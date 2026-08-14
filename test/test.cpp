@@ -915,27 +915,29 @@ auto golden_profile_renders() -> void {
     std::uint64_t checksum;
   };
   constexpr std::array profiles{
-      GoldenProfile{RenderProfile::remote, 11971755350641294141ULL},
-      GoldenProfile{RenderProfile::balanced, 9234956652280220582ULL},
-      GoldenProfile{RenderProfile::local, 9590141951237104148ULL},
-      GoldenProfile{RenderProfile::cinematic, 10512674829433416705ULL},
+      GoldenProfile{RenderProfile::remote, 2430554823040236521ULL},
+      GoldenProfile{RenderProfile::balanced, 17592776064996281288ULL},
+      GoldenProfile{RenderProfile::local, 3870257458047887296ULL},
+      GoldenProfile{RenderProfile::cinematic, 9168379169038547107ULL},
   };
 
   Camera camera;
-  camera.x = 67.25F;
-  camera.y = 91.5F;
+  camera.x = 64.0F;
+  camera.y = 64.0F;
   camera.height =
-      std::max<float>(terrain->height_at(67, 91), kWaterLevel) + 54.0F;
-  camera.yaw = 0.41F;
-  camera.pitch = 0.045F;
+      std::max<float>(terrain->height_at(64, 64), kWaterLevel) + 54.0F;
+  camera.yaw = 0.0F;
+  camera.pitch = 0.0F;
 
   for (const auto golden : profiles) {
     const auto viewport = profile_viewport(golden.profile);
     RenderSettings settings;
     settings.width = viewport.width;
     settings.height = viewport.height;
+    settings.field_of_view_degrees = 90.0F;
     settings.max_distance = 180.0F;
     settings.fog_start = 90.0F;
+    settings.sun_direction = {1.0F, 0.0F, 0.5F};
     VoxelRenderer renderer{settings};
     std::vector<Pixel> first(static_cast<std::size_t>(viewport.width) *
                              static_cast<std::size_t>(viewport.height));
