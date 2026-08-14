@@ -78,6 +78,10 @@ Interactive controls:
 - Space: toggle autopilot
 - Escape: quit
 
+Flight simulation advances at a fixed 120 Hz independently of rendering. Host
+stalls contribute at most 125 ms of catch-up work per frame; excess elapsed
+time is discarded instead of creating an unbounded simulation backlog.
+
 If the native image area is blank, compare the explicitly selected paths:
 
 ```bash
@@ -101,7 +105,9 @@ Run the deterministic headless benchmark:
 ```
 
 The benchmark measures CPU-side rendering and TermForge submission. It does not
-measure terminal, PTY, proxy, or display performance.
+measure terminal, PTY, proxy, or display performance. Its frame clock is
+synthetic, so simulation follows the same fixed-step path without sleeping or
+mixing wall-clock jitter into deterministic framebuffer checksums.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:
 

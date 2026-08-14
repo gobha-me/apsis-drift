@@ -31,12 +31,14 @@
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/render_profile.hpp"
+#include "simulation.hpp"
 
 namespace {
 
 using Clock = std::chrono::steady_clock;
 using namespace termforge;
 using namespace apsis_drift;
+namespace simulation = apsis_drift::detail;
 
 struct FrameSample {
   std::uint64_t bytes{};
@@ -197,16 +199,18 @@ class LandscapeApp final : public App {
         m_capture_seconds(capture_seconds),
         m_seed(seed) {
     set_frame_ms(33);
-    set_tick_hz(120);
-    set_max_tick_dt(std::chrono::duration<double>{0.125});
+    // TermForge supplies elapsed host time. Apsis Drift owns the fixed-step
+    // accumulator and its bounded catch-up policy.
+    set_tick_hz(0);
+    set_max_tick_dt(std::chrono::duration<double>::zero());
     set_mouse_mode(MouseMode::None);
     set_keyboard_mode(KeyboardMode::Enhanced);
-    m_camera.horizon = scaled_vertical(205.0F);
-    m_camera.height =
-        std::max<float>(m_terrain.height_at(static_cast<int>(m_camera.x),
-                                            static_cast<int>(m_camera.y)),
+    m_flight.camera.height =
+        std::max<float>(m_terrain.height_at(
+                            static_cast<int>(m_flight.camera.x),
+                            static_cast<int>(m_flight.camera.y)),
                         kWaterLevel) +
-        m_camera.clearance;
+        m_flight.camera.clearance;
     render_landscape();
   }
 
@@ -239,7 +243,7 @@ class LandscapeApp final : public App {
   }
 
   auto on_tick(std::chrono::duration<double> dt) -> void override {
-    if (!m_headless) advance(dt.count());
+    advance_simulation(dt);
   }
 
   auto on_render(Screen& screen) -> void override {
@@ -247,8 +251,6 @@ class LandscapeApp final : public App {
       driver().set_output(&m_sink);
       m_output_bound = true;
     }
-    if (m_headless) advance(1.0 / 30.0);
-
     const auto frame_started = Clock::now();
     const auto render_started = Clock::now();
     render_landscape();
@@ -299,8 +301,6 @@ class LandscapeApp final : public App {
   }
 
   auto benchmark(int frames) -> void {
-    m_headless = true;
-    set_frame_ms(0);
     // TermForge issue #256: test_run_frames() skips setup(), so its real stdin
     // remains a blocking cooked TTY when a developer launches the benchmark
     // interactively. Give this headless run an EOF input until the framework
@@ -315,15 +315,27 @@ class LandscapeApp final : public App {
       ::close(null_input);
       throw std::runtime_error{injected.error().message};
     }
+    // The borrowed clock makes the ordinary frame/tick path advance by a
+    // deterministic 33 ms per rendered frame without sleeping. The readiness
+    // override below prevents /dev/null's persistent EOF from shortening that
+    // synthetic wait. Renderer and wire measurements intentionally continue
+    // to use the real clock.
+    m_synthetic_headless = true;
+    set_clock(&m_headless_clock);
+    set_frame_ms(33);
     auto selected = std::make_unique<KittyDriver>();
     selected->set_cell_pixel_size({8, 16});
     try {
       test_run_frames(frames, 100, 40, nullptr, std::move(selected));
     } catch (...) {
       ::close(null_input);
+      set_clock(nullptr);
+      m_synthetic_headless = false;
       throw;
     }
     ::close(null_input);
+    set_clock(nullptr);
+    m_synthetic_headless = false;
     m_display_tier = "kitty-headless";
     m_display_path = "kitty (headless, /dev/null input workaround for #256)";
   }
@@ -370,6 +382,12 @@ class LandscapeApp final : public App {
       output.write(rgb, sizeof(rgb));
     }
     return output.good();
+  }
+
+ protected:
+  auto wait_readable(int timeout_ms) -> bool override {
+    if (m_synthetic_headless) return false;
+    return App::wait_readable(timeout_ms);
   }
 
  private:
@@ -428,7 +446,7 @@ class LandscapeApp final : public App {
     constexpr double step{0.08};
     clear_controls();
     set_control(control, true);
-    advance(step);
+    advance_simulation(std::chrono::duration<double>{step});
     set_control(control, false);
   }
 
@@ -437,45 +455,31 @@ class LandscapeApp final : public App {
     m_strafe_left = m_strafe_right = m_rise = m_fall = false;
   }
 
-  auto advance(double seconds) -> void {
-    m_elapsed += seconds;
-    float forward = static_cast<float>(m_forward) -
-                    static_cast<float>(m_backward);
-    float turn = static_cast<float>(m_right) - static_cast<float>(m_left);
-    float strafe = static_cast<float>(m_strafe_right) -
-                   static_cast<float>(m_strafe_left);
-    float vertical = static_cast<float>(m_rise) - static_cast<float>(m_fall);
-    if (m_autopilot) {
-      forward = 0.72F;
-      turn = 0.055F;
+  [[nodiscard]] auto flight_input() const noexcept
+      -> simulation::FlightInput {
+    return {
+        .forward = static_cast<float>(m_forward) -
+                   static_cast<float>(m_backward),
+        .turn = static_cast<float>(m_right) - static_cast<float>(m_left),
+        .strafe = static_cast<float>(m_strafe_right) -
+                  static_cast<float>(m_strafe_left),
+        .vertical = static_cast<float>(m_rise) - static_cast<float>(m_fall),
+        .autopilot = m_autopilot,
+    };
+  }
+
+  auto advance_simulation(std::chrono::duration<double> elapsed) -> void {
+    const auto advance = m_simulation_clock.advance(elapsed);
+    if (!advance) {
+      throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
-
-    const float dt = static_cast<float>(seconds);
-    m_camera.yaw += turn * 1.15F * dt;
-    const float forward_x = std::cos(m_camera.yaw);
-    const float forward_y = std::sin(m_camera.yaw);
-    const float right_x = -forward_y;
-    const float right_y = forward_x;
-    constexpr float speed{52.0F};
-    m_camera.x += (forward_x * forward + right_x * strafe) * speed * dt;
-    m_camera.y += (forward_y * forward + right_y * strafe) * speed * dt;
-    m_camera.clearance =
-        std::clamp(m_camera.clearance + vertical * 45.0F * dt, 16.0F, 160.0F);
-
-    const float world = static_cast<float>(m_terrain.size());
-    m_camera.x = std::fmod(m_camera.x + world, world);
-    m_camera.y = std::fmod(m_camera.y + world, world);
-    const float floor = std::max<float>(
-        m_terrain.height_at(static_cast<int>(m_camera.x),
-                            static_cast<int>(m_camera.y)),
-        kWaterLevel);
-    const float target_height = floor + m_camera.clearance;
-    m_camera.height +=
-        (target_height - m_camera.height) * std::min(1.0F, dt * 3.0F);
-    m_camera.horizon =
-        scaled_vertical(205.0F) +
-        std::sin(static_cast<float>(m_elapsed) * 0.17F) *
-            scaled_vertical(5.0F);
+    const auto input = flight_input();
+    for (int step = 0; step < advance->steps; ++step) {
+      if (!simulation::advance_flight(m_terrain, m_flight, input,
+                                      simulation::kSimulationStep)) {
+        throw std::runtime_error{"simulation rejected flight state"};
+      }
+    }
   }
 
   [[nodiscard]] auto scaled_vertical(float baseline) const noexcept -> float {
@@ -485,7 +489,12 @@ class LandscapeApp final : public App {
   }
 
   auto render_landscape() -> void {
-    if (!m_renderer.render(m_terrain, m_camera, m_surface.pixels())) {
+    Camera camera = m_flight.camera;
+    camera.horizon =
+        scaled_vertical(205.0F) +
+        std::sin(static_cast<float>(m_flight.elapsed_seconds) * 0.17F) *
+            scaled_vertical(5.0F);
+    if (!m_renderer.render(m_terrain, camera, m_surface.pixels())) {
       throw std::runtime_error{std::format(
           "renderer rejected the {}x{} surface",
           m_render_configuration.viewport.width,
@@ -497,15 +506,16 @@ class LandscapeApp final : public App {
   Terrain m_terrain;
   VoxelRenderer m_renderer;
   PixelSurface m_surface;
-  Camera m_camera;
+  simulation::FlightRuntime m_flight;
+  simulation::FixedStepClock m_simulation_clock;
+  SyntheticClock m_headless_clock;
   MeasuringSink m_sink;
   Clock::time_point m_run_started{};
   double m_capture_seconds{};
-  double m_elapsed{};
   std::uint32_t m_seed{};
   int m_frame{};
-  bool m_headless{false};
   bool m_output_bound{false};
+  bool m_synthetic_headless{false};
   bool m_autopilot{true};
   bool m_forward{}, m_backward{}, m_left{}, m_right{};
   bool m_strafe_left{}, m_strafe_right{}, m_rise{}, m_fall{};

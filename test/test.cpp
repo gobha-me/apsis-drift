@@ -10,11 +10,13 @@
 
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/landscape.hpp"
+#include "simulation.hpp"
 
 namespace {
 
 using namespace apsis_drift;
 using termforge::Pixel;
+namespace simulation = apsis_drift::detail;
 
 int failures{};
 
@@ -212,6 +214,96 @@ auto sweep_report_contract() -> void {
         "the sweep table must contain a header and profile rows");
 }
 
+auto fixed_step_clock_contract() -> void {
+  simulation::FixedStepClock clock;
+  const auto half = simulation::kSimulationStep / 2.0;
+
+  const auto first = clock.advance(half);
+  check(first && first->steps == 0,
+        "a partial simulation step must remain accumulated");
+  check(first && std::abs(first->interpolation_alpha - 0.5) < 0.000001,
+        "the fixed-step remainder must be presentation-only interpolation");
+
+  const auto negative = clock.advance(simulation::SimulationSeconds{-1.0});
+  check(!negative && negative.error() ==
+                         simulation::SimulationTimeError::negative_elapsed,
+        "negative elapsed time must be rejected");
+  const auto non_finite = clock.advance(simulation::SimulationSeconds{
+      std::numeric_limits<double>::infinity()});
+  check(!non_finite && non_finite.error() ==
+                           simulation::SimulationTimeError::non_finite_elapsed,
+        "non-finite elapsed time must be rejected");
+
+  const auto second = clock.advance(half);
+  check(second && second->steps == 1,
+        "rejected time must not change the accumulated remainder");
+  check(clock.accumulator() == simulation::SimulationSeconds::zero(),
+        "an exact fixed step must leave no remainder");
+
+  const auto stalled = clock.advance(simulation::SimulationSeconds{5.0});
+  check(stalled && stalled->steps == simulation::kMaxCatchUpSteps,
+        "a long stall must have bounded catch-up work");
+  check(stalled &&
+            std::abs(stalled->dropped.count() -
+                     (5.0 - simulation::kMaxCatchUp.count())) < 0.000001,
+        "a long stall must report discarded elapsed time");
+  check(clock.accumulator() == simulation::SimulationSeconds::zero(),
+        "discarded stall time must not remain as simulation debt");
+}
+
+[[nodiscard]] auto simulated_flight_checksum(int render_fps,
+                                             int seconds,
+                                             int& steps) -> std::uint64_t {
+  const auto terrain = Terrain::generate(256, 0xC0FFEEU);
+  if (!terrain) return 0;
+
+  simulation::FlightRuntime state;
+  state.camera.height =
+      std::max<float>(terrain->height_at(static_cast<int>(state.camera.x),
+                                         static_cast<int>(state.camera.y)),
+                      kWaterLevel) +
+      state.camera.clearance;
+  simulation::FixedStepClock clock;
+  const simulation::FlightInput input{.autopilot = true};
+  const simulation::SimulationSeconds frame_time{1.0 / render_fps};
+  for (int frame = 0; frame < render_fps * seconds; ++frame) {
+    const auto advance = clock.advance(frame_time);
+    if (!advance) return 0;
+    steps += advance->steps;
+    for (int step = 0; step < advance->steps; ++step) {
+      if (!simulation::advance_flight(*terrain, state, input,
+                                      simulation::kSimulationStep)) {
+        return 0;
+      }
+    }
+  }
+  return simulation::flight_state_checksum(state);
+}
+
+auto deterministic_fixed_step_flight() -> void {
+  int steps_at_30{};
+  int steps_at_60{};
+  const auto state_at_30 = simulated_flight_checksum(30, 2, steps_at_30);
+  const auto state_at_60 = simulated_flight_checksum(60, 2, steps_at_60);
+  check(steps_at_30 == 240 && steps_at_60 == 240,
+        "equal time at 30 and 60 FPS must execute the same fixed steps");
+  check(state_at_30 != 0 && state_at_30 == state_at_60,
+        "equal time at 30 and 60 FPS must produce identical flight state");
+
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "invalid-state flight fixture must generate");
+  if (!terrain) return;
+  simulation::FlightRuntime invalid;
+  invalid.camera.yaw = std::numeric_limits<float>::quiet_NaN();
+  const auto before = simulation::flight_state_checksum(invalid);
+  check(!simulation::advance_flight(
+            *terrain, invalid, simulation::FlightInput{},
+            simulation::kSimulationStep),
+        "non-finite flight state must be rejected");
+  check(simulation::flight_state_checksum(invalid) == before,
+        "rejected flight state must remain untouched");
+}
+
 auto render_failure_matrix() -> void {
   const auto terrain = Terrain::generate(128, 42);
   check(terrain.has_value(), "render fixture terrain must generate");
@@ -331,6 +423,8 @@ auto main() -> int {
   viewport_validation_contract();
   sweep_selection_contract();
   sweep_report_contract();
+  fixed_step_clock_contract();
+  deterministic_fixed_step_flight();
   render_failure_matrix();
   deterministic_render();
   required_viewport_matrix();
