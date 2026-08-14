@@ -44,11 +44,13 @@ add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
   src/landscape.cpp
   src/render_profile.cpp
+  src/simulation.cpp
 )
 add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
 target_include_directories(apsis_drift_lib
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 target_compile_features(apsis_drift_lib PUBLIC cxx_std_23)
 target_link_libraries(apsis_drift_lib PUBLIC termforge::lib)
@@ -61,6 +63,8 @@ target_link_libraries(apsis-drift PRIVATE apsis-drift::lib)
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-tests test/test.cpp)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
+  target_include_directories(apsis-drift-tests
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
 
   add_test(NAME benchmark-profile-remote
@@ -81,6 +85,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_sweep.cmake")
+
+  add_test(NAME benchmark-fixed-step-determinism
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_fixed_step_benchmark.cmake")
 
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
