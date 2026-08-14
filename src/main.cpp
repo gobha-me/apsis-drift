@@ -28,6 +28,7 @@
 #include "termforge/drivers/fallback_driver.hpp"
 #include "termforge/drivers/kitty_driver.hpp"
 #include "termforge/widgets/pixel_surface.hpp"
+#include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/render_profile.hpp"
 
@@ -41,20 +42,6 @@ struct FrameSample {
   std::uint64_t bytes{};
   double render_ms{};
   double work_ms{};
-};
-
-struct Summary {
-  std::size_t frames{};
-  double elapsed_seconds{};
-  double achieved_fps{};
-  double render_avg_ms{};
-  double render_p95_ms{};
-  double work_avg_ms{};
-  double work_p95_ms{};
-  double bytes_per_frame{};
-  double mebibytes_per_second{};
-  std::uint64_t total_bytes{};
-  std::uint64_t checksum{};
 };
 
 enum class DriverChoice { automatic, kitty, ansi, fallback };
@@ -109,8 +96,9 @@ class MeasuringSink final : public ByteSink {
     return {};
   }
 
-  [[nodiscard]] auto summary(std::uint64_t checksum) const -> Summary {
-    Summary result;
+  [[nodiscard]] auto summary(std::uint64_t checksum) const
+      -> BenchmarkSummary {
+    BenchmarkSummary result;
     result.frames = m_samples.size();
     result.checksum = checksum;
     if (m_samples.empty()) return result;
@@ -356,7 +344,7 @@ class LandscapeApp final : public App {
     return terminal().set_capabilities(caps);
   }
 
-  [[nodiscard]] auto summary() const -> Summary {
+  [[nodiscard]] auto summary() const -> BenchmarkSummary {
     return m_sink.summary(pixel_checksum(m_surface.pixels()));
   }
 
@@ -526,7 +514,7 @@ class LandscapeApp final : public App {
   std::string m_display_path{"not started"};
 };
 
-auto print_summary(const Summary& summary,
+auto print_summary(const BenchmarkSummary& summary,
                    const RenderConfiguration& configuration) -> void {
   std::printf(
       "landscape: profile=%.*s viewport=%dx%d frames=%zu elapsed=%.3fs "
@@ -545,7 +533,7 @@ auto print_summary(const Summary& summary,
       static_cast<unsigned long long>(summary.checksum));
 }
 
-[[nodiscard]] auto summary_json(const Summary& summary,
+[[nodiscard]] auto summary_json(const BenchmarkSummary& summary,
                                 const RenderConfiguration& configuration)
     -> std::string {
   return std::format(
@@ -588,11 +576,15 @@ auto usage() -> void {
       "[--viewport WIDTHxHEIGHT]\n"
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
+      "       apsis-drift --sweep [FRAMES] --report PATH\n"
+      "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
       "profile.\n"
+      "Sweep defaults: remote,balanced,local at 30,60 FPS. Viewport list\n"
+      "entries may be profile names or validated WIDTHxHEIGHT values.\n"
       "Add --snapshot PATH to save the final framebuffer as a binary PPM.\n"
       "Interactive controls: arrows/WASD move, Q/E strafe, R/F altitude,\n"
       "Space toggles autopilot, and Escape quits.");
@@ -602,13 +594,21 @@ auto usage() -> void {
 
 auto main(int argc, char** argv) -> int {
   std::optional<int> benchmark_frames;
+  std::optional<int> sweep_frames;
   int capture_seconds = 0;
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   RenderProfile selected_profile{RenderProfile::local};
   std::optional<ViewportSize> viewport_override;
+  auto sweep_viewports = default_sweep_viewports();
+  auto sweep_fps = default_sweep_fps();
   std::filesystem::path report_path;
   std::filesystem::path snapshot_path;
+  bool profile_specified{};
+  bool viewport_specified{};
+  bool driver_specified{};
+  bool sweep_viewports_specified{};
+  bool sweep_fps_specified{};
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view argument{argv[i]};
@@ -624,6 +624,21 @@ auto main(int argc, char** argv) -> int {
           benchmark_frames = value;
           ++i;
         }
+      }
+      continue;
+    }
+    if (argument == "--sweep") {
+      sweep_frames = 180;
+      const std::string_view next =
+          i + 1 < argc ? std::string_view{argv[i + 1]} : std::string_view{};
+      if (!next.empty() && next.front() != '-') {
+        int value{};
+        if (!parse_positive(next, value)) {
+          std::fprintf(stderr, "sweep frames must be positive\n");
+          return 2;
+        }
+        sweep_frames = value;
+        ++i;
       }
       continue;
     }
@@ -650,6 +665,7 @@ auto main(int argc, char** argv) -> int {
         return 2;
       }
       selected_profile = *parsed;
+      profile_specified = true;
       continue;
     }
     if (argument == "--viewport" && i + 1 < argc) {
@@ -663,6 +679,28 @@ auto main(int argc, char** argv) -> int {
         return 2;
       }
       viewport_override = *parsed;
+      viewport_specified = true;
+      continue;
+    }
+    if (argument == "--sweep-viewports" && i + 1 < argc) {
+      const auto parsed =
+          parse_sweep_viewports(std::string_view{argv[++i]});
+      if (!parsed) {
+        std::fprintf(stderr, "%s\n", parsed.error().c_str());
+        return 2;
+      }
+      sweep_viewports = *parsed;
+      sweep_viewports_specified = true;
+      continue;
+    }
+    if (argument == "--sweep-fps" && i + 1 < argc) {
+      const auto parsed = parse_sweep_fps(std::string_view{argv[++i]});
+      if (!parsed) {
+        std::fprintf(stderr, "%s\n", parsed.error().c_str());
+        return 2;
+      }
+      sweep_fps = *parsed;
+      sweep_fps_specified = true;
       continue;
     }
     if (argument == "--driver" && i + 1 < argc) {
@@ -676,6 +714,7 @@ auto main(int argc, char** argv) -> int {
                      static_cast<int>(value.size()), value.data());
         return 2;
       }
+      driver_specified = true;
       continue;
     }
     if (argument == "--report" && i + 1 < argc) {
@@ -695,12 +734,70 @@ auto main(int argc, char** argv) -> int {
     std::fprintf(stderr, "benchmark and capture modes are mutually exclusive\n");
     return 2;
   }
+  if (sweep_frames && (benchmark_frames || capture_seconds > 0)) {
+    std::fprintf(stderr,
+                 "sweep, benchmark, and capture modes are mutually exclusive\n");
+    return 2;
+  }
+  if (!sweep_frames && (sweep_viewports_specified || sweep_fps_specified)) {
+    std::fprintf(stderr,
+                 "sweep selection options require --sweep\n");
+    return 2;
+  }
+  if (sweep_frames && (profile_specified || viewport_specified ||
+                       driver_specified || !snapshot_path.empty())) {
+    std::fprintf(stderr,
+                 "sweep mode does not accept profile, viewport, driver, or "
+                 "snapshot options\n");
+    return 2;
+  }
+  if (sweep_frames && report_path.empty()) {
+    std::fprintf(stderr, "sweep mode requires --report PATH\n");
+    return 2;
+  }
   if (capture_seconds > 0 && report_path.empty()) {
     std::fprintf(stderr, "capture mode requires --report PATH\n");
     return 2;
   }
 
   try {
+    if (sweep_frames) {
+      std::vector<BenchmarkMeasurement> measurements;
+      measurements.reserve(sweep_viewports.size());
+      for (const auto& configuration : sweep_viewports) {
+        LandscapeApp app{configuration, seed};
+        app.benchmark(*sweep_frames);
+        auto summary = app.summary();
+        if (summary.frames != static_cast<std::size_t>(*sweep_frames)) {
+          throw std::runtime_error{std::format(
+              "sweep expected {} frames for {}x{} but measured {}",
+              *sweep_frames, configuration.viewport.width,
+              configuration.viewport.height, summary.frames)};
+        }
+        measurements.push_back({configuration, summary});
+      }
+
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << sweep_json(measurements, sweep_fps, seed,
+                           static_cast<std::size_t>(*sweep_frames));
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+
+      std::printf("sweep: seed=%u frames-per-viewport=%d\n", seed,
+                  *sweep_frames);
+      const auto table = sweep_table(measurements, sweep_fps);
+      std::fputs(table.c_str(), stdout);
+      return 0;
+    }
+
     const RenderConfiguration render_configuration =
         resolve_render_configuration(selected_profile, viewport_override);
     LandscapeApp app{render_configuration, seed,
@@ -720,7 +817,7 @@ auto main(int argc, char** argv) -> int {
     if (!app.error().empty()) {
       std::fprintf(stderr, "last TermForge event: %s\n", app.error().c_str());
     }
-    const Summary summary = app.summary();
+    const BenchmarkSummary summary = app.summary();
     std::printf("display: %s\n", app.display_path().c_str());
     print_summary(summary, app.render_configuration());
     if (!snapshot_path.empty() && !app.write_snapshot(snapshot_path)) {
