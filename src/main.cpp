@@ -29,6 +29,7 @@
 #include "termforge/drivers/kitty_driver.hpp"
 #include "termforge/widgets/pixel_surface.hpp"
 #include "apsis_drift/landscape.hpp"
+#include "apsis_drift/render_profile.hpp"
 
 namespace {
 
@@ -164,30 +165,47 @@ class MeasuringSink final : public ByteSink {
   return std::move(*generated);
 }
 
-[[nodiscard]] auto aspect_fit(Rect available, Extent per_cell) -> Rect {
+[[nodiscard]] auto aspect_fit(Rect available, Extent per_cell,
+                              ViewportSize viewport) -> Rect {
   if (available.empty()) return {};
   const int cell_w = std::max(1, per_cell.w);
   const int cell_h = std::max(1, per_cell.h);
   int width = available.w;
   int height = static_cast<int>(
-      (static_cast<std::int64_t>(width) * kFrameHeight * cell_w) /
-      (static_cast<std::int64_t>(kFrameWidth) * cell_h));
+      (static_cast<std::int64_t>(width) * viewport.height * cell_w) /
+      (static_cast<std::int64_t>(viewport.width) * cell_h));
   if (height <= 0) height = 1;
   if (height > available.h) {
     height = available.h;
     width = static_cast<int>(
-        (static_cast<std::int64_t>(height) * kFrameWidth * cell_h) /
-        (static_cast<std::int64_t>(kFrameHeight) * cell_w));
+        (static_cast<std::int64_t>(height) * viewport.width * cell_h) /
+        (static_cast<std::int64_t>(viewport.height) * cell_w));
     width = std::clamp(width, 1, available.w);
   }
   return {available.x + (available.w - width) / 2,
           available.y + (available.h - height) / 2, width, height};
 }
 
+[[nodiscard]] auto render_settings_for(ViewportSize viewport)
+    -> RenderSettings {
+  RenderSettings settings;
+  settings.width = viewport.width;
+  settings.height = viewport.height;
+  settings.vertical_scale *= static_cast<float>(viewport.height) /
+                             static_cast<float>(kFrameHeight);
+  return settings;
+}
+
 class LandscapeApp final : public App {
  public:
-  explicit LandscapeApp(std::uint32_t seed, double capture_seconds = 0.0)
-      : m_terrain(required_terrain(1024, seed)),
+  explicit LandscapeApp(RenderConfiguration render_configuration,
+                        std::uint32_t seed, double capture_seconds = 0.0)
+      : m_render_configuration(render_configuration),
+        m_terrain(required_terrain(1024, seed)),
+        m_renderer(render_settings_for(render_configuration.viewport)),
+        m_surface({render_configuration.viewport.width,
+                   render_configuration.viewport.height},
+                  {0, 0, 0, 255}),
         m_capture_seconds(capture_seconds),
         m_seed(seed) {
     set_frame_ms(33);
@@ -195,6 +213,7 @@ class LandscapeApp final : public App {
     set_max_tick_dt(std::chrono::duration<double>{0.125});
     set_mouse_mode(MouseMode::None);
     set_keyboard_mode(KeyboardMode::Enhanced);
+    m_camera.horizon = scaled_vertical(205.0F);
     m_camera.height =
         std::max<float>(m_terrain.height_at(static_cast<int>(m_camera.x),
                                             static_cast<int>(m_camera.y)),
@@ -253,9 +272,12 @@ class LandscapeApp final : public App {
     screen.write_text(
         0, 0,
         std::format(
-            " fractal landscape 640x480 | {} | seed {} | frame {} | {:.2f} "
-            "ms | {:.1f} MiB ",
-            m_display_tier, m_seed, m_frame, render_time,
+            " fractal landscape {}x{} | {} | {} | seed {} | frame {} | "
+            "{:.2f} ms | {:.1f} MiB ",
+            m_render_configuration.viewport.width,
+            m_render_configuration.viewport.height,
+            profile_name(m_render_configuration), m_display_tier, m_seed,
+            m_frame, render_time,
             static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
         {238, 243, 247}, {20, 43, 66});
 
@@ -274,7 +296,8 @@ class LandscapeApp final : public App {
     const Rect available{0, 1, screen.cols(),
                          std::max(0, screen.rows() - 2)};
     const Extent one_cell = driver().preferred_pixel_extent({0, 0, 1, 1});
-    m_surface.set_geometry(aspect_fit(available, one_cell));
+    m_surface.set_geometry(
+        aspect_fit(available, one_cell, m_render_configuration.viewport));
     m_surface.draw(screen);
     render_pixel_regions(m_surface);
     ++m_frame;
@@ -341,12 +364,17 @@ class LandscapeApp final : public App {
   [[nodiscard]] auto display_path() const -> const std::string& {
     return m_display_path;
   }
+  [[nodiscard]] auto render_configuration() const noexcept
+      -> const RenderConfiguration& {
+    return m_render_configuration;
+  }
 
   [[nodiscard]] auto write_snapshot(const std::filesystem::path& path) const
       -> bool {
     std::ofstream output{path, std::ios::binary};
     if (!output) return false;
-    output << "P6\n" << kFrameWidth << ' ' << kFrameHeight << "\n255\n";
+    output << "P6\n" << m_render_configuration.viewport.width << ' '
+           << m_render_configuration.viewport.height << "\n255\n";
     for (const auto pixel : m_surface.pixels()) {
       const char rgb[] = {static_cast<char>(pixel.r),
                           static_cast<char>(pixel.g),
@@ -456,19 +484,31 @@ class LandscapeApp final : public App {
     const float target_height = floor + m_camera.clearance;
     m_camera.height +=
         (target_height - m_camera.height) * std::min(1.0F, dt * 3.0F);
-    m_camera.horizon = 205.0F + std::sin(static_cast<float>(m_elapsed) * 0.17F) *
-                                     5.0F;
+    m_camera.horizon =
+        scaled_vertical(205.0F) +
+        std::sin(static_cast<float>(m_elapsed) * 0.17F) *
+            scaled_vertical(5.0F);
+  }
+
+  [[nodiscard]] auto scaled_vertical(float baseline) const noexcept -> float {
+    return baseline *
+           static_cast<float>(m_render_configuration.viewport.height) /
+           static_cast<float>(kFrameHeight);
   }
 
   auto render_landscape() -> void {
     if (!m_renderer.render(m_terrain, m_camera, m_surface.pixels())) {
-      throw std::runtime_error{"renderer rejected the 640x480 surface"};
+      throw std::runtime_error{std::format(
+          "renderer rejected the {}x{} surface",
+          m_render_configuration.viewport.width,
+          m_render_configuration.viewport.height)};
     }
   }
 
+  RenderConfiguration m_render_configuration;
   Terrain m_terrain;
   VoxelRenderer m_renderer;
-  PixelSurface m_surface{{kFrameWidth, kFrameHeight}, {0, 0, 0, 255}};
+  PixelSurface m_surface;
   Camera m_camera;
   MeasuringSink m_sink;
   Clock::time_point m_run_started{};
@@ -486,13 +526,18 @@ class LandscapeApp final : public App {
   std::string m_display_path{"not started"};
 };
 
-auto print_summary(const Summary& summary) -> void {
+auto print_summary(const Summary& summary,
+                   const RenderConfiguration& configuration) -> void {
   std::printf(
-      "landscape: frames=%zu elapsed=%.3fs achieved=%.2f fps\n"
+      "landscape: profile=%.*s viewport=%dx%d frames=%zu elapsed=%.3fs "
+      "achieved=%.2f fps\n"
       "timing: renderer avg/p95 %.3f/%.3f ms, full frame work %.3f/%.3f ms\n"
       "wire: %.1f KiB/frame, %.2f MiB/s, total %.2f MiB\n"
       "checksum: %llu\n",
-      summary.frames, summary.elapsed_seconds, summary.achieved_fps,
+      static_cast<int>(profile_name(configuration).size()),
+      profile_name(configuration).data(), configuration.viewport.width,
+      configuration.viewport.height, summary.frames, summary.elapsed_seconds,
+      summary.achieved_fps,
       summary.render_avg_ms, summary.render_p95_ms, summary.work_avg_ms,
       summary.work_p95_ms, summary.bytes_per_frame / 1024.0,
       summary.mebibytes_per_second,
@@ -500,10 +545,15 @@ auto print_summary(const Summary& summary) -> void {
       static_cast<unsigned long long>(summary.checksum));
 }
 
-[[nodiscard]] auto summary_json(const Summary& summary) -> std::string {
+[[nodiscard]] auto summary_json(const Summary& summary,
+                                const RenderConfiguration& configuration)
+    -> std::string {
   return std::format(
       "{{\n"
-      "  \"workload\": \"voxel-landscape-640x480-rgba\",\n"
+      "  \"workload\": \"voxel-landscape-{}x{}-rgba\",\n"
+      "  \"render_profile\": \"{}\",\n"
+      "  \"viewport_width\": {},\n"
+      "  \"viewport_height\": {},\n"
       "  \"frames\": {},\n"
       "  \"elapsed_seconds\": {:.6f},\n"
       "  \"achieved_fps\": {:.6f},\n"
@@ -516,6 +566,9 @@ auto print_summary(const Summary& summary) -> void {
       "  \"total_bytes\": {},\n"
       "  \"checksum\": {}\n"
       "}}\n",
+      configuration.viewport.width, configuration.viewport.height,
+      profile_name(configuration), configuration.viewport.width,
+      configuration.viewport.height,
       summary.frames, summary.elapsed_seconds, summary.achieved_fps,
       summary.render_avg_ms, summary.render_p95_ms, summary.work_avg_ms,
       summary.work_p95_ms, summary.bytes_per_frame,
@@ -531,10 +584,15 @@ template <typename T>
 
 auto usage() -> void {
   std::puts(
-      "Usage: apsis-drift [--seed N]\n"
+      "Usage: apsis-drift [--seed N] [--profile NAME] "
+      "[--viewport WIDTHxHEIGHT]\n"
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
+      "Profiles: remote (320x240), balanced (512x320), local (640x480, "
+      "default),\n"
+      "and cinematic (1024x768). An explicit viewport overrides the "
+      "profile.\n"
       "Add --snapshot PATH to save the final framebuffer as a binary PPM.\n"
       "Interactive controls: arrows/WASD move, Q/E strafe, R/F altitude,\n"
       "Space toggles autopilot, and Escape quits.");
@@ -547,6 +605,8 @@ auto main(int argc, char** argv) -> int {
   int capture_seconds = 0;
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
+  RenderProfile selected_profile{RenderProfile::local};
+  std::optional<ViewportSize> viewport_override;
   std::filesystem::path report_path;
   std::filesystem::path snapshot_path;
 
@@ -579,6 +639,30 @@ auto main(int argc, char** argv) -> int {
         std::fprintf(stderr, "seed must be a positive 32-bit integer\n");
         return 2;
       }
+      continue;
+    }
+    if (argument == "--profile" && i + 1 < argc) {
+      const std::string_view value{argv[++i]};
+      const auto parsed = parse_render_profile(value);
+      if (!parsed) {
+        std::fprintf(stderr, "unknown render profile '%.*s'\n",
+                     static_cast<int>(value.size()), value.data());
+        return 2;
+      }
+      selected_profile = *parsed;
+      continue;
+    }
+    if (argument == "--viewport" && i + 1 < argc) {
+      const std::string_view value{argv[++i]};
+      const auto parsed = parse_viewport(value);
+      if (!parsed) {
+        const auto message = viewport_error_message(parsed.error());
+        std::fprintf(stderr, "invalid viewport '%.*s': %.*s\n",
+                     static_cast<int>(value.size()), value.data(),
+                     static_cast<int>(message.size()), message.data());
+        return 2;
+      }
+      viewport_override = *parsed;
       continue;
     }
     if (argument == "--driver" && i + 1 < argc) {
@@ -617,7 +701,10 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
-    LandscapeApp app{seed, static_cast<double>(capture_seconds)};
+    const RenderConfiguration render_configuration =
+        resolve_render_configuration(selected_profile, viewport_override);
+    LandscapeApp app{render_configuration, seed,
+                     static_cast<double>(capture_seconds)};
     if (auto forced = app.force_driver(driver_choice); !forced) {
       std::fprintf(stderr, "cannot force driver: %s\n",
                    forced.error().message.c_str());
@@ -635,7 +722,7 @@ auto main(int argc, char** argv) -> int {
     }
     const Summary summary = app.summary();
     std::printf("display: %s\n", app.display_path().c_str());
-    print_summary(summary);
+    print_summary(summary, app.render_configuration());
     if (!snapshot_path.empty() && !app.write_snapshot(snapshot_path)) {
       std::fprintf(stderr, "cannot write snapshot '%s'\n",
                    snapshot_path.string().c_str());
@@ -648,7 +735,7 @@ auto main(int argc, char** argv) -> int {
                      report_path.string().c_str());
         return 1;
       }
-      report << summary_json(summary);
+      report << summary_json(summary, app.render_configuration());
     }
     return result;
   } catch (const std::exception& error) {

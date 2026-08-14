@@ -149,13 +149,18 @@ viewport inside a larger cockpit costs about 25 MiB/s at 30 FPS. It should fit
 comfortably within the observed remote path while presenting a richer overall
 screen.
 
-Candidate profiles are:
+The initial named resolution profiles are:
 
-- `remote`: 320x240 at 60 FPS or 512x320 at 30 FPS
-- `balanced`: 640x360 or 640x480 at 30 FPS
-- `local`: 640x480 at 60 FPS
-- `cinematic`: 1024x768 or terminal-fitted at a lower target cadence
-- `auto`: select a tier from recent presentation time and missed deadlines
+- `remote`: 320x240
+- `balanced`: 512x320
+- `local`: 640x480 and the compatibility default
+- `cinematic`: 1024x768
+
+An explicit viewport supports intermediate measurements such as 640x360 and
+800x600 without adding a profile name for every useful point. Profile cadence
+remains 30 FPS until the resolution/FPS sweep measures direct and remote paths.
+Later, `auto` can select a tier from recent presentation time and missed
+deadlines.
 
 There is no single useful maximum resolution. The practical upper bound is the
 combination of renderer time, encoding time, PTY/proxy throughput, terminal

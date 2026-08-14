@@ -6,10 +6,10 @@
 A deterministic, procedurally generated spaceflight experiment rendered inside
 a terminal.
 
-Apsis Drift currently renders a 640x480 voxel-space landscape into a TermForge
-`PixelSurface`. Kitty-capable terminals receive the full pixel image, while
-TermForge selects progressively simpler ANSI and cell-based presentations when
-the native image path is unavailable.
+Apsis Drift renders a voxel-space landscape into a TermForge `PixelSurface`,
+defaulting to 640x480. Kitty-capable terminals receive the full pixel image,
+while TermForge selects progressively simpler ANSI and cell-based presentations
+when the native image path is unavailable.
 
 This repository began as a feasibility spike. The renderer is fast enough for
 interactive use, including a measured 22 FPS through a Guacamole/RDP session;
@@ -48,6 +48,27 @@ cmake -S . -B build \
 ./build/apsis-drift
 ```
 
+Named viewport profiles make the logical render resolution explicit:
+
+| Profile | Viewport |
+| --- | ---: |
+| `remote` | 320x240 |
+| `balanced` | 512x320 |
+| `local` (default) | 640x480 |
+| `cinematic` | 1024x768 |
+
+Select a profile or provide a validated custom viewport. The explicit viewport
+wins when both options are present:
+
+```bash
+./build/apsis-drift --profile cinematic
+./build/apsis-drift --viewport 800x600
+./build/apsis-drift --profile remote --viewport 640x360
+```
+
+Custom viewports are limited to 4096 pixels on either axis and 4,194,304 total
+pixels so malformed or runaway dimensions fail before framebuffer allocation.
+
 Interactive controls:
 
 - Arrow keys or W/S: forward/back
@@ -76,6 +97,7 @@ Run the deterministic headless benchmark:
 ```bash
 ./build/apsis-drift --benchmark 180
 ./build/apsis-drift --benchmark 1 --snapshot landscape.ppm
+./build/apsis-drift --benchmark 1 --profile cinematic
 ```
 
 The benchmark measures CPU-side rendering and TermForge submission. It does not
