@@ -42,6 +42,7 @@ endif ()
 
 add_library(apsis_drift_lib STATIC
   src/landscape.cpp
+  src/render_profile.cpp
 )
 add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
@@ -60,4 +61,40 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-tests test/test.cpp)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
+
+  add_test(NAME benchmark-profile-remote
+    COMMAND apsis-drift --benchmark 1 --profile remote)
+  add_test(NAME benchmark-profile-balanced
+    COMMAND apsis-drift --benchmark 1 --profile balanced)
+  add_test(NAME benchmark-viewport-640x360
+    COMMAND apsis-drift --benchmark 1 --viewport 640x360)
+  add_test(NAME benchmark-profile-local
+    COMMAND apsis-drift --benchmark 1 --profile local)
+  add_test(NAME benchmark-viewport-800x600
+    COMMAND apsis-drift --benchmark 1 --viewport 800x600)
+  add_test(NAME benchmark-profile-cinematic
+    COMMAND apsis-drift --benchmark 1 --profile cinematic)
+
+  add_test(NAME reject-viewport-zero
+    COMMAND apsis-drift --benchmark 1 --viewport 0x480)
+  add_test(NAME reject-viewport-negative
+    COMMAND apsis-drift --benchmark 1 --viewport -1x480)
+  add_test(NAME reject-viewport-malformed
+    COMMAND apsis-drift --benchmark 1 --viewport 640by480)
+  add_test(NAME reject-viewport-overflow
+    COMMAND apsis-drift --benchmark 1 --viewport
+            999999999999999999999999x480)
+  add_test(NAME reject-viewport-axis
+    COMMAND apsis-drift --benchmark 1 --viewport 4097x1)
+  add_test(NAME reject-viewport-pixel-budget
+    COMMAND apsis-drift --benchmark 1 --viewport 4096x1025)
+  set_tests_properties(
+    reject-viewport-zero
+    reject-viewport-negative
+    reject-viewport-malformed
+    reject-viewport-overflow
+    reject-viewport-axis
+    reject-viewport-pixel-budget
+    PROPERTIES WILL_FAIL TRUE
+  )
 endif ()

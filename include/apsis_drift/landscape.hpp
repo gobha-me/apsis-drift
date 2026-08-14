@@ -6,12 +6,13 @@
 #include <span>
 #include <vector>
 
+#include "apsis_drift/render_profile.hpp"
 #include "termforge/core/types.hpp"
 
 namespace apsis_drift {
 
-inline constexpr int kFrameWidth{640};
-inline constexpr int kFrameHeight{480};
+inline constexpr int kFrameWidth{kDefaultViewportWidth};
+inline constexpr int kFrameHeight{kDefaultViewportHeight};
 inline constexpr std::uint8_t kWaterLevel{70};
 
 enum class TerrainError {

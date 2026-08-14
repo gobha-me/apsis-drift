@@ -197,11 +197,13 @@ auto Terrain::checksum() const noexcept -> std::uint64_t {
 
 VoxelRenderer::VoxelRenderer(RenderSettings settings)
     : m_settings(settings),
-      m_occlusion(static_cast<std::size_t>(std::max(0, settings.width))) {}
+      m_occlusion(validate_viewport({settings.width, settings.height})
+                      ? static_cast<std::size_t>(settings.width)
+                      : 0U) {}
 
 auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
                            std::span<termforge::Pixel> destination) -> bool {
-  if (m_settings.width <= 0 || m_settings.height <= 0 ||
+  if (!validate_viewport({m_settings.width, m_settings.height}) ||
       m_settings.max_distance <= 1.0F || m_settings.vertical_scale <= 0.0F ||
       m_settings.field_of_view_degrees <= 1.0F ||
       m_settings.field_of_view_degrees >= 179.0F ||
@@ -223,7 +225,10 @@ auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
                                    static_cast<float>(height - 1));
 
   for (int y = 0; y < height; ++y) {
-    const float t = static_cast<float>(y) / static_cast<float>(height - 1);
+    const float t = height > 1
+                        ? static_cast<float>(y) /
+                              static_cast<float>(height - 1)
+                        : 0.0F;
     const float haze = std::clamp(t / std::max(0.01F, horizon / height),
                                   0.0F, 1.0F);
     const termforge::Pixel sky = mix({28, 68, 116, 255},
