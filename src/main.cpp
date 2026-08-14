@@ -31,14 +31,14 @@
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/render_profile.hpp"
-#include "simulation.hpp"
+#include "apsis_drift/simulation.hpp"
+#include "flight_input.hpp"
 
 namespace {
 
 using Clock = std::chrono::steady_clock;
 using namespace termforge;
 using namespace apsis_drift;
-namespace simulation = apsis_drift::detail;
 
 struct FrameSample {
   std::uint64_t bytes{};
@@ -133,7 +133,9 @@ class MeasuringSink final : public ByteSink {
     std::sort(work.begin(), work.end());
     const std::size_t p95 = std::min(
         renders.size() - 1,
-        static_cast<std::size_t>(std::ceil(renders.size() * 0.95)) - 1);
+        static_cast<std::size_t>(
+            std::ceil(static_cast<double>(renders.size()) * 0.95)) -
+            1);
     result.render_p95_ms = renders[p95];
     result.work_p95_ms = work[p95];
     return result;
@@ -153,6 +155,13 @@ class MeasuringSink final : public ByteSink {
   auto generated = Terrain::generate(size, seed);
   if (!generated) throw std::runtime_error{"terrain generation failed"};
   return std::move(*generated);
+}
+
+[[nodiscard]] auto required_initial_flight(const Terrain& terrain)
+    -> FlightState {
+  auto state = initial_flight_state(terrain);
+  if (!state) throw std::runtime_error{"invalid initial flight state"};
+  return *state;
 }
 
 [[nodiscard]] auto aspect_fit(Rect available, Extent per_cell,
@@ -196,6 +205,7 @@ class LandscapeApp final : public App {
         m_surface({render_configuration.viewport.width,
                    render_configuration.viewport.height},
                   {0, 0, 0, 255}),
+        m_flight(required_initial_flight(m_terrain)),
         m_capture_seconds(capture_seconds),
         m_seed(seed) {
     set_frame_ms(33);
@@ -205,12 +215,6 @@ class LandscapeApp final : public App {
     set_max_tick_dt(std::chrono::duration<double>::zero());
     set_mouse_mode(MouseMode::None);
     set_keyboard_mode(KeyboardMode::Enhanced);
-    m_flight.camera.height =
-        std::max<float>(m_terrain.height_at(
-                            static_cast<int>(m_flight.camera.x),
-                            static_cast<int>(m_flight.camera.y)),
-                        kWaterLevel) +
-        m_flight.camera.clearance;
     render_landscape();
   }
 
@@ -227,6 +231,7 @@ class LandscapeApp final : public App {
         "{} (kitty_graphics={}, truecolor={}, kitty_keyboard={}, sync={})",
         tier, caps.kitty_graphics, caps.truecolor, caps.kitty_keyboard,
         caps.sync_updates);
+    m_input_mapper.set_enhanced_keyboard(caps.kitty_keyboard);
     if (m_capture_seconds > 0.0 && !capabilities().kitty_graphics) {
       m_error = "capture mode requires negotiated Kitty graphics";
       quit();
@@ -277,7 +282,8 @@ class LandscapeApp final : public App {
               ? std::format(
                     " {} | arrows/WASD move | Q/E strafe | R/F altitude | "
                     "Space autopilot | ESC quit ",
-                    m_autopilot ? "AUTOPILOT" : "MANUAL")
+                    m_flight.mode == FlightMode::autopilot ? "AUTOPILOT"
+                                                           : "MANUAL")
               : " ERROR: " + m_error + " | ESC quit ";
       screen.write_text(0, screen.rows() - 1, status, {190, 208, 214},
                         {13, 25, 35});
@@ -391,81 +397,10 @@ class LandscapeApp final : public App {
   }
 
  private:
-  enum class Control { forward, backward, left, right, strafe_left,
-                       strafe_right, rise, fall };
-
   auto handle_key(const KeyEvent& key) -> void {
-    if (key.action == KeyAction::Press && key.key == Key::Char &&
-        key.ch == U' ') {
-      m_autopilot = !m_autopilot;
-      clear_controls();
-      return;
+    if (auto queued = m_input_mapper.enqueue(key, m_flight.tick); !queued) {
+      throw std::runtime_error{"flight input tick overflow"};
     }
-
-    std::optional<Control> control;
-    if (key.key == Key::Up) control = Control::forward;
-    if (key.key == Key::Down) control = Control::backward;
-    if (key.key == Key::Left) control = Control::left;
-    if (key.key == Key::Right) control = Control::right;
-    if (key.key == Key::Char) {
-      char32_t ch = key.ch;
-      if (ch >= U'A' && ch <= U'Z') ch += U'a' - U'A';
-      if (ch == U'w') control = Control::forward;
-      if (ch == U's') control = Control::backward;
-      if (ch == U'a') control = Control::left;
-      if (ch == U'd') control = Control::right;
-      if (ch == U'q') control = Control::strafe_left;
-      if (ch == U'e') control = Control::strafe_right;
-      if (ch == U'r') control = Control::rise;
-      if (ch == U'f') control = Control::fall;
-    }
-    if (!control) return;
-
-    m_autopilot = false;
-    if (capabilities().kitty_keyboard) {
-      set_control(*control, key.action != KeyAction::Release);
-    } else if (key.action != KeyAction::Release) {
-      nudge(*control);
-    }
-  }
-
-  auto set_control(Control control, bool active) -> void {
-    switch (control) {
-      case Control::forward: m_forward = active; break;
-      case Control::backward: m_backward = active; break;
-      case Control::left: m_left = active; break;
-      case Control::right: m_right = active; break;
-      case Control::strafe_left: m_strafe_left = active; break;
-      case Control::strafe_right: m_strafe_right = active; break;
-      case Control::rise: m_rise = active; break;
-      case Control::fall: m_fall = active; break;
-    }
-  }
-
-  auto nudge(Control control) -> void {
-    constexpr double step{0.08};
-    clear_controls();
-    set_control(control, true);
-    advance_simulation(std::chrono::duration<double>{step});
-    set_control(control, false);
-  }
-
-  auto clear_controls() noexcept -> void {
-    m_forward = m_backward = m_left = m_right = false;
-    m_strafe_left = m_strafe_right = m_rise = m_fall = false;
-  }
-
-  [[nodiscard]] auto flight_input() const noexcept
-      -> simulation::FlightInput {
-    return {
-        .forward = static_cast<float>(m_forward) -
-                   static_cast<float>(m_backward),
-        .turn = static_cast<float>(m_right) - static_cast<float>(m_left),
-        .strafe = static_cast<float>(m_strafe_right) -
-                  static_cast<float>(m_strafe_left),
-        .vertical = static_cast<float>(m_rise) - static_cast<float>(m_fall),
-        .autopilot = m_autopilot,
-    };
   }
 
   auto advance_simulation(std::chrono::duration<double> elapsed) -> void {
@@ -473,10 +408,9 @@ class LandscapeApp final : public App {
     if (!advance) {
       throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
-    const auto input = flight_input();
     for (int step = 0; step < advance->steps; ++step) {
-      if (!simulation::advance_flight(m_terrain, m_flight, input,
-                                      simulation::kSimulationStep)) {
+      const auto commands = m_input_mapper.take_commands(m_flight.tick);
+      if (!advance_flight(m_terrain, m_flight, commands, kSimulationStep)) {
         throw std::runtime_error{"simulation rejected flight state"};
       }
     }
@@ -489,10 +423,16 @@ class LandscapeApp final : public App {
   }
 
   auto render_landscape() -> void {
-    Camera camera = m_flight.camera;
+    auto derived = derive_camera(m_flight);
+    if (!derived) {
+      throw std::runtime_error{"cannot derive camera from flight state"};
+    }
+    Camera camera = *derived;
+    const double elapsed_seconds =
+        static_cast<double>(m_flight.tick) * kSimulationStep.count();
     camera.horizon =
         scaled_vertical(205.0F) +
-        std::sin(static_cast<float>(m_flight.elapsed_seconds) * 0.17F) *
+        std::sin(static_cast<float>(elapsed_seconds) * 0.17F) *
             scaled_vertical(5.0F);
     if (!m_renderer.render(m_terrain, camera, m_surface.pixels())) {
       throw std::runtime_error{std::format(
@@ -506,8 +446,9 @@ class LandscapeApp final : public App {
   Terrain m_terrain;
   VoxelRenderer m_renderer;
   PixelSurface m_surface;
-  simulation::FlightRuntime m_flight;
-  simulation::FixedStepClock m_simulation_clock;
+  FlightState m_flight;
+  FixedStepClock m_simulation_clock;
+  apsis_drift::detail::FlightInputMapper m_input_mapper;
   SyntheticClock m_headless_clock;
   MeasuringSink m_sink;
   Clock::time_point m_run_started{};
@@ -516,9 +457,6 @@ class LandscapeApp final : public App {
   int m_frame{};
   bool m_output_bound{false};
   bool m_synthetic_headless{false};
-  bool m_autopilot{true};
-  bool m_forward{}, m_backward{}, m_left{}, m_right{};
-  bool m_strafe_left{}, m_strafe_right{}, m_rise{}, m_fall{};
   std::string m_error;
   std::string m_display_tier{"probing"};
   std::string m_display_path{"not started"};

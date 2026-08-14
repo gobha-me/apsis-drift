@@ -78,6 +78,12 @@ Interactive controls:
 - Space: toggle autopilot
 - Escape: quit
 
+Input is recorded as tick-addressed simulation commands. Kitty's enhanced
+keyboard protocol provides held-key press/repeat/release state; terminals that
+only report presses use deterministic ten-tick control pulses. Simultaneously
+held opposing controls cancel to a neutral axis, and any manual-control press
+disengages autopilot.
+
 Flight simulation advances at a fixed 120 Hz independently of rendering. Host
 stalls contribute at most 125 ms of catch-up work per frame; excess elapsed
 time is discarded instead of creating an unbounded simulation backlog.
