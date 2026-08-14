@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 13
+            cxx: g++
+          - name: Clang 20
+            cxx: clang++
+            clang: "20"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        if: matrix.clang
+        env:
+          CLANG_VERSION: ${{ matrix.clang }}
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh "$CLANG_VERSION"
+          sudo ln -sf "/usr/bin/clang++-$CLANG_VERSION" /usr/local/bin/clang++
+
+      - name: Configure
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Headless benchmark smoke test
+        run: ./build/apsis-drift --benchmark 3
