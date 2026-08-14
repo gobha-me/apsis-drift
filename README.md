@@ -103,6 +103,24 @@ Run the deterministic headless benchmark:
 The benchmark measures CPU-side rendering and TermForge submission. It does not
 measure terminal, PTY, proxy, or display performance.
 
+Run a repeatable resolution and target-cadence sweep and retain its JSON report:
+
+```bash
+./build/apsis-drift --sweep 180 --report landscape-sweep.json
+./build/apsis-drift --sweep 180 \
+  --sweep-viewports remote,640x360,local,cinematic \
+  --sweep-fps 24,30,60 \
+  --seed 12648430 \
+  --report landscape-sweep.json
+```
+
+The default sweep covers the remote, balanced, and local profiles at 30 and 60
+FPS. Each viewport is measured once at full headless throughput; target FPS
+values calculate deadline headroom and required wire throughput without
+sleeping or changing the simulated workload. The versioned JSON records the
+explicit seed and frame count. Repeated runs can compare ordered profile
+identities and checksums while treating timing values as machine-dependent.
+
 For an end-to-end Kitty measurement on the real terminal path:
 
 ```bash

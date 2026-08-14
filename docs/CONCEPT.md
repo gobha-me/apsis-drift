@@ -162,6 +162,12 @@ remains 30 FPS until the resolution/FPS sweep measures direct and remote paths.
 Later, `auto` can select a tier from recent presentation time and missed
 deadlines.
 
+The headless sweep command measures each requested viewport once and evaluates
+its renderer time, complete-frame work, and wire size against each requested
+cadence budget. Its stable JSON identities and deterministic checksums support
+run-to-run comparison; its timing values describe the machine that produced
+the report and do not substitute for live terminal capture.
+
 There is no single useful maximum resolution. The practical upper bound is the
 combination of renderer time, encoding time, PTY/proxy throughput, terminal
 decode/presentation time, and the desired cadence. A repeatable resolution/FPS

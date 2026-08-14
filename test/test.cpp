@@ -2,10 +2,13 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <vector>
 
+#include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/landscape.hpp"
 
 namespace {
@@ -114,6 +117,99 @@ auto viewport_validation_contract() -> void {
               "an overlong axis must be rejected");
   check_error("4096x1025", ViewportError::pixel_budget_exceeded,
               "a viewport above the pixel budget must be rejected");
+}
+
+auto sweep_selection_contract() -> void {
+  const auto defaults = default_sweep_viewports();
+  check(defaults.size() == 3,
+        "the default sweep must include three viewports");
+  if (defaults.size() == 3) {
+    check(profile_name(defaults[0]) == "remote",
+          "the default sweep must begin with remote");
+    check(profile_name(defaults[1]) == "balanced",
+          "the default sweep must continue with balanced");
+    check(profile_name(defaults[2]) == "local",
+          "the default sweep must end with local");
+  }
+  check(default_sweep_fps() == std::vector<std::uint32_t>({30, 60}),
+        "the default cadence targets must be 30 and 60 FPS");
+
+  const auto viewports = parse_sweep_viewports("remote,640x360,cinematic");
+  check(viewports && viewports->size() == 3,
+        "named and custom sweep viewports must parse together");
+  if (viewports && viewports->size() == 3) {
+    check(profile_name((*viewports)[0]) == "remote",
+          "named sweep viewport identity must be retained");
+    check(profile_name((*viewports)[1]) == "custom" &&
+              (*viewports)[1].viewport == ViewportSize{640, 360},
+          "custom sweep viewport identity and dimensions must be retained");
+  }
+  check(!parse_sweep_viewports(""),
+        "an empty sweep viewport list must be rejected");
+  check(!parse_sweep_viewports("remote,,local"),
+        "an empty sweep viewport entry must be rejected");
+  check(!parse_sweep_viewports("remote,320x240"),
+        "duplicate resolved sweep viewports must be rejected");
+  check(!parse_sweep_viewports("4097x1"),
+        "invalid sweep viewport dimensions must be rejected");
+
+  const auto fps = parse_sweep_fps("24,30,60");
+  check(fps && *fps == std::vector<std::uint32_t>({24, 30, 60}),
+        "positive sweep FPS targets must retain order");
+  check(!parse_sweep_fps(""),
+        "an empty sweep FPS list must be rejected");
+  check(!parse_sweep_fps("0,30"),
+        "a zero sweep FPS target must be rejected");
+  check(!parse_sweep_fps("30,nope"),
+        "a malformed sweep FPS target must be rejected");
+  check(!parse_sweep_fps("30,30"),
+        "a duplicate sweep FPS target must be rejected");
+  check(!parse_sweep_fps("999999999999999999999"),
+        "an overflowing sweep FPS target must be rejected");
+}
+
+auto sweep_report_contract() -> void {
+  BenchmarkSummary summary{
+      .frames = 12,
+      .elapsed_seconds = 1.5,
+      .achieved_fps = 8.0,
+      .render_avg_ms = 3.0,
+      .render_p95_ms = 4.0,
+      .work_avg_ms = 5.0,
+      .work_p95_ms = 6.0,
+      .bytes_per_frame = 1024.0,
+      .mebibytes_per_second = 1.0,
+      .total_bytes = 12288,
+      .checksum = 123456789,
+  };
+  const auto cadence = assess_cadence(summary, 50);
+  check(std::abs(cadence.deadline_budget_ms - 20.0) < 0.000001,
+        "cadence assessment must derive the frame deadline");
+  check(std::abs(cadence.renderer_p95_headroom_ms - 16.0) < 0.000001,
+        "cadence assessment must derive renderer headroom");
+  check(std::abs(cadence.frame_work_p95_headroom_ms - 14.0) < 0.000001,
+        "cadence assessment must derive complete-frame headroom");
+
+  const std::vector measurements{BenchmarkMeasurement{
+      resolve_render_configuration(RenderProfile::remote), summary}};
+  const std::vector<std::uint32_t> targets{30, 60};
+  const auto json = sweep_json(measurements, targets, 42, 12);
+  check(json.find("\"schema_version\": 1") != std::string::npos,
+        "sweep JSON must identify its schema version");
+  check(json.find("\"seed\": 42") != std::string::npos,
+        "sweep JSON must identify its seed");
+  check(json.find("\"frames_per_viewport\": 12") != std::string::npos,
+        "sweep JSON must identify its frame count");
+  check(json.find("\"checksum\": \"123456789\"") != std::string::npos,
+        "sweep JSON must preserve checksums exactly as strings");
+  check(json.find("\"target_fps\": 30") != std::string::npos &&
+            json.find("\"target_fps\": 60") != std::string::npos,
+        "sweep JSON must include every cadence target");
+
+  const auto table = sweep_table(measurements, targets);
+  check(table.find("PROFILE") != std::string::npos &&
+            table.find("remote") != std::string::npos,
+        "the sweep table must contain a header and profile rows");
 }
 
 auto render_failure_matrix() -> void {
@@ -233,6 +329,8 @@ auto main() -> int {
   deterministic_generation();
   render_profile_contract();
   viewport_validation_contract();
+  sweep_selection_contract();
+  sweep_report_contract();
   render_failure_matrix();
   deterministic_render();
   required_viewport_matrix();

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.1.0 LANGUAGES CXX)
+project(apsis-drift VERSION 0.2.0 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -41,6 +41,7 @@ if (NOT TARGET termforge::lib)
 endif ()
 
 add_library(apsis_drift_lib STATIC
+  src/benchmark.cpp
   src/landscape.cpp
   src/render_profile.cpp
 )
@@ -75,6 +76,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME benchmark-profile-cinematic
     COMMAND apsis-drift --benchmark 1 --profile cinematic)
 
+  add_test(NAME benchmark-sweep-report
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_sweep.cmake")
+
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
   add_test(NAME reject-viewport-negative
@@ -88,6 +95,21 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --benchmark 1 --viewport 4097x1)
   add_test(NAME reject-viewport-pixel-budget
     COMMAND apsis-drift --benchmark 1 --viewport 4096x1025)
+  add_test(NAME reject-sweep-zero-frames
+    COMMAND apsis-drift --sweep 0 --report sweep-invalid.json)
+  add_test(NAME reject-sweep-missing-report
+    COMMAND apsis-drift --sweep 1)
+  add_test(NAME reject-sweep-invalid-fps
+    COMMAND apsis-drift --sweep 1 --sweep-fps 30,0
+            --report sweep-invalid.json)
+  add_test(NAME reject-sweep-duplicate-viewport
+    COMMAND apsis-drift --sweep 1 --sweep-viewports remote,320x240
+            --report sweep-invalid.json)
+  add_test(NAME reject-sweep-incompatible-profile
+    COMMAND apsis-drift --sweep 1 --profile remote
+            --report sweep-invalid.json)
+  add_test(NAME reject-sweep-options-without-mode
+    COMMAND apsis-drift --sweep-fps 30 --report sweep-invalid.json)
   set_tests_properties(
     reject-viewport-zero
     reject-viewport-negative
@@ -95,6 +117,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-viewport-overflow
     reject-viewport-axis
     reject-viewport-pixel-budget
+    reject-sweep-zero-frames
+    reject-sweep-missing-report
+    reject-sweep-invalid-fps
+    reject-sweep-duplicate-viewport
+    reject-sweep-incompatible-profile
+    reject-sweep-options-without-mode
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()
