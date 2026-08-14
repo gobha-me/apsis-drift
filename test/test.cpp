@@ -10,13 +10,13 @@
 
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/landscape.hpp"
-#include "simulation.hpp"
+#include "apsis_drift/simulation.hpp"
+#include "flight_input.hpp"
 
 namespace {
 
 using namespace apsis_drift;
 using termforge::Pixel;
-namespace simulation = apsis_drift::detail;
 
 int failures{};
 
@@ -215,8 +215,8 @@ auto sweep_report_contract() -> void {
 }
 
 auto fixed_step_clock_contract() -> void {
-  simulation::FixedStepClock clock;
-  const auto half = simulation::kSimulationStep / 2.0;
+  FixedStepClock clock;
+  const auto half = kSimulationStep / 2.0;
 
   const auto first = clock.advance(half);
   check(first && first->steps == 0,
@@ -224,30 +224,30 @@ auto fixed_step_clock_contract() -> void {
   check(first && std::abs(first->interpolation_alpha - 0.5) < 0.000001,
         "the fixed-step remainder must be presentation-only interpolation");
 
-  const auto negative = clock.advance(simulation::SimulationSeconds{-1.0});
+  const auto negative = clock.advance(SimulationSeconds{-1.0});
   check(!negative && negative.error() ==
-                         simulation::SimulationTimeError::negative_elapsed,
+                         SimulationTimeError::negative_elapsed,
         "negative elapsed time must be rejected");
-  const auto non_finite = clock.advance(simulation::SimulationSeconds{
+  const auto non_finite = clock.advance(SimulationSeconds{
       std::numeric_limits<double>::infinity()});
   check(!non_finite && non_finite.error() ==
-                           simulation::SimulationTimeError::non_finite_elapsed,
+                           SimulationTimeError::non_finite_elapsed,
         "non-finite elapsed time must be rejected");
 
   const auto second = clock.advance(half);
   check(second && second->steps == 1,
         "rejected time must not change the accumulated remainder");
-  check(clock.accumulator() == simulation::SimulationSeconds::zero(),
+  check(clock.accumulator() == SimulationSeconds::zero(),
         "an exact fixed step must leave no remainder");
 
-  const auto stalled = clock.advance(simulation::SimulationSeconds{5.0});
-  check(stalled && stalled->steps == simulation::kMaxCatchUpSteps,
+  const auto stalled = clock.advance(SimulationSeconds{5.0});
+  check(stalled && stalled->steps == kMaxCatchUpSteps,
         "a long stall must have bounded catch-up work");
   check(stalled &&
             std::abs(stalled->dropped.count() -
-                     (5.0 - simulation::kMaxCatchUp.count())) < 0.000001,
+                     (5.0 - kMaxCatchUp.count())) < 0.000001,
         "a long stall must report discarded elapsed time");
-  check(clock.accumulator() == simulation::SimulationSeconds::zero(),
+  check(clock.accumulator() == SimulationSeconds::zero(),
         "discarded stall time must not remain as simulation debt");
 }
 
@@ -257,27 +257,22 @@ auto fixed_step_clock_contract() -> void {
   const auto terrain = Terrain::generate(256, 0xC0FFEEU);
   if (!terrain) return 0;
 
-  simulation::FlightRuntime state;
-  state.camera.height =
-      std::max<float>(terrain->height_at(static_cast<int>(state.camera.x),
-                                         static_cast<int>(state.camera.y)),
-                      kWaterLevel) +
-      state.camera.clearance;
-  simulation::FixedStepClock clock;
-  const simulation::FlightInput input{.autopilot = true};
-  const simulation::SimulationSeconds frame_time{1.0 / render_fps};
+  auto initialized = initial_flight_state(*terrain);
+  if (!initialized) return 0;
+  auto state = *initialized;
+  FixedStepClock clock;
+  const SimulationSeconds frame_time{1.0 / render_fps};
   for (int frame = 0; frame < render_fps * seconds; ++frame) {
     const auto advance = clock.advance(frame_time);
     if (!advance) return 0;
     steps += advance->steps;
     for (int step = 0; step < advance->steps; ++step) {
-      if (!simulation::advance_flight(*terrain, state, input,
-                                      simulation::kSimulationStep)) {
+      if (!advance_flight(*terrain, state, {}, kSimulationStep)) {
         return 0;
       }
     }
   }
-  return simulation::flight_state_checksum(state);
+  return flight_state_checksum(state);
 }
 
 auto deterministic_fixed_step_flight() -> void {
@@ -293,15 +288,349 @@ auto deterministic_fixed_step_flight() -> void {
   const auto terrain = Terrain::generate(128, 42);
   check(terrain.has_value(), "invalid-state flight fixture must generate");
   if (!terrain) return;
-  simulation::FlightRuntime invalid;
-  invalid.camera.yaw = std::numeric_limits<float>::quiet_NaN();
-  const auto before = simulation::flight_state_checksum(invalid);
-  check(!simulation::advance_flight(
-            *terrain, invalid, simulation::FlightInput{},
-            simulation::kSimulationStep),
+  auto initialized = initial_flight_state(*terrain);
+  check(initialized.has_value(), "initial flight state must be valid");
+  if (!initialized) return;
+  auto invalid = *initialized;
+  invalid.pose.yaw = std::numeric_limits<float>::quiet_NaN();
+  const auto before = flight_state_checksum(invalid);
+  check(!advance_flight(*terrain, invalid, {}, kSimulationStep),
         "non-finite flight state must be rejected");
-  check(simulation::flight_state_checksum(invalid) == before,
+  check(flight_state_checksum(invalid) == before,
         "rejected flight state must remain untouched");
+}
+
+[[nodiscard]] auto replay_golden_commands(const Terrain& terrain)
+    -> std::expected<FlightState, FlightError> {
+  auto initialized = initial_flight_state(terrain);
+  if (!initialized) return std::unexpected{initialized.error()};
+  auto state = *initialized;
+  constexpr std::array commands{
+      FlightCommand{0, FlightCommandKind::toggle_autopilot},
+      FlightCommand{0, FlightCommandKind::press_forward},
+      FlightCommand{18, FlightCommandKind::press_turn_right},
+      FlightCommand{36, FlightCommandKind::press_turn_left},
+      FlightCommand{48, FlightCommandKind::press_strafe_right},
+      FlightCommand{60, FlightCommandKind::release_turn_right},
+      FlightCommand{72, FlightCommandKind::release_turn_left},
+      FlightCommand{84, FlightCommandKind::press_rise},
+      FlightCommand{96, FlightCommandKind::release_strafe_right},
+      FlightCommand{108, FlightCommandKind::release_rise},
+      FlightCommand{120, FlightCommandKind::press_backward},
+      FlightCommand{132, FlightCommandKind::release_forward},
+      FlightCommand{144, FlightCommandKind::press_strafe_left},
+      FlightCommand{156, FlightCommandKind::press_fall},
+      FlightCommand{168, FlightCommandKind::release_backward},
+      FlightCommand{180, FlightCommandKind::release_strafe_left},
+      FlightCommand{192, FlightCommandKind::release_fall},
+      FlightCommand{204, FlightCommandKind::toggle_autopilot},
+  };
+
+  std::size_t next_command{};
+  while (state.tick < 240) {
+    const auto first = next_command;
+    while (next_command < commands.size() &&
+           commands[next_command].tick == state.tick) {
+      ++next_command;
+    }
+    const std::span tick_commands{commands.data() + first,
+                                  next_command - first};
+    if (auto advanced =
+            advance_flight(terrain, state, tick_commands, kSimulationStep);
+        !advanced) {
+      return std::unexpected{advanced.error()};
+    }
+  }
+  return state;
+}
+
+auto deterministic_command_replay() -> void {
+  const auto terrain = Terrain::generate(256, 0xC0FFEEU);
+  check(terrain.has_value(), "command replay terrain must generate");
+  if (!terrain) return;
+
+  const auto first = replay_golden_commands(*terrain);
+  const auto second = replay_golden_commands(*terrain);
+  check(first && second, "the golden command stream must replay");
+  if (!first || !second) return;
+
+  const auto first_checksum = flight_state_checksum(*first);
+  const auto second_checksum = flight_state_checksum(*second);
+  constexpr std::uint64_t expected_checksum{209895004964188471ULL};
+  if (first_checksum != expected_checksum) {
+    std::fprintf(stderr, "golden command checksum: %llu\n",
+                 static_cast<unsigned long long>(first_checksum));
+  }
+  check(first_checksum == second_checksum,
+        "replaying a command stream must reproduce its final state");
+  check(first_checksum == expected_checksum,
+        "the golden command stream checksum must remain stable");
+  check(first->tick == 240 && first->mode == FlightMode::autopilot,
+        "the golden command stream must reach its expected tick and mode");
+}
+
+auto command_edge_contract() -> void {
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "command edge terrain must generate");
+  if (!terrain) return;
+  const auto initialized = initial_flight_state(*terrain);
+  check(initialized.has_value(), "command edge state must initialize");
+  if (!initialized) return;
+
+  auto opposed = *initialized;
+  constexpr std::array conflict{
+      FlightCommand{0, FlightCommandKind::press_forward},
+      FlightCommand{0, FlightCommandKind::press_backward},
+      FlightCommand{0, FlightCommandKind::press_turn_left},
+      FlightCommand{0, FlightCommandKind::press_turn_right},
+      FlightCommand{0, FlightCommandKind::press_rise},
+      FlightCommand{0, FlightCommandKind::press_fall},
+  };
+  check(advance_flight(*terrain, opposed, conflict, kSimulationStep)
+            .has_value(),
+        "opposing commands must be accepted");
+  check(opposed.velocity.x == 0.0F && opposed.velocity.y == 0.0F &&
+            opposed.velocity.vertical == 0.0F,
+        "opposing held controls must produce neutral movement");
+  check(opposed.controls.forward && opposed.controls.backward &&
+            opposed.controls.turn_left && opposed.controls.turn_right,
+        "conflicting held controls must remain explicit in state");
+
+  auto once = *initialized;
+  auto twice = *initialized;
+  constexpr std::array one_press{
+      FlightCommand{0, FlightCommandKind::press_forward}};
+  constexpr std::array duplicate_press{
+      FlightCommand{0, FlightCommandKind::press_forward},
+      FlightCommand{0, FlightCommandKind::press_forward}};
+  check(advance_flight(*terrain, once, one_press, kSimulationStep).has_value(),
+        "a single press must advance");
+  check(advance_flight(*terrain, twice, duplicate_press, kSimulationStep)
+            .has_value(),
+        "a duplicate press must advance");
+  check(flight_state_checksum(once) == flight_state_checksum(twice),
+        "duplicate press commands must be idempotent");
+
+  auto toggle_then_press = *initialized;
+  auto press_then_toggle = *initialized;
+  constexpr std::array toggle_first{
+      FlightCommand{0, FlightCommandKind::toggle_autopilot},
+      FlightCommand{0, FlightCommandKind::press_forward}};
+  constexpr std::array toggle_last{
+      FlightCommand{0, FlightCommandKind::press_forward},
+      FlightCommand{0, FlightCommandKind::toggle_autopilot}};
+  check(advance_flight(*terrain, toggle_then_press, toggle_first,
+                       kSimulationStep)
+            .has_value() &&
+            toggle_then_press.mode == FlightMode::manual &&
+            toggle_then_press.controls.forward,
+        "a manual press after a toggle must select manual flight");
+  check(advance_flight(*terrain, press_then_toggle, toggle_last,
+                       kSimulationStep)
+            .has_value() &&
+            press_then_toggle.mode == FlightMode::autopilot &&
+            press_then_toggle.controls == FlightControls{},
+        "a toggle after a manual press must select autopilot and clear input");
+
+  const auto unchanged = flight_state_checksum(*initialized);
+  auto invalid = *initialized;
+  constexpr std::array invalid_kind{FlightCommand{
+      0, static_cast<FlightCommandKind>(std::numeric_limits<std::uint8_t>::max())}};
+  const auto invalid_result =
+      advance_flight(*terrain, invalid, invalid_kind, kSimulationStep);
+  check(!invalid_result &&
+            invalid_result.error() == FlightError::invalid_command,
+        "an unknown command must be rejected");
+  check(flight_state_checksum(invalid) == unchanged,
+        "an unknown command must not mutate state");
+
+  auto mistimed = *initialized;
+  constexpr std::array future{
+      FlightCommand{1, FlightCommandKind::press_forward}};
+  const auto mistimed_result =
+      advance_flight(*terrain, mistimed, future, kSimulationStep);
+  check(!mistimed_result &&
+            mistimed_result.error() == FlightError::wrong_command_tick,
+        "a command for another tick must be rejected");
+  check(flight_state_checksum(mistimed) == unchanged,
+        "a mistimed command must not mutate state");
+
+  auto bad_step = *initialized;
+  const auto bad_step_result =
+      advance_flight(*terrain, bad_step, {}, SimulationSeconds{0.0});
+  check(!bad_step_result && bad_step_result.error() == FlightError::invalid_step,
+        "a non-positive simulation step must be rejected");
+  check(flight_state_checksum(bad_step) == unchanged,
+        "an invalid step must not mutate state");
+
+  auto non_finite = *initialized;
+  non_finite.velocity.vertical =
+      std::numeric_limits<float>::infinity();
+  const auto non_finite_checksum = flight_state_checksum(non_finite);
+  const auto non_finite_result =
+      advance_flight(*terrain, non_finite, {}, kSimulationStep);
+  check(!non_finite_result &&
+            non_finite_result.error() == FlightError::invalid_state,
+        "non-finite velocity must be rejected");
+  check(flight_state_checksum(non_finite) == non_finite_checksum,
+        "non-finite state rejection must be transactional");
+
+  auto overflow = *initialized;
+  overflow.tick = std::numeric_limits<SimulationTick>::max();
+  const auto overflow_checksum = flight_state_checksum(overflow);
+  const auto overflow_result =
+      advance_flight(*terrain, overflow, {}, kSimulationStep);
+  check(!overflow_result && overflow_result.error() == FlightError::tick_overflow,
+        "the final simulation tick must not wrap");
+  check(flight_state_checksum(overflow) == overflow_checksum,
+        "tick overflow must not mutate state");
+}
+
+[[nodiscard]] auto key_event(termforge::Key key, char32_t ch,
+                             termforge::KeyAction action)
+    -> termforge::KeyEvent {
+  termforge::KeyEvent event;
+  event.key = key;
+  event.ch = ch;
+  event.action = action;
+  return event;
+}
+
+auto flight_input_mapping_contract() -> void {
+  using apsis_drift::detail::FlightInputMapper;
+  using termforge::Key;
+  using termforge::KeyAction;
+
+  struct Mapping {
+    Key key;
+    char32_t ch;
+    FlightCommandKind press;
+    FlightCommandKind release;
+  };
+  constexpr std::array mappings{
+      Mapping{Key::Up, 0, FlightCommandKind::press_forward,
+              FlightCommandKind::release_forward},
+      Mapping{Key::Down, 0, FlightCommandKind::press_backward,
+              FlightCommandKind::release_backward},
+      Mapping{Key::Left, 0, FlightCommandKind::press_turn_left,
+              FlightCommandKind::release_turn_left},
+      Mapping{Key::Right, 0, FlightCommandKind::press_turn_right,
+              FlightCommandKind::release_turn_right},
+      Mapping{Key::Char, U'W', FlightCommandKind::press_forward,
+              FlightCommandKind::release_forward},
+      Mapping{Key::Char, U's', FlightCommandKind::press_backward,
+              FlightCommandKind::release_backward},
+      Mapping{Key::Char, U'A', FlightCommandKind::press_turn_left,
+              FlightCommandKind::release_turn_left},
+      Mapping{Key::Char, U'd', FlightCommandKind::press_turn_right,
+              FlightCommandKind::release_turn_right},
+      Mapping{Key::Char, U'Q', FlightCommandKind::press_strafe_left,
+              FlightCommandKind::release_strafe_left},
+      Mapping{Key::Char, U'e', FlightCommandKind::press_strafe_right,
+              FlightCommandKind::release_strafe_right},
+      Mapping{Key::Char, U'R', FlightCommandKind::press_rise,
+              FlightCommandKind::release_rise},
+      Mapping{Key::Char, U'f', FlightCommandKind::press_fall,
+              FlightCommandKind::release_fall},
+  };
+
+  FlightInputMapper enhanced;
+  enhanced.set_enhanced_keyboard(true);
+  for (const auto& mapping : mappings) {
+    check(enhanced.enqueue(key_event(mapping.key, mapping.ch,
+                                     KeyAction::Press),
+                           7)
+              .has_value(),
+          "enhanced key press must enqueue");
+    check(enhanced.enqueue(key_event(mapping.key, mapping.ch,
+                                     KeyAction::Release),
+                           7)
+              .has_value(),
+          "enhanced key release must enqueue");
+  }
+  check(enhanced.enqueue(key_event(Key::Char, U'w', KeyAction::Repeat), 7)
+            .has_value(),
+        "enhanced key repeat must enqueue");
+  check(enhanced.enqueue(key_event(Key::Char, U' ', KeyAction::Press), 7)
+            .has_value(),
+        "Space press must enqueue");
+  check(enhanced.enqueue(key_event(Key::Char, U' ', KeyAction::Repeat), 7)
+            .has_value(),
+        "Space repeat must be ignored safely");
+  check(enhanced.enqueue(key_event(Key::Char, U'x', KeyAction::Press), 7)
+            .has_value(),
+        "an unrelated key must be ignored safely");
+  const auto enhanced_commands = enhanced.take_commands(7);
+  check(enhanced_commands.size() == mappings.size() * 2 + 2,
+        "enhanced mapping must emit press, release, repeat, and one toggle");
+  if (enhanced_commands.size() == mappings.size() * 2 + 2) {
+    for (std::size_t index = 0; index < mappings.size(); ++index) {
+      check(enhanced_commands[index * 2].kind == mappings[index].press &&
+                enhanced_commands[index * 2 + 1].kind ==
+                    mappings[index].release,
+            "each enhanced control must map to its command pair");
+    }
+    check(enhanced_commands[enhanced_commands.size() - 2].kind ==
+              FlightCommandKind::press_forward,
+          "an enhanced repeat must remain an idempotent press");
+    check(enhanced_commands.back().kind ==
+              FlightCommandKind::toggle_autopilot,
+          "Space must map to one autopilot toggle");
+  }
+
+  FlightInputMapper fallback;
+  fallback.set_enhanced_keyboard(false);
+  check(fallback.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 10)
+            .has_value(),
+        "fallback press must enqueue a pulse");
+  check(fallback.take_commands(10) ==
+            std::vector{FlightCommand{10,
+                                      FlightCommandKind::press_forward}},
+        "fallback pulse must begin at the current tick");
+  check(fallback.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 15)
+            .has_value(),
+        "a repeated fallback press must extend the pulse");
+  check(fallback.take_commands(20).empty(),
+        "an extended fallback pulse must remove its earlier release");
+  check(fallback.take_commands(25) ==
+            std::vector{FlightCommand{25,
+                                      FlightCommandKind::release_forward}},
+        "an extended fallback pulse must release after ten ticks");
+  check(fallback.enqueue(key_event(Key::Char, U'w', KeyAction::Release), 30)
+            .has_value() &&
+            fallback.take_commands(30).empty(),
+        "fallback release events must not create extra commands");
+  check(!fallback.enqueue(
+             key_event(Key::Char, U'w', KeyAction::Press),
+             std::numeric_limits<SimulationTick>::max())
+              .has_value(),
+        "a fallback pulse must reject a release-tick overflow");
+}
+
+auto camera_derivation_contract() -> void {
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "camera derivation terrain must generate");
+  if (!terrain) return;
+  const auto initialized = initial_flight_state(*terrain);
+  check(initialized.has_value(), "camera derivation state must initialize");
+  if (!initialized) return;
+  auto state = *initialized;
+  state.pose = {.x = 12.5F, .y = 31.25F, .altitude = 98.0F, .yaw = 1.25F};
+  const auto camera = derive_camera(state);
+  check(camera && camera->x == state.pose.x && camera->y == state.pose.y &&
+            camera->height == state.pose.altitude &&
+            camera->yaw == state.pose.yaw,
+        "the render camera must derive directly from authoritative pose");
+
+  const auto checksum = flight_state_checksum(state);
+  if (camera) {
+    auto presentation = *camera;
+    presentation.horizon += 20.0F;
+    check(presentation.horizon != camera->horizon,
+          "camera horizon must remain independently adjustable");
+  }
+  check(flight_state_checksum(state) == checksum,
+        "presentation-only camera changes must not alter flight state");
 }
 
 auto render_failure_matrix() -> void {
@@ -353,7 +682,7 @@ auto deterministic_render() -> void {
   Camera camera;
   camera.horizon = 52.0F;
   camera.height = std::max<float>(terrain->height_at(180, 240), kWaterLevel) +
-                  camera.clearance;
+                  48.0F;
   std::vector<Pixel> first(160U * 120U);
   std::vector<Pixel> second(160U * 120U);
   check(renderer.render(*terrain, camera, first),
@@ -398,7 +727,7 @@ auto required_viewport_matrix() -> void {
         static_cast<float>(kFrameHeight);
     camera.height =
         std::max<float>(terrain->height_at(180, 240), kWaterLevel) +
-        camera.clearance;
+        48.0F;
     std::vector<Pixel> frame(static_cast<std::size_t>(size.width) *
                              static_cast<std::size_t>(size.height));
     check(renderer.render(*terrain, camera, frame),
@@ -425,6 +754,10 @@ auto main() -> int {
   sweep_report_contract();
   fixed_step_clock_contract();
   deterministic_fixed_step_flight();
+  deterministic_command_replay();
+  command_edge_contract();
+  flight_input_mapping_contract();
+  camera_derivation_contract();
   render_failure_matrix();
   deterministic_render();
   required_viewport_matrix();

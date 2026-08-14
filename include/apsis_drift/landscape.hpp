@@ -49,7 +49,6 @@ struct Camera {
   float height{135.0F};
   float yaw{0.35F};
   float horizon{205.0F};
-  float clearance{48.0F};
 };
 
 struct RenderSettings {

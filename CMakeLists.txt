@@ -42,6 +42,7 @@ endif ()
 
 add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
+  src/flight_input.cpp
   src/landscape.cpp
   src/render_profile.cpp
   src/simulation.cpp
