@@ -120,6 +120,22 @@ where `test_run_frames()` can block on a cooked terminal's stdin.
 The goal is to build a small game that reveals useful abstractions, not to
 begin by inventing a generic 3D engine.
 
+## Roadmap
+
+Development is organized around playable milestone outcomes. Implementation
+issues are deliberately sized for one focused session and include explicit
+acceptance criteria, verification, and dependencies. Epic issues track the
+milestones; they are not implementation sessions themselves.
+
+- [v0.2 — Flight Deck](https://github.com/gobha-me/apsis-drift/issues/33)
+- [v0.3 — Planetfall](https://github.com/gobha-me/apsis-drift/issues/34)
+- [v0.4 — Signal Run](https://github.com/gobha-me/apsis-drift/issues/35)
+- [v0.5 — First Light](https://github.com/gobha-me/apsis-drift/issues/36)
+
+New work should use the session-sized issue form. If implementation uncovers
+additional work, record it as a follow-up issue instead of silently expanding
+the active session.
+
 ## License
 
 Code is available under the [BSD 3-Clause License](LICENSE.md). Generated or

@@ -1,0 +1,71 @@
+name: Session-sized change
+description: Define one focused, independently verifiable development session
+title: ""
+labels:
+  - session-sized
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue should fit one focused development session. If the work
+        uncovers another concern, create a linked follow-up instead of expanding
+        this issue.
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: Describe the observable result, not the implementation activity.
+      placeholder: After this issue, the game can...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List the work included in this session and any important exclusions.
+      placeholder: |
+        - Add...
+        - Update...
+        - Do not include...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use a checklist of observable pass/fail conditions.
+      placeholder: |
+        - [ ] The default behavior remains...
+        - [ ] Invalid input...
+        - [ ] GCC and Clang...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Give the exact automated and manual checks that prove completion.
+      placeholder: Run ctest and...
+    validations:
+      required: true
+
+  - type: input
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link prerequisite issues, or write None.
+      placeholder: "#1, #4"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Session boundary
+      options:
+        - label: I will record newly discovered work as follow-up issues rather than expanding this issue.
+          required: true
