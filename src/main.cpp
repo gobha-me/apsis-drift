@@ -190,8 +190,6 @@ class MeasuringSink final : public ByteSink {
   RenderSettings settings;
   settings.width = viewport.width;
   settings.height = viewport.height;
-  settings.vertical_scale *= static_cast<float>(viewport.height) /
-                             static_cast<float>(kFrameHeight);
   return settings;
 }
 
@@ -416,12 +414,6 @@ class LandscapeApp final : public App {
     }
   }
 
-  [[nodiscard]] auto scaled_vertical(float baseline) const noexcept -> float {
-    return baseline *
-           static_cast<float>(m_render_configuration.viewport.height) /
-           static_cast<float>(kFrameHeight);
-  }
-
   auto render_landscape() -> void {
     auto derived = derive_camera(m_flight);
     if (!derived) {
@@ -430,10 +422,9 @@ class LandscapeApp final : public App {
     Camera camera = *derived;
     const double elapsed_seconds =
         static_cast<double>(m_flight.tick) * kSimulationStep.count();
-    camera.horizon =
-        scaled_vertical(205.0F) +
-        std::sin(static_cast<float>(elapsed_seconds) * 0.17F) *
-            scaled_vertical(5.0F);
+    constexpr float degrees_to_radians{3.14159265358979323846F / 180.0F};
+    camera.pitch = std::sin(static_cast<float>(elapsed_seconds) * 0.17F) *
+                   degrees_to_radians;
     if (!m_renderer.render(m_terrain, camera, m_surface.pixels())) {
       throw std::runtime_error{std::format(
           "renderer rejected the {}x{} surface",
