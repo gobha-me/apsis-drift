@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -14,6 +15,18 @@ namespace apsis_drift {
 inline constexpr int kFrameWidth{kDefaultViewportWidth};
 inline constexpr int kFrameHeight{kDefaultViewportHeight};
 inline constexpr std::uint8_t kWaterLevel{70};
+
+// Local world axes use x/y across the terrain plane and positive z upward.
+struct WorldDirection {
+  float x{};
+  float y{};
+  float z{};
+
+  auto operator==(const WorldDirection&) const -> bool = default;
+};
+
+inline constexpr WorldDirection kLocalSunDirection{
+    0.747F, 0.475F, 0.342F};
 
 enum class TerrainError {
   size_too_small,
@@ -48,7 +61,23 @@ struct Camera {
   float y{240.0F};
   float height{135.0F};
   float yaw{0.35F};
-  float horizon{205.0F};
+  float pitch{};
+};
+
+struct ProjectedDirection {
+  // Normalized device coordinates: x and y are -1 at the left/bottom edge
+  // and +1 at the right/top edge. Values outside that range are off-screen.
+  float x{};
+  float y{};
+  float forward_depth{};
+};
+
+enum class ProjectionError {
+  invalid_viewport,
+  invalid_field_of_view,
+  non_finite_camera,
+  non_finite_direction,
+  zero_direction,
 };
 
 struct RenderSettings {
@@ -56,9 +85,23 @@ struct RenderSettings {
   int height{kFrameHeight};
   float field_of_view_degrees{72.0F};
   float max_distance{900.0F};
-  float vertical_scale{255.0F};
   float fog_start{420.0F};
+  WorldDirection sun_direction{kLocalSunDirection};
 };
+
+// Projects an application-owned world-space direction through a yaw/pitch
+// camera. A direction on or behind the camera plane returns std::nullopt;
+// off-screen directions retain coordinates outside normalized view bounds.
+[[nodiscard]] auto project_world_direction(
+    const Camera& camera, WorldDirection direction,
+    const RenderSettings& settings) noexcept
+    -> std::expected<std::optional<ProjectedDirection>, ProjectionError>;
+
+// Returns the screen-space row of the flat local geometric horizon. Rows grow
+// downward, so positive pitch moves the horizon toward the bottom edge.
+[[nodiscard]] auto project_local_horizon(
+    const Camera& camera, const RenderSettings& settings) noexcept
+    -> std::expected<float, ProjectionError>;
 
 class VoxelRenderer {
  public:

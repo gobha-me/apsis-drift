@@ -26,6 +26,17 @@ auto check(bool condition, const char* message) -> void {
   ++failures;
 }
 
+[[nodiscard]] auto close_enough(float left, float right,
+                                float tolerance = 1.0e-5F) -> bool {
+  return std::abs(left - right) <= tolerance;
+}
+
+[[nodiscard]] auto count_pixels(const std::vector<Pixel>& pixels,
+                                Pixel target) -> std::size_t {
+  return static_cast<std::size_t>(
+      std::count(pixels.begin(), pixels.end(), target));
+}
+
 auto generation_failure_matrix() -> void {
   check(!Terrain::generate(0, 1), "zero-sized terrain must be rejected");
   check(!Terrain::generate(16, 1), "terrain below the minimum must be rejected");
@@ -619,15 +630,15 @@ auto camera_derivation_contract() -> void {
   const auto camera = derive_camera(state);
   check(camera && camera->x == state.pose.x && camera->y == state.pose.y &&
             camera->height == state.pose.altitude &&
-            camera->yaw == state.pose.yaw,
+            camera->yaw == state.pose.yaw && camera->pitch == 0.0F,
         "the render camera must derive directly from authoritative pose");
 
   const auto checksum = flight_state_checksum(state);
   if (camera) {
     auto presentation = *camera;
-    presentation.horizon += 20.0F;
-    check(presentation.horizon != camera->horizon,
-          "camera horizon must remain independently adjustable");
+    presentation.pitch += 0.1F;
+    check(presentation.pitch != camera->pitch,
+          "camera pitch must remain independently adjustable");
   }
   check(flight_state_checksum(state) == checksum,
         "presentation-only camera changes must not alter flight state");
@@ -642,10 +653,8 @@ auto render_failure_matrix() -> void {
                           .height = 120,
                           .field_of_view_degrees = 72.0F,
                           .max_distance = 300.0F,
-                          .vertical_scale = 96.0F,
                           .fog_start = 140.0F}};
   Camera camera;
-  camera.horizon = 52.0F;
   std::vector<Pixel> short_buffer(160U * 120U - 1U, {1, 2, 3, 4});
   check(!renderer.render(*terrain, camera, short_buffer),
         "a short framebuffer must be rejected");
@@ -665,6 +674,202 @@ auto render_failure_matrix() -> void {
   check(std::all_of(frame.begin(), frame.end(),
                     [](Pixel pixel) { return pixel == Pixel{5, 6, 7, 8}; }),
         "a rejected camera must leave the framebuffer untouched");
+
+  camera.yaw = 0.0F;
+  auto invalid_sun_settings = renderer.settings();
+  invalid_sun_settings.sun_direction.x =
+      std::numeric_limits<float>::infinity();
+  VoxelRenderer invalid_sun{invalid_sun_settings};
+  check(!invalid_sun.render(*terrain, camera, frame),
+        "a non-finite sun direction must be rejected");
+  check(std::all_of(frame.begin(), frame.end(),
+                    [](Pixel pixel) { return pixel == Pixel{5, 6, 7, 8}; }),
+        "a rejected sun direction must leave the framebuffer untouched");
+
+  auto zero_sun_settings = renderer.settings();
+  zero_sun_settings.sun_direction = {};
+  VoxelRenderer zero_sun{zero_sun_settings};
+  check(!zero_sun.render(*terrain, camera, frame),
+        "a zero sun direction must be rejected");
+  check(std::all_of(frame.begin(), frame.end(),
+                    [](Pixel pixel) { return pixel == Pixel{5, 6, 7, 8}; }),
+        "a rejected zero sun must leave the framebuffer untouched");
+}
+
+auto camera_projection_contract() -> void {
+  constexpr float pi{3.14159265358979323846F};
+  RenderSettings settings;
+  Camera camera;
+  camera.x = 0.0F;
+  camera.y = 0.0F;
+  camera.height = 100.0F;
+  camera.yaw = 0.0F;
+  camera.pitch = 0.0F;
+
+  const auto forward =
+      project_world_direction(camera, {1.0F, 0.0F, 0.0F}, settings);
+  check(forward && *forward && close_enough((*forward)->x, 0.0F) &&
+            close_enough((*forward)->y, 0.0F),
+        "camera-forward direction must project to viewport center");
+
+  const auto right =
+      project_world_direction(camera, {1.0F, 0.25F, 0.0F}, settings);
+  check(right && *right && (*right)->x > 0.0F &&
+            close_enough((*right)->y, 0.0F),
+        "a world direction to camera right must project right of center");
+
+  const auto behind =
+      project_world_direction(camera, {-1.0F, 0.0F, 0.0F}, settings);
+  check(behind && !*behind,
+        "a direction behind the camera must not produce a projection");
+
+  const auto outside =
+      project_world_direction(camera, {1.0F, 2.0F, 0.0F}, settings);
+  check(outside && *outside && (*outside)->x > 1.0F,
+        "an off-screen direction must retain an out-of-range coordinate");
+
+  const auto zero = project_world_direction(camera, {}, settings);
+  check(!zero && zero.error() == ProjectionError::zero_direction,
+        "a zero-length direction must be rejected explicitly");
+  const auto non_finite = project_world_direction(
+      camera,
+      {1.0F, std::numeric_limits<float>::quiet_NaN(), 0.0F}, settings);
+  check(!non_finite &&
+            non_finite.error() == ProjectionError::non_finite_direction,
+        "a non-finite direction must be rejected explicitly");
+  auto invalid_settings = settings;
+  invalid_settings.field_of_view_degrees = 180.0F;
+  const auto invalid_fov =
+      project_world_direction(camera, {1.0F, 0.0F, 0.0F}, invalid_settings);
+  check(!invalid_fov &&
+            invalid_fov.error() == ProjectionError::invalid_field_of_view,
+        "an invalid field of view must be rejected explicitly");
+  invalid_settings = settings;
+  invalid_settings.width = 0;
+  const auto invalid_viewport = project_local_horizon(camera, invalid_settings);
+  check(!invalid_viewport &&
+            invalid_viewport.error() == ProjectionError::invalid_viewport,
+        "an invalid projection viewport must be rejected explicitly");
+
+  const auto level_horizon = project_local_horizon(camera, settings);
+  const auto sun_before_turn =
+      project_world_direction(camera, kLocalSunDirection, settings);
+  camera.yaw = pi * 0.1F;
+  const auto turned_horizon = project_local_horizon(camera, settings);
+  const auto sun_after_turn =
+      project_world_direction(camera, kLocalSunDirection, settings);
+  check(level_horizon && turned_horizon &&
+            close_enough(*level_horizon, *turned_horizon),
+        "turning a level camera must not move the local horizon");
+  check(sun_before_turn && *sun_before_turn && sun_after_turn &&
+            *sun_after_turn &&
+            !close_enough((*sun_before_turn)->x, (*sun_after_turn)->x),
+        "turning must move the projected world-space sun");
+
+  camera.yaw = 0.35F;
+  const auto level_sun =
+      project_world_direction(camera, kLocalSunDirection, settings);
+  camera.pitch = 0.1F;
+  const auto pitched_horizon = project_local_horizon(camera, settings);
+  const auto pitched_sun =
+      project_world_direction(camera, kLocalSunDirection, settings);
+  check(pitched_horizon && level_horizon &&
+            *pitched_horizon > *level_horizon,
+        "positive pitch must move the local horizon downward");
+  check(level_sun && *level_sun && pitched_sun && *pitched_sun &&
+            (*pitched_sun)->y < (*level_sun)->y,
+        "positive pitch must move a visible world-space sun downward");
+
+  constexpr std::array profiles{
+      RenderProfile::remote, RenderProfile::balanced, RenderProfile::local,
+      RenderProfile::cinematic};
+  std::optional<float> horizon_per_width;
+  std::optional<float> sun_vertical_per_aspect;
+  for (const auto profile : profiles) {
+    const auto viewport = profile_viewport(profile);
+    settings.width = viewport.width;
+    settings.height = viewport.height;
+    const auto horizon = project_local_horizon(camera, settings);
+    const auto sun =
+        project_world_direction(camera, kLocalSunDirection, settings);
+    check(horizon && sun && *sun,
+          "every named profile must project the same camera and sun");
+    if (!horizon || !sun || !*sun) continue;
+    const float centered_horizon =
+        *horizon - static_cast<float>(viewport.height - 1) * 0.5F;
+    const float normalized_horizon =
+        centered_horizon / static_cast<float>(viewport.width);
+    const float aspect = static_cast<float>(viewport.width) /
+                         static_cast<float>(viewport.height);
+    const float normalized_sun = (**sun).y / aspect;
+    if (!horizon_per_width) {
+      horizon_per_width = normalized_horizon;
+      sun_vertical_per_aspect = normalized_sun;
+    } else {
+      check(close_enough(normalized_horizon, *horizon_per_width),
+            "pitch horizon displacement must scale with projection width");
+      check(close_enough(normalized_sun, *sun_vertical_per_aspect),
+            "sun projection must account for each viewport aspect ratio");
+    }
+  }
+}
+
+auto world_sun_render_contract() -> void {
+  constexpr Pixel sun_color{247, 220, 151, 255};
+  const auto terrain = Terrain::generate(128, 0xC0FFEEU);
+  check(terrain.has_value(), "sun render terrain must generate");
+  if (!terrain) return;
+
+  RenderSettings settings{.width = 160,
+                          .height = 120,
+                          .field_of_view_degrees = 72.0F,
+                          .max_distance = 80.0F,
+                          .fog_start = 40.0F,
+                          .sun_direction = {1.0F, 0.0F, 0.35F}};
+  Camera camera;
+  camera.yaw = 0.0F;
+  camera.pitch = 0.0F;
+  camera.height = 300.0F;
+  std::vector<Pixel> frame(160U * 120U);
+  VoxelRenderer visible{settings};
+  check(visible.render(*terrain, camera, frame) &&
+            count_pixels(frame, sun_color) > 0,
+        "an in-front sun above the local horizon must be visible");
+
+  settings.sun_direction = {-1.0F, 0.0F, 0.35F};
+  VoxelRenderer behind{settings};
+  check(behind.render(*terrain, camera, frame) &&
+            count_pixels(frame, sun_color) == 0,
+        "a sun behind the camera must be absent");
+  const auto first_lighting = pixel_checksum(frame);
+
+  settings.sun_direction = {-1.0F, 0.4F, 0.35F};
+  VoxelRenderer shifted_lighting{settings};
+  check(shifted_lighting.render(*terrain, camera, frame) &&
+            count_pixels(frame, sun_color) == 0 &&
+            pixel_checksum(frame) != first_lighting,
+        "terrain lighting must follow the same world-space sun direction");
+
+  settings.sun_direction = {1.0F, 0.0F, -0.1F};
+  VoxelRenderer below{settings};
+  check(below.render(*terrain, camera, frame) &&
+            count_pixels(frame, sun_color) == 0,
+        "a sun below the local geometric horizon must be absent");
+
+  settings.sun_direction = {1.0F, 4.0F, 0.35F};
+  VoxelRenderer outside{settings};
+  check(outside.render(*terrain, camera, frame) &&
+            count_pixels(frame, sun_color) == 0,
+        "a sun outside the viewport must be absent");
+
+  settings.sun_direction = {1.0F, 0.0F, 0.02F};
+  camera.height =
+      std::max<float>(terrain->height_at(180, 240), kWaterLevel) + 16.0F;
+  settings.max_distance = 300.0F;
+  VoxelRenderer occluded{settings};
+  check(occluded.render(*terrain, camera, frame) &&
+            count_pixels(frame, sun_color) == 0,
+        "terrain must occlude a low projected sun");
 }
 
 auto deterministic_render() -> void {
@@ -676,11 +881,9 @@ auto deterministic_render() -> void {
                           .height = 120,
                           .field_of_view_degrees = 72.0F,
                           .max_distance = 420.0F,
-                          .vertical_scale = 112.0F,
                           .fog_start = 180.0F};
   VoxelRenderer renderer{settings};
   Camera camera;
-  camera.horizon = 52.0F;
   camera.height = std::max<float>(terrain->height_at(180, 240), kWaterLevel) +
                   48.0F;
   std::vector<Pixel> first(160U * 120U);
@@ -702,6 +905,58 @@ auto deterministic_render() -> void {
         "camera rotation must change the rendered frame");
 }
 
+auto golden_profile_renders() -> void {
+  const auto terrain = Terrain::generate(128, 0x39C0FFEEU);
+  check(terrain.has_value(), "golden profile terrain must generate");
+  if (!terrain) return;
+
+  struct GoldenProfile {
+    RenderProfile profile;
+    std::uint64_t checksum;
+  };
+  constexpr std::array profiles{
+      GoldenProfile{RenderProfile::remote, 11971755350641294141ULL},
+      GoldenProfile{RenderProfile::balanced, 9234956652280220582ULL},
+      GoldenProfile{RenderProfile::local, 9590141951237104148ULL},
+      GoldenProfile{RenderProfile::cinematic, 10512674829433416705ULL},
+  };
+
+  Camera camera;
+  camera.x = 67.25F;
+  camera.y = 91.5F;
+  camera.height =
+      std::max<float>(terrain->height_at(67, 91), kWaterLevel) + 54.0F;
+  camera.yaw = 0.41F;
+  camera.pitch = 0.045F;
+
+  for (const auto golden : profiles) {
+    const auto viewport = profile_viewport(golden.profile);
+    RenderSettings settings;
+    settings.width = viewport.width;
+    settings.height = viewport.height;
+    settings.max_distance = 180.0F;
+    settings.fog_start = 90.0F;
+    VoxelRenderer renderer{settings};
+    std::vector<Pixel> first(static_cast<std::size_t>(viewport.width) *
+                             static_cast<std::size_t>(viewport.height));
+    std::vector<Pixel> second(first.size());
+    check(renderer.render(*terrain, camera, first) &&
+              renderer.render(*terrain, camera, second),
+          "each golden profile camera must render twice");
+    const auto checksum = pixel_checksum(first);
+    if (checksum != golden.checksum) {
+      std::fprintf(stderr, "%.*s golden framebuffer checksum: %llu\n",
+                   static_cast<int>(profile_name(golden.profile).size()),
+                   profile_name(golden.profile).data(),
+                   static_cast<unsigned long long>(checksum));
+    }
+    check(first == second,
+          "identical profile camera and sun state must render identically");
+    check(checksum == golden.checksum,
+          "golden profile framebuffer checksum must remain stable");
+  }
+}
+
 auto required_viewport_matrix() -> void {
   const auto terrain = Terrain::generate(128, 0xC0FFEEU);
   check(terrain.has_value(), "viewport render terrain must generate");
@@ -717,14 +972,8 @@ auto required_viewport_matrix() -> void {
     settings.height = size.height;
     settings.max_distance = 180.0F;
     settings.fog_start = 90.0F;
-    settings.vertical_scale =
-        255.0F * static_cast<float>(size.height) /
-        static_cast<float>(kFrameHeight);
     VoxelRenderer renderer{settings};
     Camera camera;
-    camera.horizon =
-        205.0F * static_cast<float>(size.height) /
-        static_cast<float>(kFrameHeight);
     camera.height =
         std::max<float>(terrain->height_at(180, 240), kWaterLevel) +
         48.0F;
@@ -758,8 +1007,11 @@ auto main() -> int {
   command_edge_contract();
   flight_input_mapping_contract();
   camera_derivation_contract();
+  camera_projection_contract();
   render_failure_matrix();
+  world_sun_render_contract();
   deterministic_render();
+  golden_profile_renders();
   required_viewport_matrix();
   if (failures != 0) {
     std::fprintf(stderr, "%d test(s) failed\n", failures);

@@ -129,7 +129,7 @@ enum class FlightError : std::uint8_t {
     -> std::expected<void, FlightError>;
 
 // Camera state is presentation-only and is derived from authoritative flight
-// state. Callers remain responsible for presentation choices such as horizon.
+// state. Callers remain responsible for presentation choices such as pitch.
 [[nodiscard]] auto derive_camera(const FlightState& state) noexcept
     -> std::expected<Camera, FlightError>;
 
