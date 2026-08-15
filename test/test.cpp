@@ -241,6 +241,147 @@ auto cockpit_layout_contract() -> void {
         "cockpit layout must be deterministic");
 }
 
+auto flight_instrument_contract() -> void {
+  FlightState state;
+  state.pose.yaw = 0.35F;
+  state.pose.altitude = 135.0F;
+  state.clearance = 48.0F;
+  state.velocity = {3.0F, 4.0F, 12.0F};
+  state.mode = FlightMode::autopilot;
+
+  const auto normal = format_flight_instruments(state);
+  check(normal.heading == "HDG 020  ",
+        "heading must use rounded normalized degrees");
+  check(normal.altitude == "ALT 00135",
+        "altitude must use a fixed-width whole-unit field");
+  check(normal.clearance == "CLR 048  ",
+        "clearance must use a fixed-width whole-unit field");
+  check(normal.speed == "SPD 005  ",
+        "speed must use horizontal velocity magnitude");
+  check(normal.mode == "MODE AUTO" &&
+            normal.alert_state == CockpitAlert::none,
+        "normal autopilot telemetry must not raise an alert");
+
+  const auto check_widths = [](const FlightInstrumentReadout& readout,
+                               const char* message) {
+    check(readout.heading.size() == kInstrumentLineWidth &&
+              readout.altitude.size() == kInstrumentLineWidth &&
+              readout.clearance.size() == kInstrumentLineWidth &&
+              readout.speed.size() == kInstrumentLineWidth &&
+              readout.mode.size() == kInstrumentLineWidth &&
+              readout.alert.size() == kInstrumentLineWidth,
+          message);
+  };
+  check_widths(normal, "every normal instrument line must have fixed width");
+
+  state.mode = FlightMode::manual;
+  state.pose.yaw = -1.57079632679489661923F;
+  state.pose.altitude = -9999.0F;
+  state.clearance = kLowClearanceWarning;
+  state.velocity = {999.0F, 0.0F, 9999.0F};
+  const auto boundary = format_flight_instruments(state);
+  check(boundary.heading == "HDG 270  " &&
+            boundary.altitude == "ALT -9999" &&
+            boundary.clearance == "CLR 024  " &&
+            boundary.speed == "SPD 999  " &&
+            boundary.mode == "MODE MAN ",
+        "boundary telemetry must retain fixed-width values");
+  check(boundary.alert_state == CockpitAlert::low_clearance &&
+            boundary.alert == "! LOW CLR",
+        "the exact low-clearance threshold must raise a textual alert");
+  check_widths(boundary,
+               "every boundary instrument line must have fixed width");
+
+  state.pose.yaw = 359.6F *
+                   (3.14159265358979323846F / 180.0F);
+  state.pose.altitude = 100000.0F;
+  state.clearance = 24.1F;
+  state.velocity = {1000.0F, 0.0F, 0.0F};
+  const auto overflow = format_flight_instruments(state);
+  check(overflow.heading == "HDG 000  ",
+        "rounded heading must wrap from 360 to zero");
+  check(overflow.altitude == "ALT #####" &&
+            overflow.speed == "SPD ###  ",
+        "finite values outside display bounds must use fixed sentinels");
+  check(overflow.alert_state == CockpitAlert::none,
+        "clearance above the warning threshold must clear the alert");
+  check_widths(overflow,
+               "every overflow instrument line must have fixed width");
+
+  state.pose.altitude = -9999.5F;
+  state.clearance = -0.5F;
+  state.velocity = {-0.5F, 0.0F, 0.0F};
+  const auto negative_overflow = format_flight_instruments(state);
+  check(negative_overflow.altitude == "ALT #####" &&
+            negative_overflow.clearance == "CLR ###  " &&
+            negative_overflow.speed == "SPD 001  ",
+        "round-away negative boundaries must not exceed fixed fields");
+  check_widths(negative_overflow,
+               "negative overflow lines must retain fixed width");
+
+  std::array<FlightState, 9> invalid_states;
+  invalid_states.fill(FlightState{});
+  invalid_states[0].pose.yaw = std::numeric_limits<float>::quiet_NaN();
+  invalid_states[1].pose.altitude =
+      std::numeric_limits<float>::infinity();
+  invalid_states[2].clearance = -std::numeric_limits<float>::infinity();
+  invalid_states[3].velocity.x =
+      std::numeric_limits<float>::quiet_NaN();
+  invalid_states[4].velocity.y = std::numeric_limits<float>::infinity();
+  invalid_states[5].pose.x = std::numeric_limits<float>::infinity();
+  invalid_states[6].pose.y = std::numeric_limits<float>::quiet_NaN();
+  invalid_states[7].velocity.vertical =
+      -std::numeric_limits<float>::infinity();
+  invalid_states[8].mode = static_cast<FlightMode>(255);
+  for (const auto& invalid_state : invalid_states) {
+    const auto invalid = format_flight_instruments(invalid_state);
+    check(invalid.alert_state == CockpitAlert::invalid_telemetry &&
+              invalid.alert == "TELEM ERR",
+          "non-finite or invalid telemetry must raise a textual error");
+    check(invalid.heading == "HDG ---  " &&
+              invalid.altitude == "ALT -----" &&
+              invalid.clearance == "CLR ---  " &&
+              invalid.speed == "SPD ---  ",
+          "invalid telemetry must replace numeric fields with dashes");
+    check_widths(invalid,
+                 "every invalid instrument line must have fixed width");
+  }
+
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "instrument replay terrain must generate");
+  if (!terrain) return;
+  const auto initialized = initial_flight_state(*terrain);
+  check(initialized.has_value(), "instrument replay state must initialize");
+  if (!initialized) return;
+  auto first = *initialized;
+  auto second = *initialized;
+  const auto replay = [&](FlightState& replay_state) {
+    for (int step = 0; step < 60; ++step) {
+      constexpr std::array commands{
+          FlightCommand{0, FlightCommandKind::press_forward},
+          FlightCommand{0, FlightCommandKind::press_turn_right},
+      };
+      const std::span tick_commands =
+          replay_state.tick == 0 ? std::span{commands}
+                                 : std::span<const FlightCommand>{};
+      if (!advance_flight(*terrain, replay_state, tick_commands,
+                          kSimulationStep)) {
+        check(false, "instrument command replay must advance");
+        return;
+      }
+    }
+  };
+  const auto before = format_flight_instruments(first);
+  replay(first);
+  replay(second);
+  const auto after = format_flight_instruments(first);
+  check(after == format_flight_instruments(second),
+        "the same command steps must produce identical instrument lines");
+  check(after.heading != before.heading && after.speed == "SPD 052  " &&
+            after.mode == "MODE MAN ",
+        "deterministic command steps must update heading, speed, and mode");
+}
+
 auto sweep_selection_contract() -> void {
   const auto defaults = default_sweep_viewports();
   check(defaults.size() == 3,
@@ -1111,6 +1252,7 @@ auto main() -> int {
   render_profile_contract();
   viewport_validation_contract();
   cockpit_layout_contract();
+  flight_instrument_contract();
   sweep_selection_contract();
   sweep_report_contract();
   fixed_step_clock_contract();

@@ -26,9 +26,9 @@ Requirements:
 - Git when TermForge must be fetched
 
 Apsis Drift first looks for an installed TermForge package, then for a sibling
-checkout at `../termforge`. If neither exists, CMake fetches the exact
-post-v0.30.0 TermForge revision that includes the multi-chunk Kitty
-frame-replacement fix.
+checkout at `../termforge`. If neither exists, CMake fetches the tagged
+TermForge v0.31.2 release, which includes the multi-chunk Kitty frame-replacement
+fix.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -89,6 +89,13 @@ keyboard protocol provides held-key press/repeat/release state; terminals that
 only report presses use deterministic ten-tick control pulses. Simultaneously
 held opposing controls cancel to a neutral axis, and any manual-control press
 disengages autopilot.
+
+The cockpit's navigation rail reports heading in normalized degrees, altitude
+and requested terrain clearance in world units, and horizontal speed. The
+flight rail reports manual or autopilot mode. Clearance at or below 24 units
+raises a textual `LOW CLR` warning; invalid numeric telemetry is shown with
+fixed-width dashes and a `TELEM ERR` warning so neither condition relies on
+color alone.
 
 Flight simulation advances at a fixed 120 Hz independently of rendering. Host
 stalls contribute at most 125 ms of catch-up work per frame; excess elapsed

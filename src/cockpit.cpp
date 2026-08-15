@@ -1,7 +1,11 @@
 #include "apsis_drift/cockpit.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <format>
+#include <optional>
+#include <string_view>
 
 namespace apsis_drift {
 namespace {
@@ -15,6 +19,45 @@ inline constexpr int kMessageRows{3};
 inline constexpr int kStatusRows{1};
 inline constexpr int kRailGutterCols{1};
 inline constexpr int kMaximumTerminalAxis{65535};
+inline constexpr double kRadiansToDegrees{
+    180.0 / 3.141592653589793238462643383279502884};
+
+[[nodiscard]] auto valid_mode(FlightMode mode) noexcept -> bool {
+  return mode == FlightMode::manual || mode == FlightMode::autopilot;
+}
+
+[[nodiscard]] auto telemetry_is_finite(const FlightState& state) noexcept
+    -> bool {
+  return std::isfinite(state.pose.x) && std::isfinite(state.pose.y) &&
+         std::isfinite(state.pose.yaw) &&
+         std::isfinite(state.pose.altitude) &&
+         std::isfinite(state.clearance) &&
+         std::isfinite(state.velocity.x) &&
+         std::isfinite(state.velocity.y) &&
+         std::isfinite(state.velocity.vertical) && valid_mode(state.mode);
+}
+
+[[nodiscard]] auto rounded_in_range(double value, long long minimum,
+                                    long long maximum) noexcept
+    -> std::optional<long long> {
+  if (!std::isfinite(value) || value <= static_cast<double>(minimum) - 0.5 ||
+      value >= static_cast<double>(maximum) + 0.5) {
+    return std::nullopt;
+  }
+  return static_cast<long long>(std::round(value));
+}
+
+[[nodiscard]] auto format_altitude(float altitude) -> std::string {
+  const auto rounded = rounded_in_range(altitude, -9999, 99999);
+  return rounded ? std::format("ALT {:05}", *rounded) : "ALT #####";
+}
+
+[[nodiscard]] auto format_three_digit(std::string_view label,
+                                      double value) -> std::string {
+  const auto rounded = rounded_in_range(value, 0, 999);
+  return rounded ? std::format("{} {:03}  ", label, *rounded)
+                 : std::format("{} ###  ", label);
+}
 
 [[nodiscard]] auto aspect_fit(termforge::Rect available,
                               termforge::Extent cell_pixels,
@@ -100,6 +143,45 @@ auto compute_cockpit_layout(int cols, int rows,
       layout.viewport.h + 2,
   };
   return layout;
+}
+
+auto format_flight_instruments(const FlightState& state)
+    -> FlightInstrumentReadout {
+  FlightInstrumentReadout readout;
+  const bool valid = telemetry_is_finite(state);
+  if (!valid) {
+    readout.heading = "HDG ---  ";
+    readout.altitude = "ALT -----";
+    readout.clearance = "CLR ---  ";
+    readout.speed = "SPD ---  ";
+    readout.mode = valid_mode(state.mode)
+                       ? (state.mode == FlightMode::autopilot ? "MODE AUTO"
+                                                               : "MODE MAN ")
+                       : "MODE ----";
+    readout.alert = "TELEM ERR";
+    readout.alert_state = CockpitAlert::invalid_telemetry;
+    return readout;
+  }
+
+  double heading = std::fmod(
+      static_cast<double>(state.pose.yaw) * kRadiansToDegrees, 360.0);
+  if (heading < 0.0) heading += 360.0;
+  int heading_degrees = static_cast<int>(std::round(heading)) % 360;
+  readout.heading = std::format("HDG {:03}  ", heading_degrees);
+  readout.altitude = format_altitude(state.pose.altitude);
+  readout.clearance = format_three_digit("CLR", state.clearance);
+  readout.speed = format_three_digit(
+      "SPD", std::hypot(static_cast<double>(state.velocity.x),
+                        static_cast<double>(state.velocity.y)));
+  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
+                                                      : "MODE MAN ";
+  if (state.clearance <= kLowClearanceWarning) {
+    readout.alert = "! LOW CLR";
+    readout.alert_state = CockpitAlert::low_clearance;
+  } else {
+    readout.alert = std::string(kInstrumentLineWidth, ' ');
+  }
+  return readout;
 }
 
 }  // namespace apsis_drift

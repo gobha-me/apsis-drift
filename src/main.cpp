@@ -392,8 +392,11 @@ class LandscapeApp final : public App {
     constexpr Rgb text{205, 222, 224};
     constexpr Rgb muted{109, 143, 151};
     constexpr Rgb accent{126, 214, 210};
+    constexpr Rgb warning{238, 184, 104};
+    constexpr Rgb danger{238, 104, 104};
     constexpr Rgb chrome_bg{11, 28, 40};
     constexpr Rgb status_bg{20, 43, 66};
+    const auto instruments = format_flight_instruments(m_flight);
 
     screen.fill_rect(layout.header.x, layout.header.y, layout.header.w,
                      layout.header.h, text, status_bg);
@@ -419,20 +422,45 @@ class LandscapeApp final : public App {
                       layout.left_instruments.y + 2, "CONTROL", accent,
                       chrome_bg);
     screen.write_text(layout.left_instruments.x + 2,
-                      layout.left_instruments.y + 4, "BAY READY", muted,
+                      layout.left_instruments.y + 4, instruments.mode, text,
+                      chrome_bg);
+    const Rgb alert_color =
+        instruments.alert_state == CockpitAlert::invalid_telemetry
+            ? danger
+            : (instruments.alert_state == CockpitAlert::low_clearance
+                   ? warning
+                   : muted);
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 6, instruments.alert,
+                      alert_color, chrome_bg);
+    screen.write_text(layout.right_instruments.x + 2,
+                      layout.right_instruments.y + 2, "NAV DATA", accent,
                       chrome_bg);
     screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 2, "SYSTEMS", accent,
-                      chrome_bg);
+                      layout.right_instruments.y + 4, instruments.heading,
+                      text, chrome_bg);
     screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 4, "STANDBY", muted,
-                      chrome_bg);
+                      layout.right_instruments.y + 6, instruments.altitude,
+                      text, chrome_bg);
+    screen.write_text(layout.right_instruments.x + 2,
+                      layout.right_instruments.y + 8, instruments.clearance,
+                      alert_color, chrome_bg);
+    screen.write_text(layout.right_instruments.x + 2,
+                      layout.right_instruments.y + 10, instruments.speed,
+                      text, chrome_bg);
 
-    const std::string message =
-        m_error.empty()
-            ? " arrows/WASD move | Q/E strafe | R/F altitude | Space "
-              "autopilot | ESC quit "
-            : " ERROR: " + m_error + " | ESC quit ";
+    std::string message;
+    if (!m_error.empty()) {
+      message = " ERROR: " + m_error + " | ESC quit ";
+    } else if (instruments.alert_state == CockpitAlert::invalid_telemetry) {
+      message = " WARNING: TELEM ERR | flight instruments unavailable | "
+                "ESC quit ";
+    } else if (instruments.alert_state == CockpitAlert::low_clearance) {
+      message = " WARNING: LOW CLEARANCE | R to climb | ESC quit ";
+    } else {
+      message = " arrows/WASD move | Q/E strafe | R/F altitude | Space "
+                "autopilot | ESC quit ";
+    }
     screen.write_text(layout.messages.x + 2, layout.messages.y + 1, message,
                       text, chrome_bg);
 
