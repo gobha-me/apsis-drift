@@ -26,9 +26,9 @@ Requirements:
 - Git when TermForge must be fetched
 
 Apsis Drift first looks for an installed TermForge package, then for a sibling
-checkout at `../termforge`. If neither exists, CMake fetches the exact
-post-v0.30.0 TermForge revision that includes the multi-chunk Kitty
-frame-replacement fix.
+checkout at `../termforge`. If neither exists, CMake fetches the tagged
+TermForge v0.31.2 release, which includes the multi-chunk Kitty frame-replacement
+fix.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
