@@ -1,0 +1,66 @@
+# Seed Derivation Compatibility
+
+Apsis Drift generation begins with an explicit 64-bit universe seed. The seed
+comes from a supplied value, such as a future new-game option or a loaded save;
+seed derivation does not obtain entropy, own a random generator, or consume
+mutable random state.
+
+Version 1 derives a child from three values:
+
+- the 64-bit parent seed;
+- an explicitly numbered 64-bit domain;
+- a 64-bit ordinal identifying a sibling within that domain.
+
+The public domains and their permanent version 1 identifiers are:
+
+| Domain | Identifier |
+| --- | ---: |
+| `universe` | 1 |
+| `system` | 2 |
+| `planet` | 3 |
+| `terrain` | 4 |
+| `weather` | 5 |
+| `settlement` | 6 |
+| `encounter` | 7 |
+
+## Version 1 algorithm
+
+Derivation uses 64-bit FNV-1a with offset basis
+`14695981039346656037` and prime `1099511628211`. Beginning at the offset
+basis, feed this 44-byte record in order:
+
+1. the 16 ASCII bytes `APSIS-DRIFT-SEED`;
+2. derivation version `1` as an unsigned 32-bit integer;
+3. the parent seed as an unsigned 64-bit integer;
+4. the domain identifier as an unsigned 64-bit integer;
+5. the ordinal as an unsigned 64-bit integer.
+
+Every integer is fed least-significant byte first. For each byte, XOR it into
+the hash and multiply the hash by the FNV prime modulo 2^64. The final hash is
+the child seed; zero is a valid seed value.
+
+For example, a caller can treat `Seed{42}` as the supplied universe seed,
+derive system ordinal 0, derive planet ordinal 3 from that system, and then
+derive the planet's terrain, weather, and encounter streams independently.
+Deriving or consuming one stream cannot perturb any other stream.
+
+The checked-in golden vectors in `test/test.cpp` are the executable authority
+for exact results across compilers and hosts.
+
+## Compatibility rules
+
+The version, namespace bytes, field order, integer widths, byte order, FNV
+constants, and existing domain identifiers are generated-world compatibility
+data. None may change in place. A future algorithm must receive a new
+derivation version, and saves must record both their universe seed and the
+generator/derivation versions needed to reconstruct their world.
+
+Adding a new explicitly numbered domain does not change results for existing
+domains. A subsystem may use a deterministic PRNG after derivation, but its
+algorithm and any state that must survive save/resume form a separate
+compatibility contract.
+
+The current v0.2 flyover continues to accept its existing 32-bit terrain seed
+directly. Migrating that path is intentionally outside derivation version 1's
+introduction so its acceptance scenario and historical checksums remain
+unchanged.

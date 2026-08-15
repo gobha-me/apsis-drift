@@ -60,6 +60,10 @@ specified integer PRNG and stable derivation/hash algorithm. Standard-library
 random distributions and unconstrained floating-point behavior should not be
 treated as cross-version or cross-platform serialization formats.
 
+The exact version 1 domain identifiers, integer encoding, derivation algorithm,
+golden-vector contract, and save compatibility consequences are recorded in
+[Seed Derivation Compatibility](SEED_DERIVATION.md).
+
 Generation should be divided by scale:
 
 - Orbital scale: a procedural system model and planet sphere.
