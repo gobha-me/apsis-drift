@@ -27,8 +27,10 @@
 #include "termforge/drivers/ansi_rgb_driver.hpp"
 #include "termforge/drivers/fallback_driver.hpp"
 #include "termforge/drivers/kitty_driver.hpp"
+#include "termforge/widgets/frame.hpp"
 #include "termforge/widgets/pixel_surface.hpp"
 #include "apsis_drift/benchmark.hpp"
+#include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -164,27 +166,6 @@ class MeasuringSink final : public ByteSink {
   return *state;
 }
 
-[[nodiscard]] auto aspect_fit(Rect available, Extent per_cell,
-                              ViewportSize viewport) -> Rect {
-  if (available.empty()) return {};
-  const int cell_w = std::max(1, per_cell.w);
-  const int cell_h = std::max(1, per_cell.h);
-  int width = available.w;
-  int height = static_cast<int>(
-      (static_cast<std::int64_t>(width) * viewport.height * cell_w) /
-      (static_cast<std::int64_t>(viewport.width) * cell_h));
-  if (height <= 0) height = 1;
-  if (height > available.h) {
-    height = available.h;
-    width = static_cast<int>(
-        (static_cast<std::int64_t>(height) * viewport.width * cell_h) /
-        (static_cast<std::int64_t>(viewport.height) * cell_w));
-    width = std::clamp(width, 1, available.w);
-  }
-  return {available.x + (available.w - width) / 2,
-          available.y + (available.h - height) / 2, width, height};
-}
-
 [[nodiscard]] auto render_settings_for(ViewportSize viewport)
     -> RenderSettings {
   RenderSettings settings;
@@ -230,6 +211,7 @@ class LandscapeApp final : public App {
         tier, caps.kitty_graphics, caps.truecolor, caps.kitty_keyboard,
         caps.sync_updates);
     m_input_mapper.set_enhanced_keyboard(caps.kitty_keyboard);
+    m_input_tier = caps.kitty_keyboard ? "HELD INPUT" : "PRESS PULSES";
     if (m_capture_seconds > 0.0 && !capabilities().kitty_graphics) {
       m_error = "capture mode requires negotiated Kitty graphics";
       quit();
@@ -238,7 +220,10 @@ class LandscapeApp final : public App {
 
   auto on_event(const Event& event) -> void override {
     if (const auto* error = std::get_if<ErrorEvent>(&event)) {
-      m_error = error->message;
+      // TermForge reports expected progressive degradation as Info. The
+      // cockpit already exposes the selected press-only input tier, so reserve
+      // the ERROR bay for actionable warnings and failures.
+      if (error->severity != Severity::Info) m_error = error->message;
     } else if (const auto* key = std::get_if<KeyEvent>(&event)) {
       handle_key(*key);
     }
@@ -260,40 +245,14 @@ class LandscapeApp final : public App {
     const double render_time = elapsed_ms(render_started, Clock::now());
     m_sink.begin_frame(frame_started, render_time);
 
-    screen.clear();
-    const auto totals = driver().total_bytes();
-    screen.write_text(
-        0, 0,
-        std::format(
-            " fractal landscape {}x{} | {} | {} | seed {} | frame {} | "
-            "{:.2f} ms | {:.1f} MiB ",
-            m_render_configuration.viewport.width,
-            m_render_configuration.viewport.height,
-            profile_name(m_render_configuration), m_display_tier, m_seed,
-            m_frame, render_time,
-            static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
-        {238, 243, 247}, {20, 43, 66});
-
-    if (screen.rows() > 1) {
-      const std::string status =
-          m_error.empty()
-              ? std::format(
-                    " {} | arrows/WASD move | Q/E strafe | R/F altitude | "
-                    "Space autopilot | ESC quit ",
-                    m_flight.mode == FlightMode::autopilot ? "AUTOPILOT"
-                                                           : "MANUAL")
-              : " ERROR: " + m_error + " | ESC quit ";
-      screen.write_text(0, screen.rows() - 1, status, {190, 208, 214},
-                        {13, 25, 35});
-    }
-
-    const Rect available{0, 1, screen.cols(),
-                         std::max(0, screen.rows() - 2)};
+    Cell background;
+    background.bg = {7, 15, 24};
+    screen.clear(background);
     const Extent one_cell = driver().preferred_pixel_extent({0, 0, 1, 1});
-    m_surface.set_geometry(
-        aspect_fit(available, one_cell, m_render_configuration.viewport));
-    m_surface.draw(screen);
-    render_pixel_regions(m_surface);
+    const auto layout = compute_cockpit_layout(
+        screen.cols(), screen.rows(), one_cell,
+        m_render_configuration.viewport);
+    draw_cockpit(screen, layout, render_time);
     ++m_frame;
 
     if (m_run_started == Clock::time_point{}) m_run_started = frame_started;
@@ -395,6 +354,110 @@ class LandscapeApp final : public App {
   }
 
  private:
+  auto draw_cockpit(Screen& screen, const CockpitLayout& layout,
+                    double render_time) -> void {
+    if (!layout.supported()) {
+      m_surface.set_geometry({});
+      m_surface.draw(screen);
+      render_pixel_regions(m_surface);
+
+      const std::string title{"APSIS DRIFT // FLIGHT DECK"};
+      const std::string dimensions = std::format(
+          "terminal too small: need at least {}x{}, current {}x{}",
+          kMinimumCockpitCols, kMinimumCockpitRows, screen.cols(),
+          screen.rows());
+      const int center_y = std::max(0, screen.rows() / 2 - 1);
+      screen.write_text(std::max(0, (screen.cols() -
+                                     static_cast<int>(title.size())) /
+                                    2),
+                        center_y, title, {126, 214, 210}, {7, 15, 24});
+      screen.write_text(
+          std::max(0, (screen.cols() - static_cast<int>(dimensions.size())) /
+                          2),
+          center_y + 2, dimensions, {238, 184, 104}, {7, 15, 24});
+      return;
+    }
+
+    const auto style = m_display_tier == "fallback" ? BorderStyle::Ascii
+                                                     : BorderStyle::Rounded;
+    m_left_frame.set_style(style);
+    m_viewport_frame.set_style(style);
+    m_right_frame.set_style(style);
+    m_message_frame.set_style(style);
+    m_left_frame.set_geometry(layout.left_instruments);
+    m_viewport_frame.set_geometry(layout.viewport_frame);
+    m_right_frame.set_geometry(layout.right_instruments);
+    m_message_frame.set_geometry(layout.messages);
+
+    constexpr Rgb text{205, 222, 224};
+    constexpr Rgb muted{109, 143, 151};
+    constexpr Rgb accent{126, 214, 210};
+    constexpr Rgb chrome_bg{11, 28, 40};
+    constexpr Rgb status_bg{20, 43, 66};
+
+    screen.fill_rect(layout.header.x, layout.header.y, layout.header.w,
+                     layout.header.h, text, status_bg);
+    screen.write_text(
+        layout.header.x, layout.header.y,
+        std::format(" APSIS DRIFT // FLIGHT DECK | {} {}x{} | {} | seed {} ",
+                    profile_name(m_render_configuration),
+                    m_render_configuration.viewport.width,
+                    m_render_configuration.viewport.height, m_display_tier,
+                    m_seed),
+        text, status_bg);
+
+    const auto fill_panel = [&](Rect panel) {
+      screen.fill_rect(panel.x + 1, panel.y + 1,
+                       std::max(0, panel.w - 2),
+                       std::max(0, panel.h - 2), muted, chrome_bg);
+    };
+    fill_panel(layout.left_instruments);
+    fill_panel(layout.right_instruments);
+    fill_panel(layout.messages);
+
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 2, "CONTROL", accent,
+                      chrome_bg);
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 4, "BAY READY", muted,
+                      chrome_bg);
+    screen.write_text(layout.right_instruments.x + 2,
+                      layout.right_instruments.y + 2, "SYSTEMS", accent,
+                      chrome_bg);
+    screen.write_text(layout.right_instruments.x + 2,
+                      layout.right_instruments.y + 4, "STANDBY", muted,
+                      chrome_bg);
+
+    const std::string message =
+        m_error.empty()
+            ? " arrows/WASD move | Q/E strafe | R/F altitude | Space "
+              "autopilot | ESC quit "
+            : " ERROR: " + m_error + " | ESC quit ";
+    screen.write_text(layout.messages.x + 2, layout.messages.y + 1, message,
+                      text, chrome_bg);
+
+    m_left_frame.draw(screen);
+    m_viewport_frame.draw(screen);
+    m_right_frame.draw(screen);
+    m_message_frame.draw(screen);
+
+    const auto totals = driver().total_bytes();
+    screen.fill_rect(layout.status.x, layout.status.y, layout.status.w,
+                     layout.status.h, text, status_bg);
+    screen.write_text(
+        layout.status.x, layout.status.y,
+        std::format(" {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
+                    m_flight.mode == FlightMode::autopilot ? "AUTOPILOT"
+                                                           : "MANUAL",
+                    m_input_tier, m_frame, render_time,
+                    static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
+        text, status_bg);
+
+    m_surface.set_geometry(layout.viewport);
+    m_surface.draw(screen);
+    render_pixel_regions(m_surface);
+  }
+
   auto handle_key(const KeyEvent& key) -> void {
     if (auto queued = m_input_mapper.enqueue(key, m_flight.tick); !queued) {
       throw std::runtime_error{"flight input tick overflow"};
@@ -437,6 +500,10 @@ class LandscapeApp final : public App {
   Terrain m_terrain;
   VoxelRenderer m_renderer;
   PixelSurface m_surface;
+  Frame m_left_frame{"FLIGHT"};
+  Frame m_viewport_frame{"EXTERIOR"};
+  Frame m_right_frame{"NAV"};
+  Frame m_message_frame{"COMMS"};
   FlightState m_flight;
   FixedStepClock m_simulation_clock;
   apsis_drift::detail::FlightInputMapper m_input_mapper;
@@ -451,6 +518,7 @@ class LandscapeApp final : public App {
   std::string m_error;
   std::string m_display_tier{"probing"};
   std::string m_display_path{"not started"};
+  std::string m_input_tier{"INPUT PROBING"};
 };
 
 auto print_summary(const BenchmarkSummary& summary,
