@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.2.0 LANGUAGES CXX)
+project(apsis-drift VERSION 0.3.0 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -75,6 +75,7 @@ add_library(apsis_drift_lib STATIC
   src/landscape.cpp
   src/menu.cpp
   src/render_profile.cpp
+  src/seed.cpp
   src/simulation.cpp
   src/title.cpp
 )

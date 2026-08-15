@@ -14,6 +14,7 @@
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
+#include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
@@ -72,6 +73,74 @@ auto deterministic_generation() -> void {
         "terrain lookup must wrap at negative coordinates");
   check(first->height_at(128, 128) == first->height_at(0, 0),
         "terrain lookup must wrap at the positive boundary");
+}
+
+auto seed_derivation_contract() -> void {
+  constexpr std::array domains{
+      SeedDomain::universe, SeedDomain::system,    SeedDomain::planet,
+      SeedDomain::terrain,  SeedDomain::weather,   SeedDomain::settlement,
+      SeedDomain::encounter,
+  };
+  constexpr Seed parent{0x0123456789ABCDEFULL};
+  constexpr std::array<std::uint64_t, domains.size()> golden{
+      4143016152257524795ULL,  5513727441665043320ULL,
+      11205738369765721017ULL, 2772304862850006270ULL,
+      8464315790950683967ULL,  9835027080358202492ULL,
+      15527038008458880189ULL,
+  };
+
+  check(kSeedDerivationVersion == 1,
+        "seed derivation version 1 must remain stable");
+  check(derive_seed(Seed{0}, SeedDomain::universe).value ==
+            1291384648262051579ULL,
+        "the zero universe identity must retain its golden vector");
+  check(derive_seed(Seed{std::numeric_limits<std::uint64_t>::max()},
+                    SeedDomain::encounter,
+                    std::numeric_limits<std::uint64_t>::max())
+            .value == 11366853328773030509ULL,
+        "the maximum seed identity must retain its golden vector");
+  for (std::size_t index = 0; index < domains.size(); ++index) {
+    const auto first = derive_seed(parent, domains[index]);
+    const auto again = derive_seed(parent, domains[index]);
+    check(first == again,
+          "equal seed identities must derive the same child seed");
+    check(first.value == golden[index],
+          "named seed domains must retain their golden vectors");
+  }
+
+  const auto system = derive_seed(Seed{42}, SeedDomain::system, 2);
+  const auto planet = derive_seed(system, SeedDomain::planet, 7);
+  const auto terrain = derive_seed(planet, SeedDomain::terrain);
+  check(system.value == 14659972597280896784ULL &&
+            planet.value == 429332262284636838ULL &&
+            terrain.value == 15773001243264939156ULL,
+        "hierarchical seed derivation must retain its golden path");
+
+  check(derive_seed(parent, SeedDomain::planet, 0) !=
+            derive_seed(parent, SeedDomain::planet, 1),
+        "seed ordinals must identify distinct siblings");
+  check(derive_seed(Seed{0}, SeedDomain::terrain) !=
+            derive_seed(Seed{1}, SeedDomain::terrain),
+        "seed parents must identify distinct hierarchies");
+
+  const auto weather_before = derive_seed(planet, SeedDomain::weather);
+  (void)derive_seed(planet, SeedDomain::encounter, 99);
+  const auto weather_after = derive_seed(planet, SeedDomain::weather);
+  check(weather_before == weather_after,
+        "deriving another stream must not perturb existing streams");
+
+  std::vector<std::uint64_t> smoke;
+  smoke.reserve(64 * domains.size() * 128);
+  for (std::uint64_t root = 0; root < 64; ++root) {
+    for (const auto domain : domains) {
+      for (std::uint64_t ordinal = 0; ordinal < 128; ++ordinal) {
+        smoke.push_back(derive_seed(Seed{root}, domain, ordinal).value);
+      }
+    }
+  }
+  std::ranges::sort(smoke);
+  check(std::adjacent_find(smoke.begin(), smoke.end()) == smoke.end(),
+        "the bounded seed derivation smoke grid must not collide");
 }
 
 auto render_profile_contract() -> void {
@@ -1758,6 +1827,7 @@ auto required_viewport_matrix() -> void {
 auto main() -> int {
   generation_failure_matrix();
   deterministic_generation();
+  seed_derivation_contract();
   render_profile_contract();
   viewport_validation_contract();
   cockpit_layout_contract();
