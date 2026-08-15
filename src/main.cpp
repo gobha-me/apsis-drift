@@ -178,7 +178,8 @@ class MeasuringSink final : public ByteSink {
 class LandscapeApp final : public App {
  public:
   explicit LandscapeApp(RenderConfiguration render_configuration,
-                        std::uint32_t seed, double capture_seconds = 0.0)
+                        std::uint32_t seed, double capture_seconds = 0.0,
+                        bool interactive_controls = false)
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_renderer(render_settings_for(render_configuration.viewport)),
@@ -187,13 +188,14 @@ class LandscapeApp final : public App {
                   {0, 0, 0, 255}),
         m_flight(required_initial_flight(m_terrain)),
         m_capture_seconds(capture_seconds),
-        m_seed(seed) {
+        m_seed(seed),
+        m_interactive_controls(interactive_controls) {
     set_frame_ms(33);
     // TermForge supplies elapsed host time. Apsis Drift owns the fixed-step
     // accumulator and its bounded catch-up policy.
     set_tick_hz(0);
     set_max_tick_dt(std::chrono::duration<double>::zero());
-    set_mouse_mode(MouseMode::None);
+    set_mouse_mode(interactive_controls ? MouseMode::Click : MouseMode::None);
     set_keyboard_mode(KeyboardMode::Enhanced);
     require(apsis_drift::detail::flight_deck_requirements());
     render_landscape();
@@ -212,7 +214,7 @@ class LandscapeApp final : public App {
         "input_repeat={}, input_release={}, sync={})",
         tier, caps.kitty_graphics, caps.truecolor, input.key_press,
         input.key_repeat, input.key_release, caps.sync_updates);
-    m_input_tier = "HELD INPUT";
+    m_input_tier = m_interactive_controls ? "KEY + MOUSE" : "HELD INPUT";
     if (m_capture_seconds > 0.0 && !capabilities().kitty_graphics) {
       m_error = "capture mode requires negotiated Kitty graphics";
       quit();
@@ -222,6 +224,9 @@ class LandscapeApp final : public App {
   auto on_event(const Event& event) -> void override {
     if (const auto* error = std::get_if<ErrorEvent>(&event)) {
       if (error->severity != Severity::Info) m_error = error->message;
+      if (error->severity != Severity::Info) {
+        m_input_mapper.neutralize_mouse(m_flight.tick);
+      }
       // TermForge dispatches any synthesized held-key releases before this
       // requirements transition. Stop instead of simulating with an input
       // route that can no longer guarantee release events.
@@ -231,6 +236,13 @@ class LandscapeApp final : public App {
       }
     } else if (const auto* key = std::get_if<KeyEvent>(&event)) {
       handle_key(*key);
+    } else if (const auto* mouse = std::get_if<MouseEvent>(&event)) {
+      if (m_interactive_controls) {
+        m_input_mapper.enqueue(*mouse, m_active_mouse_region, m_flight.tick);
+      }
+    } else if (std::holds_alternative<ResizeEvent>(event)) {
+      m_input_mapper.neutralize_mouse(m_flight.tick);
+      m_active_mouse_region = {};
     }
     App::on_event(event);
   }
@@ -358,6 +370,10 @@ class LandscapeApp final : public App {
   auto draw_cockpit(Screen& screen, const CockpitLayout& layout,
                     double render_time) -> void {
     if (!layout.supported()) {
+      if (!m_active_mouse_region.empty()) {
+        m_input_mapper.neutralize_mouse(m_flight.tick);
+        m_active_mouse_region = {};
+      }
       m_surface.set_geometry({});
       m_surface.draw(screen);
       render_pixel_regions(m_surface);
@@ -378,6 +394,7 @@ class LandscapeApp final : public App {
           center_y + 2, dimensions, {238, 184, 104}, {7, 15, 24});
       return;
     }
+    m_active_mouse_region = layout.viewport;
 
     m_left_frame.set_style(BorderStyle::Rounded);
     m_viewport_frame.set_style(BorderStyle::Rounded);
@@ -457,8 +474,11 @@ class LandscapeApp final : public App {
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
       message = " WARNING: LOW CLEARANCE | R to climb | ESC quit ";
     } else {
-      message = " arrows/WASD move | Q/E strafe | R/F altitude | Space "
-                "autopilot | ESC quit ";
+      message = layout.mode == CockpitLayoutMode::wide
+                    ? " L-hold fly | R-hold strafe/alt | M-click auto | "
+                      "keys WASD Q/E R/F Space | ESC quit "
+                    : " L-hold fly | R-hold strafe/alt | M auto | "
+                      "keys WASD/QE/RF/Space | ESC quit ";
     }
     screen.write_text(layout.messages.x + 2, layout.messages.y + 1, message,
                       text, chrome_bg);
@@ -545,6 +565,8 @@ class LandscapeApp final : public App {
   std::string m_display_tier{"probing"};
   std::string m_display_path{"not started"};
   std::string m_input_tier{"INPUT PROBING"};
+  Rect m_active_mouse_region{};
+  bool m_interactive_controls{};
 };
 
 auto print_summary(const BenchmarkSummary& summary,
@@ -621,7 +643,8 @@ auto usage() -> void {
       "entries may be profile names or validated WIDTHxHEIGHT values.\n"
       "Add --snapshot PATH to save the final framebuffer as a binary PPM.\n"
       "Interactive controls: arrows/WASD move, Q/E strafe, R/F altitude,\n"
-      "Space toggles autopilot, and Escape quits.");
+      "Space toggles autopilot; left-hold flies, right-hold strafes/climbs,\n"
+      "middle-click toggles autopilot, and Escape quits.");
 }
 
 }  // namespace
@@ -855,8 +878,11 @@ auto main(int argc, char** argv) -> int {
 
     const RenderConfiguration render_configuration =
         resolve_render_configuration(selected_profile, viewport_override);
+    const bool interactive_controls =
+        !benchmark_frames && capture_seconds == 0;
     LandscapeApp app{render_configuration, seed,
-                     static_cast<double>(capture_seconds)};
+                     static_cast<double>(capture_seconds),
+                     interactive_controls};
     if (auto forced =
             app.force_capabilities(driver_choice, keyboard_choice);
         !forced) {

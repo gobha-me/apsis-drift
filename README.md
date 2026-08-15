@@ -83,15 +83,31 @@ Interactive controls:
 - Q/E: strafe
 - R/F: change flight clearance
 - Space: toggle autopilot
+- Left-button hold in the exterior viewport: forward/back and turn
+- Right-button hold in the exterior viewport: strafe and change flight clearance
+- Middle-button click in the exterior viewport: toggle autopilot
 - Escape: quit
 
-Input is recorded as tick-addressed simulation commands. Apsis Drift requires
-semantic press, repeat, and release events, supplied by TermForge through the
-enhanced terminal keyboard protocol or an explicitly configured structured
-event source. Simultaneously held opposing controls cancel to a neutral axis,
-and any manual-control press disengages autopilot. Apsis Drift does not scan or
-open raw input devices; device, permission, focus, and layout policy remain
-outside the game.
+Mouse flight divides each viewport axis into thirds. The center third is a
+dead zone; the outer thirds select the corresponding direction, and diagonal
+holds combine both axes. Release and press again in another zone to change the
+mouse direction. Keyboard and mouse holds are tracked independently,
+so releasing one does not cancel the other. Opposing directions cancel to a
+neutral axis. Button release, leaving the exterior viewport, resize, or input
+loss neutralizes mouse-owned controls without clearing keyboard holds. A
+terminal without suitable mouse reporting therefore remains fully playable by
+keyboard.
+
+Input is converted to tick-addressed simulation commands. Apsis Drift requires
+semantic keyboard press, repeat, and release events, supplied by TermForge
+through the enhanced terminal keyboard protocol or an explicitly configured
+structured event source. High-frequency pointer changes are coalesced to
+bounded per-tick intent. A mouse autopilot toggle is applied before manual
+commands at the same tick, so simultaneous keyboard or held mouse input returns
+to manual flight.
+Any manual-control press disengages autopilot. Apsis Drift does not scan or open
+raw input devices; terminal protocols, device permission, focus, layout, and
+degradation policy remain outside the game.
 
 The cockpit's navigation rail reports heading in normalized degrees, altitude
 and requested terrain clearance in world units, and horizontal speed. The
