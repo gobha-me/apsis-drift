@@ -200,12 +200,16 @@ at 144; press fall at 156; release backward at 168; release left strafe at
 240 with all manual controls neutral.
 
 Both presentations must report the flight checksum
-`15302063256845754841`. The canonical final framebuffer checksums are
+`15302063256845754841`. The captured 2026-08-15 workstation produced final
+framebuffer checksums
 `14472657128233142808` for the `local` Kitty run and
-`4248103746500193130` for the `remote` ANSI run. Timing and encoded-byte totals
-remain presentation measurements and are not deterministic acceptance values.
-The final simulation state remains visible for roughly ten seconds so the
-cockpit, instruments, and presentation quality can be inspected or captured.
+`4248103746500193130` for the `remote` ANSI run. Framebuffer checksums include
+presentation-only floating-point camera pitch and can vary with the host math
+library; reports retain them as same-environment visual diagnostics, not
+cross-machine acceptance values. Timing and encoded-byte totals are likewise
+presentation measurements. The final simulation state remains visible for
+roughly ten seconds so the cockpit, instruments, and presentation quality can
+be inspected or captured.
 
 ## Measure and capture
 
