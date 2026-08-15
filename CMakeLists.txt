@@ -70,6 +70,7 @@ endif ()
 add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
   src/cockpit.cpp
+  src/flight_deck_acceptance.cpp
   src/flight_input.cpp
   src/landscape.cpp
   src/menu.cpp
@@ -123,6 +124,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_fixed_step_benchmark.cmake")
 
+  add_test(NAME flight-deck-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_flight_deck_acceptance.cmake")
+
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
   add_test(NAME reject-viewport-negative
@@ -153,6 +160,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --sweep-fps 30 --report sweep-invalid.json)
   add_test(NAME reject-keyboard-with-automatic-driver
     COMMAND apsis-drift --keyboard enhanced)
+  add_test(NAME reject-acceptance-missing-report
+    COMMAND apsis-drift --flight-deck-acceptance)
+  add_test(NAME reject-acceptance-seed-override
+    COMMAND apsis-drift --flight-deck-acceptance --seed 42
+            --report acceptance-invalid.json)
+  add_test(NAME reject-acceptance-mode-conflict
+    COMMAND apsis-drift --flight-deck-acceptance --benchmark 1
+            --report acceptance-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -171,6 +186,9 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-sweep-incompatible-profile
     reject-sweep-options-without-mode
     reject-keyboard-with-automatic-driver
+    reject-acceptance-missing-report
+    reject-acceptance-seed-override
+    reject-acceptance-mode-conflict
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()
