@@ -72,8 +72,10 @@ add_library(apsis_drift_lib STATIC
   src/cockpit.cpp
   src/flight_input.cpp
   src/landscape.cpp
+  src/menu.cpp
   src/render_profile.cpp
   src/simulation.cpp
+  src/title.cpp
 )
 add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 

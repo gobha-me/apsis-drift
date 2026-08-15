@@ -78,6 +78,8 @@ overlapping or clipped regions.
 
 Interactive controls:
 
+- Startup/pause menus: Up/Down or Tab/Shift-Tab selects an action;
+  Enter, Space, or left click activates it
 - Arrow keys or W/S: forward/back
 - Left/Right or A/D: turn
 - Q/E: strafe
@@ -86,7 +88,20 @@ Interactive controls:
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
-- Escape: quit
+- Escape during flight: pause
+- Escape while paused: resume
+
+The game opens on a title screen with explicit Start Flight and Exit actions.
+Escape never exits active flight or the title screen. While paused, fixed-step
+simulation does not advance, accumulated host time is discarded, and held
+keyboard or mouse controls are reconciled before the first resumed tick. The
+menu keeps textual focus markers and cell-native action labels on both Kitty
+and supported truecolor ANSI paths. Ctrl-C remains the terminal interrupt path.
+
+The title uses an original code-authored bitmap alphabet and palette with
+integer scaling; it does not load an encoded font or image asset. Its exact
+glyph coverage, origin, and license are recorded in
+[docs/ASSET_PROVENANCE.md](docs/ASSET_PROVENANCE.md).
 
 Mouse flight divides each viewport axis into thirds. The center third is a
 dead zone; the outer thirds select the corresponding direction, and diagonal
@@ -132,10 +147,11 @@ refusals independently:
 
 An explicit driver defaults to enhanced input; `--keyboard press-only` isolates
 the missing-repeat/release refusal. The fallback choice exists only to verify
-missing-truecolor refusal. Unsupported combinations exit nonzero before
-alternate-screen entry. After exit, the application prints the selected display
-tier and effective input capabilities. Forcing skips the startup probe and is
-diagnostic; it cannot make an unsupported terminal implement a protocol.
+missing-truecolor refusal. Unsupported combinations exit nonzero before the
+title menu or alternate-screen entry. After exit, the application prints the
+selected display tier and effective input capabilities. Forcing skips the
+startup probe and is diagnostic; it cannot make an unsupported terminal
+implement a protocol.
 
 ## Measure and capture
 

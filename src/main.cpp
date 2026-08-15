@@ -31,8 +31,10 @@
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/landscape.hpp"
+#include "apsis_drift/menu.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
 
@@ -187,6 +189,7 @@ class LandscapeApp final : public App {
                    render_configuration.viewport.height},
                   {0, 0, 0, 255}),
         m_flight(required_initial_flight(m_terrain)),
+        m_session(!interactive_controls),
         m_capture_seconds(capture_seconds),
         m_seed(seed),
         m_interactive_controls(interactive_controls) {
@@ -235,20 +238,36 @@ class LandscapeApp final : public App {
         quit();
       }
     } else if (const auto* key = std::get_if<KeyEvent>(&event)) {
-      handle_key(*key);
+      if (key->key == Key::Escape && m_interactive_controls) {
+        if (key->action == KeyAction::Press) {
+          apply_session_command(MenuCommand::escape);
+        }
+        return;
+      }
+      if (m_session.menu_visible()) {
+        handle_menu_key(*key);
+      } else if (m_session.screen() == SessionScreen::flight) {
+        handle_key(*key);
+      }
     } else if (const auto* mouse = std::get_if<MouseEvent>(&event)) {
-      if (m_interactive_controls) {
+      if (m_session.menu_visible()) {
+        handle_menu_mouse(*mouse);
+      } else if (m_interactive_controls &&
+                 m_session.screen() == SessionScreen::flight) {
         m_input_mapper.enqueue(*mouse, m_active_mouse_region, m_flight.tick);
       }
-    } else if (std::holds_alternative<ResizeEvent>(event)) {
+    } else if (const auto* resize = std::get_if<ResizeEvent>(&event)) {
       m_input_mapper.neutralize_mouse(m_flight.tick);
       m_active_mouse_region = {};
+      m_menu_layout = compute_menu_layout(resize->cols, resize->rows);
     }
     App::on_event(event);
   }
 
   auto on_tick(std::chrono::duration<double> dt) -> void override {
-    advance_simulation(dt);
+    if (m_session.screen() == SessionScreen::flight) {
+      advance_simulation(dt);
+    }
   }
 
   auto on_render(Screen& screen) -> void override {
@@ -258,7 +277,15 @@ class LandscapeApp final : public App {
     }
     const auto frame_started = Clock::now();
     const auto render_started = Clock::now();
-    render_landscape();
+    if (m_session.screen() == SessionScreen::flight) {
+      render_landscape();
+    } else if (m_session.screen() == SessionScreen::title &&
+               !m_title_rendered) {
+      m_title_available =
+          render_title(m_render_configuration.viewport, m_surface.pixels())
+              .has_value();
+      m_title_rendered = true;
+    }
     const double render_time = elapsed_ms(render_started, Clock::now());
     m_sink.begin_frame(frame_started, render_time);
 
@@ -269,7 +296,14 @@ class LandscapeApp final : public App {
     const auto layout = compute_cockpit_layout(
         screen.cols(), screen.rows(), one_cell,
         m_render_configuration.viewport);
-    draw_cockpit(screen, layout, render_time);
+    if (m_session.screen() == SessionScreen::title) {
+      draw_title_screen(screen);
+    } else if (m_session.screen() == SessionScreen::paused) {
+      draw_cockpit(screen, layout, render_time, false);
+      draw_menu(screen, "FLIGHT PAUSED", "RESUME FLIGHT");
+    } else if (m_session.screen() == SessionScreen::flight) {
+      draw_cockpit(screen, layout, render_time, true);
+    }
     ++m_frame;
 
     if (m_run_started == Clock::time_point{}) m_run_started = frame_started;
@@ -367,34 +401,168 @@ class LandscapeApp final : public App {
   }
 
  private:
-  auto draw_cockpit(Screen& screen, const CockpitLayout& layout,
-                    double render_time) -> void {
-    if (!layout.supported()) {
-      if (!m_active_mouse_region.empty()) {
-        m_input_mapper.neutralize_mouse(m_flight.tick);
-        m_active_mouse_region = {};
-      }
+  [[nodiscard]] auto menu_command_for(const KeyEvent& key) const noexcept
+      -> std::optional<MenuCommand> {
+    if (key.action == KeyAction::Release) return std::nullopt;
+    if (key.key == Key::Up) return MenuCommand::previous;
+    if (key.key == Key::Down) return MenuCommand::next;
+    if (key.key == Key::Tab) {
+      return key.shift ? MenuCommand::previous : MenuCommand::next;
+    }
+    if (key.action != KeyAction::Press) return std::nullopt;
+    if (key.key == Key::Enter ||
+        (key.key == Key::Char && key.ch == U' ')) {
+      return MenuCommand::activate;
+    }
+    return std::nullopt;
+  }
+
+  auto apply_session_command(MenuCommand command) -> void {
+    const auto transition = m_session.dispatch(command);
+    if (!transition.changed()) return;
+
+    if (transition.from == SessionScreen::flight &&
+        transition.to == SessionScreen::paused) {
+      m_input_mapper.suspend(m_flight.controls, m_flight.tick);
+      m_simulation_clock.reset();
+      m_active_mouse_region = {};
+    }
+    if (transition.to == SessionScreen::flight) {
+      m_simulation_clock.reset();
+      m_active_mouse_region = {};
+    }
+    if (transition.to == SessionScreen::exit_requested) quit();
+  }
+
+  auto handle_menu_key(const KeyEvent& key) -> void {
+    if (const auto command = menu_command_for(key)) {
+      apply_session_command(*command);
+    }
+  }
+
+  auto handle_menu_mouse(const MouseEvent& mouse) -> void {
+    if (!mouse.pressed || mouse.button != 0 || mouse.scroll_up ||
+        mouse.scroll_down) {
+      return;
+    }
+    const auto selected = menu_item_at(m_menu_layout, mouse.x, mouse.y);
+    if (!selected) return;
+    m_session.select(*selected);
+    apply_session_command(MenuCommand::activate);
+  }
+
+  auto draw_size_requirement(Screen& screen) -> void {
+    m_active_mouse_region = {};
+    m_menu_layout = {};
+    m_surface.set_geometry({});
+    m_surface.draw(screen);
+    render_pixel_regions(m_surface);
+
+    const std::string title{"APSIS DRIFT // FLIGHT DECK"};
+    const std::string dimensions = std::format(
+        "terminal too small: need at least {}x{}, current {}x{}",
+        kMinimumCockpitCols, kMinimumCockpitRows, screen.cols(),
+        screen.rows());
+    const int center_y = std::max(0, screen.rows() / 2 - 1);
+    screen.write_text(
+        std::max(0,
+                 (screen.cols() - static_cast<int>(title.size())) / 2),
+        center_y, title, {126, 214, 210}, {7, 15, 24});
+    screen.write_text(
+        std::max(0,
+                 (screen.cols() - static_cast<int>(dimensions.size())) / 2),
+        center_y + 2, dimensions, {238, 184, 104}, {7, 15, 24});
+  }
+
+  auto draw_menu(Screen& screen, std::string_view heading,
+                 std::string_view primary_label) -> void {
+    if (screen.cols() < kMinimumCockpitCols ||
+        screen.rows() < kMinimumCockpitRows) {
+      draw_size_requirement(screen);
+      return;
+    }
+    m_menu_layout = compute_menu_layout(screen.cols(), screen.rows());
+    if (!m_menu_layout.supported()) {
+      draw_size_requirement(screen);
+      return;
+    }
+
+    constexpr Rgb text{205, 222, 224};
+    constexpr Rgb muted{109, 143, 151};
+    constexpr Rgb accent{126, 214, 210};
+    constexpr Rgb panel_bg{11, 28, 40};
+    constexpr Rgb selected_bg{20, 61, 70};
+
+    m_menu_frame.set_style(BorderStyle::Rounded);
+    m_menu_frame.set_geometry(m_menu_layout.panel);
+    screen.fill_rect(m_menu_layout.panel.x + 1, m_menu_layout.panel.y + 1,
+                     m_menu_layout.panel.w - 2,
+                     m_menu_layout.panel.h - 2, text, panel_bg);
+
+    const auto centered = [&](Rect row, std::string_view value, Rgb fg,
+                              Rgb bg) {
+      const int x = row.x + std::max(
+                                0, (row.w - static_cast<int>(value.size())) /
+                                       2);
+      screen.write_text(x, row.y, value, fg, bg);
+    };
+    centered(m_menu_layout.heading, heading, accent, panel_bg);
+
+    const auto action = [&](Rect row, MenuItem item, std::string_view label) {
+      const bool selected = m_session.selected() == item;
+      const Rgb background = selected ? selected_bg : panel_bg;
+      screen.fill_rect(row.x, row.y, row.w, row.h, text, background);
+      const std::string display =
+          selected ? std::format("> {} <", label) : std::string(label);
+      centered(row, display, text, background);
+    };
+    action(m_menu_layout.primary_action, MenuItem::primary, primary_label);
+    action(m_menu_layout.exit_action, MenuItem::exit, "EXIT TO TERMINAL");
+    centered(m_menu_layout.hint, "ARROWS/TAB  ENTER  MOUSE", muted,
+             panel_bg);
+    m_menu_frame.draw(screen);
+  }
+
+  auto draw_title_screen(Screen& screen) -> void {
+    if (screen.cols() < kMinimumCockpitCols ||
+        screen.rows() < kMinimumCockpitRows) {
+      draw_size_requirement(screen);
+      return;
+    }
+    m_menu_layout = compute_menu_layout(screen.cols(), screen.rows());
+    if (!m_menu_layout.supported()) {
+      draw_size_requirement(screen);
+      return;
+    }
+
+    if (m_title_available && !m_menu_layout.art.empty()) {
+      m_surface.set_geometry(m_menu_layout.art);
+      m_surface.draw(screen);
+      render_pixel_regions(m_surface);
+    } else {
       m_surface.set_geometry({});
       m_surface.draw(screen);
       render_pixel_regions(m_surface);
-
-      const std::string title{"APSIS DRIFT // FLIGHT DECK"};
-      const std::string dimensions = std::format(
-          "terminal too small: need at least {}x{}, current {}x{}",
-          kMinimumCockpitCols, kMinimumCockpitRows, screen.cols(),
-          screen.rows());
-      const int center_y = std::max(0, screen.rows() / 2 - 1);
-      screen.write_text(std::max(0, (screen.cols() -
-                                     static_cast<int>(title.size())) /
-                                    2),
-                        center_y, title, {126, 214, 210}, {7, 15, 24});
+      constexpr std::string_view fallback{"APSIS DRIFT"};
       screen.write_text(
-          std::max(0, (screen.cols() - static_cast<int>(dimensions.size())) /
+          std::max(0, (screen.cols() - static_cast<int>(fallback.size())) /
                           2),
-          center_y + 2, dimensions, {238, 184, 104}, {7, 15, 24});
+          std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
+          fallback, {126, 214, 210}, {7, 15, 24});
+    }
+    draw_menu(screen, "FLIGHT DECK // v0.2", "START FLIGHT");
+  }
+
+  auto draw_cockpit(Screen& screen, const CockpitLayout& layout,
+                    double render_time, bool enhanced_pixels) -> void {
+    if (!layout.supported()) {
+      if (!m_active_mouse_region.empty()) {
+        m_input_mapper.neutralize_mouse(m_flight.tick);
+      }
+      draw_size_requirement(screen);
       return;
     }
-    m_active_mouse_region = layout.viewport;
+    m_active_mouse_region = enhanced_pixels ? layout.viewport : Rect{};
 
     m_left_frame.set_style(BorderStyle::Rounded);
     m_viewport_frame.set_style(BorderStyle::Rounded);
@@ -467,18 +635,18 @@ class LandscapeApp final : public App {
 
     std::string message;
     if (!m_error.empty()) {
-      message = " ERROR: " + m_error + " | ESC quit ";
+      message = " ERROR: " + m_error + " | ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::invalid_telemetry) {
       message = " WARNING: TELEM ERR | flight instruments unavailable | "
-                "ESC quit ";
+                "ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
-      message = " WARNING: LOW CLEARANCE | R to climb | ESC quit ";
+      message = " WARNING: LOW CLEARANCE | R to climb | ESC menu ";
     } else {
       message = layout.mode == CockpitLayoutMode::wide
                     ? " L-hold fly | R-hold strafe/alt | M-click auto | "
-                      "keys WASD Q/E R/F Space | ESC quit "
+                      "keys WASD Q/E R/F Space | ESC menu "
                     : " L-hold fly | R-hold strafe/alt | M auto | "
-                      "keys WASD/QE/RF/Space | ESC quit ";
+                      "keys WASD/QE/RF/Space | ESC menu ";
     }
     screen.write_text(layout.messages.x + 2, layout.messages.y + 1, message,
                       text, chrome_bg);
@@ -502,7 +670,7 @@ class LandscapeApp final : public App {
 
     m_surface.set_geometry(layout.viewport);
     m_surface.draw(screen);
-    render_pixel_regions(m_surface);
+    if (enhanced_pixels) render_pixel_regions(m_surface);
   }
 
   auto handle_key(const KeyEvent& key) -> void {
@@ -549,7 +717,9 @@ class LandscapeApp final : public App {
   Frame m_viewport_frame{"EXTERIOR"};
   Frame m_right_frame{"NAV"};
   Frame m_message_frame{"COMMS"};
+  Frame m_menu_frame{"SYSTEM"};
   FlightState m_flight;
+  SessionController m_session;
   FixedStepClock m_simulation_clock;
   apsis_drift::detail::FlightInputMapper m_input_mapper;
   SyntheticClock m_headless_clock;
@@ -566,7 +736,10 @@ class LandscapeApp final : public App {
   std::string m_display_path{"not started"};
   std::string m_input_tier{"INPUT PROBING"};
   Rect m_active_mouse_region{};
+  MenuLayout m_menu_layout{};
   bool m_interactive_controls{};
+  bool m_title_rendered{};
+  bool m_title_available{};
 };
 
 auto print_summary(const BenchmarkSummary& summary,
@@ -644,7 +817,7 @@ auto usage() -> void {
       "Add --snapshot PATH to save the final framebuffer as a binary PPM.\n"
       "Interactive controls: arrows/WASD move, Q/E strafe, R/F altitude,\n"
       "Space toggles autopilot; left-hold flies, right-hold strafes/climbs,\n"
-      "middle-click toggles autopilot, and Escape quits.");
+      "middle-click toggles autopilot, and Escape opens the pause menu.");
 }
 
 }  // namespace
