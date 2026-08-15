@@ -184,6 +184,27 @@ auto FlightInputMapper::neutralize_mouse(SimulationTick current_tick) -> void {
   m_mouse_buttons = {};
 }
 
+auto FlightInputMapper::suspend(const FlightControls& applied_controls,
+                                SimulationTick current_tick) -> void {
+  m_pending.clear();
+  m_mouse_intents.clear();
+  m_keyboard_controls = {};
+  m_mouse_controls = {};
+  m_mouse_buttons = {};
+
+  const std::array active{
+      applied_controls.forward,      applied_controls.backward,
+      applied_controls.turn_left,    applied_controls.turn_right,
+      applied_controls.strafe_left,  applied_controls.strafe_right,
+      applied_controls.rise,         applied_controls.fall,
+  };
+  for (std::size_t index = 0; index < active.size(); ++index) {
+    if (!active[index]) continue;
+    insert({current_tick,
+            command_for(static_cast<Control>(index), false)});
+  }
+}
+
 auto FlightInputMapper::enqueue(const termforge::MouseEvent& mouse,
                                 termforge::Rect active_region,
                                 SimulationTick current_tick) -> void {

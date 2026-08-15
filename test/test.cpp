@@ -12,7 +12,9 @@
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/landscape.hpp"
+#include "apsis_drift/menu.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
 
@@ -241,6 +243,125 @@ auto cockpit_layout_contract() -> void {
   check(intermediate ==
             compute_cockpit_layout(100, 30, kitty_cell, viewport),
         "cockpit layout must be deterministic");
+}
+
+auto menu_session_contract() -> void {
+  SessionController title;
+  check(title.screen() == SessionScreen::title &&
+            title.selected() == MenuItem::primary,
+        "interactive sessions must begin at Start Flight");
+  const auto ignored_escape = title.dispatch(MenuCommand::escape);
+  check(!ignored_escape.changed() &&
+            title.screen() == SessionScreen::title,
+        "Escape on the title screen must not exit");
+  (void)title.dispatch(MenuCommand::next);
+  check(title.selected() == MenuItem::exit,
+        "menu navigation must focus the explicit Exit action");
+  (void)title.dispatch(MenuCommand::previous);
+  check(title.selected() == MenuItem::primary,
+        "reverse navigation must return focus to the primary action");
+  const auto started = title.dispatch(MenuCommand::activate);
+  check(started.from == SessionScreen::title &&
+            started.to == SessionScreen::flight,
+        "activating Start Flight must enter flight");
+
+  const auto paused = title.dispatch(MenuCommand::escape);
+  check(paused.from == SessionScreen::flight &&
+            paused.to == SessionScreen::paused &&
+            title.selected() == MenuItem::primary,
+        "Escape in flight must pause with Resume focused");
+  const auto resumed = title.dispatch(MenuCommand::escape);
+  check(resumed.from == SessionScreen::paused &&
+            resumed.to == SessionScreen::flight,
+        "Escape in the pause menu must resume flight");
+  (void)title.dispatch(MenuCommand::escape);
+  (void)title.dispatch(MenuCommand::next);
+  const auto exited = title.dispatch(MenuCommand::activate);
+  check(exited.to == SessionScreen::exit_requested,
+        "Exit must require focused activation");
+  check(!title.dispatch(MenuCommand::escape).changed(),
+        "an exit request must be terminal");
+
+  SessionController headless{true};
+  check(headless.screen() == SessionScreen::flight,
+        "benchmark and capture sessions must bypass the title screen");
+
+  for (const auto [cols, rows] :
+       std::array{std::pair{0, 24}, std::pair{-1, 24},
+                  std::pair{32, 15}, std::pair{65536, 24}}) {
+    check(!compute_menu_layout(cols, rows).supported(),
+          "invalid menu dimensions must be rejected");
+  }
+  const auto compact = compute_menu_layout(80, 24);
+  check(compact.supported() && compact.screen == Rect{0, 0, 80, 24},
+        "the minimum cockpit terminal must retain a usable menu");
+  check(contained_by(compact.art, compact.screen) &&
+            contained_by(compact.panel, compact.screen) &&
+            contained_by(compact.primary_action, compact.panel) &&
+            contained_by(compact.exit_action, compact.panel) &&
+            compact.art.intersect(compact.panel).empty(),
+        "menu art and actions must remain inside non-overlapping regions");
+  check(menu_item_at(compact, compact.primary_action.x,
+                     compact.primary_action.y) == MenuItem::primary &&
+            menu_item_at(compact,
+                         compact.exit_action.x + compact.exit_action.w - 1,
+                         compact.exit_action.y) == MenuItem::exit,
+        "menu hit testing must include both action boundaries");
+  check(!menu_item_at(compact, compact.panel.x, compact.panel.y),
+        "menu borders must not activate an action");
+  check(compact == compute_menu_layout(80, 24),
+        "menu layout must be deterministic");
+}
+
+auto title_render_contract() -> void {
+  constexpr Pixel sentinel{91, 73, 55, 37};
+  std::vector<Pixel> invalid(16, sentinel);
+  check(!render_title({0, 4}, invalid) &&
+            std::all_of(invalid.begin(), invalid.end(),
+                        [&](Pixel pixel) { return pixel == sentinel; }),
+        "invalid title dimensions must not touch the destination");
+  check(!render_title({4, 4}, std::span<Pixel>{invalid}.first(15)) &&
+            std::all_of(invalid.begin(), invalid.end(),
+                        [&](Pixel pixel) { return pixel == sentinel; }),
+        "a mismatched title buffer must remain untouched");
+  check(!render_title({8, 8}, std::span<Pixel>{invalid}.first(16)) &&
+            std::all_of(invalid.begin(), invalid.end(),
+                        [&](Pixel pixel) { return pixel == sentinel; }),
+        "a too-small title surface must use the cell fallback safely");
+
+  struct Golden {
+    ViewportSize size;
+    int scale;
+    std::uint64_t checksum;
+  };
+  constexpr std::array goldens{
+      Golden{{320, 240}, 10, 5172959142211273845ULL},
+      Golden{{512, 320}, 17, 480885040810389307ULL},
+      Golden{{640, 480}, 21, 1502170724445620124ULL},
+      Golden{{1024, 768}, 35, 3292241919495927159ULL},
+  };
+  for (const auto& golden : goldens) {
+    const auto count = static_cast<std::size_t>(golden.size.width) *
+                       static_cast<std::size_t>(golden.size.height);
+    std::vector<Pixel> guarded(count + 2, sentinel);
+    auto frame = std::span<Pixel>{guarded}.subspan(1, count);
+    const auto result = render_title(golden.size, frame);
+    check(result.has_value() && result->scale == golden.scale,
+          "title profiles must use the expected integer scale");
+    check(guarded.front() == sentinel && guarded.back() == sentinel,
+          "title rendering must stay inside its exact destination");
+    check(std::all_of(frame.begin(), frame.end(),
+                      [](Pixel pixel) { return pixel.a == 255; }),
+          "title rendering must produce an opaque framebuffer");
+    const auto checksum = pixel_checksum(frame);
+    if (checksum != golden.checksum) {
+      std::fprintf(stderr, "title %dx%d checksum: %llu\n",
+                   golden.size.width, golden.size.height,
+                   static_cast<unsigned long long>(checksum));
+    }
+    check(checksum == golden.checksum,
+          "title profile checksum must remain stable");
+  }
 }
 
 auto flight_instrument_contract() -> void {
@@ -977,6 +1098,65 @@ auto mixed_input_ownership_contract() -> void {
   }
 }
 
+auto suspended_input_contract() -> void {
+  using apsis_drift::detail::FlightInputMapper;
+  using termforge::Key;
+  using termforge::KeyAction;
+
+  FlightInputMapper mapper;
+  mapper.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 4);
+  mapper.enqueue(mouse_event(0, 0, 2, true), Rect{0, 0, 30, 30}, 4);
+
+  FlightControls applied;
+  applied.forward = true;
+  applied.strafe_left = true;
+  applied.rise = true;
+  mapper.suspend(applied, 4);
+  check(command_kinds_equal(
+            mapper.take_commands(4),
+            {FlightCommandKind::release_forward,
+             FlightCommandKind::release_strafe_left,
+             FlightCommandKind::release_rise}),
+        "menu entry must drop unapplied input and release authoritative holds");
+  check(mapper.take_commands(4).empty(),
+        "suspension releases must be consumed exactly once");
+
+  mapper.enqueue(key_event(Key::Char, U'e', KeyAction::Press), 5);
+  check(command_kinds_equal(mapper.take_commands(5),
+                            {FlightCommandKind::press_strafe_right}),
+        "keyboard input must work after menu suspension");
+
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "pause checksum terrain must generate");
+  if (!terrain) return;
+  auto state = initial_flight_state(*terrain);
+  check(state.has_value(), "pause checksum state must initialize");
+  if (!state) return;
+  state->mode = FlightMode::manual;
+  state->controls.forward = true;
+  const auto paused_checksum = flight_state_checksum(*state);
+
+  FlightInputMapper paused_mapper;
+  paused_mapper.suspend(state->controls, state->tick);
+  FixedStepClock clock;
+  const auto partial = clock.advance(kSimulationStep / 2.0);
+  check(partial && partial->steps == 0,
+        "the pause clock test must begin with a partial step");
+  clock.reset();
+  for (int render = 0; render < 1000; ++render) {
+    check(flight_state_checksum(*state) == paused_checksum,
+          "paused render cadence must not mutate authoritative flight state");
+  }
+  check(clock.accumulator() == SimulationSeconds::zero(),
+        "menu time must not remain as simulation debt");
+
+  const auto releases = paused_mapper.take_commands(state->tick);
+  check(advance_flight(*terrain, *state, releases, kSimulationStep)
+            .has_value() &&
+            !state->controls.forward,
+        "the first resumed tick must neutralize held flight controls");
+}
+
 auto mouse_event_coalescing_contract() -> void {
   using apsis_drift::detail::FlightInputMapper;
   constexpr Rect region{0, 0, 30, 30};
@@ -1597,6 +1777,8 @@ auto main() -> int {
   render_profile_contract();
   viewport_validation_contract();
   cockpit_layout_contract();
+  menu_session_contract();
+  title_render_contract();
   flight_instrument_contract();
   sweep_selection_contract();
   sweep_report_contract();
@@ -1607,6 +1789,7 @@ auto main() -> int {
   flight_input_mapping_contract();
   mouse_flight_mapping_contract();
   mixed_input_ownership_contract();
+  suspended_input_contract();
   mouse_event_coalescing_contract();
   equivalent_mouse_keyboard_trace_contract();
   capability_floor_contract();

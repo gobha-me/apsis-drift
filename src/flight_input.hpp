@@ -21,6 +21,12 @@ class FlightInputMapper {
   // Release only pointer-owned controls. Keyboard holds remain authoritative.
   auto neutralize_mouse(SimulationTick current_tick) -> void;
 
+  // Entering a menu drops unapplied input and forgets every source hold. Any
+  // controls already present in authoritative flight state are released at
+  // the same tick when simulation resumes.
+  auto suspend(const FlightControls& applied_controls,
+               SimulationTick current_tick) -> void;
+
   [[nodiscard]] auto take_commands(SimulationTick tick)
       -> std::vector<FlightCommand>;
 
