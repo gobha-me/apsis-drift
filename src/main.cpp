@@ -30,6 +30,7 @@
 #include "termforge/widgets/pixel_surface.hpp"
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
+#include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/render_profile.hpp"
@@ -181,7 +182,8 @@ class LandscapeApp final : public App {
  public:
   explicit LandscapeApp(RenderConfiguration render_configuration,
                         std::uint32_t seed, double capture_seconds = 0.0,
-                        bool interactive_controls = false)
+                        bool interactive_controls = false,
+                        bool flight_deck_acceptance = false)
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_renderer(render_settings_for(render_configuration.viewport)),
@@ -192,7 +194,8 @@ class LandscapeApp final : public App {
         m_session(!interactive_controls),
         m_capture_seconds(capture_seconds),
         m_seed(seed),
-        m_interactive_controls(interactive_controls) {
+        m_interactive_controls(interactive_controls),
+        m_flight_deck_acceptance(flight_deck_acceptance) {
     set_frame_ms(33);
     // TermForge supplies elapsed host time. Apsis Drift owns the fixed-step
     // accumulator and its bounded catch-up policy.
@@ -306,6 +309,19 @@ class LandscapeApp final : public App {
     }
     ++m_frame;
 
+    if (m_flight_deck_acceptance &&
+        m_flight.tick == kFlightDeckAcceptanceTicks) {
+      // Keep the canonical final state visible long enough for a human to
+      // inspect or capture the supported terminal presentation. Simulation is
+      // already stopped, so this presentation dwell cannot affect its checksum.
+      constexpr int acceptance_final_frames{300};
+      ++m_acceptance_final_frames;
+      if (m_acceptance_final_frames >= acceptance_final_frames) {
+        m_acceptance_final_frame_rendered = true;
+        quit();
+      }
+    }
+
     if (m_run_started == Clock::time_point{}) m_run_started = frame_started;
     if (m_capture_seconds > 0.0 &&
         std::chrono::duration<double>(Clock::now() - m_run_started).count() >=
@@ -373,6 +389,16 @@ class LandscapeApp final : public App {
   }
   [[nodiscard]] auto display_path() const -> const std::string& {
     return m_display_path;
+  }
+  [[nodiscard]] auto display_tier() const -> const std::string& {
+    return m_display_tier;
+  }
+  [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
+    return flight_state_checksum(m_flight);
+  }
+  [[nodiscard]] auto acceptance_complete() const noexcept -> bool {
+    return m_acceptance_final_frame_rendered &&
+           m_flight.tick == kFlightDeckAcceptanceTicks;
   }
   [[nodiscard]] auto render_configuration() const noexcept
       -> const RenderConfiguration& {
@@ -683,7 +709,26 @@ class LandscapeApp final : public App {
       throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
     for (int step = 0; step < advance->steps; ++step) {
-      const auto commands = m_input_mapper.take_commands(m_flight.tick);
+      if (m_flight_deck_acceptance &&
+          m_flight.tick == kFlightDeckAcceptanceTicks) {
+        break;
+      }
+      std::vector<FlightCommand> input_commands;
+      std::span<const FlightCommand> commands;
+      if (m_flight_deck_acceptance) {
+        const auto acceptance_commands = flight_deck_acceptance_commands();
+        const auto first = m_acceptance_next_command;
+        while (m_acceptance_next_command < acceptance_commands.size() &&
+               acceptance_commands[m_acceptance_next_command].tick ==
+                   m_flight.tick) {
+          ++m_acceptance_next_command;
+        }
+        commands = acceptance_commands.subspan(
+            first, m_acceptance_next_command - first);
+      } else {
+        input_commands = m_input_mapper.take_commands(m_flight.tick);
+        commands = input_commands;
+      }
       if (!advance_flight(m_terrain, m_flight, commands, kSimulationStep)) {
         throw std::runtime_error{"simulation rejected flight state"};
       }
@@ -740,6 +785,10 @@ class LandscapeApp final : public App {
   bool m_interactive_controls{};
   bool m_title_rendered{};
   bool m_title_available{};
+  bool m_flight_deck_acceptance{};
+  bool m_acceptance_final_frame_rendered{};
+  int m_acceptance_final_frames{};
+  std::size_t m_acceptance_next_command{};
 };
 
 auto print_summary(const BenchmarkSummary& summary,
@@ -808,6 +857,8 @@ auto usage() -> void {
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
+      "       apsis-drift --flight-deck-acceptance --report PATH\n"
+      "                   [--driver kitty|ansi] [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -826,6 +877,7 @@ auto main(int argc, char** argv) -> int {
   std::optional<int> benchmark_frames;
   std::optional<int> sweep_frames;
   int capture_seconds = 0;
+  bool flight_deck_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -839,6 +891,7 @@ auto main(int argc, char** argv) -> int {
   bool viewport_specified{};
   bool driver_specified{};
   bool keyboard_specified{};
+  bool seed_specified{};
   bool sweep_viewports_specified{};
   bool sweep_fps_specified{};
 
@@ -881,11 +934,16 @@ auto main(int argc, char** argv) -> int {
       }
       continue;
     }
+    if (argument == "--flight-deck-acceptance") {
+      flight_deck_acceptance = true;
+      continue;
+    }
     if (argument == "--seed" && i + 1 < argc) {
       if (!parse_positive(std::string_view{argv[++i]}, seed)) {
         std::fprintf(stderr, "seed must be a positive 32-bit integer\n");
         return 2;
       }
+      seed_specified = true;
       continue;
     }
     if (argument == "--profile" && i + 1 < argc) {
@@ -979,6 +1037,20 @@ auto main(int argc, char** argv) -> int {
     std::fprintf(stderr, "benchmark and capture modes are mutually exclusive\n");
     return 2;
   }
+  if (flight_deck_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0)) {
+    std::fprintf(
+        stderr,
+        "Flight Deck acceptance, sweep, benchmark, and capture modes are "
+        "mutually exclusive\n");
+    return 2;
+  }
+  if (flight_deck_acceptance && seed_specified) {
+    std::fprintf(stderr,
+                 "Flight Deck acceptance uses the fixed seed %u\n",
+                 kFlightDeckAcceptanceSeed);
+    return 2;
+  }
   if (sweep_frames && (benchmark_frames || capture_seconds > 0)) {
     std::fprintf(stderr,
                  "sweep, benchmark, and capture modes are mutually exclusive\n");
@@ -1008,6 +1080,11 @@ auto main(int argc, char** argv) -> int {
   }
   if (capture_seconds > 0 && report_path.empty()) {
     std::fprintf(stderr, "capture mode requires --report PATH\n");
+    return 2;
+  }
+  if (flight_deck_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Flight Deck acceptance mode requires --report PATH\n");
     return 2;
   }
 
@@ -1051,11 +1128,15 @@ auto main(int argc, char** argv) -> int {
 
     const RenderConfiguration render_configuration =
         resolve_render_configuration(selected_profile, viewport_override);
+    const std::uint32_t run_seed = flight_deck_acceptance
+                                       ? kFlightDeckAcceptanceSeed
+                                       : seed;
     const bool interactive_controls =
-        !benchmark_frames && capture_seconds == 0;
-    LandscapeApp app{render_configuration, seed,
+        !benchmark_frames && capture_seconds == 0 &&
+        !flight_deck_acceptance;
+    LandscapeApp app{render_configuration, run_seed,
                      static_cast<double>(capture_seconds),
-                     interactive_controls};
+                     interactive_controls, flight_deck_acceptance};
     if (auto forced =
             app.force_capabilities(driver_choice, keyboard_choice);
         !forced) {
@@ -1071,6 +1152,13 @@ auto main(int argc, char** argv) -> int {
       if (app.requirements_failed()) result = 1;
     }
 
+    if (flight_deck_acceptance && result == 0 &&
+        !app.acceptance_complete()) {
+      std::fprintf(stderr,
+                   "Flight Deck acceptance ended before the final frame\n");
+      result = 1;
+    }
+
     if (!app.error().empty()) {
       std::fprintf(stderr, "last TermForge event: %s\n", app.error().c_str());
     }
@@ -1082,14 +1170,28 @@ auto main(int argc, char** argv) -> int {
                    snapshot_path.string().c_str());
       return 1;
     }
-    if (!report_path.empty()) {
+    if (!report_path.empty() && result == 0) {
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
-      report << summary_json(summary, app.render_configuration());
+      if (flight_deck_acceptance) {
+        report << flight_deck_acceptance_json({
+            .flight_checksum = app.flight_checksum(),
+            .framebuffer_checksum = summary.checksum,
+            .render_configuration = app.render_configuration(),
+            .presentation = app.display_tier(),
+        });
+      } else {
+        report << summary_json(summary, app.render_configuration());
+      }
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
     }
     return result;
   } catch (const std::exception& error) {

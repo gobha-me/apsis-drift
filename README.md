@@ -6,6 +6,10 @@
 A deterministic, procedurally generated spaceflight experiment rendered inside
 a terminal.
 
+| Direct Kitty, `local` 640x480 | Truecolor ANSI, `remote` 320x240 |
+| --- | --- |
+| ![Flight Deck acceptance run using Kitty graphics](docs/media/flight-deck-kitty.png) | ![Flight Deck acceptance run using truecolor ANSI half blocks](docs/media/flight-deck-ansi.png) |
+
 Apsis Drift renders a voxel-space landscape into a TermForge `PixelSurface`,
 defaulting to 640x480. Kitty-capable terminals receive the full pixel image;
 truecolor ANSI terminals receive TermForge's half-block presentation. The game
@@ -160,6 +164,48 @@ title menu or alternate-screen entry. After exit, the application prints the
 selected display tier and effective input capabilities. Forcing skips the
 startup probe and is diagnostic; it cannot make an unsupported terminal
 implement a protocol.
+
+## Flight Deck acceptance run
+
+The v0.2 Flight Deck has one application-owned acceptance scenario. It fixes
+the terrain seed at `12648430`, applies 18 tick-addressed commands over 240
+simulation ticks, renders the final cockpit state for visual inspection, and
+writes a versioned JSON report. The fixed seed cannot be overridden in this
+mode.
+
+From a clean build, run the complete automated matrix, including Kitty,
+truecolor ANSI, missing-truecolor refusal, and missing key-release refusal:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Run either supported presentation directly to retain its acceptance report:
+
+```bash
+./build/apsis-drift --flight-deck-acceptance \
+  --driver kitty --profile local --report flight-deck-kitty.json
+./build/apsis-drift --flight-deck-acceptance \
+  --driver ansi --profile remote --report flight-deck-ansi.json
+```
+
+The command schedule is: toggle autopilot off and press forward at tick 0;
+press right at 18; press left at 36; press right strafe at 48; release right at
+60; release left at 72; press rise at 84; release right strafe at 96; release
+rise at 108; press backward at 120; release forward at 132; press left strafe
+at 144; press fall at 156; release backward at 168; release left strafe at
+180; release fall at 192; and toggle autopilot on at 204. The run ends at tick
+240 with all manual controls neutral.
+
+Both presentations must report the flight checksum
+`15302063256845754841`. The canonical final framebuffer checksums are
+`14472657128233142808` for the `local` Kitty run and
+`4248103746500193130` for the `remote` ANSI run. Timing and encoded-byte totals
+remain presentation measurements and are not deterministic acceptance values.
+The final simulation state remains visible for roughly ten seconds so the
+cockpit, instruments, and presentation quality can be inspected or captured.
 
 ## Measure and capture
 

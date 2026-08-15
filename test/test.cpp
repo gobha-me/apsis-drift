@@ -11,6 +11,7 @@
 
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
+#include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -684,63 +685,26 @@ auto deterministic_fixed_step_flight() -> void {
         "rejected flight state must remain untouched");
 }
 
-[[nodiscard]] auto replay_golden_commands(const Terrain& terrain)
-    -> std::expected<FlightState, FlightError> {
-  auto initialized = initial_flight_state(terrain);
-  if (!initialized) return std::unexpected{initialized.error()};
-  auto state = *initialized;
-  constexpr std::array commands{
-      FlightCommand{0, FlightCommandKind::toggle_autopilot},
-      FlightCommand{0, FlightCommandKind::press_forward},
-      FlightCommand{18, FlightCommandKind::press_turn_right},
-      FlightCommand{36, FlightCommandKind::press_turn_left},
-      FlightCommand{48, FlightCommandKind::press_strafe_right},
-      FlightCommand{60, FlightCommandKind::release_turn_right},
-      FlightCommand{72, FlightCommandKind::release_turn_left},
-      FlightCommand{84, FlightCommandKind::press_rise},
-      FlightCommand{96, FlightCommandKind::release_strafe_right},
-      FlightCommand{108, FlightCommandKind::release_rise},
-      FlightCommand{120, FlightCommandKind::press_backward},
-      FlightCommand{132, FlightCommandKind::release_forward},
-      FlightCommand{144, FlightCommandKind::press_strafe_left},
-      FlightCommand{156, FlightCommandKind::press_fall},
-      FlightCommand{168, FlightCommandKind::release_backward},
-      FlightCommand{180, FlightCommandKind::release_strafe_left},
-      FlightCommand{192, FlightCommandKind::release_fall},
-      FlightCommand{204, FlightCommandKind::toggle_autopilot},
-  };
-
-  std::size_t next_command{};
-  while (state.tick < 240) {
-    const auto first = next_command;
-    while (next_command < commands.size() &&
-           commands[next_command].tick == state.tick) {
-      ++next_command;
-    }
-    const std::span tick_commands{commands.data() + first,
-                                  next_command - first};
-    if (auto advanced =
-            advance_flight(terrain, state, tick_commands, kSimulationStep);
-        !advanced) {
-      return std::unexpected{advanced.error()};
-    }
-  }
-  return state;
-}
-
 auto deterministic_command_replay() -> void {
-  const auto terrain = Terrain::generate(256, 0xC0FFEEU);
+  const auto commands = flight_deck_acceptance_commands();
+  check(commands.size() == 18 && commands.front().tick == 0 &&
+            commands.back().tick == 204 &&
+            std::ranges::is_sorted(commands, {}, &FlightCommand::tick),
+        "the Flight Deck command schedule must remain ordered and complete");
+
+  const auto terrain = Terrain::generate(kFlightDeckAcceptanceTerrainSize,
+                                         kFlightDeckAcceptanceSeed);
   check(terrain.has_value(), "command replay terrain must generate");
   if (!terrain) return;
 
-  const auto first = replay_golden_commands(*terrain);
-  const auto second = replay_golden_commands(*terrain);
+  const auto first = replay_flight_deck_acceptance(*terrain);
+  const auto second = replay_flight_deck_acceptance(*terrain);
   check(first && second, "the golden command stream must replay");
   if (!first || !second) return;
 
   const auto first_checksum = flight_state_checksum(*first);
   const auto second_checksum = flight_state_checksum(*second);
-  constexpr std::uint64_t expected_checksum{209895004964188471ULL};
+  constexpr std::uint64_t expected_checksum{15302063256845754841ULL};
   if (first_checksum != expected_checksum) {
     std::fprintf(stderr, "golden command checksum: %llu\n",
                  static_cast<unsigned long long>(first_checksum));
@@ -749,8 +713,28 @@ auto deterministic_command_replay() -> void {
         "replaying a command stream must reproduce its final state");
   check(first_checksum == expected_checksum,
         "the golden command stream checksum must remain stable");
-  check(first->tick == 240 && first->mode == FlightMode::autopilot,
+  check(first->tick == kFlightDeckAcceptanceTicks &&
+            first->mode == FlightMode::autopilot &&
+            first->controls == FlightControls{},
         "the golden command stream must reach its expected tick and mode");
+
+  const auto json = flight_deck_acceptance_json({
+      .flight_checksum = first_checksum,
+      .framebuffer_checksum = 123456789ULL,
+      .render_configuration =
+          resolve_render_configuration(RenderProfile::remote),
+      .presentation = "ansi",
+  });
+  check(json.find("\"schema_version\": 1") != std::string::npos &&
+            json.find("\"scenario\": \"v0.2-flight-deck\"") !=
+                std::string::npos &&
+            json.find("\"flight_checksum\": \"") !=
+                std::string::npos &&
+            json.find("\"framebuffer_checksum\": \"123456789\"") !=
+                std::string::npos &&
+            json.find("\"presentation\": \"ansi\"") !=
+                std::string::npos,
+        "the Flight Deck report must retain its versioned exact fields");
 }
 
 auto command_edge_contract() -> void {
