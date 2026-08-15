@@ -1,0 +1,5 @@
+terminal_rows_cols=45 118
+Linux claude-desktop-6bd98c559d-69828 6.12.74+deb13+1-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.74-2 (2026-03-08) x86_64 x86_64 x86_64 GNU/Linux
+kitty 0.32.2 created by Kovid Goyal
+g++ (Ubuntu 14.2.0-4ubuntu2~24.04.1) 14.2.0
+cmake version 3.28.3

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "workload": "voxel-landscape-rgba",
+  "seed": 12648430,
+  "frames_per_viewport": 180,
+  "measurements": [
+    {
+      "render_profile": "remote",
+      "viewport_width": 320,
+      "viewport_height": 240,
+      "summary": {
+        "frames": 180,
+        "elapsed_seconds": 0.361197,
+        "achieved_fps": 498.342685,
+        "renderer_avg_ms": 1.689359,
+        "renderer_p95_ms": 2.131923,
+        "frame_work_avg_ms": 2.005299,
+        "frame_work_p95_ms": 2.593698,
+        "bytes_per_frame": 411463.638889,
+        "mebibytes_per_second": 195.550818,
+        "total_bytes": 74063455,
+        "checksum": "15945701390122890645"
+      },
+      "targets": [
+        {"target_fps": 24, "deadline_budget_ms": 41.666667, "renderer_p95_headroom_ms": 39.534744, "frame_work_p95_headroom_ms": 39.072969, "required_mebibytes_per_second": 9.417655},
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 31.201410, "frame_work_p95_headroom_ms": 30.739635, "required_mebibytes_per_second": 11.772069},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": 14.534744, "frame_work_p95_headroom_ms": 14.072969, "required_mebibytes_per_second": 23.544138}
+      ]
+    },
+    {
+      "render_profile": "balanced",
+      "viewport_width": 512,
+      "viewport_height": 320,
+      "summary": {
+        "frames": 180,
+        "elapsed_seconds": 0.535868,
+        "achieved_fps": 335.903902,
+        "renderer_avg_ms": 2.453692,
+        "renderer_p95_ms": 2.748421,
+        "frame_work_avg_ms": 2.975701,
+        "frame_work_p95_ms": 3.341506,
+        "bytes_per_frame": 877613.566667,
+        "mebibytes_per_second": 281.137296,
+        "total_bytes": 157970442,
+        "checksum": "1764940922096166657"
+      },
+      "targets": [
+        {"target_fps": 24, "deadline_budget_ms": 41.666667, "renderer_p95_headroom_ms": 38.918246, "frame_work_p95_headroom_ms": 38.325161, "required_mebibytes_per_second": 20.086980},
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 30.584912, "frame_work_p95_headroom_ms": 29.991827, "required_mebibytes_per_second": 25.108726},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": 13.918246, "frame_work_p95_headroom_ms": 13.325161, "required_mebibytes_per_second": 50.217451}
+      ]
+    },
+    {
+      "render_profile": "local",
+      "viewport_width": 640,
+      "viewport_height": 480,
+      "summary": {
+        "frames": 180,
+        "elapsed_seconds": 0.795268,
+        "achieved_fps": 226.338792,
+        "renderer_avg_ms": 3.484543,
+        "renderer_p95_ms": 3.891119,
+        "frame_work_avg_ms": 4.416398,
+        "frame_work_p95_ms": 4.940649,
+        "bytes_per_frame": 1645357.027778,
+        "mebibytes_per_second": 355.156062,
+        "total_bytes": 296164265,
+        "checksum": "13698590269346880843"
+      },
+      "targets": [
+        {"target_fps": 24, "deadline_budget_ms": 41.666667, "renderer_p95_headroom_ms": 37.775548, "frame_work_p95_headroom_ms": 36.726018, "required_mebibytes_per_second": 37.659234},
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 29.442214, "frame_work_p95_headroom_ms": 28.392684, "required_mebibytes_per_second": 47.074042},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": 12.775548, "frame_work_p95_headroom_ms": 11.726018, "required_mebibytes_per_second": 94.148084}
+      ]
+    },
+    {
+      "render_profile": "cinematic",
+      "viewport_width": 1024,
+      "viewport_height": 768,
+      "summary": {
+        "frames": 180,
+        "elapsed_seconds": 1.430625,
+        "achieved_fps": 125.819147,
+        "renderer_avg_ms": 5.644535,
+        "renderer_p95_ms": 6.012140,
+        "frame_work_avg_ms": 7.944797,
+        "frame_work_p95_ms": 8.472315,
+        "bytes_per_frame": 4211835.861111,
+        "mebibytes_per_second": 505.380243,
+        "total_bytes": 758130455,
+        "checksum": "10251580561113640449"
+      },
+      "targets": [
+        {"target_fps": 24, "deadline_budget_ms": 41.666667, "renderer_p95_headroom_ms": 35.654527, "frame_work_p95_headroom_ms": 33.194352, "required_mebibytes_per_second": 96.401272},
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 27.321193, "frame_work_p95_headroom_ms": 24.861018, "required_mebibytes_per_second": 120.501591},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": 10.654527, "frame_work_p95_headroom_ms": 8.194352, "required_mebibytes_per_second": 241.003181}
+      ]
+    }
+  ]
+}
