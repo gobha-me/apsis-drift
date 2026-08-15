@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "apsis_drift/benchmark.hpp"
+#include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "flight_input.hpp"
@@ -17,6 +18,7 @@ namespace {
 
 using namespace apsis_drift;
 using termforge::Pixel;
+using termforge::Rect;
 
 int failures{};
 
@@ -35,6 +37,13 @@ auto check(bool condition, const char* message) -> void {
                                 Pixel target) -> std::size_t {
   return static_cast<std::size_t>(
       std::count(pixels.begin(), pixels.end(), target));
+}
+
+[[nodiscard]] auto contained_by(Rect inner, Rect outer) -> bool {
+  using i64 = std::int64_t;
+  return !inner.empty() && inner.x >= outer.x && inner.y >= outer.y &&
+         i64{inner.x} + inner.w <= i64{outer.x} + outer.w &&
+         i64{inner.y} + inner.h <= i64{outer.y} + outer.h;
 }
 
 auto generation_failure_matrix() -> void {
@@ -130,6 +139,106 @@ auto viewport_validation_contract() -> void {
               "an overlong axis must be rejected");
   check_error("4096x1025", ViewportError::pixel_budget_exceeded,
               "a viewport above the pixel budget must be rejected");
+}
+
+auto cockpit_layout_contract() -> void {
+  constexpr ViewportSize viewport{320, 240};
+  constexpr termforge::Extent kitty_cell{8, 16};
+
+  for (const auto [cols, rows] :
+       std::array{std::pair{0, 24}, std::pair{-1, 24}, std::pair{80, 0},
+                  std::pair{79, 24}, std::pair{80, 23}}) {
+    const auto layout =
+        compute_cockpit_layout(cols, rows, kitty_cell, viewport);
+    check(!layout.supported(),
+          "invalid and below-minimum terminals must reject cockpit layout");
+    check(layout.viewport.empty(),
+          "an unsupported cockpit must not retain a pixel viewport");
+  }
+
+  check(!compute_cockpit_layout(80, 24, {0, 16}, viewport).supported(),
+        "zero-width cell pixels must reject cockpit layout");
+  check(!compute_cockpit_layout(80, 24, {-1, 16}, viewport).supported(),
+        "negative cell pixels must reject cockpit layout");
+  check(!compute_cockpit_layout(80, 24, kitty_cell, {0, 240}).supported(),
+        "an invalid logical viewport must reject cockpit layout");
+  check(!compute_cockpit_layout(80, 24, kitty_cell, {-1, 240}).supported(),
+        "a negative logical viewport must reject cockpit layout");
+  check(!compute_cockpit_layout(65536, 24, kitty_cell, viewport).supported() &&
+            !compute_cockpit_layout(80, 24, {65536, 16}, viewport)
+                 .supported(),
+        "out-of-domain terminal and cell dimensions must reject layout");
+
+  const auto compact =
+      compute_cockpit_layout(80, 24, kitty_cell, viewport);
+  check(compact.mode == CockpitLayoutMode::compact,
+        "the 80x24 target must use compact cockpit layout");
+  check(compact.screen == Rect{0, 0, 80, 24},
+        "compact layout must retain the full terminal bounds");
+  check(compact.left_instruments == Rect{0, 1, 12, 19} &&
+            compact.right_instruments == Rect{68, 1, 12, 19},
+        "compact layout must reserve symmetric instrument rails");
+  check(compact.viewport == Rect{17, 2, 45, 17} &&
+            compact.viewport_frame == Rect{16, 1, 47, 19},
+        "compact layout must aspect-fit the viewport inside its frame");
+
+  const auto wide = compute_cockpit_layout(120, 40, kitty_cell, viewport);
+  check(wide.mode == CockpitLayoutMode::wide,
+        "the 120x40 target must use wide cockpit layout");
+  check(wide.left_instruments == Rect{0, 1, 18, 35} &&
+            wide.right_instruments == Rect{102, 1, 18, 35},
+        "wide layout must reserve expanded instrument rails");
+  check(wide.viewport == Rect{20, 3, 80, 30} &&
+            wide.viewport_frame == Rect{19, 2, 82, 32},
+        "wide layout must preserve a framed 4:3 Kitty viewport");
+
+  const auto ansi =
+      compute_cockpit_layout(80, 24, {1, 2}, viewport);
+  check(ansi.viewport == compact.viewport,
+        "ANSI half-block and Kitty cells must share physical aspect layout");
+  const auto fallback =
+      compute_cockpit_layout(80, 24, {1, 1}, viewport);
+  check(fallback.viewport == Rect{29, 2, 22, 17},
+        "cell fallback must preserve aspect using square logical cells");
+
+  for (const auto& layout :
+       std::array{compact, wide, ansi, fallback,
+                  compute_cockpit_layout(65535, 65535, {65535, 65535},
+                                         {4096, 1024})}) {
+    check(layout.supported(),
+          "valid target and boundary layouts must remain supported");
+    check(contained_by(layout.header, layout.screen) &&
+              contained_by(layout.left_instruments, layout.screen) &&
+              contained_by(layout.viewport_frame, layout.screen) &&
+              contained_by(layout.viewport, layout.viewport_frame) &&
+              contained_by(layout.right_instruments, layout.screen) &&
+              contained_by(layout.messages, layout.screen) &&
+              contained_by(layout.status, layout.screen),
+          "every cockpit region must remain inside its owner");
+    check(layout.left_instruments.intersect(layout.viewport_frame).empty() &&
+              layout.viewport_frame
+                  .intersect(layout.right_instruments)
+                  .empty() &&
+              layout.header.intersect(layout.viewport_frame).empty() &&
+              layout.messages.intersect(layout.viewport_frame).empty() &&
+              layout.status.intersect(layout.viewport_frame).empty(),
+          "cockpit chrome regions must not overlap the pixel frame");
+    check(layout.viewport.x > layout.viewport_frame.x &&
+              layout.viewport.y > layout.viewport_frame.y &&
+              layout.viewport.x + layout.viewport.w <
+                  layout.viewport_frame.x + layout.viewport_frame.w &&
+              layout.viewport.y + layout.viewport.h <
+                  layout.viewport_frame.y + layout.viewport_frame.h,
+          "the pixel viewport must remain strictly inside the frame border");
+  }
+
+  const auto intermediate =
+      compute_cockpit_layout(100, 30, kitty_cell, viewport);
+  check(intermediate.mode == CockpitLayoutMode::compact,
+        "an intermediate terminal must retain compact layout");
+  check(intermediate ==
+            compute_cockpit_layout(100, 30, kitty_cell, viewport),
+        "cockpit layout must be deterministic");
 }
 
 auto sweep_selection_contract() -> void {
@@ -1001,6 +1110,7 @@ auto main() -> int {
   deterministic_generation();
   render_profile_contract();
   viewport_validation_contract();
+  cockpit_layout_contract();
   sweep_selection_contract();
   sweep_report_contract();
   fixed_step_clock_contract();

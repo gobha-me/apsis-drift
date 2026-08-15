@@ -10,7 +10,7 @@ set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
 set(APSIS_DRIFT_TERMFORGE_GIT_TAG
-    "0604d2087e326afcc99578a925a9b1012f5ba813"
+    "b508848c1c91f06ac028cbf72df2e46c3d09cc50"
     CACHE STRING "Pinned TermForge revision used by FetchContent")
 
 find_package(termforge CONFIG QUIET)
@@ -42,6 +42,7 @@ endif ()
 
 add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
+  src/cockpit.cpp
   src/flight_input.cpp
   src/landscape.cpp
   src/render_profile.cpp

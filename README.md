@@ -26,8 +26,9 @@ Requirements:
 - Git when TermForge must be fetched
 
 Apsis Drift first looks for an installed TermForge package, then for a sibling
-checkout at `../termforge`. If neither exists, CMake fetches the exact TermForge
-revision associated with v0.28.0.
+checkout at `../termforge`. If neither exists, CMake fetches the exact
+post-v0.30.0 TermForge revision that includes the multi-chunk Kitty
+frame-replacement fix.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -68,6 +69,11 @@ wins when both options are present:
 
 Custom viewports are limited to 4096 pixels on either axis and 4,194,304 total
 pixels so malformed or runaway dimensions fail before framebuffer allocation.
+
+The cockpit requires an 80x24 terminal. It uses compact instrument rails at
+that size and switches to wider bays at 120x32. Smaller terminals withdraw the
+pixel viewport and show the required and current dimensions instead of drawing
+overlapping or clipped regions.
 
 Interactive controls:
 
