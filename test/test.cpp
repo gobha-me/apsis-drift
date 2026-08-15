@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -758,6 +759,27 @@ auto command_edge_contract() -> void {
   return event;
 }
 
+[[nodiscard]] auto mouse_event(int x, int y, int button, bool pressed)
+    -> termforge::MouseEvent {
+  termforge::MouseEvent event;
+  event.x = x;
+  event.y = y;
+  event.button = button;
+  event.pressed = pressed;
+  return event;
+}
+
+[[nodiscard]] auto command_kinds_equal(
+    const std::vector<FlightCommand>& commands,
+    std::initializer_list<FlightCommandKind> expected) -> bool {
+  if (commands.size() != expected.size()) return false;
+  return std::equal(commands.begin(), commands.end(), expected.begin(),
+                    [](const FlightCommand& command,
+                       FlightCommandKind kind) {
+                      return command.kind == kind;
+                    });
+}
+
 auto flight_input_mapping_contract() -> void {
   using apsis_drift::detail::FlightInputMapper;
   using termforge::Key;
@@ -821,6 +843,215 @@ auto flight_input_mapping_contract() -> void {
     check(commands.back().kind == FlightCommandKind::toggle_autopilot,
           "Space must map to one autopilot toggle");
   }
+}
+
+auto mouse_flight_mapping_contract() -> void {
+  using apsis_drift::detail::FlightInputMapper;
+  constexpr Rect region{10, 20, 30, 30};
+
+  FlightInputMapper mapper;
+  mapper.enqueue(mouse_event(10, 20, 0, true), region, 1);
+  check(command_kinds_equal(
+            mapper.take_commands(1),
+            {FlightCommandKind::press_forward,
+             FlightCommandKind::press_turn_left}),
+        "a left hold in the upper-left thirds must fly forward and turn left");
+
+  mapper.enqueue(mouse_event(100, 100, 0, false), region, 2);
+  check(command_kinds_equal(
+            mapper.take_commands(2),
+            {FlightCommandKind::release_forward,
+             FlightCommandKind::release_turn_left}),
+        "a left-button release outside the viewport must neutralize flight");
+
+  mapper.enqueue(mouse_event(39, 49, 2, true), region, 3);
+  check(command_kinds_equal(
+            mapper.take_commands(3),
+            {FlightCommandKind::press_strafe_right,
+             FlightCommandKind::press_fall}),
+        "a right hold in the lower-right thirds must strafe and descend");
+
+  mapper.enqueue(mouse_event(25, 35, 2, true), region, 4);
+  check(command_kinds_equal(
+            mapper.take_commands(4),
+            {FlightCommandKind::release_strafe_right,
+             FlightCommandKind::release_fall}),
+        "the center thirds must be neutral on both right-hold axes");
+
+  mapper.enqueue(mouse_event(25, 35, 1, true), region, 5);
+  mapper.enqueue(mouse_event(26, 35, 1, true), region, 5);
+  check(command_kinds_equal(mapper.take_commands(5),
+                            {FlightCommandKind::toggle_autopilot}),
+        "a middle-button down edge must toggle once while events repeat");
+  mapper.enqueue(mouse_event(100, 100, 1, false), region, 6);
+  mapper.enqueue(mouse_event(25, 35, 1, true), region, 6);
+  check(command_kinds_equal(mapper.take_commands(6),
+                            {FlightCommandKind::toggle_autopilot}),
+        "a released middle button must arm the next toggle");
+
+  mapper.enqueue(mouse_event(25, 20, 0, true), region, 7);
+  (void)mapper.take_commands(7);
+  mapper.enqueue(mouse_event(100, 100, 0, true), region, 8);
+  check(command_kinds_equal(mapper.take_commands(8),
+                            {FlightCommandKind::release_forward}),
+        "an outside pointer event must neutralize mouse input");
+
+  FlightInputMapper invalid;
+  invalid.enqueue(mouse_event(0, 0, 0, true), Rect{0, 0, 0, 10}, 1);
+  check(invalid.take_commands(1).empty(),
+        "an empty active region must ignore mouse flight input");
+  constexpr int maximum = std::numeric_limits<int>::max();
+  constexpr Rect extreme{maximum - 5, maximum - 5, 4, 4};
+  invalid.enqueue(mouse_event(maximum - 2, maximum - 2, 2, true), extreme, 2);
+  check(command_kinds_equal(
+            invalid.take_commands(2),
+            {FlightCommandKind::press_strafe_right,
+             FlightCommandKind::press_fall}),
+        "extreme valid mouse geometry must map without integer overflow");
+}
+
+auto mixed_input_ownership_contract() -> void {
+  using apsis_drift::detail::FlightInputMapper;
+  using termforge::Key;
+  using termforge::KeyAction;
+  constexpr Rect region{0, 0, 30, 30};
+
+  FlightInputMapper mapper;
+  mapper.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 1);
+  check(command_kinds_equal(mapper.take_commands(1),
+                            {FlightCommandKind::press_forward}),
+        "keyboard must press a control before mouse composition");
+  mapper.enqueue(mouse_event(15, 0, 0, true), region, 2);
+  check(mapper.take_commands(2).empty(),
+        "mouse must not duplicate a same-direction keyboard hold");
+  mapper.enqueue(key_event(Key::Char, U'w', KeyAction::Release), 3);
+  check(mapper.take_commands(3).empty(),
+        "keyboard release must preserve a same-direction mouse hold");
+  mapper.enqueue(mouse_event(80, 80, 0, false), region, 4);
+  check(command_kinds_equal(mapper.take_commands(4),
+                            {FlightCommandKind::release_forward}),
+        "the last source release must neutralize the shared control");
+
+  mapper.enqueue(key_event(Key::Char, U'r', KeyAction::Press), 5);
+  mapper.enqueue(mouse_event(15, 0, 2, true), region, 5);
+  (void)mapper.take_commands(5);
+  mapper.neutralize_mouse(6);
+  check(mapper.take_commands(6).empty(),
+        "pointer loss must preserve keyboard-owned controls");
+  mapper.enqueue(key_event(Key::Char, U'r', KeyAction::Release), 7);
+  check(command_kinds_equal(mapper.take_commands(7),
+                            {FlightCommandKind::release_rise}),
+        "keyboard must remain usable after pointer neutralization");
+
+  FlightInputMapper simultaneous;
+  simultaneous.enqueue(mouse_event(15, 15, 1, true), region, 9);
+  simultaneous.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 9);
+  check(command_kinds_equal(
+            simultaneous.take_commands(9),
+            {FlightCommandKind::toggle_autopilot,
+             FlightCommandKind::press_forward}),
+        "same-tick pointer toggles must precede manual keyboard commands");
+
+  FlightInputMapper opposing;
+  opposing.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 0);
+  opposing.enqueue(mouse_event(15, 29, 0, true), region, 0);
+  const auto commands = opposing.take_commands(0);
+  check(command_kinds_equal(commands,
+                            {FlightCommandKind::press_forward,
+                             FlightCommandKind::press_backward}),
+        "opposing keyboard and mouse directions must remain explicit");
+
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "mixed-input cancellation terrain must generate");
+  if (terrain) {
+    auto state = initial_flight_state(*terrain);
+    check(state.has_value(), "mixed-input cancellation state must initialize");
+    if (state) {
+      check(advance_flight(*terrain, *state, commands, kSimulationStep)
+                .has_value(),
+            "opposing mixed commands must remain a valid simulation step");
+      check(close_enough(state->velocity.x, 0.0F) &&
+                close_enough(state->velocity.y, 0.0F),
+            "opposing mixed inputs must cancel through simulation rules");
+    }
+  }
+}
+
+auto mouse_event_coalescing_contract() -> void {
+  using apsis_drift::detail::FlightInputMapper;
+  constexpr Rect region{0, 0, 30, 30};
+  FlightInputMapper mapper;
+  for (int event = 0; event < 10000; ++event) {
+    const int x = event % 2 == 0 ? 0 : 29;
+    const int y = event % 4 < 2 ? 0 : 29;
+    mapper.enqueue(mouse_event(x, y, 0, true), region, 11);
+  }
+  const auto commands = mapper.take_commands(11);
+  check(commands.size() <= 8,
+        "one tick of pointer changes must produce a constant-size backlog");
+  check(mapper.take_commands(11).empty(),
+        "coalesced pointer commands must be consumed exactly once");
+}
+
+[[nodiscard]] auto replay_equivalent_control_trace(bool use_mouse)
+    -> std::uint64_t {
+  const auto terrain = Terrain::generate(256, 0xC0FFEEU);
+  if (!terrain) return 0;
+  auto initialized = initial_flight_state(*terrain);
+  if (!initialized) return 0;
+
+  constexpr Rect region{0, 0, 30, 30};
+  auto state = *initialized;
+  apsis_drift::detail::FlightInputMapper mapper;
+  for (SimulationTick tick = 0; tick < 180; ++tick) {
+    if (tick == 0) {
+      if (use_mouse) {
+        mapper.enqueue(mouse_event(15, 15, 1, true), region, tick);
+        mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
+      } else {
+        mapper.enqueue(key_event(termforge::Key::Char, U' ',
+                                 termforge::KeyAction::Press),
+                       tick);
+        mapper.enqueue(key_event(termforge::Key::Char, U'w',
+                                 termforge::KeyAction::Press),
+                       tick);
+      }
+    } else if (tick == 24) {
+      if (use_mouse) {
+        mapper.enqueue(mouse_event(29, 0, 0, true), region, tick);
+      } else {
+        mapper.enqueue(key_event(termforge::Key::Right, 0,
+                                 termforge::KeyAction::Press),
+                       tick);
+      }
+    } else if (tick == 72) {
+      if (use_mouse) {
+        mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
+      } else {
+        mapper.enqueue(key_event(termforge::Key::Right, 0,
+                                 termforge::KeyAction::Release),
+                       tick);
+      }
+    } else if (tick == 96) {
+      if (use_mouse) {
+        mapper.enqueue(mouse_event(80, 80, 0, false), region, tick);
+      } else {
+        mapper.enqueue(key_event(termforge::Key::Char, U'w',
+                                 termforge::KeyAction::Release),
+                       tick);
+      }
+    }
+    const auto commands = mapper.take_commands(tick);
+    if (!advance_flight(*terrain, state, commands, kSimulationStep)) return 0;
+  }
+  return flight_state_checksum(state);
+}
+
+auto equivalent_mouse_keyboard_trace_contract() -> void {
+  const auto keyboard = replay_equivalent_control_trace(false);
+  const auto mouse = replay_equivalent_control_trace(true);
+  check(keyboard != 0 && keyboard == mouse,
+        "equivalent mouse and keyboard actions must produce one checksum");
 }
 
 auto capability_floor_contract() -> void {
@@ -922,6 +1153,63 @@ auto deterministic_key_trace_contract() -> void {
   const auto at_60 = replay_key_trace(60);
   check(at_30 != 0 && at_30 == at_60,
         "normalized press/repeat/release traces must be deterministic across "
+        "render cadences");
+}
+
+[[nodiscard]] auto replay_mixed_input_trace(int render_fps) -> std::uint64_t {
+  const auto terrain = Terrain::generate(256, 0xC0FFEEU);
+  if (!terrain) return 0;
+  auto initialized = initial_flight_state(*terrain);
+  if (!initialized) return 0;
+
+  constexpr Rect region{0, 0, 30, 30};
+  auto state = *initialized;
+  apsis_drift::detail::FlightInputMapper mapper;
+  FixedStepClock clock;
+  const SimulationSeconds frame_time{1.0 / render_fps};
+  for (int frame = 0; frame < render_fps * 2; ++frame) {
+    const auto advance = clock.advance(frame_time);
+    if (!advance) return 0;
+    for (int step = 0; step < advance->steps; ++step) {
+      const auto tick = state.tick;
+      if (tick == 0) {
+        mapper.enqueue(key_event(termforge::Key::Char, U' ',
+                                 termforge::KeyAction::Press),
+                       tick);
+        mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
+      } else if (tick == 24) {
+        mapper.enqueue(mouse_event(29, 0, 0, true), region, tick);
+      } else if (tick == 36) {
+        mapper.enqueue(key_event(termforge::Key::Right, 0,
+                                 termforge::KeyAction::Press),
+                       tick);
+      } else if (tick == 72) {
+        mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
+      } else if (tick == 96) {
+        mapper.enqueue(key_event(termforge::Key::Right, 0,
+                                 termforge::KeyAction::Release),
+                       tick);
+      } else if (tick == 120) {
+        mapper.enqueue(mouse_event(15, 0, 2, true), region, tick);
+      } else if (tick == 144) {
+        mapper.neutralize_mouse(tick);
+      } else if (tick == 180) {
+        mapper.enqueue(mouse_event(15, 15, 1, true), region, tick);
+      }
+      const auto commands = mapper.take_commands(tick);
+      if (!advance_flight(*terrain, state, commands, kSimulationStep)) {
+        return 0;
+      }
+    }
+  }
+  return flight_state_checksum(state);
+}
+
+auto deterministic_mixed_input_trace_contract() -> void {
+  const auto at_30 = replay_mixed_input_trace(30);
+  const auto at_60 = replay_mixed_input_trace(60);
+  check(at_30 != 0 && at_30 == at_60,
+        "mixed mouse and keyboard traces must be deterministic across "
         "render cadences");
 }
 
@@ -1317,8 +1605,13 @@ auto main() -> int {
   deterministic_command_replay();
   command_edge_contract();
   flight_input_mapping_contract();
+  mouse_flight_mapping_contract();
+  mixed_input_ownership_contract();
+  mouse_event_coalescing_contract();
+  equivalent_mouse_keyboard_trace_contract();
   capability_floor_contract();
   deterministic_key_trace_contract();
+  deterministic_mixed_input_trace_contract();
   camera_derivation_contract();
   camera_projection_contract();
   render_failure_matrix();
