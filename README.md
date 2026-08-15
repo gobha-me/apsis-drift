@@ -90,6 +90,13 @@ only report presses use deterministic ten-tick control pulses. Simultaneously
 held opposing controls cancel to a neutral axis, and any manual-control press
 disengages autopilot.
 
+The cockpit's navigation rail reports heading in normalized degrees, altitude
+and requested terrain clearance in world units, and horizontal speed. The
+flight rail reports manual or autopilot mode. Clearance at or below 24 units
+raises a textual `LOW CLR` warning; invalid numeric telemetry is shown with
+fixed-width dashes and a `TELEM ERR` warning so neither condition relies on
+color alone.
+
 Flight simulation advances at a fixed 120 Hz independently of rendering. Host
 stalls contribute at most 125 ms of catch-up work per frame; excess elapsed
 time is discarded instead of creating an unbounded simulation backlog.

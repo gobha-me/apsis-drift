@@ -1,12 +1,32 @@
 #pragma once
 
-#include "termforge/core/types.hpp"
+#include <cstddef>
+#include <string>
+
 #include "apsis_drift/render_profile.hpp"
+#include "apsis_drift/simulation.hpp"
+#include "termforge/core/types.hpp"
 
 namespace apsis_drift {
 
 inline constexpr int kMinimumCockpitCols{80};
 inline constexpr int kMinimumCockpitRows{24};
+inline constexpr std::size_t kInstrumentLineWidth{9};
+inline constexpr float kLowClearanceWarning{24.0F};
+
+enum class CockpitAlert { none, low_clearance, invalid_telemetry };
+
+struct FlightInstrumentReadout {
+  std::string heading;
+  std::string altitude;
+  std::string clearance;
+  std::string speed;
+  std::string mode;
+  std::string alert;
+  CockpitAlert alert_state{CockpitAlert::none};
+
+  auto operator==(const FlightInstrumentReadout&) const -> bool = default;
+};
 
 enum class CockpitLayoutMode { too_small, compact, wide };
 
@@ -36,5 +56,10 @@ struct CockpitLayout {
 [[nodiscard]] auto compute_cockpit_layout(
     int cols, int rows, termforge::Extent cell_pixels,
     ViewportSize viewport) noexcept -> CockpitLayout;
+
+// Build fixed-width cockpit lines exclusively from authoritative simulation
+// state. Invalid numeric telemetry remains renderable as explicit sentinels.
+[[nodiscard]] auto format_flight_instruments(const FlightState& state)
+    -> FlightInstrumentReadout;
 
 }  // namespace apsis_drift
