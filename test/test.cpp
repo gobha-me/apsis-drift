@@ -14,6 +14,7 @@
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
+#include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/title.hpp"
@@ -141,6 +142,222 @@ auto seed_derivation_contract() -> void {
   std::ranges::sort(smoke);
   check(std::adjacent_find(smoke.begin(), smoke.end()) == smoke.end(),
         "the bounded seed derivation smoke grid must not collide");
+}
+
+auto planet_descriptor_contract() -> void {
+  constexpr std::array streams{
+      PlanetDescriptorStream::name,       PlanetDescriptorStream::physical,
+      PlanetDescriptorStream::atmosphere, PlanetDescriptorStream::terrain,
+      PlanetDescriptorStream::hydrology,  PlanetDescriptorStream::palette,
+  };
+
+  check(kPlanetGeneratorVersion == 1,
+        "planet generator version 1 must remain stable");
+  std::array<std::uint64_t, streams.size()> stream_seeds{};
+  for (std::size_t index = 0; index < streams.size(); ++index) {
+    const auto first = derive_planet_stream_seed(Seed{42}, streams[index]);
+    const auto again = derive_planet_stream_seed(Seed{42}, streams[index]);
+    check(first == again,
+          "equal planet stream identities must derive the same seed");
+    stream_seeds[index] = first.value;
+  }
+  auto sorted_stream_seeds = stream_seeds;
+  std::ranges::sort(sorted_stream_seeds);
+  check(std::adjacent_find(sorted_stream_seeds.begin(),
+                           sorted_stream_seeds.end()) ==
+            sorted_stream_seeds.end(),
+        "named planet descriptor streams must remain independent");
+  check(stream_seeds ==
+            std::array<std::uint64_t, streams.size()>{
+                4137554858639612274ULL,
+                1905239451672022865ULL,
+                18119668118413985072ULL,
+                15299131893477559319ULL,
+                13066816486509969910ULL,
+                10834501079542380501ULL,
+            },
+        "named planet descriptor streams must retain their golden vectors");
+
+  for (const auto seed :
+       std::array{Seed{0}, Seed{42},
+                  Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const auto first = generate_planet_descriptor(seed);
+    const auto again = generate_planet_descriptor(seed);
+    check(first == again,
+          "equal planet seeds must reproduce identical descriptors");
+    check(first.seed == seed && first.id == PlanetId{seed.value},
+          "a planet descriptor must retain its authoritative identity");
+    check(first.radius.value >= PlanetRadiusKm::min &&
+              first.radius.value <= PlanetRadiusKm::max,
+          "generated planet radius must stay inside its domain");
+    check(first.surface_gravity.value >= SurfaceGravityMilliG::min &&
+              first.surface_gravity.value <= SurfaceGravityMilliG::max,
+          "generated surface gravity must stay inside its domain");
+    check(first.atmosphere_pressure.value >= AtmospherePressureMillibars::min &&
+              first.atmosphere_pressure.value <=
+                  AtmospherePressureMillibars::max,
+          "generated atmospheric pressure must stay inside its domain");
+    check(first.water_coverage.value >= WaterCoverageBasisPoints::min &&
+              first.water_coverage.value <= WaterCoverageBasisPoints::max,
+          "generated water coverage must stay inside its domain");
+    check(!first.display_name.empty() && first.display_name.size() <= 10 &&
+              first.display_name.front() >= 'A' &&
+              first.display_name.front() <= 'Z' &&
+              std::ranges::all_of(
+                  first.display_name.substr(1),
+                  [](char value) { return value >= 'a' && value <= 'z'; }),
+          "generated planet names must use the bounded ASCII contract");
+    check((first.atmosphere_class == AtmosphereClass::airless) ==
+              (first.atmosphere_pressure.value == 0),
+          "only airless planets may have zero atmospheric pressure");
+  }
+
+  constexpr PlanetPalette kAlienPalette{
+      PaletteFamily::alien, {100, 78, 153}, {31, 38, 91},   {50, 105, 133},
+      {71, 123, 103},       {113, 75, 125}, {211, 179, 221}};
+  constexpr PlanetPalette kGlacialPalette{
+      PaletteFamily::glacial, {126, 169, 207}, {29, 69, 112},  {76, 139, 172},
+      {145, 172, 177},        {189, 207, 208}, {238, 246, 244}};
+  check(generate_planet_descriptor(Seed{0}) ==
+            PlanetDescriptor{
+                Seed{0}, PlanetId{0}, "Soltaon", PlanetRadiusKm{5'096},
+                SurfaceGravityMilliG{1'491}, AtmosphereClass::temperate,
+                AtmospherePressureMillibars{331}, TerrainCharacter::rugged,
+                WaterCoverageBasisPoints{4'478}, kAlienPalette},
+        "the zero planet seed must retain its golden descriptor");
+  const auto golden = generate_planet_descriptor(Seed{42});
+  check(golden ==
+            PlanetDescriptor{
+                Seed{42}, PlanetId{42}, "Carayx", PlanetRadiusKm{5'499},
+                SurfaceGravityMilliG{1'389}, AtmosphereClass::dense,
+                AtmospherePressureMillibars{1'561}, TerrainCharacter::volcanic,
+                WaterCoverageBasisPoints{2'953}, kAlienPalette},
+        "planet seed 42 must retain its golden descriptor");
+  check(generate_planet_descriptor(
+            Seed{std::numeric_limits<std::uint64_t>::max()}) ==
+            PlanetDescriptor{
+                Seed{std::numeric_limits<std::uint64_t>::max()},
+                PlanetId{std::numeric_limits<std::uint64_t>::max()}, "Nyceune",
+                PlanetRadiusKm{6'059}, SurfaceGravityMilliG{1'352},
+                AtmosphereClass::dense, AtmospherePressureMillibars{1'869},
+                TerrainCharacter::volcanic, WaterCoverageBasisPoints{9'998},
+                kGlacialPalette},
+        "the maximum planet seed must retain its golden descriptor");
+
+  constexpr std::string_view kGoldenJson = R"json({
+  "schema_version": 1,
+  "generator_version": 1,
+  "planet_seed": "42",
+  "planet_id": "planet-000000000000002a",
+  "display_name": "Carayx",
+  "radius_km": 5499,
+  "surface_gravity_milli_g": 1389,
+  "atmosphere": {"class": "dense", "pressure_millibars": 1561},
+  "terrain_character": "volcanic",
+  "water_coverage_basis_points": 2953,
+  "palette": {
+    "family": "alien",
+    "atmosphere": "#644e99",
+    "deep_water": "#1f265b",
+    "shallow_water": "#326985",
+    "lowland": "#477b67",
+    "highland": "#714b7d",
+    "peak": "#d3b3dd"
+  }
+}
+)json";
+  check(planet_descriptor_json(golden) == kGoldenJson,
+        "planet diagnostics must retain their version 1 representation");
+}
+
+auto planet_descriptor_population() -> void {
+  constexpr std::size_t kPopulation{4'096};
+  std::array<std::size_t, 4> atmosphere_counts{};
+  std::array<std::size_t, 5> terrain_counts{};
+  std::array<std::size_t, 5> palette_counts{};
+  std::array<std::size_t, 3> water_bands{};
+  auto checksum = std::uint64_t{14695981039346656037ULL};
+
+  for (std::uint64_t seed = 0; seed < kPopulation; ++seed) {
+    const auto descriptor = generate_planet_descriptor(Seed{seed});
+    const auto atmosphere_index =
+        static_cast<std::size_t>(descriptor.atmosphere_class);
+    const auto terrain_index =
+        static_cast<std::size_t>(descriptor.terrain_character);
+    const auto palette_index =
+        static_cast<std::size_t>(descriptor.palette.family);
+    const auto categories_valid = atmosphere_index < atmosphere_counts.size() &&
+                                  terrain_index < terrain_counts.size() &&
+                                  palette_index < palette_counts.size();
+    check(categories_valid,
+          "the planet sweep must not generate an invalid category");
+    if (!categories_valid)
+      continue;
+    ++atmosphere_counts[atmosphere_index];
+    ++terrain_counts[terrain_index];
+    ++palette_counts[palette_index];
+
+    check(descriptor.radius.value >= PlanetRadiusKm::min &&
+              descriptor.radius.value <= PlanetRadiusKm::max &&
+              descriptor.surface_gravity.value >= SurfaceGravityMilliG::min &&
+              descriptor.surface_gravity.value <= SurfaceGravityMilliG::max &&
+              descriptor.atmosphere_pressure.value >=
+                  AtmospherePressureMillibars::min &&
+              descriptor.atmosphere_pressure.value <=
+                  AtmospherePressureMillibars::max &&
+              descriptor.water_coverage.value >=
+                  WaterCoverageBasisPoints::min &&
+              descriptor.water_coverage.value <= WaterCoverageBasisPoints::max,
+          "the planet sweep must keep every measurement inside its domain");
+    const auto pressure = descriptor.atmosphere_pressure.value;
+    const auto pressure_matches_class =
+        (descriptor.atmosphere_class == AtmosphereClass::airless &&
+         pressure == 0) ||
+        (descriptor.atmosphere_class == AtmosphereClass::tenuous &&
+         pressure >= 1 && pressure <= 249) ||
+        (descriptor.atmosphere_class == AtmosphereClass::temperate &&
+         pressure >= 250 && pressure <= 1'499) ||
+        (descriptor.atmosphere_class == AtmosphereClass::dense &&
+         pressure >= 1'500 && pressure <= 2'500);
+    check(pressure_matches_class,
+          "the planet sweep must keep pressure consistent with its class");
+    if (descriptor.water_coverage.value < 3'334) {
+      ++water_bands[0];
+    } else if (descriptor.water_coverage.value < 6'667) {
+      ++water_bands[1];
+    } else {
+      ++water_bands[2];
+    }
+
+    for (const auto byte : planet_descriptor_json(descriptor)) {
+      checksum ^= static_cast<std::uint8_t>(byte);
+      checksum *= 1099511628211ULL;
+    }
+  }
+
+  check(std::ranges::all_of(atmosphere_counts,
+                            [](std::size_t count) { return count != 0; }),
+        "the planet sweep must cover every atmosphere class");
+  check(std::ranges::all_of(terrain_counts,
+                            [](std::size_t count) { return count != 0; }),
+        "the planet sweep must cover every terrain character");
+  check(std::ranges::all_of(palette_counts,
+                            [](std::size_t count) { return count != 0; }),
+        "the planet sweep must cover every palette family");
+  check(std::ranges::all_of(water_bands,
+                            [](std::size_t count) { return count != 0; }),
+        "the planet sweep must cover low, medium, and high water worlds");
+
+  check(checksum == 1927494117462691802ULL,
+        "the bounded planet population must retain its aggregate checksum");
+  check(atmosphere_counts == std::array<std::size_t, 4>{447, 897, 1'950, 802},
+        "the bounded planet population must retain atmosphere counts");
+  check(terrain_counts == std::array<std::size_t, 5>{844, 790, 816, 824, 822},
+        "the bounded planet population must retain terrain counts");
+  check(palette_counts == std::array<std::size_t, 5>{808, 812, 831, 807, 838},
+        "the bounded planet population must retain palette counts");
+  check(water_bands == std::array<std::size_t, 3>{1'305, 1'413, 1'378},
+        "the bounded planet population must retain water-band counts");
 }
 
 auto render_profile_contract() -> void {
@@ -1828,6 +2045,8 @@ auto main() -> int {
   generation_failure_matrix();
   deterministic_generation();
   seed_derivation_contract();
+  planet_descriptor_contract();
+  planet_descriptor_population();
   render_profile_contract();
   viewport_validation_contract();
   cockpit_layout_contract();

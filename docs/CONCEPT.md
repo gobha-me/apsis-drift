@@ -63,6 +63,9 @@ treated as cross-version or cross-platform serialization formats.
 The exact version 1 domain identifiers, integer encoding, derivation algorithm,
 golden-vector contract, and save compatibility consequences are recorded in
 [Seed Derivation Compatibility](SEED_DERIVATION.md).
+The versioned fields, units, named substreams, and diagnostic representation
+of one generated planet are recorded in the
+[Planet Descriptor Compatibility](PLANET_GENERATION.md) contract.
 
 Generation should be divided by scale:
 
