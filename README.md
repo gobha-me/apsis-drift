@@ -12,10 +12,11 @@ truecolor ANSI terminals receive TermForge's half-block presentation. The game
 refuses startup when neither supported presentation is available.
 
 This repository began as a feasibility spike. The renderer is fast enough for
-interactive use, including a measured 22 FPS through a Guacamole/RDP session;
-the next milestone is a cockpit-framed planet flyover and a small playable
-orbit-to-surface loop. The longer-term direction is documented in
-[docs/CONCEPT.md](docs/CONCEPT.md).
+interactive use: the measured direct-Kitty path holds 30 FPS through the
+cinematic profile, while the measured RDP path holds 30 FPS at the remote
+profile. The dated results and path-specific recommendations are documented in
+[the Flight Deck performance envelope](docs/PERFORMANCE_ENVELOPE_2026-08-15.md).
+The longer-term direction is documented in [docs/CONCEPT.md](docs/CONCEPT.md).
 
 ## Build
 
@@ -58,6 +59,13 @@ Named viewport profiles make the logical render resolution explicit:
 | `balanced` | 512x320 |
 | `local` (default) | 640x480 |
 | `cinematic` | 1024x768 |
+
+The measured conservative defaults are `remote` at 30 FPS through RDP,
+`local` at 30 FPS for direct Kitty, and `cinematic` at 30 FPS only as a
+direct-path quality mode. The measured RDP playability ceiling is 320x240; the
+direct-path ceiling is above the tested 1024x768 tier. These are starting points
+rather than universal limits; see the
+[dated measurement report](docs/PERFORMANCE_ENVELOPE_2026-08-15.md).
 
 Select a profile or provide a validated custom viewport. The explicit viewport
 wins when both options are present:
@@ -193,21 +201,23 @@ For an end-to-end Kitty measurement on the real terminal path:
 ```
 
 Capture mode forwards every frame to the terminal, so its achieved cadence
-includes the PTY/proxy/terminal path.
+includes the PTY/proxy/terminal path. It bypasses the title menu and exits after
+the requested duration.
 
-## Feasibility checkpoint
+## Measured Flight Deck envelopes
 
-On the 2026-08-14 shared development environment, 180 continuously changing
-frames produced these Release results:
+The 2026-08-15 live matrix measured every named profile for 60 seconds:
 
-| Compiler | Renderer avg/p95 | Complete frame avg/p95 | Headless throughput |
-| --- | ---: | ---: | ---: |
-| GCC 14.2 | 2.866 / 3.148 ms | 4.104 / 4.508 ms | 381.24 MiB/s |
-| Clang 20.1 | 2.163 / 2.373 ms | 3.127 / 3.459 ms | 500.50 MiB/s |
+| Path | Remote | Balanced | Local | Cinematic |
+| --- | ---: | ---: | ---: | ---: |
+| Direct Kitty | 30.70 FPS | 30.72 FPS | 30.73 FPS | 30.72 FPS |
+| Kitty over RDP | 30.29 FPS | 20.44 FPS | 21.24 FPS | 6.42 FPS |
 
-The raw Kitty path emits approximately 1,603.6 KiB per changing 640x480 frame.
-The renderer has ample CPU-side headroom for 30 FPS; live capture remains the
-meaningful measurement for a particular terminal and transport path.
+The paired GCC and Clang headless sweeps kept cinematic complete-frame p95
+below 10 ms, separating CPU-side renderer capacity from the much larger RDP
+presentation tails. The full methodology, timing distributions, environment
+details, limitations, and raw JSON are in the
+[dated performance envelope](docs/PERFORMANCE_ENVELOPE_2026-08-15.md).
 
 Headless benchmark runs temporarily use `/dev/null` for stdin. This works
 around [TermForge issue #256](https://github.com/gobha-me/termforge/issues/256),

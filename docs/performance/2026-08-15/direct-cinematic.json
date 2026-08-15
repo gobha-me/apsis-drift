@@ -1,0 +1,17 @@
+{
+  "workload": "voxel-landscape-1024x768-rgba",
+  "render_profile": "cinematic",
+  "viewport_width": 1024,
+  "viewport_height": 768,
+  "frames": 1844,
+  "elapsed_seconds": 60.026999,
+  "achieved_fps": 30.719510,
+  "renderer_avg_ms": 6.383589,
+  "renderer_p95_ms": 7.384078,
+  "frame_work_avg_ms": 23.372916,
+  "frame_work_p95_ms": 24.884635,
+  "bytes_per_frame": 4211821.071584,
+  "mebibytes_per_second": 123.391228,
+  "total_bytes": 7766598056,
+  "checksum": 2912349559989532646
+}

@@ -139,16 +139,19 @@ Representative full-frame costs are:
 | 1280x720 | 60 | 281 MiB/s |
 | 1920x1080 | 30 | 316 MiB/s |
 
-The observed 640x480 result of approximately 22 FPS through Guacamole implies
-about 34.4 MiB/s of end-to-end transport. It is consistent with this model and
-is not the renderer's CPU ceiling. The local headless renderer has substantially
-more throughput, and prior TermForge testing around 300+ MiB/s suggests much
-higher direct-Kitty modes are worth measuring outside the remote display path.
+The [2026-08-15 Flight Deck measurements](PERFORMANCE_ENVELOPE_2026-08-15.md)
+confirmed that this model describes the application-to-PTY payload but not a
+complete presentation budget. Direct Kitty sustained the 30 FPS target through
+1024x768. The measured RDP path sustained 30 FPS only at 320x240; 512x320 and
+640x480 reached approximately 20 and 21 FPS with p95 complete-frame tails above
+100 ms, while 1024x768 reached approximately 6 FPS. The paired headless sweeps
+kept complete-frame p95 below 10 ms at every profile, so the RDP limit is not
+the renderer's CPU ceiling.
 
-The cockpit provides an especially useful remote profile. A 512x320 dynamic
-viewport inside a larger cockpit costs about 25 MiB/s at 30 FPS. It should fit
-comfortably within the observed remote path while presenting a richer overall
-screen.
+The cockpit therefore uses 320x240 as the conservative remote recommendation.
+A 512x320 viewport remains a useful explicit quality choice, but its theoretical
+25 MiB/s payload is not enough to predict stable 30 FPS through the measured
+RDP presentation path.
 
 The initial named resolution profiles are:
 
@@ -159,9 +162,9 @@ The initial named resolution profiles are:
 
 An explicit viewport supports intermediate measurements such as 640x360 and
 800x600 without adding a profile name for every useful point. Profile cadence
-remains 30 FPS until the resolution/FPS sweep measures direct and remote paths.
-Later, `auto` can select a tier from recent presentation time and missed
-deadlines.
+remains 30 FPS. A later `auto` mode can select a tier from recent presentation
+time and missed deadlines, starting from the measured remote and local
+recommendations rather than a universal maximum.
 
 The headless sweep command measures each requested viewport once and evaluates
 its renderer time, complete-frame work, and wire size against each requested
@@ -171,8 +174,9 @@ the report and do not substitute for live terminal capture.
 
 There is no single useful maximum resolution. The practical upper bound is the
 combination of renderer time, encoding time, PTY/proxy throughput, terminal
-decode/presentation time, and the desired cadence. A repeatable resolution/FPS
-sweep on direct Kitty and through Guacamole should establish those envelopes.
+decode/presentation time, and the desired cadence. The dated direct-Kitty and
+RDP matrix records one reproducible pair of envelopes without treating either
+machine as universal.
 
 Potential future TermForge improvements that would move the envelope include
 RGB24 and compressed image payloads, partial rectangular image updates, shared
