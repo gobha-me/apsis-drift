@@ -7,9 +7,9 @@ A deterministic, procedurally generated spaceflight experiment rendered inside
 a terminal.
 
 Apsis Drift renders a voxel-space landscape into a TermForge `PixelSurface`,
-defaulting to 640x480. Kitty-capable terminals receive the full pixel image,
-while TermForge selects progressively simpler ANSI and cell-based presentations
-when the native image path is unavailable.
+defaulting to 640x480. Kitty-capable terminals receive the full pixel image;
+truecolor ANSI terminals receive TermForge's half-block presentation. The game
+refuses startup when neither supported presentation is available.
 
 This repository began as a feasibility spike. The renderer is fast enough for
 interactive use, including a measured 22 FPS through a Guacamole/RDP session;
@@ -25,10 +25,11 @@ Requirements:
 - A C++23 compiler (GCC 13+ or Clang 19+ recommended)
 - Git when TermForge must be fetched
 
-Apsis Drift first looks for an installed TermForge package, then for a sibling
-checkout at `../termforge`. If neither exists, CMake fetches the tagged
-TermForge v0.31.2 release, which includes the multi-chunk Kitty frame-replacement
-fix.
+Apsis Drift first looks for a TermForge v0.32.0-or-newer package, then for a
+compatible sibling checkout at `../termforge`. Older siblings are ignored. If
+neither exists, CMake fetches the tagged TermForge v0.32.0 release, which
+includes structured event sources and semantic press/repeat/release input
+capabilities.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -84,11 +85,13 @@ Interactive controls:
 - Space: toggle autopilot
 - Escape: quit
 
-Input is recorded as tick-addressed simulation commands. Kitty's enhanced
-keyboard protocol provides held-key press/repeat/release state; terminals that
-only report presses use deterministic ten-tick control pulses. Simultaneously
-held opposing controls cancel to a neutral axis, and any manual-control press
-disengages autopilot.
+Input is recorded as tick-addressed simulation commands. Apsis Drift requires
+semantic press, repeat, and release events, supplied by TermForge through the
+enhanced terminal keyboard protocol or an explicitly configured structured
+event source. Simultaneously held opposing controls cancel to a neutral axis,
+and any manual-control press disengages autopilot. Apsis Drift does not scan or
+open raw input devices; device, permission, focus, and layout policy remain
+outside the game.
 
 The cockpit's navigation rail reports heading in normalized degrees, altitude
 and requested terrain clearance in world units, and horizontal speed. The
@@ -101,17 +104,22 @@ Flight simulation advances at a fixed 120 Hz independently of rendering. Host
 stalls contribute at most 125 ms of catch-up work per frame; excess elapsed
 time is discarded instead of creating an unbounded simulation backlog.
 
-If the native image area is blank, compare the explicitly selected paths:
+Diagnostic capability forcing can exercise the supported paths and startup
+refusals independently:
 
 ```bash
 ./build/apsis-drift --driver kitty
 ./build/apsis-drift --driver ansi
+./build/apsis-drift --driver ansi --keyboard press-only
 ./build/apsis-drift --driver fallback
 ```
 
-After exit, the application prints the selected display tier and capabilities.
-Driver forcing skips the startup probe and is diagnostic; it cannot make an
-unsupported terminal implement a graphics protocol.
+An explicit driver defaults to enhanced input; `--keyboard press-only` isolates
+the missing-repeat/release refusal. The fallback choice exists only to verify
+missing-truecolor refusal. Unsupported combinations exit nonzero before
+alternate-screen entry. After exit, the application prints the selected display
+tier and effective input capabilities. Forcing skips the startup probe and is
+diagnostic; it cannot make an unsupported terminal implement a protocol.
 
 ## Measure and capture
 
@@ -177,8 +185,8 @@ where `test_run_frames()` can block on a cooked terminal's stdin.
 
 - Apsis Drift owns terrain and world generation, flight, simulation, cockpit,
   saves, and game-specific rendering.
-- TermForge owns terminal protocols, input, capability detection, degradation,
-  presentation, and general frame instrumentation.
+- TermForge owns terminal protocols, structured event sources, input capability
+  detection, degradation, presentation, and general frame instrumentation.
 - RasterForge enters only when reusable raster asset decoding, fitting,
   resizing, or compositing becomes a demonstrated need.
 

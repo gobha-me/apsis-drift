@@ -1,7 +1,6 @@
 #include "flight_input.hpp"
 
 #include <algorithm>
-#include <limits>
 #include <optional>
 
 namespace apsis_drift::detail {
@@ -86,37 +85,19 @@ auto FlightInputMapper::insert(FlightCommand command) -> void {
 }
 
 auto FlightInputMapper::enqueue(const KeyEvent& key,
-                                SimulationTick current_tick)
-    -> std::expected<void, FlightInputError> {
+                                SimulationTick current_tick) -> void {
   if (key.key == Key::Char && key.ch == U' ') {
     if (key.action == KeyAction::Press) {
       insert({current_tick, FlightCommandKind::toggle_autopilot});
     }
-    return {};
+    return;
   }
 
   const auto control = control_for(key);
-  if (!control) return {};
+  if (!control) return;
 
-  if (m_enhanced_keyboard) {
-    insert({current_tick,
-            command_for(*control, key.action != KeyAction::Release)});
-    return {};
-  }
-
-  if (key.action == KeyAction::Release) return {};
-  if (current_tick > std::numeric_limits<SimulationTick>::max() -
-                         kFallbackControlPulseTicks) {
-    return std::unexpected{FlightInputError::tick_overflow};
-  }
-
-  const auto release = command_for(*control, false);
-  std::erase_if(m_pending, [release, current_tick](const FlightCommand& item) {
-    return item.tick >= current_tick && item.kind == release;
-  });
-  insert({current_tick, command_for(*control, true)});
-  insert({current_tick + kFallbackControlPulseTicks, release});
-  return {};
+  insert({current_tick,
+          command_for(*control, key.action != KeyAction::Release)});
 }
 
 auto FlightInputMapper::take_commands(SimulationTick tick)

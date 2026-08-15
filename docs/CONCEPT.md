@@ -102,19 +102,20 @@ high-frequency pixel surface.
 The initial composition should use non-overlapping regions:
 
 - A dynamic Kitty pixel viewport for exterior flight
+- A truecolor ANSI half-block viewport when Kitty graphics are unavailable
 - TermForge cell UI for the cockpit frame and most instruments
 - Small independently updated gauges and displays
 - Static or low-frequency decorative regions
-- A deliberate ANSI/cell fallback centered on instruments and radar
 
 This works with TermForge's current composition model and reduces transport
 cost. Translucent pixel HUDs, overlapping image layers, and persistent static
 pixel decorations should wait for a clean layering facility or be baked into
 the dynamic viewport when necessary.
 
-The fallback presentation is not expected to imitate the pixel view. It can be
-a purpose-designed sensor or navigation mode that remains playable in a
-terminal without Kitty graphics.
+The supported game paths require truecolor presentation and semantic key press,
+repeat, and release events. Unsupported presentation or press-only input paths
+should refuse startup on the normal screen instead of maintaining a second,
+less capable flight experience.
 
 ## Resolution and performance envelope
 
@@ -206,8 +207,9 @@ For the initial game:
 
 - **Apsis Drift owns:** simulation, flight model, camera, terrain and planet
   generation, cockpit behavior, missions, saves, and game-specific rendering.
-- **TermForge owns:** event/input handling, terminal capabilities, Kitty and
-  fallback presentation, cell UI, transport, and general frame instrumentation.
+- **TermForge owns:** event/input handling, structured event sources, terminal
+  capabilities, Kitty and truecolor ANSI presentation, cell UI, transport, and
+  general frame instrumentation.
 - **RasterForge may later own:** reusable raster decoding, scaling, fitting,
   compositing, or asset processing once the game presents repeated use cases.
 - **Audio backend owns:** device discovery and sample delivery; the game owns

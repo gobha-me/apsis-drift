@@ -10,10 +10,10 @@ set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
 set(APSIS_DRIFT_TERMFORGE_GIT_TAG
-    "v0.31.2"
+    "v0.32.0"
     CACHE STRING "Pinned TermForge revision used by FetchContent")
 
-find_package(termforge CONFIG QUIET)
+find_package(termforge 0.32.0 CONFIG QUIET)
 if (NOT TARGET termforge::lib)
   set(termforge_TESTS OFF CACHE BOOL "" FORCE)
   set(termforge_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -21,13 +21,40 @@ if (NOT TARGET termforge::lib)
   set(termforge_BENCH OFF CACHE BOOL "" FORCE)
   set(termforge_INSTALL OFF CACHE BOOL "" FORCE)
 
+  set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE FALSE)
   if (EXISTS "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}/CMakeLists.txt")
+    if (TERMFORGE_VERSION VERSION_GREATER_EQUAL 0.32.0)
+      set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE TRUE)
+    else ()
+      find_package(Git QUIET)
+      if (GIT_FOUND)
+        execute_process(
+          COMMAND "${GIT_EXECUTABLE}" -C
+                  "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}"
+                  merge-base --is-ancestor v0.32.0 HEAD
+          RESULT_VARIABLE APSIS_DRIFT_TERMFORGE_ANCESTOR_RESULT
+          OUTPUT_QUIET
+          ERROR_QUIET
+        )
+        if (APSIS_DRIFT_TERMFORGE_ANCESTOR_RESULT EQUAL 0)
+          set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE TRUE)
+        endif ()
+      endif ()
+    endif ()
+  endif ()
+
+  if (APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE)
     add_subdirectory(
       "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}"
       "${CMAKE_CURRENT_BINARY_DIR}/_deps/termforge-build"
       EXCLUDE_FROM_ALL
     )
   else ()
+    if (EXISTS "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}/CMakeLists.txt")
+      message(STATUS
+        "Ignoring TermForge source checkout older than v0.32.0: "
+        "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}")
+    endif ()
     message(STATUS
       "TermForge not installed or found at the sibling path; fetching "
       "${APSIS_DRIFT_TERMFORGE_GIT_TAG}")
@@ -122,6 +149,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             --report sweep-invalid.json)
   add_test(NAME reject-sweep-options-without-mode
     COMMAND apsis-drift --sweep-fps 30 --report sweep-invalid.json)
+  add_test(NAME reject-keyboard-with-automatic-driver
+    COMMAND apsis-drift --keyboard enhanced)
+  add_test(NAME capability-floor-refusal
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_capability_refusal.cmake")
   set_tests_properties(
     reject-viewport-zero
     reject-viewport-negative
@@ -135,6 +168,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-sweep-duplicate-viewport
     reject-sweep-incompatible-profile
     reject-sweep-options-without-mode
+    reject-keyboard-with-automatic-driver
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()
