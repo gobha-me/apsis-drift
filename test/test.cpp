@@ -12,6 +12,7 @@
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "capability_floor.hpp"
 #include "flight_input.hpp"
 
 namespace {
@@ -196,13 +197,13 @@ auto cockpit_layout_contract() -> void {
       compute_cockpit_layout(80, 24, {1, 2}, viewport);
   check(ansi.viewport == compact.viewport,
         "ANSI half-block and Kitty cells must share physical aspect layout");
-  const auto fallback =
+  const auto square_cells =
       compute_cockpit_layout(80, 24, {1, 1}, viewport);
-  check(fallback.viewport == Rect{29, 2, 22, 17},
-        "cell fallback must preserve aspect using square logical cells");
+  check(square_cells.viewport == Rect{29, 2, 22, 17},
+        "square logical cells must preserve the viewport aspect");
 
   for (const auto& layout :
-       std::array{compact, wide, ansi, fallback,
+       std::array{compact, wide, ansi, square_cells,
                   compute_cockpit_layout(65535, 65535, {65535, 65535},
                                          {4096, 1024})}) {
     check(layout.supported(),
@@ -795,77 +796,133 @@ auto flight_input_mapping_contract() -> void {
               FlightCommandKind::release_fall},
   };
 
-  FlightInputMapper enhanced;
-  enhanced.set_enhanced_keyboard(true);
+  apsis_drift::detail::FlightInputMapper mapper;
   for (const auto& mapping : mappings) {
-    check(enhanced.enqueue(key_event(mapping.key, mapping.ch,
-                                     KeyAction::Press),
-                           7)
-              .has_value(),
-          "enhanced key press must enqueue");
-    check(enhanced.enqueue(key_event(mapping.key, mapping.ch,
-                                     KeyAction::Release),
-                           7)
-              .has_value(),
-          "enhanced key release must enqueue");
+    mapper.enqueue(key_event(mapping.key, mapping.ch, KeyAction::Press), 7);
+    mapper.enqueue(key_event(mapping.key, mapping.ch, KeyAction::Release), 7);
   }
-  check(enhanced.enqueue(key_event(Key::Char, U'w', KeyAction::Repeat), 7)
-            .has_value(),
-        "enhanced key repeat must enqueue");
-  check(enhanced.enqueue(key_event(Key::Char, U' ', KeyAction::Press), 7)
-            .has_value(),
-        "Space press must enqueue");
-  check(enhanced.enqueue(key_event(Key::Char, U' ', KeyAction::Repeat), 7)
-            .has_value(),
-        "Space repeat must be ignored safely");
-  check(enhanced.enqueue(key_event(Key::Char, U'x', KeyAction::Press), 7)
-            .has_value(),
-        "an unrelated key must be ignored safely");
-  const auto enhanced_commands = enhanced.take_commands(7);
-  check(enhanced_commands.size() == mappings.size() * 2 + 2,
-        "enhanced mapping must emit press, release, repeat, and one toggle");
-  if (enhanced_commands.size() == mappings.size() * 2 + 2) {
+  mapper.enqueue(key_event(Key::Char, U'w', KeyAction::Repeat), 7);
+  mapper.enqueue(key_event(Key::Char, U' ', KeyAction::Press), 7);
+  mapper.enqueue(key_event(Key::Char, U' ', KeyAction::Repeat), 7);
+  mapper.enqueue(key_event(Key::Char, U'x', KeyAction::Press), 7);
+  const auto commands = mapper.take_commands(7);
+  check(commands.size() == mappings.size() * 2 + 2,
+        "mapping must emit press, release, repeat, and one toggle");
+  if (commands.size() == mappings.size() * 2 + 2) {
     for (std::size_t index = 0; index < mappings.size(); ++index) {
-      check(enhanced_commands[index * 2].kind == mappings[index].press &&
-                enhanced_commands[index * 2 + 1].kind ==
+      check(commands[index * 2].kind == mappings[index].press &&
+                commands[index * 2 + 1].kind ==
                     mappings[index].release,
-            "each enhanced control must map to its command pair");
+            "each control must map to its command pair");
     }
-    check(enhanced_commands[enhanced_commands.size() - 2].kind ==
+    check(commands[commands.size() - 2].kind ==
               FlightCommandKind::press_forward,
-          "an enhanced repeat must remain an idempotent press");
-    check(enhanced_commands.back().kind ==
-              FlightCommandKind::toggle_autopilot,
+          "a repeat must remain an idempotent press");
+    check(commands.back().kind == FlightCommandKind::toggle_autopilot,
           "Space must map to one autopilot toggle");
   }
+}
 
-  FlightInputMapper fallback;
-  fallback.set_enhanced_keyboard(false);
-  check(fallback.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 10)
-            .has_value(),
-        "fallback press must enqueue a pulse");
-  check(fallback.take_commands(10) ==
-            std::vector{FlightCommand{10,
-                                      FlightCommandKind::press_forward}},
-        "fallback pulse must begin at the current tick");
-  check(fallback.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 15)
-            .has_value(),
-        "a repeated fallback press must extend the pulse");
-  check(fallback.take_commands(20).empty(),
-        "an extended fallback pulse must remove its earlier release");
-  check(fallback.take_commands(25) ==
-            std::vector{FlightCommand{25,
-                                      FlightCommandKind::release_forward}},
-        "an extended fallback pulse must release after ten ticks");
-  check(fallback.enqueue(key_event(Key::Char, U'w', KeyAction::Release), 30)
-            .has_value() &&
-            fallback.take_commands(30).empty(),
-        "fallback release events must not create extra commands");
-  check(!fallback.enqueue(
-             key_event(Key::Char, U'w', KeyAction::Press),
-             std::numeric_limits<SimulationTick>::max())
-              .has_value(),
-        "a fallback pulse must reject a release-tick overflow");
+auto capability_floor_contract() -> void {
+  using apsis_drift::detail::DriverChoice;
+  using apsis_drift::detail::KeyboardChoice;
+  using apsis_drift::detail::flight_deck_requirements;
+  using apsis_drift::detail::forced_capabilities;
+
+  const auto requirements = flight_deck_requirements();
+  check(requirements.truecolor && requirements.key_repeat &&
+            requirements.key_release && !requirements.graphics,
+        "the Flight Deck floor must accept Kitty or ANSI truecolor with "
+        "repeat/release input");
+  check(!forced_capabilities(DriverChoice::automatic,
+                             KeyboardChoice::enhanced),
+        "automatic mode must preserve normal capability probing");
+
+  const auto kitty =
+      forced_capabilities(DriverChoice::kitty, KeyboardChoice::enhanced);
+  check(kitty && kitty->kitty_graphics && kitty->truecolor &&
+            kitty->kitty_keyboard,
+        "forced Kitty must provide truecolor and enhanced input");
+
+  const auto ansi =
+      forced_capabilities(DriverChoice::ansi, KeyboardChoice::enhanced);
+  check(ansi && !ansi->kitty_graphics && ansi->truecolor &&
+            ansi->kitty_keyboard,
+        "forced ANSI must combine truecolor with enhanced input");
+
+  const auto missing_truecolor =
+      forced_capabilities(DriverChoice::fallback, KeyboardChoice::enhanced);
+  check(missing_truecolor && !missing_truecolor->truecolor &&
+            missing_truecolor->kitty_keyboard,
+        "forced fallback must isolate a missing-truecolor refusal");
+
+  const auto missing_release =
+      forced_capabilities(DriverChoice::ansi, KeyboardChoice::press_only);
+  check(missing_release && missing_release->truecolor &&
+            !missing_release->kitty_keyboard,
+        "forced press-only input must isolate a missing-release refusal");
+}
+
+struct TimedKeyEvent {
+  SimulationTick tick{};
+  termforge::KeyEvent event;
+};
+
+[[nodiscard]] auto replay_key_trace(int render_fps) -> std::uint64_t {
+  const auto terrain = Terrain::generate(256, 0xC0FFEEU);
+  if (!terrain) return 0;
+  auto initialized = initial_flight_state(*terrain);
+  if (!initialized) return 0;
+
+  const std::array trace{
+      TimedKeyEvent{0, key_event(termforge::Key::Char, U' ',
+                                 termforge::KeyAction::Press)},
+      TimedKeyEvent{0, key_event(termforge::Key::Char, U'w',
+                                 termforge::KeyAction::Press)},
+      TimedKeyEvent{24, key_event(termforge::Key::Char, U'w',
+                                  termforge::KeyAction::Repeat)},
+      TimedKeyEvent{36, key_event(termforge::Key::Right, 0,
+                                  termforge::KeyAction::Press)},
+      TimedKeyEvent{72, key_event(termforge::Key::Char, U'w',
+                                  termforge::KeyAction::Release)},
+      TimedKeyEvent{96, key_event(termforge::Key::Right, 0,
+                                  termforge::KeyAction::Release)},
+      TimedKeyEvent{120, key_event(termforge::Key::Char, U'r',
+                                   termforge::KeyAction::Press)},
+      TimedKeyEvent{144, key_event(termforge::Key::Char, U'r',
+                                   termforge::KeyAction::Release)},
+      TimedKeyEvent{180, key_event(termforge::Key::Char, U' ',
+                                   termforge::KeyAction::Press)},
+  };
+
+  auto state = *initialized;
+  apsis_drift::detail::FlightInputMapper mapper;
+  FixedStepClock clock;
+  std::size_t next_event{};
+  const SimulationSeconds frame_time{1.0 / render_fps};
+  for (int frame = 0; frame < render_fps * 2; ++frame) {
+    const auto advance = clock.advance(frame_time);
+    if (!advance) return 0;
+    for (int step = 0; step < advance->steps; ++step) {
+      while (next_event < trace.size() && trace[next_event].tick == state.tick) {
+        mapper.enqueue(trace[next_event].event, state.tick);
+        ++next_event;
+      }
+      const auto tick_commands = mapper.take_commands(state.tick);
+      if (!advance_flight(*terrain, state, tick_commands, kSimulationStep)) {
+        return 0;
+      }
+    }
+  }
+  return flight_state_checksum(state);
+}
+
+auto deterministic_key_trace_contract() -> void {
+  const auto at_30 = replay_key_trace(30);
+  const auto at_60 = replay_key_trace(60);
+  check(at_30 != 0 && at_30 == at_60,
+        "normalized press/repeat/release traces must be deterministic across "
+        "render cadences");
 }
 
 auto camera_derivation_contract() -> void {
@@ -1260,6 +1317,8 @@ auto main() -> int {
   deterministic_command_replay();
   command_edge_contract();
   flight_input_mapping_contract();
+  capability_floor_contract();
+  deterministic_key_trace_contract();
   camera_derivation_contract();
   camera_projection_contract();
   render_failure_matrix();

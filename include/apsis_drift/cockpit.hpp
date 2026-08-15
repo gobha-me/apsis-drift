@@ -50,9 +50,8 @@ struct CockpitLayout {
 };
 
 // Compute cockpit regions in terminal cells. The driver-provided `cell_pixels`
-// keeps the logical pixel viewport's aspect ratio correct on Kitty, ANSI
-// half-block, and cell fallback paths without moving terminal policy into the
-// game.
+// keeps the logical pixel viewport's aspect ratio correct on Kitty and ANSI
+// half-block paths without moving terminal policy into the game.
 [[nodiscard]] auto compute_cockpit_layout(
     int cols, int rows, termforge::Extent cell_pixels,
     ViewportSize viewport) noexcept -> CockpitLayout;

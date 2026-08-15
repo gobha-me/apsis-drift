@@ -25,7 +25,6 @@
 
 #include "termforge/core/app.hpp"
 #include "termforge/drivers/ansi_rgb_driver.hpp"
-#include "termforge/drivers/fallback_driver.hpp"
 #include "termforge/drivers/kitty_driver.hpp"
 #include "termforge/widgets/frame.hpp"
 #include "termforge/widgets/pixel_surface.hpp"
@@ -34,6 +33,7 @@
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "capability_floor.hpp"
 #include "flight_input.hpp"
 
 namespace {
@@ -48,7 +48,8 @@ struct FrameSample {
   double work_ms{};
 };
 
-enum class DriverChoice { automatic, kitty, ansi, fallback };
+using apsis_drift::detail::DriverChoice;
+using apsis_drift::detail::KeyboardChoice;
 
 [[nodiscard]] auto elapsed_ms(Clock::time_point from,
                               Clock::time_point to) noexcept -> double {
@@ -194,6 +195,7 @@ class LandscapeApp final : public App {
     set_max_tick_dt(std::chrono::duration<double>::zero());
     set_mouse_mode(MouseMode::None);
     set_keyboard_mode(KeyboardMode::Enhanced);
+    require(apsis_drift::detail::flight_deck_requirements());
     render_landscape();
   }
 
@@ -202,16 +204,15 @@ class LandscapeApp final : public App {
     driver().set_output(&m_sink);
     m_output_bound = true;
     const auto& caps = capabilities();
-    const std::string_view tier = caps.kitty_graphics
-                                      ? "kitty"
-                                      : (caps.truecolor ? "ansi" : "fallback");
+    const std::string_view tier = caps.kitty_graphics ? "kitty" : "ansi";
+    const auto input = input_capabilities();
     m_display_tier = tier;
     m_display_path = std::format(
-        "{} (kitty_graphics={}, truecolor={}, kitty_keyboard={}, sync={})",
-        tier, caps.kitty_graphics, caps.truecolor, caps.kitty_keyboard,
-        caps.sync_updates);
-    m_input_mapper.set_enhanced_keyboard(caps.kitty_keyboard);
-    m_input_tier = caps.kitty_keyboard ? "HELD INPUT" : "PRESS PULSES";
+        "{} (kitty_graphics={}, truecolor={}, input_press={}, "
+        "input_repeat={}, input_release={}, sync={})",
+        tier, caps.kitty_graphics, caps.truecolor, input.key_press,
+        input.key_repeat, input.key_release, caps.sync_updates);
+    m_input_tier = "HELD INPUT";
     if (m_capture_seconds > 0.0 && !capabilities().kitty_graphics) {
       m_error = "capture mode requires negotiated Kitty graphics";
       quit();
@@ -220,10 +221,14 @@ class LandscapeApp final : public App {
 
   auto on_event(const Event& event) -> void override {
     if (const auto* error = std::get_if<ErrorEvent>(&event)) {
-      // TermForge reports expected progressive degradation as Info. The
-      // cockpit already exposes the selected press-only input tier, so reserve
-      // the ERROR bay for actionable warnings and failures.
       if (error->severity != Severity::Info) m_error = error->message;
+      // TermForge dispatches any synthesized held-key releases before this
+      // requirements transition. Stop instead of simulating with an input
+      // route that can no longer guarantee release events.
+      if (error->source == "requirements" && !requirements_met()) {
+        m_requirements_failed = true;
+        quit();
+      }
     } else if (const auto* key = std::get_if<KeyEvent>(&event)) {
       handle_key(*key);
     }
@@ -303,20 +308,13 @@ class LandscapeApp final : public App {
     m_display_path = "kitty (headless, /dev/null input workaround for #256)";
   }
 
-  [[nodiscard]] auto force_driver(DriverChoice choice)
+  [[nodiscard]] auto force_capabilities(DriverChoice driver_choice,
+                                        KeyboardChoice keyboard_choice)
       -> std::expected<void, ErrorEvent> {
-    if (choice == DriverChoice::automatic) return {};
-    Capabilities caps;
-    if (choice == DriverChoice::kitty) {
-      caps.kitty_graphics = true;
-      caps.truecolor = true;
-      caps.color_levels = 24;
-      caps.kitty_keyboard = true;
-    } else if (choice == DriverChoice::ansi) {
-      caps.truecolor = true;
-      caps.color_levels = 24;
-    }
-    return terminal().set_capabilities(caps);
+    const auto caps = apsis_drift::detail::forced_capabilities(
+        driver_choice, keyboard_choice);
+    if (!caps) return {};
+    return terminal().set_capabilities(*caps);
   }
 
   [[nodiscard]] auto summary() const -> BenchmarkSummary {
@@ -324,6 +322,9 @@ class LandscapeApp final : public App {
   }
 
   [[nodiscard]] auto error() const -> const std::string& { return m_error; }
+  [[nodiscard]] auto requirements_failed() const noexcept -> bool {
+    return m_requirements_failed;
+  }
   [[nodiscard]] auto display_path() const -> const std::string& {
     return m_display_path;
   }
@@ -378,12 +379,10 @@ class LandscapeApp final : public App {
       return;
     }
 
-    const auto style = m_display_tier == "fallback" ? BorderStyle::Ascii
-                                                     : BorderStyle::Rounded;
-    m_left_frame.set_style(style);
-    m_viewport_frame.set_style(style);
-    m_right_frame.set_style(style);
-    m_message_frame.set_style(style);
+    m_left_frame.set_style(BorderStyle::Rounded);
+    m_viewport_frame.set_style(BorderStyle::Rounded);
+    m_right_frame.set_style(BorderStyle::Rounded);
+    m_message_frame.set_style(BorderStyle::Rounded);
     m_left_frame.set_geometry(layout.left_instruments);
     m_viewport_frame.set_geometry(layout.viewport_frame);
     m_right_frame.set_geometry(layout.right_instruments);
@@ -487,9 +486,7 @@ class LandscapeApp final : public App {
   }
 
   auto handle_key(const KeyEvent& key) -> void {
-    if (auto queued = m_input_mapper.enqueue(key, m_flight.tick); !queued) {
-      throw std::runtime_error{"flight input tick overflow"};
-    }
+    m_input_mapper.enqueue(key, m_flight.tick);
   }
 
   auto advance_simulation(std::chrono::duration<double> elapsed) -> void {
@@ -543,6 +540,7 @@ class LandscapeApp final : public App {
   int m_frame{};
   bool m_output_bound{false};
   bool m_synthetic_headless{false};
+  bool m_requirements_failed{false};
   std::string m_error;
   std::string m_display_tier{"probing"};
   std::string m_display_path{"not started"};
@@ -610,6 +608,7 @@ auto usage() -> void {
       "Usage: apsis-drift [--seed N] [--profile NAME] "
       "[--viewport WIDTHxHEIGHT]\n"
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
+      "                   [--keyboard enhanced|press-only]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
@@ -633,6 +632,7 @@ auto main(int argc, char** argv) -> int {
   int capture_seconds = 0;
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
+  KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
   RenderProfile selected_profile{RenderProfile::local};
   std::optional<ViewportSize> viewport_override;
   auto sweep_viewports = default_sweep_viewports();
@@ -642,6 +642,7 @@ auto main(int argc, char** argv) -> int {
   bool profile_specified{};
   bool viewport_specified{};
   bool driver_specified{};
+  bool keyboard_specified{};
   bool sweep_viewports_specified{};
   bool sweep_fps_specified{};
 
@@ -752,6 +753,19 @@ auto main(int argc, char** argv) -> int {
       driver_specified = true;
       continue;
     }
+    if (argument == "--keyboard" && i + 1 < argc) {
+      const std::string_view value{argv[++i]};
+      if (value == "enhanced") keyboard_choice = KeyboardChoice::enhanced;
+      else if (value == "press-only") {
+        keyboard_choice = KeyboardChoice::press_only;
+      } else {
+        std::fprintf(stderr, "unknown keyboard tier '%.*s'\n",
+                     static_cast<int>(value.size()), value.data());
+        return 2;
+      }
+      keyboard_specified = true;
+      continue;
+    }
     if (argument == "--report" && i + 1 < argc) {
       report_path = argv[++i];
       continue;
@@ -779,11 +793,17 @@ auto main(int argc, char** argv) -> int {
                  "sweep selection options require --sweep\n");
     return 2;
   }
-  if (sweep_frames && (profile_specified || viewport_specified ||
-                       driver_specified || !snapshot_path.empty())) {
+  if (keyboard_specified && driver_choice == DriverChoice::automatic) {
     std::fprintf(stderr,
-                 "sweep mode does not accept profile, viewport, driver, or "
-                 "snapshot options\n");
+                 "--keyboard requires --driver kitty, ansi, or fallback\n");
+    return 2;
+  }
+  if (sweep_frames && (profile_specified || viewport_specified ||
+                       driver_specified || keyboard_specified ||
+                       !snapshot_path.empty())) {
+    std::fprintf(stderr,
+                 "sweep mode does not accept profile, viewport, driver, "
+                 "keyboard, or snapshot options\n");
     return 2;
   }
   if (sweep_frames && report_path.empty()) {
@@ -837,8 +857,10 @@ auto main(int argc, char** argv) -> int {
         resolve_render_configuration(selected_profile, viewport_override);
     LandscapeApp app{render_configuration, seed,
                      static_cast<double>(capture_seconds)};
-    if (auto forced = app.force_driver(driver_choice); !forced) {
-      std::fprintf(stderr, "cannot force driver: %s\n",
+    if (auto forced =
+            app.force_capabilities(driver_choice, keyboard_choice);
+        !forced) {
+      std::fprintf(stderr, "cannot force capabilities: %s\n",
                    forced.error().message.c_str());
       return 2;
     }
@@ -847,6 +869,7 @@ auto main(int argc, char** argv) -> int {
       app.benchmark(*benchmark_frames);
     } else {
       result = app.run();
+      if (app.requirements_failed()) result = 1;
     }
 
     if (!app.error().empty()) {
