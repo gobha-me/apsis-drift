@@ -91,6 +91,28 @@ Even the headless cinematic profile stays below 10 ms p95 complete-frame work.
 The much larger RDP tails therefore belong to the live presentation path, not
 the CPU-side renderer ceiling.
 
+## Exploratory direct-path ceiling
+
+After the named-profile matrix, a 15-second custom-viewport probe narrowed the
+30 FPS crossover on the same direct-Kitty workstation. This is a local ceiling
+observation, not a portable limit; terminal, compositor, and hardware mileage
+will vary.
+
+| Viewport | Achieved FPS | Renderer p95 | Complete-frame p95 | Payload rate |
+| ---: | ---: | ---: | ---: | ---: |
+| 1280x960 | 30.68 | 7.49 ms | 32.51 ms | 192.54 MiB/s |
+| 1344x1008 | 30.18 | 7.73 ms | 34.66 ms | 208.82 MiB/s |
+| 1360x1020 | 29.16 | 7.91 ms | 35.46 ms | 206.58 MiB/s |
+| 1408x1056 | 27.51 | 8.32 ms | 37.83 ms | 208.94 MiB/s |
+| 1536x1152 | 23.03 | 9.12 ms | 45.08 ms | 208.09 MiB/s |
+
+At a 33.33 ms frame budget, 1280x960 is the highest tested viewport with both
+30 FPS average cadence and p95 complete-frame work inside budget. 1344x1008 is
+the ragged edge: its average remains above 30 FPS, but its p95 misses the frame
+budget. 1360x1020 is the first tested viewport below 30 FPS average. The nearly
+flat 208 MiB/s payload rate above that point, while renderer p95 remains near
+8 ms, identifies direct presentation throughput as the crossover constraint.
+
 ## Environments and method
 
 Direct Kitty used Apsis Drift commit `07bf95cb4b2f07bcd90f03d2f85cce19cd6a6daf`

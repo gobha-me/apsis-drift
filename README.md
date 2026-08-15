@@ -63,8 +63,8 @@ Named viewport profiles make the logical render resolution explicit:
 The measured conservative defaults are `remote` at 30 FPS through RDP,
 `local` at 30 FPS for direct Kitty, and `cinematic` at 30 FPS only as a
 direct-path quality mode. The measured RDP playability ceiling is 320x240; the
-direct-path ceiling is above the tested 1024x768 tier. These are starting points
-rather than universal limits; see the
+same workstation's exploratory direct-path probe held a clean 30 FPS through
+1280x960. These are starting points rather than universal limits; see the
 [dated measurement report](docs/PERFORMANCE_ENVELOPE_2026-08-15.md).
 
 Select a profile or provide a validated custom viewport. The explicit viewport
