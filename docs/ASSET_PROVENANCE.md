@@ -34,3 +34,16 @@ and license entries before publication.
   window bounds and metadata-stripped with ImageMagick 7.1.2-29
 - Edits: lossless crop only; no color, content, compositing, or generative edits
 - License: BSD 3-Clause, under the repository [license](../LICENSE.md)
+
+## Kitty raster cockpit design mockup
+
+- Location: `docs/media/kitty-raster-cockpit-mockup.png`
+- Purpose: visual hierarchy reference for the planned Kitty-first raster
+  cockpit and terrain radar issue; it is design material, not a runtime asset
+- Origin: supplied by the repository owner for this issue on 2026-08-15; the
+  source image's original creation tooling and prompt were not provided
+- Edits: copied byte-for-byte with no visual or metadata changes
+- SHA-256: `69cb1a58eb39812b891c11bfb949358e64442a5e80a10069d08c486eccd67c0a`
+- License: supplied by the repository owner for publication in this repository
+  as design and issue-tracking material; no separate third-party license was
+  identified
