@@ -23,12 +23,15 @@
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/seed.hpp"
+#include "apsis_drift/signal_navigation_acceptance.hpp"
+#include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/surface_signals.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
+#include "signal_input.hpp"
 #include "surface_signal_generation.hpp"
 
 namespace {
@@ -560,6 +563,300 @@ auto surface_signal_population() -> void {
       }
     }
   }
+}
+
+auto signal_scanner_contract() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  auto cache = TerrainTileCache::create();
+  check(cache.has_value(), "signal scanner terrain cache must initialize");
+  if (!cache) return;
+  const auto catalog = generate_surface_signals(planet, *cache);
+  check(catalog.has_value(), "signal scanner catalog must generate");
+  if (!catalog) return;
+
+  SignalScannerState selection;
+  const auto selected_next = advance_signal_selection(
+      *catalog, selection, SignalSelectionCommand::next);
+  check(selected_next && selection.selected == catalog->signals[0].id,
+        "next must select the first signal from an empty selection");
+  for (std::size_t index = 1; index < catalog->signals.size(); ++index) {
+    check(advance_signal_selection(*catalog, selection,
+                                   SignalSelectionCommand::next)
+              .has_value(),
+          "next selection must advance through the catalog");
+  }
+  check(selection.selected == catalog->signals.back().id &&
+            advance_signal_selection(*catalog, selection,
+                                     SignalSelectionCommand::next) &&
+            selection.selected == catalog->signals.front().id,
+        "next selection must wrap in catalog order");
+  check(advance_signal_selection(*catalog, selection,
+                                 SignalSelectionCommand::previous) &&
+            selection.selected == catalog->signals.back().id,
+        "previous selection must wrap in catalog order");
+
+  SignalScannerState invalid_selection{SurfaceSignalId{1}};
+  const auto unchanged = invalid_selection;
+  check(advance_signal_selection(*catalog, invalid_selection,
+                                 SignalSelectionCommand::next) ==
+            std::unexpected{SignalScannerError::invalid_selection} &&
+            invalid_selection == unchanged,
+        "invalid scanner selection must be rejected transactionally");
+  auto malformed = *catalog;
+  malformed.signals[1].id = malformed.signals[0].id;
+  check(advance_signal_selection(malformed, selection,
+                                 SignalSelectionCommand::next) ==
+            std::unexpected{SignalScannerError::invalid_catalog},
+        "duplicate signal identities must invalidate selection");
+  check(advance_signal_selection(
+            *catalog, selection,
+            static_cast<SignalSelectionCommand>(255)) ==
+            std::unexpected{SignalScannerError::invalid_command},
+        "unknown signal selection commands must be rejected");
+
+  const auto& target_signal = catalog->signals[0];
+  SignalScannerState target_selection{target_signal.id};
+  const auto target_fixed = planet_fixed_from_terrain_address(
+      planet, target_signal.anchor,
+      static_cast<double>(target_signal.approach_altitude_metres));
+  check(target_fixed.has_value(), "signal approach point must resolve");
+  if (!target_fixed) return;
+  const auto target_position =
+      geodetic_from_planet_fixed(planet, *target_fixed);
+  check(target_position.has_value(), "signal approach point must be geodetic");
+  if (!target_position) return;
+
+  PlanetaryFlightState flight{
+      .tick = 0,
+      .planet = planet.id,
+      .pose = {*target_position, 0.0},
+      .velocity = {},
+      .clearance_metres = kSurfaceSignalApproachClearanceMetres,
+      .mode = FlightMode::manual,
+      .controls = {},
+      .regime = FlightRegime::terrain_flight,
+      .last_transition = std::nullopt,
+  };
+  const auto reached = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(reached && reached->status == SignalScannerStatus::reached &&
+            reached->distance_metres < 1.0e-6 &&
+            reached->selected == target_signal.id,
+        "the generated approach point must report the target reached");
+
+  flight.pose.position.altitude_metres =
+      target_position->altitude_metres + kSignalScannerReachedRadiusMetres;
+  const auto reached_boundary = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(reached_boundary &&
+            reached_boundary->status == SignalScannerStatus::reached,
+        "the exact reached-radius boundary must remain reached");
+  flight.pose.position.altitude_metres += 1.0;
+  const auto outside_reached = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(outside_reached &&
+            outside_reached->status == SignalScannerStatus::tracking,
+        "one metre beyond the reached radius must resume tracking");
+  flight.pose.position.altitude_metres =
+      target_position->altitude_metres + kSignalScannerMaximumRangeMetres;
+  const auto range_boundary = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(range_boundary &&
+            range_boundary->status == SignalScannerStatus::tracking,
+        "the exact maximum-range boundary must remain trackable");
+  flight.pose.position.altitude_metres += 1.0;
+  const auto outside_range = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(outside_range &&
+            outside_range->status == SignalScannerStatus::out_of_range,
+        "one metre beyond maximum range must report out of range");
+
+  const auto target_frame = make_local_tangent_frame(planet, *target_position);
+  check(target_frame.has_value(), "signal target tangent frame must resolve");
+  if (!target_frame) return;
+  const auto west_fixed =
+      planet_fixed_from_local(*target_frame, {-5'000.0, 0.0, 0.0});
+  const auto west_position =
+      west_fixed ? geodetic_from_planet_fixed(planet, *west_fixed)
+                 : std::expected<GeodeticPosition, CoordinateError>{
+                       std::unexpected{CoordinateError::non_finite_input}};
+  check(west_position.has_value(), "signal approach start must resolve");
+  if (!west_position) return;
+  flight.pose = {*west_position, 0.0};
+  const auto tracking = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(tracking && tracking->status == SignalScannerStatus::tracking &&
+            tracking->distance_metres > kSignalScannerReachedRadiusMetres &&
+            tracking->distance_metres < 5'100.0 &&
+            std::abs(tracking->relative_bearing_radians) < 0.01,
+        "a nearby visible target must provide an ahead tracking solution");
+
+  auto occluded_position = *target_position;
+  occluded_position.longitude_radians += 0.2;
+  if (occluded_position.longitude_radians > std::numbers::pi_v<double>) {
+    occluded_position.longitude_radians -=
+        2.0 * std::numbers::pi_v<double>;
+  }
+  flight.pose.position = occluded_position;
+  const auto occluded = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(occluded && occluded->status == SignalScannerStatus::occluded &&
+            occluded->distance_metres < kSignalScannerMaximumRangeMetres,
+        "a nearby target below the reference-sphere horizon must be occluded");
+
+  auto opposite = *target_position;
+  opposite.latitude_radians = -opposite.latitude_radians;
+  opposite.longitude_radians += std::numbers::pi_v<double>;
+  if (opposite.longitude_radians > std::numbers::pi_v<double>) {
+    opposite.longitude_radians -= 2.0 * std::numbers::pi_v<double>;
+  }
+  flight.pose.position = opposite;
+  const auto out_of_range = resolve_signal_navigation(
+      planet, *catalog, flight, target_selection);
+  check(out_of_range &&
+            out_of_range->status == SignalScannerStatus::out_of_range &&
+            out_of_range->distance_metres > kSignalScannerMaximumRangeMetres,
+        "a target beyond scanner range must report out of range before occlusion");
+
+  flight.pose.position = *target_position;
+  const auto no_signal = resolve_signal_navigation(
+      planet, *catalog, flight, SignalScannerState{});
+  check(no_signal && no_signal->status == SignalScannerStatus::no_signal &&
+            !no_signal->selected,
+        "an empty selection must produce an explicit no-signal solution");
+  auto non_finite = flight;
+  non_finite.pose.heading_radians =
+      std::numeric_limits<double>::quiet_NaN();
+  check(resolve_signal_navigation(planet, *catalog, non_finite,
+                                  target_selection) ==
+            std::unexpected{SignalScannerError::invalid_flight_state},
+        "non-finite scanner flight state must be rejected");
+  auto wrong_flight = flight;
+  wrong_flight.planet = PlanetId{planet.id.value + 1U};
+  check(resolve_signal_navigation(planet, *catalog, wrong_flight,
+                                  target_selection) ==
+            std::unexpected{SignalScannerError::invalid_flight_state},
+        "scanner flight state from another planet must be rejected");
+  auto wrong_catalog = *catalog;
+  wrong_catalog.planet = PlanetId{planet.id.value + 1U};
+  check(resolve_signal_navigation(planet, wrong_catalog, flight,
+                                  target_selection) ==
+            std::unexpected{SignalScannerError::invalid_planet},
+        "scanner catalogs from another planet must be rejected");
+
+  const auto empty_readout = format_signal_scanner(*no_signal);
+  const auto tracking_readout = format_signal_scanner(*tracking);
+  const auto occluded_readout = format_signal_scanner(*occluded);
+  const auto range_readout = format_signal_scanner(*out_of_range);
+  const auto reached_readout = format_signal_scanner(*reached);
+  const std::array readouts{empty_readout, tracking_readout, occluded_readout,
+                            range_readout, reached_readout};
+  check(std::ranges::all_of(readouts, [](const auto& readout) {
+          return readout.target.size() == kInstrumentLineWidth &&
+                 readout.bearing.size() == kInstrumentLineWidth &&
+                 readout.distance.size() == kInstrumentLineWidth &&
+                 readout.strength.size() == kInstrumentLineWidth &&
+                 readout.cue.size() == kInstrumentLineWidth;
+        }),
+        "scanner formatting must preserve fixed-width cockpit lines");
+  check(empty_readout.cue == "NO SIGNAL" &&
+            tracking_readout.cue == "AHEAD >>>" &&
+            occluded_readout.cue == "OCCLUDED " &&
+            range_readout.cue == "OUT RANGE" &&
+            reached_readout.cue == "REACHED! ",
+        "scanner states must remain understandable without color");
+  const auto disclosed = tracking_readout.target + tracking_readout.bearing +
+                         tracking_readout.distance +
+                         tracking_readout.strength + tracking_readout.cue;
+  check(disclosed.find("survey") == std::string::npos &&
+            disclosed.find("recovery") == std::string::npos &&
+            disclosed.find("anomaly") == std::string::npos &&
+            disclosed.find(surface_signal_id_string(target_signal.id)) ==
+                std::string::npos,
+        "cockpit scanner output must not reveal undiscovered metadata");
+
+  auto right = *tracking;
+  right.relative_bearing_radians = 0.5;
+  auto left = *tracking;
+  left.relative_bearing_radians = -0.5;
+  auto overflow = *tracking;
+  overflow.distance_metres = 10'000'000.0;
+  auto metre_boundary = *tracking;
+  metre_boundary.distance_metres = 9'999.4;
+  auto kilometre_boundary = *tracking;
+  kilometre_boundary.distance_metres = 9'999.5;
+  auto bearing_boundary = *tracking;
+  bearing_boundary.absolute_bearing_radians =
+      359.5 * std::numbers::pi_v<double> / 180.0;
+  check(format_signal_scanner(right).cue == "TURN RGHT" &&
+            format_signal_scanner(left).cue == "TURN LEFT" &&
+            format_signal_scanner(metre_boundary).distance == "DST 9999m" &&
+            format_signal_scanner(kilometre_boundary).distance ==
+                "DST   10k" &&
+            format_signal_scanner(bearing_boundary).bearing == "BRG 000  " &&
+            format_signal_scanner(overflow).distance == "DST #### ",
+        "scanner formatting must preserve directional and overflow boundaries");
+
+  termforge::KeyEvent tab;
+  tab.key = termforge::Key::Tab;
+  tab.action = termforge::KeyAction::Press;
+  check(detail::signal_selection_command(tab) ==
+            SignalSelectionCommand::next,
+        "Tab press must select the next signal");
+  tab.shift = true;
+  check(detail::signal_selection_command(tab) ==
+            SignalSelectionCommand::previous,
+        "Shift-Tab press must select the previous signal");
+  tab.action = termforge::KeyAction::Repeat;
+  check(!detail::signal_selection_command(tab),
+        "key repeat must not change deterministic signal selection");
+  tab.action = termforge::KeyAction::Release;
+  check(!detail::signal_selection_command(tab),
+        "key release must not change deterministic signal selection");
+}
+
+auto signal_navigation_acceptance_contract() -> void {
+  const auto first = replay_signal_navigation_acceptance();
+  const auto second = replay_signal_navigation_acceptance();
+  check(first.has_value() && second.has_value(),
+        "the canonical signal approach must complete");
+  if (!first || !second) return;
+  const auto first_checksum = planetary_flight_state_checksum(first->flight);
+  const auto second_checksum = planetary_flight_state_checksum(second->flight);
+  constexpr SimulationTick expected_reached_tick{1'072};
+  constexpr std::uint64_t expected_flight_checksum{9743322914782455886ULL};
+  check(first->flight.tick == expected_reached_tick &&
+            first_checksum == expected_flight_checksum &&
+            first->flight.tick == second->flight.tick &&
+            first_checksum == second_checksum &&
+            first->scanner == second->scanner &&
+            first->navigation == second->navigation,
+        "the signal approach must replay deterministically");
+  check(first->navigation.status == SignalScannerStatus::reached &&
+            first->navigation.distance_metres <=
+                kSignalScannerReachedRadiusMetres &&
+            first->scanner.selected == first->catalog.signals[0].id &&
+            first->command_count == 1,
+        "the canonical approach must select and reach the first signal");
+
+  const auto json = signal_navigation_acceptance_json({
+      .target_id = *first->scanner.selected,
+      .reached_tick = first->flight.tick,
+      .command_count = first->command_count,
+      .final_distance_metres = first->navigation.distance_metres,
+      .flight_checksum = first_checksum,
+      .render_configuration = {{320, 240}, RenderProfile::remote},
+      .presentation = "ansi",
+      .framebuffer_checksum = 123,
+  });
+  check(json.find("\"schema_version\": 1") != std::string::npos &&
+            json.find("\"scenario\": \"v0.4-signal-navigation\"") !=
+                std::string::npos &&
+            json.find("\"final_status\": \"reached\"") !=
+                std::string::npos &&
+            json.find("\"presentation\": \"ansi\"") !=
+                std::string::npos,
+        "signal navigation JSON must retain its versioned exact fields");
 }
 
 auto planet_descriptor_contract() -> void {
@@ -4177,6 +4474,8 @@ auto main() -> int {
   origin_onboarding_contract();
   surface_signal_contract();
   surface_signal_population();
+  signal_scanner_contract();
+  signal_navigation_acceptance_contract();
   planet_descriptor_contract();
   planet_descriptor_population();
   terrain_tile_failure_matrix();

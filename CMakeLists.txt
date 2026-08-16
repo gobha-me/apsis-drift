@@ -83,6 +83,9 @@ add_library(apsis_drift_lib STATIC
   src/planetary_presentation.cpp
   src/render_profile.cpp
   src/seed.cpp
+  src/signal_navigation_acceptance.cpp
+  src/signal_input.cpp
+  src/signal_scanner.cpp
   src/simulation.cpp
   src/surface_signals.cpp
   src/terrain_tiles.cpp
@@ -154,6 +157,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_planetfall_acceptance.cmake")
 
+  add_test(NAME signal-navigation-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_signal_navigation_acceptance.cmake")
+
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
   add_test(NAME reject-viewport-negative
@@ -205,6 +214,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-planetfall-driver
     COMMAND apsis-drift --planetfall-acceptance --driver kitty
             --report planetfall-invalid.json)
+  add_test(NAME reject-signal-navigation-missing-report
+    COMMAND apsis-drift --signal-navigation-acceptance)
+  add_test(NAME reject-signal-navigation-seed-override
+    COMMAND apsis-drift --signal-navigation-acceptance --seed 42
+            --report signal-navigation-invalid.json)
+  add_test(NAME reject-signal-navigation-mode-conflict
+    COMMAND apsis-drift --signal-navigation-acceptance --benchmark 1
+            --report signal-navigation-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -231,6 +248,9 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-planetfall-seed-override
     reject-planetfall-mode-conflict
     reject-planetfall-driver
+    reject-signal-navigation-missing-report
+    reject-signal-navigation-seed-override
+    reject-signal-navigation-mode-conflict
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()
