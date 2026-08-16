@@ -81,6 +81,9 @@ transition telemetry, and deterministic failure behavior are recorded in the
 The tile-backed orbital/local render seam, descriptor-derived atmosphere,
 transition weights, and presentation instrumentation are recorded in the
 [Planetary Presentation Handoff](PLANETARY_PRESENTATION.md).
+The canonical seed, tick-addressed descent, stage identities, final checksum,
+and compiler/profile measurements are recorded in the
+[Planetfall Acceptance Path](PLANETFALL_ACCEPTANCE.md).
 
 Generation should be divided by scale:
 

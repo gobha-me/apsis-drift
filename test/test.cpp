@@ -18,6 +18,7 @@
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
+#include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/seed.hpp"
@@ -3623,6 +3624,90 @@ auto planetary_presentation_contract() -> void {
         "planetary telemetry must preserve fixed-width cockpit lines");
 }
 
+auto planetfall_acceptance_contract() -> void {
+  const auto invalid = run_planetfall_acceptance({{0, 64}, RenderProfile::local});
+  check(!invalid &&
+            invalid.error() ==
+                PlanetfallAcceptanceError::invalid_configuration,
+        "Planetfall acceptance must reject invalid viewport dimensions");
+
+  const auto result = run_planetfall_acceptance(
+      {{96, 64}, std::nullopt});
+  check(result.has_value(),
+        "the canonical Planetfall descent must complete");
+  if (!result) return;
+
+  check(result->report.planet_id ==
+            PlanetId{kPlanetfallAcceptanceSeed} &&
+            result->report.planet_name == "Carayx" &&
+            result->report.command_count == 4 &&
+            result->report.final_state.tick ==
+                kPlanetfallAcceptanceTicks &&
+            planetary_flight_state_checksum(result->report.final_state) ==
+                15600629779145530762ULL,
+        "the canonical Planetfall path must retain its generated identity and final state");
+  check(result->report.final_state.regime == FlightRegime::terrain_flight &&
+            result->report.final_state.clearance_metres > 200.0 &&
+            result->report.final_state.clearance_metres < 300.0 &&
+            std::hypot(
+                result->report.final_state.velocity.east_metres_per_second,
+                result->report.final_state.velocity.north_metres_per_second) >
+                100.0,
+        "Planetfall must finish in a stable low-level forward flyover");
+
+  constexpr std::array expected_modes{
+      PlanetaryPresentationMode::orbital,
+      PlanetaryPresentationMode::atmospheric,
+      PlanetaryPresentationMode::terrain_blend,
+      PlanetaryPresentationMode::local_terrain,
+  };
+  constexpr std::array<SimulationTick, 4> expected_ticks{
+      0, 13'350, 113'071, kPlanetfallAcceptanceTicks};
+  constexpr std::array<std::uint64_t, 4> expected_flight_checksums{
+      16209989626150487226ULL,
+      3828620310919835151ULL,
+      6612887580505814172ULL,
+      15600629779145530762ULL,
+  };
+  constexpr std::array<std::uint64_t, 4> expected_frame_checksums{
+      17277935430955010903ULL,
+      9195127342075088232ULL,
+      10695031067588847771ULL,
+      9247714629217840819ULL,
+  };
+  check(result->report.stages.size() == expected_modes.size(),
+        "Planetfall must report each presentation stage exactly once");
+  if (result->report.stages.size() == expected_modes.size()) {
+    for (std::size_t index = 0; index < expected_modes.size(); ++index) {
+      const auto& stage = result->report.stages[index];
+      check(stage.presentation_mode == expected_modes[index] &&
+                stage.tick == expected_ticks[index] &&
+                stage.flight_checksum == expected_flight_checksums[index] &&
+                stage.framebuffer_checksum ==
+                    expected_frame_checksums[index] &&
+                stage.surface_anchor.tile.planet == result->report.planet_id &&
+                std::isfinite(stage.total_avg_ms) &&
+                std::isfinite(stage.total_p95_ms) &&
+                stage.total_avg_ms >= 0.0 && stage.total_p95_ms >= 0.0,
+            "Planetfall stages must retain ordered deterministic identities and finite diagnostics");
+    }
+  }
+  check(result->final_frame.size() == 96U * 64U &&
+            pixel_checksum(result->final_frame) ==
+                expected_frame_checksums.back(),
+        "Planetfall must retain the final local-terrain frame for capture");
+
+  const auto json = planetfall_acceptance_json(result->report);
+  check(json.find("\"schema_version\": 1") != std::string::npos &&
+            json.find("\"scenario\": \"v0.3-planetfall\"") !=
+                std::string::npos &&
+            json.find("\"final_flight_checksum\": "
+                      "\"15600629779145530762\"") != std::string::npos &&
+            json.find("\"presentation_mode\": \"terrain-blend\"") !=
+                std::string::npos,
+        "Planetfall JSON must preserve its versioned scenario and deterministic fields");
+}
+
 }  // namespace
 
 auto main() -> int {
@@ -3673,6 +3758,7 @@ auto main() -> int {
   golden_orbital_profiles();
   terrain_surface_sampling_contract();
   planetary_presentation_contract();
+  planetfall_acceptance_contract();
   if (failures != 0) {
     std::fprintf(stderr, "%d test(s) failed\n", failures);
     return 1;

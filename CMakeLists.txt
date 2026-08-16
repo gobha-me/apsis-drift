@@ -77,6 +77,7 @@ add_library(apsis_drift_lib STATIC
   src/menu.cpp
   src/orbital.cpp
   src/planet.cpp
+  src/planetfall_acceptance.cpp
   src/planetary_flight.cpp
   src/planetary_presentation.cpp
   src/render_profile.cpp
@@ -145,6 +146,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_flight_deck_acceptance.cmake")
 
+  add_test(NAME planetfall-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_planetfall_acceptance.cmake")
+
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
   add_test(NAME reject-viewport-negative
@@ -185,6 +192,17 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-acceptance-mode-conflict
     COMMAND apsis-drift --flight-deck-acceptance --benchmark 1
             --report acceptance-invalid.json)
+  add_test(NAME reject-planetfall-missing-report
+    COMMAND apsis-drift --planetfall-acceptance)
+  add_test(NAME reject-planetfall-seed-override
+    COMMAND apsis-drift --planetfall-acceptance --seed 42
+            --report planetfall-invalid.json)
+  add_test(NAME reject-planetfall-mode-conflict
+    COMMAND apsis-drift --planetfall-acceptance --benchmark 1
+            --report planetfall-invalid.json)
+  add_test(NAME reject-planetfall-driver
+    COMMAND apsis-drift --planetfall-acceptance --driver kitty
+            --report planetfall-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -207,6 +225,10 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-acceptance-missing-report
     reject-acceptance-seed-override
     reject-acceptance-mode-conflict
+    reject-planetfall-missing-report
+    reject-planetfall-seed-override
+    reject-planetfall-mode-conflict
+    reject-planetfall-driver
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()
