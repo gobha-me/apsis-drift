@@ -5,7 +5,9 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <numbers>
+#include <vector>
 
 namespace apsis_drift {
 namespace {
@@ -293,6 +295,22 @@ auto OrbitalRenderer::render(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
     std::span<termforge::Pixel> destination) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
+  return render_impl(planet, camera, nullptr, 0, destination);
+}
+
+auto OrbitalRenderer::render_tile_backed(
+    const PlanetDescriptor& planet, const OrbitalCamera& camera,
+    std::uint8_t terrain_lod, TerrainTileCache& cache,
+    std::span<termforge::Pixel> destination) const
+    -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
+  return render_impl(planet, camera, &cache, terrain_lod, destination);
+}
+
+auto OrbitalRenderer::render_impl(
+    const PlanetDescriptor& planet, const OrbitalCamera& camera,
+    TerrainTileCache* cache, std::uint8_t terrain_lod,
+    std::span<termforge::Pixel> destination) const
+    -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   if (!validate_viewport({m_settings.width, m_settings.height})) {
     return std::unexpected{OrbitalRenderError::invalid_viewport};
   }
@@ -303,6 +321,9 @@ auto OrbitalRenderer::render(
   }
   if (!valid_planet(planet)) {
     return std::unexpected{OrbitalRenderError::invalid_planet};
+  }
+  if (cache != nullptr && terrain_lod > kMaxTerrainLod) {
+    return std::unexpected{OrbitalRenderError::invalid_terrain_lod};
   }
   if (!finite(m_settings.field_of_view_degrees) ||
       m_settings.field_of_view_degrees <= 1.0 ||
@@ -362,6 +383,8 @@ auto OrbitalRenderer::render(
   const auto atmosphere_color = pixel(planet.palette.atmosphere);
 
   OrbitalRenderStats stats;
+  std::vector<TerrainTileKey> touched_tiles;
+  std::vector<std::shared_ptr<const TerrainTile>> pinned_tiles;
   for (int y = 0; y < m_settings.height; ++y) {
     const double screen_y =
         (1.0 - (static_cast<double>(y) + 0.5) * 2.0 /
@@ -389,8 +412,27 @@ auto OrbitalRenderer::render(
           const Vector3 point =
               add(camera_position, multiply(ray, distance));
           const Vector3 normal = normalized(point);
-          const double field = surface_field(normal, planet);
-          auto color = surface_color(planet, field);
+          termforge::Pixel color;
+          if (cache != nullptr) {
+            const auto sample = sample_planet_surface(
+                planet, {point.x, point.y, point.z}, terrain_lod, *cache);
+            if (!sample) {
+              return std::unexpected{OrbitalRenderError::terrain_failure};
+            }
+            color = pixel(sample->color);
+            if (std::ranges::find(touched_tiles, sample->address.tile) ==
+                touched_tiles.end()) {
+              touched_tiles.push_back(sample->address.tile);
+              const auto pinned = cache->get(planet, sample->address.tile);
+              if (!pinned) {
+                return std::unexpected{OrbitalRenderError::terrain_failure};
+              }
+              pinned_tiles.push_back(*pinned);
+            }
+          } else {
+            const double field = surface_field(normal, planet);
+            color = surface_color(planet, field);
+          }
           const double diffuse = std::max(0.0, dot(normal, light));
           const double view = std::max(0.0, dot(normal, multiply(ray, -1.0)));
           const double limb = 0.58 + 0.42 * std::sqrt(view);
@@ -426,6 +468,7 @@ auto OrbitalRenderer::render(
       destination[index] = background;
     }
   }
+  stats.terrain_tiles_touched = touched_tiles.size();
   return stats;
 }
 

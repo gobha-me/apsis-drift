@@ -19,6 +19,7 @@
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetary_flight.hpp"
+#include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
@@ -1912,12 +1913,16 @@ auto sweep_selection_contract() -> void {
                 BenchmarkWorkload::landscape &&
             parse_benchmark_workload("orbital") ==
                 BenchmarkWorkload::orbital &&
+            parse_benchmark_workload("planetary") ==
+                BenchmarkWorkload::planetary &&
             !parse_benchmark_workload("unknown"),
         "benchmark workloads must parse only their documented names");
   check(workload_identifier(BenchmarkWorkload::landscape) ==
                 "voxel-landscape-rgba" &&
             workload_identifier(BenchmarkWorkload::orbital) ==
-                "orbital-planet-rgba",
+                "orbital-planet-rgba" &&
+            workload_identifier(BenchmarkWorkload::planetary) ==
+                "planetary-presentation-rgba",
         "benchmark workloads must retain stable report identifiers");
 
   const auto viewports = parse_sweep_viewports("remote,640x360,cinematic");
@@ -1967,6 +1972,7 @@ auto sweep_report_contract() -> void {
       .mebibytes_per_second = 1.0,
       .total_bytes = 12288,
       .checksum = 123456789,
+      .planetary_presentation = std::nullopt,
   };
   const auto cadence = assess_cadence(summary, 50);
   check(std::abs(cadence.deadline_budget_ms - 20.0) < 0.000001,
@@ -1999,6 +2005,31 @@ auto sweep_report_contract() -> void {
   check(orbital_json.find("\"workload\": \"orbital-planet-rgba\"") !=
             std::string::npos,
         "an orbital sweep report must identify its renderer workload");
+  summary.planetary_presentation = PlanetaryPresentationBenchmarkSummary{
+      .orbital_frames = 3,
+      .atmospheric_frames = 3,
+      .terrain_blend_frames = 3,
+      .local_terrain_frames = 3,
+      .orbital_render_avg_ms = 2.0,
+      .local_render_avg_ms = 3.0,
+      .composite_avg_ms = 1.0,
+      .total_avg_ms = 6.0,
+      .total_p95_ms = 9.0,
+      .maximum_tiles_touched = 4,
+  };
+  const std::vector planetary_measurements{BenchmarkMeasurement{
+      resolve_render_configuration(RenderProfile::remote), summary}};
+  const auto planetary_json = sweep_json(
+      planetary_measurements, targets, 42, 12,
+      BenchmarkWorkload::planetary);
+  check(planetary_json.find(
+            "\"workload\": \"planetary-presentation-rgba\"") !=
+                std::string::npos &&
+            planetary_json.find("\"terrain_blend\": 3") !=
+                std::string::npos &&
+            planetary_json.find("\"total_p95_ms\": 9.000000") !=
+                std::string::npos,
+        "planetary sweep reports must include stage counts and timings");
 
   const auto table = sweep_table(measurements, targets);
   check(table.find("PROFILE") != std::string::npos &&
@@ -3386,6 +3417,212 @@ auto golden_orbital_profiles() -> void {
   }
 }
 
+[[nodiscard]] auto presentation_state(const PlanetDescriptor& planet,
+                                      double altitude, double surface,
+                                      FlightRegime regime)
+    -> PlanetaryFlightState {
+  return {
+      .tick = 7,
+      .planet = planet.id,
+      .pose = {{0.0, 0.0, altitude}, 0.35},
+      .velocity = {80.0, 20.0, -15.0},
+      .clearance_metres = altitude - surface,
+      .mode = FlightMode::manual,
+      .controls = {},
+      .regime = regime,
+      .last_transition = std::nullopt,
+  };
+}
+
+auto terrain_surface_sampling_contract() -> void {
+  const auto planet = generate_planet_descriptor(Seed{0xA5515U});
+  auto cache = TerrainTileCache::create(8);
+  check(cache.has_value(), "surface sample cache must initialize");
+  if (!cache) return;
+  const auto fixed = planet_fixed_from_geodetic(planet, {0.0, 0.0, 0.0});
+  check(fixed.has_value(), "surface sample position must resolve");
+  if (!fixed) return;
+
+  const auto coarse = sample_planet_surface(planet, *fixed, 2, *cache);
+  const auto fine = sample_planet_surface(planet, *fixed, 12, *cache);
+  check(coarse && fine,
+        "the same canonical surface point must sample at multiple LODs");
+  if (coarse && fine) {
+    check(coarse->elevation_metres == fine->elevation_metres &&
+              coarse->color == fine->color,
+          "aligned cross-LOD surface samples must retain terrain identity");
+    const auto reconstructed =
+        planet_fixed_from_terrain_address(planet, fine->address);
+    check(reconstructed && close_position(*fixed, *reconstructed),
+          "a sampled surface anchor must reconstruct the same position");
+  }
+  check(!sample_planet_surface(
+             planet,
+             {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 2,
+             *cache),
+        "non-finite surface sampling must be rejected");
+  check(!sample_planet_surface(planet, *fixed, kMaxTerrainLod + 1, *cache),
+        "surface sampling above the maximum LOD must be rejected");
+}
+
+auto planetary_presentation_contract() -> void {
+  const auto generated = generate_planet_descriptor(Seed{0xA5515U});
+  const auto planet = planet_with_atmosphere(
+      generated, AtmosphereClass::temperate, 1'000);
+  auto cache = TerrainTileCache::create();
+  check(cache.has_value(), "presentation surface cache must initialize");
+  if (!cache) return;
+  const auto fixed = planet_fixed_from_geodetic(planet, {0.0, 0.0, 0.0});
+  const auto surface =
+      fixed ? sample_planet_surface(planet, *fixed, 12, *cache)
+            : std::expected<TerrainSurfaceSample, TerrainTileError>{
+                  std::unexpected{TerrainTileError::coordinate_failure}};
+  const auto bands = flight_regime_bands(planet);
+  check(surface && bands,
+        "presentation fixture surface and bands must initialize");
+  if (!surface || !bands) return;
+  const double ground = std::max(0.0, surface->elevation_metres);
+
+  auto orbital = presentation_state(
+      planet, bands->orbit_enter_altitude_metres + 1.0, ground,
+      FlightRegime::orbital);
+  auto atmosphere_start = presentation_state(
+      planet, bands->orbit_enter_altitude_metres, ground,
+      FlightRegime::orbital);
+  auto atmosphere_full = presentation_state(
+      planet, bands->atmosphere_enter_altitude_metres, ground,
+      FlightRegime::atmospheric);
+  auto terrain_start = presentation_state(
+      planet, ground + bands->terrain_exit_clearance_metres, ground,
+      FlightRegime::atmospheric);
+  auto terrain_full = presentation_state(
+      planet, ground + bands->terrain_enter_clearance_metres, ground,
+      FlightRegime::terrain_flight);
+  const auto orbital_mix = planetary_presentation_mix(planet, orbital);
+  const auto atmosphere_start_mix =
+      planetary_presentation_mix(planet, atmosphere_start);
+  const auto atmosphere_full_mix =
+      planetary_presentation_mix(planet, atmosphere_full);
+  const auto terrain_start_mix =
+      planetary_presentation_mix(planet, terrain_start);
+  const auto terrain_full_mix =
+      planetary_presentation_mix(planet, terrain_full);
+  check(orbital_mix && orbital_mix->atmosphere == 0.0 &&
+            orbital_mix->local_terrain == 0.0 && atmosphere_start_mix &&
+            atmosphere_start_mix->atmosphere == 0.0 &&
+            atmosphere_full_mix && atmosphere_full_mix->atmosphere == 1.0,
+        "atmosphere blending must use exact orbital hysteresis endpoints");
+  check(terrain_start_mix && terrain_start_mix->local_terrain == 0.0 &&
+            terrain_full_mix && terrain_full_mix->local_terrain == 1.0,
+        "terrain blending must use exact clearance hysteresis endpoints");
+
+  const auto airless =
+      planet_with_atmosphere(planet, AtmosphereClass::airless, 0);
+  auto airless_state = atmosphere_full;
+  airless_state.planet = airless.id;
+  const auto airless_mix = planetary_presentation_mix(airless, airless_state);
+  check(airless_mix && airless_mix->atmosphere == 0.0,
+        "airless approach must not invent atmospheric color");
+
+  constexpr int width{96};
+  constexpr int height{64};
+  PlanetaryPresentationRenderer renderer({
+      .width = width,
+      .height = height,
+      .field_of_view_degrees = 60.0,
+      .local_max_distance_metres = 140.0,
+      .local_fog_start_metres = 80.0,
+  });
+  std::vector<Pixel> frame(static_cast<std::size_t>(width * height));
+  std::vector<Pixel> again(frame.size());
+  struct Stage {
+    PlanetaryFlightState state;
+    PlanetaryPresentationMode mode;
+  };
+  auto blend_state = presentation_state(
+      planet,
+      ground + (bands->terrain_enter_clearance_metres +
+                bands->terrain_exit_clearance_metres) * 0.5,
+      ground, FlightRegime::atmospheric);
+  const std::array stages{
+      Stage{orbital, PlanetaryPresentationMode::orbital},
+      Stage{presentation_state(
+                planet,
+                (bands->orbit_enter_altitude_metres +
+                 bands->atmosphere_enter_altitude_metres) * 0.5,
+                ground, FlightRegime::atmospheric),
+            PlanetaryPresentationMode::atmospheric},
+      Stage{blend_state, PlanetaryPresentationMode::terrain_blend},
+      Stage{presentation_state(planet, ground + 100.0, ground,
+                               FlightRegime::terrain_flight),
+            PlanetaryPresentationMode::local_terrain},
+  };
+  std::array<std::uint64_t, stages.size()> checksums{};
+  for (std::size_t index = 0; index < stages.size(); ++index) {
+    const double stage_pitch = index == 2 ? -1.25 : index == 3 ? 0.0 : -0.08;
+    const auto first = renderer.render(planet, stages[index].state,
+                                       {.pitch_radians = stage_pitch}, frame);
+    const auto second = renderer.render(planet, stages[index].state,
+                                        {.pitch_radians = stage_pitch}, again);
+    check(first && second && first->mode == stages[index].mode &&
+              second->mode == stages[index].mode && frame == again,
+          "every planetary presentation stage must render deterministically");
+    if (!first || !second) continue;
+    checksums[index] = pixel_checksum(frame);
+    check(first->surface_anchor.tile.planet == planet.id &&
+              first->total_ms >= first->orbital_render_ms &&
+              first->total_ms >= first->local_render_ms &&
+              first->total_ms >= first->composite_ms,
+          "presentation stats must retain anchor identity and bounded timings");
+  }
+  constexpr std::array<std::uint64_t, 4> expected_checksums{
+      4464057357403076723ULL,
+      3639508942892810008ULL,
+      3992641663955562031ULL,
+      10329579900168594179ULL,
+  };
+  check(checksums == expected_checksums,
+        "planetary presentation stages must retain golden frame checksums");
+  check(std::ranges::none_of(checksums,
+                             [](std::uint64_t value) { return value == 0; }) &&
+            std::ranges::adjacent_find(checksums) == checksums.end(),
+        "scripted descent stages must produce distinct nonzero frames");
+
+  std::vector<Pixel> short_frame(frame.size() - 1, {1, 2, 3, 4});
+  check(!renderer.render(planet, orbital, {}, short_frame) &&
+            std::ranges::all_of(short_frame, [](Pixel value) {
+              return value == Pixel{1, 2, 3, 4};
+            }),
+        "a short planetary framebuffer must be rejected unchanged");
+  auto invalid_state = orbital;
+  invalid_state.pose.position.altitude_metres =
+      std::numeric_limits<double>::quiet_NaN();
+  std::fill(frame.begin(), frame.end(), Pixel{5, 6, 7, 8});
+  check(!renderer.render(planet, invalid_state, {}, frame) &&
+            std::ranges::all_of(frame, [](Pixel value) {
+              return value == Pixel{5, 6, 7, 8};
+            }),
+        "non-finite planetary state must be rejected unchanged");
+  check(!renderer.render(
+            planet, orbital,
+            {.pitch_radians = std::numeric_limits<double>::infinity()}, frame),
+        "non-finite presentation camera must be rejected");
+  PlanetaryPresentationRenderer invalid_renderer({
+      .width = 0,
+      .height = height,
+      .terrain_cache_capacity = 0,
+  });
+  check(!invalid_renderer.render(planet, orbital, {}, {}),
+        "invalid presentation settings must be rejected without allocation");
+
+  const auto instruments = format_flight_instruments(stages.back().state);
+  check(instruments.heading.size() == kInstrumentLineWidth &&
+            instruments.altitude.size() == kInstrumentLineWidth &&
+            instruments.clearance.size() == kInstrumentLineWidth &&
+            instruments.speed.size() == kInstrumentLineWidth,
+        "planetary telemetry must preserve fixed-width cockpit lines");
+}
+
 }  // namespace
 
 auto main() -> int {
@@ -3434,6 +3671,8 @@ auto main() -> int {
   orbital_visibility_contract();
   deterministic_orbital_render();
   golden_orbital_profiles();
+  terrain_surface_sampling_contract();
+  planetary_presentation_contract();
   if (failures != 0) {
     std::fprintf(stderr, "%d test(s) failed\n", failures);
     return 1;

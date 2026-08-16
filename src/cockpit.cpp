@@ -200,6 +200,53 @@ auto format_flight_instruments(const FlightState& state)
   return readout;
 }
 
+auto format_flight_instruments(const PlanetaryFlightState& state)
+    -> FlightInstrumentReadout {
+  FlightInstrumentReadout readout;
+  const bool valid =
+      std::isfinite(state.pose.position.altitude_metres) &&
+      std::isfinite(state.pose.heading_radians) &&
+      std::isfinite(state.clearance_metres) &&
+      std::isfinite(state.velocity.east_metres_per_second) &&
+      std::isfinite(state.velocity.north_metres_per_second) &&
+      valid_mode(state.mode);
+  if (!valid) {
+    readout.heading = "HDG ---  ";
+    readout.altitude = "ALT -----";
+    readout.clearance = "CLR ---  ";
+    readout.speed = "SPD ---  ";
+    readout.mode = valid_mode(state.mode)
+                       ? (state.mode == FlightMode::autopilot ? "MODE AUTO"
+                                                               : "MODE MAN ")
+                       : "MODE ----";
+    readout.alert = "TELEM ERR";
+    readout.alert_state = CockpitAlert::invalid_telemetry;
+    return readout;
+  }
+
+  double heading =
+      std::fmod(state.pose.heading_radians * kRadiansToDegrees, 360.0);
+  if (heading < 0.0) heading += 360.0;
+  readout.heading = std::format(
+      "HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
+  readout.altitude =
+      format_altitude(static_cast<float>(state.pose.position.altitude_metres));
+  readout.clearance =
+      format_three_digit("CLR", state.clearance_metres);
+  readout.speed = format_three_digit(
+      "SPD", std::hypot(state.velocity.east_metres_per_second,
+                        state.velocity.north_metres_per_second));
+  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
+                                                      : "MODE MAN ";
+  if (state.clearance_metres <= kLowClearanceWarning) {
+    readout.alert = "! LOW CLR";
+    readout.alert_state = CockpitAlert::low_clearance;
+  } else {
+    readout.alert = std::string(kInstrumentLineWidth, ' ');
+  }
+  return readout;
+}
+
 auto format_flight_regime(const PlanetaryFlightState& state)
     -> FlightRegimeReadout {
   FlightRegimeReadout readout;

@@ -69,6 +69,8 @@ struct CockpitLayout {
 // state. Invalid numeric telemetry remains renderable as explicit sentinels.
 [[nodiscard]] auto format_flight_instruments(const FlightState& state)
     -> FlightInstrumentReadout;
+[[nodiscard]] auto format_flight_instruments(
+    const PlanetaryFlightState& state) -> FlightInstrumentReadout;
 
 // Build cockpit-ready fixed-width regime and most-recent-transition lines.
 // Presentation decides when and where to show them; simulation remains the

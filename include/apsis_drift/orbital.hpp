@@ -6,6 +6,7 @@
 
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/render_profile.hpp"
+#include "apsis_drift/terrain_tiles.hpp"
 #include "termforge/core/types.hpp"
 
 namespace apsis_drift {
@@ -30,6 +31,7 @@ struct OrbitalRenderSettings {
 struct OrbitalRenderStats {
   std::size_t surface_pixels{};
   std::size_t atmosphere_pixels{};
+  std::size_t terrain_tiles_touched{};
 
   friend auto operator==(const OrbitalRenderStats&,
                          const OrbitalRenderStats&) -> bool = default;
@@ -44,6 +46,8 @@ enum class OrbitalRenderError {
   invalid_camera_basis,
   invalid_field_of_view,
   invalid_light_direction,
+  invalid_terrain_lod,
+  terrain_failure,
 };
 
 class OrbitalRenderer {
@@ -62,7 +66,21 @@ class OrbitalRenderer {
       std::span<termforge::Pixel> destination) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
+  // The tile-backed path preserves generated surface identity through the
+  // orbital-to-local presentation handoff. Cache residency affects cost only.
+  [[nodiscard]] auto render_tile_backed(
+      const PlanetDescriptor& planet, const OrbitalCamera& camera,
+      std::uint8_t terrain_lod, TerrainTileCache& cache,
+      std::span<termforge::Pixel> destination) const
+      -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
+
  private:
+  [[nodiscard]] auto render_impl(
+      const PlanetDescriptor& planet, const OrbitalCamera& camera,
+      TerrainTileCache* cache, std::uint8_t terrain_lod,
+      std::span<termforge::Pixel> destination) const
+      -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
+
   OrbitalRenderSettings m_settings;
 };
 

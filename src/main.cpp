@@ -12,6 +12,8 @@
 #include <format>
 #include <fstream>
 #include <memory>
+#include <limits>
+#include <numbers>
 #include <optional>
 #include <span>
 #include <string>
@@ -35,6 +37,7 @@
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
+#include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/title.hpp"
@@ -190,6 +193,68 @@ class MeasuringSink final : public ByteSink {
   return settings;
 }
 
+[[nodiscard]] auto planetary_settings_for(ViewportSize viewport)
+    -> PlanetaryPresentationSettings {
+  PlanetaryPresentationSettings settings;
+  settings.width = viewport.width;
+  settings.height = viewport.height;
+  return settings;
+}
+
+struct PlanetarySurfaceFixture {
+  double latitude_radians{};
+  double longitude_radians{};
+  double elevation_metres{};
+};
+
+[[nodiscard]] auto required_planetary_surface(
+    const PlanetDescriptor& planet) -> PlanetarySurfaceFixture {
+  auto cache = TerrainTileCache::create();
+  if (!cache) throw std::runtime_error{"cannot create terrain tile cache"};
+  PlanetarySurfaceFixture best{0.0, 0.0,
+                               -std::numeric_limits<double>::infinity()};
+  constexpr int latitude_samples{9};
+  constexpr int longitude_samples{16};
+  for (int latitude_index = 0; latitude_index < latitude_samples;
+       ++latitude_index) {
+    const double latitude = -1.0 +
+                            2.0 * latitude_index /
+                                static_cast<double>(latitude_samples - 1);
+    for (int longitude_index = 0; longitude_index < longitude_samples;
+         ++longitude_index) {
+      const double longitude =
+          -std::numbers::pi +
+          2.0 * std::numbers::pi * longitude_index /
+              static_cast<double>(longitude_samples);
+      const auto fixed = planet_fixed_from_geodetic(
+          planet, {latitude, longitude, 0.0});
+      if (!fixed) {
+        throw std::runtime_error{"cannot resolve planetary surface"};
+      }
+      const auto sample = sample_planet_surface(planet, *fixed, 8, *cache);
+      if (!sample) {
+        throw std::runtime_error{"cannot sample planetary surface"};
+      }
+      constexpr PlanetFixedDirection light{0.55, 0.15, 0.82};
+      const double position_length =
+          std::hypot(fixed->x, fixed->y, fixed->z);
+      const double light_length = std::hypot(light.x, light.y, light.z);
+      const double illumination =
+          (fixed->x * light.x + fixed->y * light.y + fixed->z * light.z) /
+          (position_length * light_length);
+      if (illumination < 0.35) continue;
+      if (sample->elevation_metres > best.elevation_metres) {
+        best = {latitude, longitude, sample->elevation_metres};
+      }
+    }
+  }
+  if (!std::isfinite(best.elevation_metres)) {
+    throw std::runtime_error{"cannot find an illuminated planetary surface"};
+  }
+  best.elevation_metres = std::max(0.0, best.elevation_metres);
+  return best;
+}
+
 class LandscapeApp final : public App {
  public:
   explicit LandscapeApp(RenderConfiguration render_configuration,
@@ -205,10 +270,20 @@ class LandscapeApp final : public App {
         m_renderer(render_settings_for(render_configuration.viewport)),
         m_orbital_renderer(
             orbital_settings_for(render_configuration.viewport)),
+        m_planetary_renderer(
+            workload == BenchmarkWorkload::planetary
+                ? std::optional<PlanetaryPresentationRenderer>{
+                      std::in_place,
+                      planetary_settings_for(render_configuration.viewport)}
+                : std::nullopt),
         m_surface({render_configuration.viewport.width,
                    render_configuration.viewport.height},
                   {0, 0, 0, 255}),
         m_flight(required_initial_flight(m_terrain)),
+        m_planetary_surface(
+            workload == BenchmarkWorkload::planetary
+                ? required_planetary_surface(m_planet)
+                : PlanetarySurfaceFixture{}),
         m_session(!interactive_controls),
         m_capture_seconds(capture_seconds),
         m_seed(seed),
@@ -369,6 +444,7 @@ class LandscapeApp final : public App {
     // override below prevents /dev/null's persistent EOF from shortening that
     // synthetic wait. Renderer and wire measurements intentionally continue
     // to use the real clock.
+    m_planetary_samples.clear();
     m_synthetic_headless = true;
     set_clock(&m_headless_clock);
     set_frame_ms(33);
@@ -399,7 +475,49 @@ class LandscapeApp final : public App {
   }
 
   [[nodiscard]] auto summary() const -> BenchmarkSummary {
-    return m_sink.summary(pixel_checksum(m_surface.pixels()));
+    auto result = m_sink.summary(pixel_checksum(m_surface.pixels()));
+    if (m_planetary_samples.empty()) return result;
+    PlanetaryPresentationBenchmarkSummary presentation;
+    std::vector<double> totals;
+    totals.reserve(m_planetary_samples.size());
+    for (const auto& sample : m_planetary_samples) {
+      switch (sample.mode) {
+        case PlanetaryPresentationMode::orbital:
+          ++presentation.orbital_frames;
+          break;
+        case PlanetaryPresentationMode::atmospheric:
+          ++presentation.atmospheric_frames;
+          break;
+        case PlanetaryPresentationMode::terrain_blend:
+          ++presentation.terrain_blend_frames;
+          break;
+        case PlanetaryPresentationMode::local_terrain:
+          ++presentation.local_terrain_frames;
+          break;
+      }
+      presentation.orbital_render_avg_ms += sample.orbital_render_ms;
+      presentation.local_render_avg_ms += sample.local_render_ms;
+      presentation.composite_avg_ms += sample.composite_ms;
+      presentation.total_avg_ms += sample.total_ms;
+      presentation.maximum_tiles_touched = std::max(
+          presentation.maximum_tiles_touched,
+          sample.orbital_tiles_touched + sample.local_tiles_touched);
+      totals.push_back(sample.total_ms);
+    }
+    const double count = static_cast<double>(m_planetary_samples.size());
+    presentation.orbital_render_avg_ms /= count;
+    presentation.local_render_avg_ms /= count;
+    presentation.composite_avg_ms /= count;
+    presentation.total_avg_ms /= count;
+    std::ranges::sort(totals);
+    const std::size_t p95 = std::min(
+        totals.size() - 1,
+        static_cast<std::size_t>(
+            std::ceil(static_cast<double>(totals.size()) * 0.95)) -
+            1);
+    presentation.total_p95_ms = totals[p95];
+    result.planetary_presentation = presentation;
+    return result;
   }
 
   [[nodiscard]] auto error() const -> const std::string& { return m_error; }
@@ -628,7 +746,10 @@ class LandscapeApp final : public App {
     constexpr Rgb danger{238, 104, 104};
     constexpr Rgb chrome_bg{11, 28, 40};
     constexpr Rgb status_bg{20, 43, 66};
-    const auto instruments = format_flight_instruments(m_flight);
+    const auto instruments =
+        m_planetary_flight
+            ? format_flight_instruments(*m_planetary_flight)
+            : format_flight_instruments(m_flight);
 
     screen.fill_rect(layout.header.x, layout.header.y, layout.header.w,
                      layout.header.h, text, status_bg);
@@ -665,6 +786,15 @@ class LandscapeApp final : public App {
     screen.write_text(layout.left_instruments.x + 2,
                       layout.left_instruments.y + 6, instruments.alert,
                       alert_color, chrome_bg);
+    if (m_planetary_flight) {
+      const auto regime = format_flight_regime(*m_planetary_flight);
+      screen.write_text(layout.left_instruments.x + 2,
+                        layout.left_instruments.y + 8, regime.regime,
+                        regime.valid ? text : danger, chrome_bg);
+      screen.write_text(layout.left_instruments.x + 2,
+                        layout.left_instruments.y + 10,
+                        regime.transition, muted, chrome_bg);
+    }
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 2, "NAV DATA", accent,
                       chrome_bg);
@@ -710,8 +840,11 @@ class LandscapeApp final : public App {
     screen.write_text(
         layout.status.x, layout.status.y,
         std::format(" {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
-                    m_flight.mode == FlightMode::autopilot ? "AUTOPILOT"
-                                                           : "MANUAL",
+                    (m_planetary_flight ? m_planetary_flight->mode
+                                        : m_flight.mode) ==
+                            FlightMode::autopilot
+                        ? "AUTOPILOT"
+                        : "MANUAL",
                     m_input_tier, m_frame, render_time,
                     static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
         text, status_bg);
@@ -758,6 +891,70 @@ class LandscapeApp final : public App {
   }
 
   auto render_viewport() -> void {
+    if (m_workload == BenchmarkWorkload::planetary) {
+      const auto bands = flight_regime_bands(m_planet);
+      if (!bands) throw std::runtime_error{"invalid planetary flight bands"};
+      const int phase = m_frame % 4;
+      double altitude{};
+      double clearance{};
+      FlightRegime regime{};
+      std::optional<FlightRegimeTransition> transition;
+      if (phase == 0) {
+        altitude = bands->orbit_enter_altitude_metres + 50'000.0;
+        clearance = altitude - m_planetary_surface.elevation_metres;
+        regime = FlightRegime::orbital;
+      } else if (phase == 1) {
+        altitude = (bands->orbit_enter_altitude_metres +
+                    bands->atmosphere_enter_altitude_metres) * 0.5;
+        clearance = altitude - m_planetary_surface.elevation_metres;
+        regime = FlightRegime::atmospheric;
+        transition = FlightRegimeTransition{
+            FlightRegime::orbital, FlightRegime::atmospheric,
+            static_cast<SimulationTick>(m_frame)};
+      } else if (phase == 2) {
+        clearance = (bands->terrain_enter_clearance_metres +
+                     bands->terrain_exit_clearance_metres) * 0.5;
+        altitude = m_planetary_surface.elevation_metres + clearance;
+        regime = FlightRegime::atmospheric;
+        transition = FlightRegimeTransition{
+            FlightRegime::orbital, FlightRegime::atmospheric,
+            static_cast<SimulationTick>(m_frame)};
+      } else {
+        clearance = 100.0;
+        altitude = m_planetary_surface.elevation_metres + clearance;
+        regime = FlightRegime::terrain_flight;
+        transition = FlightRegimeTransition{
+            FlightRegime::atmospheric, FlightRegime::terrain_flight,
+            static_cast<SimulationTick>(m_frame)};
+      }
+      m_planetary_flight = PlanetaryFlightState{
+          .tick = static_cast<SimulationTick>(m_frame),
+          .planet = m_planet.id,
+          .pose = {{m_planetary_surface.latitude_radians,
+                    m_planetary_surface.longitude_radians, altitude},
+                   0.35},
+          .velocity = {85.0, 24.0, phase < 3 ? -30.0 : 0.0},
+          .clearance_metres = clearance,
+          .mode = FlightMode::autopilot,
+          .controls = {},
+          .regime = regime,
+          .last_transition = transition,
+      };
+      if (!m_planetary_renderer) {
+        throw std::runtime_error{"planetary presentation is unavailable"};
+      }
+      const auto rendered = m_planetary_renderer->render(
+          m_planet, *m_planetary_flight,
+          {.pitch_radians = phase == 2 ? -1.25
+                                       : (phase == 3 ? 0.0 : -0.08)},
+          m_surface.pixels());
+      if (!rendered) {
+        throw std::runtime_error{"planetary presentation rejected frame"};
+      }
+      m_planetary_samples.push_back(*rendered);
+      return;
+    }
+    m_planetary_flight.reset();
     if (m_workload == BenchmarkWorkload::orbital) {
       const double radius = static_cast<double>(m_planet.radius.value) * 1'000.0;
       const double elapsed_seconds =
@@ -803,6 +1000,7 @@ class LandscapeApp final : public App {
   PlanetDescriptor m_planet;
   VoxelRenderer m_renderer;
   OrbitalRenderer m_orbital_renderer;
+  std::optional<PlanetaryPresentationRenderer> m_planetary_renderer;
   PixelSurface m_surface;
   Frame m_left_frame{"FLIGHT"};
   Frame m_viewport_frame{"EXTERIOR"};
@@ -810,6 +1008,9 @@ class LandscapeApp final : public App {
   Frame m_message_frame{"COMMS"};
   Frame m_menu_frame{"SYSTEM"};
   FlightState m_flight;
+  PlanetarySurfaceFixture m_planetary_surface;
+  std::optional<PlanetaryFlightState> m_planetary_flight;
+  std::vector<PlanetaryRenderStats> m_planetary_samples;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
   apsis_drift::detail::FlightInputMapper m_input_mapper;
@@ -858,6 +1059,20 @@ auto print_summary(const BenchmarkSummary& summary,
       summary.mebibytes_per_second,
       static_cast<double>(summary.total_bytes) / (1024.0 * 1024.0),
       static_cast<unsigned long long>(summary.checksum));
+  if (summary.planetary_presentation) {
+    const auto& presentation = *summary.planetary_presentation;
+    std::printf(
+        "planetary stages: orbital/atmosphere/blend/local=%zu/%zu/%zu/%zu "
+        "passes avg orbital/local/composite %.3f/%.3f/%.3f ms, "
+        "total avg/p95 %.3f/%.3f ms, max tiles=%zu\n",
+        presentation.orbital_frames, presentation.atmospheric_frames,
+        presentation.terrain_blend_frames,
+        presentation.local_terrain_frames,
+        presentation.orbital_render_avg_ms,
+        presentation.local_render_avg_ms, presentation.composite_avg_ms,
+        presentation.total_avg_ms, presentation.total_p95_ms,
+        presentation.maximum_tiles_touched);
+  }
 }
 
 [[nodiscard]] auto summary_json(const BenchmarkSummary& summary,
@@ -865,8 +1080,34 @@ auto print_summary(const BenchmarkSummary& summary,
                                 BenchmarkWorkload workload)
     -> std::string {
   const std::string_view workload_prefix =
-      workload == BenchmarkWorkload::orbital ? "orbital-planet"
-                                             : "voxel-landscape";
+      workload == BenchmarkWorkload::orbital
+          ? "orbital-planet"
+          : (workload == BenchmarkWorkload::planetary
+                 ? "planetary-presentation"
+                 : "voxel-landscape");
+  std::string presentation;
+  if (summary.planetary_presentation) {
+    const auto& value = *summary.planetary_presentation;
+    presentation = std::format(
+        ",\n"
+        "  \"planetary_presentation\": {{\n"
+        "    \"mode_frames\": {{\"orbital\": {}, "
+        "\"atmospheric\": {}, \"terrain_blend\": {}, "
+        "\"local_terrain\": {}}},\n"
+        "    \"orbital_render_avg_ms\": {:.6f},\n"
+        "    \"local_render_avg_ms\": {:.6f},\n"
+        "    \"composite_avg_ms\": {:.6f},\n"
+        "    \"total_avg_ms\": {:.6f},\n"
+        "    \"total_p95_ms\": {:.6f},\n"
+        "    \"maximum_tiles_touched\": {}\n"
+        "  }}",
+        value.orbital_frames, value.atmospheric_frames,
+        value.terrain_blend_frames, value.local_terrain_frames,
+        value.orbital_render_avg_ms,
+        value.local_render_avg_ms, value.composite_avg_ms,
+        value.total_avg_ms, value.total_p95_ms,
+        value.maximum_tiles_touched);
+  }
   return std::format(
       "{{\n"
       "  \"workload\": \"{}-{}x{}-rgba\",\n"
@@ -883,7 +1124,7 @@ auto print_summary(const BenchmarkSummary& summary,
       "  \"bytes_per_frame\": {:.6f},\n"
       "  \"mebibytes_per_second\": {:.6f},\n"
       "  \"total_bytes\": {},\n"
-      "  \"checksum\": {}\n"
+      "  \"checksum\": {}{}\n"
       "}}\n",
       workload_prefix, configuration.viewport.width,
       configuration.viewport.height,
@@ -892,7 +1133,8 @@ auto print_summary(const BenchmarkSummary& summary,
       summary.frames, summary.elapsed_seconds, summary.achieved_fps,
       summary.render_avg_ms, summary.render_p95_ms, summary.work_avg_ms,
       summary.work_p95_ms, summary.bytes_per_frame,
-      summary.mebibytes_per_second, summary.total_bytes, summary.checksum);
+      summary.mebibytes_per_second, summary.total_bytes, summary.checksum,
+      presentation);
 }
 
 template <typename T>
@@ -911,7 +1153,7 @@ auto usage() -> void {
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
-      "                   [--workload landscape|orbital]\n"
+      "                   [--workload landscape|orbital|planetary]\n"
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
       "       apsis-drift --flight-deck-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"

@@ -78,6 +78,9 @@ and bounded cache for local planet data are recorded in the
 The planet-relative craft state, bounded regime controls, altitude hysteresis,
 transition telemetry, and deterministic failure behavior are recorded in the
 [Planetary Flight Regime Contract](FLIGHT_REGIMES.md).
+The tile-backed orbital/local render seam, descriptor-derived atmosphere,
+transition weights, and presentation instrumentation are recorded in the
+[Planetary Presentation Handoff](PLANETARY_PRESENTATION.md).
 
 Generation should be divided by scale:
 

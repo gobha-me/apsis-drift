@@ -12,7 +12,20 @@
 
 namespace apsis_drift {
 
-enum class BenchmarkWorkload { landscape, orbital };
+enum class BenchmarkWorkload { landscape, orbital, planetary };
+
+struct PlanetaryPresentationBenchmarkSummary {
+  std::size_t orbital_frames{};
+  std::size_t atmospheric_frames{};
+  std::size_t terrain_blend_frames{};
+  std::size_t local_terrain_frames{};
+  double orbital_render_avg_ms{};
+  double local_render_avg_ms{};
+  double composite_avg_ms{};
+  double total_avg_ms{};
+  double total_p95_ms{};
+  std::size_t maximum_tiles_touched{};
+};
 
 [[nodiscard]] auto workload_name(BenchmarkWorkload workload) noexcept
     -> std::string_view;
@@ -33,6 +46,8 @@ struct BenchmarkSummary {
   double mebibytes_per_second{};
   std::uint64_t total_bytes{};
   std::uint64_t checksum{};
+  std::optional<PlanetaryPresentationBenchmarkSummary>
+      planetary_presentation;
 };
 
 struct BenchmarkMeasurement {
