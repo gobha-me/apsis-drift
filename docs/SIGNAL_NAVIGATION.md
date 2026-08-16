@@ -2,8 +2,9 @@
 
 The v0.4 scanner derives cockpit navigation from authoritative planetary
 flight state and the immutable surface-signal catalog. Selection, navigation,
-and presentation do not modify the generated signal recipe and do not create
-discovery, mission, scan-progress, or collection state.
+and presentation do not modify the generated signal recipe. The separate
+[signal collection contract](SIGNAL_COLLECTION.md) consumes the derived
+`reached` state and owns mutable scan progress and persistent completion.
 
 ## Selection and visibility
 
@@ -42,7 +43,7 @@ keep direction and state understandable without color.
 
 ## Deterministic acceptance
 
-The `v0.4-signal-navigation` scenario uses planet seed `42`, selects catalog
+The `v0.4-signal-collection` scenario uses planet seed `42`, selects catalog
 ordinal `0` at tick `0`, and starts two kilometres west of its generated
 approach point. One `press forward` command drives the fixed 120 Hz planetary
 simulation until the scanner first reports reached at tick `1072`.
@@ -57,5 +58,6 @@ Run the two supported presentations with:
 ```
 
 Both reports must retain target `signal-945eaa623b2b8497`, reached tick `1072`,
-and final flight checksum `9743322914782455886`. Framebuffer checksums and
-timings remain presentation diagnostics and cannot affect selection or flight.
+collection tick `1491`, one `collected` delta, and final flight checksum
+`4086686148596456340`. Framebuffer checksums and timings remain presentation
+diagnostics and cannot affect selection, collection, or flight.

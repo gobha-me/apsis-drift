@@ -354,4 +354,91 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
   return readout;
 }
 
+auto format_signal_collection(const SignalCollectionState& collection)
+    -> SignalCollectionReadout {
+  SignalCollectionReadout readout{
+      .cue = "APPROACH ",
+      .message = " Approach selected signal | enter and hold within 1000m ",
+      .status = collection.status,
+  };
+  switch (collection.status) {
+    case SignalCollectionStatus::approach:
+      if (collection.consecutive_in_range_ticks != 0 ||
+          collection.completion_tick) {
+        readout.cue = "SCAN ERR ";
+        readout.message = " Scan state invalid | progress unavailable ";
+      }
+      break;
+    case SignalCollectionStatus::in_range: {
+      if (collection.consecutive_in_range_ticks == 0 ||
+          collection.consecutive_in_range_ticks >
+              kSignalCollectionAcquireTicks ||
+          collection.completion_tick) {
+        readout.cue = "SCAN ERR ";
+        readout.message = " Scan state invalid | progress unavailable ";
+        break;
+      }
+      readout.progress_percent = static_cast<unsigned>(
+          (collection.consecutive_in_range_ticks * 100U +
+           kSignalCollectionAcquireTicks / 2U) /
+          kSignalCollectionAcquireTicks);
+      readout.cue = std::format("LOCK {:03}%", readout.progress_percent);
+      readout.message = std::format(
+          " Target lock {:03}% | remain within 1000m ",
+          readout.progress_percent);
+      break;
+    }
+    case SignalCollectionStatus::scanning: {
+      if (collection.consecutive_in_range_ticks <=
+              kSignalCollectionAcquireTicks ||
+          collection.consecutive_in_range_ticks >=
+              kSignalCollectionTotalInRangeTicks ||
+          collection.completion_tick) {
+        readout.cue = "SCAN ERR ";
+        readout.message = " Scan state invalid | progress unavailable ";
+        break;
+      }
+      const auto scan_ticks = collection.consecutive_in_range_ticks -
+                              kSignalCollectionAcquireTicks;
+      readout.progress_percent = static_cast<unsigned>(
+          (scan_ticks * 100U + kSignalCollectionScanTicks / 2U) /
+          kSignalCollectionScanTicks);
+      readout.cue = std::format("SCAN {:03}%", readout.progress_percent);
+      readout.message = std::format(
+          " Scanning {:03}% | remain within 1000m ",
+          readout.progress_percent);
+      break;
+    }
+    case SignalCollectionStatus::complete:
+      if (!collection.target ||
+          collection.consecutive_in_range_ticks <
+              kSignalCollectionTotalInRangeTicks ||
+          !collection.completion_tick) {
+        readout.cue = "SCAN ERR ";
+        readout.message = " Scan state invalid | progress unavailable ";
+        break;
+      }
+      readout.progress_percent = 100;
+      readout.cue = "COLLECTED";
+      readout.message = " Signal collected | persistent delta recorded ";
+      break;
+    case SignalCollectionStatus::aborted:
+      if (collection.consecutive_in_range_ticks != 0 ||
+          collection.completion_tick) {
+        readout.cue = "SCAN ERR ";
+        readout.message = " Scan state invalid | progress unavailable ";
+        break;
+      }
+      readout.cue = "SCAN LOST";
+      readout.message =
+          " Scan lost | re-enter 1000m radius to restart ";
+      break;
+    default:
+      readout.cue = "SCAN ERR ";
+      readout.message = " Scan state invalid | progress unavailable ";
+      break;
+  }
+  return readout;
+}
+
 }  // namespace apsis_drift

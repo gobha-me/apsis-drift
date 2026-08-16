@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cmath>
 #include <fstream>
+#include <format>
 #include <initializer_list>
 #include <iterator>
 #include <limits>
@@ -27,6 +28,7 @@
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/save_schema.hpp"
 #include "apsis_drift/seed.hpp"
+#include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/signal_navigation_acceptance.hpp"
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -1191,6 +1193,301 @@ auto signal_scanner_contract() -> void {
         "key release must not change deterministic signal selection");
 }
 
+auto signal_collection_contract() -> void {
+  check(kSignalCollectionAcquireTicks == 60 &&
+            kSignalCollectionScanTicks == 360 &&
+            kSignalCollectionTotalInRangeTicks == 420,
+        "signal collection timing must remain fixed to the 120 Hz simulation clock");
+
+  const auto planet = generate_planet_descriptor(Seed{42});
+  auto cache = TerrainTileCache::create();
+  check(cache.has_value(), "signal collection tests require a terrain cache");
+  if (!cache) return;
+  const auto catalog = generate_surface_signals(planet, *cache);
+  check(catalog.has_value(), "signal collection tests require a catalog");
+  if (!catalog) return;
+  const auto& target = catalog->signals[0];
+  const auto& other = catalog->signals[1];
+  const auto navigation_for = [](const SurfaceSignal& signal,
+                                 SignalScannerStatus status,
+                                 double distance) {
+    return SignalNavigationSolution{
+        .status = status,
+        .selected = signal.id,
+        .ordinal = signal.ordinal,
+        .absolute_bearing_radians = 0.0,
+        .relative_bearing_radians = 0.0,
+        .distance_metres = distance,
+        .strength_basis_points = signal.strength_basis_points,
+    };
+  };
+  const auto reached = navigation_for(
+      target, SignalScannerStatus::reached,
+      kSignalScannerReachedRadiusMetres);
+  const auto tracking = navigation_for(
+      target, SignalScannerStatus::tracking,
+      kSignalScannerReachedRadiusMetres + 1.0);
+
+  auto journal = *WorldDeltaJournal::create();
+  SignalCollectionState state;
+  const auto initial = advance_signal_collection(
+      *catalog, tracking, 0, journal, state);
+  check(initial && !initial->delta_emitted &&
+            state.status == SignalCollectionStatus::approach &&
+            state.target == target.id && state.last_tick == 0,
+        "an out-of-radius target must remain in approach state");
+
+  bool emitted_before_completion{};
+  bool emitted_on_completion{};
+  for (SimulationTick tick = 1;
+       tick <= kSignalCollectionTotalInRangeTicks; ++tick) {
+    const auto update = advance_signal_collection(
+        *catalog, reached, tick, journal, state);
+    check(update.has_value(),
+          "valid consecutive in-range ticks must advance collection");
+    if (!update) break;
+    if (tick < kSignalCollectionTotalInRangeTicks) {
+      emitted_before_completion |= update->delta_emitted;
+    } else {
+      emitted_on_completion = update->delta_emitted;
+    }
+    if (tick == kSignalCollectionAcquireTicks) {
+      check(state.status == SignalCollectionStatus::in_range &&
+                state.consecutive_in_range_ticks ==
+                    kSignalCollectionAcquireTicks,
+            "the final acquisition tick must remain in-range");
+    }
+    if (tick == kSignalCollectionAcquireTicks + 1U) {
+      check(state.status == SignalCollectionStatus::scanning,
+            "the tick after acquisition must begin scanning");
+    }
+  }
+  const auto target_key = surface_signal_object_key(target.id);
+  const auto* collected = journal.state(target_key);
+  check(!emitted_before_completion && emitted_on_completion &&
+            state.status == SignalCollectionStatus::complete &&
+            state.completion_tick == kSignalCollectionTotalInRangeTicks &&
+            collected != nullptr &&
+            collected->kind == SaveWorldDeltaKind::collected &&
+            collected->tick == kSignalCollectionTotalInRangeTicks &&
+            journal.entries().size() == 1,
+        "the 420th consecutive in-range tick must emit exactly one collection delta");
+  const auto repeated = advance_signal_collection(
+      *catalog, reached, kSignalCollectionTotalInRangeTicks + 1U, journal,
+      state);
+  check(repeated && !repeated->delta_emitted &&
+            journal.entries().size() == 1,
+        "a completed target must remain an idempotent single journal entry");
+
+  auto abort_journal = *WorldDeltaJournal::create();
+  SignalCollectionState abort_state;
+  for (SimulationTick tick = 0;
+       tick <= kSignalCollectionAcquireTicks; ++tick) {
+    check(advance_signal_collection(*catalog, reached, tick, abort_journal,
+                                    abort_state)
+              .has_value(),
+          "the abort fixture must reach scanning state");
+  }
+  check(abort_state.status == SignalCollectionStatus::scanning,
+        "the abort fixture must begin scanning");
+  const auto left_range = advance_signal_collection(
+      *catalog, tracking, kSignalCollectionAcquireTicks + 1U, abort_journal,
+      abort_state);
+  check(left_range && abort_state.status == SignalCollectionStatus::aborted &&
+            abort_state.consecutive_in_range_ticks == 0 &&
+            abort_journal.entries().empty(),
+        "leaving range must abort and reset partial scan progress");
+  const auto reacquired = advance_signal_collection(
+      *catalog, reached, kSignalCollectionAcquireTicks + 2U, abort_journal,
+      abort_state);
+  check(reacquired && abort_state.status == SignalCollectionStatus::in_range &&
+            abort_state.consecutive_in_range_ticks == 1,
+        "returning after an abort must start a fresh acquisition");
+
+  auto retarget_journal = *WorldDeltaJournal::create();
+  SignalCollectionState retarget_state;
+  check(advance_signal_collection(*catalog, reached, 10, retarget_journal,
+                                  retarget_state)
+            .has_value(),
+        "retarget fixture must begin acquisition");
+  const auto other_reached = navigation_for(
+      other, SignalScannerStatus::reached, 100.0);
+  const auto retargeted = advance_signal_collection(
+      *catalog, other_reached, 11, retarget_journal, retarget_state);
+  check(retargeted &&
+            retarget_state.status == SignalCollectionStatus::aborted &&
+            retarget_state.target == other.id &&
+            retarget_state.consecutive_in_range_ticks == 0,
+        "changing targets must expose an aborted tick and discard progress");
+
+  auto invalid_journal = *WorldDeltaJournal::create();
+  SignalCollectionState invalid_state;
+  auto non_finite = reached;
+  non_finite.distance_metres = std::numeric_limits<double>::quiet_NaN();
+  const auto state_before_invalid = invalid_state;
+  const auto invalid = advance_signal_collection(
+      *catalog, non_finite, 0, invalid_journal, invalid_state);
+  check(!invalid &&
+            invalid.error() == SignalCollectionError::invalid_navigation &&
+            invalid_state == state_before_invalid &&
+            invalid_journal.entries().empty(),
+        "non-finite navigation must fail without partial mutation");
+  auto unknown_target = reached;
+  unknown_target.selected = SurfaceSignalId{0};
+  const auto unknown = advance_signal_collection(
+      *catalog, unknown_target, 0, invalid_journal, invalid_state);
+  check(!unknown &&
+            unknown.error() == SignalCollectionError::invalid_catalog &&
+            invalid_state == state_before_invalid &&
+            invalid_journal.entries().empty(),
+        "unknown generated targets must fail without partial mutation");
+  SignalCollectionState malformed_state{
+      .status = static_cast<SignalCollectionStatus>(255),
+      .target = std::nullopt,
+      .consecutive_in_range_ticks = 0,
+      .last_tick = std::nullopt,
+      .completion_tick = std::nullopt,
+  };
+  const auto malformed_before = malformed_state;
+  const auto malformed = advance_signal_collection(
+      *catalog, tracking, 0, invalid_journal, malformed_state);
+  check(!malformed &&
+            malformed.error() == SignalCollectionError::invalid_state &&
+            malformed_state == malformed_before,
+        "unknown collection states must be rejected transactionally");
+  check(advance_signal_collection(*catalog, tracking, 0, invalid_journal,
+                                  invalid_state)
+            .has_value(),
+        "tick validation fixture must accept its first tick");
+  const auto before_wrong_tick = invalid_state;
+  const auto wrong_tick = advance_signal_collection(
+      *catalog, tracking, 2, invalid_journal, invalid_state);
+  check(!wrong_tick && wrong_tick.error() == SignalCollectionError::wrong_tick &&
+            invalid_state == before_wrong_tick,
+        "skipped or duplicate ticks must be rejected transactionally");
+  SignalCollectionState overflow_state{
+      .status = SignalCollectionStatus::approach,
+      .target = target.id,
+      .consecutive_in_range_ticks = 0,
+      .last_tick = std::numeric_limits<SimulationTick>::max(),
+      .completion_tick = std::nullopt,
+  };
+  const auto overflow_before = overflow_state;
+  const auto overflow = advance_signal_collection(
+      *catalog, tracking, std::numeric_limits<SimulationTick>::max(),
+      invalid_journal, overflow_state);
+  check(!overflow && overflow.error() == SignalCollectionError::tick_overflow &&
+            overflow_state == overflow_before,
+        "the tick boundary must fail before wraparound");
+
+  std::vector<SaveWorldDelta> full_entries;
+  full_entries.reserve(kMaximumSaveWorldDeltas);
+  for (std::size_t index = 0; index < kMaximumSaveWorldDeltas; ++index) {
+    full_entries.push_back(
+        {std::format("signal-{:016x}", index + 1U),
+         SaveWorldDeltaKind::discovered, 1});
+  }
+  auto full_journal = WorldDeltaJournal::create(full_entries);
+  check(full_journal.has_value(),
+        "the exact journal capacity boundary must be constructible");
+  if (full_journal) {
+    SignalCollectionState full_state{
+        .status = SignalCollectionStatus::scanning,
+        .target = target.id,
+        .consecutive_in_range_ticks =
+            kSignalCollectionTotalInRangeTicks - 1U,
+        .last_tick = 500,
+        .completion_tick = std::nullopt,
+    };
+    const auto full_state_before = full_state;
+    const auto full_entries_before = std::vector<SaveWorldDelta>{
+        full_journal->entries().begin(), full_journal->entries().end()};
+    const auto full = advance_signal_collection(
+        *catalog, reached, 501, *full_journal, full_state);
+    check(!full && full.error() == SignalCollectionError::journal_failure &&
+              full_state == full_state_before &&
+              std::ranges::equal(full_journal->entries(),
+                                 full_entries_before),
+          "journal capacity failure must not expose a completed scan or partial delta");
+  }
+
+  SaveDocument saved{
+      .recipe = make_save_recipe(Seed{42}),
+      .state =
+          SaveMutableState{
+              .location = OriginLocation::docked_at_origin,
+              .first_objective = FirstObjectiveStatus::completed,
+              .first_objective_target = target.id,
+              .flight = std::nullopt,
+              .discoveries = {{target.id, *state.completion_tick}},
+              .world_deltas = std::vector<SaveWorldDelta>(
+                  journal.entries().begin(), journal.entries().end()),
+          },
+  };
+  const auto encoded = encode_save_document_json(saved);
+  const auto decoded =
+      encoded ? decode_save_document_json(*encoded)
+              : std::expected<SaveDocument, SaveSchemaError>{
+                    std::unexpected{SaveSchemaError{}}};
+  check(encoded.has_value() && decoded.has_value(),
+        "a collected target must survive the version 1 save codec");
+  if (decoded) {
+    auto restored_journal =
+        WorldDeltaJournal::create(decoded->state.world_deltas);
+    SignalCollectionState restored_state;
+    check(restored_journal.has_value(),
+          "a saved collection journal must restore");
+    if (restored_journal) {
+      const auto restored = advance_signal_collection(
+          *catalog, reached, 10'000, *restored_journal, restored_state);
+      check(restored && !restored->delta_emitted &&
+                restored_state.status == SignalCollectionStatus::complete &&
+                restored_state.completion_tick == state.completion_tick &&
+                restored_journal->entries().size() == 1,
+            "reload must recognize terminal state without collecting the unique target twice");
+    }
+  }
+
+  const std::array readouts{
+      format_signal_collection(SignalCollectionState{}),
+      format_signal_collection(
+          {.status = SignalCollectionStatus::in_range,
+           .target = target.id,
+           .consecutive_in_range_ticks = 30,
+           .last_tick = std::nullopt,
+           .completion_tick = std::nullopt}),
+      format_signal_collection(
+          {.status = SignalCollectionStatus::scanning,
+           .target = target.id,
+           .consecutive_in_range_ticks =
+               kSignalCollectionAcquireTicks + 180U,
+           .last_tick = std::nullopt,
+           .completion_tick = std::nullopt}),
+      format_signal_collection(
+          {.status = SignalCollectionStatus::complete,
+           .target = target.id,
+           .consecutive_in_range_ticks =
+               kSignalCollectionTotalInRangeTicks,
+           .last_tick = kSignalCollectionTotalInRangeTicks,
+           .completion_tick = kSignalCollectionTotalInRangeTicks}),
+      format_signal_collection(
+          {.status = SignalCollectionStatus::aborted,
+           .target = target.id,
+           .consecutive_in_range_ticks = 0,
+           .last_tick = std::nullopt,
+           .completion_tick = std::nullopt}),
+  };
+  check(std::ranges::all_of(readouts, [](const auto& readout) {
+          return readout.cue.size() == kInstrumentLineWidth &&
+                 !readout.message.empty();
+        }) &&
+            readouts[1].cue == "LOCK 050%" &&
+            readouts[2].cue == "SCAN 050%" &&
+            readouts[3].cue == "COLLECTED" &&
+            readouts[4].cue == "SCAN LOST",
+        "cockpit collection cues must be fixed-width, textual, and expose progress and outcomes");
+}
+
 auto signal_navigation_acceptance_contract() -> void {
   const auto first = replay_signal_navigation_acceptance();
   const auto second = replay_signal_navigation_acceptance();
@@ -1200,35 +1497,49 @@ auto signal_navigation_acceptance_contract() -> void {
   const auto first_checksum = planetary_flight_state_checksum(first->flight);
   const auto second_checksum = planetary_flight_state_checksum(second->flight);
   constexpr SimulationTick expected_reached_tick{1'072};
-  constexpr std::uint64_t expected_flight_checksum{9743322914782455886ULL};
-  check(first->flight.tick == expected_reached_tick &&
+  constexpr SimulationTick expected_completion_tick{1'491};
+  constexpr std::uint64_t expected_flight_checksum{4086686148596456340ULL};
+  check(first->reached_tick == expected_reached_tick &&
+            first->flight.tick == expected_completion_tick &&
             first_checksum == expected_flight_checksum &&
             first->flight.tick == second->flight.tick &&
             first_checksum == second_checksum &&
             first->scanner == second->scanner &&
-            first->navigation == second->navigation,
-        "the signal approach must replay deterministically");
+            first->navigation == second->navigation &&
+            first->collection == second->collection &&
+            std::ranges::equal(first->journal.entries(),
+                               second->journal.entries()),
+        "the signal collection path must replay deterministically");
   check(first->navigation.status == SignalScannerStatus::reached &&
             first->navigation.distance_metres <=
                 kSignalScannerReachedRadiusMetres &&
             first->scanner.selected == first->catalog.signals[0].id &&
-            first->command_count == 1,
-        "the canonical approach must select and reach the first signal");
+            first->collection.status == SignalCollectionStatus::complete &&
+            first->collection.completion_tick == expected_completion_tick &&
+            first->command_count == 2 && first->journal.entries().size() == 1 &&
+            first->journal.entries().front().kind ==
+                SaveWorldDeltaKind::collected,
+        "the canonical approach must select, reach, and collect the first signal");
 
   const auto json = signal_navigation_acceptance_json({
       .target_id = *first->scanner.selected,
-      .reached_tick = first->flight.tick,
+      .reached_tick = *first->reached_tick,
+      .completion_tick = *first->collection.completion_tick,
       .command_count = first->command_count,
+      .world_delta_count = first->journal.entries().size(),
       .final_distance_metres = first->navigation.distance_metres,
       .flight_checksum = first_checksum,
       .render_configuration = {{320, 240}, RenderProfile::remote},
       .presentation = "ansi",
       .framebuffer_checksum = 123,
   });
-  check(json.find("\"schema_version\": 1") != std::string::npos &&
-            json.find("\"scenario\": \"v0.4-signal-navigation\"") !=
+  check(json.find("\"schema_version\": 2") != std::string::npos &&
+            json.find("\"scenario\": \"v0.4-signal-collection\"") !=
                 std::string::npos &&
-            json.find("\"final_status\": \"reached\"") !=
+            json.find("\"completion_tick\": 1491") != std::string::npos &&
+            json.find("\"final_status\": \"complete\"") !=
+                std::string::npos &&
+            json.find("\"world_delta_kind\": \"collected\"") !=
                 std::string::npos &&
             json.find("\"presentation\": \"ansi\"") !=
                 std::string::npos,
@@ -4854,6 +5165,7 @@ auto main() -> int {
   surface_signal_contract();
   surface_signal_population();
   signal_scanner_contract();
+  signal_collection_contract();
   signal_navigation_acceptance_contract();
   planet_descriptor_contract();
   planet_descriptor_population();

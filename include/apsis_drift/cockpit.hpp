@@ -5,7 +5,7 @@
 
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/render_profile.hpp"
-#include "apsis_drift/signal_scanner.hpp"
+#include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "termforge/core/types.hpp"
 
@@ -47,6 +47,15 @@ struct SignalScannerReadout {
   SignalScannerStatus status{SignalScannerStatus::no_signal};
 
   auto operator==(const SignalScannerReadout&) const -> bool = default;
+};
+
+struct SignalCollectionReadout {
+  std::string cue;
+  std::string message;
+  SignalCollectionStatus status{SignalCollectionStatus::approach};
+  unsigned progress_percent{};
+
+  auto operator==(const SignalCollectionReadout&) const -> bool = default;
 };
 
 enum class CockpitLayoutMode { too_small, compact, wide };
@@ -94,5 +103,10 @@ struct CockpitLayout {
 // so the Kitty and ANSI cockpit paths do not depend on color alone.
 [[nodiscard]] auto format_signal_scanner(
     const SignalNavigationSolution& navigation) -> SignalScannerReadout;
+
+// Collection cues remain fixed width for the instrument rail and provide a
+// textual message so progress and failure never depend on color alone.
+[[nodiscard]] auto format_signal_collection(
+    const SignalCollectionState& collection) -> SignalCollectionReadout;
 
 }  // namespace apsis_drift

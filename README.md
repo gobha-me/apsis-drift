@@ -251,11 +251,13 @@ presentations:
   --driver kitty --profile local --report signal-navigation-kitty.json
 ```
 
-Both routes select the same generated signal, reach it at tick `1072`, and
-produce flight checksum `9743322914782455886`. The scanner's fixed-width target,
-bearing, distance, strength, and textual direction/status cues are shared by
-Kitty and ANSI. The exact visibility rules and report fields are documented in
-the [signal navigation contract](docs/SIGNAL_NAVIGATION.md).
+Both routes select the same generated signal, reach it at tick `1072`, finish
+the acquisition and scan dwell at tick `1491`, and emit one persistent
+`collected` delta. They produce authoritative flight checksum
+`4086686148596456340`. Fixed-width navigation, progress, abort, and completion
+cues are shared by Kitty and ANSI. The exact visibility and collection rules
+are documented in the [signal navigation contract](docs/SIGNAL_NAVIGATION.md)
+and [signal collection contract](docs/SIGNAL_COLLECTION.md).
 
 ## Measure and capture
 
