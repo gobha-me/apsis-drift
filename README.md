@@ -337,7 +337,9 @@ milestones; they are not implementation sessions themselves.
 The v0.4 work begins from the deterministic
 [origin-station and new-game contract](docs/ORIGIN_STATION.md), which defines
 the zero-discovery start and first-objective handoff before save and Signal Run
-schemas are finalized.
+schemas are finalized. Its generated objectives follow the versioned
+[surface-signal contract](docs/SURFACE_SIGNALS.md), which keeps immutable
+placement and metadata separate from later discovery and mission state.
 
 New work should use the session-sized issue form. If implementation uncovers
 additional work, record it as a follow-up issue instead of silently expanding
