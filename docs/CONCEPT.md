@@ -119,7 +119,9 @@ the player's changes to its result:
 Early saves should plausibly remain in the kilobyte range. A generator version
 must be retained with every save so a changed algorithm does not silently
 rewrite an existing universe. Migration or legacy-generation support can be
-chosen later.
+chosen later. The concrete version 1 representation and compatibility rules
+are documented in the [Save Format and Compatibility](SAVE_FORMAT.md)
+contract.
 
 Simulation should use a fixed timestep and deterministic state transitions.
 Rendering resolution and frame rate may change without changing flight physics

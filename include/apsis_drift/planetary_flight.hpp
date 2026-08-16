@@ -77,6 +77,9 @@ struct PlanetaryFlightState {
   FlightControls controls;
   FlightRegime regime{FlightRegime::orbital};
   std::optional<FlightRegimeTransition> last_transition;
+
+  friend auto operator==(const PlanetaryFlightState&,
+                         const PlanetaryFlightState&) -> bool = default;
 };
 
 enum class PlanetaryFlightError : std::uint8_t {
@@ -102,6 +105,12 @@ enum class PlanetaryFlightError : std::uint8_t {
     PlanetaryFlightEnvironment environment, double heading_radians = 0.0,
     FlightMode mode = FlightMode::autopilot) noexcept
     -> std::expected<PlanetaryFlightState, PlanetaryFlightError>;
+
+// Validates the complete authoritative state independently of terrain cache
+// and presentation state. Persistence uses this before committing a load.
+[[nodiscard]] auto validate_planetary_flight_state(
+    const PlanetDescriptor& planet, const PlanetaryFlightState& state) noexcept
+    -> std::expected<void, PlanetaryFlightError>;
 
 // Applies every command in recorded order and advances one application-owned
 // fixed step. The caller supplies the deterministic surface elevation for the
