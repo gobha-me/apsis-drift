@@ -94,6 +94,9 @@ state. A future compatibility loader handling a pre-onboarding representation
 must preserve that in-flight/no-objective behavior rather than silently
 teleporting the craft or synthesizing mission progress.
 
+The version 1 field encodings and validation behavior are specified in the
+[Save Format and Compatibility](SAVE_FORMAT.md) contract.
+
 ## Presentation decision
 
 The first docked presentation is a shared semantic cell panel used by both

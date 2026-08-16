@@ -3,7 +3,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <fstream>
 #include <initializer_list>
+#include <iterator>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -22,6 +24,7 @@
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
+#include "apsis_drift/save_schema.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/signal_navigation_acceptance.hpp"
 #include "apsis_drift/signal_scanner.hpp"
@@ -122,6 +125,23 @@ auto check(bool condition, const char* message) -> void {
   return !inner.empty() && inner.x >= outer.x && inner.y >= outer.y &&
          i64{inner.x} + inner.w <= i64{outer.x} + outer.w &&
          i64{inner.y} + inner.h <= i64{outer.y} + outer.h;
+}
+
+[[nodiscard]] auto replace_once(std::string text, std::string_view from,
+                                std::string_view to) -> std::string {
+  const auto position = text.find(from);
+  if (position != std::string::npos) {
+    text.replace(position, from.size(), to);
+  }
+  return text;
+}
+
+[[nodiscard]] auto read_test_data(std::string_view relative) -> std::string {
+  const auto path = std::string{APSIS_DRIFT_SOURCE_DIR} + "/" +
+                    std::string{relative};
+  std::ifstream input{path, std::ios::binary};
+  return {std::istreambuf_iterator<char>{input},
+          std::istreambuf_iterator<char>{}};
 }
 
 auto generation_failure_matrix() -> void {
@@ -363,6 +383,189 @@ auto origin_onboarding_contract() -> void {
                 OriginOnboardingError::invalid_transition &&
             state == invalid_command_before,
         "unknown onboarding commands must fail without mutation");
+}
+
+auto save_schema_contract() -> void {
+  check(kSaveFormatVersion == 1 && kSaveApplication == "apsis-drift" &&
+            kMaximumSaveDocumentBytes == (1U << 20U),
+        "save format version 1 identity and byte bound must remain stable");
+  const auto fixture = read_test_data("test/data/save-v1-golden.json");
+  check(!fixture.empty(), "the version 1 golden save fixture must be readable");
+
+  auto recipe = make_save_recipe(Seed{42});
+  const auto target = SurfaceSignalId{0x71d4c959dcd64423ULL};
+  SaveDocument expected{
+      .recipe = recipe,
+      .state =
+          SaveMutableState{
+              .location = OriginLocation::in_flight,
+              .first_objective = FirstObjectiveStatus::active,
+              .first_objective_target = target,
+              .flight =
+                  PlanetaryFlightState{
+                      .tick = 1200,
+                      .planet = recipe.active_planet,
+                      .pose = {{0.25, -0.5, 100'000.0}, 0.75},
+                      .velocity = {125.5, -20.25, -5.0},
+                      .clearance_metres = 99'000.0,
+                      .mode = FlightMode::manual,
+                      .controls = {.forward = true, .turn_right = true},
+                      .regime = FlightRegime::atmospheric,
+                      .last_transition =
+                          FlightRegimeTransition{FlightRegime::orbital,
+                                                 FlightRegime::atmospheric,
+                                                 1000},
+                  },
+              .discoveries = {{target, 1100}},
+              .world_deltas =
+                  {{"signal-71d4c959dcd64423",
+                    SaveWorldDeltaKind::discovered, 1100}},
+          },
+  };
+  check(recipe.origin_station.value == 0xce51e866ec4e032dULL &&
+            recipe.active_planet.value == 0x435b7b7e8ce489e8ULL,
+        "save recipes must regenerate the canonical station and planet IDs");
+  check(validate_save_document(expected).has_value(),
+        "the representative version 1 save must validate");
+
+  const auto decoded = decode_save_document_json(fixture);
+  check(decoded && *decoded == expected,
+        "the golden save must decode to the complete semantic state");
+  const auto encoded = encode_save_document_json(expected);
+  check(encoded && *encoded == fixture,
+        "the version 1 encoder must reproduce the golden fixture byte-for-byte");
+  if (encoded) {
+    const auto round_trip = decode_save_document_json(*encoded);
+    check(round_trip && *round_trip == expected,
+          "save encode/decode must preserve semantic state");
+  }
+
+  auto unknown = fixture;
+  unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
+  unknown = replace_once(
+      std::move(unknown), "    \"universe_seed\": \"42\",",
+      "    \"universe_seed\": \"42\",\n    \"future_recipe_note\": 7,");
+  const auto ignored = decode_save_document_json(unknown);
+  check(ignored && *ignored == expected &&
+            encode_save_document_json(*ignored) == encoded,
+        "unknown optional fields must be ignored and discarded on rewrite");
+
+  const auto expect_decode_error = [&](std::string text,
+                                       SaveSchemaErrorCode code,
+                                       const char* message) {
+    const auto result = decode_save_document_json(text);
+    check(!result && result.error().code == code, message);
+  };
+  expect_decode_error("{", SaveSchemaErrorCode::malformed_json,
+                      "malformed JSON must be rejected");
+  expect_decode_error(std::string(kMaximumSaveDocumentBytes + 1U, ' '),
+                      SaveSchemaErrorCode::document_too_large,
+                      "oversized save input must be rejected before parsing");
+  expect_decode_error(
+      replace_once(fixture, "  \"application\": \"apsis-drift\",\n",
+                   "  \"application\": \"apsis-drift\",\n"
+                   "  \"application\": \"apsis-drift\",\n"),
+      SaveSchemaErrorCode::duplicate_key,
+      "duplicate JSON object keys must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 1",
+                   "\"format_version\": 2"),
+      SaveSchemaErrorCode::unsupported_format_version,
+      "future save versions must be rejected explicitly");
+  expect_decode_error(
+      "{\"application\":\"apsis-drift\",\"format_version\":2}",
+      SaveSchemaErrorCode::unsupported_format_version,
+      "future formats must be identified before version 1 fields are read");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 1",
+                   "\"format_version\": \"1\""),
+      SaveSchemaErrorCode::invalid_type,
+      "schema integers with the wrong JSON type must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"application\": \"apsis-drift\"",
+                   "\"application\": \"another-game\""),
+      SaveSchemaErrorCode::invalid_value,
+      "foreign application saves must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"seed_derivation\": 1",
+                   "\"seed_derivation\": 2"),
+      SaveSchemaErrorCode::incompatible_generator_version,
+      "unsupported generator versions must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "station-ce51e866ec4e032d",
+                   "station-ce51e866ec4e032e"),
+      SaveSchemaErrorCode::identity_mismatch,
+      "regenerated station identity mismatches must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "planet-435b7b7e8ce489e8",
+                   "planet-435B7b7e8ce489e8"),
+      SaveSchemaErrorCode::invalid_value,
+      "stable identifiers must reject uppercase hexadecimal digits");
+  expect_decode_error(
+      replace_once(fixture, "\"universe_seed\": \"42\"",
+                   "\"universe_seed\": \"042\""),
+      SaveSchemaErrorCode::invalid_value,
+      "non-canonical unsigned strings must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"latitude_radians\": \"0.25\"",
+                   "\"latitude_radians\": \"nan\""),
+      SaveSchemaErrorCode::invalid_value,
+      "non-finite flight values must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"location\": \"in_flight\"",
+                   "\"location\": \"somewhere\""),
+      SaveSchemaErrorCode::invalid_value,
+      "unknown state enums must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"kind\": \"discovered\"",
+                   "\"kind\": \"future_kind\""),
+      SaveSchemaErrorCode::invalid_value,
+      "unknown world-delta kinds must be rejected");
+
+  constexpr std::array required_sections{
+      "\"application\"", "\"format_version\"", "\"recipe\"",
+      "\"state\"",       "\"generator_versions\"",
+      "\"first_objective\"", "\"flight\"", "\"discoveries\"",
+      "\"world_deltas\"",
+  };
+  for (const auto section : required_sections) {
+    const auto renamed = replace_once(fixture, section, "\"missing_field\"");
+    const auto result = decode_save_document_json(renamed);
+    check(!result && result.error().code == SaveSchemaErrorCode::missing_field,
+          "every required save section must be present");
+  }
+
+  auto invalid = expected;
+  invalid.state.location = OriginLocation::docked_at_origin;
+  check(encode_save_document_json(invalid) ==
+            std::unexpected{SaveSchemaError{
+                SaveSchemaErrorCode::invalid_state, "$.state.flight",
+                "a docked save cannot contain active planetary flight state"}},
+        "invalid state must be rejected before encoding");
+  invalid = expected;
+  invalid.state.flight->planet.value ^= 1U;
+  auto invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result && invalid_result.error().code ==
+                               SaveSchemaErrorCode::identity_mismatch,
+        "flight state must refer to the regenerated active planet");
+  invalid = expected;
+  invalid.state.flight->velocity.east_metres_per_second = 501.0;
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result &&
+            invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
+        "saved velocity must remain inside the active regime bounds");
+  invalid = expected;
+  invalid.state.discoveries.push_back(invalid.state.discoveries.front());
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result &&
+            invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
+        "duplicate discoveries must be rejected");
+  invalid = expected;
+  invalid.state.world_deltas.front().object_key = "Bad Key";
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result &&
+            invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
+        "invalid world-delta object keys must be rejected");
 }
 
 auto surface_signal_contract() -> void {
@@ -4472,6 +4675,7 @@ auto main() -> int {
   seed_derivation_contract();
   origin_station_contract();
   origin_onboarding_contract();
+  save_schema_contract();
   surface_signal_contract();
   surface_signal_population();
   signal_scanner_contract();

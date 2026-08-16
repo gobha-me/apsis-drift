@@ -389,6 +389,20 @@ auto initial_planetary_flight_state(
   return state;
 }
 
+auto validate_planetary_flight_state(
+    const PlanetDescriptor& planet,
+    const PlanetaryFlightState& state) noexcept
+    -> std::expected<void, PlanetaryFlightError> {
+  if (!valid_planet(planet) || state.planet != planet.id ||
+      !finite_state(state) || !bounded_velocity(state)) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  if (!planet_fixed_from_geodetic(planet, state.pose.position)) {
+    return std::unexpected{PlanetaryFlightError::coordinate_failure};
+  }
+  return {};
+}
+
 auto advance_planetary_flight(
     const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
     PlanetaryFlightState& state, std::span<const FlightCommand> commands,

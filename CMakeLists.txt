@@ -67,6 +67,18 @@ if (NOT TARGET termforge::lib)
   endif ()
 endif ()
 
+find_package(nlohmann_json 3.12.0 CONFIG QUIET)
+if (NOT TARGET nlohmann_json::nlohmann_json)
+  set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+  set(JSON_Install OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH
+      SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+  )
+  FetchContent_MakeAvailable(nlohmann_json)
+endif ()
+
 add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
   src/cockpit.cpp
@@ -82,6 +94,7 @@ add_library(apsis_drift_lib STATIC
   src/planetary_flight.cpp
   src/planetary_presentation.cpp
   src/render_profile.cpp
+  src/save_schema.cpp
   src/seed.cpp
   src/signal_navigation_acceptance.cpp
   src/signal_input.cpp
@@ -98,7 +111,10 @@ target_include_directories(apsis_drift_lib
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 target_compile_features(apsis_drift_lib PUBLIC cxx_std_23)
-target_link_libraries(apsis_drift_lib PUBLIC termforge::lib)
+target_link_libraries(apsis_drift_lib
+  PUBLIC termforge::lib
+  PRIVATE nlohmann_json::nlohmann_json
+)
 
 add_executable(apsis-drift
   src/main.cpp
@@ -110,6 +126,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
   target_include_directories(apsis-drift-tests
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_definitions(apsis-drift-tests PRIVATE
+    APSIS_DRIFT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
 
   add_test(NAME benchmark-profile-remote
