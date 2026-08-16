@@ -9,6 +9,31 @@ Issue #18 defines the document and validation contract only. Atomic files,
 profile paths, CLI load/save options, and live-state commit behavior belong to
 #19. Sparse-journal application and compaction belong to #20.
 
+## Profile files
+
+Interactive runs may select a validated input profile with `--load PATH`, an
+explicit clean-exit destination with `--save PATH`, or a deterministic new
+profile with `--new-game-seed N`. Loading and new-game selection are mutually
+exclusive. A different load and save path is an explicit save-as; a load path
+is never overwritten unless it is also named as the save path.
+
+The loader reads at most the version 1 byte limit, decodes and validates into a
+temporary document, and returns it for application-owned commit only after all
+compatibility and regenerated-identity checks succeed. Failed loads therefore
+cannot partially mutate live state.
+
+Saving validates and encodes the complete document before opening the
+destination directory. It writes a private temporary file beside the target,
+synchronizes the file, atomically replaces the target, and synchronizes the
+directory. Failures before replacement preserve the previous valid file and
+remove the temporary file. A directory-synchronization failure is reported as
+a durability error after replacement rather than pretending the old file was
+retained.
+
+The current v0.4 flyover resolves this profile plumbing and persists only on a
+clean exit. The complete Signal Run in #24 owns projection of gameplay changes
+back into the mutable profile fields.
+
 ## Document shape
 
 Every document has three required top-level fields:

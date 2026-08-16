@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <format>
 #include <initializer_list>
@@ -13,6 +14,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <unistd.h>
 
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
@@ -26,6 +29,7 @@
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
+#include "apsis_drift/save_file.hpp"
 #include "apsis_drift/save_schema.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/signal_collection.hpp"
@@ -38,6 +42,7 @@
 #include "apsis_drift/world_delta_journal.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
+#include "save_file_internal.hpp"
 #include "signal_input.hpp"
 #include "surface_signal_generation.hpp"
 
@@ -146,6 +151,39 @@ auto check(bool condition, const char* message) -> void {
   std::ifstream input{path, std::ios::binary};
   return {std::istreambuf_iterator<char>{input},
           std::istreambuf_iterator<char>{}};
+}
+
+class TemporaryDirectory {
+ public:
+  TemporaryDirectory() {
+    static std::uint64_t sequence{};
+    const auto root = std::filesystem::temp_directory_path();
+    do {
+      m_path = root / std::format("apsis-drift-test-{}-{}",
+                                  static_cast<long long>(::getpid()),
+                                  sequence++);
+    } while (!std::filesystem::create_directory(m_path));
+  }
+  TemporaryDirectory(const TemporaryDirectory&) = delete;
+  auto operator=(const TemporaryDirectory&) -> TemporaryDirectory& = delete;
+  ~TemporaryDirectory() {
+    std::error_code ignored;
+    std::filesystem::remove_all(m_path, ignored);
+  }
+
+  [[nodiscard]] auto path() const -> const std::filesystem::path& {
+    return m_path;
+  }
+
+ private:
+  std::filesystem::path m_path;
+};
+
+auto write_test_file(const std::filesystem::path& path,
+                     std::string_view contents) -> bool {
+  std::ofstream output{path, std::ios::binary};
+  output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+  return output.good();
 }
 
 auto generation_failure_matrix() -> void {
@@ -570,6 +608,123 @@ auto save_schema_contract() -> void {
   check(!invalid_result &&
             invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
         "invalid world-delta object keys must be rejected");
+}
+
+auto save_file_contract() -> void {
+  const auto zero = make_new_game_document(Seed{0});
+  const auto zero_again = make_new_game_document(Seed{0});
+  const auto maximum =
+      make_new_game_document(Seed{std::numeric_limits<std::uint64_t>::max()});
+  check(zero == zero_again && validate_save_document(zero).has_value() &&
+            validate_save_document(maximum).has_value(),
+        "new-game profiles must accept the complete unsigned seed range and reproduce deterministically");
+  check(zero.state.location == OriginLocation::docked_at_origin &&
+            zero.state.first_objective == FirstObjectiveStatus::offered &&
+            !zero.state.flight && zero.state.discoveries.empty() &&
+            zero.state.world_deltas.empty(),
+        "a new-game profile must begin docked without mutable generated-world state");
+
+  TemporaryDirectory temporary;
+  const auto save_path = temporary.path() / "profile.json";
+  const auto save_as_path = temporary.path() / "profile-copy.json";
+  check(write_save_file_atomically(save_path, zero).has_value(),
+        "a valid new-game profile must save atomically");
+  const auto loaded = load_save_file(save_path);
+  check(loaded && *loaded == zero,
+        "a saved profile must round-trip through the bounded file loader");
+  const auto permissions = std::filesystem::status(save_path).permissions();
+  check((permissions & (std::filesystem::perms::group_all |
+                        std::filesystem::perms::others_all)) ==
+            std::filesystem::perms::none,
+        "new temporary save files must not grant group or other access");
+  if (loaded) {
+    check(write_save_file_atomically(save_as_path, *loaded).has_value() &&
+              load_save_file(save_as_path) == loaded,
+          "an explicitly different destination must support save-as without changing state");
+  }
+
+  const auto representative = decode_save_document_json(
+      read_test_data("test/data/save-v1-golden.json"));
+  const bool representative_written =
+      representative &&
+      write_save_file_atomically(save_as_path, *representative).has_value();
+  const auto representative_loaded = load_save_file(save_as_path);
+  check(representative_written && representative_loaded &&
+            *representative_loaded == *representative,
+        "atomic replacement must preserve a complete in-flight authoritative profile");
+
+  const auto replacement = make_new_game_document(Seed{42});
+  const auto interrupted = detail::write_save_file_atomically_for_test(
+      save_path, replacement,
+      detail::AtomicSaveTestInterruption::before_replace);
+  check(!interrupted &&
+            interrupted.error().code == SaveFileErrorCode::replace_failed &&
+            load_save_file(save_path) == loaded,
+        "an interruption before replacement must leave the prior save loadable");
+  std::size_t temporary_files{};
+  for (const auto& entry :
+       std::filesystem::directory_iterator{temporary.path()}) {
+    if (entry.path().filename().string().starts_with(".profile.json.tmp.")) {
+      ++temporary_files;
+    }
+  }
+  check(temporary_files == 0,
+        "failed atomic writes must clean their temporary save files");
+
+  auto invalid_document = replacement;
+  invalid_document.recipe.generator_versions.seed_derivation += 1;
+  const auto rejected_write =
+      write_save_file_atomically(save_path, invalid_document);
+  check(!rejected_write &&
+            rejected_write.error().code == SaveFileErrorCode::invalid_document &&
+            rejected_write.error().schema_error &&
+            load_save_file(save_path) == loaded,
+        "invalid authoritative state must fail before touching the destination");
+
+  const auto missing_path = temporary.path() / "missing.json";
+  const auto missing = load_save_file(missing_path);
+  check(!missing && missing.error().code == SaveFileErrorCode::not_found,
+        "a missing save must have a distinct actionable file error");
+  const auto empty_path = load_save_file({});
+  check(!empty_path &&
+            empty_path.error().code == SaveFileErrorCode::invalid_path,
+        "an empty load path must be rejected before opening a descriptor");
+  const auto unavailable = write_save_file_atomically(
+      temporary.path() / "missing" / "profile.json", replacement);
+  check(!unavailable && unavailable.error().code ==
+                            SaveFileErrorCode::temporary_file_failed,
+        "a destination in a missing directory must fail without creating directories implicitly");
+
+  const auto malformed_path = temporary.path() / "malformed.json";
+  check(write_test_file(malformed_path, "{"),
+        "the malformed save fixture must be writable");
+  auto live = zero;
+  const auto malformed = load_save_file(malformed_path);
+  if (malformed) live = *malformed;
+  check(!malformed &&
+            malformed.error().code == SaveFileErrorCode::invalid_document &&
+            malformed.error().schema_error && live == zero,
+        "a malformed load must expose schema context without mutating live state");
+  if (!malformed) {
+    const auto message = save_file_error_message(malformed.error());
+    check(message.find(malformed_path.string()) != std::string::npos &&
+              message.find("$") != std::string::npos,
+          "save diagnostics must include the path and schema location");
+  }
+
+  const auto boundary_path = temporary.path() / "boundary.json";
+  const bool exact_written = write_test_file(
+      boundary_path, std::string(kMaximumSaveDocumentBytes, ' '));
+  const auto exact_boundary = load_save_file(boundary_path);
+  check(exact_written && !exact_boundary &&
+            exact_boundary.error().code == SaveFileErrorCode::invalid_document,
+        "an exactly maximum-sized invalid document must reach schema validation");
+  const bool oversized_written = write_test_file(
+      boundary_path, std::string(kMaximumSaveDocumentBytes + 1U, ' '));
+  const auto oversized = load_save_file(boundary_path);
+  check(oversized_written && !oversized &&
+            oversized.error().code == SaveFileErrorCode::document_too_large,
+        "a save one byte beyond the format bound must fail before decoding");
 }
 
 auto world_delta_journal_contract() -> void {
@@ -5160,6 +5315,7 @@ auto main() -> int {
   origin_station_contract();
   origin_onboarding_contract();
   save_schema_contract();
+  save_file_contract();
   world_delta_journal_contract();
   regenerated_world_delta_contract();
   surface_signal_contract();

@@ -40,6 +40,7 @@
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/render_profile.hpp"
+#include "apsis_drift/save_file.hpp"
 #include "apsis_drift/signal_navigation_acceptance.hpp"
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -1291,10 +1292,25 @@ template <typename T>
   return error == std::errc{} && end == text.data() + text.size() && value > 0;
 }
 
+template <typename T>
+[[nodiscard]] auto parse_unsigned(std::string_view text, T& value) -> bool {
+  if (text.empty() || text.front() == '-' || text.front() == '+') return false;
+  const auto [end, error] =
+      std::from_chars(text.data(), text.data() + text.size(), value);
+  return error == std::errc{} && end == text.data() + text.size();
+}
+
+[[nodiscard]] auto presentation_seed(Seed universe_seed) noexcept
+    -> std::uint32_t {
+  return static_cast<std::uint32_t>(universe_seed.value ^
+                                    (universe_seed.value >> 32U));
+}
+
 auto usage() -> void {
   std::puts(
       "Usage: apsis-drift [--seed N] [--profile NAME] "
       "[--viewport WIDTHxHEIGHT]\n"
+      "                   [--load PATH | --new-game-seed N] [--save PATH]\n"
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
       "                   [--keyboard enhanced|press-only]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
@@ -1315,6 +1331,9 @@ auto usage() -> void {
       "Sweep defaults: remote,balanced,local at 30,60 FPS. Viewport list\n"
       "entries may be profile names or validated WIDTHxHEIGHT values.\n"
       "Workload selection is available only for benchmark and sweep modes.\n"
+      "Profile options are interactive-only. --load restores a validated save;\n"
+      "--save writes on clean exit; --new-game-seed accepts any 64-bit unsigned\n"
+      "integer. Loading and saving different paths performs an explicit save-as.\n"
       "Add --snapshot PATH to save the final framebuffer as a binary PPM.\n"
       "Interactive controls: arrows/WASD move, Q/E strafe, R/F altitude,\n"
       "Space toggles autopilot; left-hold flies, right-hold strafes/climbs,\n"
@@ -1340,6 +1359,9 @@ auto main(int argc, char** argv) -> int {
   auto sweep_fps = default_sweep_fps();
   std::filesystem::path report_path;
   std::filesystem::path snapshot_path;
+  std::filesystem::path load_path;
+  std::filesystem::path save_path;
+  std::optional<std::uint64_t> new_game_seed;
   bool profile_specified{};
   bool viewport_specified{};
   bool driver_specified{};
@@ -1406,6 +1428,34 @@ auto main(int argc, char** argv) -> int {
         return 2;
       }
       seed_specified = true;
+      continue;
+    }
+    if (argument == "--new-game-seed" && i + 1 < argc) {
+      std::uint64_t value{};
+      if (!parse_unsigned(std::string_view{argv[++i]}, value)) {
+        std::fprintf(stderr,
+                     "new-game seed must be an unsigned 64-bit integer\n");
+        return 2;
+      }
+      new_game_seed = value;
+      continue;
+    }
+    if (argument == "--load" && i + 1 < argc) {
+      const std::string_view value{argv[++i]};
+      if (value.empty()) {
+        std::fprintf(stderr, "load path must not be empty\n");
+        return 2;
+      }
+      load_path = value;
+      continue;
+    }
+    if (argument == "--save" && i + 1 < argc) {
+      const std::string_view value{argv[++i]};
+      if (value.empty()) {
+        std::fprintf(stderr, "save path must not be empty\n");
+        return 2;
+      }
+      save_path = value;
       continue;
     }
     if (argument == "--workload" && i + 1 < argc) {
@@ -1509,6 +1559,28 @@ auto main(int argc, char** argv) -> int {
 
   if (benchmark_frames && capture_seconds > 0) {
     std::fprintf(stderr, "benchmark and capture modes are mutually exclusive\n");
+    return 2;
+  }
+  const bool profile_options = !load_path.empty() || !save_path.empty() ||
+                               new_game_seed.has_value();
+  if (!load_path.empty() && new_game_seed) {
+    std::fprintf(stderr,
+                 "--load and --new-game-seed are mutually exclusive\n");
+    return 2;
+  }
+  if (profile_options && seed_specified) {
+    std::fprintf(stderr,
+                 "--seed cannot be combined with save-profile options; use "
+                 "--new-game-seed\n");
+    return 2;
+  }
+  if (profile_options &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance)) {
+    std::fprintf(stderr,
+                 "save-profile options are available only for interactive "
+                 "runs\n");
     return 2;
   }
   if (flight_deck_acceptance &&
@@ -1716,7 +1788,7 @@ auto main(int argc, char** argv) -> int {
 
     const RenderConfiguration render_configuration =
         resolve_render_configuration(selected_profile, viewport_override);
-    const std::uint32_t run_seed =
+    std::uint32_t run_seed =
         flight_deck_acceptance
             ? kFlightDeckAcceptanceSeed
             : (signal_navigation_acceptance
@@ -1725,6 +1797,23 @@ auto main(int argc, char** argv) -> int {
     const bool interactive_controls =
         !benchmark_frames && capture_seconds == 0 &&
         !flight_deck_acceptance && !signal_navigation_acceptance;
+    std::optional<SaveDocument> save_profile;
+    if (interactive_controls) {
+      if (!load_path.empty()) {
+        auto loaded = load_save_file(load_path);
+        if (!loaded) {
+          const auto message = save_file_error_message(loaded.error());
+          std::fprintf(stderr, "cannot load save: %s\n", message.c_str());
+          return 1;
+        }
+        save_profile = std::move(*loaded);
+        run_seed = presentation_seed(save_profile->recipe.universe_seed);
+      } else {
+        const Seed universe_seed{new_game_seed.value_or(seed)};
+        save_profile = make_new_game_document(universe_seed);
+        if (new_game_seed) run_seed = presentation_seed(universe_seed);
+      }
+    }
     LandscapeApp app{render_configuration, run_seed, selected_workload,
                      static_cast<double>(capture_seconds),
                      interactive_controls, flight_deck_acceptance,
@@ -1811,6 +1900,19 @@ auto main(int argc, char** argv) -> int {
                      report_path.string().c_str());
         return 1;
       }
+    }
+    if (!save_path.empty() && result == 0) {
+      if (!save_profile) {
+        std::fprintf(stderr, "cannot save without an interactive profile\n");
+        return 1;
+      }
+      if (auto saved = write_save_file_atomically(save_path, *save_profile);
+          !saved) {
+        const auto message = save_file_error_message(saved.error());
+        std::fprintf(stderr, "cannot save profile: %s\n", message.c_str());
+        return 1;
+      }
+      std::printf("save: %s\n", save_path.string().c_str());
     }
     return result;
   } catch (const std::exception& error) {
