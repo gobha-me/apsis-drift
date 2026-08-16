@@ -75,6 +75,9 @@ headless workload are recorded in the
 The fixed sample layout, seam-safe integer generation, compatibility rules,
 and bounded cache for local planet data are recorded in the
 [Deterministic Terrain Tile Compatibility](TERRAIN_TILES.md) contract.
+The planet-relative craft state, bounded regime controls, altitude hysteresis,
+transition telemetry, and deterministic failure behavior are recorded in the
+[Planetary Flight Regime Contract](FLIGHT_REGIMES.md).
 
 Generation should be divided by scale:
 

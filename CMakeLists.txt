@@ -77,6 +77,7 @@ add_library(apsis_drift_lib STATIC
   src/menu.cpp
   src/orbital.cpp
   src/planet.cpp
+  src/planetary_flight.cpp
   src/render_profile.cpp
   src/seed.cpp
   src/simulation.cpp

@@ -18,6 +18,7 @@
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
+#include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
@@ -1514,6 +1515,383 @@ auto flight_instrument_contract() -> void {
   check(after.heading != before.heading && after.speed == "SPD 052  " &&
             after.mode == "MODE MAN ",
         "deterministic command steps must update heading, speed, and mode");
+}
+
+auto planetary_flight_regime_contract() -> void {
+  const auto generated = generate_planet_descriptor(Seed{42});
+  const std::array expected_ceiling{
+      std::pair{AtmosphereClass::airless, 20'000.0},
+      std::pair{AtmosphereClass::tenuous, 60'000.0},
+      std::pair{AtmosphereClass::temperate, 100'000.0},
+      std::pair{AtmosphereClass::dense, 160'000.0},
+  };
+  for (const auto& [atmosphere, ceiling] : expected_ceiling) {
+    std::uint16_t pressure{};
+    switch (atmosphere) {
+      case AtmosphereClass::airless: pressure = 0; break;
+      case AtmosphereClass::tenuous: pressure = 100; break;
+      case AtmosphereClass::temperate: pressure = 800; break;
+      case AtmosphereClass::dense: pressure = 2'000; break;
+    }
+    const auto planet =
+        planet_with_atmosphere(generated, atmosphere, pressure);
+    const auto bands = flight_regime_bands(planet);
+    check(bands &&
+              bands->terrain_enter_clearance_metres == 2'000.0 &&
+              bands->terrain_exit_clearance_metres == 2'500.0 &&
+              bands->atmosphere_enter_altitude_metres == ceiling &&
+              bands->orbit_enter_altitude_metres > ceiling,
+          "each atmosphere class must define stable hysteretic bands");
+  }
+
+  const auto airless =
+      planet_with_atmosphere(generated, AtmosphereClass::airless, 0);
+  const auto bands = flight_regime_bands(airless);
+  check(bands.has_value(), "the airless approach fixture must be valid");
+  if (!bands) return;
+
+  const PlanetaryFlightEnvironment environment{125.0};
+  const auto orbital = initial_planetary_flight_state(
+      airless, {0.2, -0.4, bands->atmosphere_enter_altitude_metres + 1.0},
+      environment, 0.5, FlightMode::manual);
+  const auto atmospheric = initial_planetary_flight_state(
+      airless, {0.2, -0.4, bands->atmosphere_enter_altitude_metres},
+      environment, 0.5, FlightMode::manual);
+  const auto terrain = initial_planetary_flight_state(
+      airless,
+      {0.2, -0.4,
+       environment.surface_elevation_metres +
+           bands->terrain_enter_clearance_metres},
+      environment, 0.5, FlightMode::manual);
+  check(orbital && orbital->regime == FlightRegime::orbital &&
+            atmospheric &&
+            atmospheric->regime == FlightRegime::atmospheric && terrain &&
+            terrain->regime == FlightRegime::terrain_flight,
+        "initial state must select the exact descending regime boundaries");
+
+  if (!orbital || !atmospheric || !terrain) return;
+  auto descending = *orbital;
+  descending.pose.position.altitude_metres =
+      bands->atmosphere_enter_altitude_metres - 1.0;
+  descending.clearance_metres = descending.pose.position.altitude_metres -
+                                environment.surface_elevation_metres;
+  check(advance_planetary_flight(airless, environment, descending, {},
+                                 kSimulationStep) &&
+            descending.regime == FlightRegime::atmospheric &&
+            descending.last_transition ==
+                FlightRegimeTransition{FlightRegime::orbital,
+                                       FlightRegime::atmospheric, 1},
+        "descending through the approach ceiling must transition once");
+
+  auto approach_gap = descending;
+  approach_gap.pose.position.altitude_metres =
+      bands->atmosphere_enter_altitude_metres + 1.0;
+  approach_gap.clearance_metres =
+      approach_gap.pose.position.altitude_metres -
+      environment.surface_elevation_metres;
+  check(advance_planetary_flight(airless, environment, approach_gap, {},
+                                 kSimulationStep) &&
+            approach_gap.regime == FlightRegime::atmospheric,
+        "the orbital hysteresis gap must retain atmospheric flight");
+
+  auto ascending = approach_gap;
+  ascending.pose.position.altitude_metres =
+      bands->orbit_enter_altitude_metres + 1.0;
+  ascending.clearance_metres = ascending.pose.position.altitude_metres -
+                               environment.surface_elevation_metres;
+  check(advance_planetary_flight(airless, environment, ascending, {},
+                                 kSimulationStep) &&
+            ascending.regime == FlightRegime::orbital &&
+            ascending.last_transition &&
+            ascending.last_transition->from == FlightRegime::atmospheric &&
+            ascending.last_transition->to == FlightRegime::orbital,
+        "ascending through the orbital boundary must report its transition");
+
+  auto terrain_gap = *terrain;
+  terrain_gap.pose.position.altitude_metres =
+      environment.surface_elevation_metres +
+      bands->terrain_exit_clearance_metres - 1.0;
+  terrain_gap.clearance_metres =
+      terrain_gap.pose.position.altitude_metres -
+      environment.surface_elevation_metres;
+  check(advance_planetary_flight(airless, environment, terrain_gap, {},
+                                 kSimulationStep) &&
+            terrain_gap.regime == FlightRegime::terrain_flight,
+        "the terrain hysteresis gap must retain terrain flight");
+  terrain_gap.pose.position.altitude_metres =
+      environment.surface_elevation_metres +
+      bands->terrain_exit_clearance_metres + 1.0;
+  terrain_gap.clearance_metres =
+      terrain_gap.pose.position.altitude_metres -
+      environment.surface_elevation_metres;
+  check(advance_planetary_flight(airless, environment, terrain_gap, {},
+                                 kSimulationStep) &&
+            terrain_gap.regime == FlightRegime::atmospheric,
+        "ascending through the terrain boundary must enter approach flight");
+
+  const auto quiet = format_flight_regime(*orbital);
+  const auto changed = format_flight_regime(descending);
+  check(quiet.valid && quiet.regime == "REG ORB  " &&
+            quiet.transition == std::string(kInstrumentLineWidth, ' ') &&
+            changed.valid && changed.regime == "REG ATM  " &&
+            changed.transition == "ORB >ATM ",
+        "cockpit regime telemetry must be fixed-width and textual");
+  auto invalid_readout_state = descending;
+  invalid_readout_state.regime = static_cast<FlightRegime>(255);
+  const auto invalid_readout = format_flight_regime(invalid_readout_state);
+  check(!invalid_readout.valid && invalid_readout.regime == "REG ---- " &&
+            invalid_readout.transition == "TRANS ERR",
+        "invalid regime telemetry must remain renderable");
+
+  auto contact = *terrain;
+  contact.pose.position.altitude_metres =
+      environment.surface_elevation_metres +
+      kMinimumFlightClearanceMetres + 0.1;
+  contact.clearance_metres = kMinimumFlightClearanceMetres + 0.1;
+  contact.velocity.up_metres_per_second = -45.0;
+  contact.controls.fall = true;
+  check(advance_planetary_flight(airless, environment, contact, {},
+                                 kSimulationStep) &&
+            contact.clearance_metres == kMinimumFlightClearanceMetres &&
+            contact.velocity.up_metres_per_second == 0.0,
+        "terrain contact must preserve minimum clearance and cancel descent");
+
+  auto polar = initial_planetary_flight_state(
+      airless, {std::numbers::pi_v<double> / 2.0, 0.0, 1'000.0},
+      environment, std::numbers::pi_v<double> - 0.01,
+      FlightMode::manual);
+  check(polar.has_value(), "an exact-pole flight state must initialize");
+  if (polar) {
+    constexpr std::array polar_commands{
+        FlightCommand{0, FlightCommandKind::press_forward},
+        FlightCommand{0, FlightCommandKind::press_strafe_right},
+        FlightCommand{0, FlightCommandKind::press_turn_right},
+    };
+    check(advance_planetary_flight(airless, environment, *polar,
+                                   polar_commands, kSimulationStep) &&
+              std::isfinite(polar->pose.position.latitude_radians) &&
+              std::isfinite(polar->pose.position.longitude_radians) &&
+              std::isfinite(polar->pose.heading_radians) &&
+              std::hypot(polar->velocity.east_metres_per_second,
+                         polar->velocity.north_metres_per_second) <=
+                  120.0,
+          "pole motion, heading wrap, and diagonal input must remain bounded");
+  }
+}
+
+struct PlanetaryReplayFixture {
+  PlanetDescriptor planet;
+  PlanetaryFlightEnvironment environment;
+  PlanetaryFlightState initial;
+  PlanetaryFlightState expected;
+  std::vector<FlightCommand> commands;
+  std::vector<FlightRegimeTransition> transitions;
+};
+
+[[nodiscard]] auto make_planetary_replay_fixture()
+    -> std::optional<PlanetaryReplayFixture> {
+  const auto planet = planet_with_atmosphere(
+      generate_planet_descriptor(Seed{0xA5515U}), AtmosphereClass::airless, 0);
+  const PlanetaryFlightEnvironment environment{};
+  auto initialized = initial_planetary_flight_state(
+      planet, {0.15, -0.2, 31'000.0}, environment, 0.3,
+      FlightMode::manual);
+  if (!initialized) return std::nullopt;
+
+  PlanetaryReplayFixture fixture{planet, environment, *initialized,
+                                 *initialized, {}, {}};
+  fixture.commands = {
+      {0, FlightCommandKind::press_forward},
+      {0, FlightCommandKind::press_turn_right},
+      {0, FlightCommandKind::press_fall},
+  };
+  std::size_t next_command{};
+  bool ascent_scheduled{};
+  for (int step = 0; step < 100'000; ++step) {
+    const auto first = next_command;
+    while (next_command < fixture.commands.size() &&
+           fixture.commands[next_command].tick == fixture.expected.tick) {
+      ++next_command;
+    }
+    const std::span commands{fixture.commands.data() + first,
+                             next_command - first};
+    const auto advanced = advance_planetary_flight(
+        fixture.planet, fixture.environment, fixture.expected, commands,
+        kSimulationStep);
+    if (!advanced) {
+      return std::nullopt;
+    }
+    if (fixture.expected.last_transition &&
+        fixture.expected.last_transition->tick == fixture.expected.tick) {
+      fixture.transitions.push_back(*fixture.expected.last_transition);
+      if (fixture.expected.regime == FlightRegime::terrain_flight &&
+          !ascent_scheduled) {
+        ascent_scheduled = true;
+        fixture.commands.push_back(
+            {fixture.expected.tick, FlightCommandKind::release_fall});
+        fixture.commands.push_back(
+            {fixture.expected.tick, FlightCommandKind::press_rise});
+      } else if (fixture.expected.regime == FlightRegime::orbital &&
+                 ascent_scheduled) {
+        return fixture;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] auto replay_planetary_at_render_rate(
+    const PlanetaryReplayFixture& fixture, int render_fps)
+    -> std::optional<PlanetaryFlightState> {
+  PlanetaryFlightState state = fixture.initial;
+  FixedStepClock clock;
+  std::size_t next_command{};
+  const SimulationSeconds frame_time{1.0 / render_fps};
+  while (state.tick < fixture.expected.tick) {
+    const auto advance = clock.advance(frame_time);
+    if (!advance) return std::nullopt;
+    for (int step = 0;
+         step < advance->steps && state.tick < fixture.expected.tick; ++step) {
+      const auto first = next_command;
+      while (next_command < fixture.commands.size() &&
+             fixture.commands[next_command].tick == state.tick) {
+        ++next_command;
+      }
+      const std::span commands{fixture.commands.data() + first,
+                               next_command - first};
+      if (!advance_planetary_flight(fixture.planet, fixture.environment,
+                                    state, commands, kSimulationStep)) {
+        return std::nullopt;
+      }
+    }
+  }
+  return state;
+}
+
+auto deterministic_planetary_flight_replay() -> void {
+  const auto fixture = make_planetary_replay_fixture();
+  check(fixture.has_value(),
+        "the planetary descent/ascent fixture must complete");
+  if (!fixture) return;
+
+  constexpr std::array expected_transitions{
+      std::pair{FlightRegime::orbital, FlightRegime::atmospheric},
+      std::pair{FlightRegime::atmospheric, FlightRegime::terrain_flight},
+      std::pair{FlightRegime::terrain_flight, FlightRegime::atmospheric},
+      std::pair{FlightRegime::atmospheric, FlightRegime::orbital},
+  };
+  check(fixture->transitions.size() == expected_transitions.size(),
+        "the scripted flight must cross all four regime boundaries");
+  if (fixture->transitions.size() == expected_transitions.size()) {
+    for (std::size_t index = 0; index < expected_transitions.size(); ++index) {
+      check(fixture->transitions[index].from ==
+                    expected_transitions[index].first &&
+                fixture->transitions[index].to ==
+                    expected_transitions[index].second,
+            "the scripted flight must retain transition order");
+      if (index > 0) {
+        check(fixture->transitions[index - 1].tick <
+                  fixture->transitions[index].tick,
+              "regime transitions must occur on distinct ordered ticks");
+      }
+    }
+  }
+
+  const auto at_30 = replay_planetary_at_render_rate(*fixture, 30);
+  const auto at_60 = replay_planetary_at_render_rate(*fixture, 60);
+  const auto actual_checksum =
+      planetary_flight_state_checksum(fixture->expected);
+  constexpr std::uint64_t expected_checksum{11546696375629488931ULL};
+  check(actual_checksum == expected_checksum,
+        "the planetary flight replay must retain its golden checksum");
+  check(at_30 && at_60 &&
+            planetary_flight_state_checksum(*at_30) == expected_checksum &&
+            planetary_flight_state_checksum(*at_60) == expected_checksum,
+        "render cadence must not alter planetary flight state");
+  check(fixture->expected.regime == FlightRegime::orbital &&
+            fixture->expected.pose.position.altitude_metres >= 30'000.0 &&
+            std::isfinite(fixture->expected.pose.position.latitude_radians) &&
+            std::isfinite(fixture->expected.pose.position.longitude_radians) &&
+            std::isfinite(fixture->expected.pose.heading_radians),
+        "the ascent must return to finite orbital state without losing heading");
+}
+
+auto planetary_flight_failure_matrix() -> void {
+  const auto planet = planet_with_atmosphere(
+      generate_planet_descriptor(Seed{42}), AtmosphereClass::temperate, 800);
+  const PlanetaryFlightEnvironment environment{};
+  const auto initialized = initial_planetary_flight_state(
+      planet, {0.0, 0.0, 120'000.0}, environment, 0.0,
+      FlightMode::manual);
+  check(initialized.has_value(), "the failure fixture must initialize");
+  if (!initialized) return;
+
+  const auto unchanged = planetary_flight_state_checksum(*initialized);
+  const auto check_rejected = [&](PlanetaryFlightState state,
+                                  PlanetaryFlightEnvironment step_environment,
+                                  std::span<const FlightCommand> commands,
+                                  SimulationSeconds step,
+                                  PlanetaryFlightError error,
+                                  const char* message) {
+    const auto before = planetary_flight_state_checksum(state);
+    const auto result = advance_planetary_flight(
+        planet, step_environment, state, commands, step);
+    check(!result && result.error() == error &&
+              planetary_flight_state_checksum(state) == before,
+          message);
+  };
+
+  auto invalid = *initialized;
+  invalid.pose.position.latitude_radians =
+      std::numeric_limits<double>::quiet_NaN();
+  check_rejected(invalid, environment, {}, kSimulationStep,
+                 PlanetaryFlightError::invalid_state,
+                 "non-finite planetary state must be rejected transactionally");
+  auto unbounded = *initialized;
+  unbounded.velocity.east_metres_per_second = 2'001.0;
+  check_rejected(unbounded, environment, {}, kSimulationStep,
+                 PlanetaryFlightError::invalid_state,
+                 "out-of-regime velocity must be rejected transactionally");
+  check_rejected(*initialized,
+                 {std::numeric_limits<double>::infinity()}, {},
+                 kSimulationStep, PlanetaryFlightError::invalid_environment,
+                 "non-finite terrain elevation must be rejected transactionally");
+  check_rejected(*initialized, environment, {}, SimulationSeconds{0.0},
+                 PlanetaryFlightError::invalid_step,
+                 "a zero planetary step must be rejected transactionally");
+
+  constexpr std::array invalid_command{FlightCommand{
+      0, static_cast<FlightCommandKind>(std::numeric_limits<std::uint8_t>::max())}};
+  check_rejected(*initialized, environment, invalid_command, kSimulationStep,
+                 PlanetaryFlightError::invalid_command,
+                 "an unknown planetary command must be rejected transactionally");
+  constexpr std::array future_command{
+      FlightCommand{1, FlightCommandKind::press_forward}};
+  check_rejected(*initialized, environment, future_command, kSimulationStep,
+                 PlanetaryFlightError::wrong_command_tick,
+                 "a mistimed planetary command must be rejected transactionally");
+
+  auto overflow = *initialized;
+  overflow.tick = std::numeric_limits<SimulationTick>::max();
+  check_rejected(overflow, environment, {}, kSimulationStep,
+                 PlanetaryFlightError::tick_overflow,
+                 "planetary tick overflow must be rejected transactionally");
+  check(planetary_flight_state_checksum(*initialized) == unchanged,
+        "failure tests must not mutate their shared initial state");
+
+  const auto bad_radius = planet_with_radius(planet, 0);
+  check(flight_regime_bands(bad_radius) ==
+            std::unexpected{PlanetaryFlightError::invalid_planet},
+        "invalid planets must not produce flight bands");
+  const auto bad_airless =
+      planet_with_atmosphere(planet, AtmosphereClass::airless, 1);
+  check(flight_regime_bands(bad_airless) ==
+            std::unexpected{PlanetaryFlightError::invalid_planet},
+        "airless planets with pressure must be rejected");
+  check(!initial_planetary_flight_state(
+            planet, {0.0, 0.0, 15.0}, environment, 0.0,
+            FlightMode::manual),
+        "initial state below minimum clearance must be rejected");
 }
 
 auto sweep_selection_contract() -> void {
@@ -3027,6 +3405,9 @@ auto main() -> int {
   menu_session_contract();
   title_render_contract();
   flight_instrument_contract();
+  planetary_flight_regime_contract();
+  deterministic_planetary_flight_replay();
+  planetary_flight_failure_matrix();
   sweep_selection_contract();
   sweep_report_contract();
   fixed_step_clock_contract();

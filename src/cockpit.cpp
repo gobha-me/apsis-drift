@@ -26,6 +26,22 @@ inline constexpr double kRadiansToDegrees{
   return mode == FlightMode::manual || mode == FlightMode::autopilot;
 }
 
+[[nodiscard]] auto valid_regime(FlightRegime regime) noexcept -> bool {
+  return regime == FlightRegime::orbital ||
+         regime == FlightRegime::atmospheric ||
+         regime == FlightRegime::terrain_flight;
+}
+
+[[nodiscard]] auto short_regime_name(FlightRegime regime) noexcept
+    -> std::string_view {
+  switch (regime) {
+    case FlightRegime::orbital: return "ORB";
+    case FlightRegime::atmospheric: return "ATM";
+    case FlightRegime::terrain_flight: return "TERR";
+  }
+  return "----";
+}
+
 [[nodiscard]] auto telemetry_is_finite(const FlightState& state) noexcept
     -> bool {
   return std::isfinite(state.pose.x) && std::isfinite(state.pose.y) &&
@@ -180,6 +196,35 @@ auto format_flight_instruments(const FlightState& state)
     readout.alert_state = CockpitAlert::low_clearance;
   } else {
     readout.alert = std::string(kInstrumentLineWidth, ' ');
+  }
+  return readout;
+}
+
+auto format_flight_regime(const PlanetaryFlightState& state)
+    -> FlightRegimeReadout {
+  FlightRegimeReadout readout;
+  const bool transition_valid =
+      !state.last_transition ||
+      (valid_regime(state.last_transition->from) &&
+       valid_regime(state.last_transition->to) &&
+       state.last_transition->from != state.last_transition->to &&
+       state.last_transition->to == state.regime &&
+       state.last_transition->tick <= state.tick);
+  readout.valid = valid_regime(state.regime) && transition_valid;
+  if (!readout.valid) {
+    readout.regime = "REG ---- ";
+    readout.transition = "TRANS ERR";
+    return readout;
+  }
+
+  readout.regime = std::format("REG {:<5}", short_regime_name(state.regime));
+  if (state.last_transition) {
+    readout.transition =
+        std::format("{:<4}>{:<4}",
+                    short_regime_name(state.last_transition->from),
+                    short_regime_name(state.last_transition->to));
+  } else {
+    readout.transition = std::string(kInstrumentLineWidth, ' ');
   }
   return readout;
 }

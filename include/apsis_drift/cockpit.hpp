@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 
+#include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "termforge/core/types.hpp"
@@ -26,6 +27,14 @@ struct FlightInstrumentReadout {
   CockpitAlert alert_state{CockpitAlert::none};
 
   auto operator==(const FlightInstrumentReadout&) const -> bool = default;
+};
+
+struct FlightRegimeReadout {
+  std::string regime;
+  std::string transition;
+  bool valid{};
+
+  auto operator==(const FlightRegimeReadout&) const -> bool = default;
 };
 
 enum class CockpitLayoutMode { too_small, compact, wide };
@@ -60,5 +69,11 @@ struct CockpitLayout {
 // state. Invalid numeric telemetry remains renderable as explicit sentinels.
 [[nodiscard]] auto format_flight_instruments(const FlightState& state)
     -> FlightInstrumentReadout;
+
+// Build cockpit-ready fixed-width regime and most-recent-transition lines.
+// Presentation decides when and where to show them; simulation remains the
+// sole owner of transition timing.
+[[nodiscard]] auto format_flight_regime(
+    const PlanetaryFlightState& state) -> FlightRegimeReadout;
 
 }  // namespace apsis_drift
