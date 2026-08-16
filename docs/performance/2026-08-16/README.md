@@ -52,8 +52,9 @@ ran 60 frames per viewport with the same host and compiler builds:
 Remote stays inside the 30 FPS renderer and complete-frame budgets. Local's
 average modestly misses the budget, while terrain-blend frames intentionally
 render both passes and produce a roughly 77–80 ms p95. The report preserves
-that miss for issue #17 rather than confusing it with terminal/proxy
-throughput or weakening the transition coverage. Both compilers touched at
+that miss rather than confusing it with terminal/proxy throughput or weakening
+the transition coverage; the integrated replay below isolates the follow-up in
+issue #62. Both compilers touched at
 most four unique tiles per frame and produced matching final framebuffer checksums:
 `4926365054958479375` at remote and `2261776808789085952` at local.
 
@@ -61,3 +62,34 @@ Raw reports:
 
 - [`planetary-headless-gcc.json`](planetary-headless-gcc.json)
 - [`planetary-headless-clang.json`](planetary-headless-clang.json)
+
+## Integrated Planetfall acceptance
+
+The canonical seed-42 replay advances authoritative flight against generated
+terrain for 119360 ticks, then renders each deterministic checkpoint 60 times.
+The same Release host used GCC 14.2.0 and Clang 20.1.8. Values below are total
+renderer p95 in milliseconds for the ordered orbital, atmospheric,
+terrain-blend, and local-terrain checkpoints:
+
+| Compiler | Profile | Orbital | Atmospheric | Terrain blend | Local terrain |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GCC | `remote` | 6.96 | 6.88 | 26.93 | 16.06 |
+| GCC | `local` | 20.36 | 32.33 | 85.48 | 25.61 |
+| Clang | `remote` | 4.69 | 6.38 | 26.00 | 14.87 |
+| Clang | `local` | 21.74 | 27.98 | 91.77 | 28.78 |
+
+Remote stays inside the 33.33 ms 30 FPS application-renderer budget at every
+stage. Local also fits except for the intentionally explicit mixed frame,
+which renders tile-backed orbital and local passes plus the full composite.
+That hotspot is tracked in
+[issue #62](https://github.com/gobha-me/apsis-drift/issues/62); it does not
+change the shared final flight checksum `15600629779145530762` or the ordered
+stage identities. These headless timings do not include a terminal, PTY,
+proxy, decoder, compositor, display, or network.
+
+Raw reports:
+
+- [`planetfall-acceptance-gcc-remote.json`](planetfall-acceptance-gcc-remote.json)
+- [`planetfall-acceptance-gcc-local.json`](planetfall-acceptance-gcc-local.json)
+- [`planetfall-acceptance-clang-remote.json`](planetfall-acceptance-clang-remote.json)
+- [`planetfall-acceptance-clang-local.json`](planetfall-acceptance-clang-local.json)

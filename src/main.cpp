@@ -37,6 +37,7 @@
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
+#include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -62,6 +63,24 @@ using apsis_drift::detail::KeyboardChoice;
 [[nodiscard]] auto elapsed_ms(Clock::time_point from,
                               Clock::time_point to) noexcept -> double {
   return std::chrono::duration<double, std::milli>(to - from).count();
+}
+
+[[nodiscard]] auto write_snapshot(
+    const std::filesystem::path& path, ViewportSize viewport,
+    std::span<const termforge::Pixel> pixels) -> bool {
+  const auto expected = static_cast<std::size_t>(viewport.width) *
+                        static_cast<std::size_t>(viewport.height);
+  if (!validate_viewport(viewport) || pixels.size() != expected) return false;
+  std::ofstream output{path, std::ios::binary};
+  if (!output) return false;
+  output << "P6\n" << viewport.width << ' ' << viewport.height << "\n255\n";
+  for (const auto pixel : pixels) {
+    const char rgb[] = {static_cast<char>(pixel.r),
+                        static_cast<char>(pixel.g),
+                        static_cast<char>(pixel.b)};
+    output.write(rgb, sizeof(rgb));
+  }
+  return output.good();
 }
 
 class MeasuringSink final : public ByteSink {
@@ -547,17 +566,8 @@ class LandscapeApp final : public App {
 
   [[nodiscard]] auto write_snapshot(const std::filesystem::path& path) const
       -> bool {
-    std::ofstream output{path, std::ios::binary};
-    if (!output) return false;
-    output << "P6\n" << m_render_configuration.viewport.width << ' '
-           << m_render_configuration.viewport.height << "\n255\n";
-    for (const auto pixel : m_surface.pixels()) {
-      const char rgb[] = {static_cast<char>(pixel.r),
-                          static_cast<char>(pixel.g),
-                          static_cast<char>(pixel.b)};
-      output.write(rgb, sizeof(rgb));
-    }
-    return output.good();
+    return ::write_snapshot(path, m_render_configuration.viewport,
+                            m_surface.pixels());
   }
 
  protected:
@@ -1157,6 +1167,8 @@ auto usage() -> void {
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
       "       apsis-drift --flight-deck-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
+      "       apsis-drift --planetfall-acceptance --report PATH\n"
+      "                   [--profile NAME] [--snapshot PATH]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -1177,6 +1189,7 @@ auto main(int argc, char** argv) -> int {
   std::optional<int> sweep_frames;
   int capture_seconds = 0;
   bool flight_deck_acceptance{};
+  bool planetfall_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -1237,6 +1250,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--flight-deck-acceptance") {
       flight_deck_acceptance = true;
+      continue;
+    }
+    if (argument == "--planetfall-acceptance") {
+      planetfall_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -1358,10 +1375,25 @@ auto main(int argc, char** argv) -> int {
         "mutually exclusive\n");
     return 2;
   }
+  if (planetfall_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance)) {
+    std::fprintf(
+        stderr,
+        "Planetfall acceptance, Flight Deck acceptance, sweep, benchmark, "
+        "and capture modes are mutually exclusive\n");
+    return 2;
+  }
   if (flight_deck_acceptance && seed_specified) {
     std::fprintf(stderr,
                  "Flight Deck acceptance uses the fixed seed %u\n",
                  kFlightDeckAcceptanceSeed);
+    return 2;
+  }
+  if (planetfall_acceptance && seed_specified) {
+    std::fprintf(stderr,
+                 "Planetfall acceptance uses the fixed seed %u\n",
+                 kPlanetfallAcceptanceSeed);
     return 2;
   }
   if (sweep_frames && (benchmark_frames || capture_seconds > 0)) {
@@ -1405,8 +1437,73 @@ auto main(int argc, char** argv) -> int {
                  "Flight Deck acceptance mode requires --report PATH\n");
     return 2;
   }
+  if (planetfall_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Planetfall acceptance mode requires --report PATH\n");
+    return 2;
+  }
+  if (planetfall_acceptance &&
+      (driver_specified || keyboard_specified || workload_specified)) {
+    std::fprintf(stderr,
+                 "Planetfall acceptance does not accept driver, keyboard, "
+                 "or workload options\n");
+    return 2;
+  }
 
   try {
+    if (planetfall_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_planetfall_acceptance(configuration);
+      if (!acceptance) {
+        std::fprintf(stderr, "Planetfall acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << planetfall_acceptance_json(acceptance->report);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !write_snapshot(snapshot_path, configuration.viewport,
+                          acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "planetfall: seed=%u profile=%.*s viewport=%dx%d final-tick=%llu "
+          "checksum=%llu\n",
+          kPlanetfallAcceptanceSeed,
+          static_cast<int>(profile_name(configuration).size()),
+          profile_name(configuration).data(), configuration.viewport.width,
+          configuration.viewport.height,
+          static_cast<unsigned long long>(acceptance->report.final_state.tick),
+          static_cast<unsigned long long>(planetary_flight_state_checksum(
+              acceptance->report.final_state)));
+      for (const auto& stage : acceptance->report.stages) {
+        std::printf("  %.*s tick=%llu avg/p95=%.3f/%.3f ms frame=%llu\n",
+                    static_cast<int>(planetary_presentation_mode_name(
+                                         stage.presentation_mode)
+                                         .size()),
+                    planetary_presentation_mode_name(stage.presentation_mode)
+                        .data(),
+                    static_cast<unsigned long long>(stage.tick),
+                    stage.total_avg_ms, stage.total_p95_ms,
+                    static_cast<unsigned long long>(
+                        stage.framebuffer_checksum));
+      }
+      return 0;
+    }
+
     if (sweep_frames) {
       std::vector<BenchmarkMeasurement> measurements;
       measurements.reserve(sweep_viewports.size());

@@ -211,6 +211,32 @@ presentation measurements. The final simulation state remains visible for
 roughly ten seconds so the cockpit, instruments, and presentation quality can
 be inspected or captured.
 
+## Planetfall acceptance run
+
+The v0.3 Planetfall scenario advances one generated craft continuously from
+orbit to a volcanic terrain flyover. It fixes planet seed `42`, starts over a
+canonical Carayx highland at latitude `0.625` and longitude `-pi/4`, applies
+four tick-addressed commands over `119360` fixed simulation ticks, and records
+orbital, atmospheric, terrain-blend, and local-terrain checkpoints.
+
+Run the deterministic remote and local profiles directly:
+
+```bash
+./build/apsis-drift --planetfall-acceptance \
+  --profile remote --report planetfall-remote.json
+./build/apsis-drift --planetfall-acceptance \
+  --profile local --report planetfall-local.json \
+  --snapshot planetfall-local.ppm
+```
+
+Both profiles and both compiler builds must report the final authoritative
+flight checksum `15600629779145530762` and the same ordered stage ticks `0`,
+`13350`, `113071`, and `119360`. Timing fields and framebuffer checksums remain
+presentation diagnostics; they do not enter deterministic simulation state.
+The exact command schedule, report contract, stage identities, and measured
+profile envelope are documented in the
+[Planetfall acceptance path](docs/PLANETFALL_ACCEPTANCE.md).
+
 ## Measure and capture
 
 Run the deterministic headless benchmark:

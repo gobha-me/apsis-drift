@@ -64,4 +64,6 @@ Reports retain the existing renderer, complete-frame, and encoded-byte
 measurements and add mode counts, orbital/local/composite averages, total
 presentation average/p95, and maximum tiles touched. Headless measurements do
 not include a terminal, PTY, proxy, decoder, compositor, display, or network.
-The fully integrated orbit-to-flyover acceptance path remains issue #17.
+The fully integrated orbit-to-flyover replay, deterministic stage identities,
+and measured profile envelope are recorded in the
+[Planetfall acceptance path](PLANETFALL_ACCEPTANCE.md).
