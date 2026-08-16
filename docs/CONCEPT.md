@@ -66,6 +66,9 @@ golden-vector contract, and save compatibility consequences are recorded in
 The versioned fields, units, named substreams, and diagnostic representation
 of one generated planet are recorded in the
 [Planet Descriptor Compatibility](PLANET_GENERATION.md) contract.
+The system, planet-fixed, local tangent, cube-sphere tile, and altitude-driven
+LOD conventions are recorded in the
+[Coordinate and Terrain LOD Contract](COORDINATE_SYSTEM.md).
 
 Generation should be divided by scale:
 
