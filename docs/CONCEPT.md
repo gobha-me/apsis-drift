@@ -72,6 +72,9 @@ LOD conventions are recorded in the
 The application-owned orbital sphere, camera, lighting, validation, and
 headless workload are recorded in the
 [Orbital Planet Rendering](ORBITAL_RENDERING.md) contract.
+The fixed sample layout, seam-safe integer generation, compatibility rules,
+and bounded cache for local planet data are recorded in the
+[Deterministic Terrain Tile Compatibility](TERRAIN_TILES.md) contract.
 
 Generation should be divided by scale:
 
