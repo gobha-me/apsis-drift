@@ -71,10 +71,9 @@ coverage.
 ## Recorded envelope
 
 On the 2026-08-16 reference host, both GCC and Clang keep every remote 320 by
-240 stage below the 33.33 ms 30 FPS budget. Pure local 640 by 480 orbital,
-atmospheric, and terrain stages also fit, but the mixed transition renders both
-planetary passes plus the full composite and reaches about 88 ms p95. The
-complete compiler/profile measurements are retained with the
-[dated performance evidence](performance/2026-08-16/README.md), and the local
-mixed-frame optimization is isolated in
-[issue #62](https://github.com/gobha-me/apsis-drift/issues/62).
+240 and local 640 by 480 stage below the 33.33 ms 30 FPS application-renderer
+budget. The v0.3.1 optimization reduces the local terrain-blend checkpoint
+from 85.48/91.77 ms p95 under GCC/Clang to 24.87/23.09 ms while retaining the
+authoritative final flight checksum `15600629779145530762`. The complete
+before/after compiler and profile measurements are retained with the
+[dated performance evidence](performance/2026-08-16/README.md).

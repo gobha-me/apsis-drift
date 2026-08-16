@@ -351,6 +351,36 @@ auto terrain_address_from_planet_fixed(const PlanetDescriptor& planet,
       {planet.id, face, lod, x.index, y.index}, x.within, y.within};
 }
 
+auto terrain_address_from_planet_direction(
+    const PlanetDescriptor& planet, PlanetFixedDirection direction,
+    std::uint8_t lod) noexcept
+    -> std::expected<TerrainTileAddress, CoordinateError> {
+  const auto radius = radius_metres(planet);
+  if (!radius) return std::unexpected{radius.error()};
+  if (!finite(direction)) {
+    return std::unexpected{CoordinateError::non_finite_input};
+  }
+  if (lod > kMaxTerrainLod) {
+    return std::unexpected{CoordinateError::invalid_lod};
+  }
+  if (direction.x == 0.0 && direction.y == 0.0 && direction.z == 0.0) {
+    return std::unexpected{CoordinateError::planet_center};
+  }
+
+  const auto face = canonical_face(direction);
+  const auto basis = face_basis(face);
+  const auto denominator = dot(direction, basis.normal);
+  const auto face_u =
+      std::clamp(dot(direction, basis.u) / denominator, -1.0, 1.0);
+  const auto face_v =
+      std::clamp(dot(direction, basis.v) / denominator, -1.0, 1.0);
+  const auto count = tiles_per_axis(lod);
+  const auto x = tile_axis_address((face_u + 1.0) / 2.0, count);
+  const auto y = tile_axis_address((face_v + 1.0) / 2.0, count);
+  return TerrainTileAddress{
+      {planet.id, face, lod, x.index, y.index}, x.within, y.within};
+}
+
 auto planet_fixed_from_terrain_address(const PlanetDescriptor& planet,
                                        const TerrainTileAddress& address,
                                        double altitude_metres) noexcept

@@ -56,3 +56,9 @@ before changing cache state, then inserts at the most-recently-used end and
 evicts at most one least recently used entry. External shared references may
 keep an evicted immutable tile alive, but the cache itself never retains more
 entries than its capacity.
+
+`TerrainSurfaceSampler` is a presentation-pass helper layered over that cache.
+It validates one planet/LOD pair, pins each tile touched by the pass, and keeps
+a last-tile fast path so adjacent pixel samples do not repeat LRU ownership
+work. Its position and direction entry points produce the same quantized
+bilinear samples as `sample_planet_surface()`.

@@ -103,6 +103,11 @@ This policy chooses deterministic data coverage, not renderer quality. A
 renderer may blend already-selected levels or choose a presentation cadence,
 but those choices cannot change tile identity or generated samples.
 
+Renderers that already hold a surface direction may resolve it directly with
+`terrain_address_from_planet_direction()`. Cube-face ratios are scale
+invariant, so this route preserves the canonical face, seam, and tile rules
+without measuring and normalizing the direction again.
+
 ## Invalid and boundary behavior
 
 Conversions return a typed error for non-finite values, invalid descriptor

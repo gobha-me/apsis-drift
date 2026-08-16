@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.3.0 LANGUAGES CXX)
+project(apsis-drift VERSION 0.3.1 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)

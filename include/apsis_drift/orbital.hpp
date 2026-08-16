@@ -24,6 +24,10 @@ struct OrbitalRenderSettings {
   int width{kDefaultViewportWidth};
   int height{kDefaultViewportHeight};
   double field_of_view_degrees{55.0};
+  // Adjacent output columns may share one centered ray sample. The planetary
+  // handoff uses two-column sampling at local-profile widths to bound the
+  // tile-backed pass without changing generated terrain identity.
+  int horizontal_sample_stride{1};
   // Unit direction is from the planet toward the light source.
   PlanetFixedDirection light_direction{-0.45, -0.55, 0.70};
 };
@@ -45,6 +49,7 @@ enum class OrbitalRenderError {
   camera_inside_planet,
   invalid_camera_basis,
   invalid_field_of_view,
+  invalid_sample_stride,
   invalid_light_direction,
   invalid_terrain_lod,
   terrain_failure,
