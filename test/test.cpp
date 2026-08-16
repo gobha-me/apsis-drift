@@ -20,6 +20,7 @@
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
@@ -419,6 +420,316 @@ auto planet_descriptor_population() -> void {
         "the bounded planet population must retain palette counts");
   check(water_bands == std::array<std::size_t, 3>{1'305, 1'413, 1'378},
         "the bounded planet population must retain water-band counts");
+}
+
+auto terrain_tile_failure_matrix() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const TerrainTileKey valid_key{planet.id, CubeFace::positive_x, 2, 1, 2};
+  const auto valid = generate_terrain_tile(planet, valid_key);
+  check(valid.has_value(), "a valid terrain tile key must generate");
+  if (valid) {
+    check(valid->key() == valid_key &&
+              valid->samples().size() == kTerrainTileSampleCount,
+          "a generated terrain tile must retain its identity and sample grid");
+    check(valid->sample_at(0, 0).has_value() &&
+              valid->sample_at(kTerrainTileSamplesPerAxis - 1,
+                               kTerrainTileSamplesPerAxis - 1)
+                  .has_value(),
+          "both inclusive terrain tile sample boundaries must be readable");
+    check(valid->sample_at(kTerrainTileSamplesPerAxis, 0) ==
+                  std::unexpected{
+                      TerrainTileError::invalid_sample_coordinate} &&
+              valid->sample_at(0, kTerrainTileSamplesPerAxis) ==
+                  std::unexpected{
+                      TerrainTileError::invalid_sample_coordinate},
+          "terrain tile sample coordinates beyond either axis must fail");
+  }
+
+  const TerrainTileKey wrong_planet{
+      PlanetId{planet.id.value + 1U}, CubeFace::positive_x, 2, 1, 2};
+  const TerrainTileKey invalid_face{
+      planet.id, static_cast<CubeFace>(255), 2, 1, 2};
+  const TerrainTileKey invalid_lod{
+      planet.id, CubeFace::positive_x,
+      static_cast<std::uint8_t>(kMaxTerrainLod + 1U), 0, 0};
+  const TerrainTileKey invalid_x{planet.id, CubeFace::positive_x, 2, 4, 0};
+  const TerrainTileKey invalid_y{planet.id, CubeFace::positive_x, 2, 0, 4};
+  const TerrainTileKey overflowing{
+      planet.id, CubeFace::positive_x, kMaxTerrainLod,
+      std::numeric_limits<std::uint32_t>::max(),
+      std::numeric_limits<std::uint32_t>::max()};
+  check(generate_terrain_tile(planet, wrong_planet) ==
+            std::unexpected{TerrainTileError::wrong_planet},
+        "a terrain key from another planet must be rejected");
+  check(generate_terrain_tile(planet, invalid_face) ==
+            std::unexpected{TerrainTileError::invalid_cube_face},
+        "an unknown terrain cube face must be rejected");
+  check(generate_terrain_tile(planet, invalid_lod) ==
+            std::unexpected{TerrainTileError::invalid_lod},
+        "a terrain LOD above the coordinate contract must be rejected");
+  check(generate_terrain_tile(planet, invalid_x) ==
+                std::unexpected{TerrainTileError::invalid_tile_index} &&
+            generate_terrain_tile(planet, invalid_y) ==
+                std::unexpected{TerrainTileError::invalid_tile_index} &&
+            generate_terrain_tile(planet, overflowing) ==
+                std::unexpected{TerrainTileError::invalid_tile_index},
+        "out-of-range and overflowing terrain tile indices must be rejected");
+
+  const auto malformed = planet_with_radius(planet, 0);
+  check(generate_terrain_tile(malformed, valid_key) ==
+            std::unexpected{TerrainTileError::invalid_planet},
+        "a malformed planet descriptor must not generate terrain");
+  check(TerrainTileCache::create(0) ==
+            std::unexpected{TerrainTileError::invalid_cache_capacity},
+        "a zero-capacity terrain cache must be rejected");
+}
+
+auto deterministic_terrain_tiles() -> void {
+  constexpr std::array streams{TerrainGenerationStream::shape,
+                               TerrainGenerationStream::detail};
+  std::array<std::uint64_t, streams.size()> stream_seeds{};
+  for (std::size_t index = 0; index < streams.size(); ++index) {
+    stream_seeds[index] =
+        derive_terrain_generation_seed(Seed{42}, streams[index]).value;
+    check(derive_terrain_generation_seed(Seed{42}, streams[index]) ==
+              derive_terrain_generation_seed(Seed{42}, streams[index]),
+          "named terrain generation streams must be stable");
+  }
+  check(stream_seeds[0] != stream_seeds[1],
+        "terrain shape and detail streams must remain independent");
+  check(stream_seeds ==
+            std::array<std::uint64_t, streams.size()>{
+                12495169707215482604ULL, 745371854408699215ULL},
+        "named terrain streams must retain their golden vectors");
+
+  struct GoldenTile {
+    std::uint64_t seed;
+    CubeFace face;
+    std::uint8_t lod;
+    std::uint32_t x;
+    std::uint32_t y;
+    std::uint64_t checksum;
+  };
+  constexpr std::array golden_tiles{
+      GoldenTile{0, CubeFace::positive_x, 0, 0, 0,
+                 9797442332981214159ULL},
+      GoldenTile{42, CubeFace::positive_z, 4, 7, 11,
+                 743763593216380847ULL},
+      GoldenTile{std::numeric_limits<std::uint64_t>::max(),
+                 CubeFace::negative_y, kMaxTerrainLod, 65'535, 0,
+                 6857593874197516006ULL},
+  };
+  std::array<std::uint64_t, golden_tiles.size()> observed{};
+  for (std::size_t index = 0; index < golden_tiles.size(); ++index) {
+    const auto fixture = golden_tiles[index];
+    const auto planet = generate_planet_descriptor(Seed{fixture.seed});
+    const TerrainTileKey key{planet.id, fixture.face, fixture.lod, fixture.x,
+                             fixture.y};
+    const auto first = generate_terrain_tile(planet, key);
+    const auto second = generate_terrain_tile(planet, key);
+    check(first && second && first->samples() == second->samples(),
+          "equal planet and tile identities must regenerate every sample");
+    if (!first || !second) continue;
+    observed[index] = first->checksum();
+    if (observed[index] != fixture.checksum) {
+      std::fprintf(stderr, "golden terrain tile %zu checksum: %llu\n", index,
+                   static_cast<unsigned long long>(observed[index]));
+    }
+    check(observed[index] == second->checksum(),
+          "regenerated terrain tile checksums must agree");
+    check(observed[index] == fixture.checksum,
+          "terrain tiles must retain their version 1 golden checksums");
+  }
+  check(observed[0] != observed[1] && observed[1] != observed[2] &&
+            observed[0] != observed[2],
+        "different planet and tile identities must produce different terrain");
+
+  const auto dry_source = generate_planet_descriptor(Seed{42});
+  const auto dry = planet_with_water(dry_source, WaterCoverageBasisPoints::min);
+  const auto wet = planet_with_water(dry_source, WaterCoverageBasisPoints::max);
+  const TerrainTileKey dry_key{dry.id, CubeFace::positive_x, 0, 0, 0};
+  const auto dry_tile = generate_terrain_tile(dry, dry_key);
+  const auto wet_tile = generate_terrain_tile(wet, dry_key);
+  check(dry_tile && std::ranges::all_of(dry_tile->samples(), [](auto sample) {
+          return sample.elevation_metres > 0;
+        }),
+        "a zero-water descriptor must not generate submerged samples");
+  check(wet_tile && std::ranges::all_of(wet_tile->samples(), [](auto sample) {
+          return sample.elevation_metres < 0;
+        }),
+        "a full-water descriptor must not generate exposed samples");
+}
+
+auto terrain_tile_seam_contract() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  constexpr std::size_t last{kTerrainTileSamplesPerAxis - 1};
+
+  const auto left = generate_terrain_tile(
+      planet, {planet.id, CubeFace::positive_x, 2, 1, 2});
+  const auto right = generate_terrain_tile(
+      planet, {planet.id, CubeFace::positive_x, 2, 2, 2});
+  const auto above = generate_terrain_tile(
+      planet, {planet.id, CubeFace::positive_x, 2, 1, 3});
+  check(left && right && above,
+        "same-face terrain seam fixtures must generate");
+  if (left && right && above) {
+    for (std::size_t sample = 0; sample < kTerrainTileSamplesPerAxis;
+         ++sample) {
+      check(left->sample_at(last, sample) == right->sample_at(0, sample),
+            "horizontal same-face terrain neighbors must share samples");
+      check(left->sample_at(sample, last) == above->sample_at(sample, 0),
+            "vertical same-face terrain neighbors must share samples");
+    }
+  }
+
+  std::vector<TerrainTile> faces;
+  faces.reserve(6);
+  for (std::uint8_t face = 0; face < 6; ++face) {
+    auto generated = generate_terrain_tile(
+        planet, {planet.id, static_cast<CubeFace>(face), 0, 0, 0});
+    check(generated.has_value(), "every cube face terrain fixture must generate");
+    if (generated) faces.push_back(std::move(*generated));
+  }
+  if (faces.size() == 6) {
+    const auto edge_coordinate = [last](std::size_t edge,
+                                        std::size_t sample) {
+      switch (edge) {
+        case 0: return std::pair{std::size_t{0}, sample};
+        case 1: return std::pair{last, sample};
+        case 2: return std::pair{sample, std::size_t{0}};
+        default: return std::pair{sample, last};
+      }
+    };
+    for (std::size_t face = 0; face < faces.size(); ++face) {
+      for (std::size_t edge = 0; edge < 4; ++edge) {
+        for (std::size_t sample = 0; sample <= last; ++sample) {
+          const auto [x, y] = edge_coordinate(edge, sample);
+          const TerrainTileAddress source_address{
+              {planet.id, static_cast<CubeFace>(face), 0, 0, 0},
+              static_cast<double>(x) / static_cast<double>(last),
+              static_cast<double>(y) / static_cast<double>(last)};
+          const auto source_position =
+              planet_fixed_from_terrain_address(planet, source_address);
+          bool matched{};
+          for (std::size_t other_face = 0;
+               other_face < faces.size() && !matched; ++other_face) {
+            if (other_face == face) continue;
+            for (std::size_t other_edge = 0; other_edge < 4 && !matched;
+                 ++other_edge) {
+              for (std::size_t other_sample = 0; other_sample <= last;
+                   ++other_sample) {
+                const auto [other_x, other_y] =
+                    edge_coordinate(other_edge, other_sample);
+                const TerrainTileAddress other_address{
+                    {planet.id, static_cast<CubeFace>(other_face), 0, 0, 0},
+                    static_cast<double>(other_x) / static_cast<double>(last),
+                    static_cast<double>(other_y) /
+                        static_cast<double>(last)};
+                const auto other_position =
+                    planet_fixed_from_terrain_address(planet, other_address);
+                if (source_position && other_position &&
+                    close_position(*source_position, *other_position)) {
+                  check(faces[face].sample_at(x, y) ==
+                            faces[other_face].sample_at(other_x, other_y),
+                        "cube-face terrain seams and corners must share samples");
+                  matched = true;
+                  break;
+                }
+              }
+            }
+          }
+          check(matched,
+                "every cube-face edge sample must have an adjacent-face peer");
+        }
+      }
+    }
+  }
+
+  const TerrainTileKey parent_key{
+      planet.id, CubeFace::negative_z, 2, 1, 2};
+  const auto parent = generate_terrain_tile(planet, parent_key);
+  std::array<std::expected<TerrainTile, TerrainTileError>, 4> children{
+      generate_terrain_tile(
+          planet, {planet.id, parent_key.face, 3, 2, 4}),
+      generate_terrain_tile(
+          planet, {planet.id, parent_key.face, 3, 3, 4}),
+      generate_terrain_tile(
+          planet, {planet.id, parent_key.face, 3, 2, 5}),
+      generate_terrain_tile(
+          planet, {planet.id, parent_key.face, 3, 3, 5}),
+  };
+  check(parent && std::ranges::all_of(children, [](const auto& child) {
+          return child.has_value();
+        }),
+        "cross-LOD terrain seam fixtures must generate");
+  if (parent && std::ranges::all_of(children, [](const auto& child) {
+        return child.has_value();
+      })) {
+    constexpr std::size_t half{kTerrainTileIntervalsPerAxis / 2};
+    for (std::size_t y = 0; y <= last; ++y) {
+      for (std::size_t x = 0; x <= last; ++x) {
+        const auto child_x = x < half ? std::size_t{0} : std::size_t{1};
+        const auto child_y = y < half ? std::size_t{0} : std::size_t{1};
+        const auto local_x = (x - child_x * half) * 2;
+        const auto local_y = (y - child_y * half) * 2;
+        const auto& child = children[child_y * 2 + child_x].value();
+        check(parent->sample_at(x, y) == child.sample_at(local_x, local_y),
+              "aligned parent and child LOD samples must be identical");
+      }
+    }
+  }
+}
+
+auto terrain_tile_cache_contract() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  auto cache = TerrainTileCache::create(2);
+  check(cache && cache->capacity() == 2 && cache->size() == 0,
+        "a terrain cache must retain its validated capacity");
+  if (!cache) return;
+
+  const TerrainTileKey first_key{
+      planet.id, CubeFace::positive_x, 2, 0, 0};
+  const TerrainTileKey second_key{
+      planet.id, CubeFace::positive_x, 2, 1, 0};
+  const TerrainTileKey third_key{
+      planet.id, CubeFace::positive_x, 2, 2, 0};
+  const auto first = cache->get(planet, first_key);
+  const auto second = cache->get(planet, second_key);
+  const auto first_hit = cache->get(planet, first_key);
+  check(first && second && first_hit && *first == *first_hit,
+        "a terrain cache hit must return the resident immutable tile");
+  check(cache->size() == 2 && cache->contains(first_key) &&
+            cache->contains(second_key),
+        "terrain cache hits must not change bounded entry count");
+
+  const auto third = cache->get(planet, third_key);
+  check(third && cache->size() == 2 && cache->contains(first_key) &&
+            cache->contains(third_key) && !cache->contains(second_key),
+        "terrain cache insertion must evict the least recently used tile");
+  const auto second_again = cache->get(planet, second_key);
+  check(second && second_again && *second != *second_again &&
+            (*second)->checksum() == (*second_again)->checksum(),
+        "an evicted terrain tile must regenerate with the same checksum");
+  check(cache->size() == cache->capacity(),
+        "terrain cache regeneration must remain inside capacity");
+
+  const auto before_size = cache->size();
+  const TerrainTileKey invalid{
+      planet.id, CubeFace::positive_x, 2,
+      std::numeric_limits<std::uint32_t>::max(), 0};
+  check(cache->get(planet, invalid) ==
+            std::unexpected{TerrainTileError::invalid_tile_index},
+        "a cache miss with an invalid key must return the generator error");
+  check(cache->size() == before_size,
+        "failed terrain generation must leave cache state unchanged");
+
+  const auto conflicting_planet = planet_with_water(
+      planet, static_cast<std::uint16_t>(planet.water_coverage.value + 1U));
+  check(cache->get(conflicting_planet, second_key) ==
+            std::unexpected{TerrainTileError::invalid_planet},
+        "one cached planet identity must reject a conflicting descriptor");
+  check(cache->size() == before_size,
+        "a conflicting cached descriptor must leave cache state unchanged");
 }
 
 auto coordinate_and_lod_contract() -> void {
@@ -2705,6 +3016,10 @@ auto main() -> int {
   seed_derivation_contract();
   planet_descriptor_contract();
   planet_descriptor_population();
+  terrain_tile_failure_matrix();
+  deterministic_terrain_tiles();
+  terrain_tile_seam_contract();
+  terrain_tile_cache_contract();
   coordinate_and_lod_contract();
   render_profile_contract();
   viewport_validation_contract();
