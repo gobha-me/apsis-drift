@@ -55,6 +55,21 @@ cmake -S . -B build \
 ./build/apsis-drift
 ```
 
+Choose an explicit save profile for an interactive run:
+
+```bash
+./build/apsis-drift --new-game-seed 42 --save profile.json
+./build/apsis-drift --load profile.json --save profile.json
+./build/apsis-drift --load profile.json --save profile-copy.json
+```
+
+New-game seeds use the full unsigned 64-bit range, including zero. A profile is
+loaded and validated before terminal startup and is written only after a clean
+exit. Load failures do not mutate live state, and failed writes before atomic
+replacement leave the previous valid profile intact. The v0.4 Signal Run
+acceptance integration tracked by #24 will connect objective progress and
+planetary craft state to these profile checkpoints.
+
 Named viewport profiles make the logical render resolution explicit:
 
 | Profile | Viewport |

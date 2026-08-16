@@ -94,6 +94,7 @@ add_library(apsis_drift_lib STATIC
   src/planetary_flight.cpp
   src/planetary_presentation.cpp
   src/render_profile.cpp
+  src/save_file.cpp
   src/save_schema.cpp
   src/seed.cpp
   src/signal_collection.cpp
@@ -213,6 +214,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --sweep-fps 30 --report sweep-invalid.json)
   add_test(NAME reject-workload-without-mode
     COMMAND apsis-drift --workload orbital)
+  add_test(NAME reject-profile-options-with-benchmark
+    COMMAND apsis-drift --benchmark 1 --new-game-seed 0)
+  add_test(NAME reject-load-and-new-game
+    COMMAND apsis-drift --load profile.json --new-game-seed 1)
+  add_test(NAME reject-profile-seed-alias
+    COMMAND apsis-drift --save profile.json --seed 1)
+  add_test(NAME reject-negative-new-game-seed
+    COMMAND apsis-drift --new-game-seed -1)
+  add_test(NAME reject-missing-load
+    COMMAND apsis-drift --load definitely-missing-save.json)
   add_test(NAME reject-keyboard-with-automatic-driver
     COMMAND apsis-drift --keyboard enhanced)
   add_test(NAME reject-acceptance-missing-report
@@ -260,6 +271,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-sweep-incompatible-profile
     reject-sweep-options-without-mode
     reject-workload-without-mode
+    reject-profile-options-with-benchmark
+    reject-load-and-new-game
+    reject-profile-seed-alias
+    reject-negative-new-game-seed
+    reject-missing-load
     reject-keyboard-with-automatic-driver
     reject-acceptance-missing-report
     reject-acceptance-seed-override
