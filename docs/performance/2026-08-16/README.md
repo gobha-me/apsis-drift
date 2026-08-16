@@ -29,3 +29,35 @@ Raw reports:
 
 - [`orbital-headless-gcc.json`](orbital-headless-gcc.json)
 - [`orbital-headless-clang.json`](orbital-headless-clang.json)
+
+## Planetary presentation handoff
+
+The tile-backed planetary workload cycles orbital, atmospheric,
+terrain-blend, and local-terrain frames at one canonical surface location. It
+ran 60 frames per viewport with the same host and compiler builds:
+
+```bash
+./build/apsis-drift --sweep 60 --sweep-viewports remote,local \
+  --sweep-fps 30,60 --seed 42 --workload planetary \
+  --report REPORT.json
+```
+
+| Compiler | Profile | Renderer avg/p95 | Complete frame avg/p95 | Orbital/local/composite pass avg | 30 FPS headroom |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GCC | `remote` | 11.54 / 24.25 ms | 11.91 / 24.61 ms | 5.59 / 5.06 / 0.88 ms | 8.72 ms |
+| GCC | `local` | 35.51 / 75.41 ms | 36.64 / 76.52 ms | 22.05 / 10.07 / 3.37 ms | -43.19 ms |
+| Clang | `remote` | 12.01 / 25.22 ms | 12.36 / 25.56 ms | 5.72 / 5.47 / 0.81 ms | 7.77 ms |
+| Clang | `local` | 36.92 / 79.43 ms | 37.96 / 80.49 ms | 22.73 / 10.94 / 3.24 ms | -47.16 ms |
+
+Remote stays inside the 30 FPS renderer and complete-frame budgets. Local's
+average modestly misses the budget, while terrain-blend frames intentionally
+render both passes and produce a roughly 77–80 ms p95. The report preserves
+that miss for issue #17 rather than confusing it with terminal/proxy
+throughput or weakening the transition coverage. Both compilers touched at
+most four unique tiles per frame and produced matching final framebuffer checksums:
+`4926365054958479375` at remote and `2261776808789085952` at local.
+
+Raw reports:
+
+- [`planetary-headless-gcc.json`](planetary-headless-gcc.json)
+- [`planetary-headless-clang.json`](planetary-headless-clang.json)

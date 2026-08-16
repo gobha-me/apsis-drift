@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <limits>
+#include <tuple>
 #include <type_traits>
 
 namespace apsis_drift {
@@ -424,6 +426,65 @@ auto TerrainTileCache::get(const PlanetDescriptor& planet, TerrainTileKey key)
 auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
   return std::ranges::any_of(
       m_entries, [key](const Entry& entry) { return entry.key == key; });
+}
+
+auto sample_planet_surface(const PlanetDescriptor& planet,
+                           PlanetFixedPositionMetres position,
+                           std::uint8_t lod, TerrainTileCache& cache)
+    -> std::expected<TerrainSurfaceSample, TerrainTileError> {
+  const auto address = terrain_address_from_planet_fixed(planet, position, lod);
+  if (!address) {
+    return std::unexpected{TerrainTileError::coordinate_failure};
+  }
+  const auto tile = cache.get(planet, address->tile);
+  if (!tile) return std::unexpected{tile.error()};
+
+  const auto interpolate_axis = [](double coordinate) {
+    const double grid = std::clamp(coordinate, 0.0, 1.0) *
+                        static_cast<double>(kTerrainTileIntervalsPerAxis);
+    const auto lower = static_cast<std::size_t>(std::floor(grid));
+    const auto upper = std::min(lower + 1, kTerrainTileIntervalsPerAxis);
+    const auto fraction = static_cast<std::int64_t>(std::llround(
+        (grid - static_cast<double>(lower)) *
+        static_cast<double>(kFixedOne)));
+    return std::tuple{lower, upper,
+                      std::clamp(fraction, std::int64_t{0},
+                                 kFixedOne)};
+  };
+  const auto [x0, x1, tx] = interpolate_axis(address->u);
+  const auto [y0, y1, ty] = interpolate_axis(address->v);
+  const auto s00 = (*tile)->sample_at(x0, y0);
+  const auto s10 = (*tile)->sample_at(x1, y0);
+  const auto s01 = (*tile)->sample_at(x0, y1);
+  const auto s11 = (*tile)->sample_at(x1, y1);
+  if (!s00 || !s10 || !s01 || !s11) {
+    return std::unexpected{TerrainTileError::invalid_sample_coordinate};
+  }
+
+  const auto lerp = [](std::int64_t from, std::int64_t to,
+                       std::int64_t fraction) {
+    return from + (to - from) * fraction / kFixedOne;
+  };
+  const auto bilerp = [&](std::int64_t a, std::int64_t b, std::int64_t c,
+                          std::int64_t d) {
+    return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
+  };
+  const auto elevation = bilerp(s00->get().elevation_metres,
+                                s10->get().elevation_metres,
+                                s01->get().elevation_metres,
+                                s11->get().elevation_metres);
+  const auto channel = [&](auto member) {
+    return static_cast<std::uint8_t>(std::clamp<std::int64_t>(
+        bilerp(s00->get().color.*member, s10->get().color.*member,
+               s01->get().color.*member, s11->get().color.*member),
+        0, 255));
+  };
+  return TerrainSurfaceSample{
+      .address = *address,
+      .elevation_metres = static_cast<double>(elevation),
+      .color = {channel(&Rgb8::red), channel(&Rgb8::green),
+                channel(&Rgb8::blue)},
+  };
 }
 
 }  // namespace apsis_drift

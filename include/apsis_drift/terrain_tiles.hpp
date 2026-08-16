@@ -40,6 +40,15 @@ struct TerrainSample {
       -> bool = default;
 };
 
+struct TerrainSurfaceSample {
+  TerrainTileAddress address;
+  double elevation_metres{};
+  Rgb8 color;
+
+  friend auto operator==(const TerrainSurfaceSample&,
+                         const TerrainSurfaceSample&) -> bool = default;
+};
+
 enum class TerrainTileError : std::uint8_t {
   invalid_planet,
   wrong_planet,
@@ -48,6 +57,7 @@ enum class TerrainTileError : std::uint8_t {
   invalid_tile_index,
   invalid_sample_coordinate,
   invalid_cache_capacity,
+  coordinate_failure,
 };
 
 class TerrainTile {
@@ -126,5 +136,13 @@ class TerrainTileCache {
   // Most recently used is at the front; least recently used is at the back.
   std::list<Entry> m_entries;
 };
+
+// Presentation-only sampling resolves one planet-fixed direction through the
+// versioned tile generator and performs quantized bilinear interpolation
+// inside the addressed tile. It does not change generator compatibility data.
+[[nodiscard]] auto sample_planet_surface(
+    const PlanetDescriptor& planet, PlanetFixedPositionMetres position,
+    std::uint8_t lod, TerrainTileCache& cache)
+    -> std::expected<TerrainSurfaceSample, TerrainTileError>;
 
 }  // namespace apsis_drift

@@ -49,11 +49,35 @@ auto append_summary_json(std::string& output,
       "        \"bytes_per_frame\": {:.6f},\n"
       "        \"mebibytes_per_second\": {:.6f},\n"
       "        \"total_bytes\": {},\n"
-      "        \"checksum\": \"{}\"\n",
+      "        \"checksum\": \"{}\"",
       summary.frames, summary.elapsed_seconds, summary.achieved_fps,
       summary.render_avg_ms, summary.render_p95_ms, summary.work_avg_ms,
       summary.work_p95_ms, summary.bytes_per_frame,
       summary.mebibytes_per_second, summary.total_bytes, summary.checksum);
+  if (summary.planetary_presentation) {
+    const auto& value = *summary.planetary_presentation;
+    output += std::format(
+        ",\n"
+        "        \"planetary_presentation\": {{\n"
+        "          \"mode_frames\": {{\"orbital\": {}, "
+        "\"atmospheric\": {}, \"terrain_blend\": {}, "
+        "\"local_terrain\": {}}},\n"
+        "          \"orbital_render_avg_ms\": {:.6f},\n"
+        "          \"local_render_avg_ms\": {:.6f},\n"
+        "          \"composite_avg_ms\": {:.6f},\n"
+        "          \"total_avg_ms\": {:.6f},\n"
+        "          \"total_p95_ms\": {:.6f},\n"
+        "          \"maximum_tiles_touched\": {}\n"
+        "        }}\n",
+        value.orbital_frames, value.atmospheric_frames,
+        value.terrain_blend_frames, value.local_terrain_frames,
+        value.orbital_render_avg_ms,
+        value.local_render_avg_ms, value.composite_avg_ms,
+        value.total_avg_ms, value.total_p95_ms,
+        value.maximum_tiles_touched);
+  } else {
+    output += '\n';
+  }
 }
 
 }  // namespace
@@ -62,6 +86,7 @@ auto workload_name(BenchmarkWorkload workload) noexcept -> std::string_view {
   switch (workload) {
     case BenchmarkWorkload::landscape: return "landscape";
     case BenchmarkWorkload::orbital: return "orbital";
+    case BenchmarkWorkload::planetary: return "planetary";
   }
   return "landscape";
 }
@@ -71,6 +96,8 @@ auto workload_identifier(BenchmarkWorkload workload) noexcept
   switch (workload) {
     case BenchmarkWorkload::landscape: return "voxel-landscape-rgba";
     case BenchmarkWorkload::orbital: return "orbital-planet-rgba";
+    case BenchmarkWorkload::planetary:
+      return "planetary-presentation-rgba";
   }
   return "voxel-landscape-rgba";
 }
@@ -79,6 +106,7 @@ auto parse_benchmark_workload(std::string_view text) noexcept
     -> std::optional<BenchmarkWorkload> {
   if (text == "landscape") return BenchmarkWorkload::landscape;
   if (text == "orbital") return BenchmarkWorkload::orbital;
+  if (text == "planetary") return BenchmarkWorkload::planetary;
   return std::nullopt;
 }
 

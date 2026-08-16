@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "workload": "planetary-presentation-rgba",
+  "seed": 42,
+  "frames_per_viewport": 60,
+  "measurements": [
+    {
+      "render_profile": "remote",
+      "viewport_width": 320,
+      "viewport_height": 240,
+      "summary": {
+        "frames": 60,
+        "elapsed_seconds": 0.714522,
+        "achieved_fps": 83.972279,
+        "renderer_avg_ms": 11.535109,
+        "renderer_p95_ms": 24.254539,
+        "frame_work_avg_ms": 11.905240,
+        "frame_work_p95_ms": 24.614856,
+        "bytes_per_frame": 411716.600000,
+        "mebibytes_per_second": 32.971173,
+        "total_bytes": 24702996,
+        "checksum": "4926365054958479375",
+        "planetary_presentation": {
+          "mode_frames": {"orbital": 15, "atmospheric": 15, "terrain_blend": 15, "local_terrain": 15},
+          "orbital_render_avg_ms": 5.587528,
+          "local_render_avg_ms": 5.055997,
+          "composite_avg_ms": 0.875559,
+          "total_avg_ms": 11.534603,
+          "total_p95_ms": 24.254209,
+          "maximum_tiles_touched": 4
+        }
+      },
+      "targets": [
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 9.078794, "frame_work_p95_headroom_ms": 8.718477, "required_mebibytes_per_second": 11.779306},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": -7.587872, "frame_work_p95_headroom_ms": -7.948189, "required_mebibytes_per_second": 23.558613}
+      ]
+    },
+    {
+      "render_profile": "local",
+      "viewport_width": 640,
+      "viewport_height": 480,
+      "summary": {
+        "frames": 60,
+        "elapsed_seconds": 2.198791,
+        "achieved_fps": 27.287718,
+        "renderer_avg_ms": 35.508807,
+        "renderer_p95_ms": 75.413632,
+        "frame_work_avg_ms": 36.640221,
+        "frame_work_p95_ms": 76.518906,
+        "bytes_per_frame": 1645583.166667,
+        "mebibytes_per_second": 42.823992,
+        "total_bytes": 98734990,
+        "checksum": "2261776808789085952",
+        "planetary_presentation": {
+          "mode_frames": {"orbital": 15, "atmospheric": 15, "terrain_blend": 15, "local_terrain": 15},
+          "orbital_render_avg_ms": 22.053453,
+          "local_render_avg_ms": 10.066496,
+          "composite_avg_ms": 3.371156,
+          "total_avg_ms": 35.507946,
+          "total_p95_ms": 75.412638,
+          "maximum_tiles_touched": 4
+        }
+      },
+      "targets": [
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": -42.080299, "frame_work_p95_headroom_ms": -43.185573, "required_mebibytes_per_second": 47.080512},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": -58.746965, "frame_work_p95_headroom_ms": -59.852239, "required_mebibytes_per_second": 94.161024}
+      ]
+    }
+  ]
+}
