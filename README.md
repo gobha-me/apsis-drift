@@ -359,6 +359,9 @@ schemas are finalized. Its generated objectives follow the versioned
 placement and metadata separate from later discovery and mission state. The
 [signal navigation contract](docs/SIGNAL_NAVIGATION.md) adds deterministic
 selection and cockpit guidance without crossing that mutable-state boundary.
+The [sparse generated-world journal](docs/WORLD_DELTAS.md) layers compact
+discovery and terminal object state onto regenerated catalogs without storing
+terrain or cache contents.
 
 New work should use the session-sized issue form. If implementation uncovers
 additional work, record it as a follow-up issue instead of silently expanding
