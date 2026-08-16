@@ -8,6 +8,7 @@
 #include <iterator>
 #include <limits>
 #include <numbers>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,6 +33,7 @@
 #include "apsis_drift/surface_signals.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
+#include "apsis_drift/world_delta_journal.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
 #include "signal_input.hpp"
@@ -566,6 +568,177 @@ auto save_schema_contract() -> void {
   check(!invalid_result &&
             invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
         "invalid world-delta object keys must be rejected");
+}
+
+auto world_delta_journal_contract() -> void {
+  const SurfaceSignalId first_id{0x0123456789abcdefULL};
+  const auto first_key = surface_signal_object_key(first_id);
+  check(first_key == "signal-0123456789abcdef" &&
+            parse_surface_signal_object_key(first_key) == first_id,
+        "surface-signal object keys must use the canonical stable ID");
+  constexpr std::array invalid_keys{
+      std::string_view{},
+      std::string_view{"signal-123"},
+      std::string_view{"Signal-0123456789abcdef"},
+      std::string_view{"signal-0123456789abcdeF"},
+      std::string_view{"signal-0123456789abcdeg"},
+  };
+  for (const auto key : invalid_keys) {
+    check(parse_surface_signal_object_key(key) ==
+              std::unexpected{WorldDeltaJournalError::invalid_object_key},
+          "malformed generated-object keys must be rejected");
+  }
+
+  const auto second_key =
+      surface_signal_object_key(SurfaceSignalId{0xfedcba9876543210ULL});
+  const std::array duplicate_entries{
+      SaveWorldDelta{first_key, SaveWorldDeltaKind::discovered, 10},
+      SaveWorldDelta{second_key, SaveWorldDeltaKind::discovered, 4},
+      SaveWorldDelta{first_key, SaveWorldDeltaKind::completed, 20},
+      SaveWorldDelta{first_key, SaveWorldDeltaKind::collected, 20},
+      SaveWorldDelta{first_key, SaveWorldDeltaKind::discovered, 15},
+  };
+  auto journal = WorldDeltaJournal::create(duplicate_entries);
+  check(journal.has_value(),
+        "a valid sparse world journal must be constructible");
+  if (!journal) return;
+  check(journal->entries().size() == 2 &&
+            journal->entries()[0] == duplicate_entries[1] &&
+            journal->entries()[1] == duplicate_entries[3],
+        "journal compaction must choose the greatest tick, break equal ticks "
+        "by source order, and sort canonically");
+  const auto* first_state = journal->state(first_key);
+  check(first_state != nullptr &&
+            first_state->kind == SaveWorldDeltaKind::collected &&
+            first_state->tick == 20,
+        "journal lookup must expose the compact current object state");
+
+  const auto before_failure = std::vector<SaveWorldDelta>{
+      journal->entries().begin(), journal->entries().end()};
+  check(journal->record({"bad key", SaveWorldDeltaKind::removed, 30}) ==
+                std::unexpected{WorldDeltaJournalError::invalid_object_key} &&
+            std::ranges::equal(journal->entries(), before_failure),
+        "invalid journal records must not partially mutate current state");
+  check(
+      journal->record({first_key, static_cast<SaveWorldDeltaKind>(255), 30}) ==
+              std::unexpected{WorldDeltaJournalError::invalid_delta_kind} &&
+          std::ranges::equal(journal->entries(), before_failure),
+      "future delta kinds must be rejected without mutation");
+  check(journal->record({first_key, SaveWorldDeltaKind::removed, 19})
+                .has_value() &&
+            journal->state(first_key)->kind == SaveWorldDeltaKind::collected,
+        "stale journal records must be deterministic idempotent no-ops");
+
+  std::vector<SaveWorldDelta> oversized(kMaximumSaveWorldDeltas + 1U,
+                                        duplicate_entries.front());
+  check(WorldDeltaJournal::create(oversized) ==
+            std::unexpected{WorldDeltaJournalError::journal_capacity_exceeded},
+        "raw journal input must respect the version 1 entry bound before "
+        "compaction");
+}
+
+auto regenerated_world_delta_contract() -> void {
+  const auto recipe = make_save_recipe(Seed{42});
+  const auto planet =
+      generate_planet_descriptor(Seed{recipe.active_planet.value});
+  auto first_cache = TerrainTileCache::create(1);
+  check(first_cache.has_value(),
+        "world-delta regeneration requires a bounded terrain cache");
+  if (!first_cache) return;
+  const auto original = generate_surface_signals(planet, *first_cache);
+  check(original.has_value(),
+        "world-delta regeneration requires a generated signal catalog");
+  if (!original) return;
+
+  const auto target = original->signals.front().id;
+  SaveDocument saved{
+      .recipe = recipe,
+      .state =
+          SaveMutableState{
+              .location = OriginLocation::docked_at_origin,
+              .first_objective = FirstObjectiveStatus::completed,
+              .first_objective_target = target,
+              .flight = std::nullopt,
+              .discoveries = {{target, 100}},
+              .world_deltas = {{surface_signal_object_key(target),
+                                SaveWorldDeltaKind::collected, 120}},
+          },
+  };
+  const auto encoded = encode_save_document_json(saved);
+  check(encoded.has_value() &&
+            encoded->find("\"terrain_tiles\": 1") != std::string::npos &&
+            encoded->find("\"samples\"") == std::string::npos &&
+            encoded->find("\"anchor\"") == std::string::npos,
+        "world-delta saves must retain generator versions without serializing "
+        "terrain data");
+  if (!encoded) return;
+  const auto decoded = decode_save_document_json(*encoded);
+  check(decoded.has_value(),
+        "a collected generated object must survive save codec round-trip");
+  if (!decoded) return;
+
+  const TerrainTileKey unrelated{planet.id, CubeFace::negative_z, 3, 1, 1};
+  check(first_cache->get(planet, unrelated).has_value() &&
+            first_cache->size() == 1,
+        "the one-entry cache must evict prior generated terrain");
+  auto regenerated_cache = TerrainTileCache::create(1);
+  check(regenerated_cache.has_value(),
+        "regeneration requires a fresh bounded cache");
+  if (!regenerated_cache) return;
+  const auto regenerated = generate_surface_signals(planet, *regenerated_cache);
+  const auto restored_journal =
+      WorldDeltaJournal::create(decoded->state.world_deltas);
+  check(regenerated.has_value() && restored_journal.has_value(),
+        "catalog and sparse state must regenerate independently");
+  if (!regenerated || !restored_journal) return;
+  const auto projection =
+      apply_world_delta_journal(*regenerated, *restored_journal);
+  check(projection.has_value(),
+        "known sparse deltas must apply after deterministic regeneration");
+  if (!projection) return;
+  check(projection->signals.front().generated.id == target &&
+            projection->signals.front().delta &&
+            projection->signals.front().delta->kind ==
+                SaveWorldDeltaKind::collected &&
+            !projection->signals.front().active,
+        "a collected object must remain collected after eviction, "
+        "regeneration, and load");
+  check(std::ranges::all_of(projection->signals | std::views::drop(1),
+                            [](const SurfaceSignalWorldEntry& entry) {
+                              return entry.active && !entry.delta;
+                            }),
+        "unchanged generated objects must remain active without journal bulk");
+
+  const std::array state_deltas{
+      SaveWorldDelta{surface_signal_object_key(regenerated->signals[0].id),
+                     SaveWorldDeltaKind::collected, 200},
+      SaveWorldDelta{surface_signal_object_key(regenerated->signals[1].id),
+                     SaveWorldDeltaKind::discovered, 201},
+      SaveWorldDelta{surface_signal_object_key(regenerated->signals[2].id),
+                     SaveWorldDeltaKind::completed, 202},
+      SaveWorldDelta{surface_signal_object_key(regenerated->signals[3].id),
+                     SaveWorldDeltaKind::removed, 203},
+  };
+  const auto state_journal = WorldDeltaJournal::create(state_deltas);
+  check(state_journal.has_value(),
+        "every version 1 object state must be journalable");
+  if (state_journal) {
+    const auto state_projection =
+        apply_world_delta_journal(*regenerated, *state_journal);
+    check(state_projection && !state_projection->signals[0].active &&
+              state_projection->signals[1].active &&
+              !state_projection->signals[2].active &&
+              !state_projection->signals[3].active,
+          "discovered objects must remain active while collected, completed, and removed objects are terminal");
+  }
+
+  const std::array unknown_delta{SaveWorldDelta{
+      "signal-0000000000000000", SaveWorldDeltaKind::removed, 121}};
+  const auto unknown_journal = WorldDeltaJournal::create(unknown_delta);
+  check(unknown_journal &&
+            apply_world_delta_journal(*regenerated, *unknown_journal) ==
+                std::unexpected{WorldDeltaJournalError::unknown_object_key},
+        "unknown generated-object keys must fail application transactionally");
 }
 
 auto surface_signal_contract() -> void {
@@ -4676,6 +4849,8 @@ auto main() -> int {
   origin_station_contract();
   origin_onboarding_contract();
   save_schema_contract();
+  world_delta_journal_contract();
+  regenerated_world_delta_contract();
   surface_signal_contract();
   surface_signal_population();
   signal_scanner_contract();

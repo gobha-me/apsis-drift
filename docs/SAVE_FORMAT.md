@@ -56,8 +56,11 @@ literals are not accepted for these fields.
 World-delta object keys are non-empty lowercase ASCII identifiers of at most
 128 bytes using letters, digits, `-`, `_`, `.`, `:`, or `/`. Version 1 defines
 the journal envelope and the `discovered`, `collected`, `completed`, and
-`removed` state names. #20 remains responsible for stable generated-object key
-construction, duplicate resolution, application, and compaction.
+`removed` state names. The active version 1 application recognizes canonical
+surface-signal keys and applies their compact current state after deterministic
+regeneration. Stable key construction, duplicate resolution, terminal-state
+behavior, and unknown-object policy are specified in the
+[Sparse Generated-World Journal](WORLD_DELTAS.md) contract.
 
 ## Validation and compatibility
 

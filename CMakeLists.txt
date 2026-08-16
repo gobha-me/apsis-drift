@@ -103,6 +103,7 @@ add_library(apsis_drift_lib STATIC
   src/surface_signals.cpp
   src/terrain_tiles.cpp
   src/title.cpp
+  src/world_delta_journal.cpp
 )
 add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
