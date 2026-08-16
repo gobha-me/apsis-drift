@@ -5,6 +5,7 @@
 
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/render_profile.hpp"
+#include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "termforge/core/types.hpp"
 
@@ -35,6 +36,17 @@ struct FlightRegimeReadout {
   bool valid{};
 
   auto operator==(const FlightRegimeReadout&) const -> bool = default;
+};
+
+struct SignalScannerReadout {
+  std::string target;
+  std::string bearing;
+  std::string distance;
+  std::string strength;
+  std::string cue;
+  SignalScannerStatus status{SignalScannerStatus::no_signal};
+
+  auto operator==(const SignalScannerReadout&) const -> bool = default;
 };
 
 enum class CockpitLayoutMode { too_small, compact, wide };
@@ -77,5 +89,10 @@ struct CockpitLayout {
 // sole owner of transition timing.
 [[nodiscard]] auto format_flight_regime(
     const PlanetaryFlightState& state) -> FlightRegimeReadout;
+
+// Scanner lines are fixed width and communicate direction and status in text,
+// so the Kitty and ANSI cockpit paths do not depend on color alone.
+[[nodiscard]] auto format_signal_scanner(
+    const SignalNavigationSolution& navigation) -> SignalScannerReadout;
 
 }  // namespace apsis_drift

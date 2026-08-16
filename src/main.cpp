@@ -40,10 +40,13 @@
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/render_profile.hpp"
+#include "apsis_drift/signal_navigation_acceptance.hpp"
+#include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
+#include "signal_input.hpp"
 
 namespace {
 
@@ -282,7 +285,8 @@ class LandscapeApp final : public App {
                             BenchmarkWorkload::landscape,
                         double capture_seconds = 0.0,
                         bool interactive_controls = false,
-                        bool flight_deck_acceptance = false)
+                        bool flight_deck_acceptance = false,
+                        bool signal_navigation_acceptance = false)
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_planet(generate_planet_descriptor(Seed{seed})),
@@ -290,7 +294,8 @@ class LandscapeApp final : public App {
         m_orbital_renderer(
             orbital_settings_for(render_configuration.viewport)),
         m_planetary_renderer(
-            workload == BenchmarkWorkload::planetary
+            (workload == BenchmarkWorkload::planetary ||
+             signal_navigation_acceptance)
                 ? std::optional<PlanetaryPresentationRenderer>{
                       std::in_place,
                       planetary_settings_for(render_configuration.viewport)}
@@ -308,7 +313,21 @@ class LandscapeApp final : public App {
         m_seed(seed),
         m_workload(workload),
         m_interactive_controls(interactive_controls),
-        m_flight_deck_acceptance(flight_deck_acceptance) {
+        m_flight_deck_acceptance(flight_deck_acceptance),
+        m_signal_navigation_acceptance(signal_navigation_acceptance) {
+    if (m_signal_navigation_acceptance) {
+      auto cache = TerrainTileCache::create();
+      if (!cache) {
+        throw std::runtime_error{"cannot create signal navigation terrain cache"};
+      }
+      m_signal_cache.emplace(std::move(*cache));
+      auto scenario =
+          initial_signal_navigation_acceptance(m_planet, *m_signal_cache);
+      if (!scenario) {
+        throw std::runtime_error{"cannot initialize signal navigation acceptance"};
+      }
+      m_signal_scenario.emplace(std::move(*scenario));
+    }
     set_frame_ms(33);
     // TermForge supplies elapsed host time. Apsis Drift owns the fixed-step
     // accumulator and its bounded catch-up policy.
@@ -434,6 +453,17 @@ class LandscapeApp final : public App {
         quit();
       }
     }
+    if (m_signal_navigation_acceptance && m_signal_scenario &&
+        m_signal_scenario->navigation.status == SignalScannerStatus::reached) {
+      // Preserve the reached cockpit for a short visual capture dwell without
+      // advancing authoritative simulation state.
+      constexpr int signal_acceptance_final_frames{90};
+      ++m_acceptance_final_frames;
+      if (m_acceptance_final_frames >= signal_acceptance_final_frames) {
+        m_acceptance_final_frame_rendered = true;
+        quit();
+      }
+    }
 
     if (m_run_started == Clock::time_point{}) m_run_started = frame_started;
     if (m_capture_seconds > 0.0 &&
@@ -550,11 +580,23 @@ class LandscapeApp final : public App {
     return m_display_tier;
   }
   [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
+    if (m_signal_scenario) {
+      return planetary_flight_state_checksum(m_signal_scenario->flight);
+    }
     return flight_state_checksum(m_flight);
   }
   [[nodiscard]] auto acceptance_complete() const noexcept -> bool {
+    if (m_signal_navigation_acceptance) {
+      return m_acceptance_final_frame_rendered && m_signal_scenario &&
+             m_signal_scenario->navigation.status ==
+                 SignalScannerStatus::reached;
+    }
     return m_acceptance_final_frame_rendered &&
            m_flight.tick == kFlightDeckAcceptanceTicks;
+  }
+  [[nodiscard]] auto signal_acceptance_state() const noexcept
+      -> const SignalNavigationAcceptanceState* {
+    return m_signal_scenario ? &*m_signal_scenario : nullptr;
   }
   [[nodiscard]] auto render_configuration() const noexcept
       -> const RenderConfiguration& {
@@ -757,9 +799,11 @@ class LandscapeApp final : public App {
     constexpr Rgb chrome_bg{11, 28, 40};
     constexpr Rgb status_bg{20, 43, 66};
     const auto instruments =
-        m_planetary_flight
-            ? format_flight_instruments(*m_planetary_flight)
-            : format_flight_instruments(m_flight);
+        m_signal_scenario
+            ? format_flight_instruments(m_signal_scenario->flight)
+            : m_planetary_flight
+                  ? format_flight_instruments(*m_planetary_flight)
+                  : format_flight_instruments(m_flight);
 
     screen.fill_rect(layout.header.x, layout.header.y, layout.header.w,
                      layout.header.h, text, status_bg);
@@ -796,8 +840,10 @@ class LandscapeApp final : public App {
     screen.write_text(layout.left_instruments.x + 2,
                       layout.left_instruments.y + 6, instruments.alert,
                       alert_color, chrome_bg);
-    if (m_planetary_flight) {
-      const auto regime = format_flight_regime(*m_planetary_flight);
+    if (m_signal_scenario || m_planetary_flight) {
+      const auto regime = format_flight_regime(
+          m_signal_scenario ? m_signal_scenario->flight
+                            : *m_planetary_flight);
       screen.write_text(layout.left_instruments.x + 2,
                         layout.left_instruments.y + 8, regime.regime,
                         regime.valid ? text : danger, chrome_bg);
@@ -820,6 +866,33 @@ class LandscapeApp final : public App {
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 10, instruments.speed,
                       text, chrome_bg);
+    if (m_signal_scenario) {
+      const auto scanner =
+          format_signal_scanner(m_signal_scenario->navigation);
+      screen.write_text(layout.left_instruments.x + 2,
+                        layout.left_instruments.y + 12, "SIGNAL", accent,
+                        chrome_bg);
+      screen.write_text(layout.left_instruments.x + 2,
+                        layout.left_instruments.y + 14, scanner.distance,
+                        text, chrome_bg);
+      screen.write_text(layout.left_instruments.x + 2,
+                        layout.left_instruments.y + 16, scanner.strength,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 12, scanner.target,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 14, scanner.bearing,
+                        text, chrome_bg);
+      screen.write_text(
+          layout.right_instruments.x + 2,
+          layout.right_instruments.y + 16, scanner.cue,
+          scanner.status == SignalScannerStatus::reached
+              ? accent
+              : (scanner.status == SignalScannerStatus::tracking ? text
+                                                                  : warning),
+          chrome_bg);
+    }
 
     std::string message;
     if (!m_error.empty()) {
@@ -829,6 +902,10 @@ class LandscapeApp final : public App {
                 "ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
       message = " WARNING: LOW CLEARANCE | R to climb | ESC menu ";
+    } else if (m_signal_scenario) {
+      const auto scanner = format_signal_scanner(m_signal_scenario->navigation);
+      message = std::format(" {} | Tab/Shift-Tab target | scripted approach ",
+                            scanner.cue);
     } else {
       message = layout.mode == CockpitLayoutMode::wide
                     ? " L-hold fly | R-hold strafe/alt | M-click auto | "
@@ -850,8 +927,10 @@ class LandscapeApp final : public App {
     screen.write_text(
         layout.status.x, layout.status.y,
         std::format(" {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
-                    (m_planetary_flight ? m_planetary_flight->mode
-                                        : m_flight.mode) ==
+                    (m_signal_scenario
+                         ? m_signal_scenario->flight.mode
+                         : (m_planetary_flight ? m_planetary_flight->mode
+                                               : m_flight.mode)) ==
                             FlightMode::autopilot
                         ? "AUTOPILOT"
                         : "MANUAL",
@@ -865,6 +944,28 @@ class LandscapeApp final : public App {
   }
 
   auto handle_key(const KeyEvent& key) -> void {
+    if (m_signal_scenario) {
+      const auto command =
+          apsis_drift::detail::signal_selection_command(key);
+      if (!command) {
+        m_input_mapper.enqueue(key, m_flight.tick);
+        return;
+      }
+      if (!advance_signal_selection(m_signal_scenario->catalog,
+                                    m_signal_scenario->scanner, *command)) {
+        m_error = "signal selection rejected";
+        return;
+      }
+      const auto navigation = resolve_signal_navigation(
+          m_planet, m_signal_scenario->catalog, m_signal_scenario->flight,
+          m_signal_scenario->scanner);
+      if (!navigation) {
+        m_error = "signal navigation rejected";
+        return;
+      }
+      m_signal_scenario->navigation = *navigation;
+      return;
+    }
     m_input_mapper.enqueue(key, m_flight.tick);
   }
 
@@ -874,6 +975,17 @@ class LandscapeApp final : public App {
       throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
     for (int step = 0; step < advance->steps; ++step) {
+      if (m_signal_scenario) {
+        if (!m_signal_cache) {
+          throw std::runtime_error{"signal navigation cache is unavailable"};
+        }
+        const auto reached = advance_signal_navigation_acceptance(
+            m_planet, *m_signal_cache, *m_signal_scenario);
+        if (!reached) {
+          throw std::runtime_error{"signal navigation acceptance failed"};
+        }
+        continue;
+      }
       if (m_flight_deck_acceptance &&
           m_flight.tick == kFlightDeckAcceptanceTicks) {
         break;
@@ -901,6 +1013,19 @@ class LandscapeApp final : public App {
   }
 
   auto render_viewport() -> void {
+    if (m_signal_scenario) {
+      if (!m_planetary_renderer) {
+        throw std::runtime_error{"signal presentation is unavailable"};
+      }
+      const auto rendered = m_planetary_renderer->render(
+          m_planet, m_signal_scenario->flight, {.pitch_radians = -0.18},
+          m_surface.pixels());
+      if (!rendered) {
+        throw std::runtime_error{"signal presentation rejected frame"};
+      }
+      m_planetary_samples.push_back(*rendered);
+      return;
+    }
     if (m_workload == BenchmarkWorkload::planetary) {
       const auto bands = flight_regime_bands(m_planet);
       if (!bands) throw std::runtime_error{"invalid planetary flight bands"};
@@ -1020,6 +1145,8 @@ class LandscapeApp final : public App {
   FlightState m_flight;
   PlanetarySurfaceFixture m_planetary_surface;
   std::optional<PlanetaryFlightState> m_planetary_flight;
+  std::optional<TerrainTileCache> m_signal_cache;
+  std::optional<SignalNavigationAcceptanceState> m_signal_scenario;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
@@ -1044,6 +1171,7 @@ class LandscapeApp final : public App {
   bool m_title_rendered{};
   bool m_title_available{};
   bool m_flight_deck_acceptance{};
+  bool m_signal_navigation_acceptance{};
   bool m_acceptance_final_frame_rendered{};
   int m_acceptance_final_frames{};
   std::size_t m_acceptance_next_command{};
@@ -1169,6 +1297,8 @@ auto usage() -> void {
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
       "       apsis-drift --planetfall-acceptance --report PATH\n"
       "                   [--profile NAME] [--snapshot PATH]\n\n"
+      "       apsis-drift --signal-navigation-acceptance --report PATH\n"
+      "                   [--driver kitty|ansi] [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -1190,6 +1320,7 @@ auto main(int argc, char** argv) -> int {
   int capture_seconds = 0;
   bool flight_deck_acceptance{};
   bool planetfall_acceptance{};
+  bool signal_navigation_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -1254,6 +1385,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--planetfall-acceptance") {
       planetfall_acceptance = true;
+      continue;
+    }
+    if (argument == "--signal-navigation-acceptance") {
+      signal_navigation_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -1368,7 +1503,8 @@ auto main(int argc, char** argv) -> int {
     return 2;
   }
   if (flight_deck_acceptance &&
-      (benchmark_frames || sweep_frames || capture_seconds > 0)) {
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       signal_navigation_acceptance)) {
     std::fprintf(
         stderr,
         "Flight Deck acceptance, sweep, benchmark, and capture modes are "
@@ -1377,7 +1513,7 @@ auto main(int argc, char** argv) -> int {
   }
   if (planetfall_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
-       flight_deck_acceptance)) {
+       flight_deck_acceptance || signal_navigation_acceptance)) {
     std::fprintf(
         stderr,
         "Planetfall acceptance, Flight Deck acceptance, sweep, benchmark, "
@@ -1394,6 +1530,20 @@ auto main(int argc, char** argv) -> int {
     std::fprintf(stderr,
                  "Planetfall acceptance uses the fixed seed %u\n",
                  kPlanetfallAcceptanceSeed);
+    return 2;
+  }
+  if (signal_navigation_acceptance && seed_specified) {
+    std::fprintf(stderr,
+                 "Signal navigation acceptance uses the fixed seed %u\n",
+                 kSignalNavigationAcceptanceSeed);
+    return 2;
+  }
+  if (signal_navigation_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0)) {
+    std::fprintf(
+        stderr,
+        "Signal navigation acceptance, sweep, benchmark, and capture modes "
+        "are mutually exclusive\n");
     return 2;
   }
   if (sweep_frames && (benchmark_frames || capture_seconds > 0)) {
@@ -1442,11 +1592,22 @@ auto main(int argc, char** argv) -> int {
                  "Planetfall acceptance mode requires --report PATH\n");
     return 2;
   }
+  if (signal_navigation_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Signal navigation acceptance mode requires --report PATH\n");
+    return 2;
+  }
   if (planetfall_acceptance &&
       (driver_specified || keyboard_specified || workload_specified)) {
     std::fprintf(stderr,
                  "Planetfall acceptance does not accept driver, keyboard, "
                  "or workload options\n");
+    return 2;
+  }
+  if (signal_navigation_acceptance && workload_specified) {
+    std::fprintf(stderr,
+                 "Signal navigation acceptance does not accept workload "
+                 "options\n");
     return 2;
   }
 
@@ -1546,15 +1707,19 @@ auto main(int argc, char** argv) -> int {
 
     const RenderConfiguration render_configuration =
         resolve_render_configuration(selected_profile, viewport_override);
-    const std::uint32_t run_seed = flight_deck_acceptance
-                                       ? kFlightDeckAcceptanceSeed
-                                       : seed;
+    const std::uint32_t run_seed =
+        flight_deck_acceptance
+            ? kFlightDeckAcceptanceSeed
+            : (signal_navigation_acceptance
+                   ? kSignalNavigationAcceptanceSeed
+                   : seed);
     const bool interactive_controls =
         !benchmark_frames && capture_seconds == 0 &&
-        !flight_deck_acceptance;
+        !flight_deck_acceptance && !signal_navigation_acceptance;
     LandscapeApp app{render_configuration, run_seed, selected_workload,
                      static_cast<double>(capture_seconds),
-                     interactive_controls, flight_deck_acceptance};
+                     interactive_controls, flight_deck_acceptance,
+                     signal_navigation_acceptance};
     if (auto forced =
             app.force_capabilities(driver_choice, keyboard_choice);
         !forced) {
@@ -1570,10 +1735,12 @@ auto main(int argc, char** argv) -> int {
       if (app.requirements_failed()) result = 1;
     }
 
-    if (flight_deck_acceptance && result == 0 &&
+    if ((flight_deck_acceptance || signal_navigation_acceptance) &&
+        result == 0 &&
         !app.acceptance_complete()) {
-      std::fprintf(stderr,
-                   "Flight Deck acceptance ended before the final frame\n");
+      std::fprintf(stderr, "%s acceptance ended before the final frame\n",
+                   signal_navigation_acceptance ? "Signal navigation"
+                                                : "Flight Deck");
       result = 1;
     }
 
@@ -1595,7 +1762,24 @@ auto main(int argc, char** argv) -> int {
                      report_path.string().c_str());
         return 1;
       }
-      if (flight_deck_acceptance) {
+      if (signal_navigation_acceptance) {
+        const auto* state = app.signal_acceptance_state();
+        if (state == nullptr || !state->scanner.selected) {
+          std::fprintf(stderr,
+                       "signal navigation acceptance report is unavailable\n");
+          return 1;
+        }
+        report << signal_navigation_acceptance_json({
+            .target_id = *state->scanner.selected,
+            .reached_tick = state->flight.tick,
+            .command_count = state->command_count,
+            .final_distance_metres = state->navigation.distance_metres,
+            .flight_checksum = planetary_flight_state_checksum(state->flight),
+            .render_configuration = app.render_configuration(),
+            .presentation = app.display_tier(),
+            .framebuffer_checksum = summary.checksum,
+        });
+      } else if (flight_deck_acceptance) {
         report << flight_deck_acceptance_json({
             .flight_checksum = app.flight_checksum(),
             .framebuffer_checksum = summary.checksum,

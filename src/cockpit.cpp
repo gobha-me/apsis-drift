@@ -276,4 +276,82 @@ auto format_flight_regime(const PlanetaryFlightState& state)
   return readout;
 }
 
+auto format_signal_scanner(const SignalNavigationSolution& navigation)
+    -> SignalScannerReadout {
+  SignalScannerReadout readout{
+      .target = "TGT --/--",
+      .bearing = "BRG ---  ",
+      .distance = "DST ---- ",
+      .strength = "SIG ---  ",
+      .cue = "NO SIGNAL",
+      .status = navigation.status,
+  };
+  if (navigation.status == SignalScannerStatus::no_signal) return readout;
+
+  const bool valid = navigation.selected.has_value() &&
+                     navigation.ordinal < kSurfaceSignalCount &&
+                     std::isfinite(navigation.absolute_bearing_radians) &&
+                     std::isfinite(navigation.relative_bearing_radians) &&
+                     std::isfinite(navigation.distance_metres) &&
+                     navigation.distance_metres >= 0.0 &&
+                     navigation.strength_basis_points <= 10'000;
+  if (!valid) {
+    readout.status = SignalScannerStatus::no_signal;
+    readout.cue = "SCAN ERR ";
+    return readout;
+  }
+
+  readout.target = std::format("TGT {:02}/{:02}", navigation.ordinal + 1U,
+                               kSurfaceSignalCount);
+  double degrees = std::fmod(
+      navigation.absolute_bearing_radians * kRadiansToDegrees, 360.0);
+  if (degrees < 0.0) degrees += 360.0;
+  readout.bearing = std::format(
+      "BRG {:03}  ", static_cast<int>(std::round(degrees)) % 360);
+
+  char distance_unit{'m'};
+  auto rounded_distance =
+      rounded_in_range(navigation.distance_metres, 0, 9999);
+  if (!rounded_distance) {
+    distance_unit = 'k';
+    rounded_distance =
+        rounded_in_range(navigation.distance_metres / 1'000.0, 0, 9999);
+  }
+  readout.distance =
+      rounded_distance ? std::format("DST {:>4}{}", *rounded_distance,
+                                     distance_unit)
+                       : "DST #### ";
+  const auto strength_percent = static_cast<unsigned>(
+      (navigation.strength_basis_points + 50U) / 100U);
+  readout.strength = std::format("SIG {:03}% ", strength_percent);
+
+  switch (navigation.status) {
+    case SignalScannerStatus::no_signal:
+      readout.cue = "NO SIGNAL";
+      break;
+    case SignalScannerStatus::out_of_range:
+      readout.cue = "OUT RANGE";
+      break;
+    case SignalScannerStatus::occluded:
+      readout.cue = "OCCLUDED ";
+      break;
+    case SignalScannerStatus::reached:
+      readout.cue = "REACHED! ";
+      break;
+    case SignalScannerStatus::tracking: {
+      const double relative_degrees =
+          navigation.relative_bearing_radians * kRadiansToDegrees;
+      if (std::abs(relative_degrees) <= 5.0) {
+        readout.cue = "AHEAD >>>";
+      } else if (relative_degrees > 0.0) {
+        readout.cue = "TURN RGHT";
+      } else {
+        readout.cue = "TURN LEFT";
+      }
+      break;
+    }
+  }
+  return readout;
+}
+
 }  // namespace apsis_drift

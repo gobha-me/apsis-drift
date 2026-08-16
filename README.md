@@ -97,6 +97,7 @@ Interactive controls:
 - Q/E: strafe
 - R/F: change flight clearance
 - Space: toggle autopilot
+- Signal navigation mode: Tab/Shift-Tab selects the next/previous target
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
@@ -240,6 +241,22 @@ The exact command schedule, report contract, stage identities, and measured
 profile envelope are documented in the
 [Planetfall acceptance path](docs/PLANETFALL_ACCEPTANCE.md).
 
+Run the deterministic cockpit signal approach through both supported terminal
+presentations:
+
+```bash
+./build/apsis-drift --signal-navigation-acceptance \
+  --driver ansi --profile remote --report signal-navigation-ansi.json
+./build/apsis-drift --signal-navigation-acceptance \
+  --driver kitty --profile local --report signal-navigation-kitty.json
+```
+
+Both routes select the same generated signal, reach it at tick `1072`, and
+produce flight checksum `9743322914782455886`. The scanner's fixed-width target,
+bearing, distance, strength, and textual direction/status cues are shared by
+Kitty and ANSI. The exact visibility rules and report fields are documented in
+the [signal navigation contract](docs/SIGNAL_NAVIGATION.md).
+
 ## Measure and capture
 
 Run the deterministic headless benchmark:
@@ -339,7 +356,9 @@ The v0.4 work begins from the deterministic
 the zero-discovery start and first-objective handoff before save and Signal Run
 schemas are finalized. Its generated objectives follow the versioned
 [surface-signal contract](docs/SURFACE_SIGNALS.md), which keeps immutable
-placement and metadata separate from later discovery and mission state.
+placement and metadata separate from later discovery and mission state. The
+[signal navigation contract](docs/SIGNAL_NAVIGATION.md) adds deterministic
+selection and cockpit guidance without crossing that mutable-state boundary.
 
 New work should use the session-sized issue form. If implementation uncovers
 additional work, record it as a follow-up issue instead of silently expanding
