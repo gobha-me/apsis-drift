@@ -5,12 +5,14 @@
 #include <cmath>
 #include <initializer_list>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
+#include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
@@ -38,6 +40,34 @@ auto check(bool condition, const char* message) -> void {
 [[nodiscard]] auto close_enough(float left, float right,
                                 float tolerance = 1.0e-5F) -> bool {
   return std::abs(left - right) <= tolerance;
+}
+
+[[nodiscard]] auto close_enough(double left, double right,
+                                double tolerance = 1.0e-12) -> bool {
+  return std::abs(left - right) <= tolerance;
+}
+
+[[nodiscard]] auto close_position(PlanetFixedPositionMetres left,
+                                  PlanetFixedPositionMetres right,
+                                  double tolerance = 1.0e-6) -> bool {
+  return close_enough(left.x, right.x, tolerance) &&
+         close_enough(left.y, right.y, tolerance) &&
+         close_enough(left.z, right.z, tolerance);
+}
+
+[[nodiscard]] auto planet_with_radius(const PlanetDescriptor& source,
+                                      std::uint32_t radius_km)
+    -> PlanetDescriptor {
+  return {source.seed,
+          source.id,
+          source.display_name,
+          PlanetRadiusKm{radius_km},
+          source.surface_gravity,
+          source.atmosphere_class,
+          source.atmosphere_pressure,
+          source.terrain_character,
+          source.water_coverage,
+          source.palette};
 }
 
 [[nodiscard]] auto count_pixels(const std::vector<Pixel>& pixels,
@@ -358,6 +388,358 @@ auto planet_descriptor_population() -> void {
         "the bounded planet population must retain palette counts");
   check(water_bands == std::array<std::size_t, 3>{1'305, 1'413, 1'378},
         "the bounded planet population must retain water-band counts");
+}
+
+auto coordinate_and_lod_contract() -> void {
+  constexpr double pi{std::numbers::pi_v<double>};
+  constexpr double half_pi{pi / 2.0};
+  const auto generated = generate_planet_descriptor(Seed{42});
+  const auto planet = planet_with_radius(generated, 5'499);
+  constexpr double radius{5'499'000.0};
+
+  const auto prime =
+      planet_fixed_from_geodetic(planet, {0.0, 0.0, 0.0});
+  const auto east =
+      planet_fixed_from_geodetic(planet, {0.0, half_pi, 1'000.0});
+  const auto north =
+      planet_fixed_from_geodetic(planet, {half_pi, 1.234, 0.0});
+  const auto south =
+      planet_fixed_from_geodetic(planet, {-half_pi, -2.5, 0.0});
+  const auto antimeridian =
+      planet_fixed_from_geodetic(planet, {0.0, pi, 0.0});
+  check(prime && close_position(*prime, {radius, 0.0, 0.0}),
+        "the prime meridian must map to planet-fixed positive x");
+  check(east && close_position(*east, {0.0, radius + 1'000.0, 0.0}),
+        "east longitude must map to planet-fixed positive y");
+  check(north && close_position(*north, {0.0, 0.0, radius}),
+        "the north pole must map exactly to planet-fixed positive z");
+  check(south && close_position(*south, {0.0, 0.0, -radius}),
+        "the south pole must map exactly to planet-fixed negative z");
+  check(antimeridian &&
+            close_position(*antimeridian, {-radius, 0.0, 0.0}),
+        "positive pi must alias the canonical antimeridian");
+
+  if (north && south && antimeridian) {
+    const auto north_geodetic =
+        geodetic_from_planet_fixed(planet, *north);
+    const auto south_geodetic =
+        geodetic_from_planet_fixed(planet, *south);
+    const auto anti_geodetic =
+        geodetic_from_planet_fixed(planet, *antimeridian);
+    check(north_geodetic && north_geodetic->longitude_radians == 0.0 &&
+              close_enough(north_geodetic->latitude_radians, half_pi),
+          "the north pole must have canonical zero longitude");
+    check(south_geodetic && south_geodetic->longitude_radians == 0.0 &&
+              close_enough(south_geodetic->latitude_radians, -half_pi),
+          "the south pole must have canonical zero longitude");
+    check(anti_geodetic &&
+              close_enough(anti_geodetic->longitude_radians, -pi),
+          "the inverse antimeridian must use negative pi");
+  }
+
+  for (const auto radius_km :
+       std::array<std::uint32_t, 3>{PlanetRadiusKm::min, 5'499,
+                                    PlanetRadiusKm::max}) {
+    const auto sized_planet = planet_with_radius(generated, radius_km);
+    for (const auto geodetic :
+         std::array{GeodeticPosition{0.0, 0.0, 0.0},
+                    GeodeticPosition{0.61, -2.4, 12'345.0},
+                    GeodeticPosition{-0.93, 2.8, -1'000.0},
+                    GeodeticPosition{1.2, 7.0, 250'000.0}}) {
+      const auto fixed =
+          planet_fixed_from_geodetic(sized_planet, geodetic);
+      check(fixed.has_value(),
+            "valid geodetic samples must map to planet-fixed space");
+      if (!fixed) continue;
+      const auto round_trip =
+          geodetic_from_planet_fixed(sized_planet, *fixed);
+      check(round_trip.has_value(),
+            "valid planet-fixed samples must map back to geodetic space");
+      if (!round_trip) continue;
+      const auto canonical_longitude =
+          std::remainder(geodetic.longitude_radians, 2.0 * pi);
+      check(close_enough(round_trip->latitude_radians,
+                         geodetic.latitude_radians) &&
+                close_enough(round_trip->longitude_radians,
+                             canonical_longitude) &&
+                close_enough(round_trip->altitude_metres,
+                             geodetic.altitude_metres, 1.0e-6),
+            "geodetic round trips must stay inside documented tolerances");
+      const auto fixed_again =
+          planet_fixed_from_geodetic(sized_planet, *round_trip);
+      check(fixed_again && close_position(*fixed, *fixed_again),
+            "planet-fixed round trips must stay inside metre tolerance");
+    }
+  }
+
+  const auto equatorial_frame =
+      make_local_tangent_frame(planet, {0.0, 0.0, 100.0});
+  const auto polar_frame =
+      make_local_tangent_frame(planet, {half_pi, 2.0, 0.0});
+  for (const auto* frame :
+       std::array<const std::expected<LocalTangentFrame, CoordinateError>*, 2>{
+           &equatorial_frame, &polar_frame}) {
+    check(frame->has_value(),
+          "equatorial and polar local tangent frames must be valid");
+    if (!*frame) continue;
+    for (const auto local :
+         std::array{LocalPositionMetres{},
+                    LocalPositionMetres{125.5, -48.25, 2.0},
+                    LocalPositionMetres{-20'000.0, 30'000.0, 4'000.0}}) {
+      const auto fixed = planet_fixed_from_local(**frame, local);
+      check(fixed.has_value(), "valid ENU positions must map to planet space");
+      if (!fixed) continue;
+      const auto round_trip = local_from_planet_fixed(**frame, *fixed);
+      check(round_trip && close_enough(round_trip->east, local.east, 1.0e-6) &&
+                close_enough(round_trip->north, local.north, 1.0e-6) &&
+                close_enough(round_trip->up, local.up, 1.0e-6),
+            "local ENU round trips must stay inside metre tolerance");
+    }
+  }
+  if (polar_frame) {
+    check(polar_frame->east == PlanetFixedDirection{0.0, 1.0, 0.0} &&
+              polar_frame->north ==
+                  PlanetFixedDirection{-1.0, 0.0, 0.0},
+          "the north-pole tangent frame must use canonical zero longitude");
+  }
+
+  constexpr std::array face_centers{
+      std::pair{CubeFace::positive_x,
+                PlanetFixedPositionMetres{1.0, 0.0, 0.0}},
+      std::pair{CubeFace::negative_x,
+                PlanetFixedPositionMetres{-1.0, 0.0, 0.0}},
+      std::pair{CubeFace::positive_y,
+                PlanetFixedPositionMetres{0.0, 1.0, 0.0}},
+      std::pair{CubeFace::negative_y,
+                PlanetFixedPositionMetres{0.0, -1.0, 0.0}},
+      std::pair{CubeFace::positive_z,
+                PlanetFixedPositionMetres{0.0, 0.0, 1.0}},
+      std::pair{CubeFace::negative_z,
+                PlanetFixedPositionMetres{0.0, 0.0, -1.0}},
+  };
+  for (const auto& [face, center] : face_centers) {
+    const auto address = terrain_address_from_planet_fixed(planet, center, 0);
+    check(address && address->tile ==
+                         TerrainTileKey{planet.id, face, 0, 0, 0} &&
+              address->u == 0.5 && address->v == 0.5,
+          "every cube face center must retain its canonical address");
+    if (!address) continue;
+    const auto inverse =
+        planet_fixed_from_terrain_address(planet, *address);
+    check(inverse && close_enough(inverse->x / radius, center.x) &&
+              close_enough(inverse->y / radius, center.y) &&
+              close_enough(inverse->z / radius, center.z),
+          "cube face center inverse mappings must preserve direction");
+  }
+
+  const auto seam = terrain_address_from_planet_fixed(
+      planet, {1.0, 1.0, 0.0}, 0);
+  const auto corner = terrain_address_from_planet_fixed(
+      planet, {1.0, 1.0, 1.0}, 0);
+  check(seam && seam->tile.face == CubeFace::positive_x && seam->u == 1.0 &&
+            seam->v == 0.5,
+        "an x/y seam tie must choose x and preserve the outer edge");
+  check(corner && corner->tile.face == CubeFace::positive_x &&
+            corner->u == 1.0 && corner->v == 1.0,
+        "a cube corner tie must choose x and preserve both outer edges");
+
+  constexpr std::array seam_directions{
+      PlanetFixedPositionMetres{1.0, 1.0, 0.0},
+      PlanetFixedPositionMetres{1.0, -1.0, 0.0},
+      PlanetFixedPositionMetres{-1.0, 1.0, 0.0},
+      PlanetFixedPositionMetres{-1.0, -1.0, 0.0},
+      PlanetFixedPositionMetres{1.0, 0.0, 1.0},
+      PlanetFixedPositionMetres{1.0, 0.0, -1.0},
+      PlanetFixedPositionMetres{-1.0, 0.0, 1.0},
+      PlanetFixedPositionMetres{-1.0, 0.0, -1.0},
+      PlanetFixedPositionMetres{0.0, 1.0, 1.0},
+      PlanetFixedPositionMetres{0.0, 1.0, -1.0},
+      PlanetFixedPositionMetres{0.0, -1.0, 1.0},
+      PlanetFixedPositionMetres{0.0, -1.0, -1.0},
+  };
+  for (const auto direction : seam_directions) {
+    const auto address =
+        terrain_address_from_planet_fixed(planet, direction, 0);
+    check(address.has_value(),
+          "every physical cube seam must have an address");
+    if (!address) continue;
+    const auto inverse =
+        planet_fixed_from_terrain_address(planet, *address);
+    const auto source_length =
+        std::hypot(direction.x, direction.y, direction.z);
+    check(inverse && close_enough(inverse->x / radius,
+                                  direction.x / source_length) &&
+              close_enough(inverse->y / radius,
+                           direction.y / source_length) &&
+              close_enough(inverse->z / radius,
+                           direction.z / source_length),
+          "every physical cube seam must preserve direction");
+  }
+  for (const auto x : {-1.0, 1.0}) {
+    for (const auto y : {-1.0, 1.0}) {
+      for (const auto z : {-1.0, 1.0}) {
+        const auto address =
+            terrain_address_from_planet_fixed(planet, {x, y, z}, 0);
+        check(address &&
+                  address->tile.face ==
+                      (x < 0.0 ? CubeFace::negative_x
+                               : CubeFace::positive_x),
+              "every cube corner must follow the x-axis tie rule");
+      }
+    }
+  }
+
+  const auto internal_boundary = terrain_address_from_planet_fixed(
+      planet, {1.0, -0.5, 0.0}, 2);
+  check(internal_boundary && internal_boundary->tile ==
+                                 TerrainTileKey{planet.id,
+                                                CubeFace::positive_x, 2, 1, 2} &&
+            internal_boundary->u == 0.0 && internal_boundary->v == 0.0,
+        "exact internal boundaries must belong to the higher tile index");
+  const auto outer_boundary = terrain_address_from_planet_fixed(
+      planet, {1.0, 1.0, 0.0}, 2);
+  check(outer_boundary && outer_boundary->tile.x == 3 &&
+            outer_boundary->u == 1.0,
+        "outer face boundaries must remain on the final tile at one");
+
+  if (seam) {
+    const TerrainTileAddress adjacent{
+        {planet.id, CubeFace::positive_y, 2, 0, 2}, 0.0, 0.0};
+    const auto canonical_fixed =
+        planet_fixed_from_terrain_address(planet, *seam);
+    const auto adjacent_fixed =
+        planet_fixed_from_terrain_address(planet, adjacent);
+    check(canonical_fixed && adjacent_fixed &&
+              close_position(*canonical_fixed, *adjacent_fixed),
+          "adjacent cube-face edge addresses must inverse-map identically");
+  }
+
+  for (const auto sample :
+       std::array{PlanetFixedPositionMetres{1.0, 0.2, -0.4},
+                  PlanetFixedPositionMetres{-0.3, -1.0, 0.7},
+                  PlanetFixedPositionMetres{0.25, 0.6, 1.0},
+                  PlanetFixedPositionMetres{1.0, 1.0, 1.0}}) {
+    const auto address =
+        terrain_address_from_planet_fixed(planet, sample, 12);
+    check(address.has_value(), "valid directions must produce tile addresses");
+    if (!address) continue;
+    const auto inverse =
+        planet_fixed_from_terrain_address(planet, *address, 2'000.0);
+    check(inverse.has_value(), "valid tile addresses must inverse-map");
+    if (!inverse) continue;
+    const auto sample_length = std::hypot(sample.x, sample.y, sample.z);
+    const auto inverse_length = std::hypot(inverse->x, inverse->y, inverse->z);
+    check(close_enough(sample.x / sample_length, inverse->x / inverse_length) &&
+              close_enough(sample.y / sample_length,
+                           inverse->y / inverse_length) &&
+              close_enough(sample.z / sample_length,
+                           inverse->z / inverse_length),
+          "tile address round trips must preserve surface direction");
+  }
+
+  auto previous_span = std::numeric_limits<double>::infinity();
+  for (std::uint8_t lod = 0; lod <= kMaxTerrainLod; ++lod) {
+    const auto span = nominal_terrain_tile_span_metres(planet, lod);
+    check(span && *span < previous_span,
+          "each terrain LOD must reduce nominal tile span");
+    if (!span) continue;
+    if (lod != 0) {
+      check(close_enough(*span * 2.0, previous_span, 1.0e-6),
+            "adjacent terrain LOD spans must differ by exactly two");
+    }
+    previous_span = *span;
+  }
+  const auto span_zero = nominal_terrain_tile_span_metres(planet, 0);
+  check(span_zero && close_enough(*span_zero, pi * radius / 2.0, 1.0e-6),
+        "LOD zero must span one quarter great circle per cube face");
+  for (std::uint8_t lod = 0; lod < kMaxTerrainLod; ++lod) {
+    const auto span = nominal_terrain_tile_span_metres(planet, lod);
+    if (!span) continue;
+    const auto threshold = *span / kLodTileSpanMultiplier;
+    const auto at_threshold = select_terrain_lod(planet, threshold);
+    const auto below_threshold = select_terrain_lod(planet, threshold * 0.999);
+    check(at_threshold && *at_threshold == lod,
+          "an exact altitude threshold must retain the coarser LOD");
+    check(below_threshold && *below_threshold == lod + 1,
+          "descending below a threshold must select the next finer LOD");
+  }
+  check(select_terrain_lod(planet, 0.0) == kMaxTerrainLod,
+        "the minimum altitude floor must bound terrain refinement");
+
+  const auto invalid_radius = planet_with_radius(generated, 0);
+  const auto quiet_nan = std::numeric_limits<double>::quiet_NaN();
+  check(planet_fixed_from_geodetic(invalid_radius, {}) ==
+            std::unexpected{CoordinateError::invalid_planet_radius},
+        "descriptor radii outside the generated domain must be rejected");
+  check(planet_fixed_from_geodetic(planet, {half_pi + 0.01, 0.0, 0.0}) ==
+            std::unexpected{CoordinateError::invalid_latitude},
+        "latitudes beyond a pole must be rejected");
+  check(planet_fixed_from_geodetic(planet, {0.0, 0.0, -radius}) ==
+            std::unexpected{CoordinateError::invalid_altitude},
+        "the planet center cannot be expressed as geodetic altitude");
+  check(geodetic_from_planet_fixed(planet, {}) ==
+            std::unexpected{CoordinateError::planet_center},
+        "the planet center must not produce arbitrary geodetic angles");
+  check(!geodetic_from_planet_fixed(planet, {quiet_nan, 0.0, 0.0}),
+        "non-finite planet-fixed positions must be rejected");
+  check(!planet_fixed_from_local({}, {}),
+        "a malformed local tangent frame must be rejected");
+  if (equatorial_frame) {
+    auto left_handed = *equatorial_frame;
+    left_handed.up = {-left_handed.up.x, -left_handed.up.y,
+                      -left_handed.up.z};
+    check(!planet_fixed_from_local(left_handed, {}),
+          "a left-handed local tangent frame must be rejected");
+    check(!planet_fixed_from_local(*equatorial_frame,
+                                   {quiet_nan, 0.0, 0.0}),
+          "non-finite local positions must be rejected");
+  }
+  const auto maximum = std::numeric_limits<double>::max();
+  check(!geodetic_from_planet_fixed(planet, {maximum, maximum, maximum}),
+        "overflowing planet-fixed magnitudes must be rejected");
+  check(!terrain_address_from_planet_fixed(planet, {}, 0),
+        "the planet center must not produce a terrain address");
+  check(!terrain_address_from_planet_fixed(
+            planet, {1.0, 0.0, 0.0}, kMaxTerrainLod + 1),
+        "terrain addresses above the maximum LOD must be rejected");
+
+  const TerrainTileAddress invalid_face{
+      {planet.id, static_cast<CubeFace>(255), 0, 0, 0}, 0.5, 0.5};
+  const TerrainTileAddress invalid_index{
+      {planet.id, CubeFace::positive_x, 2, 4, 0}, 0.5, 0.5};
+  const TerrainTileAddress invalid_coordinate{
+      {planet.id, CubeFace::positive_x, 0, 0, 0}, -0.1, 0.5};
+  const TerrainTileAddress wrong_planet{
+      {PlanetId{planet.id.value + 1U}, CubeFace::positive_x, 0, 0, 0},
+      0.5, 0.5};
+  check(planet_fixed_from_terrain_address(planet, invalid_face) ==
+            std::unexpected{CoordinateError::invalid_cube_face},
+        "unknown cube faces must be rejected");
+  check(planet_fixed_from_terrain_address(planet, invalid_index) ==
+            std::unexpected{CoordinateError::invalid_tile_index},
+        "tile indices outside their LOD must be rejected");
+  check(planet_fixed_from_terrain_address(planet, invalid_coordinate) ==
+            std::unexpected{CoordinateError::invalid_tile_coordinate},
+        "within-tile coordinates outside the unit interval must be rejected");
+  check(planet_fixed_from_terrain_address(planet, wrong_planet) ==
+            std::unexpected{CoordinateError::wrong_planet},
+        "tile addresses from another planet must be rejected");
+  check(planet_fixed_from_terrain_address(
+            planet, {{planet.id, CubeFace::positive_x, 0, 0, 0}, 0.5, 0.5},
+            -radius) == std::unexpected{CoordinateError::invalid_altitude},
+        "terrain addresses at the planet center must be rejected");
+  check(!planet_fixed_from_terrain_address(
+            planet,
+            {{planet.id, CubeFace::positive_x, 0, 0, 0}, quiet_nan, 0.5}),
+        "non-finite within-tile coordinates must be rejected");
+  check(!nominal_terrain_tile_span_metres(planet, kMaxTerrainLod + 1),
+        "nominal spans above the maximum LOD must be rejected");
+  check(select_terrain_lod(planet, -1.0) ==
+            std::unexpected{CoordinateError::invalid_altitude},
+        "negative LOD altitudes must be rejected");
+  check(select_terrain_lod(planet, quiet_nan) ==
+            std::unexpected{CoordinateError::non_finite_input},
+        "non-finite LOD altitudes must be rejected");
 }
 
 auto render_profile_contract() -> void {
@@ -2047,6 +2429,7 @@ auto main() -> int {
   seed_derivation_contract();
   planet_descriptor_contract();
   planet_descriptor_population();
+  coordinate_and_lod_contract();
   render_profile_contract();
   viewport_validation_contract();
   cockpit_layout_contract();

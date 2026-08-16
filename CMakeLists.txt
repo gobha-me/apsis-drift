@@ -70,6 +70,7 @@ endif ()
 add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
   src/cockpit.cpp
+  src/coordinates.cpp
   src/flight_deck_acceptance.cpp
   src/flight_input.cpp
   src/landscape.cpp
