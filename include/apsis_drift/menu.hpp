@@ -9,6 +9,7 @@ namespace apsis_drift {
 
 enum class SessionScreen : std::uint8_t {
   title,
+  station,
   flight,
   paused,
   exit_requested,
@@ -34,7 +35,8 @@ struct SessionTransition {
 
 class SessionController {
  public:
-  explicit SessionController(bool start_in_flight = false) noexcept;
+  explicit SessionController(bool start_in_flight = false,
+                             bool docked_profile = false) noexcept;
 
   [[nodiscard]] auto screen() const noexcept -> SessionScreen {
     return m_screen;
@@ -44,8 +46,12 @@ class SessionController {
   }
   [[nodiscard]] auto menu_visible() const noexcept -> bool {
     return m_screen == SessionScreen::title ||
+           m_screen == SessionScreen::station ||
            m_screen == SessionScreen::paused;
   }
+
+  [[nodiscard]] auto start_flight() noexcept -> SessionTransition;
+  [[nodiscard]] auto dock_at_station() noexcept -> SessionTransition;
 
   auto select(MenuItem item) noexcept -> void;
   [[nodiscard]] auto dispatch(MenuCommand command) noexcept
@@ -53,6 +59,7 @@ class SessionController {
 
  private:
   SessionScreen m_screen{SessionScreen::title};
+  SessionScreen m_title_destination{SessionScreen::flight};
   MenuItem m_selected{MenuItem::primary};
 };
 

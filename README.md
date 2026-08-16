@@ -30,11 +30,12 @@ Requirements:
 - A C++23 compiler (GCC 13+ or Clang 19+ recommended)
 - Git when TermForge must be fetched
 
-Apsis Drift first looks for a TermForge v0.32.0-or-newer package, then for a
+Apsis Drift first looks for a TermForge v0.42.0-or-newer package, then for a
 compatible sibling checkout at `../termforge`. Older siblings are ignored. If
-neither exists, CMake fetches the tagged TermForge v0.32.0 release, which
-includes structured event sources and semantic press/repeat/release input
-capabilities.
+neither exists, CMake fetches the tagged TermForge v0.42.0 release. This keeps
+structured input while adding explicit image invalidation, bounded synchronized
+output, built-in driver selection, image residency, placement layers and crops,
+and terminal-driven animation registration and payload-free playback control.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -66,9 +67,9 @@ Choose an explicit save profile for an interactive run:
 New-game seeds use the full unsigned 64-bit range, including zero. A profile is
 loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
-replacement leave the previous valid profile intact. The v0.4 Signal Run
-acceptance integration tracked by #24 will connect objective progress and
-planetary craft state to these profile checkpoints.
+replacement leave the previous valid profile intact. Fresh profiles begin at
+their deterministic Origin Station; in-flight profiles restore the exact
+planetary craft, objective, discoveries, and compact world-delta journal.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -113,18 +114,24 @@ Interactive controls:
 - R/F: change flight clearance
 - Space: toggle autopilot
 - Signal navigation mode: Tab/Shift-Tab selects the next/previous target
+- Signal Run: accept the station briefing, launch, collect the bound target,
+  ascend and follow the Origin Station cue, then press Enter at rendezvous
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
 - Escape during flight: pause
 - Escape while paused: resume
 
-The game opens on a title screen with explicit Start Flight and Exit actions.
-Escape never exits active flight or the title screen. While paused, fixed-step
+The game opens on a title screen with explicit Continue and Exit actions.
+Continue enters the Origin Station for docked profiles and resumes the cockpit
+for in-flight profiles. Escape never exits active flight or the title screen. While paused, fixed-step
 simulation does not advance, accumulated host time is discarded, and held
 keyboard or mouse controls are reconciled before the first resumed tick. The
 menu keeps textual focus markers and cell-native action labels on both Kitty
 and supported truecolor ANSI paths. Ctrl-C remains the terminal interrupt path.
+
+The complete v0.4 objective and deterministic save/resume acceptance path are
+documented in [docs/SIGNAL_RUN.md](docs/SIGNAL_RUN.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -368,10 +375,10 @@ milestones; they are not implementation sessions themselves.
 - [v0.4 — Signal Run](https://github.com/gobha-me/apsis-drift/issues/35)
 - [v0.5 — First Light](https://github.com/gobha-me/apsis-drift/issues/36)
 
-The v0.4 work begins from the deterministic
+The v0.4 loop is grounded in the deterministic
 [origin-station and new-game contract](docs/ORIGIN_STATION.md), which defines
-the zero-discovery start and first-objective handoff before save and Signal Run
-schemas are finalized. Its generated objectives follow the versioned
+the zero-discovery start and first-objective handoff used by the completed
+Signal Run. Its generated objectives follow the versioned
 [surface-signal contract](docs/SURFACE_SIGNALS.md), which keeps immutable
 placement and metadata separate from later discovery and mission state. The
 [signal navigation contract](docs/SIGNAL_NAVIGATION.md) adds deterministic

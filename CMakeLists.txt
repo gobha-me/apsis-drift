@@ -10,10 +10,10 @@ set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
 set(APSIS_DRIFT_TERMFORGE_GIT_TAG
-    "v0.32.0"
+    "v0.42.0"
     CACHE STRING "Pinned TermForge revision used by FetchContent")
 
-find_package(termforge 0.32.0 CONFIG QUIET)
+find_package(termforge 0.42.0 CONFIG QUIET)
 if (NOT TARGET termforge::lib)
   set(termforge_TESTS OFF CACHE BOOL "" FORCE)
   set(termforge_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -23,7 +23,7 @@ if (NOT TARGET termforge::lib)
 
   set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE FALSE)
   if (EXISTS "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}/CMakeLists.txt")
-    if (TERMFORGE_VERSION VERSION_GREATER_EQUAL 0.32.0)
+    if (TERMFORGE_VERSION VERSION_GREATER_EQUAL 0.42.0)
       set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE TRUE)
     else ()
       find_package(Git QUIET)
@@ -31,7 +31,7 @@ if (NOT TARGET termforge::lib)
         execute_process(
           COMMAND "${GIT_EXECUTABLE}" -C
                   "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}"
-                  merge-base --is-ancestor v0.32.0 HEAD
+                  merge-base --is-ancestor v0.42.0 HEAD
           RESULT_VARIABLE APSIS_DRIFT_TERMFORGE_ANCESTOR_RESULT
           OUTPUT_QUIET
           ERROR_QUIET
@@ -52,7 +52,7 @@ if (NOT TARGET termforge::lib)
   else ()
     if (EXISTS "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}/CMakeLists.txt")
       message(STATUS
-        "Ignoring TermForge source checkout older than v0.32.0: "
+        "Ignoring TermForge source checkout older than v0.42.0: "
         "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}")
     endif ()
     message(STATUS
@@ -99,6 +99,8 @@ add_library(apsis_drift_lib STATIC
   src/seed.cpp
   src/signal_collection.cpp
   src/signal_navigation_acceptance.cpp
+  src/signal_run.cpp
+  src/signal_run_acceptance.cpp
   src/signal_input.cpp
   src/signal_scanner.cpp
   src/simulation.cpp
@@ -184,6 +186,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_signal_navigation_acceptance.cmake")
 
+  add_test(NAME signal-run-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_signal_run_acceptance.cmake")
+
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
   add_test(NAME reject-viewport-negative
@@ -253,6 +261,17 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-signal-navigation-mode-conflict
     COMMAND apsis-drift --signal-navigation-acceptance --benchmark 1
             --report signal-navigation-invalid.json)
+  add_test(NAME reject-signal-run-missing-report
+    COMMAND apsis-drift --signal-run-acceptance --driver ansi)
+  add_test(NAME reject-signal-run-missing-driver
+    COMMAND apsis-drift --signal-run-acceptance
+            --report signal-run-invalid.json)
+  add_test(NAME reject-signal-run-seed-override
+    COMMAND apsis-drift --signal-run-acceptance --driver kitty --seed 42
+            --report signal-run-invalid.json)
+  add_test(NAME reject-signal-run-mode-conflict
+    COMMAND apsis-drift --signal-run-acceptance --driver ansi --benchmark 1
+            --report signal-run-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -287,6 +306,10 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-signal-navigation-missing-report
     reject-signal-navigation-seed-override
     reject-signal-navigation-mode-conflict
+    reject-signal-run-missing-report
+    reject-signal-run-missing-driver
+    reject-signal-run-seed-override
+    reject-signal-run-mode-conflict
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()

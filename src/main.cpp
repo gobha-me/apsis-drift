@@ -42,6 +42,8 @@
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/save_file.hpp"
 #include "apsis_drift/signal_navigation_acceptance.hpp"
+#include "apsis_drift/signal_run.hpp"
+#include "apsis_drift/signal_run_acceptance.hpp"
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/title.hpp"
@@ -287,7 +289,8 @@ class LandscapeApp final : public App {
                         double capture_seconds = 0.0,
                         bool interactive_controls = false,
                         bool flight_deck_acceptance = false,
-                        bool signal_navigation_acceptance = false)
+                        bool signal_navigation_acceptance = false,
+                        const SaveDocument* profile = nullptr)
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_planet(generate_planet_descriptor(Seed{seed})),
@@ -296,7 +299,7 @@ class LandscapeApp final : public App {
             orbital_settings_for(render_configuration.viewport)),
         m_planetary_renderer(
             (workload == BenchmarkWorkload::planetary ||
-             signal_navigation_acceptance)
+             signal_navigation_acceptance || profile != nullptr)
                 ? std::optional<PlanetaryPresentationRenderer>{
                       std::in_place,
                       planetary_settings_for(render_configuration.viewport)}
@@ -309,13 +312,28 @@ class LandscapeApp final : public App {
             workload == BenchmarkWorkload::planetary
                 ? required_planetary_surface(m_planet)
                 : PlanetarySurfaceFixture{}),
-        m_session(!interactive_controls),
+        m_session(!interactive_controls,
+                  profile != nullptr &&
+                      profile->state.location ==
+                          OriginLocation::docked_at_origin),
         m_capture_seconds(capture_seconds),
         m_seed(seed),
         m_workload(workload),
         m_interactive_controls(interactive_controls),
         m_flight_deck_acceptance(flight_deck_acceptance),
         m_signal_navigation_acceptance(signal_navigation_acceptance) {
+    if (profile != nullptr) {
+      auto cache = TerrainTileCache::create();
+      if (!cache) {
+        throw std::runtime_error{"cannot create Signal Run terrain cache"};
+      }
+      m_signal_run_cache.emplace(std::move(*cache));
+      auto run = hydrate_signal_run(*profile, *m_signal_run_cache);
+      if (!run) {
+        throw std::runtime_error{"cannot hydrate Signal Run profile"};
+      }
+      m_signal_run.emplace(std::move(*run));
+    }
     if (m_signal_navigation_acceptance) {
       auto cache = TerrainTileCache::create();
       if (!cache) {
@@ -364,7 +382,7 @@ class LandscapeApp final : public App {
     if (const auto* error = std::get_if<ErrorEvent>(&event)) {
       if (error->severity != Severity::Info) m_error = error->message;
       if (error->severity != Severity::Info) {
-        m_input_mapper.neutralize_mouse(m_flight.tick);
+        m_input_mapper.neutralize_mouse(current_flight_tick());
       }
       // TermForge dispatches any synthesized held-key releases before this
       // requirements transition. Stop instead of simulating with an input
@@ -390,10 +408,11 @@ class LandscapeApp final : public App {
         handle_menu_mouse(*mouse);
       } else if (m_interactive_controls &&
                  m_session.screen() == SessionScreen::flight) {
-        m_input_mapper.enqueue(*mouse, m_active_mouse_region, m_flight.tick);
+        m_input_mapper.enqueue(*mouse, m_active_mouse_region,
+                               current_flight_tick());
       }
     } else if (const auto* resize = std::get_if<ResizeEvent>(&event)) {
-      m_input_mapper.neutralize_mouse(m_flight.tick);
+      m_input_mapper.neutralize_mouse(current_flight_tick());
       m_active_mouse_region = {};
       m_menu_layout = compute_menu_layout(resize->cols, resize->rows);
     }
@@ -434,6 +453,8 @@ class LandscapeApp final : public App {
         m_render_configuration.viewport);
     if (m_session.screen() == SessionScreen::title) {
       draw_title_screen(screen);
+    } else if (m_session.screen() == SessionScreen::station) {
+      draw_station_screen(screen);
     } else if (m_session.screen() == SessionScreen::paused) {
       draw_cockpit(screen, layout, render_time, false);
       draw_menu(screen, "FLIGHT PAUSED", "RESUME FLIGHT");
@@ -582,6 +603,9 @@ class LandscapeApp final : public App {
     return m_display_tier;
   }
   [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
+    if (m_signal_run && m_signal_run->flight) {
+      return planetary_flight_state_checksum(*m_signal_run->flight);
+    }
     if (m_signal_scenario) {
       return planetary_flight_state_checksum(m_signal_scenario->flight);
     }
@@ -608,6 +632,14 @@ class LandscapeApp final : public App {
     return m_workload;
   }
 
+  [[nodiscard]] auto signal_run_save() const
+      -> std::expected<SaveDocument, SignalRunError> {
+    if (!m_signal_run) {
+      return std::unexpected{SignalRunError::inconsistent_state};
+    }
+    return project_signal_run_save(*m_signal_run);
+  }
+
   [[nodiscard]] auto write_snapshot(const std::filesystem::path& path) const
       -> bool {
     return ::write_snapshot(path, m_render_configuration.viewport,
@@ -621,6 +653,12 @@ class LandscapeApp final : public App {
   }
 
  private:
+  [[nodiscard]] auto current_flight_tick() const noexcept -> SimulationTick {
+    return m_signal_run && m_signal_run->flight
+               ? m_signal_run->flight->tick
+               : m_flight.tick;
+  }
+
   [[nodiscard]] auto menu_command_for(const KeyEvent& key) const noexcept
       -> std::optional<MenuCommand> {
     if (key.action == KeyAction::Release) return std::nullopt;
@@ -638,12 +676,44 @@ class LandscapeApp final : public App {
   }
 
   auto apply_session_command(MenuCommand command) -> void {
+    if (m_session.screen() == SessionScreen::station &&
+        command == MenuCommand::activate &&
+        m_session.selected() == MenuItem::primary) {
+      if (!m_signal_run || !m_signal_run_cache) {
+        m_error = "Signal Run station state is unavailable";
+        return;
+      }
+      if (m_signal_run->onboarding.first_objective ==
+          FirstObjectiveStatus::offered) {
+        if (!accept_signal_run(*m_signal_run)) {
+          m_error = "first objective acceptance was rejected";
+        }
+        return;
+      }
+      if (m_signal_run->onboarding.first_objective ==
+          FirstObjectiveStatus::active) {
+        if (!launch_signal_run(*m_signal_run, *m_signal_run_cache)) {
+          m_error = "Signal Run launch was rejected";
+          return;
+        }
+        (void)m_session.start_flight();
+        m_simulation_clock.reset();
+        m_active_mouse_region = {};
+        return;
+      }
+      return;
+    }
     const auto transition = m_session.dispatch(command);
     if (!transition.changed()) return;
 
     if (transition.from == SessionScreen::flight &&
         transition.to == SessionScreen::paused) {
-      m_input_mapper.suspend(m_flight.controls, m_flight.tick);
+      if (m_signal_run && m_signal_run->flight) {
+        m_input_mapper.suspend(m_signal_run->flight->controls,
+                               m_signal_run->flight->tick);
+      } else {
+        m_input_mapper.suspend(m_flight.controls, m_flight.tick);
+      }
       m_simulation_clock.reset();
       m_active_mouse_region = {};
     }
@@ -770,14 +840,57 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "FLIGHT DECK // v0.2", "START FLIGHT");
+    draw_menu(screen, "SIGNAL RUN // v0.4", "CONTINUE");
+  }
+
+  auto draw_station_screen(Screen& screen) -> void {
+    m_surface.set_geometry({});
+    m_surface.draw(screen);
+    render_pixel_regions(m_surface);
+    if (!m_signal_run) {
+      draw_menu(screen, "ORIGIN STATION", "UNAVAILABLE");
+      return;
+    }
+    std::string_view action{"RETURN COMPLETE"};
+    std::string_view status{"COMPLETED"};
+    if (m_signal_run->onboarding.first_objective ==
+        FirstObjectiveStatus::offered) {
+      action = "ACCEPT BRIEFING";
+      status = "OFFERED";
+    } else if (m_signal_run->onboarding.first_objective ==
+               FirstObjectiveStatus::active) {
+      action = "LAUNCH";
+      status = "ACTIVE";
+    }
+    draw_menu(screen, "ORIGIN STATION", action);
+    if (!m_menu_layout.supported()) return;
+    constexpr Rgb text{205, 222, 224};
+    constexpr Rgb muted{109, 143, 151};
+    constexpr Rgb background{7, 15, 24};
+    const auto station = origin_station_id_string(
+        m_signal_run->onboarding.origin_station);
+    const auto objective = std::format("FIRST SIGNAL RUN // {}", status);
+    screen.write_text(std::max(0, (screen.cols() -
+                                   static_cast<int>(station.size())) /
+                                      2),
+                      std::max(1, m_menu_layout.art.y + 2), station, muted,
+                      background);
+    screen.write_text(std::max(0, (screen.cols() -
+                                   static_cast<int>(objective.size())) /
+                                      2),
+                      std::max(2, m_menu_layout.art.y + 4), objective, text,
+                      background);
+    screen.write_text(
+        std::max(0, (screen.cols() - 31) / 2),
+        std::max(3, m_menu_layout.art.y + 6),
+        "RETURN DESTINATION: ORIGIN STATION", muted, background);
   }
 
   auto draw_cockpit(Screen& screen, const CockpitLayout& layout,
                     double render_time, bool enhanced_pixels) -> void {
     if (!layout.supported()) {
       if (!m_active_mouse_region.empty()) {
-        m_input_mapper.neutralize_mouse(m_flight.tick);
+        m_input_mapper.neutralize_mouse(current_flight_tick());
       }
       draw_size_requirement(screen);
       return;
@@ -801,7 +914,9 @@ class LandscapeApp final : public App {
     constexpr Rgb chrome_bg{11, 28, 40};
     constexpr Rgb status_bg{20, 43, 66};
     const auto instruments =
-        m_signal_scenario
+        m_signal_run && m_signal_run->flight
+            ? format_flight_instruments(*m_signal_run->flight)
+            : m_signal_scenario
             ? format_flight_instruments(m_signal_scenario->flight)
             : m_planetary_flight
                   ? format_flight_instruments(*m_planetary_flight)
@@ -842,10 +957,13 @@ class LandscapeApp final : public App {
     screen.write_text(layout.left_instruments.x + 2,
                       layout.left_instruments.y + 6, instruments.alert,
                       alert_color, chrome_bg);
-    if (m_signal_scenario || m_planetary_flight) {
+    if ((m_signal_run && m_signal_run->flight) || m_signal_scenario ||
+        m_planetary_flight) {
       const auto regime = format_flight_regime(
-          m_signal_scenario ? m_signal_scenario->flight
-                            : *m_planetary_flight);
+          m_signal_run && m_signal_run->flight
+              ? *m_signal_run->flight
+              : (m_signal_scenario ? m_signal_scenario->flight
+                                   : *m_planetary_flight));
       screen.write_text(layout.left_instruments.x + 2,
                         layout.left_instruments.y + 8, regime.regime,
                         regime.valid ? text : danger, chrome_bg);
@@ -868,11 +986,19 @@ class LandscapeApp final : public App {
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 10, instruments.speed,
                       text, chrome_bg);
-    if (m_signal_scenario) {
+    if ((m_signal_run && m_signal_run->flight) || m_signal_scenario) {
+      const auto& navigation =
+          m_signal_run && m_signal_run->flight
+              ? m_signal_run->signal_navigation
+              : m_signal_scenario->navigation;
+      const auto& collection =
+          m_signal_run && m_signal_run->flight
+              ? m_signal_run->collection
+              : m_signal_scenario->collection;
       const auto scanner =
-          format_signal_scanner(m_signal_scenario->navigation);
-      const auto collection =
-          format_signal_collection(m_signal_scenario->collection);
+          format_signal_scanner(navigation);
+      const auto collection_readout =
+          format_signal_collection(collection);
       screen.write_text(layout.left_instruments.x + 2,
                         layout.left_instruments.y + 12, "SIGNAL", accent,
                         chrome_bg);
@@ -891,14 +1017,14 @@ class LandscapeApp final : public App {
       screen.write_text(
           layout.right_instruments.x + 2,
           layout.right_instruments.y + 16,
-          m_signal_scenario->collection.status ==
+          collection.status ==
                   SignalCollectionStatus::approach
               ? scanner.cue
-              : collection.cue,
-          m_signal_scenario->collection.status ==
+              : collection_readout.cue,
+          collection.status ==
                   SignalCollectionStatus::complete
               ? accent
-              : (m_signal_scenario->collection.status ==
+              : (collection.status ==
                          SignalCollectionStatus::aborted
                      ? warning
                      : text),
@@ -913,6 +1039,18 @@ class LandscapeApp final : public App {
                 "ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
       message = " WARNING: LOW CLEARANCE | R to climb | ESC menu ";
+    } else if (m_signal_run && m_signal_run->flight) {
+      if (m_signal_run->onboarding.first_objective ==
+              FirstObjectiveStatus::completed &&
+          m_signal_run->origin_navigation) {
+        message = std::format(
+            " ORIGIN {:.0f} m | {} | ENTER return when arrived ",
+            m_signal_run->origin_navigation->distance_metres,
+            m_signal_run->origin_navigation->arrived ? "RENDEZVOUS"
+                                                     : "ASCEND + NAVIGATE");
+      } else {
+        message = format_signal_collection(m_signal_run->collection).message;
+      }
     } else if (m_signal_scenario) {
       message =
           format_signal_collection(m_signal_scenario->collection).message;
@@ -937,7 +1075,9 @@ class LandscapeApp final : public App {
     screen.write_text(
         layout.status.x, layout.status.y,
         std::format(" {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
-                    (m_signal_scenario
+                    (m_signal_run && m_signal_run->flight
+                         ? m_signal_run->flight->mode
+                         : m_signal_scenario
                          ? m_signal_scenario->flight.mode
                          : (m_planetary_flight ? m_planetary_flight->mode
                                                : m_flight.mode)) ==
@@ -954,11 +1094,32 @@ class LandscapeApp final : public App {
   }
 
   auto handle_key(const KeyEvent& key) -> void {
+    if (m_signal_run && m_signal_run->flight) {
+      if (key.key == Key::Enter && key.action == KeyAction::Press &&
+          m_signal_run->onboarding.first_objective ==
+              FirstObjectiveStatus::completed) {
+        if (return_signal_run_to_origin(*m_signal_run)) {
+          (void)m_session.dock_at_station();
+          m_simulation_clock.reset();
+          m_active_mouse_region = {};
+        } else {
+          m_error = "reach the Origin Station rendezvous in orbit first";
+        }
+        return;
+      }
+      if (apsis_drift::detail::signal_selection_command(key)) {
+        // The first bounded objective is selected by the briefing and cannot
+        // be silently retargeted in flight.
+        return;
+      }
+      m_input_mapper.enqueue(key, m_signal_run->flight->tick);
+      return;
+    }
     if (m_signal_scenario) {
       const auto command =
           apsis_drift::detail::signal_selection_command(key);
       if (!command) {
-        m_input_mapper.enqueue(key, m_flight.tick);
+        m_input_mapper.enqueue(key, m_signal_scenario->flight.tick);
         return;
       }
       if (!advance_signal_selection(m_signal_scenario->catalog,
@@ -985,6 +1146,18 @@ class LandscapeApp final : public App {
       throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
     for (int step = 0; step < advance->steps; ++step) {
+      if (m_signal_run && m_signal_run->flight) {
+        if (!m_signal_run_cache) {
+          throw std::runtime_error{"Signal Run cache is unavailable"};
+        }
+        auto commands =
+            m_input_mapper.take_commands(m_signal_run->flight->tick);
+        if (!advance_signal_run(*m_signal_run, *m_signal_run_cache,
+                                commands)) {
+          throw std::runtime_error{"Signal Run simulation failed"};
+        }
+        continue;
+      }
       if (m_signal_scenario) {
         if (!m_signal_cache) {
           throw std::runtime_error{"signal navigation cache is unavailable"};
@@ -1023,6 +1196,19 @@ class LandscapeApp final : public App {
   }
 
   auto render_viewport() -> void {
+    if (m_signal_run && m_signal_run->flight) {
+      if (!m_planetary_renderer) {
+        throw std::runtime_error{"Signal Run presentation is unavailable"};
+      }
+      const auto rendered = m_planetary_renderer->render(
+          *m_signal_run->planet, *m_signal_run->flight,
+          {.pitch_radians = -0.18}, m_surface.pixels());
+      if (!rendered) {
+        throw std::runtime_error{"Signal Run presentation rejected frame"};
+      }
+      m_planetary_samples.push_back(*rendered);
+      return;
+    }
     if (m_signal_scenario) {
       if (!m_planetary_renderer) {
         throw std::runtime_error{"signal presentation is unavailable"};
@@ -1157,6 +1343,8 @@ class LandscapeApp final : public App {
   std::optional<PlanetaryFlightState> m_planetary_flight;
   std::optional<TerrainTileCache> m_signal_cache;
   std::optional<SignalNavigationAcceptanceState> m_signal_scenario;
+  std::optional<TerrainTileCache> m_signal_run_cache;
+  std::optional<SignalRunState> m_signal_run;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
@@ -1324,6 +1512,8 @@ auto usage() -> void {
       "                   [--profile NAME] [--snapshot PATH]\n\n"
       "       apsis-drift --signal-navigation-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
+      "       apsis-drift --signal-run-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -1349,6 +1539,7 @@ auto main(int argc, char** argv) -> int {
   bool flight_deck_acceptance{};
   bool planetfall_acceptance{};
   bool signal_navigation_acceptance{};
+  bool signal_run_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -1420,6 +1611,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--signal-navigation-acceptance") {
       signal_navigation_acceptance = true;
+      continue;
+    }
+    if (argument == "--signal-run-acceptance") {
+      signal_run_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -1577,7 +1772,7 @@ auto main(int argc, char** argv) -> int {
   if (profile_options &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
-       signal_navigation_acceptance)) {
+       signal_navigation_acceptance || signal_run_acceptance)) {
     std::fprintf(stderr,
                  "save-profile options are available only for interactive "
                  "runs\n");
@@ -1585,7 +1780,7 @@ auto main(int argc, char** argv) -> int {
   }
   if (flight_deck_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
-       signal_navigation_acceptance)) {
+       signal_navigation_acceptance || signal_run_acceptance)) {
     std::fprintf(
         stderr,
         "Flight Deck acceptance, sweep, benchmark, and capture modes are "
@@ -1619,12 +1814,27 @@ auto main(int argc, char** argv) -> int {
                  kSignalNavigationAcceptanceSeed);
     return 2;
   }
+  if (signal_run_acceptance && seed_specified) {
+    std::fprintf(stderr,
+                 "Signal Run acceptance uses the fixed seed %u\n",
+                 kSignalRunAcceptanceSeed);
+    return 2;
+  }
   if (signal_navigation_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0)) {
     std::fprintf(
         stderr,
         "Signal navigation acceptance, sweep, benchmark, and capture modes "
         "are mutually exclusive\n");
+    return 2;
+  }
+  if (signal_run_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance)) {
+    std::fprintf(stderr,
+                 "Signal Run acceptance is mutually exclusive with other "
+                 "run modes\n");
     return 2;
   }
   if (sweep_frames && (benchmark_frames || capture_seconds > 0)) {
@@ -1678,6 +1888,11 @@ auto main(int argc, char** argv) -> int {
                  "Signal navigation acceptance mode requires --report PATH\n");
     return 2;
   }
+  if (signal_run_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Signal Run acceptance mode requires --report PATH\n");
+    return 2;
+  }
   if (planetfall_acceptance &&
       (driver_specified || keyboard_specified || workload_specified)) {
     std::fprintf(stderr,
@@ -1691,8 +1906,67 @@ auto main(int argc, char** argv) -> int {
                  "options\n");
     return 2;
   }
+  if (signal_run_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi) ||
+       keyboard_specified || workload_specified)) {
+    std::fprintf(stderr,
+                 "Signal Run acceptance requires --driver kitty or ansi and "
+                 "does not accept keyboard or workload options\n");
+    return 2;
+  }
 
   try {
+    if (signal_run_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto checkpoint_path =
+          std::filesystem::temp_directory_path() /
+          std::format("apsis-signal-run-{}-{}.json",
+                      static_cast<long long>(::getpid()),
+                      Clock::now().time_since_epoch().count());
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      const auto acceptance = run_signal_run_acceptance(
+          configuration, checkpoint_path, presentation);
+      if (!acceptance) {
+        std::fprintf(stderr, "Signal Run acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << signal_run_acceptance_json(acceptance->report);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !write_snapshot(snapshot_path, configuration.viewport,
+                          acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "signal-run: seed=%u presentation=%.*s completion=%llu return=%llu "
+          "checksum=%llu\n",
+          kSignalRunAcceptanceSeed,
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(
+              acceptance->report.completion_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.orbital_return_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.checkpoint_flight_checksum));
+      return 0;
+    }
     if (planetfall_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);
@@ -1817,7 +2091,8 @@ auto main(int argc, char** argv) -> int {
     LandscapeApp app{render_configuration, run_seed, selected_workload,
                      static_cast<double>(capture_seconds),
                      interactive_controls, flight_deck_acceptance,
-                     signal_navigation_acceptance};
+                     signal_navigation_acceptance,
+                     save_profile ? &*save_profile : nullptr};
     if (auto forced =
             app.force_capabilities(driver_choice, keyboard_choice);
         !forced) {
@@ -1902,11 +2177,13 @@ auto main(int argc, char** argv) -> int {
       }
     }
     if (!save_path.empty() && result == 0) {
-      if (!save_profile) {
-        std::fprintf(stderr, "cannot save without an interactive profile\n");
+      auto projected = app.signal_run_save();
+      if (!projected) {
+        std::fprintf(stderr,
+                     "cannot project the live Signal Run into a save\n");
         return 1;
       }
-      if (auto saved = write_save_file_atomically(save_path, *save_profile);
+      if (auto saved = write_save_file_atomically(save_path, *projected);
           !saved) {
         const auto message = save_file_error_message(saved.error());
         std::fprintf(stderr, "cannot save profile: %s\n", message.c_str());
