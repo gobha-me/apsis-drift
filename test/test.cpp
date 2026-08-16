@@ -34,6 +34,7 @@
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/signal_navigation_acceptance.hpp"
+#include "apsis_drift/signal_run.hpp"
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/surface_signals.hpp"
@@ -725,6 +726,110 @@ auto save_file_contract() -> void {
   check(oversized_written && !oversized &&
             oversized.error().code == SaveFileErrorCode::document_too_large,
         "a save one byte beyond the format bound must fail before decoding");
+}
+
+auto signal_run_contract() -> void {
+  auto cache = TerrainTileCache::create();
+  check(cache.has_value(), "Signal Run must create a terrain cache");
+  if (!cache) return;
+
+  const auto fresh = make_new_game_document(Seed{42});
+  auto run = hydrate_signal_run(fresh, *cache);
+  check(run.has_value() &&
+            run->onboarding.location == OriginLocation::docked_at_origin &&
+            run->onboarding.first_objective ==
+                FirstObjectiveStatus::offered &&
+            !run->scanner.selected && !run->flight,
+        "a fresh save must hydrate as the bounded docked offer");
+  if (!run) return;
+
+  const auto before_invalid_launch = project_signal_run_save(*run);
+  check(!launch_signal_run(*run, *cache) &&
+            project_signal_run_save(*run) == before_invalid_launch,
+        "launch before briefing acceptance must be rejected transactionally");
+  check(accept_signal_run(*run).has_value() && run->scanner.selected &&
+            run->discoveries.size() == 1 && run->rendezvous,
+        "accepting the briefing must bind and discover exactly one target");
+  check(launch_signal_run(*run, *cache).has_value() && run->flight &&
+            run->flight->regime == FlightRegime::orbital &&
+            run->onboarding.location == OriginLocation::in_flight,
+        "launch must create the authoritative orbital craft at rendezvous");
+
+  auto non_finite = *run;
+  non_finite.flight->pose.position.latitude_radians =
+      std::numeric_limits<double>::quiet_NaN();
+  const auto non_finite_checksum =
+      planetary_flight_state_checksum(*non_finite.flight);
+  check(advance_signal_run(non_finite, *cache, {}) ==
+                std::unexpected{SignalRunError::terrain_failure} &&
+            non_finite.flight &&
+            planetary_flight_state_checksum(*non_finite.flight) ==
+                non_finite_checksum &&
+            non_finite.onboarding.location == OriginLocation::in_flight,
+        "non-finite Signal Run state must be rejected transactionally");
+
+  const auto target = *run->scanner.selected;
+  check(run->journal
+            .record({surface_signal_object_key(target),
+                     SaveWorldDeltaKind::collected, run->flight->tick})
+            .has_value(),
+        "the completed integration fixture must record its collected delta");
+  check(advance_origin_onboarding(
+            run->onboarding,
+            OriginOnboardingCommand::complete_first_objective)
+            .has_value(),
+        "the completed integration fixture must advance the objective");
+  run->collection = SignalCollectionState{
+      .status = SignalCollectionStatus::complete,
+      .target = target,
+      .consecutive_in_range_ticks = kSignalCollectionTotalInRangeTicks,
+      .last_tick = run->flight->tick,
+      .completion_tick = run->flight->tick,
+  };
+  check(advance_signal_run(*run, *cache, {}).has_value() &&
+            run->origin_navigation && run->origin_navigation->arrived,
+        "a completed craft at the orbital waypoint must resolve return arrival");
+
+  const auto checkpoint = project_signal_run_save(*run);
+  check(checkpoint.has_value() && checkpoint->state.flight &&
+            checkpoint->state.first_objective ==
+                FirstObjectiveStatus::completed &&
+            checkpoint->state.discoveries.size() == 1 &&
+            checkpoint->state.world_deltas.size() == 1,
+        "the in-flight checkpoint must preserve craft, mission, discovery, and delta state");
+  if (!checkpoint) return;
+  auto resumed_cache = TerrainTileCache::create();
+  auto resumed = resumed_cache
+                     ? hydrate_signal_run(*checkpoint, *resumed_cache)
+                     : std::expected<SignalRunState, SignalRunError>{
+                           std::unexpected{SignalRunError::terrain_failure}};
+  check(resumed.has_value() && resumed->flight == run->flight &&
+            resumed->collection.status == SignalCollectionStatus::complete &&
+            resumed->journal.entries().size() == 1,
+        "checkpoint hydration must restore terminal collection without duplicate deltas");
+  if (!resumed) return;
+  check(return_signal_run_to_origin(*resumed).has_value() &&
+            resumed->onboarding.location ==
+                OriginLocation::docked_at_origin &&
+            !resumed->flight,
+        "an arrived completed craft must return to the origin station");
+  const auto returned = project_signal_run_save(*resumed);
+  check(returned.has_value() && !returned->state.flight &&
+            returned->state.first_objective ==
+                FirstObjectiveStatus::completed &&
+            returned->state.world_deltas.size() == 1,
+        "the returned save must retain mission and sparse world state");
+
+  auto invalid = *checkpoint;
+  invalid.state.first_objective_target = SurfaceSignalId{1};
+  check(hydrate_signal_run(invalid, *cache) ==
+            std::unexpected{SignalRunError::invalid_target},
+        "a valid-schema save with an unknown generated target must fail before commit");
+  invalid = *checkpoint;
+  invalid.state.discoveries.clear();
+  check(hydrate_signal_run(invalid, *cache) ==
+            std::unexpected{SignalRunError::inconsistent_state},
+        "an objective target missing its discovery must fail before commit");
 }
 
 auto world_delta_journal_contract() -> void {
@@ -2841,6 +2946,18 @@ auto menu_session_contract() -> void {
   SessionController headless{true};
   check(headless.screen() == SessionScreen::flight,
         "benchmark and capture sessions must bypass the title screen");
+
+  SessionController docked{false, true};
+  const auto entered_station = docked.dispatch(MenuCommand::activate);
+  check(entered_station.from == SessionScreen::title &&
+            entered_station.to == SessionScreen::station &&
+            docked.menu_visible(),
+        "a docked profile must continue from title into the station menu");
+  check(!docked.dispatch(MenuCommand::activate).changed(),
+        "station primary actions must remain application-owned");
+  check(docked.start_flight().to == SessionScreen::flight &&
+            docked.dock_at_station().to == SessionScreen::station,
+        "launch and return must explicitly transition between station and flight");
 
   for (const auto [cols, rows] :
        std::array{std::pair{0, 24}, std::pair{-1, 24},
@@ -5316,6 +5433,7 @@ auto main() -> int {
   origin_onboarding_contract();
   save_schema_contract();
   save_file_contract();
+  signal_run_contract();
   world_delta_journal_contract();
   regenerated_world_delta_contract();
   surface_signal_contract();

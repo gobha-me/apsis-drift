@@ -13,9 +13,27 @@ inline constexpr int kPanelHeight{8};
 
 }  // namespace
 
-SessionController::SessionController(bool start_in_flight) noexcept
+SessionController::SessionController(bool start_in_flight,
+                                     bool docked_profile) noexcept
     : m_screen(start_in_flight ? SessionScreen::flight
-                               : SessionScreen::title) {}
+                               : SessionScreen::title),
+      m_title_destination(docked_profile ? SessionScreen::station
+                                         : SessionScreen::flight) {}
+
+auto SessionController::start_flight() noexcept -> SessionTransition {
+  const auto before = m_screen;
+  if (m_screen == SessionScreen::station) m_screen = SessionScreen::flight;
+  return {before, m_screen};
+}
+
+auto SessionController::dock_at_station() noexcept -> SessionTransition {
+  const auto before = m_screen;
+  if (m_screen == SessionScreen::flight) {
+    m_screen = SessionScreen::station;
+    m_selected = MenuItem::primary;
+  }
+  return {before, m_screen};
+}
 
 auto SessionController::select(MenuItem item) noexcept -> void {
   if (menu_visible()) m_selected = item;
@@ -43,7 +61,9 @@ auto SessionController::dispatch(MenuCommand command) noexcept
   } else if (command == MenuCommand::activate) {
     if (m_selected == MenuItem::exit) {
       m_screen = SessionScreen::exit_requested;
-    } else {
+    } else if (m_screen == SessionScreen::title) {
+      m_screen = m_title_destination;
+    } else if (m_screen == SessionScreen::paused) {
       m_screen = SessionScreen::flight;
     }
   }
