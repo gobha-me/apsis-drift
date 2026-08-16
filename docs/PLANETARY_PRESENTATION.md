@@ -26,6 +26,13 @@ All tiles read by a frame are held through immutable shared ownership for that
 frame. Rendering occurs in scratch framebuffers, so a coordinate, tile, camera,
 or buffer failure cannot expose a partial destination.
 
+Each pass uses a frame-scoped sampler that validates its planet and LOD once,
+pins unique tiles, and reuses the orbital surface normal as a cube-sphere
+direction. At widths of 640 pixels and above, the tile-backed orbital pass uses
+one centered ray for each two-column span. The stride is constant throughout
+the orbital, atmospheric, and terrain transition stages, while the remote
+320x240 profile retains one ray per output pixel.
+
 ## Transition bands
 
 Presentation weights reuse the simulation's existing hysteresis boundaries:
@@ -38,6 +45,12 @@ Presentation weights reuse the simulation's existing hysteresis boundaries:
   position, clearance, and the immutable descriptor;
 - airless planets keep the atmospheric approach regime but apply no invented
   atmosphere color.
+
+Blend coefficients are converted once per frame to 16-bit fixed-point weights.
+A source pass is omitted only when its maximum possible contribution is below
+half of one 8-bit channel value, meaning it cannot change the rounded output.
+This removes the otherwise full local pass at the canonical first mixed frame
+without introducing a visible threshold or changing the reported mode.
 
 The reported modes are `orbital`, `atmospheric`, `terrain-blend`, and
 `local-terrain`. Mode, blend weights, selected LOD, anchor address, tile counts,

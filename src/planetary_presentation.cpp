@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <memory>
 #include <numbers>
 #include <vector>
 
@@ -26,22 +25,38 @@ using Clock = std::chrono::steady_clock;
   return std::move(*cache);
 }
 
-[[nodiscard]] auto channel(double value) noexcept -> std::uint8_t {
-  return static_cast<std::uint8_t>(
-      std::clamp(static_cast<int>(std::lround(value)), 0, 255));
-}
-
 [[nodiscard]] auto pixel(Rgb8 value) noexcept -> termforge::Pixel {
   return {value.red, value.green, value.blue, 255};
 }
 
+inline constexpr std::uint32_t kBlendScale{65'536};
+
+[[nodiscard]] auto blend_weight(double amount) noexcept -> std::uint32_t {
+  return static_cast<std::uint32_t>(std::clamp(
+      std::lround(std::clamp(amount, 0.0, 1.0) * kBlendScale), 0L,
+      static_cast<long>(kBlendScale)));
+}
+
+[[nodiscard]] auto blend_channel(std::uint8_t from, std::uint8_t to,
+                                 std::uint32_t weight) noexcept
+    -> std::uint8_t {
+  const auto result =
+      static_cast<std::uint32_t>(from) * (kBlendScale - weight) +
+      static_cast<std::uint32_t>(to) * weight + kBlendScale / 2;
+  return static_cast<std::uint8_t>(result / kBlendScale);
+}
+
 [[nodiscard]] auto blend(termforge::Pixel from, termforge::Pixel to,
-                         double amount) noexcept -> termforge::Pixel {
-  amount = std::clamp(amount, 0.0, 1.0);
-  const double keep = 1.0 - amount;
-  return {channel(from.r * keep + to.r * amount),
-          channel(from.g * keep + to.g * amount),
-          channel(from.b * keep + to.b * amount), 255};
+                         std::uint32_t weight) noexcept -> termforge::Pixel {
+  if (weight == 0) return from;
+  if (weight == kBlendScale) return to;
+  return {blend_channel(from.r, to.r, weight),
+          blend_channel(from.g, to.g, weight),
+          blend_channel(from.b, to.b, weight), 255};
+}
+
+[[nodiscard]] auto can_affect_channel(std::uint32_t weight) noexcept -> bool {
+  return weight * 255U >= kBlendScale / 2;
 }
 
 [[nodiscard]] auto finite_state(const PlanetaryFlightState& state) noexcept
@@ -121,7 +136,10 @@ using Clock = std::chrono::steady_clock;
             std::max(1.0 / static_cast<double>(settings.height),
                      horizon / static_cast<double>(settings.height)),
         0.0, 1.0);
-    const auto sky = airless ? space : blend(space, atmosphere, 0.18 + haze * 0.52);
+    const auto sky = airless
+                         ? space
+                         : blend(space, atmosphere,
+                                 blend_weight(0.18 + haze * 0.52));
     std::fill_n(destination.begin() +
                     static_cast<std::ptrdiff_t>(y) * settings.width,
                 settings.width, sky);
@@ -134,8 +152,10 @@ using Clock = std::chrono::steady_clock;
   const double eye_altitude = state.pose.position.altitude_metres;
   std::vector<int> occlusion(static_cast<std::size_t>(settings.width),
                              settings.height);
-  std::vector<TerrainTileKey> touched;
-  std::vector<std::shared_ptr<const TerrainTile>> pinned_tiles;
+  auto sampler = TerrainSurfaceSampler::create(planet, lod, cache);
+  if (!sampler) {
+    return std::unexpected{PlanetaryPresentationError::terrain_failure};
+  }
 
   double distance = 1.0;
   while (distance < settings.local_max_distance_metres) {
@@ -157,17 +177,9 @@ using Clock = std::chrono::steady_clock;
       if (!fixed) {
         return std::unexpected{PlanetaryPresentationError::coordinate_failure};
       }
-      const auto sample = sample_planet_surface(planet, *fixed, lod, cache);
+      const auto sample = sampler->sample(*fixed);
       if (!sample) {
         return std::unexpected{PlanetaryPresentationError::terrain_failure};
-      }
-      if (std::ranges::find(touched, sample->address.tile) == touched.end()) {
-        touched.push_back(sample->address.tile);
-        const auto pinned = cache.get(planet, sample->address.tile);
-        if (!pinned) {
-          return std::unexpected{PlanetaryPresentationError::terrain_failure};
-        }
-        pinned_tiles.push_back(*pinned);
       }
       const double ground = std::max(0.0, sample->elevation_metres);
       const double projected =
@@ -177,7 +189,8 @@ using Clock = std::chrono::steady_clock;
       const int bottom = occlusion[static_cast<std::size_t>(x)];
       if (top < bottom) {
         auto color = pixel(sample->color);
-        color = blend(color, airless ? space : atmosphere, fog * fog * 0.72);
+        color = blend(color, airless ? space : atmosphere,
+                      blend_weight(fog * fog * 0.72));
         for (int y = top; y < bottom; ++y) {
           destination[static_cast<std::size_t>(y) *
                           static_cast<std::size_t>(settings.width) +
@@ -190,7 +203,7 @@ using Clock = std::chrono::steady_clock;
     }
     distance += std::max(0.75, distance * 0.0125);
   }
-  return touched.size();
+  return sampler->tiles_touched();
 }
 
 }  // namespace
@@ -238,6 +251,8 @@ PlanetaryPresentationRenderer::PlanetaryPresentationRenderer(
       m_orbital_renderer({.width = settings.width,
                           .height = settings.height,
                           .field_of_view_degrees = settings.field_of_view_degrees,
+                          .horizontal_sample_stride =
+                              settings.width >= kDefaultViewportWidth ? 2 : 1,
                           .light_direction = settings.light_direction}),
       m_orbital_frame(validate_viewport({settings.width, settings.height})
                           ? static_cast<std::size_t>(settings.width) *
@@ -300,7 +315,14 @@ auto PlanetaryPresentationRenderer::render(
     stats.mode = PlanetaryPresentationMode::orbital;
   }
 
-  if (mix->local_terrain < 1.0) {
+  const auto local_weight = blend_weight(mix->local_terrain);
+  const auto orbital_weight = kBlendScale - local_weight;
+  const bool render_orbital =
+      local_weight < kBlendScale && can_affect_channel(orbital_weight);
+  const bool render_local_pass =
+      local_weight > 0 && can_affect_channel(local_weight);
+
+  if (render_orbital) {
     const auto fixed = planet_fixed_from_geodetic(planet, state.pose.position);
     const auto frame = make_local_tangent_frame(planet, state.pose.position);
     if (!fixed || !frame) {
@@ -335,7 +357,7 @@ auto PlanetaryPresentationRenderer::render(
     stats.orbital_tiles_touched = orbital->terrain_tiles_touched;
   }
 
-  if (mix->local_terrain > 0.0) {
+  if (render_local_pass) {
     const auto started = Clock::now();
     const auto tiles = render_local(m_settings, planet, state, camera,
                                     *selected_lod, *m_cache, m_local_frame);
@@ -346,19 +368,18 @@ auto PlanetaryPresentationRenderer::render(
 
   const auto composite_started = Clock::now();
   const auto atmosphere_color = pixel(planet.palette.atmosphere);
+  const auto atmosphere_weight = blend_weight(mix->atmosphere * 0.12);
   for (std::size_t index = 0; index < expected; ++index) {
     termforge::Pixel result;
-    if (mix->local_terrain >= 1.0) {
+    if (!render_orbital) {
       result = m_local_frame[index];
-    } else if (mix->local_terrain <= 0.0) {
+    } else if (!render_local_pass) {
       result = m_orbital_frame[index];
     } else {
       result = blend(m_orbital_frame[index], m_local_frame[index],
-                     mix->local_terrain);
+                     local_weight);
     }
-    if (mix->atmosphere > 0.0) {
-      result = blend(result, atmosphere_color, mix->atmosphere * 0.12);
-    }
+    result = blend(result, atmosphere_color, atmosphere_weight);
     destination[index] = result;
   }
   stats.composite_ms = elapsed_ms(composite_started, Clock::now());

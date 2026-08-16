@@ -233,6 +233,9 @@ Both profiles and both compiler builds must report the final authoritative
 flight checksum `15600629779145530762` and the same ordered stage ticks `0`,
 `13350`, `113071`, and `119360`. Timing fields and framebuffer checksums remain
 presentation diagnostics; they do not enter deterministic simulation state.
+The v0.3.1 local profile keeps the canonical 640x480 terrain-blend checkpoint
+below the 33.33 ms application-renderer budget by bounding tile-backed orbital
+sampling and omitting raster passes that cannot affect an 8-bit pixel.
 The exact command schedule, report contract, stage identities, and measured
 profile envelope are documented in the
 [Planetfall acceptance path](docs/PLANETFALL_ACCEPTANCE.md).

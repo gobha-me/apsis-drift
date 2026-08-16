@@ -63,7 +63,7 @@ Raw reports:
 - [`planetary-headless-gcc.json`](planetary-headless-gcc.json)
 - [`planetary-headless-clang.json`](planetary-headless-clang.json)
 
-## Integrated Planetfall acceptance
+## Integrated Planetfall acceptance baseline
 
 The canonical seed-42 replay advances authoritative flight against generated
 terrain for 119360 ticks, then renders each deterministic checkpoint 60 times.
@@ -78,14 +78,14 @@ terrain-blend, and local-terrain checkpoints:
 | Clang | `remote` | 4.69 | 6.38 | 26.00 | 14.87 |
 | Clang | `local` | 21.74 | 27.98 | 91.77 | 28.78 |
 
-Remote stays inside the 33.33 ms 30 FPS application-renderer budget at every
-stage. Local also fits except for the intentionally explicit mixed frame,
-which renders tile-backed orbital and local passes plus the full composite.
-That hotspot is tracked in
-[issue #62](https://github.com/gobha-me/apsis-drift/issues/62); it does not
-change the shared final flight checksum `15600629779145530762` or the ordered
-stage identities. These headless timings do not include a terminal, PTY,
-proxy, decoder, compositor, display, or network.
+This v0.3.0 baseline keeps remote inside the 33.33 ms 30 FPS
+application-renderer budget at every stage. Local also fits except for the
+explicit mixed frame, which renders tile-backed orbital and local passes plus
+the full composite. That hotspot motivated
+[issue #62](https://github.com/gobha-me/apsis-drift/issues/62) and the optimized
+results below; it does not change the shared final flight checksum
+`15600629779145530762` or the ordered stage identities. These headless timings
+do not include a terminal, PTY, proxy, decoder, compositor, display, or network.
 
 Raw reports:
 
@@ -93,3 +93,43 @@ Raw reports:
 - [`planetfall-acceptance-gcc-local.json`](planetfall-acceptance-gcc-local.json)
 - [`planetfall-acceptance-clang-remote.json`](planetfall-acceptance-clang-remote.json)
 - [`planetfall-acceptance-clang-local.json`](planetfall-acceptance-clang-local.json)
+
+## v0.3.1 terrain-blend optimization
+
+Issue #62 removes repeated per-sample cache ownership work, reuses resolved
+surface directions, uses deterministic fixed-point compositing, and keeps the
+local-width tile-backed orbital pass at a constant two-column sampling stride.
+It also omits a source pass when its weight cannot alter any rounded 8-bit
+channel. The same host and compiler builds produced these total renderer p95
+values after the change:
+
+| Compiler | Profile | Orbital | Atmospheric | Terrain blend | Local terrain |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GCC | `remote` | 5.25 ms | 6.15 ms | 12.65 ms | 10.66 ms |
+| GCC | `local` | 9.62 ms | 12.01 ms | 24.87 ms | 20.44 ms |
+| Clang | `remote` | 4.50 ms | 5.47 ms | 11.86 ms | 10.86 ms |
+| Clang | `local` | 9.98 ms | 11.18 ms | 23.09 ms | 21.87 ms |
+
+The local terrain-blend checkpoint therefore gains 8.47 ms of GCC headroom
+and 10.24 ms of Clang headroom against the 33.33 ms budget. Remote remains
+full-resolution and faster than the previous evidence. Both compilers agree on
+every framebuffer checksum within each profile, and all reports retain final
+flight checksum `15600629779145530762`.
+
+The visual smoke used the final blend phase from:
+
+```bash
+./build/apsis-drift --benchmark 3 --profile local \
+  --workload planetary --snapshot terrain-blend.ppm
+```
+
+The inspected 640x480 PPM had SHA-256
+`104301fb470a1ab2d71de727f227a1846c96c187f7056ed9f4abcf5a0a7e8867`.
+It is a generated smoke artifact rather than a committed media asset.
+
+Optimized raw reports:
+
+- [`planetfall-acceptance-v0.3.1-gcc-remote.json`](planetfall-acceptance-v0.3.1-gcc-remote.json)
+- [`planetfall-acceptance-v0.3.1-gcc-local.json`](planetfall-acceptance-v0.3.1-gcc-local.json)
+- [`planetfall-acceptance-v0.3.1-clang-remote.json`](planetfall-acceptance-v0.3.1-clang-remote.json)
+- [`planetfall-acceptance-v0.3.1-clang-local.json`](planetfall-acceptance-v0.3.1-clang-local.json)

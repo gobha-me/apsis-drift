@@ -8,6 +8,7 @@
 #include <list>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/planet.hpp"
@@ -135,6 +136,52 @@ class TerrainTileCache {
   std::size_t m_capacity{};
   // Most recently used is at the front; least recently used is at the back.
   std::list<Entry> m_entries;
+};
+
+// A render-pass-local sampler validates its descriptor and LOD once, pins each
+// touched immutable tile, and avoids repeating cache ownership work for every
+// pixel. It remains presentation-only and does not alter generator identity.
+class TerrainSurfaceSampler {
+ public:
+  [[nodiscard]] static auto create(const PlanetDescriptor& planet,
+                                   std::uint8_t lod,
+                                   TerrainTileCache& cache)
+      -> std::expected<TerrainSurfaceSampler, TerrainTileError>;
+
+  TerrainSurfaceSampler(const TerrainSurfaceSampler&) = delete;
+  auto operator=(const TerrainSurfaceSampler&)
+      -> TerrainSurfaceSampler& = delete;
+  TerrainSurfaceSampler(TerrainSurfaceSampler&&) noexcept = default;
+  auto operator=(TerrainSurfaceSampler&&) noexcept
+      -> TerrainSurfaceSampler& = delete;
+
+  [[nodiscard]] auto sample(PlanetFixedPositionMetres position)
+      -> std::expected<TerrainSurfaceSample, TerrainTileError>;
+  [[nodiscard]] auto sample_direction(PlanetFixedDirection direction)
+      -> std::expected<TerrainSurfaceSample, TerrainTileError>;
+  [[nodiscard]] auto tiles_touched() const noexcept -> std::size_t {
+    return m_tiles.size();
+  }
+
+ private:
+  struct PinnedTile {
+    TerrainTileKey key;
+    std::shared_ptr<const TerrainTile> tile;
+  };
+
+  TerrainSurfaceSampler(PlanetDescriptor planet, std::uint8_t lod,
+                        TerrainTileCache& cache)
+      : m_planet{std::move(planet)}, m_lod{lod}, m_cache{&cache} {}
+
+  [[nodiscard]] auto sample_address(const TerrainTileAddress& address)
+      -> std::expected<TerrainSurfaceSample, TerrainTileError>;
+
+  PlanetDescriptor m_planet;
+  std::uint8_t m_lod{};
+  TerrainTileCache* m_cache{};
+  std::vector<PinnedTile> m_tiles;
+  TerrainTileKey m_last_key;
+  const TerrainTile* m_last_tile{};
 };
 
 // Presentation-only sampling resolves one planet-fixed direction through the

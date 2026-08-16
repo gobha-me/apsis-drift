@@ -143,6 +143,14 @@ enum class CoordinateError : std::uint8_t {
     std::uint8_t lod) noexcept
     -> std::expected<TerrainTileAddress, CoordinateError>;
 
+// Resolves an already available surface direction without measuring or
+// normalizing it. Cube-face coordinates are scale invariant, so callers such
+// as renderers can reuse a direction they have already computed.
+[[nodiscard]] auto terrain_address_from_planet_direction(
+    const PlanetDescriptor& planet, PlanetFixedDirection direction,
+    std::uint8_t lod) noexcept
+    -> std::expected<TerrainTileAddress, CoordinateError>;
+
 [[nodiscard]] auto planet_fixed_from_terrain_address(
     const PlanetDescriptor& planet, const TerrainTileAddress& address,
     double altitude_metres = 0.0) noexcept

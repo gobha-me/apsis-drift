@@ -428,17 +428,9 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
       m_entries, [key](const Entry& entry) { return entry.key == key; });
 }
 
-auto sample_planet_surface(const PlanetDescriptor& planet,
-                           PlanetFixedPositionMetres position,
-                           std::uint8_t lod, TerrainTileCache& cache)
+[[nodiscard]] auto sample_tile_address(
+    const TerrainTile& tile, const TerrainTileAddress& address)
     -> std::expected<TerrainSurfaceSample, TerrainTileError> {
-  const auto address = terrain_address_from_planet_fixed(planet, position, lod);
-  if (!address) {
-    return std::unexpected{TerrainTileError::coordinate_failure};
-  }
-  const auto tile = cache.get(planet, address->tile);
-  if (!tile) return std::unexpected{tile.error()};
-
   const auto interpolate_axis = [](double coordinate) {
     const double grid = std::clamp(coordinate, 0.0, 1.0) *
                         static_cast<double>(kTerrainTileIntervalsPerAxis);
@@ -451,12 +443,12 @@ auto sample_planet_surface(const PlanetDescriptor& planet,
                       std::clamp(fraction, std::int64_t{0},
                                  kFixedOne)};
   };
-  const auto [x0, x1, tx] = interpolate_axis(address->u);
-  const auto [y0, y1, ty] = interpolate_axis(address->v);
-  const auto s00 = (*tile)->sample_at(x0, y0);
-  const auto s10 = (*tile)->sample_at(x1, y0);
-  const auto s01 = (*tile)->sample_at(x0, y1);
-  const auto s11 = (*tile)->sample_at(x1, y1);
+  const auto [x0, x1, tx] = interpolate_axis(address.u);
+  const auto [y0, y1, ty] = interpolate_axis(address.v);
+  const auto s00 = tile.sample_at(x0, y0);
+  const auto s10 = tile.sample_at(x1, y0);
+  const auto s01 = tile.sample_at(x0, y1);
+  const auto s11 = tile.sample_at(x1, y1);
   if (!s00 || !s10 || !s01 || !s11) {
     return std::unexpected{TerrainTileError::invalid_sample_coordinate};
   }
@@ -480,11 +472,78 @@ auto sample_planet_surface(const PlanetDescriptor& planet,
         0, 255));
   };
   return TerrainSurfaceSample{
-      .address = *address,
+      .address = address,
       .elevation_metres = static_cast<double>(elevation),
       .color = {channel(&Rgb8::red), channel(&Rgb8::green),
                 channel(&Rgb8::blue)},
   };
+}
+
+auto TerrainSurfaceSampler::create(const PlanetDescriptor& planet,
+                                   std::uint8_t lod,
+                                   TerrainTileCache& cache)
+    -> std::expected<TerrainSurfaceSampler, TerrainTileError> {
+  const TerrainTileKey validation_key{planet.id, CubeFace::positive_x, lod, 0,
+                                      0};
+  const auto valid = validate_key(planet, validation_key);
+  if (!valid) return std::unexpected{valid.error()};
+  return TerrainSurfaceSampler{planet, lod, cache};
+}
+
+auto TerrainSurfaceSampler::sample(PlanetFixedPositionMetres position)
+    -> std::expected<TerrainSurfaceSample, TerrainTileError> {
+  const auto address =
+      terrain_address_from_planet_fixed(m_planet, position, m_lod);
+  if (!address) {
+    return std::unexpected{TerrainTileError::coordinate_failure};
+  }
+  return sample_address(*address);
+}
+
+auto TerrainSurfaceSampler::sample_direction(PlanetFixedDirection direction)
+    -> std::expected<TerrainSurfaceSample, TerrainTileError> {
+  const auto address =
+      terrain_address_from_planet_direction(m_planet, direction, m_lod);
+  if (!address) {
+    return std::unexpected{TerrainTileError::coordinate_failure};
+  }
+  return sample_address(*address);
+}
+
+auto TerrainSurfaceSampler::sample_address(
+    const TerrainTileAddress& address)
+    -> std::expected<TerrainSurfaceSample, TerrainTileError> {
+  const TerrainTile* tile{};
+  if (m_last_tile != nullptr && address.tile == m_last_key) {
+    tile = m_last_tile;
+  } else {
+    const auto found = std::ranges::find(
+        m_tiles, address.tile, &PinnedTile::key);
+    if (found != m_tiles.end()) {
+      tile = found->tile.get();
+    } else {
+      const auto acquired = m_cache->get(m_planet, address.tile);
+      if (!acquired) return std::unexpected{acquired.error()};
+      m_tiles.push_back({address.tile, *acquired});
+      tile = acquired->get();
+    }
+    m_last_key = address.tile;
+    m_last_tile = tile;
+  }
+  return sample_tile_address(*tile, address);
+}
+
+auto sample_planet_surface(const PlanetDescriptor& planet,
+                           PlanetFixedPositionMetres position,
+                           std::uint8_t lod, TerrainTileCache& cache)
+    -> std::expected<TerrainSurfaceSample, TerrainTileError> {
+  const auto address = terrain_address_from_planet_fixed(planet, position, lod);
+  if (!address) {
+    return std::unexpected{TerrainTileError::coordinate_failure};
+  }
+  const auto tile = cache.get(planet, address->tile);
+  if (!tile) return std::unexpected{tile.error()};
+  return sample_tile_address(**tile, *address);
 }
 
 }  // namespace apsis_drift

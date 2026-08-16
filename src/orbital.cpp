@@ -5,9 +5,8 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <numbers>
-#include <vector>
+#include <optional>
 
 namespace apsis_drift {
 namespace {
@@ -330,6 +329,10 @@ auto OrbitalRenderer::render_impl(
       m_settings.field_of_view_degrees >= 179.0) {
     return std::unexpected{OrbitalRenderError::invalid_field_of_view};
   }
+  if (m_settings.horizontal_sample_stride < 1 ||
+      m_settings.horizontal_sample_stride > 8) {
+    return std::unexpected{OrbitalRenderError::invalid_sample_stride};
+  }
 
   const Vector3 camera_position = vector(camera.position);
   const Vector3 camera_forward = vector(camera.forward);
@@ -383,16 +386,27 @@ auto OrbitalRenderer::render_impl(
   const auto atmosphere_color = pixel(planet.palette.atmosphere);
 
   OrbitalRenderStats stats;
-  std::vector<TerrainTileKey> touched_tiles;
-  std::vector<std::shared_ptr<const TerrainTile>> pinned_tiles;
+  std::optional<TerrainSurfaceSampler> terrain_sampler;
+  if (cache != nullptr) {
+    auto created = TerrainSurfaceSampler::create(planet, terrain_lod, *cache);
+    if (!created) {
+      return std::unexpected{OrbitalRenderError::terrain_failure};
+    }
+    terrain_sampler.emplace(std::move(*created));
+  }
   for (int y = 0; y < m_settings.height; ++y) {
     const double screen_y =
         (1.0 - (static_cast<double>(y) + 0.5) * 2.0 /
                    static_cast<double>(m_settings.height)) *
         vertical_tangent;
-    for (int x = 0; x < m_settings.width; ++x) {
+    for (int x = 0; x < m_settings.width;
+         x += m_settings.horizontal_sample_stride) {
+      const int sample_width =
+          std::min(m_settings.horizontal_sample_stride, m_settings.width - x);
+      const double sample_x =
+          static_cast<double>(x) + static_cast<double>(sample_width) * 0.5;
       const double screen_x =
-          ((static_cast<double>(x) + 0.5) * 2.0 /
+          (sample_x * 2.0 /
                static_cast<double>(m_settings.width) -
            1.0) *
           horizontal_tangent;
@@ -413,22 +427,13 @@ auto OrbitalRenderer::render_impl(
               add(camera_position, multiply(ray, distance));
           const Vector3 normal = normalized(point);
           termforge::Pixel color;
-          if (cache != nullptr) {
-            const auto sample = sample_planet_surface(
-                planet, {point.x, point.y, point.z}, terrain_lod, *cache);
+          if (terrain_sampler) {
+            const auto sample = terrain_sampler->sample_direction(
+                {normal.x, normal.y, normal.z});
             if (!sample) {
               return std::unexpected{OrbitalRenderError::terrain_failure};
             }
             color = pixel(sample->color);
-            if (std::ranges::find(touched_tiles, sample->address.tile) ==
-                touched_tiles.end()) {
-              touched_tiles.push_back(sample->address.tile);
-              const auto pinned = cache->get(planet, sample->address.tile);
-              if (!pinned) {
-                return std::unexpected{OrbitalRenderError::terrain_failure};
-              }
-              pinned_tiles.push_back(*pinned);
-            }
           } else {
             const double field = surface_field(normal, planet);
             color = surface_color(planet, field);
@@ -442,8 +447,10 @@ auto OrbitalRenderer::render_impl(
                 std::pow(1.0 - view, 2.2) * (0.18 + atmosphere * 0.36);
             color = blend(color, atmosphere_color, scatter);
           }
-          destination[index] = color;
-          ++stats.surface_pixels;
+          std::fill_n(destination.begin() +
+                          static_cast<std::ptrdiff_t>(index),
+                      sample_width, color);
+          stats.surface_pixels += static_cast<std::size_t>(sample_width);
           continue;
         }
       }
@@ -462,13 +469,15 @@ auto OrbitalRenderer::render_impl(
                        1.6) *
               (0.22 + atmosphere * 0.48);
           background = blend(background, atmosphere_color, halo);
-          ++stats.atmosphere_pixels;
+          stats.atmosphere_pixels += static_cast<std::size_t>(sample_width);
         }
       }
-      destination[index] = background;
+      std::fill_n(destination.begin() + static_cast<std::ptrdiff_t>(index),
+                  sample_width, background);
     }
   }
-  stats.terrain_tiles_touched = touched_tiles.size();
+  stats.terrain_tiles_touched =
+      terrain_sampler ? terrain_sampler->tiles_touched() : 0;
   return stats;
 }
 

@@ -733,6 +733,45 @@ auto terrain_tile_cache_contract() -> void {
         "one cached planet identity must reject a conflicting descriptor");
   check(cache->size() == before_size,
         "a conflicting cached descriptor must leave cache state unchanged");
+
+  auto sampling_cache = TerrainTileCache::create(4);
+  auto sampler = sampling_cache
+                     ? TerrainSurfaceSampler::create(planet, 6,
+                                                     *sampling_cache)
+                     : std::expected<TerrainSurfaceSampler, TerrainTileError>{
+                           std::unexpected{
+                               TerrainTileError::invalid_cache_capacity}};
+  const auto sample_position =
+      planet_fixed_from_geodetic(planet, {0.35, -0.65, 0.0});
+  const auto one_shot = sample_position && sampling_cache
+                            ? sample_planet_surface(planet, *sample_position, 6,
+                                                    *sampling_cache)
+                            : std::expected<TerrainSurfaceSample,
+                                            TerrainTileError>{std::unexpected{
+                                  TerrainTileError::coordinate_failure}};
+  const auto prepared = sampler && sample_position
+                            ? sampler->sample(*sample_position)
+                            : std::expected<TerrainSurfaceSample,
+                                            TerrainTileError>{std::unexpected{
+                                  TerrainTileError::coordinate_failure}};
+  const auto by_direction = sampler && sample_position
+                                ? sampler->sample_direction(
+                                      {sample_position->x, sample_position->y,
+                                       sample_position->z})
+                                : std::expected<TerrainSurfaceSample,
+                                                TerrainTileError>{
+                                      std::unexpected{
+                                          TerrainTileError::coordinate_failure}};
+  check(one_shot && prepared && by_direction && *one_shot == *prepared &&
+            *prepared == *by_direction && sampler->tiles_touched() == 1,
+        "a prepared surface sampler must preserve samples while pinning each tile once");
+  check(sampler &&
+            !sampler->sample_direction(
+                {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}) &&
+            TerrainSurfaceSampler::create(planet, kMaxTerrainLod + 1,
+                                          *sampling_cache) ==
+                std::unexpected{TerrainTileError::invalid_lod},
+        "prepared surface sampling must reject invalid directions and LODs");
 }
 
 auto coordinate_and_lod_contract() -> void {
@@ -966,7 +1005,11 @@ auto coordinate_and_lod_contract() -> void {
                   PlanetFixedPositionMetres{1.0, 1.0, 1.0}}) {
     const auto address =
         terrain_address_from_planet_fixed(planet, sample, 12);
+    const auto direction_address = terrain_address_from_planet_direction(
+        planet, {sample.x * 17.0, sample.y * 17.0, sample.z * 17.0}, 12);
     check(address.has_value(), "valid directions must produce tile addresses");
+    check(direction_address && address && *direction_address == *address,
+          "direction addressing must preserve scale-invariant cube coordinates");
     if (!address) continue;
     const auto inverse =
         planet_fixed_from_terrain_address(planet, *address, 2'000.0);
@@ -1047,6 +1090,13 @@ auto coordinate_and_lod_contract() -> void {
   check(!terrain_address_from_planet_fixed(
             planet, {1.0, 0.0, 0.0}, kMaxTerrainLod + 1),
         "terrain addresses above the maximum LOD must be rejected");
+  check(terrain_address_from_planet_direction(planet, {}, 0) ==
+            std::unexpected{CoordinateError::planet_center} &&
+            !terrain_address_from_planet_direction(
+                planet, {quiet_nan, 0.0, 0.0}, 0) &&
+            !terrain_address_from_planet_direction(
+                planet, {1.0, 0.0, 0.0}, kMaxTerrainLod + 1),
+        "direction terrain addressing must reject zero, non-finite, and invalid-LOD inputs");
 
   const TerrainTileAddress invalid_face{
       {planet.id, static_cast<CubeFace>(255), 0, 0, 0}, 0.5, 0.5};
@@ -3246,6 +3296,13 @@ auto orbital_render_failure_matrix() -> void {
                   OrbitalRenderError::invalid_field_of_view,
                   "an invalid orbital field of view must be rejected");
 
+  const OrbitalRenderer invalid_stride{{.width = 160,
+                                        .height = 120,
+                                        .horizontal_sample_stride = 0}};
+  check_untouched(invalid_stride.render(planet, camera, frame),
+                  OrbitalRenderError::invalid_sample_stride,
+                  "an invalid orbital sample stride must be rejected");
+
   const OrbitalRenderer invalid_light{{
       .width = 160, .height = 120, .light_direction = {0.0, 0.0, 0.0}}};
   check_untouched(invalid_light.render(planet, camera, frame),
@@ -3376,6 +3433,34 @@ auto deterministic_orbital_render() -> void {
   check(renderer.render(planet, moved, second) &&
             pixel_checksum(first) != pixel_checksum(second),
         "moving the orbital camera must change the rendered frame");
+
+  constexpr int strided_width{161};
+  constexpr int strided_height{121};
+  const OrbitalRenderer strided({.width = strided_width,
+                                 .height = strided_height,
+                                 .field_of_view_degrees = 60.0,
+                                 .horizontal_sample_stride = 2,
+                                 .light_direction = {-0.4, -0.6, 0.7}});
+  std::vector<Pixel> strided_frame(
+      static_cast<std::size_t>(strided_width * strided_height));
+  const auto strided_result =
+      strided.render(planet, camera, strided_frame);
+  check(strided_result &&
+            std::ranges::all_of(strided_frame,
+                                [](Pixel value) { return value.a == 255; }),
+        "strided orbital sampling must fill odd-width framebuffers without crossing their boundary");
+  bool pairs_match = true;
+  for (int y = 0; y < strided_height && pairs_match; ++y) {
+    for (int x = 0; x + 1 < strided_width; x += 2) {
+      const auto index = static_cast<std::size_t>(y * strided_width + x);
+      if (strided_frame[index] != strided_frame[index + 1]) {
+        pairs_match = false;
+        break;
+      }
+    }
+  }
+  check(pairs_match,
+        "each complete horizontal sample span must receive one centered orbital color");
 }
 
 auto golden_orbital_profiles() -> void {
@@ -3578,10 +3663,18 @@ auto planetary_presentation_contract() -> void {
   }
   constexpr std::array<std::uint64_t, 4> expected_checksums{
       4464057357403076723ULL,
-      3639508942892810008ULL,
+      6162202560146668315ULL,
       3992641663955562031ULL,
       10329579900168594179ULL,
   };
+  if (checksums != expected_checksums) {
+    std::fprintf(stderr,
+                 "planetary presentation golden checksums: %llu %llu %llu %llu\n",
+                 static_cast<unsigned long long>(checksums[0]),
+                 static_cast<unsigned long long>(checksums[1]),
+                 static_cast<unsigned long long>(checksums[2]),
+                 static_cast<unsigned long long>(checksums[3]));
+  }
   check(checksums == expected_checksums,
         "planetary presentation stages must retain golden frame checksums");
   check(std::ranges::none_of(checksums,
@@ -3595,6 +3688,19 @@ auto planetary_presentation_contract() -> void {
               return value == Pixel{1, 2, 3, 4};
             }),
         "a short planetary framebuffer must be rejected unchanged");
+
+  auto subpixel_blend = terrain_start;
+  subpixel_blend.pose.position.altitude_metres -= 0.5;
+  subpixel_blend.clearance_metres -= 0.5;
+  const auto subpixel_result = renderer.render(
+      planet, subpixel_blend, {.pitch_radians = -1.25}, frame);
+  check(subpixel_result &&
+            subpixel_result->mode ==
+                PlanetaryPresentationMode::terrain_blend &&
+            subpixel_result->orbital_tiles_touched > 0 &&
+            subpixel_result->local_tiles_touched == 0 &&
+            subpixel_result->local_render_ms == 0.0,
+        "a subpixel terrain contribution must not render an ineffectual local pass");
   auto invalid_state = orbital;
   invalid_state.pose.position.altitude_metres =
       std::numeric_limits<double>::quiet_NaN();
