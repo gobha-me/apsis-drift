@@ -69,6 +69,9 @@ of one generated planet are recorded in the
 The system, planet-fixed, local tangent, cube-sphere tile, and altitude-driven
 LOD conventions are recorded in the
 [Coordinate and Terrain LOD Contract](COORDINATE_SYSTEM.md).
+The application-owned orbital sphere, camera, lighting, validation, and
+headless workload are recorded in the
+[Orbital Planet Rendering](ORBITAL_RENDERING.md) contract.
 
 Generation should be divided by scale:
 

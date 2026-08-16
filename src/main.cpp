@@ -33,6 +33,8 @@
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
+#include "apsis_drift/orbital.hpp"
+#include "apsis_drift/planet.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/title.hpp"
@@ -178,15 +180,31 @@ class MeasuringSink final : public ByteSink {
   return settings;
 }
 
+[[nodiscard]] auto orbital_settings_for(ViewportSize viewport)
+    -> OrbitalRenderSettings {
+  OrbitalRenderSettings settings;
+  settings.width = viewport.width;
+  settings.height = viewport.height;
+  settings.field_of_view_degrees = 60.0;
+  settings.light_direction = {0.55, 0.15, 0.82};
+  return settings;
+}
+
 class LandscapeApp final : public App {
  public:
   explicit LandscapeApp(RenderConfiguration render_configuration,
-                        std::uint32_t seed, double capture_seconds = 0.0,
+                        std::uint32_t seed,
+                        BenchmarkWorkload workload =
+                            BenchmarkWorkload::landscape,
+                        double capture_seconds = 0.0,
                         bool interactive_controls = false,
                         bool flight_deck_acceptance = false)
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
+        m_planet(generate_planet_descriptor(Seed{seed})),
         m_renderer(render_settings_for(render_configuration.viewport)),
+        m_orbital_renderer(
+            orbital_settings_for(render_configuration.viewport)),
         m_surface({render_configuration.viewport.width,
                    render_configuration.viewport.height},
                   {0, 0, 0, 255}),
@@ -194,6 +212,7 @@ class LandscapeApp final : public App {
         m_session(!interactive_controls),
         m_capture_seconds(capture_seconds),
         m_seed(seed),
+        m_workload(workload),
         m_interactive_controls(interactive_controls),
         m_flight_deck_acceptance(flight_deck_acceptance) {
     set_frame_ms(33);
@@ -204,7 +223,7 @@ class LandscapeApp final : public App {
     set_mouse_mode(interactive_controls ? MouseMode::Click : MouseMode::None);
     set_keyboard_mode(KeyboardMode::Enhanced);
     require(apsis_drift::detail::flight_deck_requirements());
-    render_landscape();
+    render_viewport();
   }
 
   auto on_start() -> void override {
@@ -281,7 +300,7 @@ class LandscapeApp final : public App {
     const auto frame_started = Clock::now();
     const auto render_started = Clock::now();
     if (m_session.screen() == SessionScreen::flight) {
-      render_landscape();
+      render_viewport();
     } else if (m_session.screen() == SessionScreen::title &&
                !m_title_rendered) {
       m_title_available =
@@ -403,6 +422,9 @@ class LandscapeApp final : public App {
   [[nodiscard]] auto render_configuration() const noexcept
       -> const RenderConfiguration& {
     return m_render_configuration;
+  }
+  [[nodiscard]] auto workload() const noexcept -> BenchmarkWorkload {
+    return m_workload;
   }
 
   [[nodiscard]] auto write_snapshot(const std::filesystem::path& path) const
@@ -735,7 +757,29 @@ class LandscapeApp final : public App {
     }
   }
 
-  auto render_landscape() -> void {
+  auto render_viewport() -> void {
+    if (m_workload == BenchmarkWorkload::orbital) {
+      const double radius = static_cast<double>(m_planet.radius.value) * 1'000.0;
+      const double elapsed_seconds =
+          static_cast<double>(m_flight.tick) * kSimulationStep.count();
+      const double angle = 0.35 + elapsed_seconds * 0.025;
+      OrbitalCamera camera;
+      camera.position = {std::cos(angle) * radius * 3.5,
+                         std::sin(angle) * radius * 3.5, radius * 0.25};
+      camera.forward = {-camera.position.x, -camera.position.y,
+                        -camera.position.z};
+      camera.up = {0.0, 0.0, 1.0};
+      const auto rendered =
+          m_orbital_renderer.render(m_planet, camera, m_surface.pixels());
+      if (!rendered) {
+        throw std::runtime_error{std::format(
+            "orbital renderer rejected the {}x{} surface",
+            m_render_configuration.viewport.width,
+            m_render_configuration.viewport.height)};
+      }
+      return;
+    }
+
     auto derived = derive_camera(m_flight);
     if (!derived) {
       throw std::runtime_error{"cannot derive camera from flight state"};
@@ -756,7 +800,9 @@ class LandscapeApp final : public App {
 
   RenderConfiguration m_render_configuration;
   Terrain m_terrain;
+  PlanetDescriptor m_planet;
   VoxelRenderer m_renderer;
+  OrbitalRenderer m_orbital_renderer;
   PixelSurface m_surface;
   Frame m_left_frame{"FLIGHT"};
   Frame m_viewport_frame{"EXTERIOR"};
@@ -772,6 +818,7 @@ class LandscapeApp final : public App {
   Clock::time_point m_run_started{};
   double m_capture_seconds{};
   std::uint32_t m_seed{};
+  BenchmarkWorkload m_workload{BenchmarkWorkload::landscape};
   int m_frame{};
   bool m_output_bound{false};
   bool m_synthetic_headless{false};
@@ -792,13 +839,16 @@ class LandscapeApp final : public App {
 };
 
 auto print_summary(const BenchmarkSummary& summary,
-                   const RenderConfiguration& configuration) -> void {
+                   const RenderConfiguration& configuration,
+                   BenchmarkWorkload workload) -> void {
   std::printf(
-      "landscape: profile=%.*s viewport=%dx%d frames=%zu elapsed=%.3fs "
+      "%.*s: profile=%.*s viewport=%dx%d frames=%zu elapsed=%.3fs "
       "achieved=%.2f fps\n"
       "timing: renderer avg/p95 %.3f/%.3f ms, full frame work %.3f/%.3f ms\n"
       "wire: %.1f KiB/frame, %.2f MiB/s, total %.2f MiB\n"
       "checksum: %llu\n",
+      static_cast<int>(workload_name(workload).size()),
+      workload_name(workload).data(),
       static_cast<int>(profile_name(configuration).size()),
       profile_name(configuration).data(), configuration.viewport.width,
       configuration.viewport.height, summary.frames, summary.elapsed_seconds,
@@ -811,11 +861,15 @@ auto print_summary(const BenchmarkSummary& summary,
 }
 
 [[nodiscard]] auto summary_json(const BenchmarkSummary& summary,
-                                const RenderConfiguration& configuration)
+                                const RenderConfiguration& configuration,
+                                BenchmarkWorkload workload)
     -> std::string {
+  const std::string_view workload_prefix =
+      workload == BenchmarkWorkload::orbital ? "orbital-planet"
+                                             : "voxel-landscape";
   return std::format(
       "{{\n"
-      "  \"workload\": \"voxel-landscape-{}x{}-rgba\",\n"
+      "  \"workload\": \"{}-{}x{}-rgba\",\n"
       "  \"render_profile\": \"{}\",\n"
       "  \"viewport_width\": {},\n"
       "  \"viewport_height\": {},\n"
@@ -831,7 +885,8 @@ auto print_summary(const BenchmarkSummary& summary,
       "  \"total_bytes\": {},\n"
       "  \"checksum\": {}\n"
       "}}\n",
-      configuration.viewport.width, configuration.viewport.height,
+      workload_prefix, configuration.viewport.width,
+      configuration.viewport.height,
       profile_name(configuration), configuration.viewport.width,
       configuration.viewport.height,
       summary.frames, summary.elapsed_seconds, summary.achieved_fps,
@@ -856,6 +911,7 @@ auto usage() -> void {
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
+      "                   [--workload landscape|orbital]\n"
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
       "       apsis-drift --flight-deck-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
@@ -865,6 +921,7 @@ auto usage() -> void {
       "profile.\n"
       "Sweep defaults: remote,balanced,local at 30,60 FPS. Viewport list\n"
       "entries may be profile names or validated WIDTHxHEIGHT values.\n"
+      "Workload selection is available only for benchmark and sweep modes.\n"
       "Add --snapshot PATH to save the final framebuffer as a binary PPM.\n"
       "Interactive controls: arrows/WASD move, Q/E strafe, R/F altitude,\n"
       "Space toggles autopilot; left-hold flies, right-hold strafes/climbs,\n"
@@ -882,6 +939,7 @@ auto main(int argc, char** argv) -> int {
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
   RenderProfile selected_profile{RenderProfile::local};
+  BenchmarkWorkload selected_workload{BenchmarkWorkload::landscape};
   std::optional<ViewportSize> viewport_override;
   auto sweep_viewports = default_sweep_viewports();
   auto sweep_fps = default_sweep_fps();
@@ -894,6 +952,7 @@ auto main(int argc, char** argv) -> int {
   bool seed_specified{};
   bool sweep_viewports_specified{};
   bool sweep_fps_specified{};
+  bool workload_specified{};
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view argument{argv[i]};
@@ -944,6 +1003,18 @@ auto main(int argc, char** argv) -> int {
         return 2;
       }
       seed_specified = true;
+      continue;
+    }
+    if (argument == "--workload" && i + 1 < argc) {
+      const std::string_view value{argv[++i]};
+      const auto parsed = parse_benchmark_workload(value);
+      if (!parsed) {
+        std::fprintf(stderr, "unknown benchmark workload '%.*s'\n",
+                     static_cast<int>(value.size()), value.data());
+        return 2;
+      }
+      selected_workload = *parsed;
+      workload_specified = true;
       continue;
     }
     if (argument == "--profile" && i + 1 < argc) {
@@ -1061,6 +1132,11 @@ auto main(int argc, char** argv) -> int {
                  "sweep selection options require --sweep\n");
     return 2;
   }
+  if (workload_specified && !benchmark_frames && !sweep_frames) {
+    std::fprintf(stderr,
+                 "--workload requires --benchmark or --sweep\n");
+    return 2;
+  }
   if (keyboard_specified && driver_choice == DriverChoice::automatic) {
     std::fprintf(stderr,
                  "--keyboard requires --driver kitty, ansi, or fallback\n");
@@ -1093,7 +1169,7 @@ auto main(int argc, char** argv) -> int {
       std::vector<BenchmarkMeasurement> measurements;
       measurements.reserve(sweep_viewports.size());
       for (const auto& configuration : sweep_viewports) {
-        LandscapeApp app{configuration, seed};
+        LandscapeApp app{configuration, seed, selected_workload};
         app.benchmark(*sweep_frames);
         auto summary = app.summary();
         if (summary.frames != static_cast<std::size_t>(*sweep_frames)) {
@@ -1112,14 +1188,17 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       report << sweep_json(measurements, sweep_fps, seed,
-                           static_cast<std::size_t>(*sweep_frames));
+                           static_cast<std::size_t>(*sweep_frames),
+                           selected_workload);
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
 
-      std::printf("sweep: seed=%u frames-per-viewport=%d\n", seed,
+      std::printf("sweep: workload=%.*s seed=%u frames-per-viewport=%d\n",
+                  static_cast<int>(workload_name(selected_workload).size()),
+                  workload_name(selected_workload).data(), seed,
                   *sweep_frames);
       const auto table = sweep_table(measurements, sweep_fps);
       std::fputs(table.c_str(), stdout);
@@ -1134,7 +1213,7 @@ auto main(int argc, char** argv) -> int {
     const bool interactive_controls =
         !benchmark_frames && capture_seconds == 0 &&
         !flight_deck_acceptance;
-    LandscapeApp app{render_configuration, run_seed,
+    LandscapeApp app{render_configuration, run_seed, selected_workload,
                      static_cast<double>(capture_seconds),
                      interactive_controls, flight_deck_acceptance};
     if (auto forced =
@@ -1164,7 +1243,7 @@ auto main(int argc, char** argv) -> int {
     }
     const BenchmarkSummary summary = app.summary();
     std::printf("display: %s\n", app.display_path().c_str());
-    print_summary(summary, app.render_configuration());
+    print_summary(summary, app.render_configuration(), app.workload());
     if (!snapshot_path.empty() && !app.write_snapshot(snapshot_path)) {
       std::fprintf(stderr, "cannot write snapshot '%s'\n",
                    snapshot_path.string().c_str());
@@ -1185,7 +1264,8 @@ auto main(int argc, char** argv) -> int {
             .presentation = app.display_tier(),
         });
       } else {
-        report << summary_json(summary, app.render_configuration());
+        report << summary_json(summary, app.render_configuration(),
+                               app.workload());
       }
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",

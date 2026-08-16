@@ -58,6 +58,30 @@ auto append_summary_json(std::string& output,
 
 }  // namespace
 
+auto workload_name(BenchmarkWorkload workload) noexcept -> std::string_view {
+  switch (workload) {
+    case BenchmarkWorkload::landscape: return "landscape";
+    case BenchmarkWorkload::orbital: return "orbital";
+  }
+  return "landscape";
+}
+
+auto workload_identifier(BenchmarkWorkload workload) noexcept
+    -> std::string_view {
+  switch (workload) {
+    case BenchmarkWorkload::landscape: return "voxel-landscape-rgba";
+    case BenchmarkWorkload::orbital: return "orbital-planet-rgba";
+  }
+  return "voxel-landscape-rgba";
+}
+
+auto parse_benchmark_workload(std::string_view text) noexcept
+    -> std::optional<BenchmarkWorkload> {
+  if (text == "landscape") return BenchmarkWorkload::landscape;
+  if (text == "orbital") return BenchmarkWorkload::orbital;
+  return std::nullopt;
+}
+
 auto default_sweep_viewports() -> std::vector<RenderConfiguration> {
   return {resolve_render_configuration(RenderProfile::remote),
           resolve_render_configuration(RenderProfile::balanced),
@@ -169,16 +193,17 @@ auto sweep_table(const std::vector<BenchmarkMeasurement>& measurements,
 
 auto sweep_json(const std::vector<BenchmarkMeasurement>& measurements,
                 const std::vector<std::uint32_t>& target_fps,
-                std::uint32_t seed, std::size_t frames_per_viewport)
+                std::uint32_t seed, std::size_t frames_per_viewport,
+                BenchmarkWorkload workload)
     -> std::string {
   std::string output = std::format(
       "{{\n"
       "  \"schema_version\": 1,\n"
-      "  \"workload\": \"voxel-landscape-rgba\",\n"
+      "  \"workload\": \"{}\",\n"
       "  \"seed\": {},\n"
       "  \"frames_per_viewport\": {},\n"
       "  \"measurements\": [\n",
-      seed, frames_per_viewport);
+      workload_identifier(workload), seed, frames_per_viewport);
 
   for (std::size_t index = 0; index < measurements.size(); ++index) {
     const auto& measurement = measurements[index];

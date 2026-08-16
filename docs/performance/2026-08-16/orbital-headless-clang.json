@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "workload": "orbital-planet-rgba",
+  "seed": 42,
+  "frames_per_viewport": 60,
+  "measurements": [
+    {
+      "render_profile": "remote",
+      "viewport_width": 320,
+      "viewport_height": 240,
+      "summary": {
+        "frames": 60,
+        "elapsed_seconds": 0.288384,
+        "achieved_fps": 208.055664,
+        "renderer_avg_ms": 4.479405,
+        "renderer_p95_ms": 4.531464,
+        "frame_work_avg_ms": 4.804399,
+        "frame_work_p95_ms": 4.869058,
+        "bytes_per_frame": 411625.583333,
+        "mebibytes_per_second": 81.673655,
+        "total_bytes": 24697535,
+        "checksum": "10688641563149901707"
+      },
+      "targets": [
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 28.801869, "frame_work_p95_headroom_ms": 28.464275, "required_mebibytes_per_second": 11.776702},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": 12.135203, "frame_work_p95_headroom_ms": 11.797609, "required_mebibytes_per_second": 23.553405}
+      ]
+    },
+    {
+      "render_profile": "local",
+      "viewport_width": 640,
+      "viewport_height": 480,
+      "summary": {
+        "frames": 60,
+        "elapsed_seconds": 1.135093,
+        "achieved_fps": 52.859101,
+        "renderer_avg_ms": 17.863709,
+        "renderer_p95_ms": 17.988876,
+        "frame_work_avg_ms": 18.912806,
+        "frame_work_p95_ms": 19.065688,
+        "bytes_per_frame": 1645493.866667,
+        "mebibytes_per_second": 82.949950,
+        "total_bytes": 98729632,
+        "checksum": "2347094954246874526"
+      },
+      "targets": [
+        {"target_fps": 30, "deadline_budget_ms": 33.333333, "renderer_p95_headroom_ms": 15.344457, "frame_work_p95_headroom_ms": 14.267645, "required_mebibytes_per_second": 47.077957},
+        {"target_fps": 60, "deadline_budget_ms": 16.666667, "renderer_p95_headroom_ms": -1.322209, "frame_work_p95_headroom_ms": -2.399021, "required_mebibytes_per_second": 94.155914}
+      ]
+    }
+  ]
+}

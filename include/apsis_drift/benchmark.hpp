@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -10,6 +11,15 @@
 #include "apsis_drift/render_profile.hpp"
 
 namespace apsis_drift {
+
+enum class BenchmarkWorkload { landscape, orbital };
+
+[[nodiscard]] auto workload_name(BenchmarkWorkload workload) noexcept
+    -> std::string_view;
+[[nodiscard]] auto workload_identifier(BenchmarkWorkload workload) noexcept
+    -> std::string_view;
+[[nodiscard]] auto parse_benchmark_workload(std::string_view text) noexcept
+    -> std::optional<BenchmarkWorkload>;
 
 struct BenchmarkSummary {
   std::size_t frames{};
@@ -56,6 +66,7 @@ struct CadenceAssessment {
 [[nodiscard]] auto sweep_json(
     const std::vector<BenchmarkMeasurement>& measurements,
     const std::vector<std::uint32_t>& target_fps, std::uint32_t seed,
-    std::size_t frames_per_viewport) -> std::string;
+    std::size_t frames_per_viewport,
+    BenchmarkWorkload workload = BenchmarkWorkload::landscape) -> std::string;
 
 }  // namespace apsis_drift

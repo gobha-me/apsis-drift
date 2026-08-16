@@ -219,12 +219,17 @@ Run the deterministic headless benchmark:
 ./build/apsis-drift --benchmark 180
 ./build/apsis-drift --benchmark 1 --snapshot landscape.ppm
 ./build/apsis-drift --benchmark 1 --profile cinematic
+./build/apsis-drift --benchmark 1 --profile local \
+  --workload orbital --snapshot orbital.ppm
 ```
 
 The benchmark measures CPU-side rendering and TermForge submission. It does not
 measure terminal, PTY, proxy, or display performance. Its frame clock is
 synthetic, so simulation follows the same fixed-step path without sleeping or
 mixing wall-clock jitter into deterministic framebuffer checksums.
+The optional `orbital` workload renders the generated planet with a
+deterministic moving camera; `landscape` remains the default. Workload
+selection is available only in benchmark and sweep modes.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:
 
@@ -235,6 +240,9 @@ Run a repeatable resolution and target-cadence sweep and retain its JSON report:
   --sweep-fps 24,30,60 \
   --seed 12648430 \
   --report landscape-sweep.json
+./build/apsis-drift --sweep 60 --sweep-viewports remote,local \
+  --sweep-fps 30,60 --seed 42 --workload orbital \
+  --report orbital-sweep.json
 ```
 
 The default sweep covers the remote, balanced, and local profiles at 30 and 60

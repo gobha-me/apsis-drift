@@ -16,6 +16,7 @@
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
+#include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -67,6 +68,36 @@ auto check(bool condition, const char* message) -> void {
           source.atmosphere_pressure,
           source.terrain_character,
           source.water_coverage,
+          source.palette};
+}
+
+[[nodiscard]] auto planet_with_atmosphere(
+    const PlanetDescriptor& source, AtmosphereClass atmosphere_class,
+    std::uint16_t pressure_millibars) -> PlanetDescriptor {
+  return {source.seed,
+          source.id,
+          source.display_name,
+          source.radius,
+          source.surface_gravity,
+          atmosphere_class,
+          AtmospherePressureMillibars{pressure_millibars},
+          source.terrain_character,
+          source.water_coverage,
+          source.palette};
+}
+
+[[nodiscard]] auto planet_with_water(const PlanetDescriptor& source,
+                                     std::uint16_t basis_points)
+    -> PlanetDescriptor {
+  return {source.seed,
+          source.id,
+          source.display_name,
+          source.radius,
+          source.surface_gravity,
+          source.atmosphere_class,
+          source.atmosphere_pressure,
+          source.terrain_character,
+          WaterCoverageBasisPoints{basis_points},
           source.palette};
 }
 
@@ -1188,6 +1219,17 @@ auto sweep_selection_contract() -> void {
   }
   check(default_sweep_fps() == std::vector<std::uint32_t>({30, 60}),
         "the default cadence targets must be 30 and 60 FPS");
+  check(parse_benchmark_workload("landscape") ==
+                BenchmarkWorkload::landscape &&
+            parse_benchmark_workload("orbital") ==
+                BenchmarkWorkload::orbital &&
+            !parse_benchmark_workload("unknown"),
+        "benchmark workloads must parse only their documented names");
+  check(workload_identifier(BenchmarkWorkload::landscape) ==
+                "voxel-landscape-rgba" &&
+            workload_identifier(BenchmarkWorkload::orbital) ==
+                "orbital-planet-rgba",
+        "benchmark workloads must retain stable report identifiers");
 
   const auto viewports = parse_sweep_viewports("remote,640x360,cinematic");
   check(viewports && viewports->size() == 3,
@@ -1251,6 +1293,9 @@ auto sweep_report_contract() -> void {
   const auto json = sweep_json(measurements, targets, 42, 12);
   check(json.find("\"schema_version\": 1") != std::string::npos,
         "sweep JSON must identify its schema version");
+  check(json.find("\"workload\": \"voxel-landscape-rgba\"") !=
+            std::string::npos,
+        "the default sweep report must identify the landscape workload");
   check(json.find("\"seed\": 42") != std::string::npos,
         "sweep JSON must identify its seed");
   check(json.find("\"frames_per_viewport\": 12") != std::string::npos,
@@ -1260,6 +1305,11 @@ auto sweep_report_contract() -> void {
   check(json.find("\"target_fps\": 30") != std::string::npos &&
             json.find("\"target_fps\": 60") != std::string::npos,
         "sweep JSON must include every cadence target");
+  const auto orbital_json = sweep_json(measurements, targets, 42, 12,
+                                       BenchmarkWorkload::orbital);
+  check(orbital_json.find("\"workload\": \"orbital-planet-rgba\"") !=
+            std::string::npos,
+        "an orbital sweep report must identify its renderer workload");
 
   const auto table = sweep_table(measurements, targets);
   check(table.find("PROFILE") != std::string::npos &&
@@ -2421,6 +2471,232 @@ auto required_viewport_matrix() -> void {
         "an over-budget renderer must reject work without a framebuffer");
 }
 
+[[nodiscard]] auto orbital_camera_for(const PlanetDescriptor& planet,
+                                      double distance_scale = 3.5)
+    -> OrbitalCamera {
+  const double radius = static_cast<double>(planet.radius.value) * 1'000.0;
+  OrbitalCamera camera;
+  camera.position = {0.0, -radius * distance_scale, radius * 0.20};
+  camera.forward = {-camera.position.x, -camera.position.y,
+                    -camera.position.z};
+  camera.up = {0.0, 0.0, 1.0};
+  return camera;
+}
+
+auto orbital_render_failure_matrix() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const OrbitalRenderSettings settings{.width = 160,
+                                       .height = 120,
+                                       .field_of_view_degrees = 60.0,
+                                       .light_direction = {-0.4, -0.6, 0.7}};
+  const OrbitalRenderer renderer{settings};
+  const auto camera = orbital_camera_for(planet);
+
+  std::vector<Pixel> short_frame(160U * 120U - 1U, {1, 2, 3, 4});
+  const auto short_result = renderer.render(planet, camera, short_frame);
+  check(!short_result &&
+            short_result.error() == OrbitalRenderError::invalid_framebuffer,
+        "an orbital renderer must reject a short framebuffer");
+  check(std::ranges::all_of(short_frame, [](Pixel value) {
+          return value == Pixel{1, 2, 3, 4};
+        }),
+        "a rejected orbital framebuffer must remain untouched");
+
+  std::vector<Pixel> frame(160U * 120U, {5, 6, 7, 8});
+  const auto check_untouched = [&frame](const auto& result,
+                                      OrbitalRenderError error,
+                                      const char* message) {
+    check(!result && result.error() == error, message);
+    check(std::ranges::all_of(frame, [](Pixel value) {
+            return value == Pixel{5, 6, 7, 8};
+          }),
+          "invalid orbital input must leave the framebuffer untouched");
+  };
+
+  const OrbitalRenderer invalid_viewport{{.width = 0, .height = 120}};
+  check_untouched(invalid_viewport.render(planet, camera, frame),
+                  OrbitalRenderError::invalid_viewport,
+                  "zero orbital width must be rejected");
+
+  const OrbitalRenderer invalid_fov{{.width = 160,
+                                     .height = 120,
+                                     .field_of_view_degrees = 180.0}};
+  check_untouched(invalid_fov.render(planet, camera, frame),
+                  OrbitalRenderError::invalid_field_of_view,
+                  "an invalid orbital field of view must be rejected");
+
+  const OrbitalRenderer invalid_light{{
+      .width = 160, .height = 120, .light_direction = {0.0, 0.0, 0.0}}};
+  check_untouched(invalid_light.render(planet, camera, frame),
+                  OrbitalRenderError::invalid_light_direction,
+                  "a zero orbital light direction must be rejected");
+
+  const auto invalid_radius = planet_with_radius(planet, 0);
+  check_untouched(renderer.render(invalid_radius, camera, frame),
+                  OrbitalRenderError::invalid_planet,
+                  "an invalid orbital planet radius must be rejected");
+  const auto invalid_water = planet_with_water(planet, 10'001);
+  check_untouched(renderer.render(invalid_water, camera, frame),
+                  OrbitalRenderError::invalid_planet,
+                  "invalid orbital water coverage must be rejected");
+  const auto invalid_atmosphere =
+      planet_with_atmosphere(planet, AtmosphereClass::airless, 1);
+  check_untouched(renderer.render(invalid_atmosphere, camera, frame),
+                  OrbitalRenderError::invalid_planet,
+                  "inconsistent orbital atmosphere data must be rejected");
+
+  auto invalid_camera = camera;
+  invalid_camera.position.x = std::numeric_limits<double>::quiet_NaN();
+  check_untouched(renderer.render(planet, invalid_camera, frame),
+                  OrbitalRenderError::non_finite_camera,
+                  "a non-finite orbital camera must be rejected");
+
+  invalid_camera = camera;
+  invalid_camera.position = {
+      std::numeric_limits<double>::max(),
+      std::numeric_limits<double>::max(),
+      std::numeric_limits<double>::max()};
+  check_untouched(renderer.render(planet, invalid_camera, frame),
+                  OrbitalRenderError::non_finite_camera,
+                  "an overflowing orbital camera must be rejected");
+
+  invalid_camera = camera;
+  invalid_camera.position = {};
+  check_untouched(renderer.render(planet, invalid_camera, frame),
+                  OrbitalRenderError::camera_inside_planet,
+                  "a camera inside the planet must be rejected");
+
+  invalid_camera = camera;
+  invalid_camera.forward = {};
+  check_untouched(renderer.render(planet, invalid_camera, frame),
+                  OrbitalRenderError::invalid_camera_basis,
+                  "a zero orbital forward direction must be rejected");
+
+  invalid_camera = camera;
+  invalid_camera.up = invalid_camera.forward;
+  check_untouched(renderer.render(planet, invalid_camera, frame),
+                  OrbitalRenderError::invalid_camera_basis,
+                  "a collinear orbital camera basis must be rejected");
+}
+
+auto orbital_visibility_contract() -> void {
+  const auto generated = generate_planet_descriptor(Seed{42});
+  const auto planet = planet_with_atmosphere(
+      generated, AtmosphereClass::temperate, 1'000);
+  const OrbitalRenderSettings settings{.width = 200,
+                                       .height = 150,
+                                       .field_of_view_degrees = 60.0,
+                                       .light_direction = {-0.4, -0.6, 0.7}};
+  const OrbitalRenderer renderer{settings};
+  std::vector<Pixel> frame(200U * 150U);
+
+  auto camera = orbital_camera_for(planet);
+  const auto visible = renderer.render(planet, camera, frame);
+  check(visible && visible->surface_pixels > 0 &&
+            visible->atmosphere_pixels > 0,
+        "a centered atmospheric planet must render its disc and halo");
+  if (visible) {
+    check(visible->surface_pixels < frame.size(),
+          "a fully visible planet must leave space around its disc");
+  }
+
+  camera.forward.x += 1.65 *
+                      static_cast<double>(planet.radius.value) * 1'000.0;
+  const auto clipped = renderer.render(planet, camera, frame);
+  check(clipped && clipped->surface_pixels > 0 && visible &&
+            clipped->surface_pixels < visible->surface_pixels,
+        "an edge-clipped planet must retain only part of its visible disc");
+
+  camera = orbital_camera_for(planet);
+  camera.forward = {0.0, -1.0, 0.0};
+  const auto outside = renderer.render(planet, camera, frame);
+  check(outside && outside->surface_pixels == 0 &&
+            outside->atmosphere_pixels == 0,
+        "a planet behind the orbital camera must be outside the view");
+
+  const auto airless =
+      planet_with_atmosphere(planet, AtmosphereClass::airless, 0);
+  camera = orbital_camera_for(airless);
+  const auto without_atmosphere = renderer.render(airless, camera, frame);
+  check(without_atmosphere && without_atmosphere->surface_pixels > 0 &&
+            without_atmosphere->atmosphere_pixels == 0,
+        "an airless planet must render without a halo");
+}
+
+auto deterministic_orbital_render() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const OrbitalRenderSettings settings{.width = 160,
+                                       .height = 120,
+                                       .field_of_view_degrees = 60.0,
+                                       .light_direction = {-0.4, -0.6, 0.7}};
+  const OrbitalRenderer renderer{settings};
+  const auto camera = orbital_camera_for(planet);
+  std::vector<Pixel> first(160U * 120U);
+  std::vector<Pixel> second(first.size());
+  const auto first_result = renderer.render(planet, camera, first);
+  const auto second_result = renderer.render(planet, camera, second);
+  check(first_result && second_result && first_result == second_result,
+        "repeated orbital renders must report identical coverage");
+  check(first == second,
+        "a fixed planet and orbital camera must render deterministically");
+  check(std::ranges::all_of(first,
+                            [](Pixel value) { return value.a == 255; }),
+        "every orbital pixel must be opaque");
+
+  const auto other_planet = generate_planet_descriptor(Seed{43});
+  const auto other_camera = orbital_camera_for(other_planet);
+  check(renderer.render(other_planet, other_camera, second) &&
+            pixel_checksum(first) != pixel_checksum(second),
+        "a different planet descriptor must change the orbital frame");
+
+  auto moved = camera;
+  moved.position.x += static_cast<double>(planet.radius.value) * 300.0;
+  moved.forward = {-moved.position.x, -moved.position.y, -moved.position.z};
+  check(renderer.render(planet, moved, second) &&
+            pixel_checksum(first) != pixel_checksum(second),
+        "moving the orbital camera must change the rendered frame");
+}
+
+auto golden_orbital_profiles() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const auto camera = orbital_camera_for(planet);
+  struct GoldenProfile {
+    RenderProfile profile;
+    std::uint64_t checksum;
+  };
+  constexpr std::array profiles{
+      GoldenProfile{RenderProfile::remote, 11146610085014640820ULL},
+      GoldenProfile{RenderProfile::balanced, 3760608313539738156ULL},
+      GoldenProfile{RenderProfile::local, 1659061756243897864ULL},
+      GoldenProfile{RenderProfile::cinematic, 675305623413012357ULL},
+  };
+
+  for (const auto golden : profiles) {
+    const auto viewport = profile_viewport(golden.profile);
+    const OrbitalRenderer renderer{{.width = viewport.width,
+                                    .height = viewport.height,
+                                    .field_of_view_degrees = 60.0,
+                                    .light_direction = {-0.4, -0.6, 0.7}}};
+    std::vector<Pixel> first(static_cast<std::size_t>(viewport.width) *
+                             static_cast<std::size_t>(viewport.height));
+    std::vector<Pixel> second(first.size());
+    check(renderer.render(planet, camera, first) &&
+              renderer.render(planet, camera, second),
+          "every named profile must render the orbital fixture");
+    const auto checksum = pixel_checksum(first);
+    if (checksum != golden.checksum) {
+      std::fprintf(stderr, "%.*s golden orbital checksum: %llu\n",
+                   static_cast<int>(profile_name(golden.profile).size()),
+                   profile_name(golden.profile).data(),
+                   static_cast<unsigned long long>(checksum));
+    }
+    check(first == second,
+          "each named orbital profile must render deterministically");
+    check(checksum == golden.checksum,
+          "golden orbital profile checksums must remain stable");
+  }
+}
+
 }  // namespace
 
 auto main() -> int {
@@ -2458,10 +2734,14 @@ auto main() -> int {
   deterministic_render();
   golden_profile_renders();
   required_viewport_matrix();
+  orbital_render_failure_matrix();
+  orbital_visibility_contract();
+  deterministic_orbital_render();
+  golden_orbital_profiles();
   if (failures != 0) {
     std::fprintf(stderr, "%d test(s) failed\n", failures);
     return 1;
   }
-  std::puts("all landscape tests passed");
+  std::puts("all Apsis Drift tests passed");
   return 0;
 }
