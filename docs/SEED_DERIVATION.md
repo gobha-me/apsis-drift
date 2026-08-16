@@ -60,6 +60,13 @@ domains. A subsystem may use a deterministic PRNG after derivation, but its
 algorithm and any state that must survive save/resume form a separate
 compatibility contract.
 
+The version 1 origin station uses existing domains without changing this
+table: derive system ordinal `0` from the universe seed, then settlement
+ordinal `0` from that origin-system seed. Its identity and onboarding boundary
+are recorded in the
+[Origin Station and New-Game Contract](ORIGIN_STATION.md). Adding or deriving
+that child cannot perturb the planet, terrain, weather, or encounter streams.
+
 The current v0.2 flyover continues to accept its existing 32-bit terrain seed
 directly. Migrating that path is intentionally outside derivation version 1's
 introduction so its acceptance scenario and historical checksums remain

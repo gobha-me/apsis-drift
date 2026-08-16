@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.3.1 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.0 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -76,6 +76,7 @@ add_library(apsis_drift_lib STATIC
   src/landscape.cpp
   src/menu.cpp
   src/orbital.cpp
+  src/origin_station.cpp
   src/planet.cpp
   src/planetfall_acceptance.cpp
   src/planetary_flight.cpp

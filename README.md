@@ -334,6 +334,11 @@ milestones; they are not implementation sessions themselves.
 - [v0.4 — Signal Run](https://github.com/gobha-me/apsis-drift/issues/35)
 - [v0.5 — First Light](https://github.com/gobha-me/apsis-drift/issues/36)
 
+The v0.4 work begins from the deterministic
+[origin-station and new-game contract](docs/ORIGIN_STATION.md), which defines
+the zero-discovery start and first-objective handoff before save and Signal Run
+schemas are finalized.
+
 New work should use the session-sized issue form. If implementation uncovers
 additional work, record it as a follow-up issue instead of silently expanding
 the active session.

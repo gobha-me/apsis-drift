@@ -24,14 +24,15 @@ flight, procedural generation, and simulation application-owned. Reusable
 facilities should move into TermForge or a future RasterForge only after the
 game demonstrates a concrete, repeated need for them.
 
-A useful first vertical slice is:
+A useful first vertical slice is framed by the origin station while preserving
+the orbit-to-surface flight loop:
 
-1. Begin in orbit inside the cockpit.
-2. Select a generated location, anomaly, or signal.
-3. Descend through the atmosphere.
+1. Begin docked at the deterministic origin station with zero discoveries.
+2. Accept the first Signal Run and launch into orbit inside the cockpit.
+3. Select and descend toward the generated signal.
 4. Fly over the generated terrain and locate the target.
 5. Scan, collect, or otherwise interact with it.
-6. Climb back to orbit and persist the result in a small save.
+6. Climb back to orbit, return to the station, and persist the result.
 
 This is a complete loop without requiring a large authored universe, an asset
 pipeline, or a general-purpose engine.
@@ -63,6 +64,9 @@ treated as cross-version or cross-platform serialization formats.
 The exact version 1 domain identifiers, integer encoding, derivation algorithm,
 golden-vector contract, and save compatibility consequences are recorded in
 [Seed Derivation Compatibility](SEED_DERIVATION.md).
+The deterministic home-system child, zero-discovery docked start, bounded first
+objective, return condition, and presentation boundary are recorded in the
+[Origin Station and New-Game Contract](ORIGIN_STATION.md).
 The versioned fields, units, named substreams, and diagnostic representation
 of one generated planet are recorded in the
 [Planet Descriptor Compatibility](PLANET_GENERATION.md) contract.

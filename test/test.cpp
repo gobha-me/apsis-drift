@@ -17,6 +17,7 @@
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
+#include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
@@ -207,6 +208,156 @@ auto seed_derivation_contract() -> void {
   std::ranges::sort(smoke);
   check(std::adjacent_find(smoke.begin(), smoke.end()) == smoke.end(),
         "the bounded seed derivation smoke grid must not collide");
+}
+
+auto origin_station_contract() -> void {
+  check(kOriginStationGeneratorVersion == 1,
+        "origin-station generator version 1 must remain stable");
+  check(kOriginSystemOrdinal == 0 && kOriginStationOrdinal == 0,
+        "the version 1 origin path must retain its named ordinals");
+
+  constexpr std::array<std::uint64_t, 3> universe_seeds{
+      0, 42, std::numeric_limits<std::uint64_t>::max()};
+  constexpr std::array<std::uint64_t, universe_seeds.size()> system_goldens{
+      2662095937669570104ULL, 677859337506523986ULL,
+      4480404333408418992ULL};
+  constexpr std::array<std::uint64_t, universe_seeds.size()> station_goldens{
+      7159869865471737051ULL, 14866919373675561773ULL,
+      15849284578567890724ULL};
+  for (std::size_t index = 0; index < universe_seeds.size(); ++index) {
+    const auto station = generate_origin_station(Seed{universe_seeds[index]});
+    check(station == generate_origin_station(Seed{universe_seeds[index]}),
+          "an origin station must reproduce for the same universe seed");
+    if (station.home_system_seed.value != system_goldens[index] ||
+        station.station_seed.value != station_goldens[index]) {
+      std::fprintf(stderr,
+                   "origin station golden %zu: system=%llu station=%llu\n",
+                   index,
+                   static_cast<unsigned long long>(
+                       station.home_system_seed.value),
+                   static_cast<unsigned long long>(station.station_seed.value));
+    }
+    check(station.home_system_seed.value == system_goldens[index] &&
+              station.station_seed.value == station_goldens[index] &&
+              station.id.value == station_goldens[index],
+          "origin stations must retain their version 1 golden identities");
+  }
+  check(origin_station_id_string(OriginStationId{0}) ==
+                "station-0000000000000000" &&
+            origin_station_id_string(
+                OriginStationId{std::numeric_limits<std::uint64_t>::max()}) ==
+                "station-ffffffffffffffff",
+        "station IDs must retain their fixed-width canonical encoding");
+
+  constexpr Seed universe{42};
+  const auto system_before =
+      derive_seed(universe, SeedDomain::system, kOriginSystemOrdinal);
+  const auto planet_before = derive_seed(system_before, SeedDomain::planet, 0);
+  const auto terrain_before =
+      derive_seed(planet_before, SeedDomain::terrain, 0);
+  const auto weather_before =
+      derive_seed(planet_before, SeedDomain::weather, 0);
+  const auto encounter_before =
+      derive_seed(planet_before, SeedDomain::encounter, 0);
+  (void)generate_origin_station(universe);
+  check(system_before ==
+                derive_seed(universe, SeedDomain::system,
+                            kOriginSystemOrdinal) &&
+            planet_before == derive_seed(system_before, SeedDomain::planet, 0) &&
+            terrain_before == derive_seed(planet_before, SeedDomain::terrain, 0) &&
+            weather_before == derive_seed(planet_before, SeedDomain::weather, 0) &&
+            encounter_before ==
+                derive_seed(planet_before, SeedDomain::encounter, 0),
+        "origin-station derivation must not perturb unrelated world streams");
+}
+
+auto origin_onboarding_contract() -> void {
+  const auto station = generate_origin_station(Seed{42});
+  auto state = initial_origin_onboarding_state(station);
+  check(state == OriginOnboardingState{station.id,
+                                        OriginLocation::docked_at_origin,
+                                        FirstObjectiveStatus::offered},
+        "a zero-discovery universe must begin docked with one offered objective");
+
+  const auto unchanged_on_failure = [&](OriginOnboardingCommand command,
+                                        OriginOnboardingError error) {
+    const auto before = state;
+    const auto result = advance_origin_onboarding(state, command);
+    check(!result && result.error() == error && state == before,
+          "a rejected onboarding transition must leave state unchanged");
+  };
+
+  unchanged_on_failure(OriginOnboardingCommand::launch,
+                       OriginOnboardingError::invalid_transition);
+  unchanged_on_failure(OriginOnboardingCommand::complete_first_objective,
+                       OriginOnboardingError::invalid_transition);
+  unchanged_on_failure(OriginOnboardingCommand::return_to_origin,
+                       OriginOnboardingError::invalid_transition);
+
+  check(advance_origin_onboarding(
+            state, OriginOnboardingCommand::accept_first_objective)
+            .has_value() &&
+            state.location == OriginLocation::docked_at_origin &&
+            state.first_objective == FirstObjectiveStatus::active,
+        "accepting the bounded offer must arm launch without leaving the station");
+  unchanged_on_failure(OriginOnboardingCommand::accept_first_objective,
+                       OriginOnboardingError::invalid_transition);
+  check(advance_origin_onboarding(state, OriginOnboardingCommand::launch)
+            .has_value() &&
+            state.location == OriginLocation::in_flight &&
+            state.first_objective == FirstObjectiveStatus::active,
+        "launch must enter flight with the first objective active");
+  unchanged_on_failure(OriginOnboardingCommand::launch,
+                       OriginOnboardingError::invalid_transition);
+  unchanged_on_failure(OriginOnboardingCommand::return_to_origin,
+                       OriginOnboardingError::invalid_transition);
+  check(advance_origin_onboarding(
+            state, OriginOnboardingCommand::complete_first_objective)
+            .has_value() &&
+            state.location == OriginLocation::in_flight &&
+            state.first_objective == FirstObjectiveStatus::completed,
+        "objective completion must remain in flight until return");
+  check(advance_origin_onboarding(
+            state, OriginOnboardingCommand::return_to_origin)
+            .has_value() &&
+            state.location == OriginLocation::docked_at_origin &&
+            state.first_objective == FirstObjectiveStatus::completed,
+        "return must finish docked at the stable origin station");
+  unchanged_on_failure(OriginOnboardingCommand::return_to_origin,
+                       OriginOnboardingError::invalid_transition);
+  unchanged_on_failure(OriginOnboardingCommand::launch,
+                       OriginOnboardingError::invalid_transition);
+
+  OriginOnboardingState malformed{
+      station.id, OriginLocation::in_flight, FirstObjectiveStatus::offered};
+  const auto malformed_before = malformed;
+  const auto malformed_result = advance_origin_onboarding(
+      malformed, OriginOnboardingCommand::accept_first_objective);
+  check(!malformed_result &&
+            malformed_result.error() == OriginOnboardingError::invalid_state &&
+            malformed == malformed_before,
+        "impossible onboarding combinations must fail without mutation");
+
+  malformed = OriginOnboardingState{
+      station.id, static_cast<OriginLocation>(255),
+      FirstObjectiveStatus::active};
+  const auto invalid_location_before = malformed;
+  const auto invalid_location = advance_origin_onboarding(
+      malformed, OriginOnboardingCommand::launch);
+  check(!invalid_location &&
+            invalid_location.error() == OriginOnboardingError::invalid_state &&
+            malformed == invalid_location_before,
+        "unknown onboarding locations must fail without mutation");
+
+  state = initial_origin_onboarding_state(station);
+  const auto invalid_command_before = state;
+  const auto invalid_command = advance_origin_onboarding(
+      state, static_cast<OriginOnboardingCommand>(255));
+  check(!invalid_command &&
+            invalid_command.error() ==
+                OriginOnboardingError::invalid_transition &&
+            state == invalid_command_before,
+        "unknown onboarding commands must fail without mutation");
 }
 
 auto planet_descriptor_contract() -> void {
@@ -3820,6 +3971,8 @@ auto main() -> int {
   generation_failure_matrix();
   deterministic_generation();
   seed_derivation_contract();
+  origin_station_contract();
+  origin_onboarding_contract();
   planet_descriptor_contract();
   planet_descriptor_population();
   terrain_tile_failure_matrix();
