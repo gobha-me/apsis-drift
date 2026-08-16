@@ -67,6 +67,9 @@ golden-vector contract, and save compatibility consequences are recorded in
 The deterministic home-system child, zero-discovery docked start, bounded first
 objective, return condition, and presentation boundary are recorded in the
 [Origin Station and New-Game Contract](ORIGIN_STATION.md).
+The stable objective identities, independent encounter streams, bounded
+terrain-vetted placement, and immutable signal metadata are recorded in the
+[Deterministic Surface Signal Contract](SURFACE_SIGNALS.md).
 The versioned fields, units, named substreams, and diagnostic representation
 of one generated planet are recorded in the
 [Planet Descriptor Compatibility](PLANET_GENERATION.md) contract.

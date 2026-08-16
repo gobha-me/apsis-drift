@@ -84,6 +84,7 @@ add_library(apsis_drift_lib STATIC
   src/render_profile.cpp
   src/seed.cpp
   src/simulation.cpp
+  src/surface_signals.cpp
   src/terrain_tiles.cpp
   src/title.cpp
 )

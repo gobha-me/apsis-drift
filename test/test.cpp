@@ -24,10 +24,12 @@
 #include "apsis_drift/planetary_presentation.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/surface_signals.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
+#include "surface_signal_generation.hpp"
 
 namespace {
 
@@ -358,6 +360,206 @@ auto origin_onboarding_contract() -> void {
                 OriginOnboardingError::invalid_transition &&
             state == invalid_command_before,
         "unknown onboarding commands must fail without mutation");
+}
+
+auto surface_signal_contract() -> void {
+  check(kSurfaceSignalGeneratorVersion == 1 && kSurfaceSignalCount == 6 &&
+            kSurfaceSignalPlacementLod == 12 &&
+            kSurfaceSignalPlacementAttempts == 64 &&
+            kSurfaceSignalMaximumReliefMetres == 750 &&
+            kSurfaceSignalApproachClearanceMetres == 1'000,
+        "surface-signal version 1 placement constants must remain stable");
+
+  constexpr Seed parent{0xD15EA5EULL};
+  const auto placement =
+      derive_surface_signal_seed(parent, SurfaceSignalStream::placement);
+  const auto attributes =
+      derive_surface_signal_seed(parent, SurfaceSignalStream::attributes);
+  check(placement == derive_surface_signal_seed(
+                         parent, SurfaceSignalStream::placement) &&
+            placement != attributes,
+        "surface-signal placement and attributes must use stable independent streams");
+  check(surface_signal_id_string(SurfaceSignalId{0}) ==
+                "signal-0000000000000000" &&
+            surface_signal_id_string(SurfaceSignalId{
+                std::numeric_limits<std::uint64_t>::max()}) ==
+                "signal-ffffffffffffffff",
+        "surface signal IDs must retain their fixed-width canonical encoding");
+
+  const auto planet = generate_planet_descriptor(Seed{42});
+  auto cache = TerrainTileCache::create();
+  check(cache.has_value(), "surface-signal tests require a terrain cache");
+  if (!cache) return;
+  const auto catalog = generate_surface_signals(planet, *cache);
+  check(catalog.has_value(),
+        "the canonical planet must produce a complete surface-signal catalog");
+  if (!catalog) return;
+  check(catalog->planet == planet.id &&
+            catalog->signals.size() == kSurfaceSignalCount,
+        "a surface-signal catalog must retain its planet and fixed count");
+
+  struct Golden {
+    std::uint64_t id{};
+    SurfaceSignalKind kind{};
+    CubeFace face{};
+    std::uint32_t x{};
+    std::uint32_t y{};
+    std::int32_t surface{};
+    std::int32_t approach{};
+    std::uint16_t strength{};
+    std::uint16_t reward{};
+    std::uint16_t attempt{};
+  };
+  constexpr std::array<Golden, kSurfaceSignalCount> goldens{
+      Golden{10691169904300360855ULL, SurfaceSignalKind::anomaly,
+             CubeFace::positive_x, 2019, 1937, 1957, 3031, 8639, 1, 0},
+      Golden{8458854497332771446ULL, SurfaceSignalKind::survey,
+             CubeFace::negative_x, 1373, 2311, 2984, 4105, 5987, 3, 0},
+      Golden{6226539090365182037ULL, SurfaceSignalKind::anomaly,
+             CubeFace::positive_y, 1214, 1147, -540, 549, 4730, 1, 0},
+      Golden{3994223683397592628ULL, SurfaceSignalKind::recovery,
+             CubeFace::negative_y, 1584, 1026, 2862, 3911, 8554, 3, 0},
+      Golden{1761908276430003219ULL, SurfaceSignalKind::survey,
+             CubeFace::positive_z, 1748, 2172, -692, 428, 7652, 2, 0},
+      Golden{17976336943171965426ULL, SurfaceSignalKind::recovery,
+             CubeFace::negative_z, 2526, 2201, 3353, 4494, 7602, 1, 0},
+  };
+  for (std::size_t index = 0; index < goldens.size(); ++index) {
+    const auto& signal = catalog->signals[index];
+    const auto& golden = goldens[index];
+    check(signal.id.value == golden.id && signal.ordinal == index &&
+              signal.kind == golden.kind &&
+              signal.anchor.tile.face == golden.face &&
+              signal.anchor.tile.x == golden.x &&
+              signal.anchor.tile.y == golden.y && signal.anchor.u == 0.5 &&
+              signal.anchor.v == 0.5 &&
+              signal.surface_elevation_metres == golden.surface &&
+              signal.approach_altitude_metres == golden.approach &&
+              signal.strength_basis_points == golden.strength &&
+              signal.reward.discovery_points == golden.reward &&
+              signal.placement_attempt == golden.attempt,
+          "seed 42 surface signals must retain their version 1 golden catalog");
+    for (std::size_t other = index + 1; other < catalog->signals.size();
+         ++other) {
+      check(signal.id != catalog->signals[other].id,
+            "one planet's generated signal identities must remain unique");
+    }
+  }
+
+  auto warm_cache = TerrainTileCache::create();
+  check(warm_cache.has_value(), "cache-order checks require a terrain cache");
+  if (warm_cache) {
+    const TerrainTileKey unrelated{planet.id, CubeFace::positive_x, 3, 2, 4};
+    const auto tile_before = warm_cache->get(planet, unrelated);
+    const auto checksum_before = tile_before ? (*tile_before)->checksum() : 0;
+    const auto warm_first = generate_surface_signals(planet, *warm_cache);
+    const auto warm_second = generate_surface_signals(planet, *warm_cache);
+    const auto tile_after = warm_cache->get(planet, unrelated);
+    check(warm_first == catalog && warm_second == catalog,
+          "terrain-cache residency must not affect surface-signal generation");
+    check(tile_before && tile_after &&
+              (*tile_after)->checksum() == checksum_before,
+          "surface-signal generation must not perturb terrain identity");
+  }
+
+  const auto invalid_planet = planet_with_radius(planet, 0);
+  auto invalid_cache = TerrainTileCache::create();
+  check(invalid_cache &&
+            generate_surface_signals(invalid_planet, *invalid_cache) ==
+                std::unexpected{SurfaceSignalError::invalid_planet},
+        "invalid planets must be rejected before a signal catalog is returned");
+
+  auto exhausted_cache = TerrainTileCache::create();
+  check(exhausted_cache &&
+            detail::generate_surface_signals_with_limits(
+                planet, *exhausted_cache,
+                {.attempts = 1, .maximum_relief_metres = 0}) ==
+                std::unexpected{SurfaceSignalError::placement_exhausted},
+        "a rejected final candidate must fail transactionally without a partial catalog");
+}
+
+auto surface_signal_population() -> void {
+  constexpr std::array expected_faces{
+      CubeFace::positive_x, CubeFace::negative_x, CubeFace::positive_y,
+      CubeFace::negative_y, CubeFace::positive_z, CubeFace::negative_z,
+  };
+  for (std::uint64_t seed = 0; seed < 256; ++seed) {
+    const auto planet = generate_planet_descriptor(Seed{seed});
+    auto cache = TerrainTileCache::create();
+    check(cache.has_value(), "population checks require a terrain cache");
+    if (!cache) return;
+    const auto first = generate_surface_signals(planet, *cache);
+    const auto second = generate_surface_signals(planet, *cache);
+    check(first.has_value() && first == second,
+          "a multi-seed population must produce stable complete catalogs");
+    if (!first) continue;
+
+    for (std::size_t index = 0; index < first->signals.size(); ++index) {
+      const auto& signal = first->signals[index];
+      check(signal.ordinal == index && signal.anchor.tile.planet == planet.id &&
+                signal.anchor.tile.face == expected_faces[index] &&
+                signal.anchor.tile.lod == kSurfaceSignalPlacementLod &&
+                signal.anchor.tile.x >= 1'024 &&
+                signal.anchor.tile.x < 3'072 &&
+                signal.anchor.tile.y >= 1'024 &&
+                signal.anchor.tile.y < 3'072 && signal.anchor.u == 0.5 &&
+                signal.anchor.v == 0.5 &&
+                signal.placement_attempt < kSurfaceSignalPlacementAttempts,
+            "signals must retain ordered central-face anchors and bounded retries");
+      check(signal.strength_basis_points >=
+                    kSurfaceSignalMinimumStrengthBasisPoints &&
+                signal.strength_basis_points <=
+                    kSurfaceSignalMaximumStrengthBasisPoints &&
+                signal.reward.discovery_points >=
+                    kSurfaceSignalMinimumRewardPoints &&
+                signal.reward.discovery_points <=
+                    kSurfaceSignalMaximumRewardPoints,
+            "generated signal attributes must remain inside their versioned ranges");
+
+      const auto tile = cache->get(planet, signal.anchor.tile);
+      check(tile.has_value(), "accepted signal terrain must remain available");
+      if (!tile) continue;
+      auto minimum = std::numeric_limits<std::int32_t>::max();
+      auto maximum = std::numeric_limits<std::int32_t>::min();
+      for (const auto y : std::array<std::size_t, 3>{16, 32, 48}) {
+        for (const auto x : std::array<std::size_t, 3>{16, 32, 48}) {
+          const auto sample = (*tile)->sample_at(x, y);
+          check(sample.has_value(), "signal relief samples must be in bounds");
+          if (!sample) continue;
+          minimum = std::min(minimum, sample->get().elevation_metres);
+          maximum = std::max(maximum, sample->get().elevation_metres);
+        }
+      }
+      check(maximum - minimum <= kSurfaceSignalMaximumReliefMetres &&
+                signal.approach_altitude_metres ==
+                    maximum + kSurfaceSignalApproachClearanceMetres,
+            "accepted signals must satisfy relief and approach-clearance rules");
+    }
+
+    for (std::size_t left = 0; left < first->signals.size(); ++left) {
+      const auto left_position = planet_fixed_from_terrain_address(
+          planet, first->signals[left].anchor);
+      for (std::size_t right = left + 1; right < first->signals.size();
+           ++right) {
+        const auto right_position = planet_fixed_from_terrain_address(
+            planet, first->signals[right].anchor);
+        check(left_position.has_value() && right_position.has_value(),
+              "signal anchors must map back to planet-fixed positions");
+        if (!left_position || !right_position) continue;
+        const auto left_length = std::hypot(
+            left_position->x, left_position->y, left_position->z);
+        const auto right_length = std::hypot(
+            right_position->x, right_position->y, right_position->z);
+        const auto cosine =
+            (left_position->x * right_position->x +
+             left_position->y * right_position->y +
+             left_position->z * right_position->z) /
+            (left_length * right_length);
+        check(cosine <= std::cos(std::numbers::pi_v<double> / 6.0) + 1.0e-12,
+              "central-face signal anchors must remain at least 30 degrees apart");
+      }
+    }
+  }
 }
 
 auto planet_descriptor_contract() -> void {
@@ -3973,6 +4175,8 @@ auto main() -> int {
   seed_derivation_contract();
   origin_station_contract();
   origin_onboarding_contract();
+  surface_signal_contract();
+  surface_signal_population();
   planet_descriptor_contract();
   planet_descriptor_population();
   terrain_tile_failure_matrix();
