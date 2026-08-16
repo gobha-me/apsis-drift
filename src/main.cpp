@@ -454,8 +454,9 @@ class LandscapeApp final : public App {
       }
     }
     if (m_signal_navigation_acceptance && m_signal_scenario &&
-        m_signal_scenario->navigation.status == SignalScannerStatus::reached) {
-      // Preserve the reached cockpit for a short visual capture dwell without
+        m_signal_scenario->collection.status ==
+            SignalCollectionStatus::complete) {
+      // Preserve the collected cockpit for a short visual capture dwell without
       // advancing authoritative simulation state.
       constexpr int signal_acceptance_final_frames{90};
       ++m_acceptance_final_frames;
@@ -588,8 +589,8 @@ class LandscapeApp final : public App {
   [[nodiscard]] auto acceptance_complete() const noexcept -> bool {
     if (m_signal_navigation_acceptance) {
       return m_acceptance_final_frame_rendered && m_signal_scenario &&
-             m_signal_scenario->navigation.status ==
-                 SignalScannerStatus::reached;
+             m_signal_scenario->collection.status ==
+                 SignalCollectionStatus::complete;
     }
     return m_acceptance_final_frame_rendered &&
            m_flight.tick == kFlightDeckAcceptanceTicks;
@@ -869,6 +870,8 @@ class LandscapeApp final : public App {
     if (m_signal_scenario) {
       const auto scanner =
           format_signal_scanner(m_signal_scenario->navigation);
+      const auto collection =
+          format_signal_collection(m_signal_scenario->collection);
       screen.write_text(layout.left_instruments.x + 2,
                         layout.left_instruments.y + 12, "SIGNAL", accent,
                         chrome_bg);
@@ -886,11 +889,18 @@ class LandscapeApp final : public App {
                         text, chrome_bg);
       screen.write_text(
           layout.right_instruments.x + 2,
-          layout.right_instruments.y + 16, scanner.cue,
-          scanner.status == SignalScannerStatus::reached
+          layout.right_instruments.y + 16,
+          m_signal_scenario->collection.status ==
+                  SignalCollectionStatus::approach
+              ? scanner.cue
+              : collection.cue,
+          m_signal_scenario->collection.status ==
+                  SignalCollectionStatus::complete
               ? accent
-              : (scanner.status == SignalScannerStatus::tracking ? text
-                                                                  : warning),
+              : (m_signal_scenario->collection.status ==
+                         SignalCollectionStatus::aborted
+                     ? warning
+                     : text),
           chrome_bg);
     }
 
@@ -903,9 +913,8 @@ class LandscapeApp final : public App {
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
       message = " WARNING: LOW CLEARANCE | R to climb | ESC menu ";
     } else if (m_signal_scenario) {
-      const auto scanner = format_signal_scanner(m_signal_scenario->navigation);
-      message = std::format(" {} | Tab/Shift-Tab target | scripted approach ",
-                            scanner.cue);
+      message =
+          format_signal_collection(m_signal_scenario->collection).message;
     } else {
       message = layout.mode == CockpitLayoutMode::wide
                     ? " L-hold fly | R-hold strafe/alt | M-click auto | "
@@ -982,7 +991,7 @@ class LandscapeApp final : public App {
         const auto reached = advance_signal_navigation_acceptance(
             m_planet, *m_signal_cache, *m_signal_scenario);
         if (!reached) {
-          throw std::runtime_error{"signal navigation acceptance failed"};
+          throw std::runtime_error{"signal collection acceptance failed"};
         }
         continue;
       }
@@ -1739,7 +1748,7 @@ auto main(int argc, char** argv) -> int {
         result == 0 &&
         !app.acceptance_complete()) {
       std::fprintf(stderr, "%s acceptance ended before the final frame\n",
-                   signal_navigation_acceptance ? "Signal navigation"
+                   signal_navigation_acceptance ? "Signal collection"
                                                 : "Flight Deck");
       result = 1;
     }
@@ -1766,13 +1775,20 @@ auto main(int argc, char** argv) -> int {
         const auto* state = app.signal_acceptance_state();
         if (state == nullptr || !state->scanner.selected) {
           std::fprintf(stderr,
-                       "signal navigation acceptance report is unavailable\n");
+                       "signal collection acceptance report is unavailable\n");
+          return 1;
+        }
+        if (!state->reached_tick || !state->collection.completion_tick) {
+          std::fprintf(stderr,
+                       "signal collection checkpoints are unavailable\n");
           return 1;
         }
         report << signal_navigation_acceptance_json({
             .target_id = *state->scanner.selected,
-            .reached_tick = state->flight.tick,
+            .reached_tick = *state->reached_tick,
+            .completion_tick = *state->collection.completion_tick,
             .command_count = state->command_count,
+            .world_delta_count = state->journal.entries().size(),
             .final_distance_metres = state->navigation.distance_metres,
             .flight_checksum = planetary_flight_state_checksum(state->flight),
             .render_configuration = app.render_configuration(),

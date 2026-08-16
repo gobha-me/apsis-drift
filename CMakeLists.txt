@@ -96,6 +96,7 @@ add_library(apsis_drift_lib STATIC
   src/render_profile.cpp
   src/save_schema.cpp
   src/seed.cpp
+  src/signal_collection.cpp
   src/signal_navigation_acceptance.cpp
   src/signal_input.cpp
   src/signal_scanner.cpp
@@ -176,7 +177,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_planetfall_acceptance.cmake")
 
-  add_test(NAME signal-navigation-acceptance-matrix
+  add_test(NAME signal-collection-acceptance-matrix
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
