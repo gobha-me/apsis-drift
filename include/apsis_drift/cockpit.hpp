@@ -24,6 +24,7 @@ struct FlightInstrumentReadout {
   std::string clearance;
   std::string speed;
   std::string mode;
+  std::string drive;
   std::string alert;
   CockpitAlert alert_state{CockpitAlert::none};
 
@@ -42,6 +43,8 @@ struct SignalScannerReadout {
   std::string target;
   std::string bearing;
   std::string distance;
+  std::string motion;
+  std::string arrival;
   std::string strength;
   std::string cue;
   SignalScannerStatus status{SignalScannerStatus::no_signal};

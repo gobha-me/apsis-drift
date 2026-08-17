@@ -32,6 +32,17 @@ inline constexpr double kRadiansToDegrees{
          regime == FlightRegime::terrain_flight;
 }
 
+[[nodiscard]] auto valid_target_motion_cue(TargetMotionCue cue) noexcept
+    -> bool {
+  switch (cue) {
+    case TargetMotionCue::holding:
+    case TargetMotionCue::closing:
+    case TargetMotionCue::opening:
+    case TargetMotionCue::brake: return true;
+  }
+  return false;
+}
+
 [[nodiscard]] auto short_regime_name(FlightRegime regime) noexcept
     -> std::string_view {
   switch (regime) {
@@ -73,6 +84,48 @@ inline constexpr double kRadiansToDegrees{
   const auto rounded = rounded_in_range(value, 0, 999);
   return rounded ? std::format("{} {:03}  ", label, *rounded)
                  : std::format("{} ###  ", label);
+}
+
+[[nodiscard]] auto format_speed(double value) -> std::string {
+  const auto rounded = rounded_in_range(value, 0, 999);
+  if (rounded) return std::format("SPD {:03}  ", *rounded);
+  if (std::isfinite(value) && value >= 0.0 && value < 9'950.0) {
+    return std::format("SPD {:.1f}k ", value / 1'000.0);
+  }
+  return "SPD ###  ";
+}
+
+[[nodiscard]] auto format_drive(FlightDriveState drive) -> std::string {
+  switch (drive) {
+    case FlightDriveState::idle: return "THR IDLE ";
+    case FlightDriveState::coast: return "COAST    ";
+    case FlightDriveState::forward: return "THR FWD  ";
+    case FlightDriveState::reverse: return "THR REV  ";
+    case FlightDriveState::maneuvering: return "THR MANUV";
+    case FlightDriveState::braking: return "BRAKING  ";
+  }
+  return "THR ---- ";
+}
+
+[[nodiscard]] auto format_closing_speed(double value) -> std::string {
+  const auto rounded = rounded_in_range(std::abs(value), 0, 999);
+  if (rounded) {
+    return std::format("CLS {}{:03} ", value < 0.0 ? '-' : '+', *rounded);
+  }
+  if (std::isfinite(value) && std::abs(value) < 9'950.0) {
+    return std::format("CLS {:+.1f}k", value / 1'000.0);
+  }
+  return "CLS #### ";
+}
+
+[[nodiscard]] auto format_arrival(
+    std::optional<double> seconds) -> std::string {
+  if (!seconds || !std::isfinite(*seconds) || *seconds < 0.0) {
+    return "ETA --:--";
+  }
+  const auto rounded = static_cast<long long>(std::ceil(*seconds));
+  if (rounded > 99 * 60 + 59) return "ETA >99m ";
+  return std::format("ETA {:02}:{:02}", rounded / 60, rounded % 60);
 }
 
 [[nodiscard]] auto aspect_fit(termforge::Rect available,
@@ -174,6 +227,7 @@ auto format_flight_instruments(const FlightState& state)
                        ? (state.mode == FlightMode::autopilot ? "MODE AUTO"
                                                                : "MODE MAN ")
                        : "MODE ----";
+    readout.drive = "THR ---- ";
     readout.alert = "TELEM ERR";
     readout.alert_state = CockpitAlert::invalid_telemetry;
     return readout;
@@ -186,11 +240,19 @@ auto format_flight_instruments(const FlightState& state)
   readout.heading = std::format("HDG {:03}  ", heading_degrees);
   readout.altitude = format_altitude(state.pose.altitude);
   readout.clearance = format_three_digit("CLR", state.clearance);
-  readout.speed = format_three_digit(
-      "SPD", std::hypot(static_cast<double>(state.velocity.x),
-                        static_cast<double>(state.velocity.y)));
+  readout.speed = format_speed(std::hypot(
+      static_cast<double>(state.velocity.x),
+      static_cast<double>(state.velocity.y),
+      static_cast<double>(state.velocity.vertical)));
   readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
                                                       : "MODE MAN ";
+  const double speed = std::hypot(
+      static_cast<double>(state.velocity.x),
+      static_cast<double>(state.velocity.y),
+      static_cast<double>(state.velocity.vertical));
+  readout.drive = state.mode == FlightMode::autopilot
+                      ? "THR AUTO "
+                      : (speed > 0.5 ? "COAST    " : "THR IDLE ");
   if (state.clearance <= kLowClearanceWarning) {
     readout.alert = "! LOW CLR";
     readout.alert_state = CockpitAlert::low_clearance;
@@ -219,6 +281,7 @@ auto format_flight_instruments(const PlanetaryFlightState& state)
                        ? (state.mode == FlightMode::autopilot ? "MODE AUTO"
                                                                : "MODE MAN ")
                        : "MODE ----";
+    readout.drive = "THR ---- ";
     readout.alert = "TELEM ERR";
     readout.alert_state = CockpitAlert::invalid_telemetry;
     return readout;
@@ -233,11 +296,14 @@ auto format_flight_instruments(const PlanetaryFlightState& state)
       format_altitude(static_cast<float>(state.pose.position.altitude_metres));
   readout.clearance =
       format_three_digit("CLR", state.clearance_metres);
-  readout.speed = format_three_digit(
-      "SPD", std::hypot(state.velocity.east_metres_per_second,
-                        state.velocity.north_metres_per_second));
+  readout.speed = format_speed(std::hypot(
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second,
+      state.velocity.up_metres_per_second));
   readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
                                                       : "MODE MAN ";
+  const auto drive = flight_drive_state(state);
+  readout.drive = drive ? format_drive(*drive) : "THR ---- ";
   if (state.clearance_metres <= kLowClearanceWarning) {
     readout.alert = "! LOW CLR";
     readout.alert_state = CockpitAlert::low_clearance;
@@ -282,6 +348,8 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
       .target = "TGT --/--",
       .bearing = "BRG ---  ",
       .distance = "DST ---- ",
+      .motion = "CLS ---- ",
+      .arrival = "ETA --:--",
       .strength = "SIG ---  ",
       .cue = "NO SIGNAL",
       .status = navigation.status,
@@ -294,6 +362,16 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
                      std::isfinite(navigation.relative_bearing_radians) &&
                      std::isfinite(navigation.distance_metres) &&
                      navigation.distance_metres >= 0.0 &&
+                     std::isfinite(
+                         navigation.motion.closing_speed_metres_per_second) &&
+                     std::isfinite(
+                         navigation.motion.stopping_distance_metres) &&
+                     navigation.motion.stopping_distance_metres >= 0.0 &&
+                     (!navigation.motion.arrival_estimate_seconds ||
+                      (std::isfinite(
+                           *navigation.motion.arrival_estimate_seconds) &&
+                       *navigation.motion.arrival_estimate_seconds >= 0.0)) &&
+                     valid_target_motion_cue(navigation.motion.cue) &&
                      navigation.strength_basis_points <= 10'000;
   if (!valid) {
     readout.status = SignalScannerStatus::no_signal;
@@ -321,6 +399,10 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
       rounded_distance ? std::format("DST {:>4}{}", *rounded_distance,
                                      distance_unit)
                        : "DST #### ";
+  readout.motion = format_closing_speed(
+      navigation.motion.closing_speed_metres_per_second);
+  readout.arrival =
+      format_arrival(navigation.motion.arrival_estimate_seconds);
   const auto strength_percent = static_cast<unsigned>(
       (navigation.strength_basis_points + 50U) / 100U);
   readout.strength = std::format("SIG {:03}% ", strength_percent);
@@ -339,10 +421,20 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
       readout.cue = "REACHED! ";
       break;
     case SignalScannerStatus::tracking: {
+      if (navigation.motion.cue == TargetMotionCue::brake) {
+        readout.cue = "BRAKE NOW";
+        break;
+      }
+      if (navigation.motion.cue == TargetMotionCue::opening) {
+        readout.cue = "OPENING! ";
+        break;
+      }
       const double relative_degrees =
           navigation.relative_bearing_radians * kRadiansToDegrees;
       if (std::abs(relative_degrees) <= 5.0) {
-        readout.cue = "AHEAD >>>";
+        readout.cue = navigation.motion.cue == TargetMotionCue::closing
+                          ? "CLOSING  "
+                          : "THRUST >>";
       } else if (relative_degrees > 0.0) {
         readout.cue = "TURN RGHT";
       } else {

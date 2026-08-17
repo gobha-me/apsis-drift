@@ -28,6 +28,7 @@ struct OriginNavigationSolution {
   double absolute_bearing_radians{};
   double relative_bearing_radians{};
   double distance_metres{};
+  TargetRelativeMotion motion;
   bool arrived{};
 
   friend auto operator==(const OriginNavigationSolution&,

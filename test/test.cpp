@@ -1393,12 +1393,14 @@ auto signal_scanner_contract() -> void {
           return readout.target.size() == kInstrumentLineWidth &&
                  readout.bearing.size() == kInstrumentLineWidth &&
                  readout.distance.size() == kInstrumentLineWidth &&
+                 readout.motion.size() == kInstrumentLineWidth &&
+                 readout.arrival.size() == kInstrumentLineWidth &&
                  readout.strength.size() == kInstrumentLineWidth &&
                  readout.cue.size() == kInstrumentLineWidth;
         }),
         "scanner formatting must preserve fixed-width cockpit lines");
   check(empty_readout.cue == "NO SIGNAL" &&
-            tracking_readout.cue == "AHEAD >>>" &&
+            tracking_readout.cue == "THRUST >>" &&
             occluded_readout.cue == "OCCLUDED " &&
             range_readout.cue == "OUT RANGE" &&
             reached_readout.cue == "REACHED! ",
@@ -1412,6 +1414,35 @@ auto signal_scanner_contract() -> void {
             disclosed.find(surface_signal_id_string(target_signal.id)) ==
                 std::string::npos,
         "cockpit scanner output must not reveal undiscovered metadata");
+
+  auto closing_motion = *tracking;
+  closing_motion.motion = {
+      .closing_speed_metres_per_second = 1'200.0,
+      .arrival_estimate_seconds = 65.0,
+      .stopping_distance_metres = 720.0,
+      .cue = TargetMotionCue::closing,
+  };
+  auto braking_motion = closing_motion;
+  braking_motion.motion.cue = TargetMotionCue::brake;
+  auto opening_motion = closing_motion;
+  opening_motion.motion.closing_speed_metres_per_second = -350.0;
+  opening_motion.motion.arrival_estimate_seconds.reset();
+  opening_motion.motion.cue = TargetMotionCue::opening;
+  const auto closing_readout = format_signal_scanner(closing_motion);
+  const auto braking_readout = format_signal_scanner(braking_motion);
+  const auto opening_readout = format_signal_scanner(opening_motion);
+  check(closing_readout.motion == "CLS +1.2k" &&
+            closing_readout.arrival == "ETA 01:05" &&
+            closing_readout.cue == "CLOSING  " &&
+            braking_readout.cue == "BRAKE NOW" &&
+            opening_readout.motion == "CLS -350 " &&
+            opening_readout.arrival == "ETA --:--" &&
+            opening_readout.cue == "OPENING! ",
+        "scanner motion must expose closing, ETA, braking, and opening text");
+
+  opening_motion.motion.closing_speed_metres_per_second = -0.4;
+  check(format_signal_scanner(opening_motion).motion == "CLS -000 ",
+        "sub-unit opening speed must preserve its sign when rounded");
 
   auto right = *tracking;
   right.relative_bearing_radians = 0.5;
@@ -1478,6 +1509,7 @@ auto signal_collection_contract() -> void {
         .absolute_bearing_radians = 0.0,
         .relative_bearing_radians = 0.0,
         .distance_metres = distance,
+        .motion = {},
         .strength_basis_points = signal.strength_basis_points,
     };
   };
@@ -3052,8 +3084,8 @@ auto flight_instrument_contract() -> void {
         "altitude must use a fixed-width whole-unit field");
   check(normal.clearance == "CLR 048  ",
         "clearance must use a fixed-width whole-unit field");
-  check(normal.speed == "SPD 005  ",
-        "speed must use horizontal velocity magnitude");
+  check(normal.speed == "SPD 013  ",
+        "speed must use total craft velocity magnitude");
   check(normal.mode == "MODE AUTO" &&
             normal.alert_state == CockpitAlert::none,
         "normal autopilot telemetry must not raise an alert");
@@ -3065,6 +3097,7 @@ auto flight_instrument_contract() -> void {
               readout.clearance.size() == kInstrumentLineWidth &&
               readout.speed.size() == kInstrumentLineWidth &&
               readout.mode.size() == kInstrumentLineWidth &&
+              readout.drive.size() == kInstrumentLineWidth &&
               readout.alert.size() == kInstrumentLineWidth,
           message);
   };
@@ -3074,7 +3107,7 @@ auto flight_instrument_contract() -> void {
   state.pose.yaw = -1.57079632679489661923F;
   state.pose.altitude = -9999.0F;
   state.clearance = kLowClearanceWarning;
-  state.velocity = {999.0F, 0.0F, 9999.0F};
+  state.velocity = {999.0F, 0.0F, 0.0F};
   const auto boundary = format_flight_instruments(state);
   check(boundary.heading == "HDG 270  " &&
             boundary.altitude == "ALT -9999" &&
@@ -3097,8 +3130,8 @@ auto flight_instrument_contract() -> void {
   check(overflow.heading == "HDG 000  ",
         "rounded heading must wrap from 360 to zero");
   check(overflow.altitude == "ALT #####" &&
-            overflow.speed == "SPD ###  ",
-        "finite values outside display bounds must use fixed sentinels");
+            overflow.speed == "SPD 1.0k ",
+        "kilometre-per-second speed must remain legible in fixed width");
   check(overflow.alert_state == CockpitAlert::none,
         "clearance above the warning threshold must clear the alert");
   check_widths(overflow,
@@ -3340,6 +3373,85 @@ auto planetary_flight_regime_contract() -> void {
   }
 }
 
+auto orbital_motion_feedback_contract() -> void {
+  const auto planet = planet_with_atmosphere(
+      generate_planet_descriptor(Seed{74}), AtmosphereClass::airless, 0);
+  const PlanetaryFlightEnvironment environment{};
+  auto initialized = initial_planetary_flight_state(
+      planet, {0.1, -0.2, 80'000.0}, environment, 0.0,
+      FlightMode::manual);
+  check(initialized.has_value(),
+        "orbital motion feedback fixture must initialize");
+  if (!initialized) return;
+
+  const auto performance = flight_performance(FlightRegime::orbital);
+  check(performance && performance->maximum_horizontal_speed == 4'000.0 &&
+            performance->maximum_vertical_speed == 2'000.0 &&
+            performance->horizontal_acceleration == 1'000.0 &&
+            performance->vertical_acceleration == 1'000.0 &&
+            !flight_performance(static_cast<FlightRegime>(255)),
+        "orbital performance must retain its tuned, validated contract");
+
+  auto coast = *initialized;
+  coast.velocity.east_metres_per_second = 100.0;
+  check(flight_drive_state(coast) == FlightDriveState::coast,
+        "neutral orbital motion must report coast");
+  check(advance_planetary_flight(planet, environment, coast, {},
+                                 kSimulationStep) &&
+            std::abs(coast.velocity.east_metres_per_second - 100.0) <
+                1.0e-9,
+        "neutral orbital flight must preserve momentum");
+  constexpr std::array brake_command{
+      FlightCommand{1, FlightCommandKind::press_backward}};
+  check(advance_planetary_flight(planet, environment, coast, brake_command,
+                                 kSimulationStep) &&
+            coast.velocity.east_metres_per_second < 100.0 &&
+            flight_drive_state(coast) == FlightDriveState::braking,
+        "opposing orbital thrust must decelerate and report braking");
+
+  auto drive = *initialized;
+  drive.controls.forward = true;
+  check(flight_drive_state(drive) == FlightDriveState::forward,
+        "forward thrust must be distinguishable from idle");
+  drive.controls = {.backward = true};
+  check(flight_drive_state(drive) == FlightDriveState::reverse,
+        "reverse thrust from rest must be distinguishable");
+  drive.controls = {.strafe_right = true};
+  check(flight_drive_state(drive) == FlightDriveState::maneuvering,
+        "lateral thrust must report maneuvering");
+
+  auto motion_state = *initialized;
+  motion_state.velocity.east_metres_per_second = 100.0;
+  const auto closing = resolve_target_relative_motion(
+      motion_state, {10'000.0, 0.0, 0.0}, 1'000.0);
+  check(closing && closing->cue == TargetMotionCue::closing &&
+            std::abs(closing->closing_speed_metres_per_second - 100.0) <
+                1.0e-9 &&
+            closing->arrival_estimate_seconds &&
+            std::abs(*closing->arrival_estimate_seconds - 90.0) < 1.0e-9 &&
+            std::abs(closing->stopping_distance_metres - 5.0) < 1.0e-9,
+        "target motion must distinguish bearing from closing speed and ETA");
+  motion_state.velocity.east_metres_per_second = 4'000.0;
+  const auto brake = resolve_target_relative_motion(
+      motion_state, {9'000.0, 0.0, 0.0}, 0.0);
+  check(brake && brake->cue == TargetMotionCue::brake &&
+            brake->stopping_distance_metres == 8'000.0,
+        "target motion must warn inside a buffered stopping distance");
+  motion_state.velocity.east_metres_per_second = -100.0;
+  const auto opening = resolve_target_relative_motion(
+      motion_state, {10'000.0, 0.0, 0.0}, 1'000.0);
+  const auto arrived = resolve_target_relative_motion(
+      motion_state, {500.0, 0.0, 0.0}, 1'000.0);
+  check(opening && opening->cue == TargetMotionCue::opening &&
+            !opening->arrival_estimate_seconds && arrived &&
+            arrived->cue == TargetMotionCue::holding,
+        "opening and arrived targets must not expose a misleading ETA");
+  check(!resolve_target_relative_motion(
+             motion_state,
+             {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 0.0),
+        "non-finite target motion must be rejected");
+}
+
 struct PlanetaryReplayFixture {
   PlanetDescriptor planet;
   PlanetaryFlightEnvironment environment;
@@ -3462,7 +3574,11 @@ auto deterministic_planetary_flight_replay() -> void {
   const auto at_60 = replay_planetary_at_render_rate(*fixture, 60);
   const auto actual_checksum =
       planetary_flight_state_checksum(fixture->expected);
-  constexpr std::uint64_t expected_checksum{11546696375629488931ULL};
+  constexpr std::uint64_t expected_checksum{10230861453511211273ULL};
+  if (actual_checksum != expected_checksum) {
+    std::fprintf(stderr, "planetary replay checksum: %llu\n",
+                 static_cast<unsigned long long>(actual_checksum));
+  }
   check(actual_checksum == expected_checksum,
         "the planetary flight replay must retain its golden checksum");
   check(at_30 && at_60 &&
@@ -3509,7 +3625,7 @@ auto planetary_flight_failure_matrix() -> void {
                  PlanetaryFlightError::invalid_state,
                  "non-finite planetary state must be rejected transactionally");
   auto unbounded = *initialized;
-  unbounded.velocity.east_metres_per_second = 2'001.0;
+  unbounded.velocity.east_metres_per_second = 4'001.0;
   check_rejected(unbounded, environment, {}, kSimulationStep,
                  PlanetaryFlightError::invalid_state,
                  "out-of-regime velocity must be rejected transactionally");
@@ -5253,6 +5369,7 @@ auto planetary_presentation_contract() -> void {
             PlanetaryPresentationMode::local_terrain},
   };
   std::array<std::uint64_t, stages.size()> checksums{};
+  std::vector<Pixel> moving_orbital_frame;
   for (std::size_t index = 0; index < stages.size(); ++index) {
     const double stage_pitch = index == 2 ? -1.25 : index == 3 ? 0.0 : -0.08;
     const auto first = renderer.render(planet, stages[index].state,
@@ -5264,6 +5381,7 @@ auto planetary_presentation_contract() -> void {
           "every planetary presentation stage must render deterministically");
     if (!first || !second) continue;
     checksums[index] = pixel_checksum(frame);
+    if (index == 0) moving_orbital_frame = frame;
     check(first->surface_anchor.tile.planet == planet.id &&
               first->total_ms >= first->orbital_render_ms &&
               first->total_ms >= first->local_render_ms &&
@@ -5271,7 +5389,7 @@ auto planetary_presentation_contract() -> void {
           "presentation stats must retain anchor identity and bounded timings");
   }
   constexpr std::array<std::uint64_t, 4> expected_checksums{
-      4464057357403076723ULL,
+      4959918040514685530ULL,
       6162202560146668315ULL,
       3992641663955562031ULL,
       10329579900168594179ULL,
@@ -5290,6 +5408,29 @@ auto planetary_presentation_contract() -> void {
                              [](std::uint64_t value) { return value == 0; }) &&
             std::ranges::adjacent_find(checksums) == checksums.end(),
         "scripted descent stages must produce distinct nonzero frames");
+
+  auto stationary_orbit = orbital;
+  stationary_orbit.velocity = {};
+  stationary_orbit.controls = {};
+  std::vector<Pixel> stationary_frame(frame.size());
+  check(renderer.render(planet, stationary_orbit,
+                        {.pitch_radians = -0.08}, stationary_frame) &&
+            stationary_frame != moving_orbital_frame,
+        "orbital velocity must produce a deterministic visual motion cue");
+  auto thrust_orbit = stationary_orbit;
+  thrust_orbit.controls.forward = true;
+  std::vector<Pixel> thrust_frame(frame.size());
+  check(renderer.render(planet, thrust_orbit,
+                        {.pitch_radians = -0.08}, thrust_frame) &&
+            thrust_frame != stationary_frame,
+        "the first orbital thrust input must produce an immediate visual response");
+  auto later_orbit = orbital;
+  later_orbit.tick += 8;
+  std::vector<Pixel> later_frame(frame.size());
+  check(renderer.render(planet, later_orbit,
+                        {.pitch_radians = -0.08}, later_frame) &&
+            later_frame != moving_orbital_frame,
+        "orbital streak motion must advance only from authoritative tick state");
 
   std::vector<Pixel> short_frame(frame.size() - 1, {1, 2, 3, 4});
   check(!renderer.render(planet, orbital, {}, short_frame) &&
@@ -5359,7 +5500,7 @@ auto planetfall_acceptance_contract() -> void {
             result->report.final_state.tick ==
                 kPlanetfallAcceptanceTicks &&
             planetary_flight_state_checksum(result->report.final_state) ==
-                15600629779145530762ULL,
+                240775156608294234ULL,
         "the canonical Planetfall path must retain its generated identity and final state");
   check(result->report.final_state.regime == FlightRegime::terrain_flight &&
             result->report.final_state.clearance_metres > 200.0 &&
@@ -5377,18 +5518,18 @@ auto planetfall_acceptance_contract() -> void {
       PlanetaryPresentationMode::local_terrain,
   };
   constexpr std::array<SimulationTick, 4> expected_ticks{
-      0, 13'350, 113'071, kPlanetfallAcceptanceTicks};
+      0, 4'080, 104'826, kPlanetfallAcceptanceTicks};
   constexpr std::array<std::uint64_t, 4> expected_flight_checksums{
       16209989626150487226ULL,
-      3828620310919835151ULL,
-      6612887580505814172ULL,
-      15600629779145530762ULL,
+      6791447656138722384ULL,
+      2533444641327445206ULL,
+      240775156608294234ULL,
   };
   constexpr std::array<std::uint64_t, 4> expected_frame_checksums{
       17277935430955010903ULL,
-      9195127342075088232ULL,
-      10695031067588847771ULL,
-      9247714629217840819ULL,
+      7265261514252816326ULL,
+      3362184271317024215ULL,
+      12199060865348241754ULL,
   };
   check(result->report.stages.size() == expected_modes.size(),
         "Planetfall must report each presentation stage exactly once");
@@ -5417,7 +5558,7 @@ auto planetfall_acceptance_contract() -> void {
             json.find("\"scenario\": \"v0.3-planetfall\"") !=
                 std::string::npos &&
             json.find("\"final_flight_checksum\": "
-                      "\"15600629779145530762\"") != std::string::npos &&
+                      "\"240775156608294234\"") != std::string::npos &&
             json.find("\"presentation_mode\": \"terrain-blend\"") !=
                 std::string::npos,
         "Planetfall JSON must preserve its versioned scenario and deterministic fields");
@@ -5455,6 +5596,7 @@ auto main() -> int {
   title_render_contract();
   flight_instrument_contract();
   planetary_flight_regime_contract();
+  orbital_motion_feedback_contract();
   deterministic_planetary_flight_replay();
   planetary_flight_failure_matrix();
   sweep_selection_contract();

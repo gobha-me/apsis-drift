@@ -148,6 +148,12 @@ loss neutralizes mouse-owned controls without clearing keyboard holds. A
 terminal without suitable mouse reporting therefore remains fully playable by
 keyboard.
 
+Orbital translation preserves momentum when its input is released. Apply
+opposing thrust to brake before arrival; atmospheric and terrain flight retain
+their assisted deceleration. The cockpit distinguishes thrust, coast, and
+braking, and reports total craft speed, signed target closing speed, arrival
+estimate, and an explicit braking cue.
+
 Input is converted to tick-addressed simulation commands. Apsis Drift requires
 semantic keyboard press, repeat, and release events, supplied by TermForge
 through the enhanced terminal keyboard protocol or an explicitly configured
@@ -159,9 +165,11 @@ Any manual-control press disengages autopilot. Apsis Drift does not scan or open
 raw input devices; terminal protocols, device permission, focus, layout, and
 degradation policy remain outside the game.
 
-The cockpit's navigation rail reports heading in normalized degrees, altitude
-and requested terrain clearance in world units, and horizontal speed. The
-flight rail reports manual or autopilot mode. Clearance at or below 24 units
+The cockpit reports heading in normalized degrees, altitude and requested
+terrain clearance in world units, and total craft speed. Target guidance keeps
+bearing separate from signed closing speed and arrival estimate. The flight
+rail reports manual or autopilot mode plus current thrust/coast state.
+Clearance at or below 24 units
 raises a textual `LOW CLR` warning; invalid numeric telemetry is shown with
 fixed-width dashes and a `TELEM ERR` warning so neither condition relies on
 color alone.
@@ -253,8 +261,8 @@ Run the deterministic remote and local profiles directly:
 ```
 
 Both profiles and both compiler builds must report the final authoritative
-flight checksum `15600629779145530762` and the same ordered stage ticks `0`,
-`13350`, `113071`, and `119360`. Timing fields and framebuffer checksums remain
+flight checksum `240775156608294234` and the same ordered stage ticks `0`,
+`4080`, `104826`, and `119360`. Timing fields and framebuffer checksums remain
 presentation diagnostics; they do not enter deterministic simulation state.
 The v0.3.1 local profile keeps the canonical 640x480 terrain-blend checkpoint
 below the 33.33 ms application-renderer budget by bounding tile-backed orbital

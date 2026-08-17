@@ -49,7 +49,7 @@ function(check_report json profile width height)
       NOT seed EQUAL 42 OR
       NOT command_count EQUAL 4 OR
       NOT final_tick EQUAL 119360 OR
-      NOT final_checksum STREQUAL "15600629779145530762" OR
+      NOT final_checksum STREQUAL "240775156608294234" OR
       NOT actual_profile STREQUAL "${profile}" OR
       NOT actual_width EQUAL width OR
       NOT actual_height EQUAL height OR
@@ -61,12 +61,12 @@ function(check_report json profile width height)
 
   set(expected_modes orbital atmospheric terrain-blend local-terrain)
   set(expected_regimes orbital atmospheric atmospheric terrain-flight)
-  set(expected_ticks 0 13350 113071 119360)
+  set(expected_ticks 0 4080 104826 119360)
   set(expected_flight_checksums
       16209989626150487226
-      3828620310919835151
-      6612887580505814172
-      15600629779145530762)
+      6791447656138722384
+      2533444641327445206
+      240775156608294234)
   math(EXPR last_stage "${stage_count} - 1")
   foreach(index RANGE 0 ${last_stage})
     list(GET expected_modes ${index} expected_mode)

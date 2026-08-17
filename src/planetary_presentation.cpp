@@ -59,6 +59,85 @@ inline constexpr std::uint32_t kBlendScale{65'536};
   return weight * 255U >= kBlendScale / 2;
 }
 
+[[nodiscard]] auto mix64(std::uint64_t value) noexcept -> std::uint64_t {
+  value ^= value >> 30U;
+  value *= 0xBF58476D1CE4E5B9ULL;
+  value ^= value >> 27U;
+  value *= 0x94D049BB133111EBULL;
+  return value ^ (value >> 31U);
+}
+
+[[nodiscard]] auto dark_space(termforge::Pixel value) noexcept -> bool {
+  return value.r < 32 && value.g < 36 && value.b < 48;
+}
+
+auto render_orbital_motion_cues(
+    const PlanetaryPresentationSettings& settings,
+    const PlanetaryFlightState& state,
+    std::span<termforge::Pixel> destination) noexcept -> void {
+  if (state.regime != FlightRegime::orbital) return;
+  const double speed = std::hypot(
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second,
+      state.velocity.up_metres_per_second);
+  if (speed > 1.0) {
+    constexpr int streak_count{36};
+    const int centre_x = settings.width / 2;
+    const int centre_y = settings.height / 2;
+    const int radius_limit = std::max(settings.width, settings.height);
+    const int trail = std::clamp(1 + static_cast<int>(speed / 800.0), 1, 6);
+    constexpr double tau{2.0 * std::numbers::pi_v<double>};
+    for (int index = 0; index < streak_count; ++index) {
+      const auto key = mix64(state.planet.value ^
+                             (static_cast<std::uint64_t>(index) *
+                              0x9E3779B97F4A7C15ULL));
+      const double angle = static_cast<double>(key >> 11U) *
+                           (tau / 9'007'199'254'740'992.0);
+      const int phase = static_cast<int>(
+          (key + state.tick / 2U) % static_cast<std::uint64_t>(radius_limit));
+      for (int offset = 0; offset < trail; ++offset) {
+        const int radius = std::max(2, phase - offset * 2);
+        const int x = centre_x +
+                      static_cast<int>(std::lround(std::cos(angle) * radius));
+        const int y = centre_y +
+                      static_cast<int>(std::lround(std::sin(angle) * radius));
+        if (x < 0 || x >= settings.width || y < 0 || y >= settings.height) {
+          continue;
+        }
+        auto& target = destination[static_cast<std::size_t>(y) *
+                                       static_cast<std::size_t>(settings.width) +
+                                   static_cast<std::size_t>(x)];
+        if (!dark_space(target)) continue;
+        const auto brightness = static_cast<std::uint8_t>(
+            std::clamp(210 - offset * 20, 120, 230));
+        target = {brightness, brightness,
+                  static_cast<std::uint8_t>(std::min(255, brightness + 18)),
+                  255};
+      }
+    }
+  }
+
+  const auto drive = flight_drive_state(state);
+  if (!drive || *drive == FlightDriveState::idle ||
+      *drive == FlightDriveState::coast) {
+    return;
+  }
+  termforge::Pixel color{126, 214, 210, 255};
+  if (*drive == FlightDriveState::reverse ||
+      *drive == FlightDriveState::braking) {
+    color = {238, 184, 104, 255};
+  }
+  const int y = std::max(0, settings.height - 8);
+  const int centre_x = settings.width / 2;
+  for (int x = centre_x - 3; x <= centre_x + 3; ++x) {
+    if (x >= 0 && x < settings.width) {
+      destination[static_cast<std::size_t>(y) *
+                      static_cast<std::size_t>(settings.width) +
+                  static_cast<std::size_t>(x)] = color;
+    }
+  }
+}
+
 [[nodiscard]] auto finite_state(const PlanetaryFlightState& state) noexcept
     -> bool {
   const auto valid_regime = [](FlightRegime regime) {
@@ -355,6 +434,7 @@ auto PlanetaryPresentationRenderer::render(
       return std::unexpected{PlanetaryPresentationError::orbital_failure};
     }
     stats.orbital_tiles_touched = orbital->terrain_tiles_touched;
+    render_orbital_motion_cues(m_settings, state, m_orbital_frame);
   }
 
   if (render_local_pass) {

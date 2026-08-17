@@ -31,9 +31,13 @@ function(check_signal_run driver profile)
   endif ()
 
   foreach(field schema_version scenario seed station_id target_id launch_tick
+                initial_distance_metres first_motion_tick
+                orbital_acceleration_ticks orbital_braking_ticks
+                peak_orbital_speed_metres_per_second
                 atmospheric_tick terrain_tick reached_tick completion_tick
-                orbital_return_tick checkpoint_flight_checksum
-                resumed_flight_checksum framebuffer_checksum discovery_count
+                orbital_return_tick resume_tick checkpoint_flight_checksum
+                resumed_flight_checksum return_flight_checksum
+                framebuffer_checksum discovery_count
                 world_delta_count final_location final_objective
                 render_profile presentation viewport_width viewport_height)
     string(JSON value ERROR_VARIABLE json_error GET "${first_json}" "${field}")
@@ -44,19 +48,26 @@ function(check_signal_run driver profile)
     set("${field}" "${value}")
   endforeach ()
 
-  if (NOT schema_version STREQUAL "1" OR
-      NOT scenario STREQUAL "v0.4-signal-run" OR
+  if (NOT schema_version STREQUAL "2" OR
+      NOT scenario STREQUAL "v0.4.1-signal-run" OR
       NOT seed STREQUAL "42" OR
       NOT station_id STREQUAL "station-ce51e866ec4e032d" OR
       NOT target_id STREQUAL "signal-71d4c959dcd64423" OR
       NOT launch_tick STREQUAL "0" OR
-      NOT atmospheric_tick STREQUAL "12168" OR
-      NOT terrain_tick STREQUAL "23675" OR
-      NOT reached_tick STREQUAL "24303" OR
-      NOT completion_tick STREQUAL "24722" OR
-      NOT orbital_return_tick STREQUAL "53171" OR
-      NOT checkpoint_flight_checksum STREQUAL "9296960089338770158" OR
+      NOT initial_distance_metres MATCHES "^87889\\.861" OR
+      NOT first_motion_tick STREQUAL "1" OR
+      NOT orbital_acceleration_ticks STREQUAL "432" OR
+      NOT orbital_braking_ticks STREQUAL "433" OR
+      NOT peak_orbital_speed_metres_per_second MATCHES "^4472\\.13" OR
+      NOT atmospheric_tick STREQUAL "3725" OR
+      NOT terrain_tick STREQUAL "15233" OR
+      NOT reached_tick STREQUAL "15294" OR
+      NOT completion_tick STREQUAL "15713" OR
+      NOT orbital_return_tick STREQUAL "38890" OR
+      NOT resume_tick STREQUAL "600" OR
+      NOT checkpoint_flight_checksum STREQUAL "14947176626171235385" OR
       NOT resumed_flight_checksum STREQUAL checkpoint_flight_checksum OR
+      NOT return_flight_checksum STREQUAL "11922358221174102146" OR
       NOT framebuffer_checksum MATCHES "^[0-9]+$" OR
       framebuffer_checksum STREQUAL "0" OR
       NOT discovery_count STREQUAL "1" OR
@@ -69,7 +80,7 @@ function(check_signal_run driver profile)
       "${driver} Signal Run report is not canonical:\n${first_json}")
   endif ()
 
-  set("${driver}_flight_checksum" "${checkpoint_flight_checksum}" PARENT_SCOPE)
+  set("${driver}_flight_checksum" "${return_flight_checksum}" PARENT_SCOPE)
   set("${driver}_completion_tick" "${completion_tick}" PARENT_SCOPE)
   set("${driver}_return_tick" "${orbital_return_tick}" PARENT_SCOPE)
 endfunction ()

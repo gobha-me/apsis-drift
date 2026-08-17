@@ -24,7 +24,7 @@ constexpr std::array kCommands{
     FlightCommand{0, FlightCommandKind::press_forward},
     FlightCommand{0, FlightCommandKind::press_turn_right},
     FlightCommand{0, FlightCommandKind::press_fall},
-    FlightCommand{118'160, FlightCommandKind::release_fall},
+    FlightCommand{109'650, FlightCommandKind::release_fall},
 };
 
 struct CanonicalSurface {

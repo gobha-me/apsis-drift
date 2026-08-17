@@ -51,6 +51,44 @@ struct PlanetaryFlightVelocity {
                          const PlanetaryFlightVelocity&) -> bool = default;
 };
 
+struct FlightPerformance {
+  double maximum_horizontal_speed{};
+  double maximum_vertical_speed{};
+  double horizontal_acceleration{};
+  double vertical_acceleration{};
+  double turn_rate_radians_per_second{};
+
+  friend auto operator==(const FlightPerformance&,
+                         const FlightPerformance&) -> bool = default;
+};
+
+enum class FlightDriveState : std::uint8_t {
+  idle,
+  coast,
+  forward,
+  reverse,
+  maneuvering,
+  braking,
+};
+
+enum class TargetMotionCue : std::uint8_t {
+  holding,
+  closing,
+  opening,
+  brake,
+};
+
+struct TargetRelativeMotion {
+  // Positive values close the range; negative values open it.
+  double closing_speed_metres_per_second{};
+  std::optional<double> arrival_estimate_seconds;
+  double stopping_distance_metres{};
+  TargetMotionCue cue{TargetMotionCue::holding};
+
+  friend auto operator==(const TargetRelativeMotion&,
+                         const TargetRelativeMotion&) -> bool = default;
+};
+
 struct FlightRegimeTransition {
   FlightRegime from{};
   FlightRegime to{};
@@ -99,6 +137,19 @@ enum class PlanetaryFlightError : std::uint8_t {
 [[nodiscard]] auto flight_regime_bands(
     const PlanetDescriptor& planet) noexcept
     -> std::expected<FlightRegimeBands, PlanetaryFlightError>;
+
+[[nodiscard]] auto flight_performance(FlightRegime regime) noexcept
+    -> std::expected<FlightPerformance, PlanetaryFlightError>;
+
+// Drive state and target motion are derived cockpit/navigation semantics.
+// They never enter authoritative saves and cannot affect simulation state.
+[[nodiscard]] auto flight_drive_state(
+    const PlanetaryFlightState& state) noexcept
+    -> std::expected<FlightDriveState, PlanetaryFlightError>;
+[[nodiscard]] auto resolve_target_relative_motion(
+    const PlanetaryFlightState& state, LocalPositionMetres target,
+    double arrival_radius_metres) noexcept
+    -> std::expected<TargetRelativeMotion, PlanetaryFlightError>;
 
 [[nodiscard]] auto initial_planetary_flight_state(
     const PlanetDescriptor& planet, GeodeticPosition position,
