@@ -32,17 +32,34 @@ independent Origin Station identity and the active first target. It is neither
 the system barycenter nor a procedural parent of planet, terrain, or signal
 generation.
 
-## Canonical acceptance
+## v0.4.2 acceptance matrix
 
 Seed `42` produces station `station-ce51e866ec4e032d` and target
 `signal-71d4c959dcd64423`. Its initial three-dimensional range is 87,889.861
-metres. The v0.4.1 deterministic guidance replay launches at tick 0, reloads
+metres. The canonical deterministic guidance replay launches at tick 0, reloads
 an in-flight checkpoint at tick 600, enters atmosphere at tick 3725, enters
 terrain flight at tick 15233, reaches the signal at tick 15294, completes
 collection at tick 15713, and returns to the orbital rendezvous at tick 38890.
 The checkpoint and reload both have flight checksum
 `14947176626171235385`; the return flight checksum is
 `11922358221174102146`.
+
+The v0.4.2 matrix repeats the full launch, collection, return, and docking path
+across airless, temperate, and dense atmosphere classes. Atmospheric descent
+must enter terrain flight within 120 seconds, stored flight states must retain
+at least 16 metres of terrain clearance, and each approach must produce a
+nonzero atmospheric framebuffer checksum.
+
+| Seed | Atmosphere class | Atmosphere tick | Terrain | Target | Complete | Return | Minimum clearance |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | airless | 3725 | 15233 | 15294 | 15713 | 38890 | 1972.975030 m |
+| 12648430 | temperate | 3736 | 15722 | 15983 | 16402 | 40571 | 1723.154200 m |
+| 1 | dense | 4086 | 16013 | 16615 | 17034 | 34545 | 1974.678256 m |
+
+A separate seed-`12648430` safety probe holds forward and fall controls for
+120,000 fixed ticks (1,000 seconds). It must remain valid while crossing rising
+terrain, maintain the exact 16 metre contact floor, and produce authoritative
+flight checksum `18312514460843648054`.
 
 ### First-launch pacing
 
@@ -51,7 +68,7 @@ arrival within 150 seconds, without moving the generated rendezvous or signal.
 The deterministic probe measures 90% cruise acceleration and counter-thrust
 braking through zero from the same launch state.
 
-| Seed-42 measurement | v0.4.0 | v0.4.1 |
+| Seed-42 measurement | v0.4.0 | v0.4.1/v0.4.2 |
 | --- | ---: | ---: |
 | First authoritative motion | tick 1 | tick 1 |
 | 90% orbital acceleration | 4.50 s | 3.60 s |
@@ -78,8 +95,9 @@ Run either supported presentation matrix:
 ```
 
 The mode writes and reloads a private same-directory checkpoint during the
-first orbital leg, verifies the complete semantic document and flight
-checksum, removes the private checkpoint, returns to the station, and emits a
-versioned report. `--snapshot PATH` retains
-the final pre-docking planetary frame for visual inspection. Rendering cadence,
-driver choice, and framebuffer checksum never enter authoritative simulation.
+canonical seed's first orbital leg, verifies the complete semantic document
+and flight checksum, removes the private checkpoint, runs every atmosphere
+class plus the long terrain-safety probe, returns each scenario to the station,
+and emits a versioned report. `--snapshot PATH` retains the canonical final
+pre-docking planetary frame for visual inspection. Rendering cadence, driver
+choice, and framebuffer checksum never enter authoritative simulation.

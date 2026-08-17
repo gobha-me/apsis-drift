@@ -14,12 +14,29 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSignalRunAcceptanceScenario{
-    "v0.4.1-signal-run"};
+    "v0.4.2-signal-run"};
 inline constexpr std::uint32_t kSignalRunAcceptanceSeed{42};
+inline constexpr std::uint32_t kSignalRunDefaultSeed{0xC0FFEEU};
+inline constexpr std::uint32_t kSignalRunDenseSeed{1U};
 inline constexpr SimulationTick kSignalRunAcceptanceMaximumTicks{500'000};
 inline constexpr SimulationTick kSignalRunAcceptanceResumeTick{600};
 inline constexpr SimulationTick kSignalRunAtmosphericPacingTargetTicks{4'200};
 inline constexpr SimulationTick kSignalRunReachedPacingTargetTicks{18'000};
+inline constexpr SimulationTick kAtmosphericLegPacingTargetTicks{14'400};
+inline constexpr SimulationTick kTerrainSafetyProbeTicks{120'000};
+
+struct SignalRunScenarioMeasurement {
+  std::uint32_t seed{};
+  AtmosphereClass atmosphere_class{};
+  SimulationTick atmospheric_tick{};
+  SimulationTick terrain_tick{};
+  SimulationTick reached_tick{};
+  SimulationTick completion_tick{};
+  SimulationTick orbital_return_tick{};
+  double minimum_clearance_metres{};
+  std::uint64_t atmospheric_framebuffer_checksum{};
+  std::uint64_t return_flight_checksum{};
+};
 
 struct SignalRunAcceptanceReport {
   RenderConfiguration render_configuration;
@@ -42,8 +59,12 @@ struct SignalRunAcceptanceReport {
   std::uint64_t resumed_flight_checksum{};
   std::uint64_t return_flight_checksum{};
   std::uint64_t framebuffer_checksum{};
+  SimulationTick terrain_safety_probe_ticks{};
+  double terrain_safety_minimum_clearance_metres{};
+  std::uint64_t terrain_safety_flight_checksum{};
   std::size_t discovery_count{};
   std::size_t world_delta_count{};
+  std::vector<SignalRunScenarioMeasurement> scenarios;
 };
 
 struct SignalRunAcceptanceResult {

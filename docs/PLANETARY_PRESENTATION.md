@@ -46,6 +46,13 @@ Presentation weights reuse the simulation's existing hysteresis boundaries:
 - airless planets keep the atmospheric approach regime but apply no invented
   atmosphere color.
 
+Atmospheric orbital frames apply a pressure-aware vertical sky gradient and
+stronger horizon haze before the local-terrain blend. The treatment derives
+only from the immutable planet descriptor, authoritative flight state, and
+camera pitch. It makes the approach leg readable without removing stars
+globally or inventing a wall-clock day/night cycle; airless frames remain
+untinted.
+
 Blend coefficients are converted once per frame to 16-bit fixed-point weights.
 A source pass is omitted only when its maximum possible contribution is below
 half of one 8-bit channel value, meaning it cannot change the rounded output.

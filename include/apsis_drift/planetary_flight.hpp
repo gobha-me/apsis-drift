@@ -133,12 +133,15 @@ enum class PlanetaryFlightError : std::uint8_t {
 
 [[nodiscard]] auto flight_regime_name(FlightRegime regime) noexcept
     -> std::string_view;
+[[nodiscard]] auto planetary_flight_error_name(
+    PlanetaryFlightError error) noexcept -> std::string_view;
 
 [[nodiscard]] auto flight_regime_bands(
     const PlanetDescriptor& planet) noexcept
     -> std::expected<FlightRegimeBands, PlanetaryFlightError>;
 
-[[nodiscard]] auto flight_performance(FlightRegime regime) noexcept
+[[nodiscard]] auto flight_performance(const PlanetDescriptor& planet,
+                                      FlightRegime regime) noexcept
     -> std::expected<FlightPerformance, PlanetaryFlightError>;
 
 // Drive state and target motion are derived cockpit/navigation semantics.
@@ -147,8 +150,8 @@ enum class PlanetaryFlightError : std::uint8_t {
     const PlanetaryFlightState& state) noexcept
     -> std::expected<FlightDriveState, PlanetaryFlightError>;
 [[nodiscard]] auto resolve_target_relative_motion(
-    const PlanetaryFlightState& state, LocalPositionMetres target,
-    double arrival_radius_metres) noexcept
+    const PlanetDescriptor& planet, const PlanetaryFlightState& state,
+    LocalPositionMetres target, double arrival_radius_metres) noexcept
     -> std::expected<TargetRelativeMotion, PlanetaryFlightError>;
 
 [[nodiscard]] auto initial_planetary_flight_state(

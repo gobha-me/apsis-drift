@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "apsis_drift/save_schema.hpp"
@@ -61,6 +62,9 @@ enum class SignalRunError : std::uint8_t {
   collection_failure,
   journal_failure,
 };
+
+[[nodiscard]] auto signal_run_error_name(SignalRunError error) noexcept
+    -> std::string_view;
 
 [[nodiscard]] auto hydrate_signal_run(const SaveDocument& document,
                                       TerrainTileCache& cache)

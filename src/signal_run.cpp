@@ -112,7 +112,7 @@ namespace {
     return std::unexpected{SignalRunError::navigation_failure};
   }
   const auto motion = resolve_target_relative_motion(
-      flight, *local, arrival_radius);
+      planet, flight, *local, arrival_radius);
   if (!motion) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
@@ -157,6 +157,21 @@ namespace {
 }
 
 }  // namespace
+
+auto signal_run_error_name(SignalRunError error) noexcept -> std::string_view {
+  switch (error) {
+    case SignalRunError::invalid_document: return "invalid_document";
+    case SignalRunError::terrain_failure: return "terrain_failure";
+    case SignalRunError::invalid_target: return "invalid_target";
+    case SignalRunError::inconsistent_state: return "inconsistent_state";
+    case SignalRunError::invalid_transition: return "invalid_transition";
+    case SignalRunError::flight_failure: return "flight_failure";
+    case SignalRunError::navigation_failure: return "navigation_failure";
+    case SignalRunError::collection_failure: return "collection_failure";
+    case SignalRunError::journal_failure: return "journal_failure";
+  }
+  return "unknown";
+}
 
 auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
     -> std::expected<SignalRunState, SignalRunError> {

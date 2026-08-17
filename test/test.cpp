@@ -3236,6 +3236,16 @@ auto planetary_flight_regime_contract() -> void {
               bands->atmosphere_enter_altitude_metres == ceiling &&
               bands->orbit_enter_altitude_metres > ceiling,
           "each atmosphere class must define stable hysteretic bands");
+    const auto performance =
+        flight_performance(planet, FlightRegime::atmospheric);
+    const double expected_vertical_speed =
+        std::max(180.0, (ceiling - 2'000.0) / 100.0);
+    check(performance &&
+              std::abs(performance->maximum_vertical_speed -
+                       expected_vertical_speed) < 1.0e-9 &&
+              std::abs(performance->vertical_acceleration -
+                       expected_vertical_speed / 1.8) < 1.0e-9,
+          "atmospheric performance must normalize every approach band to the pacing target");
   }
 
   const auto airless =
@@ -3350,6 +3360,28 @@ auto planetary_flight_regime_contract() -> void {
             contact.velocity.up_metres_per_second == 0.0,
         "terrain contact must preserve minimum clearance and cancel descent");
 
+  auto rising_terrain = contact;
+  rising_terrain.pose.position.altitude_metres =
+      environment.surface_elevation_metres +
+      kMinimumFlightClearanceMetres + 0.25;
+  rising_terrain.clearance_metres = kMinimumFlightClearanceMetres + 0.25;
+  rising_terrain.velocity.up_metres_per_second = -4.0;
+  const PlanetaryFlightEnvironment raised_environment{
+      environment.surface_elevation_metres + 1.0};
+  check(advance_planetary_flight(airless, raised_environment, rising_terrain,
+                                 {}, kSimulationStep) &&
+            rising_terrain.clearance_metres ==
+                kMinimumFlightClearanceMetres &&
+            rising_terrain.pose.position.altitude_metres ==
+                raised_environment.surface_elevation_metres +
+                    kMinimumFlightClearanceMetres &&
+            rising_terrain.velocity.up_metres_per_second == 0.0,
+        "a newly sampled terrain rise must clamp safely instead of rejecting the flight step");
+  check(planetary_flight_error_name(
+            PlanetaryFlightError::invalid_environment) ==
+            "invalid_environment",
+        "planetary flight errors must expose stable typed names");
+
   auto polar = initial_planetary_flight_state(
       airless, {std::numbers::pi_v<double> / 2.0, 0.0, 1'000.0},
       environment, std::numbers::pi_v<double> - 0.01,
@@ -3384,12 +3416,12 @@ auto orbital_motion_feedback_contract() -> void {
         "orbital motion feedback fixture must initialize");
   if (!initialized) return;
 
-  const auto performance = flight_performance(FlightRegime::orbital);
+  const auto performance = flight_performance(planet, FlightRegime::orbital);
   check(performance && performance->maximum_horizontal_speed == 4'000.0 &&
             performance->maximum_vertical_speed == 2'000.0 &&
             performance->horizontal_acceleration == 1'000.0 &&
             performance->vertical_acceleration == 1'000.0 &&
-            !flight_performance(static_cast<FlightRegime>(255)),
+            !flight_performance(planet, static_cast<FlightRegime>(255)),
         "orbital performance must retain its tuned, validated contract");
 
   auto coast = *initialized;
@@ -3423,7 +3455,7 @@ auto orbital_motion_feedback_contract() -> void {
   auto motion_state = *initialized;
   motion_state.velocity.east_metres_per_second = 100.0;
   const auto closing = resolve_target_relative_motion(
-      motion_state, {10'000.0, 0.0, 0.0}, 1'000.0);
+      planet, motion_state, {10'000.0, 0.0, 0.0}, 1'000.0);
   check(closing && closing->cue == TargetMotionCue::closing &&
             std::abs(closing->closing_speed_metres_per_second - 100.0) <
                 1.0e-9 &&
@@ -3433,23 +3465,26 @@ auto orbital_motion_feedback_contract() -> void {
         "target motion must distinguish bearing from closing speed and ETA");
   motion_state.velocity.east_metres_per_second = 4'000.0;
   const auto brake = resolve_target_relative_motion(
-      motion_state, {9'000.0, 0.0, 0.0}, 0.0);
+      planet, motion_state, {9'000.0, 0.0, 0.0}, 0.0);
   check(brake && brake->cue == TargetMotionCue::brake &&
             brake->stopping_distance_metres == 8'000.0,
         "target motion must warn inside a buffered stopping distance");
   motion_state.velocity.east_metres_per_second = -100.0;
   const auto opening = resolve_target_relative_motion(
-      motion_state, {10'000.0, 0.0, 0.0}, 1'000.0);
+      planet, motion_state, {10'000.0, 0.0, 0.0}, 1'000.0);
   const auto arrived = resolve_target_relative_motion(
-      motion_state, {500.0, 0.0, 0.0}, 1'000.0);
+      planet, motion_state, {500.0, 0.0, 0.0}, 1'000.0);
   check(opening && opening->cue == TargetMotionCue::opening &&
             !opening->arrival_estimate_seconds && arrived &&
             arrived->cue == TargetMotionCue::holding,
         "opening and arrived targets must not expose a misleading ETA");
   check(!resolve_target_relative_motion(
-             motion_state,
+             planet, motion_state,
              {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 0.0),
         "non-finite target motion must be rejected");
+  check(signal_run_error_name(SignalRunError::flight_failure) ==
+            "flight_failure",
+        "Signal Run errors must retain their typed diagnostic names");
 }
 
 struct PlanetaryReplayFixture {
@@ -5370,6 +5405,7 @@ auto planetary_presentation_contract() -> void {
   };
   std::array<std::uint64_t, stages.size()> checksums{};
   std::vector<Pixel> moving_orbital_frame;
+  std::vector<Pixel> atmospheric_context_frame;
   for (std::size_t index = 0; index < stages.size(); ++index) {
     const double stage_pitch = index == 2 ? -1.25 : index == 3 ? 0.0 : -0.08;
     const auto first = renderer.render(planet, stages[index].state,
@@ -5382,6 +5418,7 @@ auto planetary_presentation_contract() -> void {
     if (!first || !second) continue;
     checksums[index] = pixel_checksum(frame);
     if (index == 0) moving_orbital_frame = frame;
+    if (index == 1) atmospheric_context_frame = frame;
     check(first->surface_anchor.tile.planet == planet.id &&
               first->total_ms >= first->orbital_render_ms &&
               first->total_ms >= first->local_render_ms &&
@@ -5390,9 +5427,9 @@ auto planetary_presentation_contract() -> void {
   }
   constexpr std::array<std::uint64_t, 4> expected_checksums{
       4959918040514685530ULL,
-      6162202560146668315ULL,
-      3992641663955562031ULL,
-      10329579900168594179ULL,
+      11542927095655513157ULL,
+      18012692218642188287ULL,
+      4161298460455776323ULL,
   };
   if (checksums != expected_checksums) {
     std::fprintf(stderr,
@@ -5408,6 +5445,41 @@ auto planetary_presentation_contract() -> void {
                              [](std::uint64_t value) { return value == 0; }) &&
             std::ranges::adjacent_find(checksums) == checksums.end(),
         "scripted descent stages must produce distinct nonzero frames");
+
+  PlanetaryPresentationRenderer airless_renderer({
+      .width = width,
+      .height = height,
+      .field_of_view_degrees = 60.0,
+      .local_max_distance_metres = 140.0,
+      .local_fog_start_metres = 80.0,
+  });
+  auto airless_atmospheric = stages[1].state;
+  airless_atmospheric.planet = airless.id;
+  std::vector<Pixel> airless_atmospheric_frame(frame.size());
+  const auto airless_render = airless_renderer.render(
+      airless, airless_atmospheric, {.pitch_radians = -0.08},
+      airless_atmospheric_frame);
+  const auto average_row = [width](std::span<const Pixel> pixels, int row) {
+    std::array<double, 3> average{};
+    for (int x = 0; x < width; ++x) {
+      const auto value = pixels[static_cast<std::size_t>(row * width + x)];
+      average[0] += value.r;
+      average[1] += value.g;
+      average[2] += value.b;
+    }
+    for (auto& value : average) value /= width;
+    return average;
+  };
+  const auto zenith = average_row(atmospheric_context_frame, 0);
+  const auto horizon = average_row(atmospheric_context_frame, height / 2);
+  const double gradient = std::abs(zenith[0] - horizon[0]) +
+                          std::abs(zenith[1] - horizon[1]) +
+                          std::abs(zenith[2] - horizon[2]);
+  check(airless_render &&
+            airless_render->mode == PlanetaryPresentationMode::orbital &&
+            atmospheric_context_frame != airless_atmospheric_frame &&
+            gradient > 8.0,
+        "atmospheric flight must add a visible horizon context while airless approaches remain orbital");
 
   auto stationary_orbit = orbital;
   stationary_orbit.velocity = {};
@@ -5500,10 +5572,10 @@ auto planetfall_acceptance_contract() -> void {
             result->report.final_state.tick ==
                 kPlanetfallAcceptanceTicks &&
             planetary_flight_state_checksum(result->report.final_state) ==
-                240775156608294234ULL,
+                1628243202805637918ULL,
         "the canonical Planetfall path must retain its generated identity and final state");
   check(result->report.final_state.regime == FlightRegime::terrain_flight &&
-            result->report.final_state.clearance_metres > 200.0 &&
+            result->report.final_state.clearance_metres > 100.0 &&
             result->report.final_state.clearance_metres < 300.0 &&
             std::hypot(
                 result->report.final_state.velocity.east_metres_per_second,
@@ -5518,22 +5590,34 @@ auto planetfall_acceptance_contract() -> void {
       PlanetaryPresentationMode::local_terrain,
   };
   constexpr std::array<SimulationTick, 4> expected_ticks{
-      0, 4'080, 104'826, kPlanetfallAcceptanceTicks};
+      0, 4'080, 15'555, kPlanetfallAcceptanceTicks};
   constexpr std::array<std::uint64_t, 4> expected_flight_checksums{
       16209989626150487226ULL,
-      6791447656138722384ULL,
-      2533444641327445206ULL,
-      240775156608294234ULL,
+      8671079691946332602ULL,
+      17709249730073023912ULL,
+      1628243202805637918ULL,
   };
   constexpr std::array<std::uint64_t, 4> expected_frame_checksums{
       17277935430955010903ULL,
-      7265261514252816326ULL,
-      3362184271317024215ULL,
-      12199060865348241754ULL,
+      14423041936955797530ULL,
+      12815083094388108906ULL,
+      10235598043936675859ULL,
   };
   check(result->report.stages.size() == expected_modes.size(),
         "Planetfall must report each presentation stage exactly once");
   if (result->report.stages.size() == expected_modes.size()) {
+    std::array<std::uint64_t, 4> actual_frames{};
+    for (std::size_t index = 0; index < expected_modes.size(); ++index) {
+      actual_frames[index] = result->report.stages[index].framebuffer_checksum;
+    }
+    if (actual_frames != expected_frame_checksums) {
+      std::fprintf(stderr,
+                   "Planetfall acceptance frame checksums: %llu %llu %llu %llu\n",
+                   static_cast<unsigned long long>(actual_frames[0]),
+                   static_cast<unsigned long long>(actual_frames[1]),
+                   static_cast<unsigned long long>(actual_frames[2]),
+                   static_cast<unsigned long long>(actual_frames[3]));
+    }
     for (std::size_t index = 0; index < expected_modes.size(); ++index) {
       const auto& stage = result->report.stages[index];
       check(stage.presentation_mode == expected_modes[index] &&
@@ -5558,7 +5642,7 @@ auto planetfall_acceptance_contract() -> void {
             json.find("\"scenario\": \"v0.3-planetfall\"") !=
                 std::string::npos &&
             json.find("\"final_flight_checksum\": "
-                      "\"240775156608294234\"") != std::string::npos &&
+                      "\"1628243202805637918\"") != std::string::npos &&
             json.find("\"presentation_mode\": \"terrain-blend\"") !=
                 std::string::npos,
         "Planetfall JSON must preserve its versioned scenario and deterministic fields");
