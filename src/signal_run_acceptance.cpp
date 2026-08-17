@@ -28,6 +28,75 @@ struct PacingProbe {
   SimulationTick braking_ticks{};
 };
 
+[[nodiscard]] auto sun_visibility_name(
+    SunCheckpointVisibility visibility) noexcept -> std::string_view {
+  switch (visibility) {
+    case SunCheckpointVisibility::visible: return "visible";
+    case SunCheckpointVisibility::planet_occluded: return "planet_occluded";
+    case SunCheckpointVisibility::reemerged: return "reemerged";
+  }
+  return "unknown";
+}
+
+[[nodiscard]] auto sun_cycle_probe(
+    const PlanetDescriptor& planet, RenderConfiguration configuration)
+    -> std::expected<std::vector<SunCycleCheckpointMeasurement>,
+                     SignalRunAcceptanceError> {
+  constexpr SimulationTick limb_offset{5'200};
+  constexpr std::array checkpoints{
+      std::pair{SunCheckpointVisibility::visible,
+                kLocalDayTicks - limb_offset},
+      std::pair{SunCheckpointVisibility::planet_occluded, kLocalDayTicks},
+      std::pair{SunCheckpointVisibility::reemerged,
+                kLocalDayTicks + limb_offset},
+  };
+  const auto aligned = resolve_local_sun(planet, kLocalDayTicks);
+  if (!aligned) {
+    return std::unexpected{
+        SignalRunAcceptanceError::initialization_failure};
+  }
+  const double radius = static_cast<double>(planet.radius.value) * 1'000.0;
+  const OrbitalCamera camera{
+      .position = {-aligned->planet_to_sun.x * radius * 3.5,
+                   -aligned->planet_to_sun.y * radius * 3.5,
+                   -aligned->planet_to_sun.z * radius * 3.5},
+      .forward = aligned->planet_to_sun,
+      .up = {0.0, 0.0, 1.0},
+  };
+  const OrbitalRenderer renderer{{
+      .width = configuration.viewport.width,
+      .height = configuration.viewport.height,
+      .field_of_view_degrees = 60.0,
+      .horizontal_sample_stride =
+          configuration.viewport.width >= kDefaultViewportWidth ? 2 : 1,
+  }};
+  std::vector<termforge::Pixel> frame(
+      static_cast<std::size_t>(configuration.viewport.width) *
+      static_cast<std::size_t>(configuration.viewport.height));
+  std::vector<SunCycleCheckpointMeasurement> result;
+  result.reserve(checkpoints.size());
+  for (const auto [visibility, tick] : checkpoints) {
+    const auto sun = resolve_local_sun(planet, tick);
+    const auto rendered =
+        sun ? renderer.render(planet, camera, sun->planet_to_sun, frame)
+            : std::expected<OrbitalRenderStats, OrbitalRenderError>{
+                  std::unexpected{OrbitalRenderError::invalid_light_direction}};
+    const bool expected_visibility =
+        visibility != SunCheckpointVisibility::planet_occluded;
+    if (!sun || !rendered ||
+        (rendered->sun_pixels > 0) != expected_visibility) {
+      return std::unexpected{
+          SignalRunAcceptanceError::presentation_failure};
+    }
+    result.push_back({.visibility = visibility,
+                      .tick = tick,
+                      .direction = sun->planet_to_sun,
+                      .sun_pixels = rendered->sun_pixels,
+                      .framebuffer_checksum = pixel_checksum(frame)});
+  }
+  return result;
+}
+
 class CheckpointCleanup {
  public:
   explicit CheckpointCleanup(std::filesystem::path path)
@@ -308,7 +377,19 @@ struct TerrainSafetyProbe {
     if (canonical_report != nullptr && !resumed && checkpoint_path != nullptr &&
         run->flight->tick == kSignalRunAcceptanceResumeTick) {
       const auto checkpoint = project_signal_run_save(*run);
+      PlanetaryPresentationSettings checkpoint_settings{
+          .width = configuration.viewport.width,
+          .height = configuration.viewport.height,
+      };
+      PlanetaryPresentationRenderer checkpoint_renderer{checkpoint_settings};
+      std::vector<termforge::Pixel> checkpoint_frame(
+          static_cast<std::size_t>(configuration.viewport.width) *
+          static_cast<std::size_t>(configuration.viewport.height));
+      const auto checkpoint_render = checkpoint_renderer.render(
+          *run->planet, *run->flight, {.pitch_radians = -0.18},
+          checkpoint_frame);
       if (!checkpoint ||
+          !checkpoint_render ||
           !write_save_file_atomically(*checkpoint_path, *checkpoint)) {
         return std::unexpected{
             SignalRunAcceptanceError::checkpoint_write_failure};
@@ -316,6 +397,9 @@ struct TerrainSafetyProbe {
       canonical_report->resume_tick = run->flight->tick;
       canonical_report->checkpoint_flight_checksum =
           planetary_flight_state_checksum(*run->flight);
+      canonical_report->checkpoint_sun = checkpoint_render->sun;
+      canonical_report->checkpoint_framebuffer_checksum =
+          pixel_checksum(checkpoint_frame);
       const auto loaded = load_save_file(*checkpoint_path);
       auto resumed_cache = TerrainTileCache::create();
       auto resumed_run = loaded && resumed_cache
@@ -330,8 +414,19 @@ struct TerrainSafetyProbe {
       }
       canonical_report->resumed_flight_checksum =
           planetary_flight_state_checksum(*resumed_run->flight);
+      PlanetaryPresentationRenderer resumed_renderer{checkpoint_settings};
+      std::vector<termforge::Pixel> resumed_frame(checkpoint_frame.size());
+      const auto resumed_render = resumed_renderer.render(
+          *resumed_run->planet, *resumed_run->flight,
+          {.pitch_radians = -0.18}, resumed_frame);
+      canonical_report->resumed_framebuffer_checksum =
+          resumed_render ? pixel_checksum(resumed_frame) : 0;
       if (canonical_report->resumed_flight_checksum !=
-          canonical_report->checkpoint_flight_checksum) {
+              canonical_report->checkpoint_flight_checksum ||
+          !resumed_render ||
+          resumed_render->sun != canonical_report->checkpoint_sun ||
+          canonical_report->resumed_framebuffer_checksum !=
+              canonical_report->checkpoint_framebuffer_checksum) {
         return std::unexpected{SignalRunAcceptanceError::resume_mismatch};
       }
       *cache = std::move(*resumed_cache);
@@ -461,10 +556,9 @@ auto run_signal_run_acceptance(
         SignalRunAcceptanceError::invalid_configuration};
   }
   const CheckpointCleanup cleanup{checkpoint_path};
-  SignalRunAcceptanceReport report{
-      .render_configuration = configuration,
-      .presentation = std::string{presentation},
-  };
+  SignalRunAcceptanceReport report{};
+  report.render_configuration = configuration;
+  report.presentation = presentation;
   constexpr std::array seeds{kSignalRunAcceptanceSeed,
                              kSignalRunDefaultSeed,
                              kSignalRunDenseSeed};
@@ -482,6 +576,11 @@ auto run_signal_run_acceptance(
   if (!canonical) {
     return std::unexpected{SignalRunAcceptanceError::incomplete_path};
   }
+  const auto canonical_planet = generate_planet_descriptor(
+      Seed{canonical->returned_save.recipe.active_planet.value});
+  const auto sun_cycle = sun_cycle_probe(canonical_planet, configuration);
+  if (!sun_cycle) return std::unexpected{sun_cycle.error()};
+  report.sun_cycle = *sun_cycle;
   const auto safety = terrain_safety_probe();
   if (!safety) return std::unexpected{safety.error()};
   report.terrain_safety_probe_ticks = safety->ticks;
@@ -516,9 +615,23 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
         scenario.return_flight_checksum,
         index + 1 == report.scenarios.size() ? "" : ",");
   }
+  std::string sun_cycle;
+  for (std::size_t index = 0; index < report.sun_cycle.size(); ++index) {
+    const auto& checkpoint = report.sun_cycle[index];
+    sun_cycle += std::format(
+        "    {{\"visibility\": \"{}\", \"tick\": {}, "
+        "\"direction\": {{\"x\": {:.9f}, \"y\": {:.9f}, "
+        "\"z\": {:.9f}}}, \"sun_pixels\": {}, "
+        "\"framebuffer_checksum\": \"{}\"}}{}\n",
+        sun_visibility_name(checkpoint.visibility), checkpoint.tick,
+        checkpoint.direction.x, checkpoint.direction.y,
+        checkpoint.direction.z, checkpoint.sun_pixels,
+        checkpoint.framebuffer_checksum,
+        index + 1 == report.sun_cycle.size() ? "" : ",");
+  }
   return std::format(
       "{{\n"
-      "  \"schema_version\": 3,\n"
+      "  \"schema_version\": 4,\n"
       "  \"scenario\": \"{}\",\n"
       "  \"seed\": {},\n"
       "  \"station_id\": \"{}\",\n"
@@ -537,6 +650,12 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       "  \"resume_tick\": {},\n"
       "  \"checkpoint_flight_checksum\": \"{}\",\n"
       "  \"resumed_flight_checksum\": \"{}\",\n"
+      "  \"sun_generator_version\": {},\n"
+      "  \"checkpoint_sun\": {{\"cycle_tick\": {}, "
+      "\"direction\": {{\"x\": {:.9f}, \"y\": {:.9f}, "
+      "\"z\": {:.9f}}}}},\n"
+      "  \"checkpoint_framebuffer_checksum\": \"{}\",\n"
+      "  \"resumed_framebuffer_checksum\": \"{}\",\n"
       "  \"return_flight_checksum\": \"{}\",\n"
       "  \"framebuffer_checksum\": \"{}\",\n"
       "  \"terrain_safety_probe_ticks\": {},\n"
@@ -546,6 +665,9 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       "  \"world_delta_count\": {},\n"
       "  \"final_location\": \"docked_at_origin\",\n"
       "  \"final_objective\": \"completed\",\n"
+      "  \"sun_cycle\": [\n"
+      "{}"
+      "  ],\n"
       "  \"scenarios\": [\n"
       "{}"
       "  ],\n"
@@ -564,12 +686,18 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       report.completion_tick, report.orbital_return_tick,
       report.resume_tick,
       report.checkpoint_flight_checksum, report.resumed_flight_checksum,
+      kLocalSunGeneratorVersion, report.checkpoint_sun.cycle_tick,
+      report.checkpoint_sun.planet_to_sun.x,
+      report.checkpoint_sun.planet_to_sun.y,
+      report.checkpoint_sun.planet_to_sun.z,
+      report.checkpoint_framebuffer_checksum,
+      report.resumed_framebuffer_checksum,
       report.return_flight_checksum, report.framebuffer_checksum,
       report.terrain_safety_probe_ticks,
       report.terrain_safety_minimum_clearance_metres,
       report.terrain_safety_flight_checksum,
       report.discovery_count,
-      report.world_delta_count, scenarios, report.presentation,
+      report.world_delta_count, sun_cycle, scenarios, report.presentation,
       profile_name(report.render_configuration),
       report.render_configuration.viewport.width,
       report.render_configuration.viewport.height);

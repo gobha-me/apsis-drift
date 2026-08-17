@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 1 is a deterministic JSON document. It keeps
+Apsis Drift save format version 2 is a deterministic JSON document. It keeps
 the generated-world recipe separate from mutable player state and does not
 serialize terrain tiles, render state, terminal capabilities, preferences, or
 other reproducible presentation data.
@@ -17,7 +17,7 @@ profile with `--new-game-seed N`. Loading and new-game selection are mutually
 exclusive. A different load and save path is an explicit save-as; a load path
 is never overwritten unless it is also named as the save path.
 
-The loader reads at most the version 1 byte limit, decodes and validates into a
+The loader reads at most the format byte limit, decodes and validates into a
 temporary document, and returns it for application-owned commit only after all
 compatibility and regenerated-identity checks succeed. Failed loads therefore
 cannot partially mutate live state.
@@ -39,14 +39,14 @@ back into the mutable profile fields.
 Every document has three required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `1`;
+- `format_version` is the unsigned JSON integer `2` for newly written saves;
 - `recipe` and `state` are required objects.
 
 The recipe records the universe seed, origin-system and active-planet
-ordinals, the seed, planet, terrain-tile, origin-station, and surface-signal
-generator versions, plus the expected regenerated station and planet IDs.
-Version 1 supports origin-system ordinal zero and any unsigned active-planet
-ordinal.
+ordinals, the seed, planet, terrain-tile, origin-station, surface-signal, and
+local-sun generator versions, plus the expected regenerated station and planet
+IDs. Version 2 supports origin-system ordinal zero and any unsigned
+active-planet ordinal.
 
 The mutable state records:
 
@@ -57,9 +57,10 @@ The mutable state records:
 - unique discovered signal records;
 - an ordered sparse world-delta journal.
 
-The checked-in [`save-v1-golden.json`](../test/data/save-v1-golden.json) is the
-canonical representative document. It is byte-for-byte reproduced by the
-version 1 encoder.
+The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) is the
+canonical representative document and is reproduced byte-for-byte by the
+encoder. [`save-v1-golden.json`](../test/data/save-v1-golden.json) remains the
+legacy migration fixture.
 
 ## Encodings
 
@@ -96,10 +97,17 @@ state. Duplicate object keys are rejected rather than resolved by ordering.
 Unknown enum values and delta kinds are rejected because silently dropping
 their semantics could resurrect or duplicate generated content.
 
-Only format version 1 and the generator versions compiled into the current
-build are supported. Other format versions fail as unsupported; other
-generator versions fail as incompatible. There are no legacy Apsis Drift save
-files and therefore no migrations in version 1.
+Formats 1 and 2 and the generator versions compiled into the current build are
+supported. Version 1 is decoded with local-sun generator version 1 and rewrites
+as version 2 on the next explicit save. Other format versions fail as
+unsupported; other generator versions fail as incompatible. Older builds
+reject version 2 before reading fields, so they cannot silently discard the
+new compatibility version.
+
+Local-sun geometry is regenerated from the active planet's independent
+celestial stream and the saved authoritative flight tick. The direction is not
+serialized as mutable state: save/reload reproduces it from the recorded
+generator version, planet identity, and tick.
 
 The validator deterministically regenerates the origin station and active
 planet from the recipe. A stored identity mismatch is corrupt or incompatible

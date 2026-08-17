@@ -39,6 +39,8 @@ The report retains one checkpoint for each presentation stage:
 
 Each checkpoint records its geodetic state, clearance, flight checksum,
 framebuffer checksum, terrain anchor, tile counts, and 60-frame timing sample.
+Every presentation checkpoint derives its terminator, sky response, and local
+terrain illumination from the same versioned planet/tick local-sun geometry.
 State and generated identities are deterministic acceptance values. Pixel
 hashes are deterministic visual diagnostics for the same implementation and
 host math behavior. Timings describe only the application renderer and are

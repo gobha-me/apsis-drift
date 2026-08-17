@@ -32,7 +32,7 @@ independent Origin Station identity and the active first target. It is neither
 the system barycenter nor a procedural parent of planet, terrain, or signal
 generation.
 
-## v0.4.2 acceptance matrix
+## v0.4.3 acceptance matrix
 
 Seed `42` produces station `station-ce51e866ec4e032d` and target
 `signal-71d4c959dcd64423`. Its initial three-dimensional range is 87,889.861
@@ -44,7 +44,7 @@ The checkpoint and reload both have flight checksum
 `14947176626171235385`; the return flight checksum is
 `11922358221174102146`.
 
-The v0.4.2 matrix repeats the full launch, collection, return, and docking path
+The v0.4.3 matrix repeats the full launch, collection, return, and docking path
 across airless, temperate, and dense atmosphere classes. Atmospheric descent
 must enter terrain flight within 120 seconds, stored flight states must retain
 at least 16 metres of terrain clearance, and each approach must produce a
@@ -68,7 +68,7 @@ arrival within 150 seconds, without moving the generated rendezvous or signal.
 The deterministic probe measures 90% cruise acceleration and counter-thrust
 braking through zero from the same launch state.
 
-| Seed-42 measurement | v0.4.0 | v0.4.1/v0.4.2 |
+| Seed-42 measurement | v0.4.0 | v0.4.1–v0.4.3 |
 | --- | ---: | ---: |
 | First authoritative motion | tick 1 | tick 1 |
 | 90% orbital acceleration | 4.50 s | 3.60 s |
@@ -98,6 +98,10 @@ The mode writes and reloads a private same-directory checkpoint during the
 canonical seed's first orbital leg, verifies the complete semantic document
 and flight checksum, removes the private checkpoint, runs every atmosphere
 class plus the long terrain-safety probe, returns each scenario to the station,
-and emits a versioned report. `--snapshot PATH` retains the canonical final
+and emits a versioned report. The checkpoint also requires identical local-sun
+geometry and framebuffer output after reload. Three fixed-seed solar
+checkpoints at ticks 66800, 72000, and 77200 verify visible, planet-occluded,
+and re-emerged states with identical direction semantics under Kitty and ANSI.
+`--snapshot PATH` retains the canonical final
 pre-docking planetary frame for visual inspection. Rendering cadence, driver
 choice, and framebuffer checksum never enter authoritative simulation.

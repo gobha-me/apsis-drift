@@ -28,13 +28,12 @@ struct OrbitalRenderSettings {
   // handoff uses two-column sampling at local-profile widths to bound the
   // tile-backed pass without changing generated terrain identity.
   int horizontal_sample_stride{1};
-  // Unit direction is from the planet toward the light source.
-  PlanetFixedDirection light_direction{-0.45, -0.55, 0.70};
 };
 
 struct OrbitalRenderStats {
   std::size_t surface_pixels{};
   std::size_t atmosphere_pixels{};
+  std::size_t sun_pixels{};
   std::size_t terrain_tiles_touched{};
 
   friend auto operator==(const OrbitalRenderStats&,
@@ -68,6 +67,7 @@ class OrbitalRenderer {
   // destination unchanged.
   [[nodiscard]] auto render(
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
+      PlanetFixedDirection light_direction,
       std::span<termforge::Pixel> destination) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
@@ -75,14 +75,16 @@ class OrbitalRenderer {
   // orbital-to-local presentation handoff. Cache residency affects cost only.
   [[nodiscard]] auto render_tile_backed(
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
-      std::uint8_t terrain_lod, TerrainTileCache& cache,
+      PlanetFixedDirection light_direction, std::uint8_t terrain_lod,
+      TerrainTileCache& cache,
       std::span<termforge::Pixel> destination) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
  private:
   [[nodiscard]] auto render_impl(
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
-      TerrainTileCache* cache, std::uint8_t terrain_lod,
+      PlanetFixedDirection light_direction, TerrainTileCache* cache,
+      std::uint8_t terrain_lod,
       std::span<termforge::Pixel> destination) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 

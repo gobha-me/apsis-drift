@@ -214,7 +214,6 @@ class MeasuringSink final : public ByteSink {
   settings.width = viewport.width;
   settings.height = viewport.height;
   settings.field_of_view_degrees = 60.0;
-  settings.light_direction = {0.55, 0.15, 0.82};
   return settings;
 }
 
@@ -1345,8 +1344,15 @@ class LandscapeApp final : public App {
       camera.forward = {-camera.position.x, -camera.position.y,
                         -camera.position.z};
       camera.up = {0.0, 0.0, 1.0};
-      const auto rendered =
-          m_orbital_renderer.render(m_planet, camera, m_surface.pixels());
+      const auto sun = resolve_local_sun(m_planet, m_flight.tick);
+      const auto rendered = sun
+                                ? m_orbital_renderer.render(
+                                      m_planet, camera, sun->planet_to_sun,
+                                      m_surface.pixels())
+                                : std::expected<OrbitalRenderStats,
+                                                OrbitalRenderError>{
+                                      std::unexpected{
+                                          OrbitalRenderError::invalid_light_direction}};
       if (!rendered) {
         throw std::runtime_error{std::format(
             "orbital renderer rejected the {}x{} surface",

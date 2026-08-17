@@ -292,22 +292,26 @@ OrbitalRenderer::OrbitalRenderer(OrbitalRenderSettings settings)
 
 auto OrbitalRenderer::render(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
+    PlanetFixedDirection light_direction,
     std::span<termforge::Pixel> destination) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
-  return render_impl(planet, camera, nullptr, 0, destination);
+  return render_impl(planet, camera, light_direction, nullptr, 0, destination);
 }
 
 auto OrbitalRenderer::render_tile_backed(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
-    std::uint8_t terrain_lod, TerrainTileCache& cache,
+    PlanetFixedDirection light_direction, std::uint8_t terrain_lod,
+    TerrainTileCache& cache,
     std::span<termforge::Pixel> destination) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
-  return render_impl(planet, camera, &cache, terrain_lod, destination);
+  return render_impl(planet, camera, light_direction, &cache, terrain_lod,
+                     destination);
 }
 
 auto OrbitalRenderer::render_impl(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
-    TerrainTileCache* cache, std::uint8_t terrain_lod,
+    PlanetFixedDirection light_direction, TerrainTileCache* cache,
+    std::uint8_t terrain_lod,
     std::span<termforge::Pixel> destination) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   if (!validate_viewport({m_settings.width, m_settings.height})) {
@@ -365,7 +369,7 @@ auto OrbitalRenderer::render_impl(
   const Vector3 right = normalized(camera_right);
   const Vector3 up = normalized(cross(right, forward));
 
-  const Vector3 raw_light = vector(m_settings.light_direction);
+  const Vector3 raw_light = vector(light_direction);
   if (!valid_direction(raw_light)) {
     return std::unexpected{OrbitalRenderError::invalid_light_direction};
   }
@@ -379,6 +383,11 @@ auto OrbitalRenderer::render_impl(
   const double aspect = static_cast<double>(m_settings.width) /
                         static_cast<double>(m_settings.height);
   const double vertical_tangent = horizontal_tangent / aspect;
+  const double sun_angular_radius = std::max(
+      0.012,
+      std::atan(vertical_tangent) /
+          static_cast<double>(std::max(1, m_settings.height)) * 2.5);
+  const double sun_threshold = std::cos(sun_angular_radius);
   const double camera_radius_squared = dot(camera_position, camera_position);
   const double atmosphere = atmosphere_strength(planet);
   const double atmosphere_radius = radius * (1.0 + 0.018 + atmosphere * 0.025);
@@ -471,6 +480,10 @@ auto OrbitalRenderer::render_impl(
           background = blend(background, atmosphere_color, halo);
           stats.atmosphere_pixels += static_cast<std::size_t>(sample_width);
         }
+      }
+      if (dot(ray, light) >= sun_threshold) {
+        background = {247, 224, 158, 255};
+        stats.sun_pixels += static_cast<std::size_t>(sample_width);
       }
       std::fill_n(destination.begin() + static_cast<std::ptrdiff_t>(index),
                   sample_width, background);

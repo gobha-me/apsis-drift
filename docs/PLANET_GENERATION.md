@@ -67,3 +67,7 @@ bounds, name tables, classification thresholds, palette definitions, and JSON
 schema are generated-world compatibility data. Do not change them in place.
 A future incompatible generator or diagnostic representation must receive a
 new version while saves retain the version needed to reconstruct their world.
+
+The permanent planet child-stream ordinal `7` is reserved for celestial
+geometry. Local-sun generator version 1 consumes that stream independently;
+adding it does not change descriptor, terrain, station, or signal draws.

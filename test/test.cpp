@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include "apsis_drift/benchmark.hpp"
+#include "apsis_drift/celestial.hpp"
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
@@ -429,11 +430,13 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 1 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 2 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 1 identity and byte bound must remain stable");
-  const auto fixture = read_test_data("test/data/save-v1-golden.json");
-  check(!fixture.empty(), "the version 1 golden save fixture must be readable");
+        "save format version 2 identity and byte bound must remain stable");
+  const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
+  const auto fixture = read_test_data("test/data/save-v2-golden.json");
+  check(!legacy_fixture.empty() && !fixture.empty(),
+        "the version 1 and version 2 golden save fixtures must be readable");
 
   auto recipe = make_save_recipe(Seed{42});
   const auto target = SurfaceSignalId{0x71d4c959dcd64423ULL};
@@ -469,19 +472,23 @@ auto save_schema_contract() -> void {
             recipe.active_planet.value == 0x435b7b7e8ce489e8ULL,
         "save recipes must regenerate the canonical station and planet IDs");
   check(validate_save_document(expected).has_value(),
-        "the representative version 1 save must validate");
+        "the representative version 2 save must validate");
 
   const auto decoded = decode_save_document_json(fixture);
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
   check(encoded && *encoded == fixture,
-        "the version 1 encoder must reproduce the golden fixture byte-for-byte");
+        "the version 2 encoder must reproduce the golden fixture byte-for-byte");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
           "save encode/decode must preserve semantic state");
   }
+  const auto migrated = decode_save_document_json(legacy_fixture);
+  check(migrated && *migrated == expected &&
+            encode_save_document_json(*migrated) == encoded,
+        "a version 1 save must migrate in memory and rewrite canonically as version 2");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -511,16 +518,16 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::duplicate_key,
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 1",
-                   "\"format_version\": 2"),
+      replace_once(fixture, "\"format_version\": 2",
+                   "\"format_version\": 3"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":2}",
+      "{\"application\":\"apsis-drift\",\"format_version\":3}",
       SaveSchemaErrorCode::unsupported_format_version,
-      "future formats must be identified before version 1 fields are read");
+        "future formats must be identified before version 2 fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 1",
+      replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
       SaveSchemaErrorCode::invalid_type,
       "schema integers with the wrong JSON type must be rejected");
@@ -534,6 +541,10 @@ auto save_schema_contract() -> void {
                    "\"seed_derivation\": 2"),
       SaveSchemaErrorCode::incompatible_generator_version,
       "unsupported generator versions must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "\"local_sun\": 1", "\"local_sun\": 2"),
+      SaveSchemaErrorCode::incompatible_generator_version,
+      "unsupported local-sun geometry versions must be rejected explicitly");
   expect_decode_error(
       replace_once(fixture, "station-ce51e866ec4e032d",
                    "station-ce51e866ec4e032e"),
@@ -567,7 +578,7 @@ auto save_schema_contract() -> void {
 
   constexpr std::array required_sections{
       "\"application\"", "\"format_version\"", "\"recipe\"",
-      "\"state\"",       "\"generator_versions\"",
+      "\"state\"",       "\"generator_versions\"", "\"local_sun\"",
       "\"first_objective\"", "\"flight\"", "\"discoveries\"",
       "\"world_deltas\"",
   };
@@ -3918,6 +3929,13 @@ auto deterministic_fixed_step_flight() -> void {
         "equal time at 30 and 60 FPS must execute the same fixed steps");
   check(state_at_30 != 0 && state_at_30 == state_at_60,
         "equal time at 30 and 60 FPS must produce identical flight state");
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const auto sun_at_30 =
+      resolve_local_sun(planet, static_cast<SimulationTick>(steps_at_30));
+  const auto sun_at_60 =
+      resolve_local_sun(planet, static_cast<SimulationTick>(steps_at_60));
+  check(sun_at_30 && sun_at_60 && *sun_at_30 == *sun_at_60,
+        "render cadence must not change authoritative local-sun geometry");
 
   const auto terrain = Terrain::generate(128, 42);
   check(terrain.has_value(), "invalid-state flight fixture must generate");
@@ -5014,17 +5032,103 @@ auto required_viewport_matrix() -> void {
   return camera;
 }
 
+inline constexpr PlanetFixedDirection kOrbitalTestLight{-0.4, -0.6, 0.7};
+
+auto celestial_geometry_contract() -> void {
+  check(kLocalSunGeneratorVersion == 1 && kLocalDayTicks == 72'000,
+        "local-sun version 1 must retain its ten-minute fixed-step cycle");
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const auto first = resolve_local_sun(planet, 0);
+  const auto again = resolve_local_sun(planet, 0);
+  const auto half = resolve_local_sun(planet, kLocalDayTicks / 2);
+  const auto full = resolve_local_sun(planet, kLocalDayTicks);
+  check(first && again && half && full && *first == *again &&
+            first->planet_to_sun == full->planet_to_sun &&
+            first->cycle_tick == full->cycle_tick &&
+            close_enough(first->planet_to_sun.x, -half->planet_to_sun.x,
+                         2.0e-9) &&
+            close_enough(first->planet_to_sun.y, -half->planet_to_sun.y,
+                         2.0e-9) &&
+            first->planet_to_sun.z == half->planet_to_sun.z,
+        "local-sun geometry must repeat exactly and cross the opposite meridian at half-cycle");
+  if (first) {
+    const auto noon = local_solar_elevation(*first, first->planet_to_sun);
+    check(noon && close_enough(*noon, 1.0, 1.0e-9),
+          "a surface normal facing the sun must resolve local noon");
+  }
+  const auto other =
+      resolve_local_sun(generate_planet_descriptor(Seed{43}), 0);
+  check(first && other && first->planet_to_sun != other->planet_to_sun,
+        "independent planet seeds must produce different celestial geometry");
+  check(resolve_local_sun(planet_with_radius(planet, 0), 0) ==
+            std::unexpected{LocalSunError::invalid_planet},
+        "invalid generated planet identity must be rejected by the sun model");
+  LocalSunGeometry invalid{};
+  invalid.planet_to_sun.x = std::numeric_limits<double>::quiet_NaN();
+  check(local_solar_elevation(invalid, {1.0, 0.0, 0.0}) ==
+            std::unexpected{LocalSunError::invalid_geometry},
+        "non-finite celestial geometry must be rejected before presentation");
+}
+
+auto orbital_sun_occlusion_contract() -> void {
+  const auto planet = generate_planet_descriptor(Seed{42});
+  const auto aligned = resolve_local_sun(planet, kLocalDayTicks);
+  check(aligned.has_value(), "the orbital sun fixture must resolve");
+  if (!aligned) return;
+  const double radius = static_cast<double>(planet.radius.value) * 1'000.0;
+  OrbitalCamera camera;
+  camera.position = {-aligned->planet_to_sun.x * radius * 3.5,
+                     -aligned->planet_to_sun.y * radius * 3.5,
+                     -aligned->planet_to_sun.z * radius * 3.5};
+  camera.forward = aligned->planet_to_sun;
+  camera.up = {0.0, 0.0, 1.0};
+  const OrbitalRenderer renderer{{.width = 320,
+                                  .height = 240,
+                                  .field_of_view_degrees = 60.0}};
+  std::vector<Pixel> visible_frame(320U * 240U);
+  std::vector<Pixel> occluded_frame(visible_frame.size());
+  std::vector<Pixel> reemerged_frame(visible_frame.size());
+  constexpr SimulationTick limb_offset{5'200};
+  const auto visible_sun =
+      resolve_local_sun(planet, kLocalDayTicks - limb_offset);
+  const auto reemerged_sun =
+      resolve_local_sun(planet, kLocalDayTicks + limb_offset);
+  const auto visible = visible_sun
+                           ? renderer.render(planet, camera,
+                                             visible_sun->planet_to_sun,
+                                             visible_frame)
+                           : std::expected<OrbitalRenderStats,
+                                           OrbitalRenderError>{
+                                 std::unexpected{
+                                     OrbitalRenderError::invalid_light_direction}};
+  const auto occluded = renderer.render(
+      planet, camera, aligned->planet_to_sun, occluded_frame);
+  const auto reemerged = reemerged_sun
+                             ? renderer.render(planet, camera,
+                                               reemerged_sun->planet_to_sun,
+                                               reemerged_frame)
+                             : std::expected<OrbitalRenderStats,
+                                             OrbitalRenderError>{
+                                   std::unexpected{
+                                       OrbitalRenderError::invalid_light_direction}};
+  check(visible && occluded && reemerged && visible->sun_pixels > 0 &&
+            occluded->sun_pixels == 0 && reemerged->sun_pixels > 0 &&
+            pixel_checksum(visible_frame) != pixel_checksum(occluded_frame) &&
+            pixel_checksum(reemerged_frame) != pixel_checksum(occluded_frame),
+        "the deterministic sun must disappear behind the planet and re-emerge on the opposite limb");
+}
+
 auto orbital_render_failure_matrix() -> void {
   const auto planet = generate_planet_descriptor(Seed{42});
   const OrbitalRenderSettings settings{.width = 160,
                                        .height = 120,
-                                       .field_of_view_degrees = 60.0,
-                                       .light_direction = {-0.4, -0.6, 0.7}};
+                                       .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   const auto camera = orbital_camera_for(planet);
 
   std::vector<Pixel> short_frame(160U * 120U - 1U, {1, 2, 3, 4});
-  const auto short_result = renderer.render(planet, camera, short_frame);
+  const auto short_result =
+      renderer.render(planet, camera, kOrbitalTestLight, short_frame);
   check(!short_result &&
             short_result.error() == OrbitalRenderError::invalid_framebuffer,
         "an orbital renderer must reject a short framebuffer");
@@ -5045,47 +5149,52 @@ auto orbital_render_failure_matrix() -> void {
   };
 
   const OrbitalRenderer invalid_viewport{{.width = 0, .height = 120}};
-  check_untouched(invalid_viewport.render(planet, camera, frame),
+  check_untouched(invalid_viewport.render(planet, camera, kOrbitalTestLight,
+                                          frame),
                   OrbitalRenderError::invalid_viewport,
                   "zero orbital width must be rejected");
 
   const OrbitalRenderer invalid_fov{{.width = 160,
                                      .height = 120,
                                      .field_of_view_degrees = 180.0}};
-  check_untouched(invalid_fov.render(planet, camera, frame),
+  check_untouched(invalid_fov.render(planet, camera, kOrbitalTestLight, frame),
                   OrbitalRenderError::invalid_field_of_view,
                   "an invalid orbital field of view must be rejected");
 
   const OrbitalRenderer invalid_stride{{.width = 160,
                                         .height = 120,
                                         .horizontal_sample_stride = 0}};
-  check_untouched(invalid_stride.render(planet, camera, frame),
+  check_untouched(
+      invalid_stride.render(planet, camera, kOrbitalTestLight, frame),
                   OrbitalRenderError::invalid_sample_stride,
                   "an invalid orbital sample stride must be rejected");
 
-  const OrbitalRenderer invalid_light{{
-      .width = 160, .height = 120, .light_direction = {0.0, 0.0, 0.0}}};
-  check_untouched(invalid_light.render(planet, camera, frame),
+  const OrbitalRenderer invalid_light{{.width = 160, .height = 120}};
+  check_untouched(invalid_light.render(planet, camera, {}, frame),
                   OrbitalRenderError::invalid_light_direction,
                   "a zero orbital light direction must be rejected");
 
   const auto invalid_radius = planet_with_radius(planet, 0);
-  check_untouched(renderer.render(invalid_radius, camera, frame),
+  check_untouched(renderer.render(invalid_radius, camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::invalid_planet,
                   "an invalid orbital planet radius must be rejected");
   const auto invalid_water = planet_with_water(planet, 10'001);
-  check_untouched(renderer.render(invalid_water, camera, frame),
+  check_untouched(renderer.render(invalid_water, camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::invalid_planet,
                   "invalid orbital water coverage must be rejected");
   const auto invalid_atmosphere =
       planet_with_atmosphere(planet, AtmosphereClass::airless, 1);
-  check_untouched(renderer.render(invalid_atmosphere, camera, frame),
+  check_untouched(renderer.render(invalid_atmosphere, camera,
+                                  kOrbitalTestLight, frame),
                   OrbitalRenderError::invalid_planet,
                   "inconsistent orbital atmosphere data must be rejected");
 
   auto invalid_camera = camera;
   invalid_camera.position.x = std::numeric_limits<double>::quiet_NaN();
-  check_untouched(renderer.render(planet, invalid_camera, frame),
+  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::non_finite_camera,
                   "a non-finite orbital camera must be rejected");
 
@@ -5094,25 +5203,29 @@ auto orbital_render_failure_matrix() -> void {
       std::numeric_limits<double>::max(),
       std::numeric_limits<double>::max(),
       std::numeric_limits<double>::max()};
-  check_untouched(renderer.render(planet, invalid_camera, frame),
+  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::non_finite_camera,
                   "an overflowing orbital camera must be rejected");
 
   invalid_camera = camera;
   invalid_camera.position = {};
-  check_untouched(renderer.render(planet, invalid_camera, frame),
+  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::camera_inside_planet,
                   "a camera inside the planet must be rejected");
 
   invalid_camera = camera;
   invalid_camera.forward = {};
-  check_untouched(renderer.render(planet, invalid_camera, frame),
+  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::invalid_camera_basis,
                   "a zero orbital forward direction must be rejected");
 
   invalid_camera = camera;
   invalid_camera.up = invalid_camera.forward;
-  check_untouched(renderer.render(planet, invalid_camera, frame),
+  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
+                                  frame),
                   OrbitalRenderError::invalid_camera_basis,
                   "a collinear orbital camera basis must be rejected");
 }
@@ -5123,13 +5236,13 @@ auto orbital_visibility_contract() -> void {
       generated, AtmosphereClass::temperate, 1'000);
   const OrbitalRenderSettings settings{.width = 200,
                                        .height = 150,
-                                       .field_of_view_degrees = 60.0,
-                                       .light_direction = {-0.4, -0.6, 0.7}};
+                                       .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   std::vector<Pixel> frame(200U * 150U);
 
   auto camera = orbital_camera_for(planet);
-  const auto visible = renderer.render(planet, camera, frame);
+  const auto visible =
+      renderer.render(planet, camera, kOrbitalTestLight, frame);
   check(visible && visible->surface_pixels > 0 &&
             visible->atmosphere_pixels > 0,
         "a centered atmospheric planet must render its disc and halo");
@@ -5140,14 +5253,16 @@ auto orbital_visibility_contract() -> void {
 
   camera.forward.x += 1.65 *
                       static_cast<double>(planet.radius.value) * 1'000.0;
-  const auto clipped = renderer.render(planet, camera, frame);
+  const auto clipped =
+      renderer.render(planet, camera, kOrbitalTestLight, frame);
   check(clipped && clipped->surface_pixels > 0 && visible &&
             clipped->surface_pixels < visible->surface_pixels,
         "an edge-clipped planet must retain only part of its visible disc");
 
   camera = orbital_camera_for(planet);
   camera.forward = {0.0, -1.0, 0.0};
-  const auto outside = renderer.render(planet, camera, frame);
+  const auto outside =
+      renderer.render(planet, camera, kOrbitalTestLight, frame);
   check(outside && outside->surface_pixels == 0 &&
             outside->atmosphere_pixels == 0,
         "a planet behind the orbital camera must be outside the view");
@@ -5155,7 +5270,8 @@ auto orbital_visibility_contract() -> void {
   const auto airless =
       planet_with_atmosphere(planet, AtmosphereClass::airless, 0);
   camera = orbital_camera_for(airless);
-  const auto without_atmosphere = renderer.render(airless, camera, frame);
+  const auto without_atmosphere =
+      renderer.render(airless, camera, kOrbitalTestLight, frame);
   check(without_atmosphere && without_atmosphere->surface_pixels > 0 &&
             without_atmosphere->atmosphere_pixels == 0,
         "an airless planet must render without a halo");
@@ -5165,14 +5281,15 @@ auto deterministic_orbital_render() -> void {
   const auto planet = generate_planet_descriptor(Seed{42});
   const OrbitalRenderSettings settings{.width = 160,
                                        .height = 120,
-                                       .field_of_view_degrees = 60.0,
-                                       .light_direction = {-0.4, -0.6, 0.7}};
+                                       .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   const auto camera = orbital_camera_for(planet);
   std::vector<Pixel> first(160U * 120U);
   std::vector<Pixel> second(first.size());
-  const auto first_result = renderer.render(planet, camera, first);
-  const auto second_result = renderer.render(planet, camera, second);
+  const auto first_result =
+      renderer.render(planet, camera, kOrbitalTestLight, first);
+  const auto second_result =
+      renderer.render(planet, camera, kOrbitalTestLight, second);
   check(first_result && second_result && first_result == second_result,
         "repeated orbital renders must report identical coverage");
   check(first == second,
@@ -5183,14 +5300,14 @@ auto deterministic_orbital_render() -> void {
 
   const auto other_planet = generate_planet_descriptor(Seed{43});
   const auto other_camera = orbital_camera_for(other_planet);
-  check(renderer.render(other_planet, other_camera, second) &&
+  check(renderer.render(other_planet, other_camera, kOrbitalTestLight, second) &&
             pixel_checksum(first) != pixel_checksum(second),
         "a different planet descriptor must change the orbital frame");
 
   auto moved = camera;
   moved.position.x += static_cast<double>(planet.radius.value) * 300.0;
   moved.forward = {-moved.position.x, -moved.position.y, -moved.position.z};
-  check(renderer.render(planet, moved, second) &&
+  check(renderer.render(planet, moved, kOrbitalTestLight, second) &&
             pixel_checksum(first) != pixel_checksum(second),
         "moving the orbital camera must change the rendered frame");
 
@@ -5199,12 +5316,11 @@ auto deterministic_orbital_render() -> void {
   const OrbitalRenderer strided({.width = strided_width,
                                  .height = strided_height,
                                  .field_of_view_degrees = 60.0,
-                                 .horizontal_sample_stride = 2,
-                                 .light_direction = {-0.4, -0.6, 0.7}});
+                                 .horizontal_sample_stride = 2});
   std::vector<Pixel> strided_frame(
       static_cast<std::size_t>(strided_width * strided_height));
   const auto strided_result =
-      strided.render(planet, camera, strided_frame);
+      strided.render(planet, camera, kOrbitalTestLight, strided_frame);
   check(strided_result &&
             std::ranges::all_of(strided_frame,
                                 [](Pixel value) { return value.a == 255; }),
@@ -5241,13 +5357,12 @@ auto golden_orbital_profiles() -> void {
     const auto viewport = profile_viewport(golden.profile);
     const OrbitalRenderer renderer{{.width = viewport.width,
                                     .height = viewport.height,
-                                    .field_of_view_degrees = 60.0,
-                                    .light_direction = {-0.4, -0.6, 0.7}}};
+                                    .field_of_view_degrees = 60.0}};
     std::vector<Pixel> first(static_cast<std::size_t>(viewport.width) *
                              static_cast<std::size_t>(viewport.height));
     std::vector<Pixel> second(first.size());
-    check(renderer.render(planet, camera, first) &&
-              renderer.render(planet, camera, second),
+    check(renderer.render(planet, camera, kOrbitalTestLight, first) &&
+              renderer.render(planet, camera, kOrbitalTestLight, second),
           "every named profile must render the orbital fixture");
     const auto checksum = pixel_checksum(first);
     if (checksum != golden.checksum) {
@@ -5426,10 +5541,10 @@ auto planetary_presentation_contract() -> void {
           "presentation stats must retain anchor identity and bounded timings");
   }
   constexpr std::array<std::uint64_t, 4> expected_checksums{
-      4959918040514685530ULL,
-      11542927095655513157ULL,
-      18012692218642188287ULL,
-      4161298460455776323ULL,
+      3389802127318038332ULL,
+      8750882505373245699ULL,
+      5378190185488340662ULL,
+      13208762389640217683ULL,
   };
   if (checksums != expected_checksums) {
     std::fprintf(stderr,
@@ -5459,7 +5574,7 @@ auto planetary_presentation_contract() -> void {
   const auto airless_render = airless_renderer.render(
       airless, airless_atmospheric, {.pitch_radians = -0.08},
       airless_atmospheric_frame);
-  const auto average_row = [width](std::span<const Pixel> pixels, int row) {
+  const auto average_row = [](std::span<const Pixel> pixels, int row) {
     std::array<double, 3> average{};
     for (int x = 0; x < width; ++x) {
       const auto value = pixels[static_cast<std::size_t>(row * width + x)];
@@ -5480,6 +5595,62 @@ auto planetary_presentation_contract() -> void {
             atmospheric_context_frame != airless_atmospheric_frame &&
             gradient > 8.0,
         "atmospheric flight must add a visible horizon context while airless approaches remain orbital");
+
+  const auto initial_sun = resolve_local_sun(planet, 0);
+  check(initial_sun.has_value(), "the local day/night fixture must resolve");
+  if (initial_sun) {
+    const SimulationTick noon_tick =
+        (kLocalDayTicks - initial_sun->cycle_tick) % kLocalDayTicks;
+    auto day_state = stages.back().state;
+    day_state.tick = noon_tick;
+    auto night_state = day_state;
+    night_state.tick = noon_tick + kLocalDayTicks / 2;
+    std::vector<Pixel> day_frame(frame.size());
+    std::vector<Pixel> night_frame(frame.size());
+    const auto day_render = renderer.render(
+        planet, day_state, {.pitch_radians = 0.0}, day_frame);
+    const auto night_render = renderer.render(
+        planet, night_state, {.pitch_radians = 0.0}, night_frame);
+    const auto luminance = [](std::span<const Pixel> pixels) {
+      std::uint64_t total{};
+      for (const auto value : pixels) {
+        total += static_cast<std::uint64_t>(value.r) + value.g + value.b;
+      }
+      return total;
+    };
+    const auto night_stars = std::ranges::count_if(
+        std::span{night_frame}.first(
+            static_cast<std::size_t>(width * height / 3)),
+        [](Pixel value) {
+          return value.r > 140 && value.r == value.g && value.b >= value.r;
+        });
+    auto airless_night_state = night_state;
+    airless_night_state.planet = airless.id;
+    std::vector<Pixel> airless_night_frame(frame.size());
+    const auto airless_night = airless_renderer.render(
+        airless, airless_night_state, {.pitch_radians = 0.0},
+        airless_night_frame);
+    const bool coherent_cycle =
+        day_render && night_render && airless_night &&
+        day_render->local_solar_elevation > 0.85 &&
+        night_render->local_solar_elevation < -0.85 &&
+        luminance(day_frame) > luminance(night_frame) && night_stars > 0 &&
+        airless_night_frame.front() == Pixel{4, 7, 13, 255};
+    if (!coherent_cycle) {
+      std::fprintf(
+          stderr,
+          "day/night diagnostics: day=%.6f night=%.6f day_luma=%llu "
+          "night_luma=%llu stars=%zu airless_first=(%u,%u,%u)\n",
+          day_render ? day_render->local_solar_elevation : 0.0,
+          night_render ? night_render->local_solar_elevation : 0.0,
+          static_cast<unsigned long long>(luminance(day_frame)),
+          static_cast<unsigned long long>(luminance(night_frame)),
+          static_cast<std::size_t>(night_stars), airless_night_frame.front().r,
+          airless_night_frame.front().g, airless_night_frame.front().b);
+    }
+    check(coherent_cycle,
+          "local terrain, atmospheric sky, night stars, and airless haze must agree on the shared sun direction");
+  }
 
   auto stationary_orbit = orbital;
   stationary_orbit.velocity = {};
@@ -5598,10 +5769,10 @@ auto planetfall_acceptance_contract() -> void {
       1628243202805637918ULL,
   };
   constexpr std::array<std::uint64_t, 4> expected_frame_checksums{
-      17277935430955010903ULL,
-      14423041936955797530ULL,
-      12815083094388108906ULL,
-      10235598043936675859ULL,
+      10946652128119593424ULL,
+      16874951085288255351ULL,
+      3576507194995956476ULL,
+      17125498855235624672ULL,
   };
   check(result->report.stages.size() == expected_modes.size(),
         "Planetfall must report each presentation stage exactly once");
@@ -5705,7 +5876,9 @@ auto main() -> int {
   deterministic_render();
   golden_profile_renders();
   required_viewport_matrix();
+  celestial_geometry_contract();
   orbital_render_failure_matrix();
+  orbital_sun_occlusion_contract();
   orbital_visibility_contract();
   deterministic_orbital_render();
   golden_orbital_profiles();
