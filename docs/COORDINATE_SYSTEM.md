@@ -12,9 +12,8 @@ All frames are right-handed:
 
 - **System inertial:** origin at the system barycenter, `+z` toward the
   system's angular-momentum north, and `+x` along the epoch reference ray.
-  Positions are metres. Planet ephemeris state will own the time-dependent
-  rigid transform into a planet frame; this contract does not invent orbital
-  or rotation state before those systems exist.
+  Positions are metres and velocities are metres per second. Planet ephemeris
+  state owns the time-dependent rigid transform into a planet frame.
 - **Planet fixed:** origin at the planet center, `+z` through spin north, `+x`
   through latitude 0 and longitude 0 at the reference epoch, and `+y` through
   latitude 0 and longitude +90 degrees east. The reference surface is the
@@ -37,6 +36,24 @@ x = (R + h) cos(lat) cos(lon)
 y = (R + h) cos(lat) sin(lon)
 z = (R + h) sin(lat)
 ```
+
+At authoritative universe tick `t`, let an ephemeris provide planet-center
+system position `c`, center velocity `v`, planet-fixed-to-system rotation `Q`,
+and planet-fixed angular velocity `omega`. For planet-fixed position `p_f` and
+velocity `v_f`, the system-inertial state is:
+
+```text
+p_s = c + Q p_f
+v_s = v + Q (v_f + omega cross p_f)
+```
+
+The inverse uses the transpose of `Q` and removes center and rotational
+velocity. Approach and departure must use one ephemeris sample at the same
+saved universe tick; render interpolation is not an input. Invalid rotations,
+non-finite vectors, unknown bodies, and inconsistent timestamps reject the
+handoff without mutating either craft representation. The versioned ownership
+and travel boundary is recorded in the
+[intersystem contract](INTERSYSTEM_CONTRACT.md).
 
 Examples on planet seed 42 (`R = 5,499,000 m`) are:
 

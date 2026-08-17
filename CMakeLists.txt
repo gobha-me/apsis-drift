@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.3 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.4 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -86,6 +86,7 @@ add_library(apsis_drift_lib STATIC
   src/coordinates.cpp
   src/flight_deck_acceptance.cpp
   src/flight_input.cpp
+  src/intersystem_contract.cpp
   src/landscape.cpp
   src/menu.cpp
   src/orbital.cpp

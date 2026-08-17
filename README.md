@@ -144,6 +144,13 @@ gradation and horizon haze while airless worlds remain haze-free. Its
 fixed-seed solar checkpoints verify visible, planet-occluded, and re-emerged
 sun states plus exact geometry/framebuffer reproduction after save/reload.
 
+The next station-to-system loop is grounded in a versioned
+[intersystem mission and travel contract](docs/INTERSYSTEM_CONTRACT.md). It
+reserves stable origin, destination, star, planet, orbit, and mission streams;
+defines one authoritative universe clock; and proves the legal outbound,
+planet-side, return, docking, and turn-in phases without yet implementing the
+later system renderer or travel mechanics.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in
@@ -396,6 +403,7 @@ milestones; they are not implementation sessions themselves.
 - [v0.3 — Planetfall](https://github.com/gobha-me/apsis-drift/issues/34)
 - [v0.4 — Signal Run](https://github.com/gobha-me/apsis-drift/issues/35)
 - [v0.5 — First Light](https://github.com/gobha-me/apsis-drift/issues/36)
+- [First intersystem contract loop](https://github.com/gobha-me/apsis-drift/issues/91)
 
 The v0.4 loop is grounded in the deterministic
 [origin-station and new-game contract](docs/ORIGIN_STATION.md), which defines
@@ -408,6 +416,8 @@ selection and cockpit guidance without crossing that mutable-state boundary.
 The [sparse generated-world journal](docs/WORLD_DELTAS.md) layers compact
 discovery and terminal object state onto regenerated catalogs without storing
 terrain or cache contents.
+The [intersystem contract](docs/INTERSYSTEM_CONTRACT.md) extends those stable
+boundaries to the first generated destination and explicit return loop.
 
 New work should use the session-sized issue form. If implementation uncovers
 additional work, record it as a follow-up issue instead of silently expanding

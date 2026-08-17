@@ -22,6 +22,7 @@
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
+#include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
@@ -279,6 +280,210 @@ auto seed_derivation_contract() -> void {
         "the bounded seed derivation smoke grid must not collide");
 }
 
+auto intersystem_identity_contract() -> void {
+  check(kIntersystemContractVersion == 1,
+        "intersystem contract version 1 must remain stable");
+  check(kFirstTargetSystemOrdinal == 1 && kSystemStarOrdinal == 0 &&
+            kFirstMissionOrdinal == 0 && kFirstMissionTargetPlanetOrdinal == 0,
+        "the first intersystem identity path must retain its named ordinals");
+  check(static_cast<std::uint64_t>(SeedDomain::star) == 8 &&
+            static_cast<std::uint64_t>(SeedDomain::orbit) == 9 &&
+            static_cast<std::uint64_t>(SeedDomain::mission) == 10,
+        "new seed domains must retain their permanent identifiers");
+  check(kJumpSpoolTicks == 360 && kJumpTransitTicks == 240,
+        "version 1 jump timing must retain its fixed-step durations");
+
+  struct Golden {
+    std::uint64_t universe;
+    std::uint64_t origin_system;
+    std::uint64_t target_system;
+    std::uint64_t target_star;
+    std::uint64_t target_planet;
+    std::uint64_t target_orbit;
+    std::uint64_t mission;
+  };
+  constexpr std::array goldens{
+      Golden{0, 2662095937669570104ULL, 4894411344637159513ULL,
+             5592200058082068984ULL, 14025633564997783731ULL,
+             11284210986182746681ULL, 11120317075475266442ULL},
+      Golden{42, 677859337506523986ULL, 2910174744474113395ULL,
+             4391435423288202480ULL, 11663323411267002299ULL,
+             10083446351388880177ULL, 15627605413347125595ULL},
+      Golden{std::numeric_limits<std::uint64_t>::max(), 4480404333408418992ULL,
+             6712719740376008401ULL, 7643486625863325908ULL,
+             14915374613842125727ULL, 13335497553964003605ULL,
+             5521705905730859352ULL},
+  };
+  for (const auto& golden : goldens) {
+    const auto identities =
+        generate_first_intersystem_identities(Seed{golden.universe});
+    check(identities ==
+              generate_first_intersystem_identities(Seed{golden.universe}),
+          "first intersystem identities must reproduce from one universe seed");
+    check(identities.origin_system_seed.value == golden.origin_system &&
+              identities.origin_system.value == golden.origin_system &&
+              identities.target_system_seed.value == golden.target_system &&
+              identities.target_system.value == golden.target_system &&
+              identities.target_star_seed.value == golden.target_star &&
+              identities.target_star.value == golden.target_star &&
+              identities.target_planet_seed.value == golden.target_planet &&
+              identities.target_planet.value == golden.target_planet &&
+              identities.target_orbit_seed.value == golden.target_orbit &&
+              identities.mission_seed.value == golden.mission &&
+              identities.mission.value == golden.mission,
+          "first intersystem identities must retain their golden vectors");
+  }
+
+  check(system_id_string(SystemId{0}) == "system-0000000000000000" &&
+            star_id_string(StarId{0xABC}) == "star-0000000000000abc" &&
+            mission_id_string(
+                MissionId{std::numeric_limits<std::uint64_t>::max()}) ==
+                "mission-ffffffffffffffff",
+        "intersystem IDs must retain fixed-width canonical encodings");
+
+  constexpr Seed universe{42};
+  const auto origin = derive_seed(universe, SeedDomain::system, 0);
+  const auto original_planet = derive_seed(origin, SeedDomain::planet, 0);
+  const auto terrain = derive_seed(original_planet, SeedDomain::terrain, 0);
+  const auto weather = derive_seed(original_planet, SeedDomain::weather, 0);
+  const auto settlement = derive_seed(origin, SeedDomain::settlement, 0);
+  const auto encounter = derive_seed(original_planet, SeedDomain::encounter, 0);
+  (void)generate_first_intersystem_identities(universe);
+  check(origin == derive_seed(universe, SeedDomain::system, 0) &&
+            original_planet == derive_seed(origin, SeedDomain::planet, 0) &&
+            terrain == derive_seed(original_planet, SeedDomain::terrain, 0) &&
+            weather == derive_seed(original_planet, SeedDomain::weather, 0) &&
+            settlement == derive_seed(origin, SeedDomain::settlement, 0) &&
+            encounter == derive_seed(original_planet, SeedDomain::encounter, 0),
+        "new intersystem derivations must not perturb existing world streams");
+}
+
+auto intersystem_state_contract() -> void {
+  auto state = initial_intersystem_contract_state(Seed{42});
+  check(
+      validate_intersystem_contract_state(state).has_value() &&
+          state.universe_tick == 0 &&
+          state.mission_phase == IntersystemMissionPhase::offered &&
+          state.travel_phase == IntersystemTravelPhase::docked_at_origin &&
+          state.current_system == state.identities.origin_system,
+      "a first intersystem contract must begin offered at the origin station");
+
+  const auto rejected = [&](IntersystemContractCommand command,
+                            IntersystemContractError expected) {
+    const auto before = state;
+    const auto result =
+        advance_intersystem_contract(state, state.universe_tick, command);
+    check(!result && result.error() == expected && state == before,
+          "a rejected intersystem transition must leave state unchanged");
+  };
+  const auto accepted = [&](IntersystemContractCommand command) {
+    const auto result =
+        advance_intersystem_contract(state, state.universe_tick, command);
+    check(result.has_value(), "a legal intersystem transition must succeed");
+  };
+  const auto advance_time = [&](SimulationTick ticks) {
+    const auto result = advance_intersystem_time(state, ticks);
+    check(result.has_value(), "a valid universe-time advance must succeed");
+  };
+
+  rejected(IntersystemContractCommand::launch,
+           IntersystemContractError::invalid_transition);
+  const auto wrong_tick_before = state;
+  const auto wrong_tick =
+      advance_intersystem_contract(state, state.universe_tick + 1,
+                                   IntersystemContractCommand::accept_mission);
+  check(
+      !wrong_tick &&
+          wrong_tick.error() == IntersystemContractError::wrong_command_tick &&
+          state == wrong_tick_before,
+      "commands must address the exact authoritative universe tick");
+  accepted(IntersystemContractCommand::accept_mission);
+  rejected(IntersystemContractCommand::accept_mission,
+           IntersystemContractError::invalid_transition);
+  accepted(IntersystemContractCommand::launch);
+  accepted(IntersystemContractCommand::begin_outbound_jump);
+  advance_time(kJumpSpoolTicks - 1);
+  rejected(IntersystemContractCommand::commit_outbound_jump,
+           IntersystemContractError::invalid_transition);
+  accepted(IntersystemContractCommand::cancel_jump);
+  accepted(IntersystemContractCommand::begin_outbound_jump);
+  advance_time(kJumpSpoolTicks);
+  accepted(IntersystemContractCommand::commit_outbound_jump);
+  check(state.committed_jump_destination == state.identities.target_system,
+        "outbound commitment must bind the target before presentation");
+  rejected(IntersystemContractCommand::cancel_jump,
+           IntersystemContractError::invalid_transition);
+  advance_time(kJumpTransitTicks - 1);
+  rejected(IntersystemContractCommand::arrive_target_system,
+           IntersystemContractError::invalid_transition);
+  advance_time(1);
+  accepted(IntersystemContractCommand::arrive_target_system);
+  accepted(IntersystemContractCommand::enter_target_planet);
+  rejected(IntersystemContractCommand::begin_return_jump,
+           IntersystemContractError::invalid_transition);
+  accepted(IntersystemContractCommand::complete_objective);
+  accepted(IntersystemContractCommand::leave_target_planet);
+  accepted(IntersystemContractCommand::begin_return_jump);
+  accepted(IntersystemContractCommand::cancel_jump);
+  accepted(IntersystemContractCommand::begin_return_jump);
+  advance_time(kJumpSpoolTicks);
+  accepted(IntersystemContractCommand::commit_return_jump);
+  check(state.committed_jump_destination == state.identities.origin_system,
+        "return commitment must bind the origin before presentation");
+  advance_time(kJumpTransitTicks);
+  accepted(IntersystemContractCommand::arrive_origin_system);
+  accepted(IntersystemContractCommand::dock_at_origin);
+  check(state.mission_phase == IntersystemMissionPhase::returned,
+        "docking must preserve a distinct returned phase before turn-in");
+  accepted(IntersystemContractCommand::turn_in);
+  rejected(IntersystemContractCommand::turn_in,
+           IntersystemContractError::invalid_transition);
+  check(state.mission_phase == IntersystemMissionPhase::turned_in &&
+            state.travel_phase == IntersystemTravelPhase::docked_at_origin,
+        "the complete contract must finish turned in at the origin station");
+
+  const auto zero_advance_before = state;
+  const auto zero_advance = advance_intersystem_time(state, 0);
+  check(!zero_advance &&
+            zero_advance.error() ==
+                IntersystemContractError::invalid_time_advance &&
+            state == zero_advance_before,
+        "a zero universe-time advance must fail without mutation");
+
+  auto overflow = state;
+  overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
+  const auto overflow_before = overflow;
+  const auto overflow_result = advance_intersystem_time(overflow, 1);
+  check(
+      !overflow_result &&
+          overflow_result.error() == IntersystemContractError::tick_overflow &&
+          overflow == overflow_before,
+      "universe-time overflow must fail without mutation");
+
+  auto malformed = initial_intersystem_contract_state(Seed{42});
+  malformed.identities.target_system.value ^= 1U;
+  const auto malformed_before = malformed;
+  const auto malformed_result =
+      advance_intersystem_contract(malformed, malformed.universe_tick,
+                                   IntersystemContractCommand::accept_mission);
+  check(
+      !malformed_result &&
+          malformed_result.error() == IntersystemContractError::invalid_state &&
+          malformed == malformed_before,
+      "corrupt generated identities must fail without mutation");
+
+  malformed = initial_intersystem_contract_state(Seed{42});
+  malformed.travel_phase = static_cast<IntersystemTravelPhase>(255);
+  check(!validate_intersystem_contract_state(malformed),
+        "unknown travel phases must fail validation");
+  malformed = initial_intersystem_contract_state(Seed{42});
+  malformed.mission_phase = static_cast<IntersystemMissionPhase>(255);
+  check(!validate_intersystem_contract_state(malformed),
+        "unknown mission phases must fail validation");
+  rejected(static_cast<IntersystemContractCommand>(255),
+           IntersystemContractError::invalid_transition);
+}
+
 auto origin_station_contract() -> void {
   check(kOriginStationGeneratorVersion == 1,
         "origin-station generator version 1 must remain stable");
@@ -288,11 +493,9 @@ auto origin_station_contract() -> void {
   constexpr std::array<std::uint64_t, 3> universe_seeds{
       0, 42, std::numeric_limits<std::uint64_t>::max()};
   constexpr std::array<std::uint64_t, universe_seeds.size()> system_goldens{
-      2662095937669570104ULL, 677859337506523986ULL,
-      4480404333408418992ULL};
+      2662095937669570104ULL, 677859337506523986ULL, 4480404333408418992ULL};
   constexpr std::array<std::uint64_t, universe_seeds.size()> station_goldens{
-      7159869865471737051ULL, 14866919373675561773ULL,
-      15849284578567890724ULL};
+      7159869865471737051ULL, 14866919373675561773ULL, 15849284578567890724ULL};
   for (std::size_t index = 0; index < universe_seeds.size(); ++index) {
     const auto station = generate_origin_station(Seed{universe_seeds[index]});
     check(station == generate_origin_station(Seed{universe_seeds[index]}),
@@ -5825,6 +6028,8 @@ auto main() -> int {
   generation_failure_matrix();
   deterministic_generation();
   seed_derivation_contract();
+  intersystem_identity_contract();
+  intersystem_state_contract();
   origin_station_contract();
   origin_onboarding_contract();
   save_schema_contract();

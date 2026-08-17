@@ -22,6 +22,9 @@ The public domains and their permanent version 1 identifiers are:
 | `weather` | 5 |
 | `settlement` | 6 |
 | `encounter` | 7 |
+| `star` | 8 |
+| `orbit` | 9 |
+| `mission` | 10 |
 
 ## Version 1 algorithm
 
@@ -66,6 +69,12 @@ ordinal `0` from that origin-system seed. Its identity and onboarding boundary
 are recorded in the
 [Origin Station and New-Game Contract](ORIGIN_STATION.md). Adding or deriving
 that child cannot perturb the planet, terrain, weather, or encounter streams.
+
+The version 1 first intersystem route adds domains without renumbering any
+existing input. It derives target system ordinal `1`, star ordinal `0`, planet
+and independent orbit ordinal `0`, and mission ordinal `0` beneath the origin
+station. The exact hierarchy and compatibility boundary are recorded in the
+[Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
 
 The current v0.2 flyover continues to accept its existing 32-bit terrain seed
 directly. Migrating that path is intentionally outside derivation version 1's

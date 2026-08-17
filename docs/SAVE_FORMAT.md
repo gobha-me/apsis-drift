@@ -120,3 +120,14 @@ cannot retain a merely offered objective.
 The decoder accepts at most 1 MiB, 4,096 discoveries, 16,384 journal entries,
 and 128 bytes per object key. These are format bounds, not a target size;
 normal early saves should remain in the kilobyte range.
+
+## Planned intersystem format
+
+The current contract-only intersystem work does not change this format or its
+golden fixtures. The first implementation that persists system travel will use
+format version 3 for stable system/mission identities, one authoritative
+universe tick, the active location representation, and committed-jump state.
+Formats 1 and 2 will migrate as legacy origin-system Signal Runs without
+teleporting, retargeting, or synthesizing progress. The complete projection and
+presentation exclusions are specified in the
+[Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
