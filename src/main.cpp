@@ -866,6 +866,7 @@ class LandscapeApp final : public App {
     if (!m_menu_layout.supported()) return;
     constexpr Rgb text{205, 222, 224};
     constexpr Rgb muted{109, 143, 151};
+    constexpr Rgb accent{126, 214, 210};
     constexpr Rgb background{7, 15, 24};
     const auto station = origin_station_id_string(
         m_signal_run->onboarding.origin_station);
@@ -884,6 +885,17 @@ class LandscapeApp final : public App {
         std::max(0, (screen.cols() - 31) / 2),
         std::max(3, m_menu_layout.art.y + 6),
         "RETURN DESTINATION: ORIGIN STATION", muted, background);
+    if (m_signal_run->onboarding.first_objective ==
+        FirstObjectiveStatus::active) {
+      constexpr std::string_view launch_help{
+          "MATCH BRG | W/F THRUST | S/R BRAKE"};
+      screen.write_text(
+          std::max(0, (screen.cols() -
+                       static_cast<int>(launch_help.size())) /
+                          2),
+          std::max(4, m_menu_layout.art.y + 8), launch_help, accent,
+          background);
+    }
   }
 
   auto draw_cockpit(Screen& screen, const CockpitLayout& layout,
@@ -943,7 +955,7 @@ class LandscapeApp final : public App {
     fill_panel(layout.messages);
 
     screen.write_text(layout.left_instruments.x + 2,
-                      layout.left_instruments.y + 2, "CONTROL", accent,
+                      layout.left_instruments.y + 2, "FLIGHT", accent,
                       chrome_bg);
     screen.write_text(layout.left_instruments.x + 2,
                       layout.left_instruments.y + 4, instruments.mode, text,
@@ -955,8 +967,9 @@ class LandscapeApp final : public App {
                    ? warning
                    : muted);
     screen.write_text(layout.left_instruments.x + 2,
-                      layout.left_instruments.y + 6, instruments.alert,
-                      alert_color, chrome_bg);
+                      layout.left_instruments.y + 6, instruments.drive,
+                      instruments.drive == "BRAKING  " ? warning : text,
+                      chrome_bg);
     if ((m_signal_run && m_signal_run->flight) || m_signal_scenario ||
         m_planetary_flight) {
       const auto regime = format_flight_regime(
@@ -967,25 +980,22 @@ class LandscapeApp final : public App {
       screen.write_text(layout.left_instruments.x + 2,
                         layout.left_instruments.y + 8, regime.regime,
                         regime.valid ? text : danger, chrome_bg);
-      screen.write_text(layout.left_instruments.x + 2,
-                        layout.left_instruments.y + 10,
-                        regime.transition, muted, chrome_bg);
     }
-    screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 2, "NAV DATA", accent,
-                      chrome_bg);
-    screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 4, instruments.heading,
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 10, instruments.speed,
                       text, chrome_bg);
-    screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 6, instruments.altitude,
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 12, instruments.altitude,
                       text, chrome_bg);
-    screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 8, instruments.clearance,
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 14,
+                      instruments.clearance, alert_color, chrome_bg);
+    screen.write_text(layout.left_instruments.x + 2,
+                      layout.left_instruments.y + 16, instruments.alert,
                       alert_color, chrome_bg);
     screen.write_text(layout.right_instruments.x + 2,
-                      layout.right_instruments.y + 10, instruments.speed,
-                      text, chrome_bg);
+                      layout.right_instruments.y + 2, "TARGET", accent,
+                      chrome_bg);
     if ((m_signal_run && m_signal_run->flight) || m_signal_scenario) {
       const auto& navigation =
           m_signal_run && m_signal_run->flight
@@ -999,21 +1009,29 @@ class LandscapeApp final : public App {
           format_signal_scanner(navigation);
       const auto collection_readout =
           format_signal_collection(collection);
-      screen.write_text(layout.left_instruments.x + 2,
-                        layout.left_instruments.y + 12, "SIGNAL", accent,
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 4, scanner.target,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 6, scanner.bearing,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 8, scanner.distance,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 10, scanner.motion,
+                        scanner.status == SignalScannerStatus::tracking &&
+                                navigation.motion.cue ==
+                                    TargetMotionCue::opening
+                            ? warning
+                            : text,
                         chrome_bg);
-      screen.write_text(layout.left_instruments.x + 2,
-                        layout.left_instruments.y + 14, scanner.distance,
-                        text, chrome_bg);
-      screen.write_text(layout.left_instruments.x + 2,
-                        layout.left_instruments.y + 16, scanner.strength,
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 12, scanner.arrival,
                         text, chrome_bg);
       screen.write_text(layout.right_instruments.x + 2,
-                        layout.right_instruments.y + 12, scanner.target,
-                        text, chrome_bg);
-      screen.write_text(layout.right_instruments.x + 2,
-                        layout.right_instruments.y + 14, scanner.bearing,
-                        text, chrome_bg);
+                        layout.right_instruments.y + 14, scanner.strength,
+                        muted, chrome_bg);
       screen.write_text(
           layout.right_instruments.x + 2,
           layout.right_instruments.y + 16,
@@ -1043,13 +1061,29 @@ class LandscapeApp final : public App {
       if (m_signal_run->onboarding.first_objective ==
               FirstObjectiveStatus::completed &&
           m_signal_run->origin_navigation) {
+        const auto& origin = *m_signal_run->origin_navigation;
+        const std::string_view cue =
+            origin.motion.cue == TargetMotionCue::brake
+                ? "BRAKE NOW"
+                : (origin.motion.cue == TargetMotionCue::opening
+                       ? "OPENING"
+                       : (origin.arrived ? "RENDEZVOUS" : "ASCEND + NAV"));
         message = std::format(
-            " ORIGIN {:.0f} m | {} | ENTER return when arrived ",
-            m_signal_run->origin_navigation->distance_metres,
-            m_signal_run->origin_navigation->arrived ? "RENDEZVOUS"
-                                                     : "ASCEND + NAVIGATE");
+            " ORIGIN {:.0f} m | CLS {:+.0f} m/s | {} | ENTER when arrived ",
+            origin.distance_metres,
+            origin.motion.closing_speed_metres_per_second, cue);
       } else {
-        message = format_signal_collection(m_signal_run->collection).message;
+        const auto scanner =
+            format_signal_scanner(m_signal_run->signal_navigation);
+        if (m_signal_run->collection.status ==
+            SignalCollectionStatus::approach) {
+          message = std::format(
+              " MATCH {} | W/F thrust | S/R brake | {} ", scanner.bearing,
+              scanner.cue);
+        } else {
+          message =
+              format_signal_collection(m_signal_run->collection).message;
+        }
       }
     } else if (m_signal_scenario) {
       message =
@@ -1955,16 +1989,19 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "signal-run: seed=%u presentation=%.*s completion=%llu return=%llu "
-          "checksum=%llu\n",
+          "signal-run: seed=%u presentation=%.*s atmosphere=%llu "
+          "reached=%llu completion=%llu return=%llu checksum=%llu\n",
           kSignalRunAcceptanceSeed,
           static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(
+              acceptance->report.atmospheric_tick),
+          static_cast<unsigned long long>(acceptance->report.reached_tick),
           static_cast<unsigned long long>(
               acceptance->report.completion_tick),
           static_cast<unsigned long long>(
               acceptance->report.orbital_return_tick),
           static_cast<unsigned long long>(
-              acceptance->report.checkpoint_flight_checksum));
+              acceptance->report.return_flight_checksum));
       return 0;
     }
     if (planetfall_acceptance) {

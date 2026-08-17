@@ -16,14 +16,6 @@ inline constexpr double kDenseAtmosphereCeilingMetres{160'000.0};
 inline constexpr double kMinimumOrbitHysteresisMetres{10'000.0};
 inline constexpr SimulationSeconds kMaximumPlanetaryFlightStep{0.25};
 
-struct RegimeParameters {
-  double maximum_horizontal_speed{};
-  double maximum_vertical_speed{};
-  double horizontal_acceleration{};
-  double vertical_acceleration{};
-  double turn_rate_radians_per_second{};
-};
-
 [[nodiscard]] auto valid_mode(FlightMode mode) noexcept -> bool {
   return mode == FlightMode::manual || mode == FlightMode::autopilot;
 }
@@ -200,10 +192,10 @@ auto apply_command(PlanetaryFlightState& state,
 }
 
 [[nodiscard]] auto parameters_for(FlightRegime regime) noexcept
-    -> RegimeParameters {
+    -> FlightPerformance {
   switch (regime) {
     case FlightRegime::orbital:
-      return {2'000.0, 600.0, 400.0, 240.0, 0.35};
+      return {4'000.0, 2'000.0, 1'000.0, 1'000.0, 0.35};
     case FlightRegime::atmospheric:
       return {500.0, 180.0, 180.0, 100.0, 0.75};
     case FlightRegime::terrain_flight:
@@ -348,6 +340,100 @@ auto flight_regime_bands(const PlanetDescriptor& planet) noexcept
   };
 }
 
+auto flight_performance(FlightRegime regime) noexcept
+    -> std::expected<FlightPerformance, PlanetaryFlightError> {
+  if (!valid_regime(regime)) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  return parameters_for(regime);
+}
+
+auto flight_drive_state(const PlanetaryFlightState& state) noexcept
+    -> std::expected<FlightDriveState, PlanetaryFlightError> {
+  if (!finite_state(state)) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  double forward = static_cast<double>(state.controls.forward) -
+                   static_cast<double>(state.controls.backward);
+  double strafe = static_cast<double>(state.controls.strafe_right) -
+                  static_cast<double>(state.controls.strafe_left);
+  double vertical = static_cast<double>(state.controls.rise) -
+                    static_cast<double>(state.controls.fall);
+  if (state.mode == FlightMode::autopilot) forward = 0.72;
+
+  const double speed = std::hypot(
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second,
+      state.velocity.up_metres_per_second);
+  if (forward == 0.0 && strafe == 0.0 && vertical == 0.0) {
+    return speed <= 0.5 ? FlightDriveState::idle
+                        : FlightDriveState::coast;
+  }
+
+  const double heading_cos = std::cos(state.pose.heading_radians);
+  const double heading_sin = std::sin(state.pose.heading_radians);
+  const double intent_east = heading_cos * forward - heading_sin * strafe;
+  const double intent_north = heading_sin * forward + heading_cos * strafe;
+  const double alignment =
+      intent_east * state.velocity.east_metres_per_second +
+      intent_north * state.velocity.north_metres_per_second +
+      vertical * state.velocity.up_metres_per_second;
+  if (speed > 0.5 && alignment < -0.5) {
+    return FlightDriveState::braking;
+  }
+  if (strafe != 0.0 || vertical != 0.0) {
+    return FlightDriveState::maneuvering;
+  }
+  return forward < 0.0 ? FlightDriveState::reverse
+                       : FlightDriveState::forward;
+}
+
+auto resolve_target_relative_motion(
+    const PlanetaryFlightState& state, LocalPositionMetres target,
+    double arrival_radius_metres) noexcept
+    -> std::expected<TargetRelativeMotion, PlanetaryFlightError> {
+  if (!finite_state(state) || !std::isfinite(target.east) ||
+      !std::isfinite(target.north) || !std::isfinite(target.up) ||
+      !std::isfinite(arrival_radius_metres) || arrival_radius_metres < 0.0) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  const double distance = std::hypot(target.east, target.north, target.up);
+  if (!std::isfinite(distance)) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  TargetRelativeMotion motion;
+  if (distance <= std::max(1.0e-9, arrival_radius_metres)) return motion;
+
+  motion.closing_speed_metres_per_second =
+      (target.east * state.velocity.east_metres_per_second +
+       target.north * state.velocity.north_metres_per_second +
+       target.up * state.velocity.up_metres_per_second) /
+      distance;
+  const auto performance = flight_performance(state.regime);
+  if (!performance ||
+      !std::isfinite(motion.closing_speed_metres_per_second)) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  const double braking_acceleration =
+      std::min(performance->horizontal_acceleration,
+               performance->vertical_acceleration);
+  const double remaining =
+      std::max(0.0, distance - arrival_radius_metres);
+  constexpr double motion_threshold{1.0};
+  if (motion.closing_speed_metres_per_second > motion_threshold) {
+    const double closing = motion.closing_speed_metres_per_second;
+    motion.arrival_estimate_seconds = remaining / closing;
+    motion.stopping_distance_metres =
+        closing * closing / (2.0 * braking_acceleration);
+    motion.cue = remaining <= motion.stopping_distance_metres * 1.25
+                     ? TargetMotionCue::brake
+                     : TargetMotionCue::closing;
+  } else if (motion.closing_speed_metres_per_second < -motion_threshold) {
+    motion.cue = TargetMotionCue::opening;
+  }
+  return motion;
+}
+
 auto initial_planetary_flight_state(
     const PlanetDescriptor& planet, GeodeticPosition position,
     PlanetaryFlightEnvironment environment, double heading_radians,
@@ -477,8 +563,16 @@ auto advance_planetary_flight(
     target_east *= scale;
     target_north *= scale;
   }
-  const double target_up =
-      vertical * parameters.maximum_vertical_speed;
+  double target_up = vertical * parameters.maximum_vertical_speed;
+  if (next.regime == FlightRegime::orbital) {
+    if (forward == 0.0 && strafe == 0.0) {
+      target_east = next.velocity.east_metres_per_second;
+      target_north = next.velocity.north_metres_per_second;
+    }
+    if (vertical == 0.0) {
+      target_up = next.velocity.up_metres_per_second;
+    }
+  }
   next.velocity.east_metres_per_second = move_toward(
       next.velocity.east_metres_per_second, target_east,
       parameters.horizontal_acceleration * dt);

@@ -40,6 +40,7 @@ struct SignalNavigationSolution {
   double absolute_bearing_radians{};
   double relative_bearing_radians{};
   double distance_metres{};
+  TargetRelativeMotion motion;
   std::uint16_t strength_basis_points{};
 
   friend auto operator==(const SignalNavigationSolution&,

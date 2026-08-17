@@ -180,6 +180,11 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
   if (!std::isfinite(distance) || !std::isfinite(horizontal)) {
     return std::unexpected{SignalScannerError::coordinate_failure};
   }
+  const auto motion = resolve_target_relative_motion(
+      flight, *local_target, kSignalScannerReachedRadiusMetres);
+  if (!motion) {
+    return std::unexpected{SignalScannerError::invalid_flight_state};
+  }
 
   const double absolute =
       horizontal == 0.0
@@ -207,6 +212,7 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
       .absolute_bearing_radians = absolute,
       .relative_bearing_radians = relative,
       .distance_metres = distance,
+      .motion = *motion,
       .strength_basis_points = signal.strength_basis_points,
   };
 }

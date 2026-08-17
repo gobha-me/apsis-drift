@@ -111,10 +111,16 @@ namespace {
   if (!std::isfinite(distance) || !std::isfinite(relative)) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
+  const auto motion = resolve_target_relative_motion(
+      flight, *local, arrival_radius);
+  if (!motion) {
+    return std::unexpected{SignalRunError::navigation_failure};
+  }
   return OriginNavigationSolution{
       .absolute_bearing_radians = bearing,
       .relative_bearing_radians = relative,
       .distance_metres = distance,
+      .motion = *motion,
       .arrived = distance <= arrival_radius,
   };
 }

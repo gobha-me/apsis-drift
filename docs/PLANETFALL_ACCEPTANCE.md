@@ -19,22 +19,22 @@ and the deterministic LOD-12 terrain sample beneath that position. The fixed
 | 0 | press forward |
 | 0 | press right turn |
 | 0 | press fall |
-| 118160 | release fall |
+| 109650 | release fall |
 
 Every simulation step samples the generated surface at the craft subpoint
-before advancing `PlanetaryFlightState`. The replay crosses the atmosphere at
-tick `13350`, enters the first mixed terrain frame at tick `113071`, releases
-descent at tick `118160`, and ends at tick `119360` after ten seconds of
-low-level forward flight. Its authoritative final flight checksum is
-`15600629779145530762`.
+before advancing `PlanetaryFlightState`. With the v0.4.1 orbital envelope, the
+replay crosses the atmosphere at tick `4080`, enters the first mixed terrain
+frame at tick `104826`, releases descent at tick `109650`, and ends at tick
+`119360` in stable low-level forward flight. Its authoritative final flight
+checksum is `240775156608294234`.
 
 The report retains one checkpoint for each presentation stage:
 
 | Stage | Tick | Flight regime |
 | --- | ---: | --- |
 | `orbital` | 0 | orbital |
-| `atmospheric` | 13350 | atmospheric |
-| `terrain-blend` | 113071 | atmospheric |
+| `atmospheric` | 4080 | atmospheric |
+| `terrain-blend` | 104826 | atmospheric |
 | `local-terrain` | 119360 | terrain flight |
 
 Each checkpoint records its geodetic state, clearance, flight checksum,
@@ -72,8 +72,9 @@ coverage.
 
 On the 2026-08-16 reference host, both GCC and Clang keep every remote 320 by
 240 and local 640 by 480 stage below the 33.33 ms 30 FPS application-renderer
-budget. The v0.3.1 optimization reduces the local terrain-blend checkpoint
+budget. These dated reports preserve the pre-v0.4.1 flight checksum and stage
+ticks as historical performance evidence. The v0.3.1 optimization reduces the local terrain-blend checkpoint
 from 85.48/91.77 ms p95 under GCC/Clang to 24.87/23.09 ms while retaining the
-authoritative final flight checksum `15600629779145530762`. The complete
+then-authoritative final flight checksum `15600629779145530762`. The complete
 before/after compiler and profile measurements are retained with the
 [dated performance evidence](performance/2026-08-16/README.md).

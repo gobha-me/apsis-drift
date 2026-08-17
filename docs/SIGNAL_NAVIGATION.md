@@ -17,9 +17,13 @@ repeat and release events are ignored.
 Navigation resolves the selected signal's generated approach altitude into
 planet-fixed space. It measures straight-line distance, computes the initial
 east/north bearing in the craft's local tangent frame, and normalizes the
-heading-relative bearing to `[-pi, pi)`. The generated strength is presented
-as a percentage, while kind, reward, canonical ID, and later discovery data
-remain absent from the cockpit readout.
+heading-relative bearing to `[-pi, pi)`. Independently, it projects local craft
+velocity onto the target vector: positive range rate means closing and negative
+range rate means opening. Positive closure produces an arrival estimate and a
+regime-aware stopping distance; the buffered stopping distance raises the
+braking cue before overshoot. The generated strength is presented as a
+percentage, while kind, reward, canonical ID, and later discovery data remain
+absent from the cockpit readout.
 
 Status precedence is:
 
@@ -37,9 +41,10 @@ terrain-scale line-of-sight obstruction is not part of this first scanner.
 ## Cockpit presentation
 
 Both Kitty and truecolor ANSI paths use the same cell-native fixed-width
-scanner lines: target slot, absolute bearing, distance, strength, and a textual
-cue. `TURN LEFT`, `TURN RGHT`, `AHEAD`, `OUT RANGE`, `OCCLUDED`, and `REACHED`
-keep direction and state understandable without color.
+scanner lines: target slot, absolute bearing, distance, signed closing speed,
+arrival estimate, strength, and a textual cue. `TURN LEFT`, `TURN RGHT`,
+`THRUST`, `CLOSING`, `OPENING`, `BRAKE NOW`, `OUT RANGE`, `OCCLUDED`, and
+`REACHED` keep direction and state understandable without color.
 
 ## Deterministic acceptance
 
