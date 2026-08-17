@@ -24,6 +24,9 @@ enum class SeedDomain : std::uint64_t {
   weather = 5,
   settlement = 6,
   encounter = 7,
+  star = 8,
+  orbit = 9,
+  mission = 10,
 };
 
 // Derives one child seed without consuming or exposing mutable random state.

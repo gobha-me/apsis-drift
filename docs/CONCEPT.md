@@ -67,6 +67,9 @@ golden-vector contract, and save compatibility consequences are recorded in
 The deterministic home-system child, zero-discovery docked start, bounded first
 objective, return condition, and presentation boundary are recorded in the
 [Origin Station and New-Game Contract](ORIGIN_STATION.md).
+The stable first target, global time, travel phases, coordinate handoffs,
+entry-anywhere recovery, and future save projection are recorded in the
+[Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
 The stable objective identities, independent encounter streams, bounded
 terrain-vetted placement, and immutable signal metadata are recorded in the
 [Deterministic Surface Signal Contract](SURFACE_SIGNALS.md).

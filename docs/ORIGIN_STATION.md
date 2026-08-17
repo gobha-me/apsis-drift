@@ -116,3 +116,9 @@ the ANSI half-block path can present the same pixels. This does not require
 encoded media, RasterForge, transparent layers, named terminal images, or new
 TermForge protocol features. Static art and richer docking presentation should
 wait until the gameplay loop demonstrates their value.
+
+The later first intersystem mission keeps this same station and identity as its
+offer, return, and turn-in anchor. Its target system is a separate generated
+child, and neither its system-inertial waypoint nor its mission seed changes
+the station's established derivation. See the
+[Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
