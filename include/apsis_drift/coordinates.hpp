@@ -10,8 +10,8 @@ namespace apsis_drift {
 // Authoritative spatial calculations use double-precision metres and radians.
 // System space is right-handed and inertial. Planet-fixed space is centered on
 // one planet with +z at spin north, +x at zero longitude, and +y at 90 degrees
-// east. The time-dependent transform between those frames belongs to future
-// orbital state, not this static coordinate contract.
+// east. Analytic ephemeris owns generated planet-center position and velocity;
+// the later flight handoff adds the complete planet-fixed orientation.
 struct SystemPositionMetres {
   double x{};
   double y{};
@@ -19,6 +19,16 @@ struct SystemPositionMetres {
 
   friend auto operator==(const SystemPositionMetres&,
                          const SystemPositionMetres&) -> bool = default;
+};
+
+struct SystemVelocityMetresPerSecond {
+  double x{};
+  double y{};
+  double z{};
+
+  friend auto operator==(const SystemVelocityMetresPerSecond&,
+                         const SystemVelocityMetresPerSecond&)
+      -> bool = default;
 };
 
 struct PlanetFixedPositionMetres {

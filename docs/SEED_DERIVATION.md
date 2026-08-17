@@ -75,6 +75,9 @@ existing input. It derives target system ordinal `1`, star ordinal `0`, planet
 and independent orbit ordinal `0`, and mission ordinal `0` beneath the origin
 station. The exact hierarchy and compatibility boundary are recorded in the
 [Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
+The target system expands those stable children into a bounded catalog using
+additional named substreams documented in
+[Local System Generation and Analytic Ephemeris](LOCAL_SYSTEM_GENERATION.md).
 
 The current v0.2 flyover continues to accept its existing 32-bit terrain seed
 directly. Migrating that path is intentionally outside derivation version 1's

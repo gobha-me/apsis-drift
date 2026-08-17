@@ -70,6 +70,9 @@ objective, return condition, and presentation boundary are recorded in the
 The stable first target, global time, travel phases, coordinate handoffs,
 entry-anywhere recovery, and future save projection are recorded in the
 [Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
+The bounded destination star, ordered planet catalog, independent orbit
+streams, and tick-addressed analytic positions are recorded in
+[Local System Generation and Analytic Ephemeris](LOCAL_SYSTEM_GENERATION.md).
 The stable objective identities, independent encounter streams, bounded
 terrain-vetted placement, and immutable signal metadata are recorded in the
 [Deterministic Surface Signal Contract](SURFACE_SIGNALS.md).

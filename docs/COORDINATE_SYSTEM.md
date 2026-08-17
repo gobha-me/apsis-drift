@@ -23,6 +23,11 @@ All frames are right-handed:
   refines the existing landscape convention of two terrain-plane axes and
   positive `z` up without changing the current flyover state in this session.
 
+Local-system generator version 1 resolves the planet-center position and
+velocity components of that ephemeris from circular inclined orbits. The
+planet-fixed orientation and angular velocity remain part of the later flight
+handoff; see [Local System Generation and Analytic Ephemeris](LOCAL_SYSTEM_GENERATION.md).
+
 Geodetic latitude is in `[-pi/2, pi/2]`. Longitude is east-positive and
 canonicalized to `[-pi, pi)`, so `+pi` and `-pi` identify the same antimeridian.
 Inverse conversion assigns longitude zero at either exact pole. Altitude is

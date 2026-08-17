@@ -176,7 +176,8 @@ must reject format 3 before discarding any of these fields.
 
 ## Implementation boundaries
 
-- #82 generates the bounded target system and analytic ephemeris.
+- #82 generates the bounded target system and analytic ephemeris described in
+  the [local-system generation contract](LOCAL_SYSTEM_GENERATION.md).
 - #83 renders that authoritative system state.
 - #84 binds and presents the first mission.
 - #85 implements the Assisted jump and arrival solution.
