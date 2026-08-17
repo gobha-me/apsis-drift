@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "apsis_drift/celestial.hpp"
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
@@ -544,6 +545,7 @@ auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
       .terrain_tiles = kTerrainTileGeneratorVersion,
       .origin_station = kOriginStationGeneratorVersion,
       .surface_signals = kSurfaceSignalGeneratorVersion,
+      .local_sun = kLocalSunGeneratorVersion,
   };
 }
 
@@ -576,7 +578,7 @@ auto validate_save_document(const SaveDocument& document)
   if (document.recipe.origin_system_ordinal != kOriginSystemOrdinal) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::invalid_value, "$.recipe.origin_system_ordinal",
-        "save format version 1 supports only the origin system")};
+        "current save formats support only the origin system")};
   }
   const auto expected = make_save_recipe(document.recipe.universe_seed,
                                          document.recipe.active_planet_ordinal);
@@ -622,7 +624,7 @@ auto validate_save_document(const SaveDocument& document)
   if (document.state.discoveries.size() > kMaximumSaveDiscoveries) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
-                "discovery count exceeds the format version 1 bound")};
+                "discovery count exceeds the save-format bound")};
   }
   std::unordered_set<std::uint64_t> discoveries;
   for (std::size_t index = 0; index < document.state.discoveries.size();
@@ -638,7 +640,7 @@ auto validate_save_document(const SaveDocument& document)
   if (document.state.world_deltas.size() > kMaximumSaveWorldDeltas) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
-                "world-delta count exceeds the format version 1 bound")};
+                "world-delta count exceeds the save-format bound")};
   }
   for (std::size_t index = 0; index < document.state.world_deltas.size();
        ++index) {
@@ -687,7 +689,8 @@ auto encode_save_document_json(const SaveDocument& document)
                   {"planet_descriptor", versions.planet_descriptor},
                   {"terrain_tiles", versions.terrain_tiles},
                   {"origin_station", versions.origin_station},
-                  {"surface_signals", versions.surface_signals}}},
+                  {"surface_signals", versions.surface_signals},
+                  {"local_sun", versions.local_sun}}},
             {"origin_station_id",
              encoded_id("station-", document.recipe.origin_station)},
             {"active_planet_id",
@@ -708,7 +711,7 @@ auto encode_save_document_json(const SaveDocument& document)
   if (output.size() > kMaximumSaveDocumentBytes) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::document_too_large, "$",
-                "encoded save exceeds the format version 1 byte bound")};
+                "encoded save exceeds the save-format byte bound")};
   }
   return output;
 }
@@ -718,7 +721,7 @@ auto decode_save_document_json(std::string_view json_text)
   if (json_text.size() > kMaximumSaveDocumentBytes) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::document_too_large, "$",
-                "save exceeds the format version 1 byte bound")};
+                "save exceeds the save-format byte bound")};
   }
   bool duplicate_key{};
   std::vector<std::unordered_set<std::string>> object_keys;
@@ -767,7 +770,7 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.application",
                                    "save belongs to another application")};
   }
-  if (*format_version != kSaveFormatVersion) {
+  if (*format_version != 1U && *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "save format version is unsupported by this build")};
@@ -805,14 +808,26 @@ auto decode_save_document_json(std::string_view json_text)
                                   "$.recipe.generator_versions");
   auto signal_version = read_u32(**versions_json, "surface_signals",
                                  "$.recipe.generator_versions");
+  std::expected<std::uint32_t, SaveSchemaError> sun_version{
+      kLocalSunGeneratorVersion};
+  if (*format_version >= 2U) {
+    sun_version = read_u32(**versions_json, "local_sun",
+                           "$.recipe.generator_versions");
+  }
   if (!seed_version) return std::unexpected{seed_version.error()};
   if (!planet_version) return std::unexpected{planet_version.error()};
   if (!terrain_version) return std::unexpected{terrain_version.error()};
   if (!station_version) return std::unexpected{station_version.error()};
   if (!signal_version) return std::unexpected{signal_version.error()};
-  const SaveGeneratorVersions versions{*seed_version, *planet_version,
-                                       *terrain_version, *station_version,
-                                       *signal_version};
+  if (!sun_version) return std::unexpected{sun_version.error()};
+  const SaveGeneratorVersions versions{
+      .seed_derivation = *seed_version,
+      .planet_descriptor = *planet_version,
+      .terrain_tiles = *terrain_version,
+      .origin_station = *station_version,
+      .surface_signals = *signal_version,
+      .local_sun = *sun_version,
+  };
   if (versions != current_save_generator_versions()) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,

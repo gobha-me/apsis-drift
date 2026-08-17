@@ -47,11 +47,16 @@ Presentation weights reuse the simulation's existing hysteresis boundaries:
   atmosphere color.
 
 Atmospheric orbital frames apply a pressure-aware vertical sky gradient and
-stronger horizon haze before the local-terrain blend. The treatment derives
-only from the immutable planet descriptor, authoritative flight state, and
-camera pitch. It makes the approach leg readable without removing stars
-globally or inventing a wall-clock day/night cycle; airless frames remain
-untinted.
+stronger horizon haze before the local-terrain blend. One versioned local-sun
+direction is derived from the immutable planet identity and authoritative
+flight tick on a 72,000-tick (ten-minute) cycle. The orbital terminator,
+atmospheric daylight and twilight, visible sun, and local-terrain shading all
+consume that direction. Wall-clock and render cadence never enter the model.
+
+The sun disc is projected through the active camera and remains absent when
+the planet or rendered terrain blocks its line of sight. Night-side skies keep
+the deterministic star field. Airless worlds receive the same solar geometry
+and surface day/night shading without atmospheric color or haze.
 
 Blend coefficients are converted once per frame to 16-bit fixed-point weights.
 A source pass is omitted only when its maximum possible contribution is below

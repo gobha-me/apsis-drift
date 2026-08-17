@@ -70,6 +70,9 @@ exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station; in-flight profiles restore the exact
 planetary craft, objective, discoveries, and compact world-delta journal.
+New writes use save format version 2 and record local-sun generator
+compatibility. Version 1 profiles load normally and migrate to version 2 on
+their next explicit save.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -133,11 +136,13 @@ and supported truecolor ANSI paths. Ctrl-C remains the terminal interrupt path.
 The complete v0.4 objective and deterministic save/resume acceptance path are
 documented in [docs/SIGNAL_RUN.md](docs/SIGNAL_RUN.md).
 
-The v0.4.2 acceptance matrix completes the objective on airless, temperate,
+The v0.4.3 acceptance matrix completes the objective on airless, temperate,
 and dense worlds, bounds atmosphere-to-terrain descent to 120 seconds, and
 holds forward descent over generated terrain for 120,000 ticks to verify the
 16 metre contact floor. Atmospheric approaches now add pressure-aware sky
-gradation and horizon haze while airless worlds remain unchanged.
+gradation and horizon haze while airless worlds remain haze-free. Its
+fixed-seed solar checkpoints verify visible, planet-occluded, and re-emerged
+sun states plus exact geometry/framebuffer reproduction after save/reload.
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -270,6 +275,9 @@ Both profiles and both compiler builds must report the final authoritative
 flight checksum `1628243202805637918` and the same ordered stage ticks `0`,
 `4080`, `15555`, and `30089`. Timing fields and framebuffer checksums remain
 presentation diagnostics; they do not enter deterministic simulation state.
+Planetary frames derive their terminator, atmospheric daylight, visible sun,
+and terrain day/night from one seed- and tick-owned ten-minute solar cycle;
+night-side and airless skies retain deterministic stars.
 The v0.3.1 local profile keeps the canonical 640x480 terrain-blend checkpoint
 below the 33.33 ms application-renderer budget by bounding tile-backed orbital
 sampling and omitting raster passes that cannot affect an 8-bit pixel.

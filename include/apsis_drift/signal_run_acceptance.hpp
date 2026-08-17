@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "apsis_drift/celestial.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/signal_run.hpp"
 #include "termforge/core/types.hpp"
@@ -14,7 +15,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSignalRunAcceptanceScenario{
-    "v0.4.2-signal-run"};
+    "v0.4.3-signal-run"};
 inline constexpr std::uint32_t kSignalRunAcceptanceSeed{42};
 inline constexpr std::uint32_t kSignalRunDefaultSeed{0xC0FFEEU};
 inline constexpr std::uint32_t kSignalRunDenseSeed{1U};
@@ -24,6 +25,20 @@ inline constexpr SimulationTick kSignalRunAtmosphericPacingTargetTicks{4'200};
 inline constexpr SimulationTick kSignalRunReachedPacingTargetTicks{18'000};
 inline constexpr SimulationTick kAtmosphericLegPacingTargetTicks{14'400};
 inline constexpr SimulationTick kTerrainSafetyProbeTicks{120'000};
+
+enum class SunCheckpointVisibility : std::uint8_t {
+  visible,
+  planet_occluded,
+  reemerged,
+};
+
+struct SunCycleCheckpointMeasurement {
+  SunCheckpointVisibility visibility{};
+  SimulationTick tick{};
+  PlanetFixedDirection direction;
+  std::size_t sun_pixels{};
+  std::uint64_t framebuffer_checksum{};
+};
 
 struct SignalRunScenarioMeasurement {
   std::uint32_t seed{};
@@ -57,6 +72,9 @@ struct SignalRunAcceptanceReport {
   SimulationTick resume_tick{};
   std::uint64_t checkpoint_flight_checksum{};
   std::uint64_t resumed_flight_checksum{};
+  LocalSunGeometry checkpoint_sun;
+  std::uint64_t checkpoint_framebuffer_checksum{};
+  std::uint64_t resumed_framebuffer_checksum{};
   std::uint64_t return_flight_checksum{};
   std::uint64_t framebuffer_checksum{};
   SimulationTick terrain_safety_probe_ticks{};
@@ -64,6 +82,7 @@ struct SignalRunAcceptanceReport {
   std::uint64_t terrain_safety_flight_checksum{};
   std::size_t discovery_count{};
   std::size_t world_delta_count{};
+  std::vector<SunCycleCheckpointMeasurement> sun_cycle;
   std::vector<SignalRunScenarioMeasurement> scenarios;
 };
 

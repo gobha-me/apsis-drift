@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "apsis_drift/celestial.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
@@ -45,17 +46,19 @@ struct PlanetaryPresentationSettings {
   double local_max_distance_metres{900.0};
   double local_fog_start_metres{420.0};
   std::uint8_t orbital_terrain_lod{2};
-  PlanetFixedDirection light_direction{0.55, 0.15, 0.82};
   std::size_t terrain_cache_capacity{kDefaultTerrainTileCacheCapacity};
 };
 
 struct PlanetaryRenderStats {
   PlanetaryPresentationMode mode{};
   PlanetaryPresentationMix mix;
+  LocalSunGeometry sun;
+  double local_solar_elevation{};
   std::uint8_t local_terrain_lod{};
   TerrainTileAddress surface_anchor;
   std::size_t orbital_tiles_touched{};
   std::size_t local_tiles_touched{};
+  std::size_t sun_pixels{};
   double orbital_render_ms{};
   double local_render_ms{};
   double composite_ms{};
@@ -70,6 +73,7 @@ enum class PlanetaryPresentationError : std::uint8_t {
   coordinate_failure,
   terrain_failure,
   orbital_failure,
+  celestial_failure,
 };
 
 [[nodiscard]] auto planetary_presentation_mix(

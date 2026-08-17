@@ -10,10 +10,12 @@ viewport. It does not inspect terminal capabilities or depend on RasterForge.
 `OrbitalCamera` uses metres in the planet-fixed frame. Its position must be
 outside the descriptor radius. `forward` and `up` may have any non-zero length,
 but must be finite and non-collinear. `OrbitalRenderSettings` uses a horizontal
-field of view between 1 and 179 degrees and a planet-to-light direction.
+field of view between 1 and 179 degrees. Each render receives an explicit
+planet-to-sun direction resolved by the application-owned celestial model.
 
 `OrbitalRenderer::render()` validates the viewport, exact framebuffer length,
-descriptor domains, camera, field of view, and light before touching the
+descriptor domains, camera, field of view, and explicit planet-to-sun
+direction before touching the
 destination. Successful pixels are opaque RGBA. The result reports surface and
 atmosphere pixel counts so callers and tests can distinguish a visible,
 clipped, or off-screen planet without inspecting presentation colors.
@@ -25,7 +27,8 @@ Surface color combines:
 
 - the descriptor's terrain stream, terrain character, and water coverage;
 - its deep/shallow water and lowland/highland/peak palette colors;
-- diffuse lighting, view-dependent limb shading, and atmospheric scatter.
+- diffuse lighting, a direction-consistent terminator, view-dependent limb
+  shading, and atmospheric scatter.
 
 The two-octave spherical field is orbital-scale presentation, not generated
 terrain compatibility data. It consumes no mutable random state and does not
@@ -36,7 +39,8 @@ detail near the surface.
 Airless descriptors have no halo. Other atmosphere classes derive halo width
 and intensity from pressure while using the descriptor atmosphere color. Rays
 outside the planet produce an opaque near-black field with deterministic sparse
-stars.
+stars. A projected sun disc is written only on unobstructed background rays,
+so the planet disc provides deterministic occlusion and re-emergence.
 
 ## Reproducible benchmark path
 

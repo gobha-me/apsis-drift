@@ -15,7 +15,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{1};
+inline constexpr std::uint32_t kSaveFormatVersion{2};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
 inline constexpr std::size_t kMaximumSaveWorldDeltas{16'384};
@@ -27,6 +27,7 @@ struct SaveGeneratorVersions {
   std::uint32_t terrain_tiles{};
   std::uint32_t origin_station{};
   std::uint32_t surface_signals{};
+  std::uint32_t local_sun{};
 
   friend auto operator==(const SaveGeneratorVersions&,
                          const SaveGeneratorVersions&) -> bool = default;

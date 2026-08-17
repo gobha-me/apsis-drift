@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.2 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.3 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -81,6 +81,7 @@ endif ()
 
 add_library(apsis_drift_lib STATIC
   src/benchmark.cpp
+  src/celestial.cpp
   src/cockpit.cpp
   src/coordinates.cpp
   src/flight_deck_acceptance.cpp

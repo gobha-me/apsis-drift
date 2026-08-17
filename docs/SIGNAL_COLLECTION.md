@@ -37,7 +37,7 @@ When a regenerated save journal already marks the target `collected`,
 `completed`, or `removed`, collection immediately projects as complete without
 emitting a new entry. A `discovered` entry remains active and may be collected.
 This keeps unique generated targets from being collected twice without adding
-partial runtime progress to save format version 1.
+partial runtime progress to the current versioned save format.
 
 ## Cockpit presentation
 

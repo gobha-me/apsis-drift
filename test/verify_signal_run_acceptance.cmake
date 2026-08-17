@@ -37,10 +37,13 @@ function(check_signal_run driver profile)
                 atmospheric_tick terrain_tick reached_tick completion_tick
                 orbital_return_tick resume_tick checkpoint_flight_checksum
                 resumed_flight_checksum return_flight_checksum
-                framebuffer_checksum terrain_safety_probe_ticks
+                sun_generator_version checkpoint_sun
+                checkpoint_framebuffer_checksum
+                resumed_framebuffer_checksum framebuffer_checksum
+                terrain_safety_probe_ticks
                 terrain_safety_minimum_clearance_metres
                 terrain_safety_flight_checksum discovery_count
-                world_delta_count final_location final_objective
+                world_delta_count final_location final_objective sun_cycle
                 render_profile presentation viewport_width viewport_height)
     string(JSON value ERROR_VARIABLE json_error GET "${first_json}" "${field}")
     if (json_error)
@@ -50,8 +53,8 @@ function(check_signal_run driver profile)
     set("${field}" "${value}")
   endforeach ()
 
-  if (NOT schema_version STREQUAL "3" OR
-      NOT scenario STREQUAL "v0.4.2-signal-run" OR
+  if (NOT schema_version STREQUAL "4" OR
+      NOT scenario STREQUAL "v0.4.3-signal-run" OR
       NOT seed STREQUAL "42" OR
       NOT station_id STREQUAL "station-ce51e866ec4e032d" OR
       NOT target_id STREQUAL "signal-71d4c959dcd64423" OR
@@ -69,6 +72,10 @@ function(check_signal_run driver profile)
       NOT resume_tick STREQUAL "600" OR
       NOT checkpoint_flight_checksum STREQUAL "14947176626171235385" OR
       NOT resumed_flight_checksum STREQUAL checkpoint_flight_checksum OR
+      NOT sun_generator_version STREQUAL "1" OR
+      NOT checkpoint_framebuffer_checksum STREQUAL
+          resumed_framebuffer_checksum OR
+      checkpoint_framebuffer_checksum STREQUAL "0" OR
       NOT return_flight_checksum STREQUAL "11922358221174102146" OR
       NOT framebuffer_checksum MATCHES "^[0-9]+$" OR
       framebuffer_checksum STREQUAL "0" OR
@@ -85,6 +92,35 @@ function(check_signal_run driver profile)
     message(FATAL_ERROR
       "${driver} Signal Run report is not canonical:\n${first_json}")
   endif ()
+
+  string(JSON sun_cycle_count ERROR_VARIABLE sun_cycle_error
+         LENGTH "${first_json}" sun_cycle)
+  if (sun_cycle_error OR NOT sun_cycle_count STREQUAL "3")
+    message(FATAL_ERROR
+      "${driver} sun-cycle matrix is incomplete: ${sun_cycle_error}")
+  endif ()
+  set(expected_sun_visibility visible planet_occluded reemerged)
+  set(expected_sun_ticks 66800 72000 77200)
+  set(sun_signature "")
+  foreach(index RANGE 0 2)
+    list(GET expected_sun_visibility ${index} expected_visibility)
+    list(GET expected_sun_ticks ${index} expected_tick)
+    string(JSON visibility GET "${first_json}" sun_cycle ${index} visibility)
+    string(JSON tick GET "${first_json}" sun_cycle ${index} tick)
+    string(JSON direction GET "${first_json}" sun_cycle ${index} direction)
+    string(JSON sun_pixels GET "${first_json}" sun_cycle ${index} sun_pixels)
+    string(JSON sun_framebuffer GET "${first_json}" sun_cycle ${index}
+           framebuffer_checksum)
+    if (NOT visibility STREQUAL expected_visibility OR
+        NOT tick STREQUAL expected_tick OR
+        sun_framebuffer STREQUAL "0" OR
+        (visibility STREQUAL "planet_occluded" AND NOT sun_pixels EQUAL 0) OR
+        (NOT visibility STREQUAL "planet_occluded" AND sun_pixels EQUAL 0))
+      message(FATAL_ERROR
+        "${driver} sun-cycle checkpoint ${index} is invalid:\n${first_json}")
+    endif ()
+    string(APPEND sun_signature "${visibility}:${tick}:${direction};")
+  endforeach ()
 
   string(JSON scenario_count ERROR_VARIABLE scenario_error
          LENGTH "${first_json}" scenarios)
@@ -136,6 +172,7 @@ function(check_signal_run driver profile)
   set("${driver}_completion_tick" "${completion_tick}" PARENT_SCOPE)
   set("${driver}_return_tick" "${orbital_return_tick}" PARENT_SCOPE)
   set("${driver}_safety_checksum" "${terrain_safety_flight_checksum}" PARENT_SCOPE)
+  set("${driver}_sun_signature" "${sun_signature}" PARENT_SCOPE)
 endfunction ()
 
 check_signal_run(ansi remote)
@@ -144,7 +181,8 @@ check_signal_run(kitty local)
 if (NOT ansi_flight_checksum STREQUAL kitty_flight_checksum OR
     NOT ansi_completion_tick STREQUAL kitty_completion_tick OR
     NOT ansi_return_tick STREQUAL kitty_return_tick OR
-    NOT ansi_safety_checksum STREQUAL kitty_safety_checksum)
+    NOT ansi_safety_checksum STREQUAL kitty_safety_checksum OR
+    NOT ansi_sun_signature STREQUAL kitty_sun_signature)
   message(FATAL_ERROR
     "presentation path changed deterministic Signal Run state")
 endif ()
