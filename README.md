@@ -151,6 +151,13 @@ defines one authoritative universe clock; and proves the legal outbound,
 planet-side, return, docking, and turn-in phases without yet implementing the
 later system renderer or travel mechanics.
 
+The v0.4.5 local-system generator now resolves that destination into a stable
+star and ordered three-to-six-planet catalog. Independent ordinal seeds preserve
+the existing mission planet and terrain, while circular inclined ephemerides
+produce bounded system-frame positions and velocities from authoritative time.
+The exact generator and diagnostic contract is documented in
+[docs/LOCAL_SYSTEM_GENERATION.md](docs/LOCAL_SYSTEM_GENERATION.md).
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in

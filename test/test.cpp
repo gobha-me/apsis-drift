@@ -24,6 +24,7 @@
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/landscape.hpp"
+#include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_station.hpp"
@@ -482,6 +483,213 @@ auto intersystem_state_contract() -> void {
         "unknown mission phases must fail validation");
   rejected(static_cast<IntersystemContractCommand>(255),
            IntersystemContractError::invalid_transition);
+}
+
+auto local_system_contract() -> void {
+  check(kLocalSystemGeneratorVersion == 1 &&
+            kAnalyticEphemerisVersion == 1 &&
+            kMinimumLocalSystemPlanets == 3 &&
+            kMaximumLocalSystemPlanets == 6,
+        "local-system version and catalog bounds must remain stable");
+
+  for (const auto seed :
+       std::array{Seed{0}, Seed{42},
+                  Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const auto first = generate_local_system(seed);
+    const auto again = generate_local_system(seed);
+    check(first == again && validate_local_system(first).has_value(),
+          "equal system seeds must reproduce one valid catalog");
+    check(first.seed == seed && first.id == SystemId{seed.value} &&
+              first.planets.size() >= kMinimumLocalSystemPlanets &&
+              first.planets.size() <= kMaximumLocalSystemPlanets,
+          "a generated local system must retain its identity and bounds");
+    for (std::size_t index = 0; index < first.planets.size(); ++index) {
+      const auto& planet = first.planets[index];
+      const auto expected_seed =
+          derive_seed(seed, SeedDomain::planet, index);
+      check(planet.descriptor == generate_planet_descriptor(expected_seed) &&
+                planet.orbit.planet == planet.descriptor.id &&
+                planet.orbit.ordinal == index,
+            "each catalog ordinal must retain independent planet identity");
+    }
+  }
+
+  const auto identities = generate_first_intersystem_identities(Seed{42});
+  const auto system = generate_local_system(identities.target_system_seed);
+  check(system.id == identities.target_system &&
+            system.star.id == identities.target_star &&
+            !system.planets.empty() &&
+            system.planets.front().descriptor.id == identities.target_planet,
+        "the first target catalog must preserve the mission's stable IDs");
+  const auto target_before =
+      generate_planet_descriptor(identities.target_planet_seed);
+  (void)generate_local_system(identities.target_system_seed);
+  check(target_before ==
+            generate_planet_descriptor(identities.target_planet_seed),
+        "catalog generation must not perturb the existing planet stream");
+
+  check(system.planets.size() == 6 &&
+            system.star ==
+                StarDescriptor{
+                    Seed{4'391'435'423'288'202'480ULL},
+                    StarId{4'391'435'423'288'202'480ULL}, "Ortis",
+                    StarSpectralClass::f, 6'426, 1'276'641,
+                    Rgb8{234, 239, 255}},
+        "universe seed 42 must retain its target star and catalog size");
+  struct OrbitGolden {
+    std::uint64_t planet;
+    std::uint64_t orbit;
+    std::uint64_t radius;
+    SimulationTick period;
+    std::uint32_t phase;
+    std::int32_t inclination;
+    std::uint32_t node;
+  };
+  constexpr std::array orbit_goldens{
+      OrbitGolden{11'663'323'411'267'002'299ULL,
+                  10'083'446'351'388'880'177ULL, 7'099'452, 2'783'653,
+                  2'721'764'640U, -9'833'115, 3'923'635'174U},
+      OrbitGolden{9'431'008'004'299'412'890ULL,
+                  7'851'130'944'421'290'768ULL, 18'428'603, 6'272'031,
+                  1'567'099'797U, -5'965'106, 939'652'002U},
+      OrbitGolden{7'198'692'597'331'823'481ULL,
+                  14'548'077'165'324'058'995ULL, 30'784'617, 9'894'474,
+                  3'114'248'701U, 3'697'998, 3'328'899'740U},
+      OrbitGolden{4'966'377'190'364'234'072ULL,
+                  12'315'761'758'356'469'586ULL, 41'919'621, 13'232'201,
+                  2'274'257'782U, -9'742'142, 441'980'010U},
+      OrbitGolden{2'145'840'965'427'808'319ULL, 565'963'905'549'686'197ULL,
+                  54'281'536, 16'933'492, 203'468'468U, -9'843'524,
+                  2'992'320'609U},
+      OrbitGolden{18'360'269'632'169'770'526ULL,
+                  16'780'392'572'291'648'404ULL, 64'236'026, 20'542'364,
+                  367'035'075U, 7'034'988, 1'949'158'013U},
+  };
+  for (std::size_t index = 0; index < orbit_goldens.size(); ++index) {
+    const auto& observed = system.planets[index];
+    const auto& golden = orbit_goldens[index];
+    const auto expected_orbit =
+        PlanetOrbit{Seed{golden.orbit}, PlanetId{golden.planet},
+                    static_cast<std::uint32_t>(index), golden.radius,
+                    golden.period, golden.phase, golden.inclination,
+                    golden.node};
+    check(observed.descriptor.id == PlanetId{golden.planet} &&
+              observed.orbit == expected_orbit,
+          "universe seed 42 must retain its target orbit catalog");
+
+    const auto start = resolve_planet_ephemeris(
+        system, observed.descriptor.id, {0, 0.0});
+    const auto repeated = resolve_planet_ephemeris(
+        system, observed.descriptor.id, {observed.orbit.period_ticks, 0.0});
+    const auto extreme = resolve_planet_ephemeris(
+        system, observed.descriptor.id,
+        {std::numeric_limits<SimulationTick>::max(), 0.999999});
+    const auto radius_metres =
+        static_cast<double>(observed.orbit.radius_kilometres) * 1'000.0;
+    check(start.has_value() && repeated.has_value() && extreme.has_value() &&
+              start->position == repeated->position &&
+              start->velocity == repeated->velocity &&
+              std::abs(std::hypot(start->position.x, start->position.y,
+                                  start->position.z) -
+                       radius_metres) <= 1.0,
+          "every generated orbit must be bounded, periodic, and overflow-safe");
+  }
+
+  const auto target = system.planets.front().descriptor.id;
+  const auto epoch = resolve_planet_ephemeris(system, target, {0, 0.0});
+  check(epoch.has_value(), "a valid target ephemeris must resolve");
+  if (epoch) {
+    check(epoch->position ==
+                  SystemPositionMetres{-6'748'693'202.0, -2'010'489'231.0,
+                                       902'935'114.0} &&
+              epoch->velocity ==
+                  SystemVelocityMetresPerSecond{572'317.287, -1'822'691.659,
+                                                219'165.062} &&
+              close_enough(epoch->phase_radians, 3.981718699366, 1.0e-12),
+          "universe seed 42 must retain its target ephemeris epoch");
+    const auto period = system.planets.front().orbit.period_ticks;
+    const auto repeated =
+        resolve_planet_ephemeris(system, target, {period, 0.0});
+    check(repeated.has_value() && repeated->position == epoch->position &&
+              repeated->velocity == epoch->velocity &&
+              repeated->cycle_tick == 0,
+          "analytic ephemerides must repeat exactly after one period");
+    const auto half =
+        resolve_planet_ephemeris(system, target, {period / 2, 0.0});
+    check(half.has_value() && half->cycle_tick == period / 2 &&
+              std::isfinite(half->position.x) &&
+              std::isfinite(half->position.y) &&
+              std::isfinite(half->position.z),
+          "analytic ephemerides must remain finite inside their period");
+    const auto maximum = resolve_planet_ephemeris(
+        system, target,
+        {std::numeric_limits<SimulationTick>::max(), 0.999999});
+    check(maximum.has_value(),
+          "maximum authoritative ticks must resolve without overflow");
+  }
+
+  const auto unknown = resolve_planet_ephemeris(
+      system, PlanetId{system.id.value}, {0, 0.0});
+  check(!unknown && unknown.error() == LocalSystemError::unknown_planet,
+        "unknown planet references must be rejected");
+  for (const auto fraction :
+       std::array{std::numeric_limits<double>::quiet_NaN(),
+                  std::numeric_limits<double>::infinity(), -0.01, 1.0}) {
+    const auto invalid =
+        resolve_planet_ephemeris(system, target, {0, fraction});
+    check(!invalid && invalid.error() == LocalSystemError::non_finite_time,
+          "non-finite and out-of-range ephemeris time must be rejected");
+  }
+
+  auto malformed_identity = system;
+  malformed_identity.id.value ^= 1U;
+  check(!validate_local_system(malformed_identity) &&
+            validate_local_system(malformed_identity).error() ==
+                LocalSystemError::invalid_system,
+        "a mismatched system identity must be rejected");
+  auto malformed_star = system;
+  malformed_star.star.temperature_kelvin = 0;
+  check(!validate_local_system(malformed_star) &&
+            validate_local_system(malformed_star).error() ==
+                LocalSystemError::invalid_star,
+        "an invalid star descriptor must be rejected");
+  auto malformed_orbit = system;
+  malformed_orbit.planets.front().orbit.period_ticks = 0;
+  check(!validate_local_system(malformed_orbit) &&
+            validate_local_system(malformed_orbit).error() ==
+                LocalSystemError::invalid_orbit,
+        "an invalid orbital period must be rejected");
+  const LocalSystemDescriptor malformed_catalog{
+      .seed = system.seed,
+      .id = system.id,
+      .star = system.star,
+      .planets = std::vector<LocalSystemPlanet>{
+          system.planets.begin(),
+          system.planets.begin() +
+              static_cast<std::ptrdiff_t>(kMinimumLocalSystemPlanets - 1)},
+  };
+  check(!validate_local_system(malformed_catalog) &&
+            validate_local_system(malformed_catalog).error() ==
+                LocalSystemError::invalid_planet_catalog,
+        "an out-of-bounds planet catalog must be rejected");
+
+  const auto diagnostic = local_system_diagnostic_json(system);
+  check(diagnostic.has_value() &&
+            diagnostic->find("\"generator_version\": 1") !=
+                std::string::npos &&
+            diagnostic->find(system_id_string(system.id)) !=
+                std::string::npos &&
+            diagnostic->find("planet-") != std::string::npos,
+        "local-system diagnostics must expose compact stable identities");
+  if (diagnostic) {
+    auto checksum = std::uint64_t{14695981039346656037ULL};
+    for (const auto byte : *diagnostic) {
+      checksum ^= static_cast<unsigned char>(byte);
+      checksum *= 1099511628211ULL;
+    }
+    check(checksum == 15'119'861'268'817'475'810ULL,
+          "local-system diagnostics must retain their golden checksum");
+  }
 }
 
 auto origin_station_contract() -> void {
@@ -6030,6 +6238,7 @@ auto main() -> int {
   seed_derivation_contract();
   intersystem_identity_contract();
   intersystem_state_contract();
+  local_system_contract();
   origin_station_contract();
   origin_onboarding_contract();
   save_schema_contract();
