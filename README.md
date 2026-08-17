@@ -133,6 +133,12 @@ and supported truecolor ANSI paths. Ctrl-C remains the terminal interrupt path.
 The complete v0.4 objective and deterministic save/resume acceptance path are
 documented in [docs/SIGNAL_RUN.md](docs/SIGNAL_RUN.md).
 
+The v0.4.2 acceptance matrix completes the objective on airless, temperate,
+and dense worlds, bounds atmosphere-to-terrain descent to 120 seconds, and
+holds forward descent over generated terrain for 120,000 ticks to verify the
+16 metre contact floor. Atmospheric approaches now add pressure-aware sky
+gradation and horizon haze while airless worlds remain unchanged.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in
@@ -247,7 +253,7 @@ be inspected or captured.
 The v0.3 Planetfall scenario advances one generated craft continuously from
 orbit to a volcanic terrain flyover. It fixes planet seed `42`, starts over a
 canonical Carayx highland at latitude `0.625` and longitude `-pi/4`, applies
-four tick-addressed commands over `119360` fixed simulation ticks, and records
+four tick-addressed commands over `30089` fixed simulation ticks, and records
 orbital, atmospheric, terrain-blend, and local-terrain checkpoints.
 
 Run the deterministic remote and local profiles directly:
@@ -261,8 +267,8 @@ Run the deterministic remote and local profiles directly:
 ```
 
 Both profiles and both compiler builds must report the final authoritative
-flight checksum `240775156608294234` and the same ordered stage ticks `0`,
-`4080`, `104826`, and `119360`. Timing fields and framebuffer checksums remain
+flight checksum `1628243202805637918` and the same ordered stage ticks `0`,
+`4080`, `15555`, and `30089`. Timing fields and framebuffer checksums remain
 presentation diagnostics; they do not enter deterministic simulation state.
 The v0.3.1 local profile keeps the canonical 640x480 terrain-blend checkpoint
 below the 33.33 ms application-renderer budget by bounding tile-backed orbital

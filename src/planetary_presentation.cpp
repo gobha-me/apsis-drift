@@ -71,6 +71,48 @@ inline constexpr std::uint32_t kBlendScale{65'536};
   return value.r < 32 && value.g < 36 && value.b < 48;
 }
 
+auto render_atmospheric_context(
+    const PlanetaryPresentationSettings& settings,
+    const PlanetDescriptor& planet, PlanetaryPresentationCamera camera,
+    double atmosphere_mix,
+    std::span<termforge::Pixel> destination) noexcept -> void {
+  if (planet.atmosphere_class == AtmosphereClass::airless ||
+      atmosphere_mix <= 0.0) {
+    return;
+  }
+  const double tangent = std::tan(settings.field_of_view_degrees *
+                                  std::numbers::pi / 360.0);
+  const double focal = static_cast<double>(settings.width) / (2.0 * tangent);
+  const double horizon = static_cast<double>(settings.height - 1) * 0.5 +
+                         std::tan(camera.pitch_radians) * focal;
+  const double pressure = std::clamp(
+      static_cast<double>(planet.atmosphere_pressure.value) /
+          static_cast<double>(AtmospherePressureMillibars::max),
+      0.0, 1.0);
+  const double density = 0.62 + std::sqrt(pressure) * 0.38;
+  const auto atmosphere = pixel(planet.palette.atmosphere);
+  const termforge::Pixel daylight{196, 208, 218, 255};
+
+  for (int y = 0; y < settings.height; ++y) {
+    const double horizon_distance =
+        std::abs(static_cast<double>(y) - horizon) /
+        std::max(1.0, static_cast<double>(settings.height) * 0.72);
+    const double horizon_haze =
+        std::pow(1.0 - std::clamp(horizon_distance, 0.0, 1.0), 2.0);
+    const auto sky = blend(
+        atmosphere, daylight,
+        blend_weight(0.16 + horizon_haze * (0.20 + pressure * 0.18)));
+    const auto weight = blend_weight(
+        atmosphere_mix * density * (0.22 + horizon_haze * 0.38));
+    const auto row = static_cast<std::size_t>(y) *
+                     static_cast<std::size_t>(settings.width);
+    for (int x = 0; x < settings.width; ++x) {
+      auto& target = destination[row + static_cast<std::size_t>(x)];
+      target = blend(target, sky, weight);
+    }
+  }
+}
+
 auto render_orbital_motion_cues(
     const PlanetaryPresentationSettings& settings,
     const PlanetaryFlightState& state,
@@ -434,6 +476,8 @@ auto PlanetaryPresentationRenderer::render(
       return std::unexpected{PlanetaryPresentationError::orbital_failure};
     }
     stats.orbital_tiles_touched = orbital->terrain_tiles_touched;
+    render_atmospheric_context(m_settings, planet, camera, mix->atmosphere,
+                               m_orbital_frame);
     render_orbital_motion_cues(m_settings, state, m_orbital_frame);
   }
 
@@ -447,8 +491,6 @@ auto PlanetaryPresentationRenderer::render(
   }
 
   const auto composite_started = Clock::now();
-  const auto atmosphere_color = pixel(planet.palette.atmosphere);
-  const auto atmosphere_weight = blend_weight(mix->atmosphere * 0.12);
   for (std::size_t index = 0; index < expected; ++index) {
     termforge::Pixel result;
     if (!render_orbital) {
@@ -459,7 +501,6 @@ auto PlanetaryPresentationRenderer::render(
       result = blend(m_orbital_frame[index], m_local_frame[index],
                      local_weight);
     }
-    result = blend(result, atmosphere_color, atmosphere_weight);
     destination[index] = result;
   }
   stats.composite_ms = elapsed_ms(composite_started, Clock::now());

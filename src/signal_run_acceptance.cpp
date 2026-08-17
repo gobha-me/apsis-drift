@@ -132,7 +132,8 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
         SignalRunAcceptanceError::initialization_failure};
   }
   auto run = initial;
-  const auto performance = flight_performance(FlightRegime::orbital);
+  const auto performance =
+      flight_performance(*run.planet, FlightRegime::orbital);
   if (!performance) {
     return std::unexpected{
         SignalRunAcceptanceError::initialization_failure};
@@ -190,6 +191,260 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
   return result;
 }
 
+struct CompletedScenario {
+  SignalRunScenarioMeasurement measurement;
+  SaveDocument returned_save;
+  std::vector<termforge::Pixel> final_frame;
+};
+
+struct TerrainSafetyProbe {
+  SimulationTick ticks{};
+  double minimum_clearance_metres{};
+  std::uint64_t flight_checksum{};
+};
+
+[[nodiscard]] auto terrain_safety_probe()
+    -> std::expected<TerrainSafetyProbe, SignalRunAcceptanceError> {
+  auto cache = TerrainTileCache::create();
+  const auto fresh = make_new_game_document(Seed{kSignalRunDefaultSeed});
+  auto run = cache ? hydrate_signal_run(fresh, *cache)
+                   : std::expected<SignalRunState, SignalRunError>{
+                         std::unexpected{SignalRunError::terrain_failure}};
+  if (!cache || !run || !accept_signal_run(*run) ||
+      !launch_signal_run(*run, *cache) || !run->flight) {
+    return std::unexpected{
+        SignalRunAcceptanceError::initialization_failure};
+  }
+  TerrainSafetyProbe result{
+      .minimum_clearance_metres = run->flight->clearance_metres,
+  };
+  while (run->flight->tick < kTerrainSafetyProbeTicks) {
+    constexpr std::array initial_commands{
+        FlightCommand{0, FlightCommandKind::press_forward},
+        FlightCommand{0, FlightCommandKind::press_fall},
+    };
+    const std::span<const FlightCommand> commands =
+        run->flight->tick == 0
+            ? std::span<const FlightCommand>{initial_commands}
+            : std::span<const FlightCommand>{};
+    if (!advance_signal_run(*run, *cache, commands)) {
+      return std::unexpected{SignalRunAcceptanceError::simulation_failure};
+    }
+    result.minimum_clearance_metres =
+        std::min(result.minimum_clearance_metres,
+                 run->flight->clearance_metres);
+  }
+  result.ticks = run->flight->tick;
+  result.flight_checksum = planetary_flight_state_checksum(*run->flight);
+  if (result.ticks != kTerrainSafetyProbeTicks ||
+      result.minimum_clearance_metres < kMinimumFlightClearanceMetres) {
+    return std::unexpected{SignalRunAcceptanceError::incomplete_path};
+  }
+  return result;
+}
+
+[[nodiscard]] auto run_complete_scenario(
+    std::uint32_t seed, RenderConfiguration configuration,
+    const std::filesystem::path* checkpoint_path,
+    SignalRunAcceptanceReport* canonical_report)
+    -> std::expected<CompletedScenario, SignalRunAcceptanceError> {
+  auto cache = TerrainTileCache::create();
+  if (!cache) {
+    return std::unexpected{
+        SignalRunAcceptanceError::initialization_failure};
+  }
+  const auto fresh = make_new_game_document(Seed{seed});
+  auto run = hydrate_signal_run(fresh, *cache);
+  if (!run || !accept_signal_run(*run) ||
+      !launch_signal_run(*run, *cache) || !run->flight ||
+      !run->scanner.selected) {
+    return std::unexpected{
+        SignalRunAcceptanceError::initialization_failure};
+  }
+
+  SignalRunScenarioMeasurement measurement{
+      .seed = seed,
+      .atmosphere_class = run->planet->atmosphere_class,
+      .minimum_clearance_metres = run->flight->clearance_metres,
+  };
+  if (canonical_report != nullptr) {
+    canonical_report->station_id = run->onboarding.origin_station;
+    canonical_report->target_id = *run->scanner.selected;
+    canonical_report->launch_tick = run->flight->tick;
+    canonical_report->initial_distance_metres =
+        run->signal_navigation.distance_metres;
+    const auto probe = pacing_probe(*run);
+    if (!probe) return std::unexpected{probe.error()};
+    canonical_report->first_motion_tick = probe->first_motion_tick;
+    canonical_report->orbital_acceleration_ticks = probe->acceleration_ticks;
+    canonical_report->orbital_braking_ticks = probe->braking_ticks;
+  }
+
+  std::optional<PlanetaryFlightState> atmospheric_state;
+  bool resumed{};
+  while (run->onboarding.first_objective !=
+         FirstObjectiveStatus::completed) {
+    if (run->flight->tick >= kSignalRunAcceptanceMaximumTicks) {
+      return std::unexpected{SignalRunAcceptanceError::incomplete_path};
+    }
+    const auto prior_regime = run->flight->regime;
+    const auto prior_status = run->signal_navigation.status;
+    const auto commands =
+        guidance_commands(*run->flight, descent_guidance(*run));
+    if (!advance_signal_run(*run, *cache, commands)) {
+      return std::unexpected{SignalRunAcceptanceError::simulation_failure};
+    }
+    measurement.minimum_clearance_metres =
+        std::min(measurement.minimum_clearance_metres,
+                 run->flight->clearance_metres);
+    if (canonical_report != nullptr &&
+        run->flight->regime == FlightRegime::orbital) {
+      canonical_report->peak_orbital_speed_metres_per_second = std::max(
+          canonical_report->peak_orbital_speed_metres_per_second,
+          std::hypot(run->flight->velocity.east_metres_per_second,
+                     run->flight->velocity.north_metres_per_second,
+                     run->flight->velocity.up_metres_per_second));
+    }
+    if (canonical_report != nullptr && !resumed && checkpoint_path != nullptr &&
+        run->flight->tick == kSignalRunAcceptanceResumeTick) {
+      const auto checkpoint = project_signal_run_save(*run);
+      if (!checkpoint ||
+          !write_save_file_atomically(*checkpoint_path, *checkpoint)) {
+        return std::unexpected{
+            SignalRunAcceptanceError::checkpoint_write_failure};
+      }
+      canonical_report->resume_tick = run->flight->tick;
+      canonical_report->checkpoint_flight_checksum =
+          planetary_flight_state_checksum(*run->flight);
+      const auto loaded = load_save_file(*checkpoint_path);
+      auto resumed_cache = TerrainTileCache::create();
+      auto resumed_run = loaded && resumed_cache
+                             ? hydrate_signal_run(*loaded, *resumed_cache)
+                             : std::expected<SignalRunState, SignalRunError>{
+                                   std::unexpected{
+                                       SignalRunError::terrain_failure}};
+      if (!loaded || !resumed_cache || !resumed_run ||
+          !resumed_run->flight || *loaded != *checkpoint) {
+        return std::unexpected{
+            SignalRunAcceptanceError::checkpoint_load_failure};
+      }
+      canonical_report->resumed_flight_checksum =
+          planetary_flight_state_checksum(*resumed_run->flight);
+      if (canonical_report->resumed_flight_checksum !=
+          canonical_report->checkpoint_flight_checksum) {
+        return std::unexpected{SignalRunAcceptanceError::resume_mismatch};
+      }
+      *cache = std::move(*resumed_cache);
+      *run = std::move(*resumed_run);
+      resumed = true;
+    }
+    if (prior_regime == FlightRegime::orbital &&
+        run->flight->regime == FlightRegime::atmospheric) {
+      measurement.atmospheric_tick = run->flight->tick;
+      atmospheric_state = *run->flight;
+    }
+    if (prior_regime != FlightRegime::terrain_flight &&
+        run->flight->regime == FlightRegime::terrain_flight) {
+      measurement.terrain_tick = run->flight->tick;
+    }
+    if (prior_status != SignalScannerStatus::reached &&
+        run->signal_navigation.status == SignalScannerStatus::reached) {
+      measurement.reached_tick = run->flight->tick;
+    }
+  }
+  measurement.completion_tick = *run->collection.completion_tick;
+  if (!atmospheric_state || measurement.atmospheric_tick == 0 ||
+      measurement.terrain_tick <= measurement.atmospheric_tick ||
+      measurement.terrain_tick - measurement.atmospheric_tick >
+          kAtmosphericLegPacingTargetTicks ||
+      measurement.minimum_clearance_metres <
+          kMinimumFlightClearanceMetres) {
+    return std::unexpected{SignalRunAcceptanceError::incomplete_path};
+  }
+  if (canonical_report != nullptr) {
+    canonical_report->atmospheric_tick = measurement.atmospheric_tick;
+    canonical_report->terrain_tick = measurement.terrain_tick;
+    canonical_report->reached_tick = measurement.reached_tick;
+    canonical_report->completion_tick = measurement.completion_tick;
+    if (!resumed || canonical_report->first_motion_tick != 1 ||
+        canonical_report->orbital_acceleration_ticks > 600 ||
+        canonical_report->orbital_braking_ticks > 600 ||
+        canonical_report->atmospheric_tick >
+            kSignalRunAtmosphericPacingTargetTicks ||
+        canonical_report->reached_tick >
+            kSignalRunReachedPacingTargetTicks) {
+      return std::unexpected{SignalRunAcceptanceError::incomplete_path};
+    }
+  }
+
+  while (run->flight->regime != FlightRegime::orbital ||
+         !run->origin_navigation || !run->origin_navigation->arrived) {
+    if (run->flight->tick >= kSignalRunAcceptanceMaximumTicks) {
+      return std::unexpected{SignalRunAcceptanceError::incomplete_path};
+    }
+    const auto commands =
+        guidance_commands(*run->flight, return_guidance(*run));
+    if (!advance_signal_run(*run, *cache, commands)) {
+      return std::unexpected{SignalRunAcceptanceError::simulation_failure};
+    }
+    measurement.minimum_clearance_metres =
+        std::min(measurement.minimum_clearance_metres,
+                 run->flight->clearance_metres);
+  }
+  measurement.orbital_return_tick = run->flight->tick;
+  measurement.return_flight_checksum =
+      planetary_flight_state_checksum(*run->flight);
+  if (canonical_report != nullptr) {
+    canonical_report->orbital_return_tick = measurement.orbital_return_tick;
+    canonical_report->return_flight_checksum =
+        measurement.return_flight_checksum;
+  }
+
+  PlanetaryPresentationSettings settings{
+      .width = configuration.viewport.width,
+      .height = configuration.viewport.height,
+  };
+  PlanetaryPresentationRenderer renderer{settings};
+  std::vector<termforge::Pixel> atmospheric_frame(
+      static_cast<std::size_t>(configuration.viewport.width) *
+      static_cast<std::size_t>(configuration.viewport.height));
+  const auto atmospheric_render = renderer.render(
+      *run->planet, *atmospheric_state, {.pitch_radians = -0.08},
+      atmospheric_frame);
+  if (!atmospheric_render ||
+      (run->planet->atmosphere_class != AtmosphereClass::airless &&
+       atmospheric_render->mode != PlanetaryPresentationMode::atmospheric)) {
+    return std::unexpected{
+        SignalRunAcceptanceError::presentation_failure};
+  }
+  measurement.atmospheric_framebuffer_checksum =
+      pixel_checksum(atmospheric_frame);
+
+  std::vector<termforge::Pixel> final_frame(atmospheric_frame.size());
+  if (!renderer.render(*run->planet, *run->flight,
+                       {.pitch_radians = -0.18}, final_frame)) {
+    return std::unexpected{
+        SignalRunAcceptanceError::presentation_failure};
+  }
+  if (canonical_report != nullptr) {
+    canonical_report->framebuffer_checksum = pixel_checksum(final_frame);
+    canonical_report->discovery_count = run->discoveries.size();
+    canonical_report->world_delta_count = run->journal.entries().size();
+  }
+  if (!return_signal_run_to_origin(*run)) {
+    return std::unexpected{SignalRunAcceptanceError::simulation_failure};
+  }
+  auto returned = project_signal_run_save(*run);
+  if (!returned || returned->state.location !=
+                       OriginLocation::docked_at_origin ||
+      returned->state.flight || returned->state.first_objective !=
+                                    FirstObjectiveStatus::completed) {
+    return std::unexpected{SignalRunAcceptanceError::incomplete_path};
+  }
+  return CompletedScenario{measurement, std::move(*returned),
+                           std::move(final_frame)};
+}
+
 }  // namespace
 
 auto run_signal_run_acceptance(
@@ -206,160 +461,64 @@ auto run_signal_run_acceptance(
         SignalRunAcceptanceError::invalid_configuration};
   }
   const CheckpointCleanup cleanup{checkpoint_path};
-  auto cache = TerrainTileCache::create();
-  if (!cache) {
-    return std::unexpected{
-        SignalRunAcceptanceError::initialization_failure};
-  }
-  const auto fresh = make_new_game_document(Seed{kSignalRunAcceptanceSeed});
-  auto run = hydrate_signal_run(fresh, *cache);
-  if (!run || !accept_signal_run(*run) ||
-      !launch_signal_run(*run, *cache) || !run->flight ||
-      !run->scanner.selected) {
-    return std::unexpected{
-        SignalRunAcceptanceError::initialization_failure};
-  }
-
   SignalRunAcceptanceReport report{
       .render_configuration = configuration,
       .presentation = std::string{presentation},
-      .station_id = run->onboarding.origin_station,
-      .target_id = *run->scanner.selected,
-      .launch_tick = run->flight->tick,
-      .initial_distance_metres = run->signal_navigation.distance_metres,
   };
-  const auto probe = pacing_probe(*run);
-  if (!probe) return std::unexpected{probe.error()};
-  report.first_motion_tick = probe->first_motion_tick;
-  report.orbital_acceleration_ticks = probe->acceleration_ticks;
-  report.orbital_braking_ticks = probe->braking_ticks;
-  bool resumed{};
-  while (run->onboarding.first_objective !=
-         FirstObjectiveStatus::completed) {
-    if (run->flight->tick >= kSignalRunAcceptanceMaximumTicks) {
-      return std::unexpected{SignalRunAcceptanceError::incomplete_path};
-    }
-    const auto prior_regime = run->flight->regime;
-    const auto prior_status = run->signal_navigation.status;
-    const auto commands =
-        guidance_commands(*run->flight, descent_guidance(*run));
-    if (!advance_signal_run(*run, *cache, commands)) {
-      return std::unexpected{SignalRunAcceptanceError::simulation_failure};
-    }
-    if (run->flight->regime == FlightRegime::orbital) {
-      report.peak_orbital_speed_metres_per_second = std::max(
-          report.peak_orbital_speed_metres_per_second,
-          std::hypot(run->flight->velocity.east_metres_per_second,
-                     run->flight->velocity.north_metres_per_second,
-                     run->flight->velocity.up_metres_per_second));
-    }
-    if (!resumed && run->flight->tick == kSignalRunAcceptanceResumeTick) {
-      const auto checkpoint = project_signal_run_save(*run);
-      if (!checkpoint ||
-          !write_save_file_atomically(checkpoint_path, *checkpoint)) {
-        return std::unexpected{
-            SignalRunAcceptanceError::checkpoint_write_failure};
-      }
-      report.resume_tick = run->flight->tick;
-      report.checkpoint_flight_checksum =
-          planetary_flight_state_checksum(*run->flight);
-      const auto loaded = load_save_file(checkpoint_path);
-      auto resumed_cache = TerrainTileCache::create();
-      auto resumed_run = loaded && resumed_cache
-                             ? hydrate_signal_run(*loaded, *resumed_cache)
-                             : std::expected<SignalRunState, SignalRunError>{
-                                   std::unexpected{
-                                       SignalRunError::terrain_failure}};
-      if (!loaded || !resumed_cache || !resumed_run ||
-          !resumed_run->flight || *loaded != *checkpoint) {
-        return std::unexpected{
-            SignalRunAcceptanceError::checkpoint_load_failure};
-      }
-      report.resumed_flight_checksum =
-          planetary_flight_state_checksum(*resumed_run->flight);
-      if (report.resumed_flight_checksum !=
-          report.checkpoint_flight_checksum) {
-        return std::unexpected{SignalRunAcceptanceError::resume_mismatch};
-      }
-      *cache = std::move(*resumed_cache);
-      *run = std::move(*resumed_run);
-      resumed = true;
-    }
-    if (prior_regime == FlightRegime::orbital &&
-        run->flight->regime == FlightRegime::atmospheric) {
-      report.atmospheric_tick = run->flight->tick;
-    }
-    if (prior_regime != FlightRegime::terrain_flight &&
-        run->flight->regime == FlightRegime::terrain_flight) {
-      report.terrain_tick = run->flight->tick;
-    }
-    if (prior_status != SignalScannerStatus::reached &&
-        run->signal_navigation.status == SignalScannerStatus::reached) {
-      report.reached_tick = run->flight->tick;
-    }
+  constexpr std::array seeds{kSignalRunAcceptanceSeed,
+                             kSignalRunDefaultSeed,
+                             kSignalRunDenseSeed};
+  std::optional<CompletedScenario> canonical;
+  report.scenarios.reserve(seeds.size());
+  for (const auto seed : seeds) {
+    const bool is_canonical = seed == kSignalRunAcceptanceSeed;
+    auto completed = run_complete_scenario(
+        seed, configuration, is_canonical ? &checkpoint_path : nullptr,
+        is_canonical ? &report : nullptr);
+    if (!completed) return std::unexpected{completed.error()};
+    report.scenarios.push_back(completed->measurement);
+    if (is_canonical) canonical = std::move(*completed);
   }
-  report.completion_tick = *run->collection.completion_tick;
-  if (!resumed || report.first_motion_tick != 1 ||
-      report.orbital_acceleration_ticks > 600 ||
-      report.orbital_braking_ticks > 600 ||
-      report.atmospheric_tick > kSignalRunAtmosphericPacingTargetTicks ||
-      report.reached_tick > kSignalRunReachedPacingTargetTicks) {
+  if (!canonical) {
     return std::unexpected{SignalRunAcceptanceError::incomplete_path};
   }
-
-  while (run->flight->regime != FlightRegime::orbital ||
-         !run->origin_navigation || !run->origin_navigation->arrived) {
-    if (run->flight->tick >= kSignalRunAcceptanceMaximumTicks) {
-      return std::unexpected{SignalRunAcceptanceError::incomplete_path};
-    }
-    const auto commands =
-        guidance_commands(*run->flight, return_guidance(*run));
-    if (!advance_signal_run(*run, *cache, commands)) {
-      return std::unexpected{SignalRunAcceptanceError::simulation_failure};
-    }
-  }
-  report.orbital_return_tick = run->flight->tick;
-  report.return_flight_checksum =
-      planetary_flight_state_checksum(*run->flight);
-
-  PlanetaryPresentationSettings settings{
-      .width = configuration.viewport.width,
-      .height = configuration.viewport.height,
-  };
-  PlanetaryPresentationRenderer renderer{settings};
-  std::vector<termforge::Pixel> frame(
-      static_cast<std::size_t>(configuration.viewport.width) *
-      static_cast<std::size_t>(configuration.viewport.height));
-  if (!renderer.render(*run->planet, *run->flight,
-                       {.pitch_radians = -0.18}, frame)) {
-    return std::unexpected{
-        SignalRunAcceptanceError::presentation_failure};
-  }
-  report.framebuffer_checksum = pixel_checksum(frame);
-  report.discovery_count = run->discoveries.size();
-  report.world_delta_count = run->journal.entries().size();
-  if (!return_signal_run_to_origin(*run)) {
-    return std::unexpected{SignalRunAcceptanceError::simulation_failure};
-  }
-  auto returned = project_signal_run_save(*run);
-  if (!returned || returned->state.location !=
-                       OriginLocation::docked_at_origin ||
-      returned->state.flight || returned->state.first_objective !=
-                                    FirstObjectiveStatus::completed) {
-    return std::unexpected{SignalRunAcceptanceError::incomplete_path};
-  }
+  const auto safety = terrain_safety_probe();
+  if (!safety) return std::unexpected{safety.error()};
+  report.terrain_safety_probe_ticks = safety->ticks;
+  report.terrain_safety_minimum_clearance_metres =
+      safety->minimum_clearance_metres;
+  report.terrain_safety_flight_checksum = safety->flight_checksum;
   return SignalRunAcceptanceResult{
       .report = report,
-      .returned_save = std::move(*returned),
-      .final_frame = std::move(frame),
+      .returned_save = std::move(canonical->returned_save),
+      .final_frame = std::move(canonical->final_frame),
   };
 }
 
 auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
     -> std::string {
+  std::string scenarios;
+  for (std::size_t index = 0; index < report.scenarios.size(); ++index) {
+    const auto& scenario = report.scenarios[index];
+    scenarios += std::format(
+        "    {{\"seed\": {}, \"atmosphere_class\": \"{}\", "
+        "\"atmospheric_tick\": {}, \"terrain_tick\": {}, "
+        "\"reached_tick\": {}, \"completion_tick\": {}, "
+        "\"orbital_return_tick\": {}, "
+        "\"minimum_clearance_metres\": {:.6f}, "
+        "\"atmospheric_framebuffer_checksum\": \"{}\", "
+        "\"return_flight_checksum\": \"{}\"}}{}\n",
+        scenario.seed, atmosphere_class_name(scenario.atmosphere_class),
+        scenario.atmospheric_tick, scenario.terrain_tick,
+        scenario.reached_tick, scenario.completion_tick,
+        scenario.orbital_return_tick, scenario.minimum_clearance_metres,
+        scenario.atmospheric_framebuffer_checksum,
+        scenario.return_flight_checksum,
+        index + 1 == report.scenarios.size() ? "" : ",");
+  }
   return std::format(
       "{{\n"
-      "  \"schema_version\": 2,\n"
+      "  \"schema_version\": 3,\n"
       "  \"scenario\": \"{}\",\n"
       "  \"seed\": {},\n"
       "  \"station_id\": \"{}\",\n"
@@ -380,10 +539,16 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       "  \"resumed_flight_checksum\": \"{}\",\n"
       "  \"return_flight_checksum\": \"{}\",\n"
       "  \"framebuffer_checksum\": \"{}\",\n"
+      "  \"terrain_safety_probe_ticks\": {},\n"
+      "  \"terrain_safety_minimum_clearance_metres\": {:.6f},\n"
+      "  \"terrain_safety_flight_checksum\": \"{}\",\n"
       "  \"discovery_count\": {},\n"
       "  \"world_delta_count\": {},\n"
       "  \"final_location\": \"docked_at_origin\",\n"
       "  \"final_objective\": \"completed\",\n"
+      "  \"scenarios\": [\n"
+      "{}"
+      "  ],\n"
       "  \"presentation\": \"{}\",\n"
       "  \"render_profile\": \"{}\",\n"
       "  \"viewport_width\": {},\n"
@@ -400,8 +565,11 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       report.resume_tick,
       report.checkpoint_flight_checksum, report.resumed_flight_checksum,
       report.return_flight_checksum, report.framebuffer_checksum,
+      report.terrain_safety_probe_ticks,
+      report.terrain_safety_minimum_clearance_metres,
+      report.terrain_safety_flight_checksum,
       report.discovery_count,
-      report.world_delta_count, report.presentation,
+      report.world_delta_count, scenarios, report.presentation,
       profile_name(report.render_configuration),
       report.render_configuration.viewport.width,
       report.render_configuration.viewport.height);

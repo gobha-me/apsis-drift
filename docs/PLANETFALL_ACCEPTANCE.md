@@ -19,14 +19,14 @@ and the deterministic LOD-12 terrain sample beneath that position. The fixed
 | 0 | press forward |
 | 0 | press right turn |
 | 0 | press fall |
-| 109650 | release fall |
+| 20379 | release fall |
 
 Every simulation step samples the generated surface at the craft subpoint
-before advancing `PlanetaryFlightState`. With the v0.4.1 orbital envelope, the
-replay crosses the atmosphere at tick `4080`, enters the first mixed terrain
-frame at tick `104826`, releases descent at tick `109650`, and ends at tick
-`119360` in stable low-level forward flight. Its authoritative final flight
-checksum is `240775156608294234`.
+before advancing `PlanetaryFlightState`. With the v0.4.2 atmosphere-normalized
+envelope, the replay crosses the atmosphere at tick `4080`, enters the first
+mixed terrain frame at tick `15555`, releases descent at tick `20379`, and ends
+at tick `30089` in stable low-level forward flight. Its authoritative final
+flight checksum is `1628243202805637918`.
 
 The report retains one checkpoint for each presentation stage:
 
@@ -34,8 +34,8 @@ The report retains one checkpoint for each presentation stage:
 | --- | ---: | --- |
 | `orbital` | 0 | orbital |
 | `atmospheric` | 4080 | atmospheric |
-| `terrain-blend` | 104826 | atmospheric |
-| `local-terrain` | 119360 | terrain flight |
+| `terrain-blend` | 15555 | atmospheric |
+| `local-terrain` | 30089 | terrain flight |
 
 Each checkpoint records its geodetic state, clearance, flight checksum,
 framebuffer checksum, terrain anchor, tile counts, and 60-frame timing sample.

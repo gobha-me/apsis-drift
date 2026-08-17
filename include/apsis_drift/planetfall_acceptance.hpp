@@ -17,7 +17,7 @@ inline constexpr std::string_view kPlanetfallAcceptanceScenario{
     "v0.3-planetfall"};
 inline constexpr std::uint32_t kPlanetfallAcceptanceSeed{42U};
 inline constexpr std::size_t kPlanetfallAcceptanceFramesPerStage{60};
-inline constexpr SimulationTick kPlanetfallAcceptanceTicks{119'360};
+inline constexpr SimulationTick kPlanetfallAcceptanceTicks{30'089};
 
 struct PlanetfallStageMeasurement {
   PlanetaryPresentationMode presentation_mode{};

@@ -181,7 +181,7 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
     return std::unexpected{SignalScannerError::coordinate_failure};
   }
   const auto motion = resolve_target_relative_motion(
-      flight, *local_target, kSignalScannerReachedRadiusMetres);
+      planet, flight, *local_target, kSignalScannerReachedRadiusMetres);
   if (!motion) {
     return std::unexpected{SignalScannerError::invalid_flight_state};
   }

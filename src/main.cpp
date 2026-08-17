@@ -1186,9 +1186,23 @@ class LandscapeApp final : public App {
         }
         auto commands =
             m_input_mapper.take_commands(m_signal_run->flight->tick);
-        if (!advance_signal_run(*m_signal_run, *m_signal_run_cache,
-                                commands)) {
-          throw std::runtime_error{"Signal Run simulation failed"};
+        const auto advanced = advance_signal_run(
+            *m_signal_run, *m_signal_run_cache, commands);
+        if (!advanced) {
+          const auto& flight = *m_signal_run->flight;
+          throw std::runtime_error{std::format(
+              "Signal Run simulation failed: {} at tick {} "
+              "(regime={}, latitude={:.12f}, longitude={:.12f}, "
+              "altitude={:.3f} m, clearance={:.3f} m, "
+              "velocity=({:.3f}, {:.3f}, {:.3f}) m/s)",
+              signal_run_error_name(advanced.error()), flight.tick,
+              flight_regime_name(flight.regime),
+              flight.pose.position.latitude_radians,
+              flight.pose.position.longitude_radians,
+              flight.pose.position.altitude_metres, flight.clearance_metres,
+              flight.velocity.east_metres_per_second,
+              flight.velocity.north_metres_per_second,
+              flight.velocity.up_metres_per_second)};
         }
         continue;
       }

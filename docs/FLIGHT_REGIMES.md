@@ -49,17 +49,25 @@ limits:
 
 | Regime | Horizontal speed | Vertical speed | Horizontal acceleration | Vertical acceleration | Turn rate |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Orbital | 2,000 m/s | 600 m/s | 400 m/s² | 240 m/s² | 0.35 rad/s |
-| Atmospheric | 500 m/s | 180 m/s | 180 m/s² | 100 m/s² | 0.75 rad/s |
+| Orbital | 4,000 m/s | 2,000 m/s | 1,000 m/s² | 1,000 m/s² | 0.35 rad/s |
+| Atmospheric | 500 m/s | atmosphere-dependent | 180 m/s² | atmosphere-dependent | 0.75 rad/s |
 | Terrain flight | 120 m/s | 45 m/s | 100 m/s² | 60 m/s² | 1.15 rad/s |
+
+Atmospheric vertical speed is the greater of 180 m/s or the approach-band
+height divided by 100 seconds. Vertical acceleration reaches that limit in
+1.8 seconds. This preserves the existing airless response while normalizing
+the much taller tenuous, temperate, and dense bands to the same playable leg;
+deterministic acceptance allows no more than 120 seconds from atmosphere entry
+to terrain flight.
 
 Opposed controls cancel while remaining explicit in state. Diagonal input is
 normalized to the regime's horizontal speed. Autopilot retains the established
 72 percent forward and gentle right-turn intent. Velocity approaches the
-commanded target by the regime acceleration bound; terrain contact clamps to a
-minimum 16 metre clearance and cancels downward velocity. A transition clamps
-carried velocity to the new regime's limits before the resulting state is
-committed.
+commanded target by the regime acceleration bound. A newly sampled terrain rise
+first reconciles the craft to the minimum 16 metre clearance and cancels
+downward velocity; ordinary contact applies the same clamp after motion. A
+transition clamps carried velocity to the new regime's limits before the
+resulting state is committed.
 
 ## Determinism and failure behavior
 
