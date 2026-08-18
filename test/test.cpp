@@ -23,6 +23,7 @@
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
+#include "apsis_drift/intersystem_contract_acceptance.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
 #include "apsis_drift/intersystem_planetfall.hpp"
@@ -1104,6 +1105,44 @@ auto intersystem_return_contract() -> void {
               migrated->state.intersystem_contract == contract,
           "released format-6 origin arrival must materialize its immutable station approach");
   }
+}
+
+auto intersystem_contract_acceptance_contract() -> void {
+  check(!run_intersystem_contract_acceptance(0, 64) &&
+            !run_intersystem_contract_acceptance(
+                std::numeric_limits<int>::max(), 1),
+        "contract-loop acceptance must reject invalid dimensions before allocation");
+  const auto result = run_intersystem_contract_acceptance(96, 64);
+  check(result && result->report.checkpoints.size() == 6U &&
+            result->report.final_tick == 31'535U &&
+            result->report.final_authoritative_checksum ==
+                9'496'404'445'183'332'939ULL &&
+            result->report.wrong_side_recovery_checksum != 0U &&
+            result->report.target_system_planet_count >= 3U &&
+            result->report.target_system_initial_framebuffer_checksum !=
+                result->report.target_system_moved_framebuffer_checksum &&
+            result->report.discovery_count == 1U &&
+            result->report.world_delta_count == 1U &&
+            result->report.framebuffer_checksum != 0U &&
+            result->final_frame.size() == 96U * 64U,
+        "contract-loop acceptance must complete and resume the full deterministic mission");
+  if (!result) return;
+  check(std::ranges::all_of(
+            result->report.checkpoints,
+            [&](const auto& checkpoint) {
+              return checkpoint.resumed_final_checksum ==
+                     result->report.final_authoritative_checksum;
+            }),
+        "every representative save/resume stage must reach the uninterrupted final checksum");
+  const auto json =
+      intersystem_contract_acceptance_json(result->report, "kitty");
+  check(json.find("\"scenario\": \"v0.4.13-intersystem-contract-loop\"") !=
+                std::string::npos &&
+            json.find("\"final_mission_phase\": \"turned_in\"") !=
+                std::string::npos &&
+            json.find("\"terminal_proxy\": \"external-live-capture\"") !=
+                std::string::npos,
+        "contract-loop JSON must separate authoritative, render, and live presentation evidence");
 }
 
 auto intersystem_planetfall_contract() -> void {
@@ -7550,6 +7589,7 @@ auto main() -> int {
   intersystem_jump_acceptance_contract();
   system_flight_contract();
   intersystem_return_contract();
+  intersystem_contract_acceptance_contract();
   intersystem_planetfall_contract();
   intersystem_planetfall_acceptance_contract();
   mission_board_contract();

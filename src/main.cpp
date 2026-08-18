@@ -34,6 +34,7 @@
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
+#include "apsis_drift/intersystem_contract_acceptance.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
 #include "apsis_drift/intersystem_planetfall.hpp"
@@ -2314,6 +2315,8 @@ auto usage() -> void {
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --intersystem-return-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME] [--snapshot PATH]\n\n"
+      "       apsis-drift --intersystem-contract-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME] [--snapshot PATH]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -2345,6 +2348,7 @@ auto main(int argc, char** argv) -> int {
   bool system_flight_acceptance{};
   bool intersystem_planetfall_acceptance{};
   bool intersystem_return_acceptance{};
+  bool intersystem_contract_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -2440,6 +2444,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--intersystem-return-acceptance") {
       intersystem_return_acceptance = true;
+      continue;
+    }
+    if (argument == "--intersystem-contract-acceptance") {
+      intersystem_contract_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -2579,6 +2587,33 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (intersystem_contract_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       system_flight_acceptance || intersystem_planetfall_acceptance ||
+       intersystem_return_acceptance || profile_options || seed_specified ||
+       workload_specified || keyboard_specified)) {
+    std::fprintf(stderr,
+                 "Intersystem contract acceptance is mutually exclusive with "
+                 "other run, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (intersystem_contract_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "Intersystem contract acceptance requires --driver kitty "
+                 "or --driver ansi\n");
+    return 2;
+  }
+  if (intersystem_contract_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Intersystem contract acceptance requires --report PATH\n");
+    return 2;
+  }
   if (intersystem_return_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -2872,6 +2907,47 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (intersystem_contract_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_intersystem_contract_acceptance(
+          configuration.viewport.width, configuration.viewport.height);
+      if (!acceptance) {
+        std::fprintf(stderr,
+                     "Intersystem contract acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << intersystem_contract_acceptance_json(acceptance->report,
+                                                      presentation);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "intersystem-contract: presentation=%.*s final=%llu checksum=%llu\n",
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(acceptance->report.final_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.final_authoritative_checksum));
+      return 0;
+    }
     if (intersystem_return_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);
