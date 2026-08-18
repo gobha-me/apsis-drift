@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.7 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.8 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -87,6 +87,8 @@ add_library(apsis_drift_lib STATIC
   src/flight_deck_acceptance.cpp
   src/flight_input.cpp
   src/intersystem_contract.cpp
+  src/intersystem_jump.cpp
+  src/intersystem_jump_acceptance.cpp
   src/landscape.cpp
   src/local_system.cpp
   src/menu.cpp
@@ -162,6 +164,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_system_navigation_acceptance.cmake")
+  add_test(NAME intersystem-jump-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_intersystem_jump_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -295,6 +302,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-system-navigation-mode-conflict
     COMMAND apsis-drift --system-navigation-acceptance --driver kitty
             --benchmark 1 --report system-navigation-invalid.json)
+  add_test(NAME reject-intersystem-jump-missing-report
+    COMMAND apsis-drift --intersystem-jump-acceptance --driver ansi)
+  add_test(NAME reject-intersystem-jump-missing-driver
+    COMMAND apsis-drift --intersystem-jump-acceptance
+            --report intersystem-jump-invalid.json)
+  add_test(NAME reject-intersystem-jump-mode-conflict
+    COMMAND apsis-drift --intersystem-jump-acceptance --driver kitty
+            --benchmark 1 --report intersystem-jump-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -336,6 +351,9 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-system-navigation-missing-report
     reject-system-navigation-missing-driver
     reject-system-navigation-mode-conflict
+    reject-intersystem-jump-missing-report
+    reject-intersystem-jump-missing-driver
+    reject-intersystem-jump-mode-conflict
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()

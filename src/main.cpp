@@ -34,6 +34,8 @@
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
+#include "apsis_drift/intersystem_jump.hpp"
+#include "apsis_drift/intersystem_jump_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
@@ -297,14 +299,19 @@ class LandscapeApp final : public App {
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_planet(generate_planet_descriptor(Seed{seed})),
+        m_origin_system(generate_local_system(
+            generate_first_intersystem_identities(
+                profile ? profile->recipe.universe_seed : Seed{seed})
+                .origin_system_seed)),
         m_local_system(generate_local_system(
-            generate_first_intersystem_identities(Seed{seed})
+            generate_first_intersystem_identities(
+                profile ? profile->recipe.universe_seed : Seed{seed})
                 .target_system_seed)),
         m_renderer(render_settings_for(render_configuration.viewport)),
         m_orbital_renderer(
             orbital_settings_for(render_configuration.viewport)),
         m_system_renderer(
-            workload == BenchmarkWorkload::system
+            (workload == BenchmarkWorkload::system || profile != nullptr)
                 ? std::optional<LocalSystemRenderer>{
                       std::in_place,
                       LocalSystemRenderSettings{
@@ -726,11 +733,19 @@ class LandscapeApp final : public App {
             m_intersystem_contract->mission_phase ==
                     IntersystemMissionPhase::offered
                 ? IntersystemContractCommand::accept_mission
-                : IntersystemContractCommand::turn_in;
-        if (!advance_intersystem_contract(
-                *m_intersystem_contract,
-                m_intersystem_contract->universe_tick, board_command)) {
+                : m_intersystem_contract->mission_phase ==
+                          IntersystemMissionPhase::accepted
+                      ? IntersystemContractCommand::launch
+                      : IntersystemContractCommand::turn_in;
+        const auto advanced = advance_intersystem_contract(
+            *m_intersystem_contract,
+            m_intersystem_contract->universe_tick, board_command);
+        if (!advanced) {
           m_error = "mission board action was rejected";
+        } else if (board_command == IntersystemContractCommand::launch) {
+          (void)m_session.start_flight();
+          m_simulation_clock.reset();
+          m_active_mouse_region = {};
         }
         return;
       }
@@ -898,7 +913,7 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "FIRST CONTRACT // v0.4.7", "CONTINUE");
+    draw_menu(screen, "FIRST CONTRACT // v0.4.8", "CONTINUE");
   }
 
   auto draw_station_screen(Screen& screen) -> void {
@@ -1206,12 +1221,24 @@ class LandscapeApp final : public App {
     } else if (m_signal_scenario) {
       message =
           format_signal_collection(m_signal_scenario->collection).message;
+    } else if (m_intersystem_contract &&
+               intersystem_jump_snapshot(*m_intersystem_contract)) {
+      const auto jump =
+          *intersystem_jump_snapshot(*m_intersystem_contract);
+      message = std::format(" {} | {} | {:3.0f}% | {} ", jump.phase,
+                            jump.destination, jump.progress * 100.0,
+                            jump.cancelable ? "J CANCEL" : "ARRIVAL BOUND");
     } else if (m_system_render) {
       const auto navigation =
           format_system_navigation(m_system_render->navigation);
       message = std::format(
           " SYSTEM {} | {} | {} | {} ",
-          m_local_system.star.display_name, navigation.target,
+          (m_intersystem_contract &&
+                   m_intersystem_contract->current_system ==
+                       m_intersystem_contract->identities.origin_system
+               ? m_origin_system.star.display_name
+               : m_local_system.star.display_name),
+          navigation.target,
           navigation.distance, navigation.cue);
     } else {
       message = layout.mode == CockpitLayoutMode::wide
@@ -1253,6 +1280,22 @@ class LandscapeApp final : public App {
   }
 
   auto handle_key(const KeyEvent& key) -> void {
+    if (m_intersystem_contract) {
+      if (key.action != KeyAction::Press || key.key != Key::Char ||
+          (key.ch != U'j' && key.ch != U'J')) {
+        return;
+      }
+      const bool spooling =
+          m_intersystem_contract->travel_phase ==
+              IntersystemTravelPhase::outbound_jump_spooling ||
+          m_intersystem_contract->travel_phase ==
+              IntersystemTravelPhase::return_jump_spooling;
+      const auto changed = spooling
+                               ? cancel_assisted_jump(*m_intersystem_contract)
+                               : begin_assisted_jump(*m_intersystem_contract);
+      if (!changed) m_error = "jump command refused in the current state";
+      return;
+    }
     if (m_signal_run && m_signal_run->flight) {
       if (key.key == Key::Enter && key.action == KeyAction::Press &&
           m_signal_run->onboarding.first_objective ==
@@ -1305,6 +1348,28 @@ class LandscapeApp final : public App {
       throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
     for (int step = 0; step < advance->steps; ++step) {
+      if (m_intersystem_contract) {
+        const auto phase = m_intersystem_contract->travel_phase;
+        const bool jumping =
+            phase == IntersystemTravelPhase::outbound_jump_spooling ||
+            phase == IntersystemTravelPhase::outbound_jump_committed ||
+            phase == IntersystemTravelPhase::return_jump_spooling ||
+            phase == IntersystemTravelPhase::return_jump_committed;
+        if (jumping) {
+          const bool outbound =
+              phase == IntersystemTravelPhase::outbound_jump_spooling ||
+              phase == IntersystemTravelPhase::outbound_jump_committed;
+          const auto advanced = advance_assisted_jump_tick(
+              *m_intersystem_contract,
+              outbound ? m_local_system : m_origin_system);
+          if (!advanced) {
+            throw std::runtime_error{"Assisted jump simulation failed"};
+          }
+        } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
+          throw std::runtime_error{"universe clock failed"};
+        }
+        continue;
+      }
       if (m_signal_run && m_signal_run->flight) {
         if (!m_signal_run_cache) {
           throw std::runtime_error{"Signal Run cache is unavailable"};
@@ -1370,6 +1435,61 @@ class LandscapeApp final : public App {
 
   auto render_viewport() -> void {
     m_system_render.reset();
+    if (m_intersystem_contract) {
+      if (const auto jump =
+              intersystem_jump_snapshot(*m_intersystem_contract)) {
+        if (!render_intersystem_jump(
+                *jump, m_render_configuration.viewport.width,
+                m_render_configuration.viewport.height, m_surface.pixels())) {
+          throw std::runtime_error{"jump presentation rejected frame"};
+        }
+        return;
+      }
+      const bool at_target =
+          m_intersystem_contract->current_system ==
+          m_intersystem_contract->identities.target_system;
+      const auto& system = at_target ? m_local_system : m_origin_system;
+      SystemPositionMetres camera_position{0.0, -92'000'000'000.0,
+                                            26'000'000'000.0};
+      SystemVelocityMetresPerSecond camera_velocity{};
+      if (m_intersystem_contract->arrival_solution &&
+          m_intersystem_contract->arrival_solution->destination == system.id) {
+        camera_position =
+            m_intersystem_contract->arrival_solution->position;
+        camera_velocity =
+            m_intersystem_contract->arrival_solution->velocity;
+      }
+      const PlanetId selected =
+          at_target ? m_intersystem_contract->identities.target_planet
+                    : system.planets.front().descriptor.id;
+      const auto selected_ephemeris = resolve_planet_ephemeris(
+          system, selected,
+          {.tick = m_intersystem_contract->universe_tick,
+           .sub_tick_fraction = 0.0});
+      if (!selected_ephemeris) {
+        throw std::runtime_error{"cannot resolve intersystem target"};
+      }
+      const LocalSystemView view{
+          .time = {m_intersystem_contract->universe_tick, 0.0},
+          .position = camera_position,
+          .velocity = camera_velocity,
+          .forward = {selected_ephemeris->position.x - camera_position.x,
+                      selected_ephemeris->position.y - camera_position.y,
+                      selected_ephemeris->position.z - camera_position.z},
+          .up = {0.0, 0.0, 1.0},
+          .selected_planet = selected,
+      };
+      if (!m_system_renderer) {
+        throw std::runtime_error{"intersystem presentation is unavailable"};
+      }
+      const auto rendered =
+          m_system_renderer->render(system, view, m_surface.pixels());
+      if (!rendered) {
+        throw std::runtime_error{"intersystem presentation rejected frame"};
+      }
+      m_system_render = *rendered;
+      return;
+    }
     if (m_signal_run && m_signal_run->flight) {
       if (!m_planetary_renderer) {
         throw std::runtime_error{"Signal Run presentation is unavailable"};
@@ -1537,6 +1657,7 @@ class LandscapeApp final : public App {
   RenderConfiguration m_render_configuration;
   Terrain m_terrain;
   PlanetDescriptor m_planet;
+  LocalSystemDescriptor m_origin_system;
   LocalSystemDescriptor m_local_system;
   VoxelRenderer m_renderer;
   OrbitalRenderer m_orbital_renderer;
@@ -1762,6 +1883,8 @@ auto usage() -> void {
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --system-navigation-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "       apsis-drift --intersystem-jump-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -1789,6 +1912,7 @@ auto main(int argc, char** argv) -> int {
   bool signal_navigation_acceptance{};
   bool signal_run_acceptance{};
   bool system_navigation_acceptance{};
+  bool intersystem_jump_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -1868,6 +1992,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--system-navigation-acceptance") {
       system_navigation_acceptance = true;
+      continue;
+    }
+    if (argument == "--intersystem-jump-acceptance") {
+      intersystem_jump_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -2007,6 +2135,31 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (intersystem_jump_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || profile_options || seed_specified ||
+       workload_specified || keyboard_specified)) {
+    std::fprintf(stderr,
+                 "Intersystem jump acceptance is mutually exclusive with "
+                 "other run, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (intersystem_jump_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "Intersystem jump acceptance requires --driver kitty or "
+                 "--driver ansi\n");
+    return 2;
+  }
+  if (intersystem_jump_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Intersystem jump acceptance requires --report PATH\n");
+    return 2;
+  }
   if (benchmark_frames && capture_seconds > 0) {
     std::fprintf(stderr, "benchmark and capture modes are mutually exclusive\n");
     return 2;
@@ -2196,6 +2349,49 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (intersystem_jump_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_intersystem_jump_acceptance(
+          configuration.viewport.width, configuration.viewport.height);
+      if (!acceptance) {
+        std::fprintf(stderr, "Intersystem jump acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << intersystem_jump_acceptance_json(acceptance->report,
+                                                 presentation);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->transit_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "intersystem-jump: presentation=%.*s destination=%llu "
+          "commit=%llu arrival=%llu checksum=%llu\n",
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(acceptance->report.destination.value),
+          static_cast<unsigned long long>(acceptance->report.committed_tick),
+          static_cast<unsigned long long>(acceptance->report.arrival_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.arrival_checksum));
+      return 0;
+    }
     if (system_navigation_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

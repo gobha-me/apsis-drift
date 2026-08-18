@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+#include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/simulation.hpp"
@@ -63,6 +64,20 @@ struct FirstIntersystemIdentities {
                          const FirstIntersystemIdentities&) -> bool = default;
 };
 
+// An Assisted jump binds this immutable system-space handoff before its
+// presentation begins. It is deliberately not the mutable sub-light craft
+// state owned by the later system-flight implementation.
+struct IntersystemArrivalSolution {
+  SystemId destination;
+  std::optional<PlanetId> reference_planet;
+  SimulationTick arrival_tick{};
+  SystemPositionMetres position;
+  SystemVelocityMetresPerSecond velocity;
+
+  friend auto operator==(const IntersystemArrivalSolution&,
+                         const IntersystemArrivalSolution&) -> bool = default;
+};
+
 [[nodiscard]] auto generate_first_intersystem_identities(
     Seed universe_seed) noexcept -> FirstIntersystemIdentities;
 
@@ -100,6 +115,7 @@ struct IntersystemContractState {
   std::optional<PlanetId> current_planet;
   std::optional<SystemId> committed_jump_destination;
   std::optional<SimulationTick> phase_started_tick;
+  std::optional<IntersystemArrivalSolution> arrival_solution;
 
   friend auto operator==(const IntersystemContractState&,
                          const IntersystemContractState&) -> bool = default;

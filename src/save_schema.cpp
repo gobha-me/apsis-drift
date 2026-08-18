@@ -14,6 +14,7 @@
 #include "apsis_drift/celestial.hpp"
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/local_system.hpp"
+#include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
@@ -550,6 +551,28 @@ template <typename Id>
   if (state.phase_started_tick) {
     phase_started_tick = decimal(*state.phase_started_tick);
   }
+  Json arrival_solution = nullptr;
+  if (state.arrival_solution) {
+    const auto& arrival = *state.arrival_solution;
+    Json reference_planet = nullptr;
+    if (arrival.reference_planet) {
+      reference_planet = encoded_id("planet-", *arrival.reference_planet);
+    }
+    arrival_solution = Json{
+        {"destination_system_id",
+         encoded_id("system-", arrival.destination)},
+        {"reference_planet_id", std::move(reference_planet)},
+        {"arrival_tick", decimal(arrival.arrival_tick)},
+        {"position_metres",
+         Json{{"x", decimal(arrival.position.x)},
+              {"y", decimal(arrival.position.y)},
+              {"z", decimal(arrival.position.z)}}},
+        {"velocity_metres_per_second",
+         Json{{"x", decimal(arrival.velocity.x)},
+              {"y", decimal(arrival.velocity.y)},
+              {"z", decimal(arrival.velocity.z)}}},
+    };
+  }
   return Json{
       {"identities",
        Json{{"origin_system_id", encoded_id("system-", ids.origin_system)},
@@ -568,11 +591,13 @@ template <typename Id>
       {"current_planet_id", std::move(current_planet)},
       {"committed_jump_destination_id", std::move(committed_destination)},
       {"phase_started_tick", std::move(phase_started_tick)},
+      {"arrival_solution", std::move(arrival_solution)},
   };
 }
 
 [[nodiscard]] auto decode_intersystem_contract(const Json& json,
-                                               Seed universe_seed)
+                                               Seed universe_seed,
+                                               std::uint32_t format_version)
     -> std::expected<IntersystemContractState, SaveSchemaError> {
   constexpr std::string_view path{"$.state.intersystem_contract"};
   if (!json.is_object()) {
@@ -601,6 +626,73 @@ template <typename Id>
   if (!current_planet) return std::unexpected{current_planet.error()};
   if (!destination) return std::unexpected{destination.error()};
   if (!phase_tick) return std::unexpected{phase_tick.error()};
+
+  std::optional<IntersystemArrivalSolution> arrival_solution;
+  if (format_version >= 4U) {
+    auto arrival_field = require_field(json, "arrival_solution",
+                                       std::string{path});
+    if (!arrival_field) return std::unexpected{arrival_field.error()};
+    if (!(**arrival_field).is_null()) {
+      if (!(**arrival_field).is_object()) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_type,
+            "$.state.intersystem_contract.arrival_solution",
+            "expected an object or null")};
+      }
+      const auto& arrival = **arrival_field;
+      constexpr std::string_view arrival_path{
+          "$.state.intersystem_contract.arrival_solution"};
+      auto arrival_destination = read_id<SystemId>(
+          arrival, "destination_system_id", std::string{arrival_path},
+          "system-");
+      auto reference_planet = read_optional_id<PlanetId>(
+          arrival, "reference_planet_id", std::string{arrival_path},
+          "planet-");
+      auto arrival_tick =
+          read_u64(arrival, "arrival_tick", std::string{arrival_path});
+      auto position = read_object(arrival, "position_metres",
+                                  std::string{arrival_path});
+      auto velocity = read_object(arrival, "velocity_metres_per_second",
+                                  std::string{arrival_path});
+      if (!arrival_destination) {
+        return std::unexpected{arrival_destination.error()};
+      }
+      if (!reference_planet) {
+        return std::unexpected{reference_planet.error()};
+      }
+      if (!arrival_tick) return std::unexpected{arrival_tick.error()};
+      if (!position) return std::unexpected{position.error()};
+      if (!velocity) return std::unexpected{velocity.error()};
+      auto px = read_double(**position, "x",
+                            std::format("{}.position_metres", arrival_path));
+      auto py = read_double(**position, "y",
+                            std::format("{}.position_metres", arrival_path));
+      auto pz = read_double(**position, "z",
+                            std::format("{}.position_metres", arrival_path));
+      auto vx = read_double(
+          **velocity, "x",
+          std::format("{}.velocity_metres_per_second", arrival_path));
+      auto vy = read_double(
+          **velocity, "y",
+          std::format("{}.velocity_metres_per_second", arrival_path));
+      auto vz = read_double(
+          **velocity, "z",
+          std::format("{}.velocity_metres_per_second", arrival_path));
+      if (!px) return std::unexpected{px.error()};
+      if (!py) return std::unexpected{py.error()};
+      if (!pz) return std::unexpected{pz.error()};
+      if (!vx) return std::unexpected{vx.error()};
+      if (!vy) return std::unexpected{vy.error()};
+      if (!vz) return std::unexpected{vz.error()};
+      arrival_solution = IntersystemArrivalSolution{
+          .destination = *arrival_destination,
+          .reference_planet = *reference_planet,
+          .arrival_tick = *arrival_tick,
+          .position = {*px, *py, *pz},
+          .velocity = {*vx, *vy, *vz},
+      };
+    }
+  }
 
   const auto expected = generate_first_intersystem_identities(universe_seed);
   auto origin_system = read_id<SystemId>(**identities, "origin_system_id",
@@ -652,6 +744,7 @@ template <typename Id>
       .current_planet = *current_planet,
       .committed_jump_destination = *destination,
       .phase_started_tick = *phase_tick,
+      .arrival_solution = std::move(arrival_solution),
   };
   if (!validate_intersystem_contract_state(state)) {
     return std::unexpected{failure(
@@ -811,6 +904,7 @@ auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
       .local_system = kLocalSystemGeneratorVersion,
       .analytic_ephemeris = kAnalyticEphemerisVersion,
       .intersystem_contract = kIntersystemContractVersion,
+      .intersystem_jump = kIntersystemJumpVersion,
   };
 }
 
@@ -864,6 +958,14 @@ auto validate_save_document(const SaveDocument& document)
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
           "intersystem contract does not match the save recipe or state machine")};
+    }
+    if (contract.arrival_solution &&
+        !validate_intersystem_arrival_solution(
+            contract, *contract.arrival_solution)) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state,
+          "$.state.intersystem_contract.arrival_solution",
+          "Assisted arrival solution does not match the contract")};
     }
     if (document.state.flight || !document.state.discoveries.empty() ||
         !document.state.world_deltas.empty()) {
@@ -997,7 +1099,8 @@ auto encode_save_document_json(const SaveDocument& document)
                   {"local_system", versions.local_system},
                   {"analytic_ephemeris", versions.analytic_ephemeris},
                   {"intersystem_contract",
-                   versions.intersystem_contract}}},
+                   versions.intersystem_contract},
+                  {"intersystem_jump", versions.intersystem_jump}}},
             {"origin_station_id",
              encoded_id("station-", document.recipe.origin_station)},
             {"active_planet_id",
@@ -1069,6 +1172,7 @@ auto decode_save_document_json(std::string_view json_text)
                                    "save belongs to another application")};
   }
   if (*format_version != 1U && *format_version != 2U &&
+      *format_version != 3U &&
       *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -1115,6 +1219,8 @@ auto decode_save_document_json(std::string_view json_text)
       kAnalyticEphemerisVersion};
   std::expected<std::uint32_t, SaveSchemaError> contract_version{
       kIntersystemContractVersion};
+  std::expected<std::uint32_t, SaveSchemaError> jump_version{
+      kIntersystemJumpVersion};
   if (*format_version >= 2U) {
     sun_version = read_u32(**versions_json, "local_sun",
                            "$.recipe.generator_versions");
@@ -1127,6 +1233,10 @@ auto decode_save_document_json(std::string_view json_text)
     contract_version = read_u32(**versions_json, "intersystem_contract",
                                 "$.recipe.generator_versions");
   }
+  if (*format_version >= 4U) {
+    jump_version = read_u32(**versions_json, "intersystem_jump",
+                            "$.recipe.generator_versions");
+  }
   if (!seed_version) return std::unexpected{seed_version.error()};
   if (!planet_version) return std::unexpected{planet_version.error()};
   if (!terrain_version) return std::unexpected{terrain_version.error()};
@@ -1136,6 +1246,7 @@ auto decode_save_document_json(std::string_view json_text)
   if (!system_version) return std::unexpected{system_version.error()};
   if (!ephemeris_version) return std::unexpected{ephemeris_version.error()};
   if (!contract_version) return std::unexpected{contract_version.error()};
+  if (!jump_version) return std::unexpected{jump_version.error()};
   const SaveGeneratorVersions versions{
       .seed_derivation = *seed_version,
       .planet_descriptor = *planet_version,
@@ -1146,6 +1257,7 @@ auto decode_save_document_json(std::string_view json_text)
       .local_system = *system_version,
       .analytic_ephemeris = *ephemeris_version,
       .intersystem_contract = *contract_version,
+      .intersystem_jump = *jump_version,
   };
   if (versions != current_save_generator_versions()) {
     return std::unexpected{
@@ -1182,7 +1294,8 @@ auto decode_save_document_json(std::string_view json_text)
         read_object(**state_json, "intersystem_contract", "$.state");
     if (!contract_json) return std::unexpected{contract_json.error()};
     auto decoded =
-        decode_intersystem_contract(**contract_json, Seed{*universe_seed});
+        decode_intersystem_contract(**contract_json, Seed{*universe_seed},
+                                    *format_version);
     if (!decoded) return std::unexpected{decoded.error()};
     contract = std::move(*decoded);
   } else {

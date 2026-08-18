@@ -71,8 +71,8 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 3; version 1 and 2 profiles load as legacy local Signal Runs and
-migrate to version 3 without being teleported or retargeted.
+version 4; versions 1 and 2 load as legacy local Signal Runs, while released
+version 3 intersystem profiles retain their mission and travel state.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -119,6 +119,9 @@ Interactive controls:
 - Signal navigation mode: Tab/Shift-Tab selects the next/previous target
 - Signal Run: accept the station briefing, launch, collect the bound target,
   ascend and follow the Origin Station cue, then press Enter at rendezvous
+- First intersystem contract: accept and launch at the mission board, then
+  press J to begin or cancel the three-second FTL spool; committed transit
+  arrives automatically after two seconds
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
@@ -169,9 +172,14 @@ projection, overlap, handoff, and measurement rules are documented in
 The v0.4.7 Origin Station mission board binds one deterministic mission,
 target system, planet, and existing surface-signal objective. Its semantic
 briefing and acceptance state are shared by Kitty and ANSI, persist in save
-format 3, and authorize the later launch route without implementing FTL or
-sub-light flight early. The exact boundary is documented in
+format 4, and now launch into the v0.4.8 deterministic Assisted FTL transit.
+Sub-light flight remains separate. The exact boundaries are documented in
 [docs/MISSION_BOARD.md](docs/MISSION_BOARD.md).
+
+The v0.4.8 jump binds its destination, arrival tick, position, and velocity at
+commitment, then presents the same bounded five-second sequence through Kitty,
+ANSI, or headless execution. See
+[docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -354,6 +362,8 @@ moving multi-planet catalog; `landscape` remains the default. Workload
 selection is available only in benchmark and sweep modes. Run the complete
 fixed-seed cockpit matrix with
 `--system-navigation-acceptance --driver kitty|ansi --report PATH`.
+The deterministic Assisted-jump matrix is available through
+`--intersystem-jump-acceptance --driver kitty|ansi --report PATH`.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:
 

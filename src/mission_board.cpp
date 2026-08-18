@@ -58,7 +58,8 @@ auto mission_board_snapshot(const IntersystemContractState& state)
     snapshot.primary_action = "ACCEPT CONTRACT";
     snapshot.primary_action_enabled = true;
   } else if (state.mission_phase == IntersystemMissionPhase::accepted) {
-    snapshot.primary_action = "MISSION ACCEPTED";
+    snapshot.primary_action = "LAUNCH";
+    snapshot.primary_action_enabled = true;
   } else if (state.mission_phase == IntersystemMissionPhase::returned) {
     snapshot.primary_action = "TURN IN CONTRACT";
     snapshot.primary_action_enabled = true;
