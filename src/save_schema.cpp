@@ -19,6 +19,7 @@
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/system_flight.hpp"
+#include "apsis_drift/world_delta_journal.hpp"
 
 namespace apsis_drift {
 namespace {
@@ -1142,11 +1143,32 @@ auto validate_save_document(const SaveDocument& document)
           SaveSchemaErrorCode::invalid_state, "$.state",
           "the current travel phase cannot contain an active craft state")};
     }
-    if (!document.state.discoveries.empty() ||
-        !document.state.world_deltas.empty()) {
+    for (const auto& discovery : document.state.discoveries) {
+      if (discovery.signal != contract.identities.target_objective ||
+          discovery.tick > contract.universe_tick) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
+            "intersystem discoveries must name the bound target at a valid tick")};
+      }
+    }
+    const bool objective_complete =
+        contract.mission_phase ==
+            IntersystemMissionPhase::objective_complete ||
+        contract.mission_phase == IntersystemMissionPhase::returned ||
+        contract.mission_phase == IntersystemMissionPhase::turned_in;
+    const auto target_key =
+        surface_signal_object_key(contract.identities.target_objective);
+    const bool valid_completed_delta =
+        document.state.world_deltas.size() == 1U &&
+        document.state.world_deltas.front().object_key == target_key &&
+        document.state.world_deltas.front().kind ==
+            SaveWorldDeltaKind::collected &&
+        document.state.world_deltas.front().tick <= contract.universe_tick;
+    if ((objective_complete && !valid_completed_delta) ||
+        (!objective_complete && !document.state.world_deltas.empty())) {
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state, "$.state",
-          "the first intersystem approach cannot yet contain Signal Run deltas")};
+          "intersystem objective state and its collected delta disagree")};
     }
   } else {
     if (document.state.system_flight) {
@@ -1360,6 +1382,7 @@ auto decode_save_document_json(std::string_view json_text)
   }
   if (*format_version != 1U && *format_version != 2U &&
       *format_version != 3U && *format_version != 4U &&
+      *format_version != 5U &&
       *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -1595,6 +1618,18 @@ auto decode_save_document_json(std::string_view json_text)
     if (!kind) return std::unexpected{kind.error()};
     if (!tick) return std::unexpected{tick.error()};
     deltas.push_back(SaveWorldDelta{std::move(*object_key), *kind, *tick});
+  }
+  // Formats 3-5 could record objective_complete in the contract before the
+  // intersystem surface journal was admitted. Materialize the already-earned
+  // terminal projection during migration; this does not advance mission state.
+  if (*format_version <= 5U && contract && deltas.empty() &&
+      (contract->mission_phase ==
+           IntersystemMissionPhase::objective_complete ||
+       contract->mission_phase == IntersystemMissionPhase::returned ||
+       contract->mission_phase == IntersystemMissionPhase::turned_in)) {
+    deltas.push_back(
+        {surface_signal_object_key(contract->identities.target_objective),
+         SaveWorldDeltaKind::collected, contract->universe_tick});
   }
 
   SaveDocument document{

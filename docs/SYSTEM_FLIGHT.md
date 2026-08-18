@@ -44,7 +44,8 @@ velocity, and heading; it never moves the craft above the mission objective.
 
 ## Persistence and verification
 
-Save format 5 records finite binary64 values as canonical decimal strings and
+The system-flight projection introduced by save format 5 records finite
+binary64 values as canonical decimal strings and
 requires exactly one matching system-flight state during target-system flight.
 A released format-4 save already at the target initializes this state from its
 immutable arrival solution. Formats 1–3 retain their existing migrations.

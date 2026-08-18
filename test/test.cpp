@@ -25,6 +25,8 @@
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
+#include "apsis_drift/intersystem_planetfall.hpp"
+#include "apsis_drift/intersystem_planetfall_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
@@ -619,7 +621,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v5 round trip");
+        "a committed arrival solution must survive a canonical v6 round trip");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -944,10 +946,10 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v5 save/resume exactly");
+        "system flight must survive canonical v6 save/resume exactly");
   if (encoded && contract.arrival_solution) {
     const auto released_v4 = replace_once(
-        *encoded, "\"format_version\": 5", "\"format_version\": 4");
+        *encoded, "\"format_version\": 6", "\"format_version\": 4");
     const auto migrated = decode_save_document_json(released_v4);
     const auto expected_migration = initial_system_flight_state(
         system, contract.identities.target_planet,
@@ -956,6 +958,114 @@ auto system_flight_contract() -> void {
               migrated->state.system_flight == *expected_migration,
           "released format-4 target arrivals must migrate from the immutable handoff");
   }
+}
+
+auto intersystem_planetfall_contract() -> void {
+  const auto identities = generate_first_intersystem_identities(Seed{42});
+  const auto system = generate_local_system(identities.target_system_seed);
+  const auto body =
+      find_local_system_planet(system, identities.target_planet);
+  auto cache = TerrainTileCache::create();
+  check(body && cache,
+        "the intersystem Planetfall fixture must resolve its target terrain");
+  if (!body || !cache) return;
+  const auto catalog = generate_surface_signals((*body)->descriptor, *cache);
+  check(catalog && catalog->signals.front().id ==
+                       identities.target_objective,
+        "the mission objective must be the target planet's stable first signal");
+  if (!catalog) return;
+  const auto target_fixed = planet_fixed_from_terrain_address(
+      (*body)->descriptor, catalog->signals.front().anchor,
+      static_cast<double>(catalog->signals.front().approach_altitude_metres));
+  const auto target =
+      target_fixed
+          ? geodetic_from_planet_fixed((*body)->descriptor, *target_fixed)
+          : std::expected<GeodeticPosition, CoordinateError>{
+                std::unexpected{CoordinateError::non_finite_input}};
+  if (!target) {
+    check(false, "the mission target must resolve to a geodetic position");
+    return;
+  }
+  auto flight = initial_planetary_flight_state(
+      (*body)->descriptor, *target,
+      {static_cast<double>(catalog->signals.front().surface_elevation_metres)},
+      0.0, FlightMode::manual);
+  if (!flight) {
+    check(false, "the target approach must initialize planetary flight");
+    return;
+  }
+  flight->tick = 600;
+  auto planetfall = initialize_intersystem_planetfall(
+      (*body)->descriptor, identities.target_objective, *flight, {}, *cache);
+  check(planetfall && planetfall->scanner.selected ==
+                           identities.target_objective &&
+            planetfall->navigation.status == SignalScannerStatus::reached,
+        "Planetfall must bind the mission target without retargeting it");
+  if (!planetfall) return;
+
+  bool completed{};
+  for (SimulationTick tick = 0;
+       tick < kSignalCollectionTotalInRangeTicks; ++tick) {
+    const auto update = advance_intersystem_planetfall(*planetfall, *cache, {});
+    if (!update) {
+      check(false, "Planetfall must advance transactionally");
+      return;
+    }
+    completed = completed || update->objective_completed;
+  }
+  check(completed &&
+            planetfall->collection.status == SignalCollectionStatus::complete &&
+            planetfall->journal.entries().size() == 1U &&
+            planetfall->journal.entries().front().object_key ==
+                surface_signal_object_key(identities.target_objective),
+        "collection dwell must emit one bound target delta");
+
+  auto restored_cache = TerrainTileCache::create();
+  const auto restored =
+      restored_cache
+          ? initialize_intersystem_planetfall(
+                (*body)->descriptor, identities.target_objective,
+                planetfall->flight, planetfall->journal.entries(),
+                *restored_cache)
+          : std::expected<IntersystemPlanetfallState,
+                          IntersystemPlanetfallError>{
+                std::unexpected{IntersystemPlanetfallError::terrain_failure}};
+  check(restored && restored->flight == planetfall->flight &&
+            restored->navigation == planetfall->navigation &&
+            restored->collection.status == SignalCollectionStatus::complete,
+        "Planetfall must hydrate flight, navigation, and completion exactly");
+
+  auto invalid = flight.value();
+  invalid.pose.position.latitude_radians =
+      std::numeric_limits<double>::quiet_NaN();
+  check(initialize_intersystem_planetfall(
+            (*body)->descriptor, identities.target_objective, invalid, {},
+            *cache) ==
+            std::unexpected{IntersystemPlanetfallError::invalid_planet},
+        "non-finite Planetfall state must reject before mutation");
+  const std::array invalid_delta{
+      SaveWorldDelta{surface_signal_object_key(identities.target_objective),
+                     SaveWorldDeltaKind::discovered, flight->tick}};
+  check(initialize_intersystem_planetfall(
+            (*body)->descriptor, identities.target_objective, *flight,
+            invalid_delta, *cache) ==
+            std::unexpected{IntersystemPlanetfallError::journal_failure},
+        "Planetfall must reject non-terminal mission deltas");
+}
+
+auto intersystem_planetfall_acceptance_contract() -> void {
+  check(!run_intersystem_planetfall_acceptance(0, 64) &&
+            !run_intersystem_planetfall_acceptance(
+                std::numeric_limits<int>::max(), 1),
+        "intersystem Planetfall acceptance must reject invalid dimensions");
+  const auto result = run_intersystem_planetfall_acceptance(96, 64);
+  const auto identities = generate_first_intersystem_identities(Seed{42});
+  check(result && result->report.planet == identities.target_planet &&
+            result->report.target == identities.target_objective &&
+            result->report.world_delta_count == 1U &&
+            result->report.completion_tick == 1020 &&
+            result->final_frame.size() == 96U * 64U,
+        "canonical Planetfall acceptance must enter anywhere, abort, collect, save, and render");
 }
 
 auto mission_board_contract() -> void {
@@ -997,7 +1107,7 @@ auto mission_board_contract() -> void {
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
   if (fresh_json) {
-    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 5",
+    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 6",
                                     "\"format_version\": 3");
     released_v3 = replace_once(std::move(released_v3),
                                "\"arrival_solution\": null",
@@ -1011,15 +1121,25 @@ auto mission_board_contract() -> void {
     check(migrated_v3 &&
               migrated_v3->state.intersystem_contract ==
                   document.state.intersystem_contract &&
-              rewritten_v3 && rewritten_v3->find("\"format_version\": 5") !=
+              rewritten_v3 && rewritten_v3->find("\"format_version\": 6") !=
                                     std::string::npos,
-          "released v3 intersystem profiles must preserve state and rewrite as v5");
+          "released v3 intersystem profiles must preserve state and rewrite as v6");
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
     document.state.intersystem_contract = checkpoint;
     document.state.system_flight.reset();
     document.state.flight.reset();
+    document.state.world_deltas.clear();
+    if (checkpoint.mission_phase ==
+            IntersystemMissionPhase::objective_complete ||
+        checkpoint.mission_phase == IntersystemMissionPhase::returned ||
+        checkpoint.mission_phase == IntersystemMissionPhase::turned_in) {
+      document.state.world_deltas.push_back(
+          {surface_signal_object_key(
+               checkpoint.identities.target_objective),
+           SaveWorldDeltaKind::collected, checkpoint.universe_tick});
+    }
     const auto system =
         generate_local_system(checkpoint.identities.target_system_seed);
     const auto body = find_local_system_planet(
@@ -1094,6 +1214,30 @@ auto mission_board_contract() -> void {
         "the persistence fixture must reach objective completion legally");
   round_trip(state,
              "objective-complete intersystem state must survive a v3 round trip");
+  const auto completed_v6 = encode_save_document_json(document);
+  if (completed_v6) {
+    auto released_v5 = replace_once(*completed_v6, "\"format_version\": 6",
+                                    "\"format_version\": 5");
+    const auto deltas_start = released_v5.find("    \"world_deltas\": [");
+    const auto deltas_end =
+        deltas_start == std::string::npos
+            ? std::string::npos
+            : released_v5.find("    ]", deltas_start);
+    if (deltas_start != std::string::npos &&
+        deltas_end != std::string::npos) {
+      released_v5.replace(deltas_start, deltas_end + 5U - deltas_start,
+                          "    \"world_deltas\": []");
+    }
+    const auto migrated_v5 = decode_save_document_json(released_v5);
+    check(migrated_v5 &&
+              migrated_v5->state.world_deltas ==
+                  document.state.world_deltas,
+          "released v5 completion must materialize its earned target delta");
+  }
+  auto inconsistent_completion = document;
+  inconsistent_completion.state.world_deltas.clear();
+  check(!encode_save_document_json(inconsistent_completion),
+        "format v6 completion must require its bound collected delta");
   check(command(IntersystemContractCommand::leave_target_planet).has_value() &&
             command(IntersystemContractCommand::begin_return_jump)
                 .has_value() &&
@@ -1700,9 +1844,9 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 5 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 6 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 5 identity and byte bound must remain stable");
+        "save format version 6 identity and byte bound must remain stable");
   const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
   const auto fixture = read_test_data("test/data/save-v2-golden.json");
   check(!legacy_fixture.empty() && !fixture.empty(),
@@ -1750,11 +1894,11 @@ auto save_schema_contract() -> void {
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 5") !=
+  check(encoded && encoded->find("\"format_version\": 6") !=
                        std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must migrate legacy state into canonical version 5");
+        "the current encoder must migrate legacy state into canonical version 6");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
@@ -1763,7 +1907,7 @@ auto save_schema_contract() -> void {
   const auto migrated = decode_save_document_json(legacy_fixture);
   check(migrated && *migrated == expected &&
             encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 5");
+        "a version 1 save must migrate in memory and rewrite canonically as version 6");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -1794,13 +1938,13 @@ auto save_schema_contract() -> void {
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 6"),
+                   "\"format_version\": 7"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":6}",
+      "{\"application\":\"apsis-drift\",\"format_version\":7}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 5 fields are read");
+        "future formats must be identified before version 6 fields are read");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
@@ -7256,6 +7400,8 @@ auto main() -> int {
   intersystem_jump_contract();
   intersystem_jump_acceptance_contract();
   system_flight_contract();
+  intersystem_planetfall_contract();
+  intersystem_planetfall_acceptance_contract();
   mission_board_contract();
   local_system_contract();
   local_system_rendering_contract();

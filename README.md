@@ -71,8 +71,9 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 5; versions 1 and 2 load as legacy local Signal Runs, while released
-versions 3 and 4 retain their mission, jump, and target-arrival state.
+version 6; versions 1 and 2 load as legacy local Signal Runs, while released
+versions 3 through 5 retain their mission, jump, arrival, and system-flight
+state.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -176,7 +177,7 @@ projection, overlap, handoff, and measurement rules are documented in
 The v0.4.7 Origin Station mission board binds one deterministic mission,
 target system, planet, and existing surface-signal objective. Its semantic
 briefing and acceptance state are shared by Kitty and ANSI, persist in save
-format 5, and launch into the deterministic Assisted FTL transit and sub-light
+format 6, and launch into the deterministic Assisted FTL transit and sub-light
 target approach. The exact mission-board boundaries are documented in
 [docs/MISSION_BOARD.md](docs/MISSION_BOARD.md).
 
@@ -197,6 +198,13 @@ detail while distant samples use screen-bounded steps and coarser LODs. Any
 spherical surface not yet covered by the local pass remains visible, preventing
 sky-only frames through the 2,500-to-2,000 metre blend. See
 [docs/PLANETARY_PRESENTATION.md](docs/PLANETARY_PRESENTATION.md).
+
+The v0.4.11 target Planetfall path keeps orbit insertion on the actual arrival
+side, permits descent from any longitude, and treats the mission marker as
+guidance rather than an entry gate. Real terrain sampling, scanner navigation,
+collection dwell, the immutable mission target, and the sparse collected delta
+advance transactionally and resume from save format 6. See
+[docs/INTERSYSTEM_PLANETFALL.md](docs/INTERSYSTEM_PLANETFALL.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
