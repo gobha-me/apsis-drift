@@ -17,7 +17,7 @@ namespace apsis_drift {
 // This high-level contract is generated-world and save compatibility data.
 // It deliberately proves only identities, authoritative phases, and legal
 // transitions; later systems own ephemerides, flight, and presentation.
-inline constexpr std::uint32_t kIntersystemContractVersion{2};
+inline constexpr std::uint32_t kIntersystemContractVersion{3};
 inline constexpr std::uint64_t kFirstTargetSystemOrdinal{1};
 inline constexpr std::uint64_t kSystemStarOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionOrdinal{0};
@@ -65,15 +65,47 @@ struct FirstIntersystemIdentities {
                          const FirstIntersystemIdentities&) -> bool = default;
 };
 
-// An Assisted jump binds this immutable system-space handoff before its
-// presentation begins. It is deliberately not the mutable sub-light craft
-// state owned by the later system-flight implementation.
+enum class IntersystemArrivalQuality : std::uint8_t {
+  aligned,
+  offset,
+  opposed,
+};
+
+[[nodiscard]] auto intersystem_arrival_quality_name(
+    IntersystemArrivalQuality quality) noexcept -> std::string_view;
+
+// Pilot alignment uses fixed-point authoritative values so grading is exact
+// across compilers. Positive heading error is corrected with left/A; positive
+// velocity error is corrected with backward/S.
+struct IntersystemJumpAlignmentState {
+  std::int32_t heading_error_millidegrees{};
+  std::int32_t velocity_error_basis_points{};
+  FlightControls controls;
+
+  friend auto operator==(const IntersystemJumpAlignmentState&,
+                         const IntersystemJumpAlignmentState&) -> bool = default;
+};
+
+struct IntersystemArrivalAssessment {
+  std::int32_t heading_error_millidegrees{};
+  std::int32_t velocity_error_basis_points{};
+  IntersystemArrivalQuality quality{IntersystemArrivalQuality::aligned};
+
+  friend auto operator==(const IntersystemArrivalAssessment&,
+                         const IntersystemArrivalAssessment&) -> bool = default;
+};
+
+// A jump binds this immutable system-space handoff before its presentation
+// begins. It is deliberately not the mutable sub-light craft state owned by
+// system flight. Outbound solutions carry their immutable alignment grade;
+// return solutions do not reference a planet and carry no assessment.
 struct IntersystemArrivalSolution {
   SystemId destination;
   std::optional<PlanetId> reference_planet;
   SimulationTick arrival_tick{};
   SystemPositionMetres position;
   SystemVelocityMetresPerSecond velocity;
+  std::optional<IntersystemArrivalAssessment> assessment;
 
   friend auto operator==(const IntersystemArrivalSolution&,
                          const IntersystemArrivalSolution&) -> bool = default;
@@ -125,6 +157,7 @@ struct IntersystemContractState {
   std::optional<PlanetId> current_planet;
   std::optional<SystemId> committed_jump_destination;
   std::optional<SimulationTick> phase_started_tick;
+  std::optional<IntersystemJumpAlignmentState> jump_alignment;
   std::optional<IntersystemArrivalSolution> arrival_solution;
 
   friend auto operator==(const IntersystemContractState&,

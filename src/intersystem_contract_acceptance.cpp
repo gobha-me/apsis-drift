@@ -193,7 +193,7 @@ struct Replay {
       !advance_intersystem_contract(initial_contract,
                                     initial_contract.universe_tick,
                                     IntersystemContractCommand::launch) ||
-      !begin_assisted_jump(initial_contract)) {
+      !begin_intersystem_jump(initial_contract)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
@@ -202,7 +202,7 @@ struct Replay {
   const auto origin_system =
       generate_local_system(initial_contract.identities.origin_system_seed);
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
-    if (!advance_assisted_jump_tick(*document.state.intersystem_contract,
+    if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
                                     target_system)) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
@@ -216,7 +216,7 @@ struct Replay {
         IntersystemContractAcceptanceError::persistence_failure};
   }
   for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
-    if (!advance_assisted_jump_tick(*document.state.intersystem_contract,
+    if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
                                     target_system)) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
@@ -416,13 +416,13 @@ struct Replay {
   }
   document.state.flight.reset();
   document.state.system_flight = *departing;
-  if (!begin_assisted_jump(*document.state.intersystem_contract)) {
+  if (!begin_intersystem_jump(*document.state.intersystem_contract)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
        ++tick) {
-    const auto advanced = advance_assisted_jump_tick(
+    const auto advanced = advance_intersystem_jump_tick(
         *document.state.intersystem_contract, origin_system);
     if (!advanced) {
       return std::unexpected{

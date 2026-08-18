@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "scenario": "v0.4.15-pilot-ftl-alignment",
+  "presentation": "ansi",
+  "destination_system_id": "system-28630482e6b15573",
+  "reference_planet_id": "planet-a1dc72d8fd111fbb",
+  "committed_tick": "360",
+  "arrival_tick": "600",
+  "arrival_checksum": "14671588990613181972",
+  "assisted_quality": "ALIGNED",
+  "pilot_initial_heading_error_millidegrees": -16160,
+  "pilot_initial_velocity_error_basis_points": -473,
+  "pilot_aligned_checksum": "14671588990613181972",
+  "pilot_offset_checksum": "4112027265386174051",
+  "pilot_opposed_checksum": "4541203662738406157",
+  "pilot_offset_distance_metres": "503720000.000",
+  "pilot_opposed_distance_metres": "14198903999.135",
+  "viewport": {"width": 320, "height": 240},
+  "framebuffer_checksum": "4656956508158175312"
+}

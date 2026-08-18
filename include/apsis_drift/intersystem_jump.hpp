@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -11,9 +12,15 @@
 
 namespace apsis_drift {
 
-inline constexpr std::uint32_t kIntersystemJumpVersion{1};
+inline constexpr std::uint32_t kIntersystemJumpVersion{2};
 inline constexpr double kAssistedTargetArrivalStandoffRadii{10.0};
 inline constexpr double kAssistedOriginArrivalRadiusMetres{80'000'000'000.0};
+inline constexpr std::int32_t kAlignedHeadingErrorMillidegrees{3'000};
+inline constexpr std::int32_t kAlignedVelocityErrorBasisPoints{200};
+inline constexpr std::int32_t kOffsetHeadingErrorMillidegrees{45'000};
+inline constexpr std::int32_t kOffsetVelocityErrorBasisPoints{2'000};
+inline constexpr std::int32_t kHeadingCorrectionMillidegreesPerTick{250};
+inline constexpr std::int32_t kVelocityCorrectionBasisPointsPerTick{10};
 
 enum class IntersystemJumpError : std::uint8_t {
   invalid_contract,
@@ -21,6 +28,8 @@ enum class IntersystemJumpError : std::uint8_t {
   invalid_destination,
   invalid_arrival,
   ephemeris_failure,
+  invalid_command,
+  wrong_command_tick,
   tick_overflow,
   transition_failure,
   invalid_framebuffer,
@@ -31,6 +40,17 @@ struct IntersystemJumpAdvance {
   bool arrived{};
 };
 
+struct IntersystemJumpGuidance {
+  std::int32_t heading_error_millidegrees{};
+  std::int32_t velocity_error_basis_points{};
+  IntersystemArrivalQuality projected_quality{
+      IntersystemArrivalQuality::aligned};
+  std::string correction;
+
+  friend auto operator==(const IntersystemJumpGuidance&,
+                         const IntersystemJumpGuidance&) -> bool = default;
+};
+
 struct IntersystemJumpSnapshot {
   std::string phase;
   std::string destination;
@@ -39,6 +59,9 @@ struct IntersystemJumpSnapshot {
   double progress{};
   bool cancelable{};
   bool committed{};
+  IntersystemRuleProfile rule_profile{IntersystemRuleProfile::assisted};
+  std::optional<IntersystemJumpGuidance> alignment;
+  std::optional<IntersystemArrivalQuality> bound_quality;
 
   friend auto operator==(const IntersystemJumpSnapshot&,
                          const IntersystemJumpSnapshot&) -> bool = default;
@@ -49,25 +72,30 @@ struct IntersystemJumpSnapshot {
     const IntersystemArrivalSolution& solution) noexcept
     -> std::expected<void, IntersystemJumpError>;
 
-[[nodiscard]] auto resolve_assisted_jump_arrival(
+[[nodiscard]] auto resolve_intersystem_jump_arrival(
     const IntersystemContractState& contract,
     const LocalSystemDescriptor& destination)
     -> std::expected<IntersystemArrivalSolution, IntersystemJumpError>;
 
-[[nodiscard]] auto begin_assisted_jump(
+[[nodiscard]] auto begin_intersystem_jump(
     IntersystemContractState& contract) noexcept
     -> std::expected<void, IntersystemJumpError>;
 
-[[nodiscard]] auto cancel_assisted_jump(
+[[nodiscard]] auto cancel_intersystem_jump(
     IntersystemContractState& contract) noexcept
     -> std::expected<void, IntersystemJumpError>;
 
 // Advances exactly one authoritative 120 Hz tick. Threshold transitions and
 // arrival binding commit atomically; a failure leaves the contract unchanged.
-[[nodiscard]] auto advance_assisted_jump_tick(
+[[nodiscard]] auto advance_intersystem_jump_tick(
     IntersystemContractState& contract,
-    const LocalSystemDescriptor& destination)
+    const LocalSystemDescriptor& destination,
+    std::span<const FlightCommand> commands = {})
     -> std::expected<IntersystemJumpAdvance, IntersystemJumpError>;
+
+[[nodiscard]] auto resolve_intersystem_jump_guidance(
+    const IntersystemContractState& contract)
+    -> std::expected<IntersystemJumpGuidance, IntersystemJumpError>;
 
 [[nodiscard]] auto intersystem_jump_snapshot(
     const IntersystemContractState& contract)

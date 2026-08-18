@@ -1,6 +1,6 @@
-# Deterministic Assisted FTL Transit
+# Deterministic FTL Transit and Pilot Alignment
 
-Version 1 implements the bounded first-contract route without continuous
+Version 2 implements the bounded first-contract route without continuous
 interstellar flight. The application owns the authoritative fixed-step state,
 arrival solution, and transit rendering; TermForge only presents pixels and
 semantic input events.
@@ -15,27 +15,53 @@ terminal capability, and a headless/no-animation run cannot change the result.
 
 Outbound commitment resolves the mission planet ephemeris at the future
 arrival tick. Assisted mode places the handoff ten planet radii behind its
-velocity vector and matches the planet's system-inertial velocity. This is an
-approach corridor for #86, not orbit insertion or objective placement. The
+velocity vector and matches the planet's system-inertial velocity. Pilot mode
+derives one alignment sample from the independent `jump_alignment=11` seed
+domain. During the cancelable spool, A/D changes heading error by 250
+millidegrees per tick and W/S changes velocity error by 10 basis points per
+tick. The cockpit and code-rendered reticle show both errors, the projected
+grade, and the next correction.
+
+Commit uses signed fixed-point integers and inclusive boundaries:
+
+- `ALIGNED`: absolute heading error at most 3,000 millidegrees and velocity
+  error at most 200 basis points. Placement is identical to Assisted.
+- `OFFSET`: absolute heading error at most 45,000 millidegrees and velocity
+  error at most 2,000 basis points. Placement is 10–100 planet radii away,
+  with the approach direction rotated by heading error and planet-relative
+  velocity scaled by velocity error.
+- `OPPOSED`: any other valid sample. Placement uses the opposite
+  star-centered orbital phase and reversed planet velocity.
+
+Every grade arrives in the correct generated system and retains the same
+planet, ephemeris, terrain, objective, and mission state. OFFSET remains a
+normal sub-light approach. For OPPOSED, the bounded recovery is to cancel
+before commitment or use the existing target-hold system-flight assist after
+arrival; propulsion-specific travel-time progression is measured by #95.
+These are approach corridors, not orbit insertion or objective placement. The
 bounded return route uses `(0, -80,000,000,000, 0)` metres with zero velocity
 in origin-system coordinates. It is explicitly not the station waypoint;
 station rendezvous and docking remain #88.
 
 ## Persistence and presentation
 
-Save format 4 records the immutable arrival solution as canonical finite
-binary64 decimal strings together with destination/reference identities and
-arrival tick. A save before commitment has no solution; a save after
-commitment restores the same solution rather than rerolling it. Released
-format 3 profiles remain readable and are not assigned synthetic progress.
+Save format 9 records active Pilot alignment and the immutable committed
+assessment in addition to the arrival solution's canonical finite binary64
+decimal strings, destination/reference identities, and arrival tick. A save
+after commitment restores the same solution rather than rerolling it. Released
+format 8 Pilot spools migrate to neutral alignment because that release did
+not define a sample. Existing format 8 target arrivals receive the optimal
+grade without changing their stored pose.
 
-The transit image is a bounded code-rendered RGBA field derived only from the
-semantic jump snapshot. Kitty and ANSI consume the same pixels and cockpit
-text. The snapshot exposes phase, destination, tick progress, commitment, and
-cancelability without relying on color. `--intersystem-jump-acceptance` runs
-the save/resume transit without a terminal clock and reports authoritative and
+The transit image and reticle are bounded code-rendered RGBA derived only from
+the semantic jump snapshot. Kitty and ANSI consume the same pixels and cockpit
+text. The snapshot exposes phase, destination, progress, commitment,
+cancelability, error, and quality without relying on color.
+`--intersystem-jump-acceptance` runs Assisted plus all Pilot placements, saves
+and resumes a committed Pilot result, and reports authoritative placement and
 framebuffer checksums separately.
 
-Invalid systems, mission references, non-finite arrival values, tick overflow,
-invalid dimensions, and framebuffer-size mismatches reject transactionally
-before rendering or state commit.
+Invalid systems, mission references, out-of-range alignment, non-finite
+arrival values, mistimed or unrelated controls, tick overflow, invalid
+dimensions, and framebuffer-size mismatches reject transactionally before
+rendering or state commit.

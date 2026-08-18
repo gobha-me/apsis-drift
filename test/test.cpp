@@ -293,14 +293,15 @@ auto seed_derivation_contract() -> void {
 }
 
 auto intersystem_identity_contract() -> void {
-  check(kIntersystemContractVersion == 2,
-        "intersystem contract version 2 must remain stable");
+  check(kIntersystemContractVersion == 3,
+        "intersystem contract version 3 must remain stable");
   check(kFirstTargetSystemOrdinal == 1 && kSystemStarOrdinal == 0 &&
             kFirstMissionOrdinal == 0 && kFirstMissionTargetPlanetOrdinal == 0,
         "the first intersystem identity path must retain its named ordinals");
   check(static_cast<std::uint64_t>(SeedDomain::star) == 8 &&
             static_cast<std::uint64_t>(SeedDomain::orbit) == 9 &&
-            static_cast<std::uint64_t>(SeedDomain::mission) == 10,
+            static_cast<std::uint64_t>(SeedDomain::mission) == 10 &&
+            static_cast<std::uint64_t>(SeedDomain::jump_alignment) == 11,
         "new seed domains must retain their permanent identifiers");
   check(kJumpSpoolTicks == 360 && kJumpTransitTicks == 240,
         "version 1 jump timing must retain its fixed-step durations");
@@ -519,12 +520,12 @@ auto intersystem_state_contract() -> void {
 auto intersystem_jump_contract() -> void {
   auto refused = initial_intersystem_contract_state(Seed{42});
   const auto refused_before = refused;
-  check(!begin_assisted_jump(refused) && refused == refused_before,
+  check(!begin_intersystem_jump(refused) && refused == refused_before,
         "jump must be refused transactionally while docked without an "
         "accepted mission");
   refused.current_system = refused.identities.target_system;
   const auto invalid_system_before = refused;
-  check(!begin_assisted_jump(refused) && refused == invalid_system_before,
+  check(!begin_intersystem_jump(refused) && refused == invalid_system_before,
         "jump must be refused transactionally from an invalid system state");
 
   auto state = initial_intersystem_contract_state(Seed{42});
@@ -550,7 +551,7 @@ auto intersystem_jump_contract() -> void {
     return decoded && decoded->state.intersystem_contract == expected &&
            decoded->state.system_flight == document.state.system_flight;
   };
-  check(kIntersystemJumpVersion == 1 &&
+  check(kIntersystemJumpVersion == 2 &&
             kAssistedTargetArrivalStandoffRadii == 10.0 &&
             kAssistedOriginArrivalRadiusMetres == 80'000'000'000.0,
         "Assisted jump version and arrival constants must remain stable");
@@ -562,11 +563,11 @@ auto intersystem_jump_contract() -> void {
                 IntersystemContractCommand::launch),
         "an accepted mission must enter origin-system flight");
   const auto ready_before = state;
-  check(advance_assisted_jump_tick(state, target) ==
+  check(advance_intersystem_jump_tick(state, target) ==
                 std::unexpected{IntersystemJumpError::invalid_phase} &&
             state == ready_before,
         "the transit tick driver must refuse ready state without mutation");
-  check(begin_assisted_jump(state).has_value(),
+  check(begin_intersystem_jump(state).has_value(),
         "an accepted mission must begin outbound jump spooling");
 
   const auto initial_snapshot = intersystem_jump_snapshot(state);
@@ -576,14 +577,14 @@ auto intersystem_jump_contract() -> void {
   check(persists_exactly(state),
         "the initial spool boundary must survive save and restore exactly");
   const auto before_wrong_destination = state;
-  check(!resolve_assisted_jump_arrival(state, origin) &&
-            advance_assisted_jump_tick(state, origin) ==
+  check(!resolve_intersystem_jump_arrival(state, origin) &&
+            advance_intersystem_jump_tick(state, origin) ==
                 std::unexpected{IntersystemJumpError::invalid_destination} &&
             state == before_wrong_destination,
         "an outbound jump must reject the wrong destination system");
 
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks - 1; ++tick) {
-    check(advance_assisted_jump_tick(state, target).has_value(),
+    check(advance_intersystem_jump_tick(state, target).has_value(),
           "a valid spool tick must advance");
   }
   check(!state.arrival_solution &&
@@ -592,15 +593,15 @@ auto intersystem_jump_contract() -> void {
         "arrival must remain unbound before the exact commitment tick");
   check(persists_exactly(state),
         "the pre-commit spool boundary must survive save and restore exactly");
-  check(cancel_assisted_jump(state) &&
+  check(cancel_intersystem_jump(state) &&
             state.travel_phase == IntersystemTravelPhase::origin_system_flight,
         "spooling must remain cancelable through its final pre-commit tick");
-  check(begin_assisted_jump(state).has_value(),
+  check(begin_intersystem_jump(state).has_value(),
         "a canceled outbound jump must be restartable");
 
   IntersystemJumpAdvance boundary;
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
-    const auto advanced = advance_assisted_jump_tick(state, target);
+    const auto advanced = advance_intersystem_jump_tick(state, target);
     check(advanced.has_value(), "the restarted spool must advance");
     if (advanced) boundary = *advanced;
   }
@@ -619,7 +620,7 @@ auto intersystem_jump_contract() -> void {
   const auto committed_snapshot = intersystem_jump_snapshot(state);
   check(committed_snapshot && committed_snapshot->committed &&
             !committed_snapshot->cancelable &&
-            !cancel_assisted_jump(state),
+            !cancel_intersystem_jump(state),
         "a committed jump must be visible and irreversible");
   std::vector<Pixel> jump_frame(96U * 64U);
   check(committed_snapshot &&
@@ -638,7 +639,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v8 round trip");
+        "a committed arrival solution must survive a canonical v9 round trip");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -666,7 +667,7 @@ auto intersystem_jump_contract() -> void {
         "Assisted arrival must use a ten-radius matched-velocity corridor");
 
   for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
-    const auto advanced = advance_assisted_jump_tick(state, target);
+    const auto advanced = advance_intersystem_jump_tick(state, target);
     check(advanced.has_value(), "a committed transit tick must advance");
     if (tick + 1 == kJumpTransitTicks / 2) {
       check(persists_exactly(state),
@@ -692,7 +693,7 @@ auto intersystem_jump_contract() -> void {
         IntersystemContractCommand::accept_mission);
     (void)advance_intersystem_contract(
         replay, replay.universe_tick, IntersystemContractCommand::launch);
-    (void)begin_assisted_jump(replay);
+    (void)begin_intersystem_jump(replay);
     FixedStepClock clock;
     while (replay.travel_phase !=
            IntersystemTravelPhase::target_system_flight) {
@@ -703,7 +704,7 @@ auto intersystem_jump_contract() -> void {
                          replay.travel_phase !=
                              IntersystemTravelPhase::target_system_flight;
            ++step) {
-        if (!advance_assisted_jump_tick(replay, target)) return replay;
+        if (!advance_intersystem_jump_tick(replay, target)) return replay;
       }
     }
     return replay;
@@ -715,6 +716,264 @@ auto intersystem_jump_contract() -> void {
                 intersystem_arrival_checksum(at_60),
         "render cadence must not affect authoritative jump arrival");
 
+  auto pilot = initial_intersystem_contract_state(Seed{42});
+  check(advance_intersystem_contract(
+            pilot, pilot.universe_tick,
+            IntersystemContractCommand::select_pilot_profile) &&
+            advance_intersystem_contract(
+                pilot, pilot.universe_tick,
+                IntersystemContractCommand::accept_mission) &&
+            advance_intersystem_contract(
+                pilot, pilot.universe_tick,
+                IntersystemContractCommand::launch) &&
+            begin_intersystem_jump(pilot) && pilot.jump_alignment,
+        "Pilot launch must expose deterministic alignment state during spool");
+  auto pilot_retry = pilot;
+  const auto initial_alignment = *pilot.jump_alignment;
+  check(cancel_intersystem_jump(pilot_retry) &&
+            begin_intersystem_jump(pilot_retry) &&
+            pilot_retry.jump_alignment == initial_alignment,
+        "canceling and retrying must not reroll Pilot alignment");
+  const auto guidance = resolve_intersystem_jump_guidance(pilot);
+  check(guidance && guidance->projected_quality ==
+                        IntersystemArrivalQuality::offset &&
+            !guidance->correction.empty(),
+        "Pilot spool must expose the authoritative error and projected grade");
+  const auto pilot_snapshot = intersystem_jump_snapshot(pilot);
+  std::vector<Pixel> assisted_spool_frame(96U * 64U);
+  std::vector<Pixel> pilot_spool_frame(96U * 64U);
+  check(initial_snapshot && pilot_snapshot && pilot_snapshot->alignment &&
+            render_intersystem_jump(*initial_snapshot, 96, 64,
+                                    assisted_spool_frame) &&
+            render_intersystem_jump(*pilot_snapshot, 96, 64,
+                                    pilot_spool_frame) &&
+            pixel_checksum(assisted_spool_frame) !=
+                pixel_checksum(pilot_spool_frame),
+        "Pilot spool rendering must add one deterministic alignment reticle");
+  if (pilot_snapshot) {
+    auto invalid_reticle = *pilot_snapshot;
+    invalid_reticle.alignment->heading_error_millidegrees =
+        std::numeric_limits<std::int32_t>::min();
+    const auto before = pilot_spool_frame;
+    check(render_intersystem_jump(invalid_reticle, 96, 64,
+                                  pilot_spool_frame) ==
+                  std::unexpected{
+                      IntersystemJumpError::invalid_framebuffer} &&
+              pilot_spool_frame == before,
+          "invalid reticle coordinates must reject before touching pixels");
+  }
+  const auto pilot_before_invalid = pilot;
+  const std::array invalid_commands{
+      FlightCommand{pilot.universe_tick,
+                    FlightCommandKind::press_strafe_left}};
+  const std::array wrong_tick_commands{
+      FlightCommand{pilot.universe_tick + 1,
+                    FlightCommandKind::press_turn_left}};
+  check(advance_intersystem_jump_tick(pilot, target, invalid_commands) ==
+                std::unexpected{IntersystemJumpError::invalid_command} &&
+            pilot == pilot_before_invalid &&
+            advance_intersystem_jump_tick(pilot, target,
+                                          wrong_tick_commands) ==
+                std::unexpected{IntersystemJumpError::wrong_command_tick} &&
+            pilot == pilot_before_invalid,
+        "Pilot alignment must reject unrelated or mistimed controls atomically");
+  const auto heading_before =
+      std::abs(pilot.jump_alignment->heading_error_millidegrees);
+  const auto velocity_before =
+      std::abs(pilot.jump_alignment->velocity_error_basis_points);
+  const std::array correction_commands{
+      FlightCommand{
+          pilot.universe_tick,
+          pilot.jump_alignment->heading_error_millidegrees > 0
+              ? FlightCommandKind::press_turn_left
+              : FlightCommandKind::press_turn_right},
+      FlightCommand{
+          pilot.universe_tick,
+          pilot.jump_alignment->velocity_error_basis_points > 0
+              ? FlightCommandKind::press_backward
+              : FlightCommandKind::press_forward},
+  };
+  check(advance_intersystem_jump_tick(pilot, target, correction_commands) &&
+            std::abs(pilot.jump_alignment->heading_error_millidegrees) <
+                heading_before &&
+            std::abs(pilot.jump_alignment->velocity_error_basis_points) <
+                velocity_before &&
+            persists_exactly(pilot),
+        "existing flight controls must improve and persist Pilot alignment");
+  auto malformed_alignment = pilot;
+  malformed_alignment.jump_alignment->heading_error_millidegrees = 180'001;
+  check(!validate_intersystem_contract_state(malformed_alignment),
+        "out-of-range Pilot alignment must fail contract validation");
+
+  const auto pilot_commit = [&target](std::int32_t heading,
+                                      std::int32_t velocity) {
+    auto candidate = initial_intersystem_contract_state(Seed{42});
+    (void)advance_intersystem_contract(
+        candidate, candidate.universe_tick,
+        IntersystemContractCommand::select_pilot_profile);
+    (void)advance_intersystem_contract(
+        candidate, candidate.universe_tick,
+        IntersystemContractCommand::accept_mission);
+    (void)advance_intersystem_contract(
+        candidate, candidate.universe_tick,
+        IntersystemContractCommand::launch);
+    (void)begin_intersystem_jump(candidate);
+    candidate.jump_alignment = IntersystemJumpAlignmentState{
+        .heading_error_millidegrees = heading,
+        .velocity_error_basis_points = velocity,
+        .controls = {}};
+    for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
+      if (!advance_intersystem_jump_tick(candidate, target)) break;
+    }
+    return candidate;
+  };
+  const auto aligned_edge = pilot_commit(
+      kAlignedHeadingErrorMillidegrees,
+      kAlignedVelocityErrorBasisPoints);
+  const auto offset_edge = pilot_commit(
+      kAlignedHeadingErrorMillidegrees + 1,
+      kAlignedVelocityErrorBasisPoints);
+  const auto offset_limit = pilot_commit(
+      kOffsetHeadingErrorMillidegrees,
+      kOffsetVelocityErrorBasisPoints);
+  const auto opposed_edge = pilot_commit(
+      kOffsetHeadingErrorMillidegrees + 1, 0);
+  check(aligned_edge.arrival_solution &&
+            aligned_edge.arrival_solution->assessment->quality ==
+                IntersystemArrivalQuality::aligned &&
+            offset_edge.arrival_solution &&
+            offset_edge.arrival_solution->assessment->quality ==
+                IntersystemArrivalQuality::offset &&
+            offset_limit.arrival_solution &&
+            offset_limit.arrival_solution->assessment->quality ==
+                IntersystemArrivalQuality::offset &&
+            opposed_edge.arrival_solution &&
+            opposed_edge.arrival_solution->assessment->quality ==
+                IntersystemArrivalQuality::opposed,
+        "Pilot grading must include its exact documented threshold edges");
+  const auto pilot_replay_at_rate = [&target](int frames_per_second) {
+    auto replay = initial_intersystem_contract_state(Seed{42});
+    (void)advance_intersystem_contract(
+        replay, replay.universe_tick,
+        IntersystemContractCommand::select_pilot_profile);
+    (void)advance_intersystem_contract(
+        replay, replay.universe_tick,
+        IntersystemContractCommand::accept_mission);
+    (void)advance_intersystem_contract(
+        replay, replay.universe_tick, IntersystemContractCommand::launch);
+    (void)begin_intersystem_jump(replay);
+    FixedStepClock clock;
+    while (replay.travel_phase !=
+           IntersystemTravelPhase::target_system_flight) {
+      const auto frame = clock.advance(SimulationSeconds{
+          1.0 / static_cast<double>(frames_per_second)});
+      if (!frame) break;
+      for (int step = 0; step < frame->steps &&
+                         replay.travel_phase !=
+                             IntersystemTravelPhase::target_system_flight;
+           ++step) {
+        std::vector<FlightCommand> commands;
+        if (replay.universe_tick == 0) {
+          commands = {
+              {replay.universe_tick, FlightCommandKind::press_turn_right},
+              {replay.universe_tick, FlightCommandKind::press_forward},
+          };
+        } else if (replay.universe_tick == 60) {
+          commands = {
+              {replay.universe_tick, FlightCommandKind::release_turn_right},
+              {replay.universe_tick, FlightCommandKind::release_forward},
+          };
+        }
+        if (!advance_intersystem_jump_tick(replay, target, commands)) {
+          return replay;
+        }
+      }
+    }
+    return replay;
+  };
+  const auto pilot_at_30 = pilot_replay_at_rate(30);
+  const auto pilot_at_60 = pilot_replay_at_rate(60);
+  check(pilot_at_30 == pilot_at_60 && pilot_at_30.arrival_solution &&
+            pilot_at_30.arrival_solution->assessment->quality ==
+                IntersystemArrivalQuality::aligned &&
+            intersystem_arrival_checksum(pilot_at_30) ==
+                intersystem_arrival_checksum(pilot_at_60),
+        "render cadence must not affect a tick-addressed Pilot input trace");
+  check(persists_exactly(offset_edge),
+        "a committed Pilot grade and placement must survive save and restore");
+  auto arrived_offset = offset_edge;
+  for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
+    (void)advance_intersystem_jump_tick(arrived_offset, target);
+  }
+  check(arrived_offset.travel_phase ==
+                IntersystemTravelPhase::target_system_flight &&
+            persists_exactly(arrived_offset),
+        "an arrived Pilot grade and placement must survive save and restore");
+  auto dishonest_grade = aligned_edge;
+  dishonest_grade.arrival_solution->assessment->quality =
+      IntersystemArrivalQuality::opposed;
+  check(!validate_intersystem_contract_state(dishonest_grade),
+        "a stored Pilot grade must agree with its fixed-point threshold inputs");
+  const auto opposed_ephemeris = resolve_planet_ephemeris(
+      target, opposed_edge.identities.target_planet,
+      {.tick = opposed_edge.arrival_solution->arrival_tick,
+       .sub_tick_fraction = 0.0});
+  check(opposed_ephemeris &&
+            opposed_edge.arrival_solution->destination ==
+                opposed_edge.identities.target_system &&
+            opposed_edge.arrival_solution->reference_planet ==
+                opposed_edge.identities.target_planet &&
+            opposed_edge.arrival_solution->position ==
+                SystemPositionMetres{-opposed_ephemeris->position.x,
+                                     -opposed_ephemeris->position.y,
+                                     -opposed_ephemeris->position.z} &&
+            opposed_edge.arrival_solution->velocity ==
+                SystemVelocityMetresPerSecond{
+                    -opposed_ephemeris->velocity.x,
+                    -opposed_ephemeris->velocity.y,
+                    -opposed_ephemeris->velocity.z},
+        "the worst valid grade must bind a recoverable opposite-phase handoff in the correct system");
+  const auto opposed_flight = initial_system_flight_state(
+      target, opposed_edge.identities.target_planet,
+      *opposed_edge.arrival_solution);
+  const auto opposed_guidance =
+      opposed_flight
+          ? resolve_system_flight_guidance(target, *opposed_flight)
+          : std::expected<SystemFlightGuidance, SystemFlightError>{
+                std::unexpected{SystemFlightError::invalid_arrival}};
+  check(opposed_flight && opposed_guidance &&
+            !opposed_guidance->orbit_insertion_ready &&
+            opposed_guidance->distance_metres >
+                kAssistedOriginArrivalRadiusMetres / 10.0,
+        "an opposed arrival must initialize the existing target-hold sub-light recovery route");
+  const auto opposed_before_recommit = opposed_edge;
+  auto opposed_recommit = opposed_edge;
+  check(!begin_intersystem_jump(opposed_recommit) &&
+            opposed_recommit == opposed_before_recommit,
+        "a committed Pilot jump must reject recommit without mutation");
+
+  auto pilot_v8_document = make_new_game_document(Seed{42});
+  pilot_v8_document.state.intersystem_contract = pilot;
+  const auto pilot_v9_json = encode_save_document_json(pilot_v8_document);
+  if (pilot_v9_json) {
+    auto pilot_v8_json = replace_once(*pilot_v9_json,
+                                      "\"format_version\": 9",
+                                      "\"format_version\": 8");
+    pilot_v8_json = replace_once(std::move(pilot_v8_json),
+                                 "\"intersystem_contract\": 3",
+                                 "\"intersystem_contract\": 2");
+    pilot_v8_json = replace_once(std::move(pilot_v8_json),
+                                 "\"intersystem_jump\": 2",
+                                 "\"intersystem_jump\": 1");
+    const auto migrated_pilot_v8 =
+        decode_save_document_json(pilot_v8_json);
+    check(migrated_pilot_v8 &&
+              migrated_pilot_v8->state.intersystem_contract &&
+              migrated_pilot_v8->state.intersystem_contract->jump_alignment ==
+                  IntersystemJumpAlignmentState{},
+          "format v8 Pilot spool saves must migrate to one neutral deterministic alignment");
+  }
+
   auto overflow = initial_intersystem_contract_state(Seed{42});
   (void)advance_intersystem_contract(
       overflow, overflow.universe_tick,
@@ -722,10 +981,10 @@ auto intersystem_jump_contract() -> void {
   (void)advance_intersystem_contract(
       overflow, overflow.universe_tick, IntersystemContractCommand::launch);
   overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
-  check(begin_assisted_jump(overflow).has_value(),
+  check(begin_intersystem_jump(overflow).has_value(),
         "the overflow fixture must enter spooling");
   const auto overflow_before = overflow;
-  check(advance_assisted_jump_tick(overflow, target) ==
+  check(advance_intersystem_jump_tick(overflow, target) ==
                 std::unexpected{IntersystemJumpError::tick_overflow} &&
             overflow == overflow_before,
         "tick overflow must reject atomically");
@@ -740,11 +999,11 @@ auto intersystem_jump_contract() -> void {
             advance_intersystem_contract(
                 return_state, return_state.universe_tick,
                 IntersystemContractCommand::leave_target_planet) &&
-            begin_assisted_jump(return_state),
+            begin_intersystem_jump(return_state),
         "an objective-complete mission must begin the bounded return route");
   for (SimulationTick tick = 0;
        tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
-    check(advance_assisted_jump_tick(return_state, origin).has_value(),
+    check(advance_intersystem_jump_tick(return_state, origin).has_value(),
           "the Assisted return route must advance");
   }
   check(return_state.travel_phase ==
@@ -779,14 +1038,29 @@ auto intersystem_jump_acceptance_contract() -> void {
             result->report.committed_tick == kJumpSpoolTicks &&
             result->report.arrival_tick ==
                 kJumpSpoolTicks + kJumpTransitTicks &&
-            result->report.arrival_checksum == 5687260627167661077ULL &&
+            result->report.arrival_checksum ==
+                14671588990613181972ULL &&
+            result->report.assisted_quality ==
+                IntersystemArrivalQuality::aligned &&
+            result->report.pilot_initial_heading_error_millidegrees ==
+                -16'160 &&
+            result->report.pilot_initial_velocity_error_basis_points == -473 &&
+            result->report.pilot_aligned_checksum ==
+                result->report.arrival_checksum &&
+            result->report.pilot_offset_checksum ==
+                4112027265386174051ULL &&
+            result->report.pilot_opposed_checksum ==
+                4541203662738406157ULL &&
+            result->report.pilot_offset_distance_metres <
+                result->report.pilot_opposed_distance_metres &&
             result->report.framebuffer_checksum != 0 &&
             result->transit_frame.size() == 96U * 64U,
         "canonical headless jump acceptance must commit, resume, render, and arrive");
   if (!result) return;
   const auto json = intersystem_jump_acceptance_json(result->report, "ansi");
-  check(json.find("\"scenario\": \"v0.4.8-assisted-intersystem-jump\"") !=
+  check(json.find("\"scenario\": \"v0.4.15-pilot-ftl-alignment\"") !=
                 std::string::npos &&
+            json.find("\"schema_version\": 2") != std::string::npos &&
             json.find("\"presentation\": \"ansi\"") !=
                 std::string::npos,
         "jump acceptance JSON must retain its versioned semantic fields");
@@ -805,10 +1079,10 @@ auto system_flight_contract() -> void {
       IntersystemContractCommand::accept_mission);
   (void)advance_intersystem_contract(
       contract, contract.universe_tick, IntersystemContractCommand::launch);
-  (void)begin_assisted_jump(contract);
+  (void)begin_intersystem_jump(contract);
   for (SimulationTick tick = 0;
        tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
-    (void)advance_assisted_jump_tick(contract, system);
+    (void)advance_intersystem_jump_tick(contract, system);
   }
   const auto initial = contract.arrival_solution
                            ? initial_system_flight_state(
@@ -978,13 +1252,16 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v8 save/resume exactly");
+        "system flight must survive canonical v9 save/resume exactly");
   if (encoded && contract.arrival_solution) {
     auto released_v4 = replace_once(
-        *encoded, "\"format_version\": 8", "\"format_version\": 4");
+        *encoded, "\"format_version\": 9", "\"format_version\": 4");
     released_v4 = replace_once(std::move(released_v4),
-                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 3",
                                "\"intersystem_contract\": 1");
+    released_v4 = replace_once(std::move(released_v4),
+                               "\"intersystem_jump\": 2",
+                               "\"intersystem_jump\": 1");
     released_v4 = replace_once(std::move(released_v4),
                                "\"rule_profile\": \"assisted\",\n", "");
     const auto migrated = decode_save_document_json(released_v4);
@@ -1053,20 +1330,20 @@ auto intersystem_return_contract() -> void {
       generate_local_system(contract.identities.origin_system_seed);
   check(command(IntersystemContractCommand::accept_mission) &&
             command(IntersystemContractCommand::launch) &&
-            begin_assisted_jump(contract),
+            begin_intersystem_jump(contract),
         "origin return validation fixture must launch the contract");
   for (SimulationTick tick = 0;
        tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
-    (void)advance_assisted_jump_tick(contract, target_system);
+    (void)advance_intersystem_jump_tick(contract, target_system);
   }
   check(command(IntersystemContractCommand::enter_target_planet) &&
             command(IntersystemContractCommand::complete_objective) &&
             command(IntersystemContractCommand::leave_target_planet) &&
-            begin_assisted_jump(contract),
+            begin_intersystem_jump(contract),
         "origin return validation fixture must complete and depart the target");
   for (SimulationTick tick = 0;
        tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
-    (void)advance_assisted_jump_tick(contract, origin_system);
+    (void)advance_intersystem_jump_tick(contract, origin_system);
   }
   const auto returning = initialize_origin_return(contract);
   check(returning && validate_origin_return_state(contract, *returning),
@@ -1118,10 +1395,13 @@ auto intersystem_return_contract() -> void {
         "format 8 must preserve the exact origin-station approach state");
   if (encoded) {
     auto released_v6 = replace_once(
-        *encoded, "\"format_version\": 8", "\"format_version\": 6");
+        *encoded, "\"format_version\": 9", "\"format_version\": 6");
     released_v6 = replace_once(std::move(released_v6),
-                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 3",
                                "\"intersystem_contract\": 1");
+    released_v6 = replace_once(std::move(released_v6),
+                               "\"intersystem_jump\": 2",
+                               "\"intersystem_jump\": 1");
     released_v6 = replace_once(std::move(released_v6),
                                "\"rule_profile\": \"assisted\",\n", "");
     const auto migrated = decode_save_document_json(released_v6);
@@ -1140,7 +1420,7 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(result && result->report.checkpoints.size() == 6U &&
             result->report.final_tick == 31'535U &&
             result->report.final_authoritative_checksum ==
-                1'830'402'382'728'972'499ULL &&
+                10'761'875'017'770'641'381ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -1327,10 +1607,10 @@ auto mission_board_contract() -> void {
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
   if (fresh_json) {
-    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 8",
+    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 9",
                                     "\"format_version\": 3");
     released_v3 = replace_once(std::move(released_v3),
-                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 3",
                                "\"intersystem_contract\": 1");
     released_v3 = replace_once(std::move(released_v3),
                                "\"rule_profile\": \"assisted\",\n", "");
@@ -1346,9 +1626,9 @@ auto mission_board_contract() -> void {
     check(migrated_v3 &&
               migrated_v3->state.intersystem_contract ==
                   document.state.intersystem_contract &&
-              rewritten_v3 && rewritten_v3->find("\"format_version\": 8") !=
+              rewritten_v3 && rewritten_v3->find("\"format_version\": 9") !=
                                     std::string::npos,
-          "released v3 intersystem profiles must default to Assisted and rewrite as v8");
+          "released v3 intersystem profiles must default to Assisted and rewrite as v9");
 
     auto pilot_document = make_new_game_document(Seed{42});
     const auto selected = advance_intersystem_contract(
@@ -1365,7 +1645,7 @@ auto mission_board_contract() -> void {
               pilot_round_trip &&
               pilot_round_trip->state.intersystem_contract->rule_profile ==
                   IntersystemRuleProfile::pilot,
-          "format v8 must preserve the authoritative Pilot selection");
+          "format v9 must preserve the authoritative Pilot selection");
     if (pilot_json) {
       const auto invalid_profile = decode_save_document_json(replace_once(
           *pilot_json, "\"rule_profile\": \"pilot\"",
@@ -1375,13 +1655,16 @@ auto mission_board_contract() -> void {
                     SaveSchemaErrorCode::invalid_value &&
                 invalid_profile.error().path ==
                     "$.state.intersystem_contract.rule_profile",
-            "format v8 must reject unknown rule profiles before state commit");
+            "format v9 must reject unknown rule profiles before state commit");
 
-      auto released_v7 = replace_once(*pilot_json, "\"format_version\": 8",
+      auto released_v7 = replace_once(*pilot_json, "\"format_version\": 9",
                                       "\"format_version\": 7");
       released_v7 = replace_once(std::move(released_v7),
-                                 "\"intersystem_contract\": 2",
+                                 "\"intersystem_contract\": 3",
                                  "\"intersystem_contract\": 1");
+      released_v7 = replace_once(std::move(released_v7),
+                                 "\"intersystem_jump\": 2",
+                                 "\"intersystem_jump\": 1");
       released_v7 = replace_once(std::move(released_v7),
                                  "\"rule_profile\": \"pilot\",\n", "");
       const auto migrated_v7 = decode_save_document_json(released_v7);
@@ -1392,7 +1675,7 @@ auto mission_board_contract() -> void {
                     IntersystemRuleProfile::assisted,
             "released format v7 must normalize contract version 1 and default to Assisted");
 
-      auto dishonest_v7 = replace_once(*pilot_json, "\"format_version\": 8",
+      auto dishonest_v7 = replace_once(*pilot_json, "\"format_version\": 9",
                                        "\"format_version\": 7");
       dishonest_v7 = replace_once(std::move(dishonest_v7),
                                   "\"rule_profile\": \"pilot\",\n", "");
@@ -1438,6 +1721,8 @@ auto mission_board_contract() -> void {
             .position = {ephemeris->position.x - radius * 10.0,
                          ephemeris->position.y, ephemeris->position.z},
             .velocity = ephemeris->velocity,
+            .assessment = IntersystemArrivalAssessment{
+                .quality = IntersystemArrivalQuality::aligned},
         };
         const auto system_flight = initial_system_flight_state(
             system, checkpoint.identities.target_planet, arrival);
@@ -1469,15 +1754,15 @@ auto mission_board_contract() -> void {
           message);
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
-             "offered intersystem state must survive a v3 round trip");
-  round_trip(state, "accepted intersystem state must survive a v3 round trip");
+             "offered intersystem state must survive a v9 round trip");
+  round_trip(state, "accepted intersystem state must survive a v9 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
   };
   check(command(IntersystemContractCommand::launch).has_value(),
         "the accepted mission fixture must launch");
-  round_trip(state, "active intersystem state must survive a v3 round trip");
+  round_trip(state, "active intersystem state must survive a v9 round trip");
   check(command(IntersystemContractCommand::begin_outbound_jump).has_value() &&
             advance_intersystem_time(state, kJumpSpoolTicks).has_value() &&
             command(IntersystemContractCommand::commit_outbound_jump)
@@ -1491,14 +1776,17 @@ auto mission_board_contract() -> void {
                 .has_value(),
         "the persistence fixture must reach objective completion legally");
   round_trip(state,
-             "objective-complete intersystem state must survive a v3 round trip");
-  const auto completed_v8 = encode_save_document_json(document);
-  if (completed_v8) {
-    auto released_v5 = replace_once(*completed_v8, "\"format_version\": 8",
+             "objective-complete intersystem state must survive a v9 round trip");
+  const auto completed_v9 = encode_save_document_json(document);
+  if (completed_v9) {
+    auto released_v5 = replace_once(*completed_v9, "\"format_version\": 9",
                                     "\"format_version\": 5");
     released_v5 = replace_once(std::move(released_v5),
-                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 3",
                                "\"intersystem_contract\": 1");
+    released_v5 = replace_once(std::move(released_v5),
+                               "\"intersystem_jump\": 2",
+                               "\"intersystem_jump\": 1");
     const auto deltas_start = released_v5.find("    \"world_deltas\": [");
     const auto deltas_end =
         deltas_start == std::string::npos
@@ -1518,7 +1806,7 @@ auto mission_board_contract() -> void {
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v8 completion must require its bound collected delta");
+        "format v9 completion must require its bound collected delta");
   check(command(IntersystemContractCommand::leave_target_planet).has_value() &&
             command(IntersystemContractCommand::begin_return_jump)
                 .has_value() &&
@@ -1530,10 +1818,10 @@ auto mission_board_contract() -> void {
                 .has_value() &&
             command(IntersystemContractCommand::dock_at_origin).has_value(),
         "the persistence fixture must return legally");
-  round_trip(state, "returned intersystem state must survive a v3 round trip");
+  round_trip(state, "returned intersystem state must survive a v9 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),
         "the persistence fixture must turn in legally");
-  round_trip(state, "turned-in intersystem state must survive a v3 round trip");
+  round_trip(state, "turned-in intersystem state must survive a v9 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -2125,9 +2413,9 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 8 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 9 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 8 identity and byte bound must remain stable");
+        "save format version 9 identity and byte bound must remain stable");
   const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
   const auto fixture = read_test_data("test/data/save-v2-golden.json");
   check(!legacy_fixture.empty() && !fixture.empty(),
@@ -2176,11 +2464,11 @@ auto save_schema_contract() -> void {
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 8") !=
+  check(encoded && encoded->find("\"format_version\": 9") !=
                        std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must migrate legacy state into canonical version 8");
+        "the current encoder must migrate legacy state into canonical version 9");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
@@ -2189,7 +2477,7 @@ auto save_schema_contract() -> void {
   const auto migrated = decode_save_document_json(legacy_fixture);
   check(migrated && *migrated == expected &&
             encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 8");
+        "a version 1 save must migrate in memory and rewrite canonically as version 9");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -2220,13 +2508,13 @@ auto save_schema_contract() -> void {
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 9"),
+                   "\"format_version\": 10"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":9}",
+      "{\"application\":\"apsis-drift\",\"format_version\":10}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 8 fields are read");
+        "future formats must be identified before version 9 fields are read");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
@@ -2258,13 +2546,13 @@ auto save_schema_contract() -> void {
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported ephemeris versions must be rejected explicitly");
     expect_decode_error(
-        replace_once(*encoded, "\"intersystem_contract\": 2",
-                     "\"intersystem_contract\": 3"),
+        replace_once(*encoded, "\"intersystem_contract\": 3",
+                     "\"intersystem_contract\": 4"),
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported first-contract versions must be rejected explicitly");
     expect_decode_error(
-        replace_once(*encoded, "\"intersystem_jump\": 1",
-                     "\"intersystem_jump\": 2"),
+        replace_once(*encoded, "\"intersystem_jump\": 2",
+                     "\"intersystem_jump\": 3"),
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported Assisted-jump versions must be rejected explicitly");
   }

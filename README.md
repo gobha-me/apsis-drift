@@ -71,9 +71,9 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 8; versions 1 and 2 load as legacy local Signal Runs, while released
-versions 3 through 7 retain their mission, jump, arrival, system-flight,
-Planetfall, and return state and default to Assisted rules.
+version 9; versions 1 and 2 load as legacy local Signal Runs, while released
+versions 3 through 8 retain their mission, jump, arrival, system-flight,
+Planetfall, return, and rule-profile state.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -125,6 +125,9 @@ Interactive controls:
   arrives automatically after two seconds
 - Rule profile: press Left/Right at the mission board before launch to select
   Assisted or Pilot; launch locks the authoritative selection for the mission
+- Pilot FTL spool: use A/D to correct heading and W/S to correct velocity;
+  the cockpit shows signed error, projected ALIGNED/OFFSET/OPPOSED quality, and
+  the next correction before J can still cancel the spool
 - Target-system flight: W/S thrust or brake, A/D turn, Q/E strafe, R/F rise
   or fall, Space toggles direct target assist, and `[`/`]` selects 1x/4x/16x
   time compression outside the six-radius approach boundary; press Enter when
@@ -234,9 +237,17 @@ separate evidence. See
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records the deterministic thermal-abort and alignment-quality
-boundaries consumed by the next flight systems. Formats 1 through 7 migrate to
+boundaries. The FTL boundary is now playable; thermal entry remains follow-up
+work. Formats 1 through 7 migrate to
 Assisted without changing generated truth or mission progress. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
+
+The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment
+task. Commitment grades an immutable ALIGNED, OFFSET, or OPPOSED handoff;
+Assisted retains its exact ten-radius matched-velocity corridor, while poor
+Pilot execution changes only the recoverable target-system approach. Save
+format 9 prevents reloads from rerolling either alignment or placement. See
+[docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact

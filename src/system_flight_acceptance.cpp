@@ -44,12 +44,12 @@ struct Replay {
       !advance_intersystem_contract(
           contract, contract.universe_tick,
           IntersystemContractCommand::launch) ||
-      !begin_assisted_jump(contract)) {
+      !begin_intersystem_jump(contract)) {
     return std::unexpected{SystemFlightAcceptanceError::jump_failure};
   }
   for (SimulationTick tick = 0;
        tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
-    if (!advance_assisted_jump_tick(contract, system)) {
+    if (!advance_intersystem_jump_tick(contract, system)) {
       return std::unexpected{SystemFlightAcceptanceError::jump_failure};
     }
   }
