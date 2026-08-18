@@ -63,6 +63,8 @@ enum class FlightCommandKind : std::uint8_t {
   press_fall,
   release_fall,
   toggle_autopilot,
+  decrease_time_scale,
+  increase_time_scale,
 };
 
 struct FlightCommand {

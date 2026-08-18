@@ -92,6 +92,9 @@ inline constexpr double kRadiansToDegrees{
   if (std::isfinite(value) && value >= 0.0 && value < 9'950.0) {
     return std::format("SPD {:.1f}k ", value / 1'000.0);
   }
+  if (std::isfinite(value) && value >= 0.0 && value < 9'950'000.0) {
+    return std::format("SPD {:.1f}M ", value / 1'000'000.0);
+  }
   return "SPD ###  ";
 }
 
@@ -310,6 +313,50 @@ auto format_flight_instruments(const PlanetaryFlightState& state)
   } else {
     readout.alert = std::string(kInstrumentLineWidth, ' ');
   }
+  return readout;
+}
+
+auto format_flight_instruments(const SystemFlightState& state)
+    -> FlightInstrumentReadout {
+  FlightInstrumentReadout readout;
+  const double speed = std::hypot(state.velocity.x, state.velocity.y,
+                                  state.velocity.z);
+  const bool valid = std::isfinite(state.forward.x) &&
+                     std::isfinite(state.forward.y) &&
+                     std::isfinite(state.forward.z) && std::isfinite(speed) &&
+                     valid_mode(state.mode);
+  if (!valid) {
+    readout = {.heading = "HDG ---  ", .altitude = "SYS ---- ",
+               .clearance = "TIME --- ", .speed = "SPD ---  ",
+               .mode = "MODE ----", .drive = "THR ---- ",
+               .alert = "TELEM ERR",
+               .alert_state = CockpitAlert::invalid_telemetry};
+    return readout;
+  }
+  double heading = std::fmod(
+      std::atan2(state.forward.y, state.forward.x) * kRadiansToDegrees,
+      360.0);
+  if (heading < 0.0) heading += 360.0;
+  readout.heading = std::format(
+      "HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
+  readout.altitude = "SYS FLT  ";
+  readout.clearance = std::format(
+      "TIME {:>2}x ", system_time_scale_value(state.time_scale));
+  readout.speed = format_speed(speed);
+  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
+                                                      : "MODE MAN ";
+  const bool maneuver = state.controls.turn_left || state.controls.turn_right ||
+                        state.controls.strafe_left ||
+                        state.controls.strafe_right || state.controls.rise ||
+                        state.controls.fall;
+  readout.drive = state.mode == FlightMode::autopilot
+                      ? "THR AUTO "
+                      : (state.controls.forward
+                             ? "THR FWD  "
+                             : (state.controls.backward
+                                    ? "BRAKING  "
+                                    : (maneuver ? "THR MANUV" : "COAST    ")));
+  readout.alert = std::string(kInstrumentLineWidth, ' ');
   return readout;
 }
 
@@ -536,6 +583,7 @@ auto format_signal_collection(const SignalCollectionState& collection)
 auto format_system_navigation(const SystemNavigationSolution& navigation)
     -> SystemNavigationReadout {
   SystemNavigationReadout result;
+  result.arrival = "ETA --:--";
   const auto short_name = navigation.display_name.substr(
       0, std::min<std::size_t>(4, navigation.display_name.size()));
   result.target = std::format("TGT {:<4} ", short_name);
@@ -606,6 +654,23 @@ auto format_system_navigation(const SystemNavigationSolution& navigation)
     }
   }
   if (result.cue.empty()) result.cue = "NAV ERROR";
+  return result;
+}
+
+auto format_system_navigation(const SystemNavigationSolution& navigation,
+                              const SystemFlightGuidance& guidance)
+    -> SystemNavigationReadout {
+  auto result = format_system_navigation(navigation);
+  result.motion = format_closing_speed(
+      guidance.closing_speed_metres_per_second);
+  result.arrival = format_arrival(guidance.arrival_estimate_seconds);
+  switch (guidance.cue) {
+    case SystemFlightCue::hold: result.cue = "HOLD      "; break;
+    case SystemFlightCue::closing: result.cue = "CLOSING  "; break;
+    case SystemFlightCue::opening: result.cue = "OPENING  "; break;
+    case SystemFlightCue::brake: result.cue = "BRAKE NOW"; break;
+    case SystemFlightCue::orbit_ready: result.cue = "ORBIT RDY"; break;
+  }
   return result;
 }
 

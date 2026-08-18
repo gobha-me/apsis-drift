@@ -50,6 +50,8 @@ namespace {
     case FlightCommandKind::press_fall:
     case FlightCommandKind::release_fall:
     case FlightCommandKind::toggle_autopilot: return true;
+    case FlightCommandKind::decrease_time_scale:
+    case FlightCommandKind::increase_time_scale: return false;
   }
   return false;
 }
@@ -123,6 +125,8 @@ auto apply_command(FlightState& state, FlightCommandKind kind) noexcept
                        : FlightMode::autopilot;
       clear_controls(state.controls);
       break;
+    case FlightCommandKind::decrease_time_scale:
+    case FlightCommandKind::increase_time_scale: break;
   }
 }
 

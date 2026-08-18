@@ -11,7 +11,7 @@ namespace apsis_drift {
 // System space is right-handed and inertial. Planet-fixed space is centered on
 // one planet with +z at spin north, +x at zero longitude, and +y at 90 degrees
 // east. Analytic ephemeris owns generated planet-center position and velocity;
-// the later flight handoff adds the complete planet-fixed orientation.
+// the system-flight handoff adds the complete planet-fixed orientation.
 struct SystemPositionMetres {
   double x{};
   double y{};
@@ -28,6 +28,15 @@ struct SystemVelocityMetresPerSecond {
 
   friend auto operator==(const SystemVelocityMetresPerSecond&,
                          const SystemVelocityMetresPerSecond&)
+      -> bool = default;
+};
+
+struct SystemDirection {
+  double x{};
+  double y{};
+  double z{};
+
+  friend auto operator==(const SystemDirection&, const SystemDirection&)
       -> bool = default;
 };
 

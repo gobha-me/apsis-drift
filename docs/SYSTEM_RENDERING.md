@@ -52,9 +52,9 @@ relative to the selected ephemeris center, and light points from that center to
 the system star. The selected brackets remain after composition, so the target
 cannot disappear or exchange identity during the transition.
 
-This alignment is presentation-only. Planet-fixed rotation, entry targeting,
-craft acceleration, orbit insertion, and persistence belong to later travel
-and Planetfall issues.
+This alignment remains presentation-only. The application-owned system-flight
+state now supplies craft acceleration, planet-fixed rotation, orbit insertion,
+and persistence; entry targeting remains a Planetfall concern.
 
 ## Validation and measurement
 

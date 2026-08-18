@@ -14,15 +14,6 @@
 
 namespace apsis_drift {
 
-struct SystemDirection {
-  double x{};
-  double y{};
-  double z{};
-
-  friend auto operator==(const SystemDirection&, const SystemDirection&)
-      -> bool = default;
-};
-
 struct LocalSystemView {
   EphemerisQueryTime time;
   SystemPositionMetres position;
