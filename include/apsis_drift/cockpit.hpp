@@ -76,6 +76,14 @@ struct SystemNavigationReadout {
   auto operator==(const SystemNavigationReadout&) const -> bool = default;
 };
 
+struct SystemFlightStatusReadout {
+  std::string message;
+  std::string insertion_refusal;
+  bool insertion_ready{};
+
+  auto operator==(const SystemFlightStatusReadout&) const -> bool = default;
+};
+
 enum class CockpitLayoutMode { too_small, compact, wide };
 
 struct CockpitLayout {
@@ -138,5 +146,12 @@ struct CockpitLayout {
 [[nodiscard]] auto format_system_navigation(
     const SystemNavigationSolution& navigation,
     const SystemFlightGuidance& guidance) -> SystemNavigationReadout;
+
+// Target-system status keeps the active control mode and time scale visible.
+// The insertion action appears only when authoritative guidance is ready; the
+// refusal text names every unmet threshold without changing flight state.
+[[nodiscard]] auto format_system_flight_status(
+    const SystemFlightState& state,
+    const SystemFlightGuidance& guidance) -> SystemFlightStatusReadout;
 
 }  // namespace apsis_drift

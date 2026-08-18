@@ -33,8 +33,10 @@ brake/orbit-ready cue.
 Orbit insertion is an explicit Enter action. It is available at or inside three
 planet radii when target-relative speed is at most 4 km/s and absolute radial
 speed is at most 250 m/s. Refused insertion does not mutate either travel state.
-Overshoot remains ordinary system flight and can be recovered by turning and
-braking.
+The cockpit exposes Enter only at `ORBIT RDY`; before that it shows the active
+flight mode, time scale, and approach cue. A refused attempt names every unmet
+minimum-clearance, range, relative-speed, and radial-speed threshold. Overshoot
+remains ordinary system flight and can be recovered by turning and braking.
 
 The handoff samples the planet center at the same tick, applies a deterministic
 24-hour planet-frame rotation derived from stable planet identity, and converts

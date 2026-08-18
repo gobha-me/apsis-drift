@@ -2090,6 +2090,7 @@ auto local_system_rendering_contract() -> void {
     const auto guided = format_system_navigation(
         *closing,
         {.target = closing->target,
+         .target_radius_metres = 1'000.0,
          .distance_metres = closing->distance_metres,
          .closing_speed_metres_per_second = 1'200.0,
          .relative_speed_metres_per_second = 1'200.0,
@@ -2102,6 +2103,69 @@ auto local_system_rendering_contract() -> void {
               guided.arrival == "ETA 01:05" &&
               guided.cue == "BRAKE NOW",
           "system flight guidance must expose closing, ETA, and braking text");
+
+    SystemFlightState status_state;
+    status_state.mode = FlightMode::autopilot;
+    status_state.time_scale = SystemTimeScale::sixteen;
+    const SystemFlightGuidance blocked_guidance{
+        .target = closing->target,
+        .target_radius_metres = 1'000.0,
+        .distance_metres = 5'000.0,
+        .closing_speed_metres_per_second = 500.0,
+        .relative_speed_metres_per_second = 8'000.0,
+        .arrival_estimate_seconds = 10.0,
+        .stopping_distance_metres = 2'500.0,
+        .cue = SystemFlightCue::brake,
+        .inside_approach_boundary = true,
+        .orbit_insertion_ready = false,
+    };
+    const auto blocked_status =
+        format_system_flight_status(status_state, blocked_guidance);
+    check(blocked_status.message.contains("AUTO HOLD") &&
+              blocked_status.message.contains("16x") &&
+              blocked_status.message.contains("BRAKE NOW") &&
+              !blocked_status.message.contains("ENTER") &&
+              blocked_status.insertion_refusal.contains("RNG 5.0R>3R") &&
+              blocked_status.insertion_refusal.contains("REL 8.0k>4k") &&
+              blocked_status.insertion_refusal.contains("RAD 500>250m/s"),
+          "blocked system flight must hide Enter and name every unsafe insertion threshold");
+
+    auto below_surface_guidance = blocked_guidance;
+    below_surface_guidance.distance_metres = 900.0;
+    below_surface_guidance.closing_speed_metres_per_second = 0.0;
+    below_surface_guidance.relative_speed_metres_per_second = 0.0;
+    const auto below_surface_status =
+        format_system_flight_status(status_state, below_surface_guidance);
+    check(below_surface_status.insertion_refusal.contains("ALT -100<16m") &&
+              !below_surface_status.insertion_ready,
+          "below-surface system flight must name the minimum-clearance threshold");
+
+    status_state.mode = FlightMode::manual;
+    status_state.time_scale = SystemTimeScale::four;
+    auto ready_guidance = blocked_guidance;
+    ready_guidance.distance_metres = 2'000.0;
+    ready_guidance.closing_speed_metres_per_second = 200.0;
+    ready_guidance.relative_speed_metres_per_second = 3'000.0;
+    ready_guidance.cue = SystemFlightCue::orbit_ready;
+    ready_guidance.orbit_insertion_ready = true;
+    const auto ready_status =
+        format_system_flight_status(status_state, ready_guidance);
+    check(ready_status.message.contains("ORBIT RDY") &&
+              ready_status.message.contains("ENTER INSERT ORBIT") &&
+              ready_status.message.contains("MANUAL") &&
+              ready_status.message.contains("4x") &&
+              ready_status.insertion_refusal.empty(),
+          "ready system flight must expose the actionable Enter cue and active controls");
+
+    auto invalid_guidance = ready_guidance;
+    invalid_guidance.target_radius_metres =
+        std::numeric_limits<double>::quiet_NaN();
+    const auto invalid_status =
+        format_system_flight_status(status_state, invalid_guidance);
+    check(invalid_status.message == " SYSTEM GUIDANCE INVALID " &&
+              invalid_status.insertion_refusal.contains("GUIDANCE INVALID") &&
+              !invalid_status.insertion_ready,
+          "non-finite system guidance must fail closed before presentation");
     auto scaled_navigation = *closing;
     scaled_navigation.distance_metres = 93'666'774'627.0;
     scaled_navigation.closing_speed_metres_per_second = 1'851'067.0;
