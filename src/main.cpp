@@ -867,6 +867,23 @@ class LandscapeApp final : public App {
   }
 
   auto handle_menu_key(const KeyEvent& key) -> void {
+    if (m_session.screen() == SessionScreen::station &&
+        m_intersystem_contract && key.action == KeyAction::Press &&
+        (key.key == Key::Left || key.key == Key::Right)) {
+      const auto board = mission_board_snapshot(*m_intersystem_contract);
+      if (!board || !board->rule_profile_selection_enabled) return;
+      const auto command =
+          m_intersystem_contract->rule_profile ==
+                  IntersystemRuleProfile::assisted
+              ? IntersystemContractCommand::select_pilot_profile
+              : IntersystemContractCommand::select_assisted_profile;
+      if (!advance_intersystem_contract(*m_intersystem_contract,
+                                        m_intersystem_contract->universe_tick,
+                                        command)) {
+        m_error = "rule profile selection was rejected";
+      }
+      return;
+    }
     if (const auto command = menu_command_for(key)) {
       apply_session_command(*command);
     }
@@ -985,7 +1002,7 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "FIRST CONTRACT // v0.4.12", "CONTINUE");
+    draw_menu(screen, "FIRST CONTRACT // v0.4.14", "CONTINUE");
   }
 
   auto draw_station_screen(Screen& screen) -> void {
@@ -1011,20 +1028,25 @@ class LandscapeApp final : public App {
             std::max(1, m_menu_layout.art.y + row), value, color, background);
       };
       centered(1, board->station, muted);
-      centered(3, std::format("FIRST INTERSYSTEM CONTRACT // {}",
+      centered(2, std::format("FIRST INTERSYSTEM CONTRACT // {} // {}",
+                              board->mission,
                               board->status),
                accent);
-      centered(5, board->mission, muted);
-      centered(7, std::format("DESTINATION: {}", board->destination_system),
+      centered(4, std::format("DESTINATION: {}", board->destination_system),
                text);
-      centered(9, std::format("PLANET: {}", board->destination_planet), text);
-      centered(11, std::format("OBJECTIVE: {}", board->objective), text);
-      centered(13,
+      centered(6, std::format("PLANET: {}", board->destination_planet), text);
+      centered(8, std::format("OBJECTIVE: {}", board->objective), text);
+      centered(10,
                std::format("RETURN REQUIRED: {}", board->return_destination),
                muted);
-      if (board->launch_authorized) {
-        centered(15, "LAUNCH ROUTE AUTHORIZED", accent);
-      }
+      centered(12,
+               std::format("RULE PROFILE: {} // {} [{}]",
+                           board->rule_profile,
+                           board->rule_profile_description,
+                           board->rule_profile_selection_enabled
+                               ? "LEFT/RIGHT"
+                               : "LOCKED"),
+               board->rule_profile_selection_enabled ? accent : muted);
       return;
     }
     if (!m_signal_run) {

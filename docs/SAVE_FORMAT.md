@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 7 is a deterministic JSON document. It keeps
+Apsis Drift save format version 8 is a deterministic JSON document. It keeps
 the generated-world recipe separate from mutable player state and does not
 serialize terrain tiles, render state, terminal capabilities, preferences, or
 other reproducible presentation data.
@@ -39,7 +39,7 @@ projects its authoritative contract state independently.
 Every document has three required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `7` for newly written saves;
+- `format_version` is the unsigned JSON integer `8` for newly written saves;
 - `recipe` and `state` are required objects.
 
 The recipe records the universe seed, origin-system and active-planet
@@ -60,7 +60,8 @@ regenerated station and planet IDs.
   controls, flight mode, and bounded time scale. Version 6 admits the matching
   target-planet flight state and one collected delta for the contract's bound
   surface objective. Version 7 adds the origin-station approach tick,
-  identities, inertial pose, controls, and mode.
+  identities, inertial pose, controls, and mode. Version 8 records the
+  authoritative `assisted` or `pilot` rule profile selected before launch.
 
 Legacy mutable state records:
 
@@ -73,7 +74,7 @@ Legacy mutable state records:
 
 The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) and
 [`save-v1-golden.json`](../test/data/save-v1-golden.json) remain legacy
-migration fixtures. Newly encoded documents are canonical version 7.
+migration fixtures. Newly encoded documents are canonical version 8.
 
 ## Encodings
 
@@ -111,9 +112,9 @@ state. Duplicate object keys are rejected rather than resolved by ordering.
 Unknown enum values and delta kinds are rejected because silently dropping
 their semantics could resurrect or duplicate generated content.
 
-Formats 1, 2, 3, 4, 5, 6, and 7 and the generator versions compiled into the current
-build are supported. Version 1 is decoded with local-sun generator version 1;
-formats 1 and 2 rewrite as version 7 on the next explicit save. They remain
+Formats 1 through 8 and the generator versions compiled into the current build
+are supported. Version 1 is decoded with local-sun generator version 1;
+formats 1 and 2 rewrite as version 8 on the next explicit save. They remain
 `legacy_signal_run` careers and are never assigned the intersystem contract.
 Released version 3 intersystem careers preserve every recorded phase and tick;
 their absent arrival solution remains absent rather than synthesizing progress.
@@ -125,8 +126,10 @@ collected delta at its saved universe tick; it does not advance a mission.
 Released version 6 Planetfall state remains exact. A released origin arrival
 with an immutable return solution materializes the matching station-approach
 state without changing its tick, mission phase, or world delta.
+Formats 1 through 7 have no rule-profile field and migrate to `assisted`; their
+version-1 intersystem contract recipe is normalized to contract version 2.
 Other format versions fail as unsupported and other generator versions fail as
-incompatible. Older builds reject version 7 before reading fields, so they
+incompatible. Older builds reject version 8 before reading fields, so they
 cannot silently discard the new mission state.
 
 Local-sun geometry is regenerated from the active planet's independent
@@ -165,3 +168,9 @@ return spooling, removes it at jump commitment, and admits exactly one matching
 states contain no active craft representation. The origin-return state must
 match the contract tick, origin system, and stable station identity and must
 contain only finite bounded inertial values.
+
+Version 8 adds the rule profile to the high-level intersystem contract. It may
+change only while docked with an offered or accepted mission and is locked by
+launch. Thermal load, alignment samples, and arrival-quality fields remain
+deferred to the systems that first make them authoritative; presentation-only
+profile labels and guidance are not serialized.

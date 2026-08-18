@@ -293,8 +293,8 @@ auto seed_derivation_contract() -> void {
 }
 
 auto intersystem_identity_contract() -> void {
-  check(kIntersystemContractVersion == 1,
-        "intersystem contract version 1 must remain stable");
+  check(kIntersystemContractVersion == 2,
+        "intersystem contract version 2 must remain stable");
   check(kFirstTargetSystemOrdinal == 1 && kSystemStarOrdinal == 0 &&
             kFirstMissionOrdinal == 0 && kFirstMissionTargetPlanetOrdinal == 0,
         "the first intersystem identity path must retain its named ordinals");
@@ -383,6 +383,7 @@ auto intersystem_state_contract() -> void {
           state.universe_tick == 0 &&
           state.mission_phase == IntersystemMissionPhase::offered &&
           state.travel_phase == IntersystemTravelPhase::docked_at_origin &&
+          state.rule_profile == IntersystemRuleProfile::assisted &&
           state.current_system == state.identities.origin_system,
       "a first intersystem contract must begin offered at the origin station");
 
@@ -406,6 +407,10 @@ auto intersystem_state_contract() -> void {
 
   rejected(IntersystemContractCommand::launch,
            IntersystemContractError::invalid_transition);
+  accepted(IntersystemContractCommand::select_pilot_profile);
+  check(state.rule_profile == IntersystemRuleProfile::pilot &&
+            intersystem_rule_profile_name(state.rule_profile) == "PILOT",
+        "a docked offered contract must accept the Pilot rule profile");
   const auto wrong_tick_before = state;
   const auto wrong_tick =
       advance_intersystem_contract(state, state.universe_tick + 1,
@@ -416,9 +421,14 @@ auto intersystem_state_contract() -> void {
           state == wrong_tick_before,
       "commands must address the exact authoritative universe tick");
   accepted(IntersystemContractCommand::accept_mission);
+  accepted(IntersystemContractCommand::select_assisted_profile);
+  check(state.rule_profile == IntersystemRuleProfile::assisted,
+        "a docked accepted contract must remain profile-selectable");
   rejected(IntersystemContractCommand::accept_mission,
            IntersystemContractError::invalid_transition);
   accepted(IntersystemContractCommand::launch);
+  rejected(IntersystemContractCommand::select_pilot_profile,
+           IntersystemContractError::invalid_transition);
   accepted(IntersystemContractCommand::begin_outbound_jump);
   advance_time(kJumpSpoolTicks - 1);
   rejected(IntersystemContractCommand::commit_outbound_jump,
@@ -498,6 +508,10 @@ auto intersystem_state_contract() -> void {
   malformed.mission_phase = static_cast<IntersystemMissionPhase>(255);
   check(!validate_intersystem_contract_state(malformed),
         "unknown mission phases must fail validation");
+  malformed = initial_intersystem_contract_state(Seed{42});
+  malformed.rule_profile = static_cast<IntersystemRuleProfile>(255);
+  check(!validate_intersystem_contract_state(malformed),
+        "unknown rule profiles must fail validation");
   rejected(static_cast<IntersystemContractCommand>(255),
            IntersystemContractError::invalid_transition);
 }
@@ -624,7 +638,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v7 round trip");
+        "a committed arrival solution must survive a canonical v8 round trip");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -964,10 +978,15 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v7 save/resume exactly");
+        "system flight must survive canonical v8 save/resume exactly");
   if (encoded && contract.arrival_solution) {
-    const auto released_v4 = replace_once(
-        *encoded, "\"format_version\": 7", "\"format_version\": 4");
+    auto released_v4 = replace_once(
+        *encoded, "\"format_version\": 8", "\"format_version\": 4");
+    released_v4 = replace_once(std::move(released_v4),
+                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 1");
+    released_v4 = replace_once(std::move(released_v4),
+                               "\"rule_profile\": \"assisted\",\n", "");
     const auto migrated = decode_save_document_json(released_v4);
     const auto expected_migration = initial_system_flight_state(
         system, contract.identities.target_planet,
@@ -1096,10 +1115,15 @@ auto intersystem_return_contract() -> void {
               : std::expected<SaveDocument, SaveSchemaError>{
                     std::unexpected{SaveSchemaError{}}};
   check(restored && restored->state.origin_return == returning,
-        "format 7 must preserve the exact origin-station approach state");
+        "format 8 must preserve the exact origin-station approach state");
   if (encoded) {
-    const auto released_v6 = replace_once(
-        *encoded, "\"format_version\": 7", "\"format_version\": 6");
+    auto released_v6 = replace_once(
+        *encoded, "\"format_version\": 8", "\"format_version\": 6");
+    released_v6 = replace_once(std::move(released_v6),
+                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 1");
+    released_v6 = replace_once(std::move(released_v6),
+                               "\"rule_profile\": \"assisted\",\n", "");
     const auto migrated = decode_save_document_json(released_v6);
     check(migrated && migrated->state.origin_return == returning &&
               migrated->state.intersystem_contract == contract,
@@ -1116,7 +1140,7 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(result && result->report.checkpoints.size() == 6U &&
             result->report.final_tick == 31'535U &&
             result->report.final_authoritative_checksum ==
-                9'496'404'445'183'332'939ULL &&
+                1'830'402'382'728'972'499ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -1262,14 +1286,25 @@ auto mission_board_contract() -> void {
             offered->objective ==
                 "SIGNAL SURVEY // signal-9936ac67f2245d20" &&
             offered->status == "OFFERED" &&
+            offered->rule_profile == "ASSISTED" &&
+            offered->rule_profile_description ==
+                "FORGIVING ENTRY // OPTIMAL FTL ARRIVAL" &&
+            offered->rule_profile_selection_enabled &&
             offered->primary_action == "ACCEPT CONTRACT" &&
             offered->primary_action_enabled && !offered->launch_authorized,
         "the offered mission board must expose one complete semantic contract");
 
   const auto accept = advance_intersystem_contract(
       state, state.universe_tick, IntersystemContractCommand::accept_mission);
+  const auto pilot = advance_intersystem_contract(
+      state, state.universe_tick,
+      IntersystemContractCommand::select_pilot_profile);
   const auto accepted = mission_board_snapshot(state);
-  check(accept && accepted && accepted->status == "ACCEPTED" &&
+  check(accept && pilot && accepted && accepted->status == "ACCEPTED" &&
+            accepted->rule_profile == "PILOT" &&
+            accepted->rule_profile_description ==
+                "THERMAL ABORTS // ALIGNMENT-GRADED ARRIVAL" &&
+            accepted->rule_profile_selection_enabled &&
             accepted->primary_action == "LAUNCH" &&
             accepted->primary_action_enabled && accepted->launch_authorized,
         "acceptance must authorize an explicit intersystem launch");
@@ -1292,8 +1327,13 @@ auto mission_board_contract() -> void {
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
   if (fresh_json) {
-    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 7",
+    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 8",
                                     "\"format_version\": 3");
+    released_v3 = replace_once(std::move(released_v3),
+                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 1");
+    released_v3 = replace_once(std::move(released_v3),
+                               "\"rule_profile\": \"assisted\",\n", "");
     released_v3 = replace_once(std::move(released_v3),
                                "\"arrival_solution\": null",
                                "\"legacy_optional\": null");
@@ -1306,9 +1346,62 @@ auto mission_board_contract() -> void {
     check(migrated_v3 &&
               migrated_v3->state.intersystem_contract ==
                   document.state.intersystem_contract &&
-              rewritten_v3 && rewritten_v3->find("\"format_version\": 7") !=
+              rewritten_v3 && rewritten_v3->find("\"format_version\": 8") !=
                                     std::string::npos,
-          "released v3 intersystem profiles must preserve state and rewrite as v7");
+          "released v3 intersystem profiles must default to Assisted and rewrite as v8");
+
+    auto pilot_document = make_new_game_document(Seed{42});
+    const auto selected = advance_intersystem_contract(
+        *pilot_document.state.intersystem_contract, 0,
+        IntersystemContractCommand::select_pilot_profile);
+    const auto pilot_json = encode_save_document_json(pilot_document);
+    const auto pilot_round_trip =
+        pilot_json ? decode_save_document_json(*pilot_json)
+                   : std::expected<SaveDocument, SaveSchemaError>{
+                         std::unexpected{SaveSchemaError{}}};
+    check(selected && pilot_json &&
+              pilot_json->find("\"rule_profile\": \"pilot\"") !=
+                  std::string::npos &&
+              pilot_round_trip &&
+              pilot_round_trip->state.intersystem_contract->rule_profile ==
+                  IntersystemRuleProfile::pilot,
+          "format v8 must preserve the authoritative Pilot selection");
+    if (pilot_json) {
+      const auto invalid_profile = decode_save_document_json(replace_once(
+          *pilot_json, "\"rule_profile\": \"pilot\"",
+          "\"rule_profile\": \"simulation\""));
+      check(!invalid_profile &&
+                invalid_profile.error().code ==
+                    SaveSchemaErrorCode::invalid_value &&
+                invalid_profile.error().path ==
+                    "$.state.intersystem_contract.rule_profile",
+            "format v8 must reject unknown rule profiles before state commit");
+
+      auto released_v7 = replace_once(*pilot_json, "\"format_version\": 8",
+                                      "\"format_version\": 7");
+      released_v7 = replace_once(std::move(released_v7),
+                                 "\"intersystem_contract\": 2",
+                                 "\"intersystem_contract\": 1");
+      released_v7 = replace_once(std::move(released_v7),
+                                 "\"rule_profile\": \"pilot\",\n", "");
+      const auto migrated_v7 = decode_save_document_json(released_v7);
+      check(migrated_v7 &&
+                migrated_v7->recipe.generator_versions.intersystem_contract ==
+                    kIntersystemContractVersion &&
+                migrated_v7->state.intersystem_contract->rule_profile ==
+                    IntersystemRuleProfile::assisted,
+            "released format v7 must normalize contract version 1 and default to Assisted");
+
+      auto dishonest_v7 = replace_once(*pilot_json, "\"format_version\": 8",
+                                       "\"format_version\": 7");
+      dishonest_v7 = replace_once(std::move(dishonest_v7),
+                                  "\"rule_profile\": \"pilot\",\n", "");
+      const auto rejected_v7 = decode_save_document_json(dishonest_v7);
+      check(!rejected_v7 &&
+                rejected_v7.error().code ==
+                    SaveSchemaErrorCode::incompatible_generator_version,
+            "released formats must reject contract-version metadata they could not encode");
+    }
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
@@ -1399,10 +1492,13 @@ auto mission_board_contract() -> void {
         "the persistence fixture must reach objective completion legally");
   round_trip(state,
              "objective-complete intersystem state must survive a v3 round trip");
-  const auto completed_v7 = encode_save_document_json(document);
-  if (completed_v7) {
-    auto released_v5 = replace_once(*completed_v7, "\"format_version\": 7",
+  const auto completed_v8 = encode_save_document_json(document);
+  if (completed_v8) {
+    auto released_v5 = replace_once(*completed_v8, "\"format_version\": 8",
                                     "\"format_version\": 5");
+    released_v5 = replace_once(std::move(released_v5),
+                               "\"intersystem_contract\": 2",
+                               "\"intersystem_contract\": 1");
     const auto deltas_start = released_v5.find("    \"world_deltas\": [");
     const auto deltas_end =
         deltas_start == std::string::npos
@@ -1422,7 +1518,7 @@ auto mission_board_contract() -> void {
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v7 completion must require its bound collected delta");
+        "format v8 completion must require its bound collected delta");
   check(command(IntersystemContractCommand::leave_target_planet).has_value() &&
             command(IntersystemContractCommand::begin_return_jump)
                 .has_value() &&
@@ -2029,9 +2125,9 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 7 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 8 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 7 identity and byte bound must remain stable");
+        "save format version 8 identity and byte bound must remain stable");
   const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
   const auto fixture = read_test_data("test/data/save-v2-golden.json");
   check(!legacy_fixture.empty() && !fixture.empty(),
@@ -2080,11 +2176,11 @@ auto save_schema_contract() -> void {
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 7") !=
+  check(encoded && encoded->find("\"format_version\": 8") !=
                        std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must migrate legacy state into canonical version 7");
+        "the current encoder must migrate legacy state into canonical version 8");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
@@ -2093,7 +2189,7 @@ auto save_schema_contract() -> void {
   const auto migrated = decode_save_document_json(legacy_fixture);
   check(migrated && *migrated == expected &&
             encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 7");
+        "a version 1 save must migrate in memory and rewrite canonically as version 8");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -2124,13 +2220,13 @@ auto save_schema_contract() -> void {
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 8"),
+                   "\"format_version\": 9"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":8}",
+      "{\"application\":\"apsis-drift\",\"format_version\":9}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 7 fields are read");
+        "future formats must be identified before version 8 fields are read");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
@@ -2162,8 +2258,8 @@ auto save_schema_contract() -> void {
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported ephemeris versions must be rejected explicitly");
     expect_decode_error(
-        replace_once(*encoded, "\"intersystem_contract\": 1",
-                     "\"intersystem_contract\": 2"),
+        replace_once(*encoded, "\"intersystem_contract\": 2",
+                     "\"intersystem_contract\": 3"),
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported first-contract versions must be rejected explicitly");
     expect_decode_error(

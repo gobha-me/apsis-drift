@@ -24,8 +24,9 @@ incompatible state.
 
 `MissionBoardSnapshot` supplies the origin station, mission, destination
 system, target planet, objective, return destination, textual status, primary
-action, and launch authorization. Kitty and ANSI render that same snapshot, so
-no mission state or warning depends on pixels or color alone.
+action, launch authorization, rule profile, profile explanation, and selection
+lock. Kitty and ANSI render that same snapshot, so no mission state or warning
+depends on pixels or color alone.
 
 A fresh career begins `OFFERED` with `ACCEPT CONTRACT`. Acceptance is an atomic
 `offered -> accepted` transition at the authoritative universe tick. Repeated,
@@ -35,15 +36,21 @@ mutation. The accepted board reports `LAUNCH ROUTE AUTHORIZED` and exposes
 Sub-light system-space craft movement and the target-planet orbital handoff are
 implemented by the versioned system-flight path.
 
+Left and Right switch between `ASSISTED` and `PILOT` while the mission is
+offered or accepted at the station. Launch locks the selection for the active
+mission. Assisted is the fresh-career and migration default; the descriptions
+remain textual and information-complete on Kitty and ANSI. The complete
+profile contract is recorded in [Deterministic Rule Profiles](RULE_PROFILES.md).
+
 The same semantic model names active, objective-complete, returned, and
 turned-in states for later loop stages. A returned contract exposes
 `TURN IN CONTRACT`; turning it in remains a distinct explicit transition.
 
 ## Persistence and compatibility
 
-Fresh careers use save format 7 and persist the high-level
+Fresh careers use save format 8 and persist the high-level
 `IntersystemContractState`. Formats 1 and 2 decode as `legacy_signal_run`, keep
-their original planet-side objective and craft state, and rewrite as format 7
+their original planet-side objective and craft state, and rewrite as format 8
 without teleporting, retargeting, or synthesizing mission progress.
 
 The save excludes terminal capabilities, render profiles, menu selection,

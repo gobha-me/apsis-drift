@@ -1,10 +1,11 @@
 # Deterministic Intersystem Mission and Travel Contract
 
-Version 1 defines the authoritative boundary for the first complete
-station-to-system contract loop. It records identities, time, coordinate
-ownership, legal travel phases, and save implications before the individual
-generation, rendering, flight, and mission-board systems implement them. It is
-not a galaxy generator, a general mission framework, or a flight engine.
+Version 2 defines the authoritative boundary for the first complete
+station-to-system contract loop. Version 1 established identities, time,
+coordinate ownership, legal travel phases, and save implications before the
+individual generation, rendering, flight, and mission-board systems implement
+them. It is not a galaxy generator, a general mission framework, or a flight
+engine.
 
 ## Bounded first route
 
@@ -147,6 +148,19 @@ No first-loop recovery requires fuel, repair, damage, or a new objective. Pilot
 thermal consequences may later make recovery harder, but they must remain
 bounded and cannot turn a valid location into corrupt mission state.
 
+## Rule profiles
+
+Version 2 adds exactly two authoritative rule profiles. `ASSISTED` is the
+fresh-career and migration default. `PILOT` opts into deterministic thermal and
+alignment consequences implemented by follow-up systems. The player may select
+either profile only while docked with the mission offered or accepted; launch
+locks it for the active mission. Profile commands are tick-addressed and never
+change seeds, identities, ephemerides, terrain, objectives, or mission phases.
+
+The thermal abort, arrival-quality bands, authoritative/derived state boundary,
+and recovery cap are specified in
+[Deterministic Rule Profiles](RULE_PROFILES.md).
+
 ## Save projection and compatibility
 
 The v0.4.7 mission board introduced save format version 3. The v0.4.8 Assisted
@@ -180,11 +194,15 @@ does not, and origin arrival creates one matching station-approach state.
 Docking removes that craft state and changes the mission to `returned`; only
 the separate mission-board action changes it to `turned_in`.
 
+The v0.4.14 rule-profile path extends the projection as version 8 and records
+the locked Assisted/Pilot selection. Formats 1 through 7 migrate to Assisted
+and retain every previously authoritative field unchanged.
+
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 through 6 remain readable. Formats 1 and 2 retain their saved
+Formats 1 through 7 remain readable. Formats 1 and 2 retain their saved
 origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
@@ -192,9 +210,9 @@ not moved to system ordinal 1, assigned a generated jump, or given synthetic
 mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. A released format-4
 target arrival initializes mutable flight from its already-bound immutable
-arrival solution. Released format-5 system flight and format-6 Planetfall state
-remain exact. Older readers must reject format 7 before discarding any of these
-fields.
+arrival solution. Released format-5 system flight, format-6 Planetfall state,
+and format-7 return state remain exact. Older readers must reject format 8
+before discarding any of these fields.
 
 ## Implementation boundaries
 

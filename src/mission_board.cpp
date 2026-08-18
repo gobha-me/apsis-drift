@@ -49,10 +49,20 @@ auto mission_board_snapshot(const IntersystemContractState& state)
       .return_destination =
           origin_station_id_string(state.identities.origin_station),
       .status = std::string{mission_status(state.mission_phase)},
+      .rule_profile = std::string{
+          intersystem_rule_profile_name(state.rule_profile)},
+      .rule_profile_description =
+          state.rule_profile == IntersystemRuleProfile::assisted
+              ? "FORGIVING ENTRY // OPTIMAL FTL ARRIVAL"
+              : "THERMAL ABORTS // ALIGNMENT-GRADED ARRIVAL",
       .primary_action = "CONTRACT IN FLIGHT",
       .primary_action_enabled = false,
       .launch_authorized =
           state.mission_phase == IntersystemMissionPhase::accepted,
+      .rule_profile_selection_enabled =
+          state.travel_phase == IntersystemTravelPhase::docked_at_origin &&
+          (state.mission_phase == IntersystemMissionPhase::offered ||
+           state.mission_phase == IntersystemMissionPhase::accepted),
   };
   if (state.mission_phase == IntersystemMissionPhase::offered) {
     snapshot.primary_action = "ACCEPT CONTRACT";
