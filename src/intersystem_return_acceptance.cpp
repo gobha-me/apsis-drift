@@ -133,13 +133,13 @@ auto run_intersystem_return_acceptance(int width, int height)
     return saved;
   };
   if (!document.state.system_flight ||
-      !begin_assisted_jump(resumed_contract)) {
+      !begin_intersystem_jump(resumed_contract)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::transition_failure};
   }
   const auto frozen_tick = document.state.system_flight->tick;
   for (SimulationTick tick = 0; tick < kSimulationHz / 2; ++tick) {
-    if (!advance_assisted_jump_tick(resumed_contract,
+    if (!advance_intersystem_jump_tick(resumed_contract,
                                    generate_local_system(
                                        resumed_contract.identities
                                            .origin_system_seed))) {
@@ -147,14 +147,14 @@ auto run_intersystem_return_acceptance(int width, int height)
           IntersystemReturnAcceptanceError::simulation_failure};
     }
   }
-  if (!cancel_assisted_jump(resumed_contract)) {
+  if (!cancel_intersystem_jump(resumed_contract)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::transition_failure};
   }
   document.state.system_flight->tick = resumed_contract.universe_tick;
   document.state.system_flight->controls = {};
   if (frozen_tick >= document.state.system_flight->tick ||
-      !persist() || !begin_assisted_jump(resumed_contract)) {
+      !persist() || !begin_intersystem_jump(resumed_contract)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::persistence_failure};
   }
@@ -164,7 +164,7 @@ auto run_intersystem_return_acceptance(int width, int height)
   SimulationTick commit_tick{};
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
     const auto advanced =
-        advance_assisted_jump_tick(resumed_contract, origin_system);
+        advance_intersystem_jump_tick(resumed_contract, origin_system);
     if (!advanced) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
@@ -179,7 +179,7 @@ auto run_intersystem_return_acceptance(int width, int height)
         IntersystemReturnAcceptanceError::persistence_failure};
   }
   for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
-    if (!advance_assisted_jump_tick(resumed_contract, origin_system)) {
+    if (!advance_intersystem_jump_tick(resumed_contract, origin_system)) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
     }

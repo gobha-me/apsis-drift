@@ -14,13 +14,12 @@ terminal driver, resizing, changing render cadence, or loading the save cannot
 change it.
 
 The selection is a tick-addressed intersystem contract command and save format
-8 stores it as authoritative state. Formats 1 through 7 migrate without a
+9 stores it as authoritative state. Formats 1 through 7 migrate without a
 profile field and therefore select `ASSISTED`. Unknown profile values are
 invalid rather than silently downgraded.
 
-This version establishes and persists the profile boundary. The existing
-Assisted jump and entry mechanics remain the playable implementation until the
-separate Pilot thermal and alignment systems consume the selection.
+Pilot FTL alignment now consumes this boundary. Pilot thermal entry remains a
+separate follow-up.
 
 ## Assisted
 
@@ -58,20 +57,20 @@ quality bands:
 - `OPPOSED` may place the craft across the target planet's orbital phase while
   remaining in the correct generated system.
 
-The sampled alignment score, selected band, and immutable arrival solution are
-authoritative at commitment. Pre-commit aiming cues and projected quality are
-derived presentation. The band geometry must keep the worst generated first-
-route direct-assist recovery within five authoritative hours of additional
-system travel, which is less than nineteen minutes at 16x compression. The
-alignment implementation must test that bound across the generated first-route
-catalog before publication.
+The fixed-point heading/velocity sample, selected band, and immutable arrival
+solution are authoritative at commitment. Pre-commit aiming cues and projected
+quality are derived presentation. ALIGNED is bounded by 3 degrees and 2%;
+OFFSET is bounded by 45 degrees and 20%; OPPOSED covers the remaining valid
+sample. OFFSET scales from 10 to 100 planet radii. OPPOSED approximates the
+opposite orbital phase. Its bounded recovery route is to cancel while spooling
+or use target-hold system flight after arrival; #95 owns propulsion-specific
+direct travel-time measurements.
 
 Poor alignment never changes the target system, planet identity, ephemeris,
 mission, or objective and never requires fuel, repair, or permanent damage.
 
 ## Deferred systems
 
-Thermal integration and reentry guidance belong to #93. Alignment scoring and
-band-specific arrival placement belong to #94. Fuel, repair, permanent ship
-damage, installed hardware, additional profiles, sliders, and a generic
+Thermal integration and reentry guidance belong to #93. Fuel, repair,
+permanent ship damage, installed hardware, additional profiles, sliders, and a generic
 difficulty framework remain outside this contract.

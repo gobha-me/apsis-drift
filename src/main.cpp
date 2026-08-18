@@ -1401,9 +1401,29 @@ class LandscapeApp final : public App {
                intersystem_jump_snapshot(*m_intersystem_contract)) {
       const auto jump =
           *intersystem_jump_snapshot(*m_intersystem_contract);
-      message = std::format(" {} | {} | {:3.0f}% | {} ", jump.phase,
-                            jump.destination, jump.progress * 100.0,
-                            jump.cancelable ? "J CANCEL" : "ARRIVAL BOUND");
+      if (jump.alignment) {
+        message = std::format(
+            " PILOT ALIGN {:+.1f} deg | VEL {:+.1f}% | {} | {} | J cancel ",
+            static_cast<double>(
+                jump.alignment->heading_error_millidegrees) /
+                1'000.0,
+            static_cast<double>(
+                jump.alignment->velocity_error_basis_points) /
+                100.0,
+            intersystem_arrival_quality_name(
+                jump.alignment->projected_quality),
+            jump.alignment->correction);
+      } else {
+        const auto quality = jump.bound_quality
+                                 ? intersystem_arrival_quality_name(
+                                       *jump.bound_quality)
+                                 : std::string_view{"AUTO ALIGN"};
+        message = std::format(" {} | {} | {:3.0f}% | {} | {} ", jump.phase,
+                              jump.destination, jump.progress * 100.0,
+                              quality,
+                              jump.cancelable ? "J CANCEL"
+                                              : "ARRIVAL BOUND");
+      }
     } else if (m_origin_return && m_intersystem_contract) {
       const auto guidance = resolve_origin_return_guidance(
           *m_intersystem_contract, *m_origin_return);
@@ -1535,7 +1555,7 @@ class LandscapeApp final : public App {
             (key.ch == U'j' || key.ch == U'J')) {
           if (m_intersystem_contract->travel_phase ==
               IntersystemTravelPhase::return_jump_spooling) {
-            if (!cancel_assisted_jump(*m_intersystem_contract)) {
+            if (!cancel_intersystem_jump(*m_intersystem_contract)) {
               m_error = "return jump cancellation was rejected";
               return;
             }
@@ -1543,7 +1563,7 @@ class LandscapeApp final : public App {
             m_system_flight->controls = {};
           } else if (m_intersystem_contract->mission_phase ==
                          IntersystemMissionPhase::objective_complete &&
-                     begin_assisted_jump(*m_intersystem_contract)) {
+                     begin_intersystem_jump(*m_intersystem_contract)) {
             m_system_flight->controls = {};
             m_input_mapper.suspend({},
                                    m_intersystem_contract->universe_tick);
@@ -1607,8 +1627,17 @@ class LandscapeApp final : public App {
         m_input_mapper.enqueue(key, m_origin_return->tick, true);
         return;
       }
-      if (key.action != KeyAction::Press || key.key != Key::Char ||
-          (key.ch != U'j' && key.ch != U'J')) {
+      const bool jump_key = key.action == KeyAction::Press &&
+                            key.key == Key::Char &&
+                            (key.ch == U'j' || key.ch == U'J');
+      if (!jump_key) {
+        if (m_intersystem_contract->travel_phase ==
+                IntersystemTravelPhase::outbound_jump_spooling &&
+            m_intersystem_contract->rule_profile ==
+                IntersystemRuleProfile::pilot) {
+          m_input_mapper.enqueue(key,
+                                 m_intersystem_contract->universe_tick);
+        }
         return;
       }
       const bool spooling =
@@ -1617,9 +1646,13 @@ class LandscapeApp final : public App {
           m_intersystem_contract->travel_phase ==
               IntersystemTravelPhase::return_jump_spooling;
       const auto changed = spooling
-                               ? cancel_assisted_jump(*m_intersystem_contract)
-                               : begin_assisted_jump(*m_intersystem_contract);
-      if (!changed) m_error = "jump command refused in the current state";
+                               ? cancel_intersystem_jump(*m_intersystem_contract)
+                               : begin_intersystem_jump(*m_intersystem_contract);
+      if (!changed) {
+        m_error = "jump command refused in the current state";
+      } else {
+        m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
+      }
       return;
     }
     if (m_signal_run && m_signal_run->flight) {
@@ -1685,15 +1718,23 @@ class LandscapeApp final : public App {
           const bool outbound =
               phase == IntersystemTravelPhase::outbound_jump_spooling ||
               phase == IntersystemTravelPhase::outbound_jump_committed;
-          const auto advanced = advance_assisted_jump_tick(
+          const auto commands =
+              outbound && phase ==
+                              IntersystemTravelPhase::outbound_jump_spooling &&
+                      m_intersystem_contract->rule_profile ==
+                          IntersystemRuleProfile::pilot
+                  ? m_input_mapper.take_commands(
+                        m_intersystem_contract->universe_tick)
+                  : std::vector<FlightCommand>{};
+          const auto advanced = advance_intersystem_jump_tick(
               *m_intersystem_contract,
-              outbound ? m_local_system : m_origin_system);
+              outbound ? m_local_system : m_origin_system, commands);
           if (!advanced) {
-            throw std::runtime_error{"Assisted jump simulation failed"};
+            throw std::runtime_error{"intersystem jump simulation failed"};
           }
           if (advanced->arrived && outbound) {
             if (!m_intersystem_contract->arrival_solution) {
-              throw std::runtime_error{"Assisted arrival state is unavailable"};
+              throw std::runtime_error{"intersystem arrival state is unavailable"};
             }
             auto flight = initial_system_flight_state(
                 m_local_system,
@@ -1703,6 +1744,7 @@ class LandscapeApp final : public App {
               throw std::runtime_error{"cannot initialize target-system flight"};
             }
             m_system_flight = std::move(*flight);
+            m_input_mapper.suspend({}, m_system_flight->tick);
           } else if (advanced->arrived && !outbound) {
             auto returning = initialize_origin_return(*m_intersystem_contract);
             if (!returning) {
@@ -1713,6 +1755,10 @@ class LandscapeApp final : public App {
           }
           if (advanced->committed && !outbound) {
             m_system_flight.reset();
+          }
+          if (advanced->committed) {
+            m_input_mapper.suspend({},
+                                   m_intersystem_contract->universe_tick);
           }
         } else if (m_system_flight) {
           auto next_flight = *m_system_flight;

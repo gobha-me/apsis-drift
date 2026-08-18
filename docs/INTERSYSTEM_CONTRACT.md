@@ -1,6 +1,6 @@
 # Deterministic Intersystem Mission and Travel Contract
 
-Version 2 defines the authoritative boundary for the first complete
+Version 3 defines the authoritative boundary for the first complete
 station-to-system contract loop. Version 1 established identities, time,
 coordinate ownership, legal travel phases, and save implications before the
 individual generation, rendering, flight, and mission-board systems implement
@@ -28,8 +28,8 @@ corresponding derived 64-bit seeds. Their canonical diagnostic forms use the
 sixteen lowercase hexadecimal digits. Catalog indices may locate an item but
 never replace its stable ID in mission or save state.
 
-Seed domains `star=8`, `orbit=9`, and `mission=10` are additive version 1
-inputs. Planet descriptor identity continues to use the existing `planet`
+Seed domains `star=8`, `orbit=9`, `mission=10`, and `jump_alignment=11` are
+additive inputs. Planet descriptor identity continues to use the existing `planet`
 domain. Keeping `orbit/ordinal` beside `planet/ordinal` allows orbital metadata
 to evolve without perturbing the existing planet, terrain, signal, or local-sun
 streams. Derivation is stateless, so inspecting or adding one child cannot
@@ -52,7 +52,7 @@ not a second local clock. At a system/planet handoff both representations are
 resolved at that exact tick. Saving and restoring the tick therefore restores
 the same body positions, daylight, and legal jump boundary.
 
-Version 1 jump timing is intentionally short and explicit:
+Version 2 jump timing is intentionally short and explicit:
 
 - spooling lasts 360 ticks (three seconds) and may be canceled;
 - committed transit lasts 240 ticks (two seconds);
@@ -65,9 +65,9 @@ The committed state has no meaningful continuous interstellar position. It
 simulates a bounded deterministic transition and advances authoritative time;
 camera motion, flashes, skipped frames, and no-animation/headless completion
 are presentation choices. Assisted arrival uses the documented ten-radius
-matched-velocity target corridor. The optional Pilot profile may choose another
-deterministic pose inside the same correct target system, but cannot change its
-identity.
+matched-velocity target corridor. Pilot grades fixed-point heading and velocity
+alignment and binds an aligned, offset, or opposite-phase pose inside the same
+correct target system, but cannot change its identity.
 
 ## Coordinate ownership and handoffs
 
@@ -150,9 +150,9 @@ bounded and cannot turn a valid location into corrupt mission state.
 
 ## Rule profiles
 
-Version 2 adds exactly two authoritative rule profiles. `ASSISTED` is the
-fresh-career and migration default. `PILOT` opts into deterministic thermal and
-alignment consequences implemented by follow-up systems. The player may select
+Version 3 retains exactly two authoritative rule profiles. `ASSISTED` is the
+fresh-career and migration default. `PILOT` opts into deterministic thermal
+consequences and the implemented alignment consequences. The player may select
 either profile only while docked with the mission offered or accepted; launch
 locks it for the active mission. Profile commands are tick-addressed and never
 change seeds, identities, ephemerides, terrain, objectives, or mission phases.
@@ -198,11 +198,17 @@ The v0.4.14 rule-profile path extends the projection as version 8 and records
 the locked Assisted/Pilot selection. Formats 1 through 7 migrate to Assisted
 and retain every previously authoritative field unchanged.
 
+The v0.4.15 Pilot FTL path extends the projection as version 9 and records
+active fixed-point alignment controls plus the immutable committed assessment.
+Format 8 preserves existing arrival coordinates and assigns them the optimal
+grade; an active Pilot spool migrates to neutral alignment rather than
+inventing a released-version random sample.
+
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 through 7 remain readable. Formats 1 and 2 retain their saved
+Formats 1 through 8 remain readable. Formats 1 and 2 retain their saved
 origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
@@ -211,7 +217,7 @@ mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. A released format-4
 target arrival initializes mutable flight from its already-bound immutable
 arrival solution. Released format-5 system flight, format-6 Planetfall state,
-and format-7 return state remain exact. Older readers must reject format 8
+and format-7 return state remain exact. Older readers must reject format 9
 before discarding any of these fields.
 
 ## Implementation boundaries

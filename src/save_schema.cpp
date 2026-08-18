@@ -155,6 +155,16 @@ template <typename Id>
   return "unknown";
 }
 
+[[nodiscard]] auto arrival_quality_name(IntersystemArrivalQuality value)
+    -> std::string_view {
+  switch (value) {
+    case IntersystemArrivalQuality::aligned: return "aligned";
+    case IntersystemArrivalQuality::offset: return "offset";
+    case IntersystemArrivalQuality::opposed: return "opposed";
+  }
+  return "unknown";
+}
+
 [[nodiscard]] auto travel_phase_name(IntersystemTravelPhase value)
     -> std::string_view {
   switch (value) {
@@ -300,6 +310,36 @@ template <typename Id>
                                    "integer exceeds uint32 range")};
   }
   return static_cast<std::uint32_t>(number);
+}
+
+[[nodiscard]] auto read_i32(const Json& parent, std::string_view name,
+                            std::string path)
+    -> std::expected<std::int32_t, SaveSchemaError> {
+  auto value = require_field(parent, name, path);
+  if (!value) return std::unexpected{value.error()};
+  if (!(*value)->is_number_integer() && !(*value)->is_number_unsigned()) {
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
+                                   std::format("{}.{}", path, name),
+                                   "expected a signed integer")};
+  }
+  if ((*value)->is_number_unsigned()) {
+    const auto number = (*value)->get<std::uint64_t>();
+    if (number > static_cast<std::uint64_t>(
+                     std::numeric_limits<std::int32_t>::max())) {
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                     std::format("{}.{}", path, name),
+                                     "integer exceeds int32 range")};
+    }
+    return static_cast<std::int32_t>(number);
+  }
+  const auto number = (*value)->get<std::int64_t>();
+  if (number < std::numeric_limits<std::int32_t>::min() ||
+      number > std::numeric_limits<std::int32_t>::max()) {
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                   std::format("{}.{}", path, name),
+                                   "integer exceeds int32 range")};
+  }
+  return static_cast<std::int32_t>(number);
 }
 
 [[nodiscard]] auto parse_u64(std::string_view value, std::string path)
@@ -484,6 +524,20 @@ template <typename Id>
                                  "unknown intersystem rule profile")};
 }
 
+[[nodiscard]] auto read_arrival_quality(const Json& parent,
+                                        std::string_view name,
+                                        std::string path)
+    -> std::expected<IntersystemArrivalQuality, SaveSchemaError> {
+  auto value = read_string(parent, name, path);
+  if (!value) return std::unexpected{value.error()};
+  if (*value == "aligned") return IntersystemArrivalQuality::aligned;
+  if (*value == "offset") return IntersystemArrivalQuality::offset;
+  if (*value == "opposed") return IntersystemArrivalQuality::opposed;
+  return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                 std::format("{}.{}", path, name),
+                                 "unknown intersystem arrival quality")};
+}
+
 [[nodiscard]] auto read_travel_phase(const Json& parent,
                                      std::string_view name,
                                      std::string path)
@@ -575,12 +629,36 @@ template <typename Id>
   if (state.phase_started_tick) {
     phase_started_tick = decimal(*state.phase_started_tick);
   }
+  Json jump_alignment = nullptr;
+  if (state.jump_alignment) {
+    const auto& alignment = *state.jump_alignment;
+    jump_alignment = Json{
+        {"heading_error_millidegrees",
+         alignment.heading_error_millidegrees},
+        {"velocity_error_basis_points",
+         alignment.velocity_error_basis_points},
+        {"controls", Json{{"forward", alignment.controls.forward},
+                           {"backward", alignment.controls.backward},
+                           {"turn_left", alignment.controls.turn_left},
+                           {"turn_right", alignment.controls.turn_right}}},
+    };
+  }
   Json arrival_solution = nullptr;
   if (state.arrival_solution) {
     const auto& arrival = *state.arrival_solution;
     Json reference_planet = nullptr;
     if (arrival.reference_planet) {
       reference_planet = encoded_id("planet-", *arrival.reference_planet);
+    }
+    Json assessment = nullptr;
+    if (arrival.assessment) {
+      assessment = Json{
+          {"heading_error_millidegrees",
+           arrival.assessment->heading_error_millidegrees},
+          {"velocity_error_basis_points",
+           arrival.assessment->velocity_error_basis_points},
+          {"quality", arrival_quality_name(arrival.assessment->quality)},
+      };
     }
     arrival_solution = Json{
         {"destination_system_id",
@@ -595,6 +673,7 @@ template <typename Id>
          Json{{"x", decimal(arrival.velocity.x)},
               {"y", decimal(arrival.velocity.y)},
               {"z", decimal(arrival.velocity.z)}}},
+        {"assessment", std::move(assessment)},
     };
   }
   return Json{
@@ -616,6 +695,7 @@ template <typename Id>
       {"current_planet_id", std::move(current_planet)},
       {"committed_jump_destination_id", std::move(committed_destination)},
       {"phase_started_tick", std::move(phase_started_tick)},
+      {"jump_alignment", std::move(jump_alignment)},
       {"arrival_solution", std::move(arrival_solution)},
   };
 }
@@ -657,6 +737,61 @@ template <typename Id>
   if (!current_planet) return std::unexpected{current_planet.error()};
   if (!destination) return std::unexpected{destination.error()};
   if (!phase_tick) return std::unexpected{phase_tick.error()};
+
+  std::optional<IntersystemJumpAlignmentState> jump_alignment;
+  if (format_version >= 9U) {
+    auto alignment_field = require_field(json, "jump_alignment",
+                                         std::string{path});
+    if (!alignment_field) return std::unexpected{alignment_field.error()};
+    if (!(**alignment_field).is_null()) {
+      if (!(**alignment_field).is_object()) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_type,
+            "$.state.intersystem_contract.jump_alignment",
+            "expected an object or null")};
+      }
+      constexpr std::string_view alignment_path{
+          "$.state.intersystem_contract.jump_alignment"};
+      auto heading = read_i32(**alignment_field,
+                              "heading_error_millidegrees",
+                              std::string{alignment_path});
+      auto velocity = read_i32(**alignment_field,
+                               "velocity_error_basis_points",
+                               std::string{alignment_path});
+      auto controls = read_object(**alignment_field, "controls",
+                                  std::string{alignment_path});
+      if (!heading) return std::unexpected{heading.error()};
+      if (!velocity) return std::unexpected{velocity.error()};
+      if (!controls) return std::unexpected{controls.error()};
+      auto forward = read_bool(**controls, "forward",
+                               std::format("{}.controls", alignment_path));
+      auto backward = read_bool(**controls, "backward",
+                                std::format("{}.controls", alignment_path));
+      auto turn_left = read_bool(**controls, "turn_left",
+                                 std::format("{}.controls", alignment_path));
+      auto turn_right = read_bool(**controls, "turn_right",
+                                  std::format("{}.controls", alignment_path));
+      if (!forward) return std::unexpected{forward.error()};
+      if (!backward) return std::unexpected{backward.error()};
+      if (!turn_left) return std::unexpected{turn_left.error()};
+      if (!turn_right) return std::unexpected{turn_right.error()};
+      jump_alignment = IntersystemJumpAlignmentState{
+          .heading_error_millidegrees = *heading,
+          .velocity_error_basis_points = *velocity,
+          .controls = {.forward = *forward,
+                       .backward = *backward,
+                       .turn_left = *turn_left,
+                       .turn_right = *turn_right},
+      };
+    }
+  } else if (*rule_profile == IntersystemRuleProfile::pilot &&
+             *travel_phase ==
+                 IntersystemTravelPhase::outbound_jump_spooling) {
+    // Version 8 made Pilot selectable before alignment had consequences.
+    // Resume an already-running legacy spool neutrally rather than inventing
+    // a penalty or changing its tick.
+    jump_alignment = IntersystemJumpAlignmentState{};
+  }
 
   std::optional<IntersystemArrivalSolution> arrival_solution;
   if (format_version >= 4U) {
@@ -715,12 +850,52 @@ template <typename Id>
       if (!vx) return std::unexpected{vx.error()};
       if (!vy) return std::unexpected{vy.error()};
       if (!vz) return std::unexpected{vz.error()};
+      std::optional<IntersystemArrivalAssessment> assessment;
+      if (format_version >= 9U) {
+        auto assessment_field = require_field(
+            arrival, "assessment", std::string{arrival_path});
+        if (!assessment_field) {
+          return std::unexpected{assessment_field.error()};
+        }
+        if (!(**assessment_field).is_null()) {
+          if (!(**assessment_field).is_object()) {
+            return std::unexpected{failure(
+                SaveSchemaErrorCode::invalid_type,
+                "$.state.intersystem_contract.arrival_solution.assessment",
+                "expected an object or null")};
+          }
+          constexpr std::string_view assessment_path{
+              "$.state.intersystem_contract.arrival_solution.assessment"};
+          auto heading = read_i32(**assessment_field,
+                                  "heading_error_millidegrees",
+                                  std::string{assessment_path});
+          auto velocity_error = read_i32(**assessment_field,
+                                         "velocity_error_basis_points",
+                                         std::string{assessment_path});
+          auto quality = read_arrival_quality(**assessment_field, "quality",
+                                              std::string{assessment_path});
+          if (!heading) return std::unexpected{heading.error()};
+          if (!velocity_error) {
+            return std::unexpected{velocity_error.error()};
+          }
+          if (!quality) return std::unexpected{quality.error()};
+          assessment = IntersystemArrivalAssessment{
+              .heading_error_millidegrees = *heading,
+              .velocity_error_basis_points = *velocity_error,
+              .quality = *quality,
+          };
+        }
+      } else if (reference_planet->has_value()) {
+        assessment = IntersystemArrivalAssessment{
+            .quality = IntersystemArrivalQuality::aligned};
+      }
       arrival_solution = IntersystemArrivalSolution{
           .destination = *arrival_destination,
           .reference_planet = *reference_planet,
           .arrival_tick = *arrival_tick,
           .position = {*px, *py, *pz},
           .velocity = {*vx, *vy, *vz},
+          .assessment = assessment,
       };
     }
   }
@@ -776,6 +951,7 @@ template <typename Id>
       .current_planet = *current_planet,
       .committed_jump_destination = *destination,
       .phase_started_tick = *phase_tick,
+      .jump_alignment = std::move(jump_alignment),
       .arrival_solution = std::move(arrival_solution),
   };
   if (!validate_intersystem_contract_state(state)) {
@@ -1247,7 +1423,7 @@ auto validate_save_document(const SaveDocument& document)
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state,
           "$.state.intersystem_contract.arrival_solution",
-          "Assisted arrival solution does not match the contract")};
+          "intersystem arrival solution does not match the contract")};
     }
     const bool target_system_flight =
         contract.travel_phase == IntersystemTravelPhase::target_system_flight;
@@ -1573,7 +1749,7 @@ auto decode_save_document_json(std::string_view json_text)
   if (*format_version != 1U && *format_version != 2U &&
       *format_version != 3U && *format_version != 4U &&
       *format_version != 5U && *format_version != 6U &&
-      *format_version != 7U &&
+      *format_version != 7U && *format_version != 8U &&
       *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -1688,6 +1864,26 @@ auto decode_save_document_json(std::string_view json_text)
                   "released save format requires intersystem contract version 1")};
     }
     versions.intersystem_contract = kIntersystemContractVersion;
+    if (*format_version >= 4U) {
+      if (versions.intersystem_jump != 1U) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::incompatible_generator_version,
+            "$.recipe.generator_versions.intersystem_jump",
+            "released save format requires intersystem jump version 1")};
+      }
+      versions.intersystem_jump = kIntersystemJumpVersion;
+    }
+  }
+  if (*format_version == 8U) {
+    if (versions.intersystem_contract != 2U ||
+        versions.intersystem_jump != 1U) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::incompatible_generator_version,
+          "$.recipe.generator_versions",
+          "released save format 8 requires contract version 2 and jump version 1")};
+    }
+    versions.intersystem_contract = kIntersystemContractVersion;
+    versions.intersystem_jump = kIntersystemJumpVersion;
   }
   if (versions != current_save_generator_versions()) {
     return std::unexpected{
@@ -1819,6 +2015,8 @@ auto decode_save_document_json(std::string_view json_text)
                          radius * kAssistedTargetArrivalStandoffRadii,
                      ephemeris->position.y, ephemeris->position.z},
         .velocity = ephemeris->velocity,
+        .assessment = IntersystemArrivalAssessment{
+            .quality = IntersystemArrivalQuality::aligned},
     };
     auto migrated = initial_system_flight_state(
         system, contract->identities.target_planet, source);

@@ -10,7 +10,7 @@ state or checksum.
 `SystemFlightState` records the authoritative universe tick, system and target
 IDs, system-inertial position and velocity, a finite camera/attitude basis,
 semantic controls, flight mode, and the selected time scale. The outbound state
-is copied exactly from the immutable Assisted arrival solution. Releasing thrust
+is copied exactly from the immutable intersystem arrival solution. Releasing thrust
 preserves momentum.
 
 Forward/reverse thrust is bounded to 50 km/s², maneuver thrust to 25 km/s²,
