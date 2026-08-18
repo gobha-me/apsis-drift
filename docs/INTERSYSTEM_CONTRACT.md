@@ -167,11 +167,18 @@ system-flight tick, system/target identities, inertial position and velocity,
 attitude basis, controls, flight mode, and bounded time scale. Target-system
 and target-planet phases require exactly one matching craft representation.
 
+The v0.4.11 Planetfall path extends the projection as version 6. Target-planet
+flight retains its exact geodetic pose, local velocity, clearance, controls,
+regime, and transition. Mission completion requires exactly one `collected`
+world delta for the contract's immutable objective. Earlier intersystem
+formats that already recorded completion materialize that already-earned delta
+during migration; no location, tick, target, or mission phase is advanced.
+
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 through 3 remain readable. Formats 1 and 2 retain their saved
+Formats 1 through 5 remain readable. Formats 1 and 2 retain their saved
 origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
@@ -179,8 +186,8 @@ not moved to system ordinal 1, assigned a generated jump, or given synthetic
 mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. A released format-4
 target arrival initializes mutable flight from its already-bound immutable
-arrival solution. Older readers must reject format 5 before discarding any of
-these fields.
+arrival solution. Released format-5 system flight remains exact. Older readers
+must reject format 6 before discarding any of these fields.
 
 ## Implementation boundaries
 

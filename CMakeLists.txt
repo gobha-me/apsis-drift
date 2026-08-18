@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.10 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.11 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -89,6 +89,8 @@ add_library(apsis_drift_lib STATIC
   src/intersystem_contract.cpp
   src/intersystem_jump.cpp
   src/intersystem_jump_acceptance.cpp
+  src/intersystem_planetfall.cpp
+  src/intersystem_planetfall_acceptance.cpp
   src/landscape.cpp
   src/local_system.cpp
   src/menu.cpp
@@ -176,6 +178,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_system_flight_acceptance.cmake")
+  add_test(NAME intersystem-planetfall-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_intersystem_planetfall_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -226,6 +233,20 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-system-flight-missing-report
     COMMAND apsis-drift --system-flight-acceptance --driver kitty)
   set_tests_properties(reject-system-flight-missing-report
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-intersystem-planetfall-missing-report
+    COMMAND apsis-drift --intersystem-planetfall-acceptance --driver kitty)
+  set_tests_properties(reject-intersystem-planetfall-missing-report
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-intersystem-planetfall-missing-driver
+    COMMAND apsis-drift --intersystem-planetfall-acceptance
+            --report intersystem-planetfall-invalid.json)
+  set_tests_properties(reject-intersystem-planetfall-missing-driver
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-intersystem-planetfall-mode-conflict
+    COMMAND apsis-drift --intersystem-planetfall-acceptance --driver ansi
+            --benchmark 1 --report intersystem-planetfall-invalid.json)
+  set_tests_properties(reject-intersystem-planetfall-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-viewport-negative
     COMMAND apsis-drift --benchmark 1 --viewport -1x480)

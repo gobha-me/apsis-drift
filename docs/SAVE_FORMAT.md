@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 5 is a deterministic JSON document. It keeps
+Apsis Drift save format version 6 is a deterministic JSON document. It keeps
 the generated-world recipe separate from mutable player state and does not
 serialize terrain tiles, render state, terminal capabilities, preferences, or
 other reproducible presentation data.
@@ -39,7 +39,7 @@ projects its authoritative contract state independently.
 Every document has three required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `5` for newly written saves;
+- `format_version` is the unsigned JSON integer `6` for newly written saves;
 - `recipe` and `state` are required objects.
 
 The recipe records the universe seed, origin-system and active-planet
@@ -57,7 +57,9 @@ station and planet IDs.
   arrival solution bound at jump commitment: destination/reference identities,
   arrival tick, and finite system-space position and velocity. Version 5 adds
   the mutable system-flight tick, identities, position, velocity, attitude,
-  controls, flight mode, and bounded time scale.
+  controls, flight mode, and bounded time scale. Version 6 admits the matching
+  target-planet flight state and one collected delta for the contract's bound
+  surface objective.
 
 Legacy mutable state records:
 
@@ -70,7 +72,7 @@ Legacy mutable state records:
 
 The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) and
 [`save-v1-golden.json`](../test/data/save-v1-golden.json) remain legacy
-migration fixtures. Newly encoded documents are canonical version 5.
+migration fixtures. Newly encoded documents are canonical version 6.
 
 ## Encodings
 
@@ -108,16 +110,19 @@ state. Duplicate object keys are rejected rather than resolved by ordering.
 Unknown enum values and delta kinds are rejected because silently dropping
 their semantics could resurrect or duplicate generated content.
 
-Formats 1, 2, 3, 4, and 5 and the generator versions compiled into the current
+Formats 1, 2, 3, 4, 5, and 6 and the generator versions compiled into the current
 build are supported. Version 1 is decoded with local-sun generator version 1;
-formats 1 and 2 rewrite as version 5 on the next explicit save. They remain
+formats 1 and 2 rewrite as version 6 on the next explicit save. They remain
 `legacy_signal_run` careers and are never assigned the intersystem contract.
 Released version 3 intersystem careers preserve every recorded phase and tick;
 their absent arrival solution remains absent rather than synthesizing progress.
 Released version 4 target arrivals initialize system flight from their immutable
-arrival solution; no destination, tick, or mission progress is rerolled. Other
-format versions fail as unsupported and other generator versions fail as
-incompatible. Older builds reject version 5 before reading fields, so they
+arrival solution; no destination, tick, or mission progress is rerolled.
+Released version 5 system flight remains exact. For a version 3–5 contract that
+already recorded objective completion, migration materializes the matching
+collected delta at its saved universe tick; it does not advance a mission.
+Other format versions fail as unsupported and other generator versions fail as
+incompatible. Older builds reject version 6 before reading fields, so they
 cannot silently discard the new mission state.
 
 Local-sun geometry is regenerated from the active planet's independent
@@ -142,6 +147,10 @@ normal early saves should remain in the kilobyte range.
 Version 3 reserved the high-level travel-state envelope. Version 4 binds and
 persists the Assisted FTL arrival solution. Version 5 persists mutable
 target-system craft flight and permits exactly one matching system or target-
-planet flight representation for its travel phase. Camera state, terminal
-capabilities, render profiles, caches, and presentation progress remain
-excluded.
+planet flight representation for its travel phase. Version 6 makes the
+target-planet projection playable: it retains planetary flight and requires
+objective-complete, returned, and turned-in contracts to carry exactly one
+collected delta for the immutable target, at or before the universe tick.
+Pre-completion intersystem state cannot carry a world delta. Camera state,
+terminal capabilities, render profiles, caches, and presentation progress
+remain excluded.

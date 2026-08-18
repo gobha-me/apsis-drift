@@ -36,6 +36,8 @@
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
+#include "apsis_drift/intersystem_planetfall.hpp"
+#include "apsis_drift/intersystem_planetfall_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
@@ -354,7 +356,26 @@ class LandscapeApp final : public App {
       if (profile->state.intersystem_contract) {
         m_intersystem_contract = *profile->state.intersystem_contract;
         m_system_flight = profile->state.system_flight;
-        m_planetary_flight = profile->state.flight;
+        if (profile->state.flight) {
+          auto cache = TerrainTileCache::create();
+          const auto body = find_local_system_planet(
+              m_local_system,
+              m_intersystem_contract->identities.target_planet);
+          if (!cache || !body) {
+            throw std::runtime_error{
+                "cannot create target Planetfall terrain state"};
+          }
+          auto planetfall = initialize_intersystem_planetfall(
+              (*body)->descriptor,
+              m_intersystem_contract->identities.target_objective,
+              *profile->state.flight, profile->state.world_deltas, *cache);
+          if (!planetfall) {
+            throw std::runtime_error{
+                "cannot hydrate target Planetfall state"};
+          }
+          m_intersystem_planetfall_cache.emplace(std::move(*cache));
+          m_intersystem_planetfall.emplace(std::move(*planetfall));
+        }
       } else {
         auto cache = TerrainTileCache::create();
         if (!cache) {
@@ -640,6 +661,10 @@ class LandscapeApp final : public App {
     if (m_system_flight) {
       return system_flight_state_checksum(*m_system_flight);
     }
+    if (m_intersystem_planetfall) {
+      return planetary_flight_state_checksum(
+          m_intersystem_planetfall->flight);
+    }
     if (m_signal_run && m_signal_run->flight) {
       return planetary_flight_state_checksum(*m_signal_run->flight);
     }
@@ -683,7 +708,16 @@ class LandscapeApp final : public App {
       auto document = *m_save_profile;
       document.state.intersystem_contract = *m_intersystem_contract;
       document.state.system_flight = m_system_flight;
-      document.state.flight = m_planetary_flight;
+      document.state.flight =
+          m_intersystem_planetfall
+              ? std::optional<PlanetaryFlightState>{
+                    m_intersystem_planetfall->flight}
+              : std::nullopt;
+      if (m_intersystem_planetfall) {
+        document.state.world_deltas = std::vector<SaveWorldDelta>{
+            m_intersystem_planetfall->journal.entries().begin(),
+            m_intersystem_planetfall->journal.entries().end()};
+      }
       return document;
     }
     if (!m_signal_run) {
@@ -793,9 +827,9 @@ class LandscapeApp final : public App {
       } else if (m_system_flight) {
         m_input_mapper.suspend(m_system_flight->controls,
                                m_system_flight->tick);
-      } else if (m_planetary_flight) {
-        m_input_mapper.suspend(m_planetary_flight->controls,
-                               m_planetary_flight->tick);
+      } else if (m_intersystem_planetfall) {
+        m_input_mapper.suspend(m_intersystem_planetfall->flight.controls,
+                               m_intersystem_planetfall->flight.tick);
       } else {
         m_input_mapper.suspend(m_flight.controls, m_flight.tick);
       }
@@ -1055,6 +1089,9 @@ class LandscapeApp final : public App {
             ? format_flight_instruments(m_signal_scenario->flight)
             : m_system_flight
             ? format_flight_instruments(*m_system_flight)
+            : m_intersystem_planetfall
+                  ? format_flight_instruments(
+                        m_intersystem_planetfall->flight)
             : m_planetary_flight
                   ? format_flight_instruments(*m_planetary_flight)
                   : format_flight_instruments(m_flight);
@@ -1096,12 +1133,14 @@ class LandscapeApp final : public App {
                       instruments.drive == "BRAKING  " ? warning : text,
                       chrome_bg);
     if ((m_signal_run && m_signal_run->flight) || m_signal_scenario ||
-        m_planetary_flight) {
+        m_intersystem_planetfall || m_planetary_flight) {
       const auto regime = format_flight_regime(
           m_signal_run && m_signal_run->flight
               ? *m_signal_run->flight
               : (m_signal_scenario ? m_signal_scenario->flight
-                                   : *m_planetary_flight));
+                 : (m_intersystem_planetfall
+                        ? m_intersystem_planetfall->flight
+                        : *m_planetary_flight)));
       screen.write_text(layout.left_instruments.x + 2,
                         layout.left_instruments.y + 8, regime.regime,
                         regime.valid ? text : danger, chrome_bg);
@@ -1160,15 +1199,20 @@ class LandscapeApp final : public App {
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 16, navigation.cue,
                         text, chrome_bg);
-    } else if ((m_signal_run && m_signal_run->flight) || m_signal_scenario) {
+    } else if ((m_signal_run && m_signal_run->flight) || m_signal_scenario ||
+               m_intersystem_planetfall) {
       const auto& navigation =
           m_signal_run && m_signal_run->flight
               ? m_signal_run->signal_navigation
-              : m_signal_scenario->navigation;
+              : (m_signal_scenario
+                     ? m_signal_scenario->navigation
+                     : m_intersystem_planetfall->navigation);
       const auto& collection =
           m_signal_run && m_signal_run->flight
               ? m_signal_run->collection
-              : m_signal_scenario->collection;
+              : (m_signal_scenario
+                     ? m_signal_scenario->collection
+                     : m_intersystem_planetfall->collection);
       const auto scanner =
           format_signal_scanner(navigation);
       const auto collection_readout =
@@ -1252,6 +1296,24 @@ class LandscapeApp final : public App {
     } else if (m_signal_scenario) {
       message =
           format_signal_collection(m_signal_scenario->collection).message;
+    } else if (m_intersystem_planetfall) {
+      const auto scanner =
+          format_signal_scanner(m_intersystem_planetfall->navigation);
+      const auto& flight = m_intersystem_planetfall->flight;
+      if (m_intersystem_planetfall->collection.status ==
+          SignalCollectionStatus::complete) {
+        message = flight.regime == FlightRegime::orbital
+                      ? " OBJECTIVE COMPLETE | ORBIT ACHIEVED "
+                      : " OBJECTIVE COMPLETE | ASCEND TO ORBIT WITH R ";
+      } else if (flight.regime == FlightRegime::orbital) {
+        message = std::format(
+            " {} | ALIGNMENT GUIDANCE ONLY | ENTRY ANYWHERE | F descend ",
+            scanner.cue);
+      } else {
+        message = std::format(
+            " MATCH {} | W/F thrust | S/R brake | {} ", scanner.bearing,
+            scanner.cue);
+      }
     } else if (m_intersystem_contract &&
                intersystem_jump_snapshot(*m_intersystem_contract)) {
       const auto jump =
@@ -1308,8 +1370,11 @@ class LandscapeApp final : public App {
                          ? m_signal_scenario->flight.mode
                          : m_system_flight
                          ? m_system_flight->mode
-                         : (m_planetary_flight ? m_planetary_flight->mode
-                                               : m_flight.mode)) ==
+                         : (m_intersystem_planetfall
+                                ? m_intersystem_planetfall->flight.mode
+                            : (m_planetary_flight
+                                   ? m_planetary_flight->mode
+                                   : m_flight.mode))) ==
                             FlightMode::autopilot
                         ? "AUTOPILOT"
                         : "MANUAL",
@@ -1341,8 +1406,23 @@ class LandscapeApp final : public App {
                 "orbit insertion is unavailable in the current mission phase";
             return;
           }
+          const auto body = find_local_system_planet(
+              m_local_system, next_contract.identities.target_planet);
+          auto cache = TerrainTileCache::create();
+          if (!body || !cache) {
+            m_error = "target Planetfall terrain is unavailable";
+            return;
+          }
+          auto planetfall = initialize_intersystem_planetfall(
+              (*body)->descriptor, next_contract.identities.target_objective,
+              *orbital, {}, *cache);
+          if (!planetfall) {
+            m_error = "target Planetfall initialization was rejected";
+            return;
+          }
           m_intersystem_contract = std::move(next_contract);
-          m_planetary_flight = std::move(*orbital);
+          m_intersystem_planetfall_cache.emplace(std::move(*cache));
+          m_intersystem_planetfall.emplace(std::move(*planetfall));
           m_system_flight.reset();
           m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
           return;
@@ -1355,8 +1435,12 @@ class LandscapeApp final : public App {
         m_input_mapper.enqueue(key, m_system_flight->tick, true);
         return;
       }
-      if (m_planetary_flight) {
-        m_input_mapper.enqueue(key, m_planetary_flight->tick);
+      if (m_intersystem_planetfall) {
+        // The briefing binds one immutable objective; target-selection keys
+        // cannot retarget the intersystem mission.
+        if (apsis_drift::detail::signal_selection_command(key)) return;
+        m_input_mapper.enqueue(key,
+                               m_intersystem_planetfall->flight.tick);
         return;
       }
       if (key.action != KeyAction::Press || key.key != Key::Char ||
@@ -1470,24 +1554,31 @@ class LandscapeApp final : public App {
           }
           m_system_flight = std::move(next_flight);
           m_intersystem_contract = std::move(next_contract);
-        } else if (m_planetary_flight) {
-          const auto body = find_local_system_planet(
-              m_local_system, m_intersystem_contract->identities.target_planet);
-          if (!body) {
-            throw std::runtime_error{"target planet is unavailable"};
+        } else if (m_intersystem_planetfall) {
+          if (!m_intersystem_planetfall_cache) {
+            throw std::runtime_error{
+                "target Planetfall terrain cache is unavailable"};
           }
-          auto next_flight = *m_planetary_flight;
-          auto commands = m_input_mapper.take_commands(next_flight.tick);
-          if (!advance_planetary_flight(
-                  (*body)->descriptor, {.surface_elevation_metres = 0.0},
-                  next_flight, commands, kSimulationStep)) {
-            throw std::runtime_error{"target orbital simulation failed"};
+          auto next_planetfall = *m_intersystem_planetfall;
+          auto commands = m_input_mapper.take_commands(
+              next_planetfall.flight.tick);
+          const auto advanced = advance_intersystem_planetfall(
+              next_planetfall, *m_intersystem_planetfall_cache, commands);
+          if (!advanced) {
+            throw std::runtime_error{"target Planetfall simulation failed"};
           }
           auto next_contract = *m_intersystem_contract;
           if (!advance_intersystem_time(next_contract, 1)) {
-            throw std::runtime_error{"target orbital clock failed"};
+            throw std::runtime_error{"target Planetfall clock failed"};
           }
-          m_planetary_flight = std::move(next_flight);
+          if (advanced->objective_completed &&
+              !advance_intersystem_contract(
+                  next_contract, next_contract.universe_tick,
+                  IntersystemContractCommand::complete_objective)) {
+            throw std::runtime_error{
+                "target objective completion was rejected"};
+          }
+          m_intersystem_planetfall = std::move(next_planetfall);
           m_intersystem_contract = std::move(next_contract);
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"universe clock failed"};
@@ -1569,18 +1660,14 @@ class LandscapeApp final : public App {
         }
         return;
       }
-      if (m_planetary_flight) {
+      if (m_intersystem_planetfall) {
         m_system_render.reset();
         if (!m_planetary_renderer) {
           throw std::runtime_error{"target planetary presentation is unavailable"};
         }
-        const auto body = find_local_system_planet(
-            m_local_system, m_intersystem_contract->identities.target_planet);
-        if (!body) {
-          throw std::runtime_error{"target planet is unavailable"};
-        }
         const auto rendered = m_planetary_renderer->render(
-            (*body)->descriptor, *m_planetary_flight,
+            *m_intersystem_planetfall->planet,
+            m_intersystem_planetfall->flight,
             {.pitch_radians = -0.18}, m_surface.pixels());
         if (!rendered) {
           throw std::runtime_error{"target orbital presentation rejected frame"};
@@ -1827,6 +1914,8 @@ class LandscapeApp final : public App {
   PlanetarySurfaceFixture m_planetary_surface;
   std::optional<PlanetaryFlightState> m_planetary_flight;
   std::optional<SystemFlightState> m_system_flight;
+  std::optional<TerrainTileCache> m_intersystem_planetfall_cache;
+  std::optional<IntersystemPlanetfallState> m_intersystem_planetfall;
   std::optional<LocalSystemRenderStats> m_system_render;
   std::optional<TerrainTileCache> m_signal_cache;
   std::optional<SignalNavigationAcceptanceState> m_signal_scenario;
@@ -2042,6 +2131,8 @@ auto usage() -> void {
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --system-flight-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "       apsis-drift --intersystem-planetfall-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -2071,6 +2162,7 @@ auto main(int argc, char** argv) -> int {
   bool system_navigation_acceptance{};
   bool intersystem_jump_acceptance{};
   bool system_flight_acceptance{};
+  bool intersystem_planetfall_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -2158,6 +2250,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--system-flight-acceptance") {
       system_flight_acceptance = true;
+      continue;
+    }
+    if (argument == "--intersystem-planetfall-acceptance") {
+      intersystem_planetfall_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -2297,6 +2393,32 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (intersystem_planetfall_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       system_flight_acceptance || profile_options || seed_specified ||
+       workload_specified || keyboard_specified)) {
+    std::fprintf(stderr,
+                 "Intersystem Planetfall acceptance is mutually exclusive "
+                 "with other run, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (intersystem_planetfall_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "Intersystem Planetfall acceptance requires --driver kitty "
+                 "or --driver ansi\n");
+    return 2;
+  }
+  if (intersystem_planetfall_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Intersystem Planetfall acceptance requires --report PATH\n");
+    return 2;
+  }
   if (system_flight_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -2537,6 +2659,48 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (intersystem_planetfall_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_intersystem_planetfall_acceptance(
+          configuration.viewport.width, configuration.viewport.height);
+      if (!acceptance) {
+        std::fprintf(stderr,
+                     "Intersystem Planetfall acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << intersystem_planetfall_acceptance_json(acceptance->report,
+                                                       presentation);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "intersystem-planetfall: presentation=%.*s completion=%llu "
+          "checksum=%llu\n",
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(acceptance->report.completion_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.completed_flight_checksum));
+      return 0;
+    }
     if (system_flight_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

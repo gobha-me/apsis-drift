@@ -41,9 +41,9 @@ turned-in states for later loop stages. A returned contract exposes
 
 ## Persistence and compatibility
 
-Fresh careers use save format 5 and persist the high-level
+Fresh careers use save format 6 and persist the high-level
 `IntersystemContractState`. Formats 1 and 2 decode as `legacy_signal_run`, keep
-their original planet-side objective and craft state, and rewrite as format 5
+their original planet-side objective and craft state, and rewrite as format 6
 without teleporting, retargeting, or synthesizing mission progress.
 
 The save excludes terminal capabilities, render profiles, menu selection,
