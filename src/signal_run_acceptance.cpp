@@ -75,7 +75,7 @@ struct PacingProbe {
       static_cast<std::size_t>(configuration.viewport.height));
   std::vector<SunCycleCheckpointMeasurement> result;
   result.reserve(checkpoints.size());
-  for (const auto [visibility, tick] : checkpoints) {
+  for (const auto& [visibility, tick] : checkpoints) {
     const auto sun = resolve_local_sun(planet, tick);
     const auto rendered =
         sun ? renderer.render(planet, camera, sun->planet_to_sun, frame)

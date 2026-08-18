@@ -55,10 +55,6 @@ struct ProjectedBody {
   return {value.x, value.y, value.z};
 }
 
-[[nodiscard]] auto add(Vector3 left, Vector3 right) noexcept -> Vector3 {
-  return {left.x + right.x, left.y + right.y, left.z + right.z};
-}
-
 [[nodiscard]] auto subtract(Vector3 left, Vector3 right) noexcept -> Vector3 {
   return {left.x - right.x, left.y - right.y, left.z - right.z};
 }

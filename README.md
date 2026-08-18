@@ -71,9 +71,9 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 6; versions 1 and 2 load as legacy local Signal Runs, while released
-versions 3 through 5 retain their mission, jump, arrival, and system-flight
-state.
+version 7; versions 1 and 2 load as legacy local Signal Runs, while released
+versions 3 through 6 retain their mission, jump, arrival, system-flight, and
+Planetfall state.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -127,6 +127,11 @@ Interactive controls:
   or fall, Space toggles direct target assist, and `[`/`]` selects 1x/4x/16x
   time compression outside the six-radius approach boundary; press Enter when
   the cockpit reports `ORBIT RDY`
+- Planet return: ascend to the orbital regime and press Enter to depart the
+  planet; after completing the objective, press J in target-system flight to
+  spool the home jump
+- Origin return: follow the explicit Origin Station range and closing cues,
+  then press Enter at `ENTER DOCK`; turn in the contract from the station board
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
@@ -177,7 +182,7 @@ projection, overlap, handoff, and measurement rules are documented in
 The v0.4.7 Origin Station mission board binds one deterministic mission,
 target system, planet, and existing surface-signal objective. Its semantic
 briefing and acceptance state are shared by Kitty and ANSI, persist in save
-format 6, and launch into the deterministic Assisted FTL transit and sub-light
+format 7, and launch into the deterministic Assisted FTL transit and sub-light
 target approach. The exact mission-board boundaries are documented in
 [docs/MISSION_BOARD.md](docs/MISSION_BOARD.md).
 
@@ -205,6 +210,13 @@ guidance rather than an entry gate. Real terrain sampling, scanner navigation,
 collection dwell, the immutable mission target, and the sparse collected delta
 advance transactionally and resume from save format 6. See
 [docs/INTERSYSTEM_PLANETFALL.md](docs/INTERSYSTEM_PLANETFALL.md).
+
+The v0.4.12 return path reverses the planet-fixed handoff from any orbital
+longitude, preserves the collected world delta through a cancelable home-jump
+spool, and arrives 40 km from an explicit Origin Station waypoint.
+Station-relative guidance, a 5 km rendezvous predicate, explicit docking
+confirmation, and idempotent mission turn-in resume from save format 7. See
+[docs/INTERSYSTEM_RETURN.md](docs/INTERSYSTEM_RETURN.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact

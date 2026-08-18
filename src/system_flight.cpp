@@ -299,6 +299,22 @@ auto hash_bool(std::uint64_t& hash, bool value) noexcept -> void {
           system_vector.z};
 }
 
+[[nodiscard]] auto forward_spin(Vec3 fixed_vector, PlanetId planet,
+                                SimulationTick tick) noexcept -> Vec3 {
+  const SimulationTick offset = planet.value % kSystemPlanetFrameRotationTicks;
+  const SimulationTick cycle =
+      (offset + tick % kSystemPlanetFrameRotationTicks) %
+      kSystemPlanetFrameRotationTicks;
+  const double phase = 2.0 * std::numbers::pi_v<double> *
+                       static_cast<double>(cycle) /
+                       static_cast<double>(kSystemPlanetFrameRotationTicks);
+  const double cosine = std::cos(phase);
+  const double sine = std::sin(phase);
+  return {cosine * fixed_vector.x - sine * fixed_vector.y,
+          sine * fixed_vector.x + cosine * fixed_vector.y,
+          fixed_vector.z};
+}
+
 }  // namespace
 
 auto initial_system_flight_state(const LocalSystemDescriptor& system,
@@ -461,6 +477,78 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       .last_transition = std::nullopt,
   };
   if (!validate_planetary_flight_state((*body)->descriptor, result)) {
+    return std::unexpected{SystemFlightError::coordinate_failure};
+  }
+  return result;
+}
+
+auto depart_planetary_orbit(const LocalSystemDescriptor& system,
+                            const PlanetaryFlightState& state)
+    -> std::expected<SystemFlightState, SystemFlightError> {
+  if (!validate_local_system(system) || state.regime != FlightRegime::orbital) {
+    return std::unexpected{SystemFlightError::planet_departure_refused};
+  }
+  const auto body = find_local_system_planet(system, state.planet);
+  if (!body ||
+      !validate_planetary_flight_state((*body)->descriptor, state)) {
+    return std::unexpected{SystemFlightError::invalid_state};
+  }
+  const auto ephemeris = resolve_planet_ephemeris(
+      system, state.planet, {.tick = state.tick, .sub_tick_fraction = 0.0});
+  const auto fixed_position =
+      planet_fixed_from_geodetic((*body)->descriptor, state.pose.position);
+  const auto frame = make_local_tangent_frame((*body)->descriptor,
+                                               state.pose.position);
+  if (!ephemeris || !fixed_position || !frame) {
+    return std::unexpected{SystemFlightError::coordinate_failure};
+  }
+  const auto combine = [](PlanetFixedDirection east,
+                          PlanetFixedDirection north,
+                          PlanetFixedDirection up, double east_value,
+                          double north_value, double up_value) noexcept {
+    return Vec3{east.x * east_value + north.x * north_value + up.x * up_value,
+                east.y * east_value + north.y * north_value + up.y * up_value,
+                east.z * east_value + north.z * north_value + up.z * up_value};
+  };
+  const Vec3 fixed{fixed_position->x, fixed_position->y, fixed_position->z};
+  Vec3 fixed_velocity = combine(
+      frame->east, frame->north, frame->up,
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second,
+      state.velocity.up_metres_per_second);
+  constexpr double omega = 2.0 * std::numbers::pi_v<double> /
+                           (static_cast<double>(kSystemPlanetFrameRotationTicks) /
+                            static_cast<double>(kSimulationHz));
+  fixed_velocity = add(fixed_velocity,
+                       cross({0.0, 0.0, omega}, fixed));
+  const Vec3 relative_position = forward_spin(fixed, state.planet, state.tick);
+  const Vec3 relative_velocity =
+      forward_spin(fixed_velocity, state.planet, state.tick);
+  const Vec3 fixed_forward = combine(
+      frame->east, frame->north, frame->up,
+      std::cos(state.pose.heading_radians),
+      std::sin(state.pose.heading_radians), 0.0);
+  const Vec3 system_forward =
+      forward_spin(fixed_forward, state.planet, state.tick);
+  const Vec3 system_up = forward_spin(
+      {frame->up.x, frame->up.y, frame->up.z}, state.planet, state.tick);
+  SystemFlightState result{
+      .tick = state.tick,
+      .system = system.id,
+      .target = state.planet,
+      .position = {ephemeris->position.x + relative_position.x,
+                   ephemeris->position.y + relative_position.y,
+                   ephemeris->position.z + relative_position.z},
+      .velocity = {ephemeris->velocity.x + relative_velocity.x,
+                   ephemeris->velocity.y + relative_velocity.y,
+                   ephemeris->velocity.z + relative_velocity.z},
+      .forward = {system_forward.x, system_forward.y, system_forward.z},
+      .up = {system_up.x, system_up.y, system_up.z},
+      .mode = state.mode,
+      .controls = {},
+      .time_scale = SystemTimeScale::one,
+  };
+  if (!validate_system_flight_state(system, result)) {
     return std::unexpected{SystemFlightError::coordinate_failure};
   }
   return result;

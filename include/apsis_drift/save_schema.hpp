@@ -10,6 +10,7 @@
 
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/origin_station.hpp"
+#include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/surface_signals.hpp"
 #include "apsis_drift/system_flight.hpp"
@@ -17,7 +18,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{6};
+inline constexpr std::uint32_t kSaveFormatVersion{7};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
 inline constexpr std::size_t kMaximumSaveWorldDeltas{16'384};
@@ -35,6 +36,7 @@ struct SaveGeneratorVersions {
   std::uint32_t intersystem_contract{};
   std::uint32_t intersystem_jump{};
   std::uint32_t system_flight{};
+  std::uint32_t origin_return{};
 
   friend auto operator==(const SaveGeneratorVersions&,
                          const SaveGeneratorVersions&) -> bool = default;
@@ -82,6 +84,7 @@ struct SaveMutableState {
   SurfaceSignalId first_objective_target;
   std::optional<PlanetaryFlightState> flight;
   std::optional<SystemFlightState> system_flight;
+  std::optional<OriginReturnState> origin_return;
   std::vector<SaveDiscovery> discoveries;
   std::vector<SaveWorldDelta> world_deltas;
   // Present for the v3 first-contract career. Absence identifies a migrated
