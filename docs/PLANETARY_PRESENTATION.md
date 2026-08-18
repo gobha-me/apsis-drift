@@ -16,11 +16,16 @@ version 1 or any stored tile checksum. Exact aligned samples remain identical
 across LODs, face edges, and corners.
 
 The tile-backed orbital pass uses LOD 2 for bounded whole-planet coverage. The
-local pass selects LOD with `select_terrain_lod()`, clamping negative reference
-altitudes to the contract's zero-altitude floor. Both passes derive their
-camera from the craft's geodetic position, local east/north/up frame, heading,
-and presentation-only pitch. This keeps the surface anchor and view direction
-stable while detail increases near the ground.
+local pass begins with the LOD selected by `select_terrain_lod()`, clamping
+negative reference altitudes to the contract's zero-altitude floor. Its reach
+is derived from clearance, pitch, horizontal and vertical field of view, and
+viewport aspect. The established 900 metre near field remains the minimum;
+camera geometry may extend sampling to a bounded 32 kilometre ceiling. Nearby
+steps retain the existing fine cadence, while distant steps grow by projected
+screen footprint and may select a coarser immutable terrain LOD. Both passes
+derive their camera from the craft's geodetic position, local east/north/up
+frame, heading, and presentation-only pitch. This keeps the surface anchor and
+view direction stable while detail increases near the ground.
 
 All tiles read by a frame are held through immutable shared ownership for that
 frame. Rendering occurs in scratch framebuffers, so a coordinate, tile, camera,
@@ -64,9 +69,18 @@ half of one 8-bit channel value, meaning it cannot change the rounded output.
 This removes the otherwise full local pass at the canonical first mixed frame
 without introducing a visible threshold or changing the reported mode.
 
+The local pass also records which framebuffer pixels received terrain and
+whether its column occlusion covers the conservative spherical silhouette. An
+uncovered pixel retains the orbital result instead of blending toward local
+sky. At full local weight, the orbital pass is omitted only when that silhouette
+is covered; a bounded or upward-looking local pass therefore cannot erase a
+still-visible planet. Coverage, effective local distance, and fallback use are
+presentation diagnostics and never affect simulation.
+
 The reported modes are `orbital`, `atmospheric`, `terrain-blend`, and
-`local-terrain`. Mode, blend weights, selected LOD, anchor address, tile counts,
-and per-pass CPU timings are diagnostics. None enters the flight checksum.
+`local-terrain`. Mode, blend weights, selected LOD, anchor address, tile and
+terrain-pixel counts, effective local distance, fallback use, and per-pass CPU
+timings are diagnostics. None enters the flight checksum.
 
 ## Cockpit and benchmark path
 

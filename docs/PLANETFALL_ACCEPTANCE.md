@@ -70,6 +70,13 @@ matrices also retain the existing invalid-dimension, non-finite-state,
 framebuffer-boundary, capability-refusal, Flight Deck, and headless benchmark
 coverage.
 
+The v0.4.10 handoff regression matrix additionally renders the 2,500, 2,250,
+2,000, 1,000, and near-ground clearance checkpoints with level and downward
+cameras. It covers 320x240, 640x480, 1024x320, and 320x1024 viewports. A
+deliberately range-bounded local pass that reaches no terrain must retain the
+spherical framebuffer, proving that coverage rather than blend weight alone
+controls when the planet may disappear.
+
 ## Recorded envelope
 
 On the 2026-08-16 reference host, both GCC and Clang keep every remote 320 by
@@ -80,3 +87,19 @@ from 85.48/91.77 ms p95 under GCC/Clang to 24.87/23.09 ms while retaining the
 then-authoritative final flight checksum `15600629779145530762`. The complete
 before/after compiler and profile measurements are retained with the
 [dated performance evidence](performance/2026-08-16/README.md).
+
+The v0.4.10 coverage-aware handoff was also compared directly with v0.4.9 on
+the same 2026-08-18 host using GCC 14 Release builds and pinned TermForge
+v0.42.0. Application-renderer p95 values were:
+
+| Profile | Stage | v0.4.9 | v0.4.10 |
+| --- | --- | ---: | ---: |
+| `remote` | Terrain blend | 23.55 ms | 23.28 ms |
+| `remote` | Local terrain | 11.46 ms | 12.06 ms |
+| `local` | Terrain blend | 46.39 ms | 47.64 ms |
+| `local` | Local terrain | 23.74 ms | 25.92 ms |
+
+The local mixed stage already exceeded 33.33 ms on this host before the fix;
+the coverage path preserves that explicit miss rather than allowing a
+sky-only handoff. These measurements exclude terminal, proxy, decoder,
+compositor, display, and network throughput.

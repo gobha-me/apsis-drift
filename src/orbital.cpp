@@ -295,24 +295,27 @@ auto OrbitalRenderer::render(
     PlanetFixedDirection light_direction,
     std::span<termforge::Pixel> destination) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
-  return render_impl(planet, camera, light_direction, nullptr, 0, destination);
+  return render_impl(planet, camera, light_direction, nullptr, 0, destination,
+                     {});
 }
 
 auto OrbitalRenderer::render_tile_backed(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
     PlanetFixedDirection light_direction, std::uint8_t terrain_lod,
     TerrainTileCache& cache,
-    std::span<termforge::Pixel> destination) const
+    std::span<termforge::Pixel> destination,
+    std::span<const std::uint8_t> covered_pixels) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   return render_impl(planet, camera, light_direction, &cache, terrain_lod,
-                     destination);
+                     destination, covered_pixels);
 }
 
 auto OrbitalRenderer::render_impl(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
     PlanetFixedDirection light_direction, TerrainTileCache* cache,
     std::uint8_t terrain_lod,
-    std::span<termforge::Pixel> destination) const
+    std::span<termforge::Pixel> destination,
+    std::span<const std::uint8_t> covered_pixels) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   if (!validate_viewport({m_settings.width, m_settings.height})) {
     return std::unexpected{OrbitalRenderError::invalid_viewport};
@@ -320,6 +323,9 @@ auto OrbitalRenderer::render_impl(
   const auto expected = static_cast<std::size_t>(m_settings.width) *
                         static_cast<std::size_t>(m_settings.height);
   if (destination.size() != expected) {
+    return std::unexpected{OrbitalRenderError::invalid_framebuffer};
+  }
+  if (!covered_pixels.empty() && covered_pixels.size() != expected) {
     return std::unexpected{OrbitalRenderError::invalid_framebuffer};
   }
   if (!valid_planet(planet)) {
@@ -412,6 +418,16 @@ auto OrbitalRenderer::render_impl(
          x += m_settings.horizontal_sample_stride) {
       const int sample_width =
           std::min(m_settings.horizontal_sample_stride, m_settings.width - x);
+      const auto index = static_cast<std::size_t>(y) *
+                             static_cast<std::size_t>(m_settings.width) +
+                         static_cast<std::size_t>(x);
+      if (!covered_pixels.empty() &&
+          std::ranges::all_of(
+              covered_pixels.subspan(index,
+                                     static_cast<std::size_t>(sample_width)),
+              [](std::uint8_t covered) { return covered != 0; })) {
+        continue;
+      }
       const double sample_x =
           static_cast<double>(x) + static_cast<double>(sample_width) * 0.5;
       const double screen_x =
@@ -425,10 +441,6 @@ auto OrbitalRenderer::render_impl(
       const double discriminant =
           camera_along_ray * camera_along_ray -
           (camera_radius_squared - radius * radius);
-      const auto index = static_cast<std::size_t>(y) *
-                             static_cast<std::size_t>(m_settings.width) +
-                         static_cast<std::size_t>(x);
-
       if (discriminant >= 0.0) {
         const double distance = -camera_along_ray - std::sqrt(discriminant);
         if (distance > 0.0) {

@@ -191,6 +191,13 @@ It supplies explicit closing, ETA, braking, compression, and insertion cues,
 and preserves arrival side and heading when handing off to the existing
 orbital path. See [docs/SYSTEM_FLIGHT.md](docs/SYSTEM_FLIGHT.md).
 
+The v0.4.10 planetary handoff derives local terrain reach from clearance,
+camera pitch, field of view, and viewport aspect. Nearby samples retain fine
+detail while distant samples use screen-bounded steps and coarser LODs. Any
+spherical surface not yet covered by the local pass remains visible, preventing
+sky-only frames through the 2,500-to-2,000 metre blend. See
+[docs/PLANETARY_PRESENTATION.md](docs/PLANETARY_PRESENTATION.md).
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in

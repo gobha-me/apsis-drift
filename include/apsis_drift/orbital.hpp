@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <span>
 
@@ -73,11 +74,14 @@ class OrbitalRenderer {
 
   // The tile-backed path preserves generated surface identity through the
   // orbital-to-local presentation handoff. Cache residency affects cost only.
+  // Optional covered pixels are left untouched so a fully weighted local pass
+  // can request only the orbital fallback regions it will consume.
   [[nodiscard]] auto render_tile_backed(
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
       PlanetFixedDirection light_direction, std::uint8_t terrain_lod,
       TerrainTileCache& cache,
-      std::span<termforge::Pixel> destination) const
+      std::span<termforge::Pixel> destination,
+      std::span<const std::uint8_t> covered_pixels = {}) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
  private:
@@ -85,7 +89,8 @@ class OrbitalRenderer {
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
       PlanetFixedDirection light_direction, TerrainTileCache* cache,
       std::uint8_t terrain_lod,
-      std::span<termforge::Pixel> destination) const
+      std::span<termforge::Pixel> destination,
+      std::span<const std::uint8_t> covered_pixels) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
   OrbitalRenderSettings m_settings;

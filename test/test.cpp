@@ -6489,6 +6489,18 @@ auto orbital_render_failure_matrix() -> void {
                   OrbitalRenderError::invalid_light_direction,
                   "a zero orbital light direction must be rejected");
 
+  auto tile_cache = TerrainTileCache::create();
+  std::vector<std::uint8_t> short_coverage(frame.size() - 1U, 1U);
+  check(tile_cache.has_value(),
+        "the orbital coverage failure fixture must create its tile cache");
+  if (tile_cache) {
+    check_untouched(renderer.render_tile_backed(
+                        planet, camera, kOrbitalTestLight, 2, *tile_cache,
+                        frame, short_coverage),
+                    OrbitalRenderError::invalid_framebuffer,
+                    "a short orbital coverage buffer must be rejected");
+  }
+
   const auto invalid_radius = planet_with_radius(planet, 0);
   check_untouched(renderer.render(invalid_radius, camera, kOrbitalTestLight,
                                   frame),
@@ -6652,6 +6664,24 @@ auto deterministic_orbital_render() -> void {
   }
   check(pairs_match,
         "each complete horizontal sample span must receive one centered orbital color");
+
+  auto cache = TerrainTileCache::create();
+  std::vector<std::uint8_t> covered(first.size(), 1U);
+  std::fill(first.begin(), first.end(), Pixel{9, 8, 7, 6});
+  const auto skipped = cache
+                           ? renderer.render_tile_backed(
+                                 planet, camera, kOrbitalTestLight, 2, *cache,
+                                 first, covered)
+                           : std::expected<OrbitalRenderStats,
+                                           OrbitalRenderError>{
+                                 std::unexpected{
+                                     OrbitalRenderError::terrain_failure}};
+  check(skipped && skipped->surface_pixels == 0 &&
+            skipped->terrain_tiles_touched == 0 &&
+            std::ranges::all_of(first, [](Pixel value) {
+              return value == Pixel{9, 8, 7, 6};
+            }),
+        "a fully covered orbital fallback must skip tile sampling and leave its unused pixels untouched");
 }
 
 auto golden_orbital_profiles() -> void {
@@ -6806,7 +6836,8 @@ auto planetary_presentation_contract() -> void {
       .width = width,
       .height = height,
       .field_of_view_degrees = 60.0,
-      .local_max_distance_metres = 140.0,
+      .local_near_distance_metres = 140.0,
+      .local_max_distance_metres = 100'000.0,
       .local_fog_start_metres = 80.0,
   });
   std::vector<Pixel> frame(static_cast<std::size_t>(width * height));
@@ -6858,8 +6889,8 @@ auto planetary_presentation_contract() -> void {
   constexpr std::array<std::uint64_t, 4> expected_checksums{
       3389802127318038332ULL,
       8750882505373245699ULL,
-      5378190185488340662ULL,
-      13208762389640217683ULL,
+      17140362428803543361ULL,
+      9313099484138567917ULL,
   };
   if (checksums != expected_checksums) {
     std::fprintf(stderr,
@@ -6876,11 +6907,83 @@ auto planetary_presentation_contract() -> void {
             std::ranges::adjacent_find(checksums) == checksums.end(),
         "scripted descent stages must produce distinct nonzero frames");
 
+  const std::array handoff_viewports{
+      ViewportSize{320, 240}, ViewportSize{640, 480},
+      ViewportSize{1024, 320}, ViewportSize{320, 1024}};
+  for (const auto viewport : handoff_viewports) {
+    PlanetaryPresentationRenderer handoff_renderer({
+        .width = viewport.width,
+        .height = viewport.height,
+    });
+    std::vector<Pixel> handoff_frame(
+        static_cast<std::size_t>(viewport.width) *
+        static_cast<std::size_t>(viewport.height));
+    const auto state = presentation_state(
+        planet, ground + bands->terrain_enter_clearance_metres, ground,
+        FlightRegime::terrain_flight);
+    const auto rendered = handoff_renderer.render(
+        planet, state, {.pitch_radians = 0.0}, handoff_frame);
+    check(rendered && rendered->local_terrain_pixels > 0 &&
+              rendered->local_distance_metres > 900.0 &&
+              (!rendered->orbital_surface_fallback ||
+               rendered->orbital_tiles_touched > 0),
+          "minimum, canonical, wide, and tall viewports must establish local terrain while retaining any required spherical coverage");
+  }
+
+  PlanetaryPresentationRenderer clearance_renderer;
+  std::vector<Pixel> clearance_frame(
+      static_cast<std::size_t>(kDefaultViewportWidth) *
+      static_cast<std::size_t>(kDefaultViewportHeight));
+  struct CoverageCheckpoint {
+    double clearance;
+    double pitch;
+  };
+  constexpr std::array coverage_checkpoints{
+      CoverageCheckpoint{2'500.0, 0.0},
+      CoverageCheckpoint{2'250.0, 0.0},
+      CoverageCheckpoint{2'000.0, 0.0},
+      CoverageCheckpoint{1'000.0, -0.18},
+      CoverageCheckpoint{100.0, -0.35},
+  };
+  for (const auto checkpoint : coverage_checkpoints) {
+    const auto regime = checkpoint.clearance <= 2'000.0
+                            ? FlightRegime::terrain_flight
+                            : FlightRegime::atmospheric;
+    const auto state = presentation_state(
+        planet, ground + checkpoint.clearance, ground, regime);
+    const auto rendered = clearance_renderer.render(
+        planet, state, {.pitch_radians = checkpoint.pitch}, clearance_frame);
+    const bool terrain_expected = checkpoint.clearance < 2'500.0;
+    check(rendered &&
+              (terrain_expected ? rendered->local_terrain_pixels > 0
+                                : rendered->local_terrain_pixels == 0) &&
+              (!rendered->orbital_surface_fallback ||
+               rendered->orbital_tiles_touched > 0) &&
+              (terrain_expected || rendered->orbital_tiles_touched > 0),
+          "canonical descent clearances must retain continuous spherical or local surface coverage");
+  }
+
+  PlanetaryPresentationRenderer bounded_renderer({
+      .width = width,
+      .height = height,
+      .local_near_distance_metres = 140.0,
+      .local_max_distance_metres = 140.0,
+      .local_fog_start_metres = 80.0,
+  });
+  std::vector<Pixel> bounded_frame(frame.size());
+  const auto bounded = bounded_renderer.render(
+      planet, terrain_full, {.pitch_radians = 0.0}, bounded_frame);
+  check(bounded && bounded->local_terrain_pixels == 0 &&
+            bounded->orbital_surface_fallback &&
+            bounded->orbital_tiles_touched > 0,
+        "a local pass with zero terrain coverage must retain the spherical planet pass");
+
   PlanetaryPresentationRenderer airless_renderer({
       .width = width,
       .height = height,
       .field_of_view_degrees = 60.0,
-      .local_max_distance_metres = 140.0,
+      .local_near_distance_metres = 140.0,
+      .local_max_distance_metres = 100'000.0,
       .local_fog_start_metres = 80.0,
   });
   auto airless_atmospheric = stages[1].state;
@@ -6934,8 +7037,7 @@ auto planetary_presentation_contract() -> void {
       return total;
     };
     const auto night_stars = std::ranges::count_if(
-        std::span{night_frame}.first(
-            static_cast<std::size_t>(width * height / 3)),
+        std::span{night_frame},
         [](Pixel value) {
           return value.r > 140 && value.r == value.g && value.b >= value.r;
         });
@@ -7029,6 +7131,15 @@ auto planetary_presentation_contract() -> void {
   });
   check(!invalid_renderer.render(planet, orbital, {}, {}),
         "invalid presentation settings must be rejected without allocation");
+  PlanetaryPresentationRenderer invalid_range_renderer({
+      .width = width,
+      .height = height,
+      .local_near_distance_metres = 200.0,
+      .local_max_distance_metres = 100.0,
+      .local_fog_start_metres = 80.0,
+  });
+  check(!invalid_range_renderer.render(planet, orbital, {}, frame),
+        "an inverted adaptive terrain range must be rejected");
 
   const auto instruments = format_flight_instruments(stages.back().state);
   check(instruments.heading.size() == kInstrumentLineWidth &&
@@ -7087,7 +7198,7 @@ auto planetfall_acceptance_contract() -> void {
       10946652128119593424ULL,
       16874951085288255351ULL,
       3576507194995956476ULL,
-      17125498855235624672ULL,
+      6089475364341542143ULL,
   };
   check(result->report.stages.size() == expected_modes.size(),
         "Planetfall must report each presentation stage exactly once");

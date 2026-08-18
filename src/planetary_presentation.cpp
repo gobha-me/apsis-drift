@@ -1,6 +1,7 @@
 #include "apsis_drift/planetary_presentation.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <numbers>
@@ -270,28 +271,68 @@ auto render_orbital_motion_cues(
          std::isfinite(settings.field_of_view_degrees) &&
          settings.field_of_view_degrees > 1.0 &&
          settings.field_of_view_degrees < 179.0 &&
+         std::isfinite(settings.local_near_distance_metres) &&
+         settings.local_near_distance_metres > 1.0 &&
          std::isfinite(settings.local_max_distance_metres) &&
-         settings.local_max_distance_metres > 1.0 &&
+         settings.local_max_distance_metres >=
+             settings.local_near_distance_metres &&
          std::isfinite(settings.local_fog_start_metres) &&
          settings.local_fog_start_metres >= 0.0 &&
          settings.local_fog_start_metres <
-             settings.local_max_distance_metres &&
+             settings.local_near_distance_metres &&
          settings.orbital_terrain_lod <= kMaxTerrainLod &&
          settings.terrain_cache_capacity > 0;
 }
 
 struct LocalRenderStats {
   std::size_t tiles_touched{};
+  std::size_t terrain_pixels{};
   std::size_t sun_pixels{};
+  double distance_metres{};
+  bool spherical_surface_covered{};
 };
+
+struct LocalProjectionRange {
+  double distance_metres{};
+  double spherical_surface_top{};
+};
+
+[[nodiscard]] auto local_projection_range(
+    const PlanetaryPresentationSettings& settings,
+    const PlanetDescriptor& planet, const PlanetaryFlightState& state,
+    double focal, double horizon) noexcept -> LocalProjectionRange {
+  const double radius = static_cast<double>(planet.radius.value) * 1'000.0;
+  const double radial_altitude =
+      std::max(0.0, state.pose.position.altitude_metres);
+  const double depression = std::acos(std::clamp(
+      radius / (radius + radial_altitude), 0.0, 1.0));
+  const double spherical_surface_top =
+      horizon + std::tan(depression) * focal;
+
+  double required = settings.local_near_distance_metres;
+  const double projected_height =
+      static_cast<double>(settings.height) - horizon;
+  if (projected_height > 1.0e-9) {
+    required = std::max(
+        required, state.clearance_metres * focal / projected_height * 1.02);
+  }
+  return {std::clamp(required, settings.local_near_distance_metres,
+                     settings.local_max_distance_metres),
+          spherical_surface_top};
+}
 
 [[nodiscard]] auto render_local(
     const PlanetaryPresentationSettings& settings,
     const PlanetDescriptor& planet, const PlanetaryFlightState& state,
     const LocalSunGeometry& sun, PlanetaryPresentationCamera camera,
     std::uint8_t lod,
-    TerrainTileCache& cache, std::span<termforge::Pixel> destination)
+    TerrainTileCache& cache, std::span<termforge::Pixel> destination,
+    std::span<std::uint8_t> coverage)
     -> std::expected<LocalRenderStats, PlanetaryPresentationError> {
+  if (coverage.size() != destination.size()) {
+    return std::unexpected{PlanetaryPresentationError::invalid_framebuffer};
+  }
+  std::ranges::fill(coverage, std::uint8_t{0});
   const GeodeticPosition surface_origin{
       state.pose.position.latitude_radians,
       state.pose.position.longitude_radians, 0.0};
@@ -404,15 +445,16 @@ struct LocalRenderStats {
   }
 
   const double eye_altitude = state.pose.position.altitude_metres;
+  const auto projection =
+      local_projection_range(settings, planet, state, focal, horizon);
   std::vector<int> occlusion(static_cast<std::size_t>(settings.width),
                              settings.height);
-  auto sampler = TerrainSurfaceSampler::create(planet, lod, cache);
-  if (!sampler) {
-    return std::unexpected{PlanetaryPresentationError::terrain_failure};
-  }
+  std::array<std::optional<TerrainSurfaceSampler>,
+             static_cast<std::size_t>(kMaxTerrainLod) + 1U>
+      samplers;
 
   double distance = 1.0;
-  while (distance < settings.local_max_distance_metres) {
+  while (distance <= projection.distance_metres) {
     const double half_width = distance * tangent;
     double east = forward_east * distance - right_east * half_width;
     double north = forward_north * distance - right_north * half_width;
@@ -422,9 +464,27 @@ struct LocalRenderStats {
         right_north * (2.0 * half_width / settings.width);
     const double fog = std::clamp(
         (distance - settings.local_fog_start_metres) /
-            (settings.local_max_distance_metres -
+            (settings.local_near_distance_metres -
              settings.local_fog_start_metres),
         0.0, 1.0);
+    const double sample_footprint =
+        2.0 * half_width / static_cast<double>(settings.width);
+    const auto distance_lod = select_terrain_lod(
+        planet,
+        std::max({0.0, eye_altitude, distance * 0.25,
+                  sample_footprint * 16.0}));
+    if (!distance_lod) {
+      return std::unexpected{PlanetaryPresentationError::coordinate_failure};
+    }
+    const auto sample_lod = std::min(lod, *distance_lod);
+    auto& sampler = samplers[static_cast<std::size_t>(sample_lod)];
+    if (!sampler) {
+      auto created = TerrainSurfaceSampler::create(planet, sample_lod, cache);
+      if (!created) {
+        return std::unexpected{PlanetaryPresentationError::terrain_failure};
+      }
+      sampler.emplace(std::move(*created));
+    }
 
     for (int x = 0; x < settings.width; ++x) {
       const auto fixed = planet_fixed_from_local(*frame, {east, north, 0.0});
@@ -453,20 +513,44 @@ struct LocalRenderStats {
                                            blend_weight(daylight * 0.35));
         color = blend(color, fog_color, blend_weight(fog * fog * 0.72));
         for (int y = top; y < bottom; ++y) {
-          destination[static_cast<std::size_t>(y) *
-                          static_cast<std::size_t>(settings.width) +
-                      static_cast<std::size_t>(x)] = color;
+          const auto index = static_cast<std::size_t>(y) *
+                                 static_cast<std::size_t>(settings.width) +
+                             static_cast<std::size_t>(x);
+          destination[index] = color;
+          coverage[index] = 1;
         }
         occlusion[static_cast<std::size_t>(x)] = top;
       }
       east += step_east;
       north += step_north;
     }
-    distance += std::max(0.75, distance * 0.0125);
+    if (distance >= projection.distance_metres) break;
+    const double projected_scale = std::max(1.0, eye_altitude * focal);
+    const double screen_space_step =
+        distance * distance / projected_scale * 0.75;
+    distance = std::min(
+        projection.distance_metres,
+        distance + std::max({0.75, distance * 0.0125, screen_space_step}));
   }
+  std::size_t tiles_touched{};
+  for (const auto& sampler : samplers) {
+    if (sampler) tiles_touched += sampler->tiles_touched();
+  }
+  const auto terrain_pixels = static_cast<std::size_t>(
+      std::ranges::count(coverage, std::uint8_t{1}));
+  const int required_top = static_cast<int>(std::clamp(
+      std::ceil(projection.spherical_surface_top), 0.0,
+      static_cast<double>(settings.height)));
+  const bool spherical_surface_covered =
+      required_top >= settings.height ||
+      std::ranges::all_of(occlusion, [required_top](int top) {
+        return top <= required_top;
+      });
   const auto sun_pixels = static_cast<std::size_t>(std::ranges::count(
       destination, sun_color));
-  return LocalRenderStats{sampler->tiles_touched(), sun_pixels};
+  return LocalRenderStats{tiles_touched, terrain_pixels, sun_pixels,
+                          projection.distance_metres,
+                          spherical_surface_covered};
 }
 
 }  // namespace
@@ -520,7 +604,8 @@ PlanetaryPresentationRenderer::PlanetaryPresentationRenderer(
                           ? static_cast<std::size_t>(settings.width) *
                                 static_cast<std::size_t>(settings.height)
                           : 0U),
-      m_local_frame(m_orbital_frame.size()) {}
+      m_local_frame(m_orbital_frame.size()),
+      m_local_coverage(m_orbital_frame.size()) {}
 
 auto PlanetaryPresentationRenderer::render(
     const PlanetDescriptor& planet, const PlanetaryFlightState& state,
@@ -584,11 +669,32 @@ auto PlanetaryPresentationRenderer::render(
 
   const auto local_weight = blend_weight(mix->local_terrain);
   const auto orbital_weight = kBlendScale - local_weight;
-  const bool render_orbital =
-      local_weight < kBlendScale && can_affect_channel(orbital_weight);
   const bool render_local_pass =
       local_weight > 0 && can_affect_channel(local_weight);
+  bool spherical_surface_covered{};
 
+  if (render_local_pass) {
+    const auto started = Clock::now();
+    const auto local = render_local(m_settings, planet, state, *sun, camera,
+                                    *selected_lod, *m_cache, m_local_frame,
+                                    m_local_coverage);
+    stats.local_render_ms = elapsed_ms(started, Clock::now());
+    if (!local) return std::unexpected{local.error()};
+    stats.local_tiles_touched = local->tiles_touched;
+    stats.local_terrain_pixels = local->terrain_pixels;
+    stats.local_distance_metres = local->distance_metres;
+    spherical_surface_covered = local->spherical_surface_covered;
+    if (local_weight >= kBlendScale / 2) stats.sun_pixels = local->sun_pixels;
+  } else {
+    std::ranges::fill(m_local_coverage, std::uint8_t{0});
+  }
+
+  const bool weighted_orbital =
+      local_weight < kBlendScale && can_affect_channel(orbital_weight);
+  stats.orbital_surface_fallback =
+      render_local_pass && !spherical_surface_covered;
+  const bool render_orbital =
+      weighted_orbital || stats.orbital_surface_fallback;
   if (render_orbital) {
     const auto fixed = planet_fixed_from_geodetic(planet, state.pose.position);
     const auto frame = make_local_tangent_frame(planet, state.pose.position);
@@ -614,28 +720,23 @@ auto PlanetaryPresentationRenderer::render(
         frame->up.z * horizontal -
             (frame->east.z * heading_cos + frame->north.z * heading_sin) * vertical};
     const auto started = Clock::now();
+    const std::span<const std::uint8_t> covered_pixels =
+        local_weight == kBlendScale
+            ? std::span<const std::uint8_t>{m_local_coverage}
+            : std::span<const std::uint8_t>{};
     const auto orbital = m_orbital_renderer.render_tile_backed(
         planet, {*fixed, forward, up}, sun->planet_to_sun,
-        m_settings.orbital_terrain_lod, *m_cache, m_orbital_frame);
+        m_settings.orbital_terrain_lod, *m_cache, m_orbital_frame,
+        covered_pixels);
     stats.orbital_render_ms = elapsed_ms(started, Clock::now());
     if (!orbital) {
       return std::unexpected{PlanetaryPresentationError::orbital_failure};
     }
     stats.orbital_tiles_touched = orbital->terrain_tiles_touched;
-    stats.sun_pixels = orbital->sun_pixels;
+    if (local_weight < kBlendScale / 2) stats.sun_pixels = orbital->sun_pixels;
     render_atmospheric_context(m_settings, planet, state, *sun, camera,
                                mix->atmosphere, m_orbital_frame);
     render_orbital_motion_cues(m_settings, state, m_orbital_frame);
-  }
-
-  if (render_local_pass) {
-    const auto started = Clock::now();
-    const auto local = render_local(m_settings, planet, state, *sun, camera,
-                                    *selected_lod, *m_cache, m_local_frame);
-    stats.local_render_ms = elapsed_ms(started, Clock::now());
-    if (!local) return std::unexpected{local.error()};
-    stats.local_tiles_touched = local->tiles_touched;
-    if (local_weight >= kBlendScale / 2) stats.sun_pixels = local->sun_pixels;
   }
 
   const auto local_frame = make_local_tangent_frame(planet, state.pose.position);
@@ -654,6 +755,8 @@ auto PlanetaryPresentationRenderer::render(
     if (!render_orbital) {
       result = m_local_frame[index];
     } else if (!render_local_pass) {
+      result = m_orbital_frame[index];
+    } else if (m_local_coverage[index] == 0) {
       result = m_orbital_frame[index];
     } else {
       result = blend(m_orbital_frame[index], m_local_frame[index],
