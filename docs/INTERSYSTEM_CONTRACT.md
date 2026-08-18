@@ -148,18 +148,14 @@ bounded and cannot turn a valid location into corrupt mission state.
 
 ## Save projection and compatibility
 
-The current save format remains version 2 for this contract-only change. The
-first implementation that persists intersystem state must introduce format
-version 3 and record:
+The v0.4.7 mission board introduces save format version 3 and records:
 
 - generator versions for the system catalog, ephemeris, and first mission;
 - stable origin/target system, star, mission-planet, station, mission, and
   objective IDs needed to validate regeneration;
 - `universe_tick`, mission phase, current system, and the active craft-location
   variant;
-- system-space craft pose or existing planetary flight state, never both;
-- jump source, destination, phase-start/commit tick, and authoritative arrival
-  solution while transit is active;
+- the high-level active location and jump phase fields defined here;
 - existing discoveries and sparse world deltas unchanged.
 
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
@@ -170,9 +166,9 @@ Formats 1 and 2 remain readable. They retain their saved origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
 not moved to system ordinal 1, assigned a generated jump, or given synthetic
-mission progress. After the legacy run returns, the intersystem offer may be
-introduced explicitly by the later mission-board migration. Older readers
-must reject format 3 before discarding any of these fields.
+mission progress. Legacy careers remain explicitly local in v0.4.7;
+conversion into the intersystem career is not synthesized. Older readers must
+reject format 3 before discarding any of these fields.
 
 ## Implementation boundaries
 

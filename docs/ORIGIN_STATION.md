@@ -122,3 +122,7 @@ offer, return, and turn-in anchor. Its target system is a separate generated
 child, and neither its system-inertial waypoint nor its mission seed changes
 the station's established derivation. See the
 [Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
+
+As of v0.4.7, fresh careers present that bounded contract through the shared
+[Origin Station Mission Board](MISSION_BOARD.md). Version 1 and 2 saves remain
+legacy local Signal Runs and are not silently assigned the new route.

@@ -275,7 +275,8 @@ struct TerrainSafetyProbe {
 [[nodiscard]] auto terrain_safety_probe()
     -> std::expected<TerrainSafetyProbe, SignalRunAcceptanceError> {
   auto cache = TerrainTileCache::create();
-  const auto fresh = make_new_game_document(Seed{kSignalRunDefaultSeed});
+  const auto fresh =
+      make_legacy_signal_run_document(Seed{kSignalRunDefaultSeed});
   auto run = cache ? hydrate_signal_run(fresh, *cache)
                    : std::expected<SignalRunState, SignalRunError>{
                          std::unexpected{SignalRunError::terrain_failure}};
@@ -322,7 +323,7 @@ struct TerrainSafetyProbe {
     return std::unexpected{
         SignalRunAcceptanceError::initialization_failure};
   }
-  const auto fresh = make_new_game_document(Seed{seed});
+  const auto fresh = make_legacy_signal_run_document(Seed{seed});
   auto run = hydrate_signal_run(fresh, *cache);
   if (!run || !accept_signal_run(*run) ||
       !launch_signal_run(*run, *cache) || !run->flight ||

@@ -8,6 +8,7 @@
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/surface_signals.hpp"
 
 namespace apsis_drift {
 
@@ -19,6 +20,7 @@ inline constexpr std::uint64_t kFirstTargetSystemOrdinal{1};
 inline constexpr std::uint64_t kSystemStarOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionTargetPlanetOrdinal{0};
+inline constexpr std::uint64_t kFirstMissionObjectiveOrdinal{0};
 inline constexpr SimulationTick kJumpSpoolTicks{3 * kSimulationHz};
 inline constexpr SimulationTick kJumpTransitTicks{2 * kSimulationHz};
 
@@ -52,6 +54,8 @@ struct FirstIntersystemIdentities {
   Seed target_planet_seed;
   PlanetId target_planet;
   Seed target_orbit_seed;
+  Seed target_objective_seed;
+  SurfaceSignalId target_objective;
   Seed mission_seed;
   MissionId mission;
 

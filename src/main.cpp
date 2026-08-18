@@ -37,6 +37,7 @@
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
+#include "apsis_drift/mission_board.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetfall_acceptance.hpp"
@@ -328,8 +329,11 @@ class LandscapeApp final : public App {
                 : PlanetarySurfaceFixture{}),
         m_session(!interactive_controls,
                   profile != nullptr &&
-                      profile->state.location ==
-                          OriginLocation::docked_at_origin),
+                      (profile->state.intersystem_contract
+                           ? profile->state.intersystem_contract->travel_phase ==
+                                 IntersystemTravelPhase::docked_at_origin
+                           : profile->state.location ==
+                                 OriginLocation::docked_at_origin)),
         m_capture_seconds(capture_seconds),
         m_seed(seed),
         m_workload(workload),
@@ -337,16 +341,21 @@ class LandscapeApp final : public App {
         m_flight_deck_acceptance(flight_deck_acceptance),
         m_signal_navigation_acceptance(signal_navigation_acceptance) {
     if (profile != nullptr) {
-      auto cache = TerrainTileCache::create();
-      if (!cache) {
-        throw std::runtime_error{"cannot create Signal Run terrain cache"};
+      m_save_profile = *profile;
+      if (profile->state.intersystem_contract) {
+        m_intersystem_contract = *profile->state.intersystem_contract;
+      } else {
+        auto cache = TerrainTileCache::create();
+        if (!cache) {
+          throw std::runtime_error{"cannot create Signal Run terrain cache"};
+        }
+        m_signal_run_cache.emplace(std::move(*cache));
+        auto run = hydrate_signal_run(*profile, *m_signal_run_cache);
+        if (!run) {
+          throw std::runtime_error{"cannot hydrate Signal Run profile"};
+        }
+        m_signal_run.emplace(std::move(*run));
       }
-      m_signal_run_cache.emplace(std::move(*cache));
-      auto run = hydrate_signal_run(*profile, *m_signal_run_cache);
-      if (!run) {
-        throw std::runtime_error{"cannot hydrate Signal Run profile"};
-      }
-      m_signal_run.emplace(std::move(*run));
     }
     if (m_signal_navigation_acceptance) {
       auto cache = TerrainTileCache::create();
@@ -656,6 +665,11 @@ class LandscapeApp final : public App {
 
   [[nodiscard]] auto signal_run_save() const
       -> std::expected<SaveDocument, SignalRunError> {
+    if (m_intersystem_contract && m_save_profile) {
+      auto document = *m_save_profile;
+      document.state.intersystem_contract = *m_intersystem_contract;
+      return document;
+    }
     if (!m_signal_run) {
       return std::unexpected{SignalRunError::inconsistent_state};
     }
@@ -676,6 +690,9 @@ class LandscapeApp final : public App {
 
  private:
   [[nodiscard]] auto current_flight_tick() const noexcept -> SimulationTick {
+    if (m_intersystem_contract) {
+      return m_intersystem_contract->universe_tick;
+    }
     return m_signal_run && m_signal_run->flight
                ? m_signal_run->flight->tick
                : m_flight.tick;
@@ -701,6 +718,22 @@ class LandscapeApp final : public App {
     if (m_session.screen() == SessionScreen::station &&
         command == MenuCommand::activate &&
         m_session.selected() == MenuItem::primary) {
+      if (m_intersystem_contract) {
+        const auto snapshot =
+            mission_board_snapshot(*m_intersystem_contract);
+        if (!snapshot || !snapshot->primary_action_enabled) return;
+        const auto board_command =
+            m_intersystem_contract->mission_phase ==
+                    IntersystemMissionPhase::offered
+                ? IntersystemContractCommand::accept_mission
+                : IntersystemContractCommand::turn_in;
+        if (!advance_intersystem_contract(
+                *m_intersystem_contract,
+                m_intersystem_contract->universe_tick, board_command)) {
+          m_error = "mission board action was rejected";
+        }
+        return;
+      }
       if (!m_signal_run || !m_signal_run_cache) {
         m_error = "Signal Run station state is unavailable";
         return;
@@ -787,7 +820,8 @@ class LandscapeApp final : public App {
   }
 
   auto draw_menu(Screen& screen, std::string_view heading,
-                 std::string_view primary_label) -> void {
+                 std::string_view primary_label,
+                 bool primary_enabled = true) -> void {
     if (screen.cols() < kMinimumCockpitCols ||
         screen.rows() < kMinimumCockpitRows) {
       draw_size_requirement(screen);
@@ -826,7 +860,9 @@ class LandscapeApp final : public App {
       screen.fill_rect(row.x, row.y, row.w, row.h, text, background);
       const std::string display =
           selected ? std::format("> {} <", label) : std::string(label);
-      centered(row, display, text, background);
+      centered(row, display,
+               item == MenuItem::primary && !primary_enabled ? muted : text,
+               background);
     };
     action(m_menu_layout.primary_action, MenuItem::primary, primary_label);
     action(m_menu_layout.exit_action, MenuItem::exit, "EXIT TO TERMINAL");
@@ -862,13 +898,48 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "SIGNAL RUN // v0.4", "CONTINUE");
+    draw_menu(screen, "FIRST CONTRACT // v0.4.7", "CONTINUE");
   }
 
   auto draw_station_screen(Screen& screen) -> void {
     m_surface.set_geometry({});
     m_surface.draw(screen);
     render_pixel_regions(m_surface);
+    if (m_intersystem_contract) {
+      const auto board = mission_board_snapshot(*m_intersystem_contract);
+      if (!board) {
+        draw_menu(screen, "ORIGIN STATION", "CONTRACT INVALID", false);
+        return;
+      }
+      draw_menu(screen, "ORIGIN STATION // MISSION BOARD",
+                board->primary_action, board->primary_action_enabled);
+      if (!m_menu_layout.supported()) return;
+      constexpr Rgb text{205, 222, 224};
+      constexpr Rgb muted{109, 143, 151};
+      constexpr Rgb accent{126, 214, 210};
+      constexpr Rgb background{7, 15, 24};
+      const auto centered = [&](int row, std::string_view value, Rgb color) {
+        screen.write_text(
+            std::max(0, (screen.cols() - static_cast<int>(value.size())) / 2),
+            std::max(1, m_menu_layout.art.y + row), value, color, background);
+      };
+      centered(1, board->station, muted);
+      centered(3, std::format("FIRST INTERSYSTEM CONTRACT // {}",
+                              board->status),
+               accent);
+      centered(5, board->mission, muted);
+      centered(7, std::format("DESTINATION: {}", board->destination_system),
+               text);
+      centered(9, std::format("PLANET: {}", board->destination_planet), text);
+      centered(11, std::format("OBJECTIVE: {}", board->objective), text);
+      centered(13,
+               std::format("RETURN REQUIRED: {}", board->return_destination),
+               muted);
+      if (board->launch_authorized) {
+        centered(15, "LAUNCH ROUTE AUTHORIZED", accent);
+      }
+      return;
+    }
     if (!m_signal_run) {
       draw_menu(screen, "ORIGIN STATION", "UNAVAILABLE");
       return;
@@ -1485,6 +1556,8 @@ class LandscapeApp final : public App {
   std::optional<SignalNavigationAcceptanceState> m_signal_scenario;
   std::optional<TerrainTileCache> m_signal_run_cache;
   std::optional<SignalRunState> m_signal_run;
+  std::optional<SaveDocument> m_save_profile;
+  std::optional<IntersystemContractState> m_intersystem_contract;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
   SessionController m_session;
   FixedStepClock m_simulation_clock;

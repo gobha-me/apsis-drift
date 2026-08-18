@@ -26,6 +26,7 @@
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
+#include "apsis_drift/mission_board.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/planet.hpp"
@@ -302,19 +303,22 @@ auto intersystem_identity_contract() -> void {
     std::uint64_t target_star;
     std::uint64_t target_planet;
     std::uint64_t target_orbit;
+    std::uint64_t target_objective;
     std::uint64_t mission;
   };
   constexpr std::array goldens{
       Golden{0, 2662095937669570104ULL, 4894411344637159513ULL,
              5592200058082068984ULL, 14025633564997783731ULL,
-             11284210986182746681ULL, 11120317075475266442ULL},
+             11284210986182746681ULL, 13547108315800561202ULL,
+             11120317075475266442ULL},
       Golden{42, 677859337506523986ULL, 2910174744474113395ULL,
              4391435423288202480ULL, 11663323411267002299ULL,
-             10083446351388880177ULL, 15627605413347125595ULL},
+             10083446351388880177ULL, 11040201098989428000ULL,
+             15627605413347125595ULL},
       Golden{std::numeric_limits<std::uint64_t>::max(), 4480404333408418992ULL,
              6712719740376008401ULL, 7643486625863325908ULL,
              14915374613842125727ULL, 13335497553964003605ULL,
-             5521705905730859352ULL},
+             8612026277630883453ULL, 5521705905730859352ULL},
   };
   for (const auto& golden : goldens) {
     const auto identities =
@@ -331,6 +335,9 @@ auto intersystem_identity_contract() -> void {
               identities.target_planet_seed.value == golden.target_planet &&
               identities.target_planet.value == golden.target_planet &&
               identities.target_orbit_seed.value == golden.target_orbit &&
+              identities.target_objective_seed.value ==
+                  golden.target_objective &&
+              identities.target_objective.value == golden.target_objective &&
               identities.mission_seed.value == golden.mission &&
               identities.mission.value == golden.mission,
           "first intersystem identities must retain their golden vectors");
@@ -484,6 +491,97 @@ auto intersystem_state_contract() -> void {
         "unknown mission phases must fail validation");
   rejected(static_cast<IntersystemContractCommand>(255),
            IntersystemContractError::invalid_transition);
+}
+
+auto mission_board_contract() -> void {
+  auto state = initial_intersystem_contract_state(Seed{42});
+  const auto offered = mission_board_snapshot(state);
+  check(offered && offered->station == "station-ce51e866ec4e032d" &&
+            offered->mission == "mission-d8e068532886e95b" &&
+            offered->destination_system.find("Ortis // system-") == 0 &&
+            offered->objective ==
+                "SIGNAL SURVEY // signal-9936ac67f2245d20" &&
+            offered->status == "OFFERED" &&
+            offered->primary_action == "ACCEPT CONTRACT" &&
+            offered->primary_action_enabled && !offered->launch_authorized,
+        "the offered mission board must expose one complete semantic contract");
+
+  const auto accept = advance_intersystem_contract(
+      state, state.universe_tick, IntersystemContractCommand::accept_mission);
+  const auto accepted = mission_board_snapshot(state);
+  check(accept && accepted && accepted->status == "ACCEPTED" &&
+            accepted->primary_action == "MISSION ACCEPTED" &&
+            !accepted->primary_action_enabled && accepted->launch_authorized,
+        "acceptance must authorize launch without starting future transit work");
+
+  auto corrupted = state;
+  corrupted.identities.target_objective.value ^= 1U;
+  check(mission_board_snapshot(corrupted) ==
+            std::unexpected{MissionBoardError::invalid_contract},
+        "the mission board must reject corrupt deterministic references");
+
+  auto document = make_new_game_document(Seed{42});
+  const auto fresh_json = encode_save_document_json(document);
+  check(fresh_json &&
+            decode_save_document_json(replace_once(
+                *fresh_json, "signal-9936ac67f2245d20",
+                "signal-9936ac67f2245d21")) ==
+                std::unexpected{SaveSchemaError{
+                    SaveSchemaErrorCode::identity_mismatch,
+                    "$.state.intersystem_contract.identities",
+                    "stored first-contract identities do not match deterministic regeneration"}},
+        "a corrupt saved mission objective must fail before state commit");
+  const auto round_trip = [&](const IntersystemContractState& checkpoint,
+                              const char* message) {
+    document.state.intersystem_contract = checkpoint;
+    const auto encoded = encode_save_document_json(document);
+    if (!encoded) {
+      check(false, message);
+      return;
+    }
+    const auto decoded = decode_save_document_json(*encoded);
+    check(decoded && decoded->state.intersystem_contract == checkpoint,
+          message);
+  };
+  round_trip(initial_intersystem_contract_state(Seed{42}),
+             "offered intersystem state must survive a v3 round trip");
+  round_trip(state, "accepted intersystem state must survive a v3 round trip");
+
+  const auto command = [&](IntersystemContractCommand value) {
+    return advance_intersystem_contract(state, state.universe_tick, value);
+  };
+  check(command(IntersystemContractCommand::launch).has_value(),
+        "the accepted mission fixture must launch");
+  round_trip(state, "active intersystem state must survive a v3 round trip");
+  check(command(IntersystemContractCommand::begin_outbound_jump).has_value() &&
+            advance_intersystem_time(state, kJumpSpoolTicks).has_value() &&
+            command(IntersystemContractCommand::commit_outbound_jump)
+                .has_value() &&
+            advance_intersystem_time(state, kJumpTransitTicks).has_value() &&
+            command(IntersystemContractCommand::arrive_target_system)
+                .has_value() &&
+            command(IntersystemContractCommand::enter_target_planet)
+                .has_value() &&
+            command(IntersystemContractCommand::complete_objective)
+                .has_value(),
+        "the persistence fixture must reach objective completion legally");
+  round_trip(state,
+             "objective-complete intersystem state must survive a v3 round trip");
+  check(command(IntersystemContractCommand::leave_target_planet).has_value() &&
+            command(IntersystemContractCommand::begin_return_jump)
+                .has_value() &&
+            advance_intersystem_time(state, kJumpSpoolTicks).has_value() &&
+            command(IntersystemContractCommand::commit_return_jump)
+                .has_value() &&
+            advance_intersystem_time(state, kJumpTransitTicks).has_value() &&
+            command(IntersystemContractCommand::arrive_origin_system)
+                .has_value() &&
+            command(IntersystemContractCommand::dock_at_origin).has_value(),
+        "the persistence fixture must return legally");
+  round_trip(state, "returned intersystem state must survive a v3 round trip");
+  check(command(IntersystemContractCommand::turn_in).has_value(),
+        "the persistence fixture must turn in legally");
+  round_trip(state, "turned-in intersystem state must survive a v3 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -1059,9 +1157,9 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 2 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 3 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 2 identity and byte bound must remain stable");
+        "save format version 3 identity and byte bound must remain stable");
   const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
   const auto fixture = read_test_data("test/data/save-v2-golden.json");
   check(!legacy_fixture.empty() && !fixture.empty(),
@@ -1095,20 +1193,24 @@ auto save_schema_contract() -> void {
               .world_deltas =
                   {{"signal-71d4c959dcd64423",
                     SaveWorldDeltaKind::discovered, 1100}},
+              .intersystem_contract = std::nullopt,
           },
   };
   check(recipe.origin_station.value == 0xce51e866ec4e032dULL &&
             recipe.active_planet.value == 0x435b7b7e8ce489e8ULL,
         "save recipes must regenerate the canonical station and planet IDs");
   check(validate_save_document(expected).has_value(),
-        "the representative version 2 save must validate");
+        "the representative legacy Signal Run save must validate");
 
   const auto decoded = decode_save_document_json(fixture);
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && *encoded == fixture,
-        "the version 2 encoder must reproduce the golden fixture byte-for-byte");
+  check(encoded && encoded->find("\"format_version\": 3") !=
+                       std::string::npos &&
+            encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
+                std::string::npos,
+        "the current encoder must migrate legacy state into canonical version 3");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
@@ -1117,7 +1219,7 @@ auto save_schema_contract() -> void {
   const auto migrated = decode_save_document_json(legacy_fixture);
   check(migrated && *migrated == expected &&
             encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 2");
+        "a version 1 save must migrate in memory and rewrite canonically as version 3");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -1148,13 +1250,13 @@ auto save_schema_contract() -> void {
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 3"),
+                   "\"format_version\": 4"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":3}",
+      "{\"application\":\"apsis-drift\",\"format_version\":4}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 2 fields are read");
+        "future formats must be identified before version 3 fields are read");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
@@ -1174,6 +1276,23 @@ auto save_schema_contract() -> void {
       replace_once(fixture, "\"local_sun\": 1", "\"local_sun\": 2"),
       SaveSchemaErrorCode::incompatible_generator_version,
       "unsupported local-sun geometry versions must be rejected explicitly");
+  if (encoded) {
+    expect_decode_error(
+        replace_once(*encoded, "\"local_system\": 1",
+                     "\"local_system\": 2"),
+        SaveSchemaErrorCode::incompatible_generator_version,
+        "unsupported local-system versions must be rejected explicitly");
+    expect_decode_error(
+        replace_once(*encoded, "\"analytic_ephemeris\": 1",
+                     "\"analytic_ephemeris\": 2"),
+        SaveSchemaErrorCode::incompatible_generator_version,
+        "unsupported ephemeris versions must be rejected explicitly");
+    expect_decode_error(
+        replace_once(*encoded, "\"intersystem_contract\": 1",
+                     "\"intersystem_contract\": 2"),
+        SaveSchemaErrorCode::incompatible_generator_version,
+        "unsupported first-contract versions must be rejected explicitly");
+  }
   expect_decode_error(
       replace_once(fixture, "station-ce51e866ec4e032d",
                    "station-ce51e866ec4e032e"),
@@ -1373,7 +1492,7 @@ auto signal_run_contract() -> void {
   check(cache.has_value(), "Signal Run must create a terrain cache");
   if (!cache) return;
 
-  const auto fresh = make_new_game_document(Seed{42});
+  const auto fresh = make_legacy_signal_run_document(Seed{42});
   auto run = hydrate_signal_run(fresh, *cache);
   check(run.has_value() &&
             run->onboarding.location == OriginLocation::docked_at_origin &&
@@ -1564,6 +1683,7 @@ auto regenerated_world_delta_contract() -> void {
               .discoveries = {{target, 100}},
               .world_deltas = {{surface_signal_object_key(target),
                                 SaveWorldDeltaKind::collected, 120}},
+              .intersystem_contract = std::nullopt,
           },
   };
   const auto encoded = encode_save_document_json(saved);
@@ -2354,6 +2474,7 @@ auto signal_collection_contract() -> void {
               .discoveries = {{target.id, *state.completion_tick}},
               .world_deltas = std::vector<SaveWorldDelta>(
                   journal.entries().begin(), journal.entries().end()),
+              .intersystem_contract = std::nullopt,
           },
   };
   const auto encoded = encode_save_document_json(saved);
@@ -6460,6 +6581,7 @@ auto main() -> int {
   seed_derivation_contract();
   intersystem_identity_contract();
   intersystem_state_contract();
+  mission_board_contract();
   local_system_contract();
   local_system_rendering_contract();
   origin_station_contract();

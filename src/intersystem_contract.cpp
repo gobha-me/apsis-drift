@@ -55,6 +55,9 @@ auto generate_first_intersystem_identities(Seed universe_seed) noexcept
       target_system_seed, SeedDomain::planet, kFirstMissionTargetPlanetOrdinal);
   const auto target_orbit_seed = derive_seed(
       target_system_seed, SeedDomain::orbit, kFirstMissionTargetPlanetOrdinal);
+  const auto target_objective_seed = derive_seed(
+      target_planet_seed, SeedDomain::encounter,
+      kFirstMissionObjectiveOrdinal);
   const auto mission_seed = derive_seed(
       station.station_seed, SeedDomain::mission, kFirstMissionOrdinal);
   return {
@@ -69,6 +72,8 @@ auto generate_first_intersystem_identities(Seed universe_seed) noexcept
       .target_planet_seed = target_planet_seed,
       .target_planet = PlanetId{target_planet_seed.value},
       .target_orbit_seed = target_orbit_seed,
+      .target_objective_seed = target_objective_seed,
+      .target_objective = SurfaceSignalId{target_objective_seed.value},
       .mission_seed = mission_seed,
       .mission = MissionId{mission_seed.value},
   };

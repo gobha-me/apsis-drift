@@ -268,6 +268,13 @@ struct CreatedTemporary {
 }  // namespace
 
 auto make_new_game_document(Seed universe_seed) -> SaveDocument {
+  auto document = make_legacy_signal_run_document(universe_seed);
+  document.state.intersystem_contract =
+      initial_intersystem_contract_state(universe_seed);
+  return document;
+}
+
+auto make_legacy_signal_run_document(Seed universe_seed) -> SaveDocument {
   return SaveDocument{
       .recipe = make_save_recipe(universe_seed),
       .state =
@@ -278,6 +285,7 @@ auto make_new_game_document(Seed universe_seed) -> SaveDocument {
               .flight = std::nullopt,
               .discoveries = {},
               .world_deltas = {},
+              .intersystem_contract = std::nullopt,
           },
   };
 }

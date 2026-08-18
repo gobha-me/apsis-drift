@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/surface_signals.hpp"
@@ -15,7 +16,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{2};
+inline constexpr std::uint32_t kSaveFormatVersion{3};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
 inline constexpr std::size_t kMaximumSaveWorldDeltas{16'384};
@@ -28,6 +29,9 @@ struct SaveGeneratorVersions {
   std::uint32_t origin_station{};
   std::uint32_t surface_signals{};
   std::uint32_t local_sun{};
+  std::uint32_t local_system{};
+  std::uint32_t analytic_ephemeris{};
+  std::uint32_t intersystem_contract{};
 
   friend auto operator==(const SaveGeneratorVersions&,
                          const SaveGeneratorVersions&) -> bool = default;
@@ -76,6 +80,9 @@ struct SaveMutableState {
   std::optional<PlanetaryFlightState> flight;
   std::vector<SaveDiscovery> discoveries;
   std::vector<SaveWorldDelta> world_deltas;
+  // Present for the v3 first-contract career. Absence identifies a migrated
+  // v1/v2 local Signal Run, which must never be silently retargeted.
+  std::optional<IntersystemContractState> intersystem_contract;
 
   friend auto operator==(const SaveMutableState&, const SaveMutableState&)
       -> bool = default;
