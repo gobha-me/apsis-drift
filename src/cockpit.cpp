@@ -533,4 +533,80 @@ auto format_signal_collection(const SignalCollectionState& collection)
   return readout;
 }
 
+auto format_system_navigation(const SystemNavigationSolution& navigation)
+    -> SystemNavigationReadout {
+  SystemNavigationReadout result;
+  const auto short_name = navigation.display_name.substr(
+      0, std::min<std::size_t>(4, navigation.display_name.size()));
+  result.target = std::format("TGT {:<4} ", short_name);
+
+  const double bearing_degrees = navigation.bearing_radians *
+                                 kRadiansToDegrees;
+  const double elevation_degrees = navigation.elevation_radians *
+                                   kRadiansToDegrees;
+  const auto bearing = rounded_in_range(std::abs(bearing_degrees), 0, 180);
+  const auto elevation = rounded_in_range(std::abs(elevation_degrees), 0, 90);
+  result.bearing = bearing
+                       ? std::format("BRG {}{:03} ",
+                                     bearing_degrees < 0.0 ? 'L' : 'R',
+                                     *bearing)
+                       : "BRG #### ";
+  result.elevation = elevation
+                         ? std::format("ELV {}{:02}  ",
+                                       elevation_degrees < 0.0 ? '-' : '+',
+                                       *elevation)
+                         : "ELV ###  ";
+
+  const double kilometres = navigation.distance_metres / 1'000.0;
+  if (std::isfinite(kilometres) && kilometres >= 0.0 &&
+      kilometres < 9'999.5) {
+    result.distance = std::format("RNG {:04.0f}k", kilometres);
+  } else if (std::isfinite(kilometres) && kilometres >= 0.0 &&
+             kilometres < 9'999'500.0) {
+    result.distance = std::format("RNG {:04.0f}M", kilometres / 1'000.0);
+  } else if (std::isfinite(kilometres) && kilometres >= 0.0 &&
+             kilometres < 9'999'500'000.0) {
+    result.distance = std::format("RNG {:04.0f}G", kilometres / 1'000'000.0);
+  } else {
+    result.distance = "RNG #### ";
+  }
+  const double closing_speed = navigation.closing_speed_metres_per_second;
+  const auto rounded_speed =
+      rounded_in_range(std::abs(closing_speed), 0, 999);
+  if (rounded_speed) {
+    result.motion = std::format("CLS {}{:03} ",
+                                closing_speed < 0.0 ? '-' : '+',
+                                *rounded_speed);
+  } else if (std::isfinite(closing_speed) &&
+             std::abs(closing_speed) < 999'500.0) {
+    result.motion = std::format("CLS {}{:03}k",
+                                closing_speed < 0.0 ? '-' : '+',
+                                static_cast<long long>(std::lround(
+                                    std::abs(closing_speed) / 1'000.0)));
+  } else if (std::isfinite(closing_speed) &&
+             std::abs(closing_speed) < 9'950'000.0) {
+    result.motion = std::format("CLS {:+.1f}M",
+                                closing_speed / 1'000'000.0);
+  } else {
+    result.motion = "CLS #### ";
+  }
+
+  constexpr double steering_tolerance_degrees{3.0};
+  if (!navigation.in_front ||
+      std::abs(bearing_degrees) > steering_tolerance_degrees) {
+    result.cue = bearing_degrees < 0.0 ? "TURN LEFT" : "TURN RGHT";
+  } else if (std::abs(elevation_degrees) >
+             steering_tolerance_degrees) {
+    result.cue = elevation_degrees < 0.0 ? "PITCH DN " : "PITCH UP ";
+  } else {
+    switch (navigation.motion) {
+      case SystemTargetMotion::holding: result.cue = "ON TARGET"; break;
+      case SystemTargetMotion::closing: result.cue = "CLOSING  "; break;
+      case SystemTargetMotion::opening: result.cue = "OPENING  "; break;
+    }
+  }
+  if (result.cue.empty()) result.cue = "NAV ERROR";
+  return result;
+}
+
 }  // namespace apsis_drift

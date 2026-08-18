@@ -7,6 +7,7 @@
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/system_rendering.hpp"
 #include "termforge/core/types.hpp"
 
 namespace apsis_drift {
@@ -61,6 +62,17 @@ struct SignalCollectionReadout {
   auto operator==(const SignalCollectionReadout&) const -> bool = default;
 };
 
+struct SystemNavigationReadout {
+  std::string target;
+  std::string bearing;
+  std::string elevation;
+  std::string distance;
+  std::string motion;
+  std::string cue;
+
+  auto operator==(const SystemNavigationReadout&) const -> bool = default;
+};
+
 enum class CockpitLayoutMode { too_small, compact, wide };
 
 struct CockpitLayout {
@@ -111,5 +123,10 @@ struct CockpitLayout {
 // textual message so progress and failure never depend on color alone.
 [[nodiscard]] auto format_signal_collection(
     const SignalCollectionState& collection) -> SignalCollectionReadout;
+
+// Local-system navigation remains textual as well as graphical so selection
+// and steering do not depend on color or Kitty graphics.
+[[nodiscard]] auto format_system_navigation(
+    const SystemNavigationSolution& navigation) -> SystemNavigationReadout;
 
 }  // namespace apsis_drift

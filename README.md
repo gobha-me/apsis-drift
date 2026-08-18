@@ -148,8 +148,8 @@ The next station-to-system loop is grounded in a versioned
 [intersystem mission and travel contract](docs/INTERSYSTEM_CONTRACT.md). It
 reserves stable origin, destination, star, planet, orbit, and mission streams;
 defines one authoritative universe clock; and proves the legal outbound,
-planet-side, return, docking, and turn-in phases without yet implementing the
-later system renderer or travel mechanics.
+planet-side, return, docking, and turn-in phases consumed by the local-system
+presentation and later travel mechanics.
 
 The v0.4.5 local-system generator now resolves that destination into a stable
 star and ordered three-to-six-planet catalog. Independent ordinal seeds preserve
@@ -157,6 +157,14 @@ the existing mission planet and terrain, while circular inclined ephemerides
 produce bounded system-frame positions and velocities from authoritative time.
 The exact generator and diagnostic contract is documented in
 [docs/LOCAL_SYSTEM_GENERATION.md](docs/LOCAL_SYSTEM_GENERATION.md).
+
+The v0.4.6 local-system presentation renders that star and every moving planet
+from explicit analytic ephemeris time. A stable selected planet has graphical
+brackets plus textual bearing, elevation, range, and closing/opening cues on
+both Kitty and ANSI paths. Angular-size impostors blend into the existing
+orbital planet renderer during approach without changing target identity. The
+projection, overlap, handoff, and measurement rules are documented in
+[docs/SYSTEM_RENDERING.md](docs/SYSTEM_RENDERING.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -334,8 +342,11 @@ measure terminal, PTY, proxy, or display performance. Its frame clock is
 synthetic, so simulation follows the same fixed-step path without sleeping or
 mixing wall-clock jitter into deterministic framebuffer checksums.
 The optional `orbital` workload renders the generated planet with a
-deterministic moving camera; `landscape` remains the default. Workload
-selection is available only in benchmark and sweep modes.
+deterministic moving camera, while `system` renders the generated star and
+moving multi-planet catalog; `landscape` remains the default. Workload
+selection is available only in benchmark and sweep modes. Run the complete
+fixed-seed cockpit matrix with
+`--system-navigation-acceptance --driver kitty|ansi --report PATH`.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:
 

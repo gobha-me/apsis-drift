@@ -87,6 +87,7 @@ auto workload_name(BenchmarkWorkload workload) noexcept -> std::string_view {
     case BenchmarkWorkload::landscape: return "landscape";
     case BenchmarkWorkload::orbital: return "orbital";
     case BenchmarkWorkload::planetary: return "planetary";
+    case BenchmarkWorkload::system: return "system";
   }
   return "landscape";
 }
@@ -98,6 +99,7 @@ auto workload_identifier(BenchmarkWorkload workload) noexcept
     case BenchmarkWorkload::orbital: return "orbital-planet-rgba";
     case BenchmarkWorkload::planetary:
       return "planetary-presentation-rgba";
+    case BenchmarkWorkload::system: return "local-system-rgba";
   }
   return "voxel-landscape-rgba";
 }
@@ -107,6 +109,7 @@ auto parse_benchmark_workload(std::string_view text) noexcept
   if (text == "landscape") return BenchmarkWorkload::landscape;
   if (text == "orbital") return BenchmarkWorkload::orbital;
   if (text == "planetary") return BenchmarkWorkload::planetary;
+  if (text == "system") return BenchmarkWorkload::system;
   return std::nullopt;
 }
 
