@@ -32,7 +32,8 @@ A fresh career begins `OFFERED` with `ACCEPT CONTRACT`. Acceptance is an atomic
 out-of-order, wrong-tick, or corrupt-reference actions are rejected without
 mutation. The accepted board reports `LAUNCH ROUTE AUTHORIZED` and exposes
 `LAUNCH`; the flight deck then owns the explicit Assisted jump command.
-Sub-light system-space craft movement remains #86.
+Sub-light system-space craft movement and the target-planet orbital handoff are
+implemented by the versioned system-flight path.
 
 The same semantic model names active, objective-complete, returned, and
 turned-in states for later loop stages. A returned contract exposes
@@ -40,9 +41,9 @@ turned-in states for later loop stages. A returned contract exposes
 
 ## Persistence and compatibility
 
-Fresh careers use save format 4 and persist the high-level
+Fresh careers use save format 5 and persist the high-level
 `IntersystemContractState`. Formats 1 and 2 decode as `legacy_signal_run`, keep
-their original planet-side objective and craft state, and rewrite as format 4
+their original planet-side objective and craft state, and rewrite as format 5
 without teleporting, retargeting, or synthesizing mission progress.
 
 The save excludes terminal capabilities, render profiles, menu selection,

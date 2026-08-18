@@ -121,7 +121,16 @@ auto FlightInputMapper::insert_before_tick(FlightCommand command) -> void {
 }
 
 auto FlightInputMapper::enqueue(const KeyEvent& key,
-                                SimulationTick current_tick) -> void {
+                                SimulationTick current_tick,
+                                bool enable_time_scale) -> void {
+  if (enable_time_scale && key.key == Key::Char &&
+      key.action == KeyAction::Press &&
+      (key.ch == U'[' || key.ch == U']')) {
+    insert({current_tick, key.ch == U'['
+                              ? FlightCommandKind::decrease_time_scale
+                              : FlightCommandKind::increase_time_scale});
+    return;
+  }
   if (key.key == Key::Char && key.ch == U' ') {
     if (key.action == KeyAction::Press) {
       insert({current_tick, FlightCommandKind::toggle_autopilot});

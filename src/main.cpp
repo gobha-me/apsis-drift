@@ -51,6 +51,8 @@
 #include "apsis_drift/signal_run_acceptance.hpp"
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/system_flight.hpp"
+#include "apsis_drift/system_flight_acceptance.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
@@ -351,6 +353,8 @@ class LandscapeApp final : public App {
       m_save_profile = *profile;
       if (profile->state.intersystem_contract) {
         m_intersystem_contract = *profile->state.intersystem_contract;
+        m_system_flight = profile->state.system_flight;
+        m_planetary_flight = profile->state.flight;
       } else {
         auto cache = TerrainTileCache::create();
         if (!cache) {
@@ -633,6 +637,9 @@ class LandscapeApp final : public App {
     return m_display_tier;
   }
   [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
+    if (m_system_flight) {
+      return system_flight_state_checksum(*m_system_flight);
+    }
     if (m_signal_run && m_signal_run->flight) {
       return planetary_flight_state_checksum(*m_signal_run->flight);
     }
@@ -675,6 +682,8 @@ class LandscapeApp final : public App {
     if (m_intersystem_contract && m_save_profile) {
       auto document = *m_save_profile;
       document.state.intersystem_contract = *m_intersystem_contract;
+      document.state.system_flight = m_system_flight;
+      document.state.flight = m_planetary_flight;
       return document;
     }
     if (!m_signal_run) {
@@ -781,6 +790,12 @@ class LandscapeApp final : public App {
       if (m_signal_run && m_signal_run->flight) {
         m_input_mapper.suspend(m_signal_run->flight->controls,
                                m_signal_run->flight->tick);
+      } else if (m_system_flight) {
+        m_input_mapper.suspend(m_system_flight->controls,
+                               m_system_flight->tick);
+      } else if (m_planetary_flight) {
+        m_input_mapper.suspend(m_planetary_flight->controls,
+                               m_planetary_flight->tick);
       } else {
         m_input_mapper.suspend(m_flight.controls, m_flight.tick);
       }
@@ -913,7 +928,7 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "FIRST CONTRACT // v0.4.8", "CONTINUE");
+    draw_menu(screen, "FIRST CONTRACT // v0.4.9", "CONTINUE");
   }
 
   auto draw_station_screen(Screen& screen) -> void {
@@ -1038,6 +1053,8 @@ class LandscapeApp final : public App {
             ? format_flight_instruments(*m_signal_run->flight)
             : m_signal_scenario
             ? format_flight_instruments(m_signal_scenario->flight)
+            : m_system_flight
+            ? format_flight_instruments(*m_system_flight)
             : m_planetary_flight
                   ? format_flight_instruments(*m_planetary_flight)
                   : format_flight_instruments(m_flight);
@@ -1105,8 +1122,18 @@ class LandscapeApp final : public App {
                       layout.right_instruments.y + 2, "TARGET", accent,
                       chrome_bg);
     if (m_system_render) {
-      const auto navigation =
-          format_system_navigation(m_system_render->navigation);
+      const auto guidance = m_system_flight
+                                ? resolve_system_flight_guidance(
+                                      m_local_system, *m_system_flight)
+                                : std::expected<SystemFlightGuidance,
+                                                SystemFlightError>{
+                                      std::unexpected{
+                                          SystemFlightError::invalid_state}};
+      const auto navigation = guidance
+                                  ? format_system_navigation(
+                                        m_system_render->navigation, *guidance)
+                                  : format_system_navigation(
+                                        m_system_render->navigation);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 4, navigation.target,
                         text, chrome_bg);
@@ -1121,11 +1148,15 @@ class LandscapeApp final : public App {
                         text, chrome_bg);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 12, navigation.motion,
-                        m_system_render->navigation.motion ==
-                                SystemTargetMotion::opening
+                        (guidance &&
+                         (guidance->cue == SystemFlightCue::opening ||
+                          guidance->cue == SystemFlightCue::brake))
                             ? warning
                             : text,
                         chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 14, navigation.arrival,
+                        text, chrome_bg);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 16, navigation.cue,
                         text, chrome_bg);
@@ -1229,17 +1260,27 @@ class LandscapeApp final : public App {
                             jump.destination, jump.progress * 100.0,
                             jump.cancelable ? "J CANCEL" : "ARRIVAL BOUND");
     } else if (m_system_render) {
-      const auto navigation =
-          format_system_navigation(m_system_render->navigation);
+      const auto guidance = m_system_flight
+                                ? resolve_system_flight_guidance(
+                                      m_local_system, *m_system_flight)
+                                : std::expected<SystemFlightGuidance,
+                                                SystemFlightError>{
+                                      std::unexpected{
+                                          SystemFlightError::invalid_state}};
+      const auto navigation = guidance
+                                  ? format_system_navigation(
+                                        m_system_render->navigation, *guidance)
+                                  : format_system_navigation(
+                                        m_system_render->navigation);
       message = std::format(
-          " SYSTEM {} | {} | {} | {} ",
+          " SYSTEM {} | {} | {} | {} | {} | [] time | ENTER insert ",
           (m_intersystem_contract &&
                    m_intersystem_contract->current_system ==
                        m_intersystem_contract->identities.origin_system
                ? m_origin_system.star.display_name
                : m_local_system.star.display_name),
           navigation.target,
-          navigation.distance, navigation.cue);
+          navigation.distance, navigation.arrival, navigation.cue);
     } else {
       message = layout.mode == CockpitLayoutMode::wide
                     ? " L-hold fly | R-hold strafe/alt | M-click auto | "
@@ -1265,6 +1306,8 @@ class LandscapeApp final : public App {
                          ? m_signal_run->flight->mode
                          : m_signal_scenario
                          ? m_signal_scenario->flight.mode
+                         : m_system_flight
+                         ? m_system_flight->mode
                          : (m_planetary_flight ? m_planetary_flight->mode
                                                : m_flight.mode)) ==
                             FlightMode::autopilot
@@ -1281,6 +1324,41 @@ class LandscapeApp final : public App {
 
   auto handle_key(const KeyEvent& key) -> void {
     if (m_intersystem_contract) {
+      if (m_system_flight) {
+        if (key.key == Key::Enter && key.action == KeyAction::Press) {
+          auto orbital =
+              insert_system_flight_orbit(m_local_system, *m_system_flight);
+          if (!orbital) {
+            m_error = "orbit insertion requires <=3 radii, <=4 km/s, and "
+                      "<=250 m/s radial";
+            return;
+          }
+          auto next_contract = *m_intersystem_contract;
+          if (!advance_intersystem_contract(
+                  next_contract, next_contract.universe_tick,
+                  IntersystemContractCommand::enter_target_planet)) {
+            m_error =
+                "orbit insertion is unavailable in the current mission phase";
+            return;
+          }
+          m_intersystem_contract = std::move(next_contract);
+          m_planetary_flight = std::move(*orbital);
+          m_system_flight.reset();
+          m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
+          return;
+        }
+        if (key.action == KeyAction::Press && key.key == Key::Char &&
+            (key.ch == U'j' || key.ch == U'J')) {
+          m_error = "complete the planet objective before the return jump";
+          return;
+        }
+        m_input_mapper.enqueue(key, m_system_flight->tick, true);
+        return;
+      }
+      if (m_planetary_flight) {
+        m_input_mapper.enqueue(key, m_planetary_flight->tick);
+        return;
+      }
       if (key.action != KeyAction::Press || key.key != Key::Char ||
           (key.ch != U'j' && key.ch != U'J')) {
         return;
@@ -1365,6 +1443,52 @@ class LandscapeApp final : public App {
           if (!advanced) {
             throw std::runtime_error{"Assisted jump simulation failed"};
           }
+          if (advanced->arrived && outbound) {
+            if (!m_intersystem_contract->arrival_solution) {
+              throw std::runtime_error{"Assisted arrival state is unavailable"};
+            }
+            auto flight = initial_system_flight_state(
+                m_local_system,
+                m_intersystem_contract->identities.target_planet,
+                *m_intersystem_contract->arrival_solution);
+            if (!flight) {
+              throw std::runtime_error{"cannot initialize target-system flight"};
+            }
+            m_system_flight = std::move(*flight);
+          }
+        } else if (m_system_flight) {
+          auto next_flight = *m_system_flight;
+          auto next_contract = *m_intersystem_contract;
+          auto commands = m_input_mapper.take_commands(next_flight.tick);
+          const auto previous_tick = next_flight.tick;
+          if (!advance_system_flight(m_local_system, next_flight, commands)) {
+            throw std::runtime_error{"system-flight simulation failed"};
+          }
+          if (!advance_intersystem_time(next_contract,
+                                        next_flight.tick - previous_tick)) {
+            throw std::runtime_error{"system-flight clock failed"};
+          }
+          m_system_flight = std::move(next_flight);
+          m_intersystem_contract = std::move(next_contract);
+        } else if (m_planetary_flight) {
+          const auto body = find_local_system_planet(
+              m_local_system, m_intersystem_contract->identities.target_planet);
+          if (!body) {
+            throw std::runtime_error{"target planet is unavailable"};
+          }
+          auto next_flight = *m_planetary_flight;
+          auto commands = m_input_mapper.take_commands(next_flight.tick);
+          if (!advance_planetary_flight(
+                  (*body)->descriptor, {.surface_elevation_metres = 0.0},
+                  next_flight, commands, kSimulationStep)) {
+            throw std::runtime_error{"target orbital simulation failed"};
+          }
+          auto next_contract = *m_intersystem_contract;
+          if (!advance_intersystem_time(next_contract, 1)) {
+            throw std::runtime_error{"target orbital clock failed"};
+          }
+          m_planetary_flight = std::move(next_flight);
+          m_intersystem_contract = std::move(next_contract);
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"universe clock failed"};
         }
@@ -1445,6 +1569,25 @@ class LandscapeApp final : public App {
         }
         return;
       }
+      if (m_planetary_flight) {
+        m_system_render.reset();
+        if (!m_planetary_renderer) {
+          throw std::runtime_error{"target planetary presentation is unavailable"};
+        }
+        const auto body = find_local_system_planet(
+            m_local_system, m_intersystem_contract->identities.target_planet);
+        if (!body) {
+          throw std::runtime_error{"target planet is unavailable"};
+        }
+        const auto rendered = m_planetary_renderer->render(
+            (*body)->descriptor, *m_planetary_flight,
+            {.pitch_radians = -0.18}, m_surface.pixels());
+        if (!rendered) {
+          throw std::runtime_error{"target orbital presentation rejected frame"};
+        }
+        m_planetary_samples.push_back(*rendered);
+        return;
+      }
       const bool at_target =
           m_intersystem_contract->current_system ==
           m_intersystem_contract->identities.target_system;
@@ -1458,6 +1601,14 @@ class LandscapeApp final : public App {
             m_intersystem_contract->arrival_solution->position;
         camera_velocity =
             m_intersystem_contract->arrival_solution->velocity;
+      }
+      SystemDirection forward{};
+      SystemDirection up{0.0, 0.0, 1.0};
+      if (m_system_flight && m_system_flight->system == system.id) {
+        camera_position = m_system_flight->position;
+        camera_velocity = m_system_flight->velocity;
+        forward = m_system_flight->forward;
+        up = m_system_flight->up;
       }
       const PlanetId selected =
           at_target ? m_intersystem_contract->identities.target_planet
@@ -1473,10 +1624,13 @@ class LandscapeApp final : public App {
           .time = {m_intersystem_contract->universe_tick, 0.0},
           .position = camera_position,
           .velocity = camera_velocity,
-          .forward = {selected_ephemeris->position.x - camera_position.x,
-                      selected_ephemeris->position.y - camera_position.y,
-                      selected_ephemeris->position.z - camera_position.z},
-          .up = {0.0, 0.0, 1.0},
+          .forward = m_system_flight
+                         ? forward
+                         : SystemDirection{
+                               selected_ephemeris->position.x - camera_position.x,
+                               selected_ephemeris->position.y - camera_position.y,
+                               selected_ephemeris->position.z - camera_position.z},
+          .up = up,
           .selected_planet = selected,
       };
       if (!m_system_renderer) {
@@ -1672,6 +1826,7 @@ class LandscapeApp final : public App {
   FlightState m_flight;
   PlanetarySurfaceFixture m_planetary_surface;
   std::optional<PlanetaryFlightState> m_planetary_flight;
+  std::optional<SystemFlightState> m_system_flight;
   std::optional<LocalSystemRenderStats> m_system_render;
   std::optional<TerrainTileCache> m_signal_cache;
   std::optional<SignalNavigationAcceptanceState> m_signal_scenario;
@@ -1885,6 +2040,8 @@ auto usage() -> void {
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --intersystem-jump-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "       apsis-drift --system-flight-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -1913,6 +2070,7 @@ auto main(int argc, char** argv) -> int {
   bool signal_run_acceptance{};
   bool system_navigation_acceptance{};
   bool intersystem_jump_acceptance{};
+  bool system_flight_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -1996,6 +2154,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--intersystem-jump-acceptance") {
       intersystem_jump_acceptance = true;
+      continue;
+    }
+    if (argument == "--system-flight-acceptance") {
+      system_flight_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -2135,6 +2297,32 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (system_flight_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       profile_options || seed_specified || workload_specified ||
+       keyboard_specified)) {
+    std::fprintf(stderr,
+                 "System flight acceptance is mutually exclusive with "
+                 "other run, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (system_flight_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "System flight acceptance requires --driver kitty or "
+                 "--driver ansi\n");
+    return 2;
+  }
+  if (system_flight_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "System flight acceptance requires --report PATH\n");
+    return 2;
+  }
   if (intersystem_jump_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -2349,6 +2537,46 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (system_flight_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_system_flight_acceptance(
+          configuration.viewport.width, configuration.viewport.height);
+      if (!acceptance) {
+        std::fprintf(stderr, "System flight acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << system_flight_acceptance_json(acceptance->report,
+                                              presentation);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "system-flight: presentation=%.*s insertion=%llu checksum=%llu\n",
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(acceptance->report.insertion_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.system_flight_checksum));
+      return 0;
+    }
     if (intersystem_jump_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

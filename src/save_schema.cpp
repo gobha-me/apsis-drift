@@ -18,6 +18,7 @@
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
+#include "apsis_drift/system_flight.hpp"
 
 namespace apsis_drift {
 namespace {
@@ -891,6 +892,137 @@ template <typename Id>
   };
 }
 
+[[nodiscard]] auto encode_system_flight(const SystemFlightState& state)
+    -> Json {
+  return Json{
+      {"tick", decimal(state.tick)},
+      {"system_id", encoded_id("system-", state.system)},
+      {"target_planet_id", encoded_id("planet-", state.target)},
+      {"position_metres",
+       Json{{"x", decimal(state.position.x)},
+            {"y", decimal(state.position.y)},
+            {"z", decimal(state.position.z)}}},
+      {"velocity_metres_per_second",
+       Json{{"x", decimal(state.velocity.x)},
+            {"y", decimal(state.velocity.y)},
+            {"z", decimal(state.velocity.z)}}},
+      {"forward", Json{{"x", decimal(state.forward.x)},
+                        {"y", decimal(state.forward.y)},
+                        {"z", decimal(state.forward.z)}}},
+      {"up", Json{{"x", decimal(state.up.x)},
+                   {"y", decimal(state.up.y)},
+                   {"z", decimal(state.up.z)}}},
+      {"mode", mode_name(state.mode)},
+      {"controls", Json{{"forward", state.controls.forward},
+                        {"backward", state.controls.backward},
+                        {"turn_left", state.controls.turn_left},
+                        {"turn_right", state.controls.turn_right},
+                        {"strafe_left", state.controls.strafe_left},
+                        {"strafe_right", state.controls.strafe_right},
+                        {"rise", state.controls.rise},
+                        {"fall", state.controls.fall}}},
+      {"time_scale", static_cast<std::uint32_t>(state.time_scale)},
+  };
+}
+
+[[nodiscard]] auto decode_system_flight(const Json& json)
+    -> std::expected<SystemFlightState, SaveSchemaError> {
+  constexpr std::string_view path{"$.state.system_flight"};
+  if (!json.is_object()) {
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
+                                   std::string{path}, "expected an object")};
+  }
+  auto tick = read_u64(json, "tick", std::string{path});
+  auto system = read_id<SystemId>(json, "system_id", std::string{path},
+                                  "system-");
+  auto target = read_id<PlanetId>(json, "target_planet_id",
+                                  std::string{path}, "planet-");
+  auto position = read_object(json, "position_metres", std::string{path});
+  auto velocity = read_object(json, "velocity_metres_per_second",
+                              std::string{path});
+  auto forward = read_object(json, "forward", std::string{path});
+  auto up = read_object(json, "up", std::string{path});
+  auto mode = read_mode(json, "mode", std::string{path});
+  auto controls = read_object(json, "controls", std::string{path});
+  auto scale = read_u32(json, "time_scale", std::string{path});
+  if (!tick) return std::unexpected{tick.error()};
+  if (!system) return std::unexpected{system.error()};
+  if (!target) return std::unexpected{target.error()};
+  if (!position) return std::unexpected{position.error()};
+  if (!velocity) return std::unexpected{velocity.error()};
+  if (!forward) return std::unexpected{forward.error()};
+  if (!up) return std::unexpected{up.error()};
+  if (!mode) return std::unexpected{mode.error()};
+  if (!controls) return std::unexpected{controls.error()};
+  if (!scale) return std::unexpected{scale.error()};
+
+  const auto vector = [](const Json& object, std::string path_value)
+      -> std::expected<std::array<double, 3>, SaveSchemaError> {
+    auto x = read_double(object, "x", path_value);
+    auto y = read_double(object, "y", path_value);
+    auto z = read_double(object, "z", path_value);
+    if (!x) return std::unexpected{x.error()};
+    if (!y) return std::unexpected{y.error()};
+    if (!z) return std::unexpected{z.error()};
+    return std::array<double, 3>{*x, *y, *z};
+  };
+  auto decoded_position = vector(**position, "$.state.system_flight.position_metres");
+  auto decoded_velocity = vector(
+      **velocity, "$.state.system_flight.velocity_metres_per_second");
+  auto decoded_forward = vector(**forward, "$.state.system_flight.forward");
+  auto decoded_up = vector(**up, "$.state.system_flight.up");
+  if (!decoded_position) return std::unexpected{decoded_position.error()};
+  if (!decoded_velocity) return std::unexpected{decoded_velocity.error()};
+  if (!decoded_forward) return std::unexpected{decoded_forward.error()};
+  if (!decoded_up) return std::unexpected{decoded_up.error()};
+
+  auto control = [&](std::string_view name)
+      -> std::expected<bool, SaveSchemaError> {
+    return read_bool(**controls, name, "$.state.system_flight.controls");
+  };
+  auto control_forward = control("forward");
+  auto backward = control("backward");
+  auto turn_left = control("turn_left");
+  auto turn_right = control("turn_right");
+  auto strafe_left = control("strafe_left");
+  auto strafe_right = control("strafe_right");
+  auto rise = control("rise");
+  auto fall = control("fall");
+  if (!control_forward) return std::unexpected{control_forward.error()};
+  if (!backward) return std::unexpected{backward.error()};
+  if (!turn_left) return std::unexpected{turn_left.error()};
+  if (!turn_right) return std::unexpected{turn_right.error()};
+  if (!strafe_left) return std::unexpected{strafe_left.error()};
+  if (!strafe_right) return std::unexpected{strafe_right.error()};
+  if (!rise) return std::unexpected{rise.error()};
+  if (!fall) return std::unexpected{fall.error()};
+  SystemTimeScale time_scale{};
+  if (*scale == 1U) time_scale = SystemTimeScale::one;
+  else if (*scale == 4U) time_scale = SystemTimeScale::four;
+  else if (*scale == 16U) time_scale = SystemTimeScale::sixteen;
+  else {
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                   "$.state.system_flight.time_scale",
+                                   "time scale must be 1, 4, or 16")};
+  }
+  return SystemFlightState{
+      .tick = *tick,
+      .system = *system,
+      .target = *target,
+      .position = {(*decoded_position)[0], (*decoded_position)[1],
+                   (*decoded_position)[2]},
+      .velocity = {(*decoded_velocity)[0], (*decoded_velocity)[1],
+                   (*decoded_velocity)[2]},
+      .forward = {(*decoded_forward)[0], (*decoded_forward)[1],
+                  (*decoded_forward)[2]},
+      .up = {(*decoded_up)[0], (*decoded_up)[1], (*decoded_up)[2]},
+      .mode = *mode,
+      .controls = {*control_forward, *backward, *turn_left, *turn_right,
+                   *strafe_left, *strafe_right, *rise, *fall},
+      .time_scale = time_scale,
+  };
+}
+
 }  // namespace
 
 auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
@@ -905,6 +1037,7 @@ auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
       .analytic_ephemeris = kAnalyticEphemerisVersion,
       .intersystem_contract = kIntersystemContractVersion,
       .intersystem_jump = kIntersystemJumpVersion,
+      .system_flight = kSystemFlightVersion,
   };
 }
 
@@ -967,13 +1100,60 @@ auto validate_save_document(const SaveDocument& document)
           "$.state.intersystem_contract.arrival_solution",
           "Assisted arrival solution does not match the contract")};
     }
-    if (document.state.flight || !document.state.discoveries.empty() ||
+    const bool target_system_flight =
+        contract.travel_phase == IntersystemTravelPhase::target_system_flight;
+    const bool target_planet_flight =
+        contract.travel_phase == IntersystemTravelPhase::target_planet_flight;
+    if (target_system_flight) {
+      if (!document.state.system_flight || document.state.flight) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
+            "target-system flight requires exactly one system-flight state")};
+      }
+      const auto system = generate_local_system(contract.identities.target_system_seed);
+      if (document.state.system_flight->tick != contract.universe_tick ||
+          document.state.system_flight->target !=
+              contract.identities.target_planet ||
+          !validate_system_flight_state(system,
+                                        *document.state.system_flight)) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
+            "system flight does not match the target contract and clock")};
+      }
+    } else if (target_planet_flight) {
+      if (!document.state.flight || document.state.system_flight ||
+          document.state.flight->planet != contract.identities.target_planet ||
+          document.state.flight->tick != contract.universe_tick) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state, "$.state.flight",
+            "target-planet travel requires exactly one matching orbital state")};
+      }
+      const auto system = generate_local_system(contract.identities.target_system_seed);
+      const auto body = find_local_system_planet(
+          system, contract.identities.target_planet);
+      if (!body || !validate_planetary_flight_state((*body)->descriptor,
+                                                    *document.state.flight)) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state, "$.state.flight",
+            "target-planet flight violates the planetary flight contract")};
+      }
+    } else if (document.state.flight || document.state.system_flight) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state",
+          "the current travel phase cannot contain an active craft state")};
+    }
+    if (!document.state.discoveries.empty() ||
         !document.state.world_deltas.empty()) {
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state, "$.state",
-          "mission-board saves cannot yet contain planetary Signal Run state")};
+          "the first intersystem approach cannot yet contain Signal Run deltas")};
     }
   } else {
+    if (document.state.system_flight) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
+          "legacy Signal Run saves cannot contain system flight")};
+    }
     if (!valid_location(document.state.location) ||
         !valid_objective(document.state.first_objective)) {
       return std::unexpected{
@@ -1057,6 +1237,10 @@ auto encode_save_document_json(const SaveDocument& document)
   }
   Json flight = nullptr;
   if (document.state.flight) flight = encode_flight(*document.state.flight);
+  Json system_flight = nullptr;
+  if (document.state.system_flight) {
+    system_flight = encode_system_flight(*document.state.system_flight);
+  }
   Json state;
   if (document.state.intersystem_contract) {
     state = Json{
@@ -1064,6 +1248,7 @@ auto encode_save_document_json(const SaveDocument& document)
         {"intersystem_contract",
          encode_intersystem_contract(*document.state.intersystem_contract)},
         {"flight", std::move(flight)},
+        {"system_flight", std::move(system_flight)},
         {"discoveries", std::move(discoveries)},
         {"world_deltas", std::move(deltas)},
     };
@@ -1076,6 +1261,7 @@ auto encode_save_document_json(const SaveDocument& document)
               {"target_signal_id",
                encoded_id("signal-", document.state.first_objective_target)}}},
         {"flight", std::move(flight)},
+        {"system_flight", std::move(system_flight)},
         {"discoveries", std::move(discoveries)},
         {"world_deltas", std::move(deltas)},
     };
@@ -1100,7 +1286,8 @@ auto encode_save_document_json(const SaveDocument& document)
                   {"analytic_ephemeris", versions.analytic_ephemeris},
                   {"intersystem_contract",
                    versions.intersystem_contract},
-                  {"intersystem_jump", versions.intersystem_jump}}},
+                  {"intersystem_jump", versions.intersystem_jump},
+                  {"system_flight", versions.system_flight}}},
             {"origin_station_id",
              encoded_id("station-", document.recipe.origin_station)},
             {"active_planet_id",
@@ -1172,7 +1359,7 @@ auto decode_save_document_json(std::string_view json_text)
                                    "save belongs to another application")};
   }
   if (*format_version != 1U && *format_version != 2U &&
-      *format_version != 3U &&
+      *format_version != 3U && *format_version != 4U &&
       *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -1221,6 +1408,8 @@ auto decode_save_document_json(std::string_view json_text)
       kIntersystemContractVersion};
   std::expected<std::uint32_t, SaveSchemaError> jump_version{
       kIntersystemJumpVersion};
+  std::expected<std::uint32_t, SaveSchemaError> system_flight_version{
+      kSystemFlightVersion};
   if (*format_version >= 2U) {
     sun_version = read_u32(**versions_json, "local_sun",
                            "$.recipe.generator_versions");
@@ -1237,6 +1426,10 @@ auto decode_save_document_json(std::string_view json_text)
     jump_version = read_u32(**versions_json, "intersystem_jump",
                             "$.recipe.generator_versions");
   }
+  if (*format_version >= 5U) {
+    system_flight_version = read_u32(**versions_json, "system_flight",
+                                     "$.recipe.generator_versions");
+  }
   if (!seed_version) return std::unexpected{seed_version.error()};
   if (!planet_version) return std::unexpected{planet_version.error()};
   if (!terrain_version) return std::unexpected{terrain_version.error()};
@@ -1247,6 +1440,9 @@ auto decode_save_document_json(std::string_view json_text)
   if (!ephemeris_version) return std::unexpected{ephemeris_version.error()};
   if (!contract_version) return std::unexpected{contract_version.error()};
   if (!jump_version) return std::unexpected{jump_version.error()};
+  if (!system_flight_version) {
+    return std::unexpected{system_flight_version.error()};
+  }
   const SaveGeneratorVersions versions{
       .seed_derivation = *seed_version,
       .planet_descriptor = *planet_version,
@@ -1258,6 +1454,7 @@ auto decode_save_document_json(std::string_view json_text)
       .analytic_ephemeris = *ephemeris_version,
       .intersystem_contract = *contract_version,
       .intersystem_jump = *jump_version,
+      .system_flight = *system_flight_version,
   };
   if (versions != current_save_generator_versions()) {
     return std::unexpected{
@@ -1279,9 +1476,17 @@ auto decode_save_document_json(std::string_view json_text)
     }
   }
   auto flight_json = require_field(**state_json, "flight", "$.state");
+  std::expected<const Json*, SaveSchemaError> system_flight_json{nullptr};
+  if (*format_version >= 5U) {
+    system_flight_json =
+        require_field(**state_json, "system_flight", "$.state");
+  }
   auto discoveries_json = read_array(**state_json, "discoveries", "$.state");
   auto deltas_json = read_array(**state_json, "world_deltas", "$.state");
   if (!flight_json) return std::unexpected{flight_json.error()};
+  if (!system_flight_json) {
+    return std::unexpected{system_flight_json.error()};
+  }
   if (!discoveries_json) return std::unexpected{discoveries_json.error()};
   if (!deltas_json) return std::unexpected{deltas_json.error()};
 
@@ -1326,6 +1531,27 @@ auto decode_save_document_json(std::string_view json_text)
     auto decoded = decode_flight(**flight_json);
     if (!decoded) return std::unexpected{decoded.error()};
     flight = std::move(*decoded);
+  }
+  std::optional<SystemFlightState> system_flight;
+  if (*format_version >= 5U && *system_flight_json != nullptr &&
+      !(**system_flight_json).is_null()) {
+    auto decoded = decode_system_flight(**system_flight_json);
+    if (!decoded) return std::unexpected{decoded.error()};
+    system_flight = std::move(*decoded);
+  } else if (*format_version == 4U && contract &&
+             contract->travel_phase ==
+                 IntersystemTravelPhase::target_system_flight &&
+             contract->arrival_solution) {
+    const auto system = generate_local_system(contract->identities.target_system_seed);
+    auto migrated = initial_system_flight_state(
+        system, contract->identities.target_planet,
+        *contract->arrival_solution);
+    if (!migrated) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
+          "format-4 arrival could not initialize system flight")};
+    }
+    system_flight = std::move(*migrated);
   }
   std::vector<SaveDiscovery> discoveries;
   if ((**discoveries_json).size() > kMaximumSaveDiscoveries) {
@@ -1387,6 +1613,7 @@ auto decode_save_document_json(std::string_view json_text)
               .first_objective = objective,
               .first_objective_target = target,
               .flight = std::move(flight),
+              .system_flight = std::move(system_flight),
               .discoveries = std::move(discoveries),
               .world_deltas = std::move(deltas),
               .intersystem_contract = std::move(contract),

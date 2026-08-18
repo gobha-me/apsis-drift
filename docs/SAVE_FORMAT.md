@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 4 is a deterministic JSON document. It keeps
+Apsis Drift save format version 5 is a deterministic JSON document. It keeps
 the generated-world recipe separate from mutable player state and does not
 serialize terrain tiles, render state, terminal capabilities, preferences, or
 other reproducible presentation data.
@@ -39,14 +39,14 @@ projects its authoritative contract state independently.
 Every document has three required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `4` for newly written saves;
+- `format_version` is the unsigned JSON integer `5` for newly written saves;
 - `recipe` and `state` are required objects.
 
 The recipe records the universe seed, origin-system and active-planet
 ordinals, the seed, planet, terrain-tile, origin-station, surface-signal,
 local-sun, local-system, analytic-ephemeris, intersystem-contract, and
-intersystem-jump versions, plus the expected regenerated station and planet
-IDs.
+intersystem-jump, and system-flight versions, plus the expected regenerated
+station and planet IDs.
 
 `state.career_kind` selects one of two explicit projections:
 
@@ -55,7 +55,9 @@ IDs.
   mission/travel phases, current system/planet, committed destination, and
   phase-start tick. Version 4 additionally records the immutable Assisted
   arrival solution bound at jump commitment: destination/reference identities,
-  arrival tick, and finite system-space position and velocity.
+  arrival tick, and finite system-space position and velocity. Version 5 adds
+  the mutable system-flight tick, identities, position, velocity, attitude,
+  controls, flight mode, and bounded time scale.
 
 Legacy mutable state records:
 
@@ -68,7 +70,7 @@ Legacy mutable state records:
 
 The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) and
 [`save-v1-golden.json`](../test/data/save-v1-golden.json) remain legacy
-migration fixtures. Newly encoded documents are canonical version 4.
+migration fixtures. Newly encoded documents are canonical version 5.
 
 ## Encodings
 
@@ -106,14 +108,16 @@ state. Duplicate object keys are rejected rather than resolved by ordering.
 Unknown enum values and delta kinds are rejected because silently dropping
 their semantics could resurrect or duplicate generated content.
 
-Formats 1, 2, 3, and 4 and the generator versions compiled into the current
+Formats 1, 2, 3, 4, and 5 and the generator versions compiled into the current
 build are supported. Version 1 is decoded with local-sun generator version 1;
-formats 1 and 2 rewrite as version 4 on the next explicit save. They remain
+formats 1 and 2 rewrite as version 5 on the next explicit save. They remain
 `legacy_signal_run` careers and are never assigned the intersystem contract.
 Released version 3 intersystem careers preserve every recorded phase and tick;
 their absent arrival solution remains absent rather than synthesizing progress.
-Other format versions fail as unsupported and other generator versions fail as
-incompatible. Older builds reject version 4 before reading fields, so they
+Released version 4 target arrivals initialize system flight from their immutable
+arrival solution; no destination, tick, or mission progress is rerolled. Other
+format versions fail as unsupported and other generator versions fail as
+incompatible. Older builds reject version 5 before reading fields, so they
 cannot silently discard the new mission state.
 
 Local-sun geometry is regenerated from the active planet's independent
@@ -136,7 +140,8 @@ normal early saves should remain in the kilobyte range.
 ## Intersystem staging
 
 Version 3 reserved the high-level travel-state envelope. Version 4 binds and
-persists the Assisted FTL arrival solution while leaving mutable system-space
-craft flight and planetary handoffs to their owning systems. Camera state,
-terminal capabilities, render profiles, caches, and presentation progress
-remain excluded.
+persists the Assisted FTL arrival solution. Version 5 persists mutable
+target-system craft flight and permits exactly one matching system or target-
+planet flight representation for its travel phase. Camera state, terminal
+capabilities, render profiles, caches, and presentation progress remain
+excluded.

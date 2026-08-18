@@ -7,6 +7,7 @@
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/system_flight.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "termforge/core/types.hpp"
 
@@ -68,6 +69,7 @@ struct SystemNavigationReadout {
   std::string elevation;
   std::string distance;
   std::string motion;
+  std::string arrival;
   std::string cue;
 
   auto operator==(const SystemNavigationReadout&) const -> bool = default;
@@ -107,6 +109,8 @@ struct CockpitLayout {
     -> FlightInstrumentReadout;
 [[nodiscard]] auto format_flight_instruments(
     const PlanetaryFlightState& state) -> FlightInstrumentReadout;
+[[nodiscard]] auto format_flight_instruments(
+    const SystemFlightState& state) -> FlightInstrumentReadout;
 
 // Build cockpit-ready fixed-width regime and most-recent-transition lines.
 // Presentation decides when and where to show them; simulation remains the
@@ -128,5 +132,8 @@ struct CockpitLayout {
 // and steering do not depend on color or Kitty graphics.
 [[nodiscard]] auto format_system_navigation(
     const SystemNavigationSolution& navigation) -> SystemNavigationReadout;
+[[nodiscard]] auto format_system_navigation(
+    const SystemNavigationSolution& navigation,
+    const SystemFlightGuidance& guidance) -> SystemNavigationReadout;
 
 }  // namespace apsis_drift

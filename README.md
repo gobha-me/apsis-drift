@@ -71,8 +71,8 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 4; versions 1 and 2 load as legacy local Signal Runs, while released
-version 3 intersystem profiles retain their mission and travel state.
+version 5; versions 1 and 2 load as legacy local Signal Runs, while released
+versions 3 and 4 retain their mission, jump, and target-arrival state.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -122,6 +122,10 @@ Interactive controls:
 - First intersystem contract: accept and launch at the mission board, then
   press J to begin or cancel the three-second FTL spool; committed transit
   arrives automatically after two seconds
+- Target-system flight: W/S thrust or brake, A/D turn, Q/E strafe, R/F rise
+  or fall, Space toggles direct target assist, and `[`/`]` selects 1x/4x/16x
+  time compression outside the six-radius approach boundary; press Enter when
+  the cockpit reports `ORBIT RDY`
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
@@ -172,14 +176,20 @@ projection, overlap, handoff, and measurement rules are documented in
 The v0.4.7 Origin Station mission board binds one deterministic mission,
 target system, planet, and existing surface-signal objective. Its semantic
 briefing and acceptance state are shared by Kitty and ANSI, persist in save
-format 4, and now launch into the v0.4.8 deterministic Assisted FTL transit.
-Sub-light flight remains separate. The exact boundaries are documented in
+format 5, and launch into the deterministic Assisted FTL transit and sub-light
+target approach. The exact mission-board boundaries are documented in
 [docs/MISSION_BOARD.md](docs/MISSION_BOARD.md).
 
 The v0.4.8 jump binds its destination, arrival tick, position, and velocity at
 commitment, then presents the same bounded five-second sequence through Kitty,
 ANSI, or headless execution. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
+
+The v0.4.9 target-system flight begins from that immutable arrival solution,
+then advances bounded inertial thrust and moving-planet interception at 120 Hz.
+It supplies explicit closing, ETA, braking, compression, and insertion cues,
+and preserves arrival side and heading when handing off to the existing
+orbital path. See [docs/SYSTEM_FLIGHT.md](docs/SYSTEM_FLIGHT.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact

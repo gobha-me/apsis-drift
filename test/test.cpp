@@ -44,6 +44,8 @@
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/surface_signals.hpp"
+#include "apsis_drift/system_flight.hpp"
+#include "apsis_drift/system_flight_acceptance.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
@@ -509,15 +511,25 @@ auto intersystem_jump_contract() -> void {
   auto state = initial_intersystem_contract_state(Seed{42});
   const auto origin = generate_local_system(state.identities.origin_system_seed);
   const auto target = generate_local_system(state.identities.target_system_seed);
-  const auto persists_exactly = [](const IntersystemContractState& expected) {
+  const auto persists_exactly = [&target](
+                                    const IntersystemContractState& expected) {
     auto document = make_new_game_document(Seed{42});
     document.state.intersystem_contract = expected;
+    if (expected.travel_phase ==
+            IntersystemTravelPhase::target_system_flight &&
+        expected.arrival_solution) {
+      const auto flight = initial_system_flight_state(
+          target, expected.identities.target_planet,
+          *expected.arrival_solution);
+      if (flight) document.state.system_flight = *flight;
+    }
     const auto encoded = encode_save_document_json(document);
     const auto decoded =
         encoded ? decode_save_document_json(*encoded)
                 : std::expected<SaveDocument, SaveSchemaError>{
                       std::unexpected{SaveSchemaError{}}};
-    return decoded && decoded->state.intersystem_contract == expected;
+    return decoded && decoded->state.intersystem_contract == expected &&
+           decoded->state.system_flight == document.state.system_flight;
   };
   check(kIntersystemJumpVersion == 1 &&
             kAssistedTargetArrivalStandoffRadii == 10.0 &&
@@ -607,7 +619,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v4 round trip");
+        "a committed arrival solution must survive a canonical v5 round trip");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -761,6 +773,191 @@ auto intersystem_jump_acceptance_contract() -> void {
         "jump acceptance JSON must retain its versioned semantic fields");
 }
 
+auto system_flight_contract() -> void {
+  check(!run_system_flight_acceptance(0, 64) &&
+            !run_system_flight_acceptance(
+                std::numeric_limits<int>::max(), 1),
+        "system-flight acceptance must reject invalid dimensions before allocation");
+  auto contract = initial_intersystem_contract_state(Seed{42});
+  const auto system =
+      generate_local_system(contract.identities.target_system_seed);
+  (void)advance_intersystem_contract(
+      contract, contract.universe_tick,
+      IntersystemContractCommand::accept_mission);
+  (void)advance_intersystem_contract(
+      contract, contract.universe_tick, IntersystemContractCommand::launch);
+  (void)begin_assisted_jump(contract);
+  for (SimulationTick tick = 0;
+       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    (void)advance_assisted_jump_tick(contract, system);
+  }
+  const auto initial = contract.arrival_solution
+                           ? initial_system_flight_state(
+                                 system, contract.identities.target_planet,
+                                 *contract.arrival_solution)
+                           : std::expected<SystemFlightState,
+                                           SystemFlightError>{
+                                 std::unexpected{
+                                     SystemFlightError::invalid_arrival}};
+  check(kSystemFlightVersion == 1 && initial &&
+            initial->tick == contract.universe_tick &&
+            validate_system_flight_state(system, *initial).has_value(),
+        "the FTL handoff must initialize one valid system-flight state");
+  if (!initial) return;
+  const auto initial_guidance = resolve_system_flight_guidance(system, *initial);
+  const auto initial_instruments = format_flight_instruments(*initial);
+  check(initial_guidance &&
+            !initial_guidance->inside_approach_boundary &&
+            initial_guidance->relative_speed_metres_per_second < 1.0 &&
+            initial_guidance->distance_metres > 0.0 &&
+            initial_instruments.altitude == "SYS FLT  " &&
+            initial_instruments.clearance == "TIME  1x " &&
+            initial_instruments.mode == "MODE AUTO" &&
+            initial_instruments.alert_state == CockpitAlert::none,
+        "arrival guidance must begin at the matched-velocity ten-radius corridor");
+
+  auto compressed = *initial;
+  const FlightCommand faster{compressed.tick,
+                             FlightCommandKind::increase_time_scale};
+  check(advance_system_flight(system, compressed,
+                              std::span<const FlightCommand>{&faster, 1}) &&
+            compressed.time_scale == SystemTimeScale::four &&
+            compressed.tick == initial->tick + 4,
+        "time compression must use four bounded authoritative substeps");
+
+  auto coast = *initial;
+  coast.mode = FlightMode::manual;
+  const auto coast_velocity = coast.velocity;
+  const auto coast_position = coast.position;
+  check(advance_system_flight(system, coast, {}) &&
+            coast.velocity == coast_velocity &&
+            coast.position != coast_position,
+        "released manual thrust must preserve inertial momentum");
+
+  const auto body = find_local_system_planet(
+      system, contract.identities.target_planet);
+  const auto ephemeris = resolve_planet_ephemeris(
+      system, contract.identities.target_planet,
+      {.tick = initial->tick, .sub_tick_fraction = 0.0});
+  check(body && ephemeris,
+        "the orbit insertion fixture requires the mission planet ephemeris");
+  if (!body || !ephemeris) return;
+  const double radius =
+      static_cast<double>((*body)->descriptor.radius.value) * 1'000.0;
+
+  auto approach = *initial;
+  approach.position = {ephemeris->position.x + radius * 5.0,
+                       ephemeris->position.y, ephemeris->position.z};
+  approach.velocity = ephemeris->velocity;
+  approach.time_scale = SystemTimeScale::sixteen;
+  check(advance_system_flight(system, approach, {}) &&
+            approach.tick == initial->tick + 1 &&
+            approach.time_scale == SystemTimeScale::one,
+        "the six-radius approach boundary must force one-times simulation");
+
+  auto opening = *initial;
+  opening.position = {ephemeris->position.x + radius * 4.0,
+                      ephemeris->position.y, ephemeris->position.z};
+  opening.velocity = {ephemeris->velocity.x + 10'000.0,
+                      ephemeris->velocity.y, ephemeris->velocity.z};
+  const auto opening_guidance =
+      resolve_system_flight_guidance(system, opening);
+  check(opening_guidance && opening_guidance->cue == SystemFlightCue::opening &&
+            !opening_guidance->orbit_insertion_ready,
+        "overshoot must remain a recoverable opening state");
+
+  auto ready = *initial;
+  ready.position = {ephemeris->position.x + radius * 2.5,
+                    ephemeris->position.y, ephemeris->position.z};
+  ready.velocity = {ephemeris->velocity.x,
+                    ephemeris->velocity.y + 1'000.0,
+                    ephemeris->velocity.z};
+  ready.forward = {-1.0, 0.0, 0.0};
+  const auto ready_guidance = resolve_system_flight_guidance(system, ready);
+  const auto orbital = insert_system_flight_orbit(system, ready);
+  check(ready_guidance && ready_guidance->orbit_insertion_ready && orbital &&
+            orbital->planet == ready.target &&
+            orbital->regime == FlightRegime::orbital &&
+            orbital->tick == ready.tick &&
+            orbital->pose.position.altitude_metres > radius,
+        "orbit insertion must preserve tick, planet, arrival side, and orbital altitude");
+  auto below_surface = ready;
+  below_surface.position.x = ephemeris->position.x + radius * 0.5;
+  check(insert_system_flight_orbit(system, below_surface) ==
+            std::unexpected{SystemFlightError::orbit_insertion_refused},
+        "orbit insertion must reject a craft position below the target surface");
+
+  auto invalid = *initial;
+  invalid.position.x = std::numeric_limits<double>::quiet_NaN();
+  const auto invalid_before = invalid;
+  check(advance_system_flight(system, invalid, {}) ==
+                std::unexpected{SystemFlightError::invalid_state} &&
+            std::bit_cast<std::uint64_t>(invalid.position.x) ==
+                std::bit_cast<std::uint64_t>(invalid_before.position.x),
+        "non-finite system flight must reject without partial mutation");
+  auto wrong_body = *initial;
+  wrong_body.target = PlanetId{wrong_body.target.value ^ 1U};
+  check(validate_system_flight_state(system, wrong_body) ==
+                std::unexpected{SystemFlightError::unknown_target} &&
+            insert_system_flight_orbit(system, wrong_body) ==
+                std::unexpected{SystemFlightError::unknown_target},
+        "wrong-body system flight must be rejected before transition");
+  auto excessive_step = *initial;
+  excessive_step.time_scale = static_cast<SystemTimeScale>(32);
+  check(advance_system_flight(system, excessive_step, {}) ==
+            std::unexpected{SystemFlightError::invalid_state},
+        "unsupported time-compression step counts must be rejected");
+  auto excessive_coordinate = *initial;
+  excessive_coordinate.position.x = 1.0e17;
+  check(validate_system_flight_state(system, excessive_coordinate) ==
+            std::unexpected{SystemFlightError::invalid_state},
+        "overflow-prone system coordinates must be rejected");
+  auto overflow = *initial;
+  overflow.tick = std::numeric_limits<SimulationTick>::max();
+  check(advance_system_flight(system, overflow, {}) ==
+            std::unexpected{SystemFlightError::tick_overflow},
+        "system-flight tick overflow must reject before integration");
+  auto mistimed = *initial;
+  const FlightCommand future{mistimed.tick + 1,
+                             FlightCommandKind::press_forward};
+  check(advance_system_flight(
+            system, mistimed,
+            std::span<const FlightCommand>{&future, 1}) ==
+            std::unexpected{SystemFlightError::wrong_command_tick},
+        "system-flight commands must target the authoritative current tick");
+  auto held = *initial;
+  held.controls.forward = true;
+  check(system_flight_state_checksum(held) !=
+            system_flight_state_checksum(*initial),
+        "system-flight checksums must include held authoritative controls");
+
+  auto saved_contract = contract;
+  saved_contract.universe_tick = ready.tick;
+  auto document = make_new_game_document(Seed{42});
+  document.state.intersystem_contract = saved_contract;
+  document.state.system_flight = ready;
+  const auto encoded = encode_save_document_json(document);
+  const auto decoded = encoded ? decode_save_document_json(*encoded)
+                               : std::expected<SaveDocument, SaveSchemaError>{
+                                     std::unexpected{SaveSchemaError{}}};
+  check(encoded && decoded && decoded->state.system_flight == ready &&
+            decoded->state.intersystem_contract == saved_contract &&
+            system_flight_state_checksum(*decoded->state.system_flight) ==
+                system_flight_state_checksum(ready),
+        "system flight must survive canonical v5 save/resume exactly");
+  if (encoded && contract.arrival_solution) {
+    const auto released_v4 = replace_once(
+        *encoded, "\"format_version\": 5", "\"format_version\": 4");
+    const auto migrated = decode_save_document_json(released_v4);
+    const auto expected_migration = initial_system_flight_state(
+        system, contract.identities.target_planet,
+        *contract.arrival_solution);
+    check(migrated && expected_migration &&
+              migrated->state.system_flight == *expected_migration,
+          "released format-4 target arrivals must migrate from the immutable handoff");
+  }
+}
+
 auto mission_board_contract() -> void {
   auto state = initial_intersystem_contract_state(Seed{42});
   const auto offered = mission_board_snapshot(state);
@@ -800,7 +997,7 @@ auto mission_board_contract() -> void {
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
   if (fresh_json) {
-    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 4",
+    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 5",
                                     "\"format_version\": 3");
     released_v3 = replace_once(std::move(released_v3),
                                "\"arrival_solution\": null",
@@ -814,13 +1011,56 @@ auto mission_board_contract() -> void {
     check(migrated_v3 &&
               migrated_v3->state.intersystem_contract ==
                   document.state.intersystem_contract &&
-              rewritten_v3 && rewritten_v3->find("\"format_version\": 4") !=
+              rewritten_v3 && rewritten_v3->find("\"format_version\": 5") !=
                                     std::string::npos,
-          "released v3 intersystem profiles must preserve state and rewrite as v4");
+          "released v3 intersystem profiles must preserve state and rewrite as v5");
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
     document.state.intersystem_contract = checkpoint;
+    document.state.system_flight.reset();
+    document.state.flight.reset();
+    const auto system =
+        generate_local_system(checkpoint.identities.target_system_seed);
+    const auto body = find_local_system_planet(
+        system, checkpoint.identities.target_planet);
+    if (checkpoint.travel_phase ==
+            IntersystemTravelPhase::target_system_flight &&
+        body) {
+      const auto ephemeris = resolve_planet_ephemeris(
+          system, checkpoint.identities.target_planet,
+          {.tick = checkpoint.universe_tick, .sub_tick_fraction = 0.0});
+      if (ephemeris) {
+        const double radius =
+            static_cast<double>((*body)->descriptor.radius.value) * 1'000.0;
+        const IntersystemArrivalSolution arrival{
+            .destination = system.id,
+            .reference_planet = checkpoint.identities.target_planet,
+            .arrival_tick = checkpoint.universe_tick,
+            .position = {ephemeris->position.x - radius * 10.0,
+                         ephemeris->position.y, ephemeris->position.z},
+            .velocity = ephemeris->velocity,
+        };
+        const auto system_flight = initial_system_flight_state(
+            system, checkpoint.identities.target_planet, arrival);
+        if (system_flight) document.state.system_flight = *system_flight;
+      }
+    } else if (checkpoint.travel_phase ==
+                   IntersystemTravelPhase::target_planet_flight &&
+               body) {
+      auto flight = initial_planetary_flight_state(
+          (*body)->descriptor,
+          {.latitude_radians = 0.0,
+           .longitude_radians = 0.0,
+           .altitude_metres =
+               static_cast<double>((*body)->descriptor.radius.value) *
+               2'000.0},
+          {.surface_elevation_metres = 0.0});
+      if (flight) {
+        flight->tick = checkpoint.universe_tick;
+        document.state.flight = *flight;
+      }
+    }
     const auto encoded = encode_save_document_json(document);
     if (!encoded) {
       check(false, message);
@@ -1131,8 +1371,24 @@ auto local_system_rendering_contract() -> void {
               readout.elevation.size() == kInstrumentLineWidth &&
               readout.distance.size() == kInstrumentLineWidth &&
               readout.motion.size() == kInstrumentLineWidth &&
+              readout.arrival.size() == kInstrumentLineWidth &&
               readout.cue.size() == kInstrumentLineWidth,
           "system navigation must remain fixed-width and information-complete");
+    const auto guided = format_system_navigation(
+        *closing,
+        {.target = closing->target,
+         .distance_metres = closing->distance_metres,
+         .closing_speed_metres_per_second = 1'200.0,
+         .relative_speed_metres_per_second = 1'200.0,
+         .arrival_estimate_seconds = 65.0,
+         .stopping_distance_metres = 14'400.0,
+         .cue = SystemFlightCue::brake,
+         .inside_approach_boundary = false,
+         .orbit_insertion_ready = false});
+    check(guided.motion == "CLS +1.2k" &&
+              guided.arrival == "ETA 01:05" &&
+              guided.cue == "BRAKE NOW",
+          "system flight guidance must expose closing, ETA, and braking text");
     auto scaled_navigation = *closing;
     scaled_navigation.distance_metres = 93'666'774'627.0;
     scaled_navigation.closing_speed_metres_per_second = 1'851'067.0;
@@ -1444,9 +1700,9 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 4 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 5 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 4 identity and byte bound must remain stable");
+        "save format version 5 identity and byte bound must remain stable");
   const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
   const auto fixture = read_test_data("test/data/save-v2-golden.json");
   check(!legacy_fixture.empty() && !fixture.empty(),
@@ -1476,6 +1732,7 @@ auto save_schema_contract() -> void {
                                                  FlightRegime::atmospheric,
                                                  1000},
                   },
+              .system_flight = std::nullopt,
               .discoveries = {{target, 1100}},
               .world_deltas =
                   {{"signal-71d4c959dcd64423",
@@ -1493,11 +1750,11 @@ auto save_schema_contract() -> void {
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 4") !=
+  check(encoded && encoded->find("\"format_version\": 5") !=
                        std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must migrate legacy state into canonical version 4");
+        "the current encoder must migrate legacy state into canonical version 5");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
@@ -1506,7 +1763,7 @@ auto save_schema_contract() -> void {
   const auto migrated = decode_save_document_json(legacy_fixture);
   check(migrated && *migrated == expected &&
             encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 4");
+        "a version 1 save must migrate in memory and rewrite canonically as version 5");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -1537,13 +1794,13 @@ auto save_schema_contract() -> void {
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 5"),
+                   "\"format_version\": 6"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":5}",
+      "{\"application\":\"apsis-drift\",\"format_version\":6}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 4 fields are read");
+        "future formats must be identified before version 5 fields are read");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
@@ -1972,6 +2229,7 @@ auto regenerated_world_delta_contract() -> void {
               .first_objective = FirstObjectiveStatus::completed,
               .first_objective_target = target,
               .flight = std::nullopt,
+              .system_flight = std::nullopt,
               .discoveries = {{target, 100}},
               .world_deltas = {{surface_signal_object_key(target),
                                 SaveWorldDeltaKind::collected, 120}},
@@ -2763,6 +3021,7 @@ auto signal_collection_contract() -> void {
               .first_objective = FirstObjectiveStatus::completed,
               .first_objective_target = target.id,
               .flight = std::nullopt,
+              .system_flight = std::nullopt,
               .discoveries = {{target.id, *state.completion_tick}},
               .world_deltas = std::vector<SaveWorldDelta>(
                   journal.entries().begin(), journal.entries().end()),
@@ -5245,6 +5504,7 @@ auto flight_input_mapping_contract() -> void {
   mapper.enqueue(key_event(Key::Char, U' ', KeyAction::Press), 7);
   mapper.enqueue(key_event(Key::Char, U' ', KeyAction::Repeat), 7);
   mapper.enqueue(key_event(Key::Char, U'x', KeyAction::Press), 7);
+  mapper.enqueue(key_event(Key::Char, U']', KeyAction::Press), 7);
   const auto commands = mapper.take_commands(7);
   check(commands.size() == mappings.size() * 2 + 2,
         "mapping must emit press, release, repeat, and one toggle");
@@ -5261,6 +5521,15 @@ auto flight_input_mapping_contract() -> void {
     check(commands.back().kind == FlightCommandKind::toggle_autopilot,
           "Space must map to one autopilot toggle");
   }
+
+  mapper.enqueue(key_event(Key::Char, U'[', KeyAction::Press), 8, true);
+  mapper.enqueue(key_event(Key::Char, U']', KeyAction::Press), 8, true);
+  const auto system_commands = mapper.take_commands(8);
+  check(command_kinds_equal(
+            system_commands,
+            {FlightCommandKind::decrease_time_scale,
+             FlightCommandKind::increase_time_scale}),
+        "time-scale keys must be enabled only for system flight");
 }
 
 auto mouse_flight_mapping_contract() -> void {
@@ -6875,6 +7144,7 @@ auto main() -> int {
   intersystem_state_contract();
   intersystem_jump_contract();
   intersystem_jump_acceptance_contract();
+  system_flight_contract();
   mission_board_contract();
   local_system_contract();
   local_system_rendering_contract();

@@ -162,6 +162,11 @@ jump extends that projection as version 4 and records:
   bound when a jump commits;
 - existing discoveries and sparse world deltas unchanged.
 
+The v0.4.9 target approach extends the projection as version 5 with the active
+system-flight tick, system/target identities, inertial position and velocity,
+attitude basis, controls, flight mode, and bounded time scale. Target-system
+and target-planet phases require exactly one matching craft representation.
+
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
@@ -172,8 +177,10 @@ flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
 not moved to system ordinal 1, assigned a generated jump, or given synthetic
 mission progress. Legacy careers remain explicitly local;
-conversion into the intersystem career is not synthesized. Older readers must
-reject format 4 before discarding any of these fields.
+conversion into the intersystem career is not synthesized. A released format-4
+target arrival initializes mutable flight from its already-bound immutable
+arrival solution. Older readers must reject format 5 before discarding any of
+these fields.
 
 ## Implementation boundaries
 
@@ -184,7 +191,9 @@ reject format 4 before discarding any of these fields.
 - #84 binds and presents the first mission.
 - The v0.4.8 Assisted jump and arrival solution are documented in
   [Deterministic Assisted FTL Transit](INTERSYSTEM_JUMP.md).
-- #86 owns system-space craft flight and the planet handoff.
+- The v0.4.9 system-flight path owns system-space craft motion, moving-target
+  guidance, and the preserved planet handoff described in
+  [Deterministic Sub-light System Flight](SYSTEM_FLIGHT.md).
 - #87 preserves entry-anywhere Planetfall and objective identity.
 - #88 implements explicit return, docking, and turn-in.
 - #89 composes the complete deterministic acceptance path.

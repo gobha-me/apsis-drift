@@ -13,7 +13,8 @@ namespace apsis_drift::detail {
 class FlightInputMapper {
  public:
   auto enqueue(const termforge::KeyEvent& key,
-               SimulationTick current_tick) -> void;
+               SimulationTick current_tick,
+               bool enable_time_scale = false) -> void;
   auto enqueue(const termforge::MouseEvent& mouse,
                termforge::Rect active_region,
                SimulationTick current_tick) -> void;

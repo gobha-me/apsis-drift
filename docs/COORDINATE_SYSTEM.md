@@ -25,8 +25,8 @@ All frames are right-handed:
 
 Local-system generator version 1 resolves the planet-center position and
 velocity components of that ephemeris from circular inclined orbits. The
-planet-fixed orientation and angular velocity remain part of the later flight
-handoff; see [Local System Generation and Analytic Ephemeris](LOCAL_SYSTEM_GENERATION.md).
+planet-fixed orientation and angular velocity are applied by the versioned
+system-flight handoff; see [Deterministic Sub-light System Flight](SYSTEM_FLIGHT.md).
 
 Geodetic latitude is in `[-pi/2, pi/2]`. Longitude is east-positive and
 canonicalized to `[-pi, pi)`, so `+pi` and `-pi` identify the same antimeridian.

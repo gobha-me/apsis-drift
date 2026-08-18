@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.8 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.9 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -111,6 +111,8 @@ add_library(apsis_drift_lib STATIC
   src/signal_scanner.cpp
   src/simulation.cpp
   src/surface_signals.cpp
+  src/system_flight.cpp
+  src/system_flight_acceptance.cpp
   src/system_rendering.cpp
   src/terrain_tiles.cpp
   src/title.cpp
@@ -169,6 +171,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_intersystem_jump_acceptance.cmake")
+  add_test(NAME system-flight-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_system_flight_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -216,6 +223,10 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
 
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
+  add_test(NAME reject-system-flight-missing-report
+    COMMAND apsis-drift --system-flight-acceptance --driver kitty)
+  set_tests_properties(reject-system-flight-missing-report
+    PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-viewport-negative
     COMMAND apsis-drift --benchmark 1 --viewport -1x480)
   add_test(NAME reject-viewport-malformed
