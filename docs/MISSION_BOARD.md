@@ -30,8 +30,9 @@ no mission state or warning depends on pixels or color alone.
 A fresh career begins `OFFERED` with `ACCEPT CONTRACT`. Acceptance is an atomic
 `offered -> accepted` transition at the authoritative universe tick. Repeated,
 out-of-order, wrong-tick, or corrupt-reference actions are rejected without
-mutation. The accepted board reports `LAUNCH ROUTE AUTHORIZED`; FTL transit and
-system-space craft movement remain #85 and #86.
+mutation. The accepted board reports `LAUNCH ROUTE AUTHORIZED` and exposes
+`LAUNCH`; the flight deck then owns the explicit Assisted jump command.
+Sub-light system-space craft movement remains #86.
 
 The same semantic model names active, objective-complete, returned, and
 turned-in states for later loop stages. A returned contract exposes
@@ -39,9 +40,9 @@ turned-in states for later loop stages. A returned contract exposes
 
 ## Persistence and compatibility
 
-Fresh careers use save format 3 and persist the high-level
+Fresh careers use save format 4 and persist the high-level
 `IntersystemContractState`. Formats 1 and 2 decode as `legacy_signal_run`, keep
-their original planet-side objective and craft state, and rewrite as format 3
+their original planet-side objective and craft state, and rewrite as format 4
 without teleporting, retargeting, or synthesizing mission progress.
 
 The save excludes terminal capabilities, render profiles, menu selection,

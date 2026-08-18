@@ -75,7 +75,7 @@ ephemeris versions, canonical fixed-width IDs, star fields, ordered planet
 identities, and integer orbit parameters. It is compact enough for acceptance
 reports and defines the data that a later save format may project.
 
-Save format version 3 records this generator and ephemeris version alongside
+Save format versions 3 and 4 record this generator and ephemeris version alongside
 the stable mission-selected system, star, and planet identities. It regenerates
 rather than serializing mutable ephemeris or random state. Rendering, craft
 travel, and planet-fixed orientation remain separate systems.

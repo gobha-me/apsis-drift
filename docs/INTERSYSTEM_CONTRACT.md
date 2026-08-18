@@ -63,9 +63,10 @@ Version 1 jump timing is intentionally short and explicit:
 The committed state has no meaningful continuous interstellar position. It
 simulates a bounded deterministic transition and advances authoritative time;
 camera motion, flashes, skipped frames, and no-animation/headless completion
-are presentation choices. Assisted arrival uses the optimal corridor that #85
-will specify. The optional Pilot profile may choose another deterministic pose
-inside the same correct target system, but cannot change its identity.
+are presentation choices. Assisted arrival uses the documented ten-radius
+matched-velocity target corridor. The optional Pilot profile may choose another
+deterministic pose inside the same correct target system, but cannot change its
+identity.
 
 ## Coordinate ownership and handoffs
 
@@ -148,7 +149,8 @@ bounded and cannot turn a valid location into corrupt mission state.
 
 ## Save projection and compatibility
 
-The v0.4.7 mission board introduces save format version 3 and records:
+The v0.4.7 mission board introduced save format version 3. The v0.4.8 Assisted
+jump extends that projection as version 4 and records:
 
 - generator versions for the system catalog, ephemeris, and first mission;
 - stable origin/target system, star, mission-planet, station, mission, and
@@ -156,19 +158,22 @@ The v0.4.7 mission board introduces save format version 3 and records:
 - `universe_tick`, mission phase, current system, and the active craft-location
   variant;
 - the high-level active location and jump phase fields defined here;
+- the immutable destination, arrival tick, system-space position, and velocity
+  bound when a jump commits;
 - existing discoveries and sparse world deltas unchanged.
 
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 and 2 remain readable. They retain their saved origin-system planet,
+Formats 1 through 3 remain readable. Formats 1 and 2 retain their saved
+origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
 not moved to system ordinal 1, assigned a generated jump, or given synthetic
-mission progress. Legacy careers remain explicitly local in v0.4.7;
+mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. Older readers must
-reject format 3 before discarding any of these fields.
+reject format 4 before discarding any of these fields.
 
 ## Implementation boundaries
 
@@ -177,7 +182,8 @@ reject format 3 before discarding any of these fields.
 - The v0.4.6 local-system presentation renders that authoritative state and
   derives target navigation without adding travel physics.
 - #84 binds and presents the first mission.
-- #85 implements the Assisted jump and arrival solution.
+- The v0.4.8 Assisted jump and arrival solution are documented in
+  [Deterministic Assisted FTL Transit](INTERSYSTEM_JUMP.md).
 - #86 owns system-space craft flight and the planet handoff.
 - #87 preserves entry-anywhere Planetfall and objective identity.
 - #88 implements explicit return, docking, and turn-in.

@@ -1,5 +1,6 @@
 #include "apsis_drift/intersystem_contract.hpp"
 
+#include <cmath>
 #include <format>
 #include <limits>
 
@@ -103,6 +104,7 @@ auto initial_intersystem_contract_state(Seed universe_seed) noexcept
       .current_planet = std::nullopt,
       .committed_jump_destination = std::nullopt,
       .phase_started_tick = std::nullopt,
+      .arrival_solution = std::nullopt,
   };
 }
 
@@ -120,10 +122,38 @@ auto validate_intersystem_contract_state(
   const auto origin = state.identities.origin_system;
   const auto target = state.identities.target_system;
   const auto target_planet = state.identities.target_planet;
+  if (state.arrival_solution) {
+    const auto& arrival = *state.arrival_solution;
+    constexpr double maximum_coordinate_metres{1.0e15};
+    constexpr double maximum_velocity_metres_per_second{1.0e9};
+    if (!std::isfinite(arrival.position.x) ||
+        !std::isfinite(arrival.position.y) ||
+        !std::isfinite(arrival.position.z) ||
+        !std::isfinite(arrival.velocity.x) ||
+        !std::isfinite(arrival.velocity.y) ||
+        !std::isfinite(arrival.velocity.z) ||
+        std::abs(arrival.position.x) > maximum_coordinate_metres ||
+        std::abs(arrival.position.y) > maximum_coordinate_metres ||
+        std::abs(arrival.position.z) > maximum_coordinate_metres ||
+        std::abs(arrival.velocity.x) >
+            maximum_velocity_metres_per_second ||
+        std::abs(arrival.velocity.y) >
+            maximum_velocity_metres_per_second ||
+        std::abs(arrival.velocity.z) >
+            maximum_velocity_metres_per_second ||
+        (arrival.destination == target
+             ? arrival.reference_planet != target_planet
+             : arrival.destination == origin
+                   ? arrival.reference_planet.has_value()
+                   : true)) {
+      return std::unexpected{IntersystemContractError::invalid_state};
+    }
+  }
   switch (state.travel_phase) {
     case IntersystemTravelPhase::docked_at_origin:
       if (state.current_system != origin || state.current_planet ||
           state.committed_jump_destination || state.phase_started_tick ||
+          state.arrival_solution ||
           (state.mission_phase != IntersystemMissionPhase::offered &&
            state.mission_phase != IntersystemMissionPhase::accepted &&
            state.mission_phase != IntersystemMissionPhase::returned &&
@@ -134,6 +164,7 @@ auto validate_intersystem_contract_state(
     case IntersystemTravelPhase::origin_system_flight:
       if (state.current_system != origin || state.current_planet ||
           state.committed_jump_destination || state.phase_started_tick ||
+          state.arrival_solution ||
           state.mission_phase != IntersystemMissionPhase::active) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
@@ -141,6 +172,7 @@ auto validate_intersystem_contract_state(
     case IntersystemTravelPhase::outbound_jump_spooling:
       if (state.current_system != origin || state.current_planet ||
           state.committed_jump_destination || !state.phase_started_tick ||
+          state.arrival_solution ||
           *state.phase_started_tick > state.universe_tick ||
           state.mission_phase != IntersystemMissionPhase::active) {
         return std::unexpected{IntersystemContractError::invalid_state};
@@ -154,6 +186,16 @@ auto validate_intersystem_contract_state(
           state.mission_phase != IntersystemMissionPhase::active) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
+      if (state.arrival_solution &&
+          (state.arrival_solution->destination != target ||
+           state.arrival_solution->arrival_tick < state.universe_tick ||
+           *state.phase_started_tick >
+               std::numeric_limits<SimulationTick>::max() -
+                   kJumpTransitTicks ||
+           state.arrival_solution->arrival_tick !=
+               *state.phase_started_tick + kJumpTransitTicks)) {
+        return std::unexpected{IntersystemContractError::invalid_state};
+      }
       break;
     case IntersystemTravelPhase::target_system_flight:
       if (state.current_system != target || state.current_planet ||
@@ -161,6 +203,11 @@ auto validate_intersystem_contract_state(
           (state.mission_phase != IntersystemMissionPhase::active &&
            state.mission_phase !=
                IntersystemMissionPhase::objective_complete)) {
+        return std::unexpected{IntersystemContractError::invalid_state};
+      }
+      if (state.arrival_solution &&
+          (state.arrival_solution->destination != target ||
+           state.arrival_solution->arrival_tick > state.universe_tick)) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
       break;
@@ -173,10 +220,16 @@ auto validate_intersystem_contract_state(
                IntersystemMissionPhase::objective_complete)) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
+      if (state.arrival_solution &&
+          (state.arrival_solution->destination != target ||
+           state.arrival_solution->arrival_tick > state.universe_tick)) {
+        return std::unexpected{IntersystemContractError::invalid_state};
+      }
       break;
     case IntersystemTravelPhase::return_jump_spooling:
       if (state.current_system != target || state.current_planet ||
           state.committed_jump_destination || !state.phase_started_tick ||
+          state.arrival_solution ||
           *state.phase_started_tick > state.universe_tick ||
           state.mission_phase != IntersystemMissionPhase::objective_complete) {
         return std::unexpected{IntersystemContractError::invalid_state};
@@ -190,11 +243,26 @@ auto validate_intersystem_contract_state(
           state.mission_phase != IntersystemMissionPhase::objective_complete) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
+      if (state.arrival_solution &&
+          (state.arrival_solution->destination != origin ||
+           state.arrival_solution->arrival_tick < state.universe_tick ||
+           *state.phase_started_tick >
+               std::numeric_limits<SimulationTick>::max() -
+                   kJumpTransitTicks ||
+           state.arrival_solution->arrival_tick !=
+               *state.phase_started_tick + kJumpTransitTicks)) {
+        return std::unexpected{IntersystemContractError::invalid_state};
+      }
       break;
     case IntersystemTravelPhase::origin_system_return:
       if (state.current_system != origin || state.current_planet ||
           state.committed_jump_destination || state.phase_started_tick ||
           state.mission_phase != IntersystemMissionPhase::objective_complete) {
+        return std::unexpected{IntersystemContractError::invalid_state};
+      }
+      if (state.arrival_solution &&
+          (state.arrival_solution->destination != origin ||
+           state.arrival_solution->arrival_tick > state.universe_tick)) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
       break;
@@ -258,6 +326,7 @@ auto advance_intersystem_contract(IntersystemContractState& state,
       }
       next.travel_phase = IntersystemTravelPhase::outbound_jump_spooling;
       next.phase_started_tick = next.universe_tick;
+      next.arrival_solution.reset();
       break;
     case IntersystemContractCommand::cancel_jump:
       if (next.travel_phase == IntersystemTravelPhase::outbound_jump_spooling) {
@@ -269,6 +338,7 @@ auto advance_intersystem_contract(IntersystemContractState& state,
         return reject();
       }
       next.phase_started_tick.reset();
+      next.arrival_solution.reset();
       break;
     case IntersystemContractCommand::commit_outbound_jump:
       if (next.travel_phase != IntersystemTravelPhase::outbound_jump_spooling ||
@@ -325,6 +395,7 @@ auto advance_intersystem_contract(IntersystemContractState& state,
       }
       next.travel_phase = IntersystemTravelPhase::return_jump_spooling;
       next.phase_started_tick = next.universe_tick;
+      next.arrival_solution.reset();
       break;
     case IntersystemContractCommand::commit_return_jump:
       if (next.travel_phase != IntersystemTravelPhase::return_jump_spooling ||
@@ -356,6 +427,7 @@ auto advance_intersystem_contract(IntersystemContractState& state,
       }
       next.travel_phase = IntersystemTravelPhase::docked_at_origin;
       next.mission_phase = IntersystemMissionPhase::returned;
+      next.arrival_solution.reset();
       break;
     case IntersystemContractCommand::turn_in:
       if (next.travel_phase != IntersystemTravelPhase::docked_at_origin ||
