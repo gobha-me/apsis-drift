@@ -178,7 +178,8 @@ must reject format 3 before discarding any of these fields.
 
 - #82 generates the bounded target system and analytic ephemeris described in
   the [local-system generation contract](LOCAL_SYSTEM_GENERATION.md).
-- #83 renders that authoritative system state.
+- The v0.4.6 local-system presentation renders that authoritative state and
+  derives target navigation without adding travel physics.
 - #84 binds and presents the first mission.
 - #85 implements the Assisted jump and arrival solution.
 - #86 owns system-space craft flight and the planet handoff.

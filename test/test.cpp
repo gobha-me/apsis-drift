@@ -41,6 +41,7 @@
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/surface_signals.hpp"
+#include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
 #include "apsis_drift/world_delta_journal.hpp"
@@ -689,6 +690,223 @@ auto local_system_contract() -> void {
     }
     check(checksum == 15'119'861'268'817'475'810ULL,
           "local-system diagnostics must retain their golden checksum");
+  }
+}
+
+[[nodiscard]] auto system_render_fixture_view(
+    const LocalSystemDescriptor& system, SimulationTick tick = 0)
+    -> LocalSystemView {
+  const auto target = resolve_planet_ephemeris(
+      system, system.planets.front().descriptor.id, {tick, 0.0});
+  if (!target) return {};
+  constexpr SystemPositionMetres offset{0.0, -1'000'000'000.0,
+                                         120'000'000.0};
+  return {
+      .time = {tick, 0.0},
+      .position = {target->position.x + offset.x,
+                   target->position.y + offset.y,
+                   target->position.z + offset.z},
+      .velocity = target->velocity,
+      .forward = {-offset.x, -offset.y, -offset.z},
+      .up = {0.0, 0.0, 1.0},
+      .selected_planet = target->planet,
+  };
+}
+
+auto local_system_rendering_contract() -> void {
+  const auto identities = generate_first_intersystem_identities(Seed{42});
+  const auto system = generate_local_system(identities.target_system_seed);
+  auto view = system_render_fixture_view(system);
+  const auto target = resolve_planet_ephemeris(
+      system, view.selected_planet, view.time);
+  check(target.has_value(), "the system-render target fixture must resolve");
+  if (!target) return;
+
+  auto closing_view = view;
+  closing_view.velocity.y += 100.0;
+  const auto closing = resolve_system_navigation(system, closing_view);
+  check(closing && closing->target == identities.target_planet &&
+            closing->display_name ==
+                system.planets.front().descriptor.display_name &&
+            closing->distance_metres > 1'000'000.0 &&
+            closing->closing_speed_metres_per_second > 90.0 &&
+            closing->motion == SystemTargetMotion::closing &&
+            closing->in_front,
+        "system navigation must derive stable target identity, range, and closing state");
+  auto opening_view = view;
+  opening_view.velocity.y -= 100.0;
+  const auto opening = resolve_system_navigation(system, opening_view);
+  check(opening && opening->closing_speed_metres_per_second < -90.0 &&
+            opening->motion == SystemTargetMotion::opening,
+        "system navigation must distinguish opening motion");
+  if (closing) {
+    const auto readout = format_system_navigation(*closing);
+    check(readout.target.size() == kInstrumentLineWidth &&
+              readout.bearing.size() == kInstrumentLineWidth &&
+              readout.elevation.size() == kInstrumentLineWidth &&
+              readout.distance.size() == kInstrumentLineWidth &&
+              readout.motion.size() == kInstrumentLineWidth &&
+              readout.cue.size() == kInstrumentLineWidth,
+          "system navigation must remain fixed-width and information-complete");
+    auto scaled_navigation = *closing;
+    scaled_navigation.distance_metres = 93'666'774'627.0;
+    scaled_navigation.closing_speed_metres_per_second = 1'851'067.0;
+    const auto scaled = format_system_navigation(scaled_navigation);
+    check(scaled.distance == "RNG 0094G" && scaled.motion == "CLS +1.9M" &&
+              scaled.distance.size() == kInstrumentLineWidth &&
+              scaled.motion.size() == kInstrumentLineWidth,
+          "system-scale range and speed must retain bounded readable units");
+  }
+
+  constexpr LocalSystemRenderSettings settings{
+      .width = 160,
+      .height = 120,
+      .field_of_view_degrees = 60.0,
+      .near_clip_metres = 1'000.0,
+      .far_clip_metres = 100'000'000'000.0,
+      .handoff_start_radius_pixels = 24.0,
+      .handoff_complete_radius_pixels = 48.0,
+  };
+  LocalSystemRenderer renderer{settings};
+  std::vector<Pixel> first(160U * 120U);
+  std::vector<Pixel> repeated(first.size());
+  const auto first_result = renderer.render(system, view, first);
+  const auto repeated_result = renderer.render(system, view, repeated);
+  check(first_result && repeated_result && first_result == repeated_result &&
+            first == repeated && first_result->selected_visible &&
+            first_result->visible_planets > 0,
+        "a fixed system view must render deterministic bodies and selection cues");
+
+  auto later_view = system_render_fixture_view(
+      system, system.planets.front().orbit.period_ticks / 4);
+  std::vector<Pixel> later(first.size());
+  const auto later_result = renderer.render(system, later_view, later);
+  check(later_result && pixel_checksum(later) != pixel_checksum(first),
+        "planet presentation must move with explicit ephemeris time");
+
+  auto behind_view = view;
+  behind_view.forward = {0.0, -1.0, 0.0};
+  std::vector<Pixel> behind(first.size());
+  const auto behind_result = renderer.render(system, behind_view, behind);
+  check(behind_result && !behind_result->selected_visible &&
+            !behind_result->navigation.in_front,
+        "a selected planet behind the camera must remain navigable but not render as visible");
+
+  const double target_radius = static_cast<double>(
+                                   system.planets.front().descriptor.radius.value) *
+                               1'000.0;
+  auto handoff_view = view;
+  handoff_view.position = {target->position.x,
+                           target->position.y - target_radius * 4.0,
+                           target->position.z};
+  handoff_view.forward = {0.0, 1.0, 0.0};
+  std::vector<Pixel> handoff(first.size());
+  const auto handoff_result =
+      renderer.render(system, handoff_view, handoff);
+  check(handoff_result &&
+            handoff_result->mode ==
+                LocalSystemPresentationMode::target_handoff &&
+            handoff_result->orbital_mix > 0.0 &&
+            handoff_result->orbital_mix < 1.0 &&
+            handoff_result->selected_visible,
+        "target approach must blend continuously into the existing orbital renderer");
+
+  auto orbital_view = handoff_view;
+  orbital_view.position.y = target->position.y - target_radius * 3.0;
+  std::vector<Pixel> orbital(first.size());
+  const auto orbital_result =
+      renderer.render(system, orbital_view, orbital);
+  check(orbital_result &&
+            orbital_result->mode ==
+                LocalSystemPresentationMode::orbital_target &&
+            orbital_result->orbital_mix == 1.0 &&
+            orbital_result->navigation.target == identities.target_planet,
+        "a close target must complete the orbital handoff without changing identity");
+
+  LocalSystemRenderer clipped_renderer{
+      {.width = 160, .height = 120, .field_of_view_degrees = 60.0,
+       .near_clip_metres = 2'000'000'000.0,
+       .far_clip_metres = 3'000'000'000.0}};
+  std::vector<Pixel> clipped(first.size());
+  const auto clipped_result =
+      clipped_renderer.render(system, view, clipped);
+  check(clipped_result && !clipped_result->selected_visible &&
+            clipped_result->navigation.target == identities.target_planet,
+        "near/far clipping must not discard selected-target navigation identity");
+
+  std::vector<Pixel> short_frame(first.size() - 1U, {1, 2, 3, 4});
+  const auto short_result = renderer.render(system, view, short_frame);
+  check(!short_result &&
+            short_result.error() ==
+                LocalSystemRenderError::invalid_framebuffer &&
+            std::ranges::all_of(short_frame, [](Pixel value) {
+              return value == Pixel{1, 2, 3, 4};
+            }),
+        "invalid system framebuffers must fail without mutation");
+
+  std::vector<Pixel> untouched(first.size(), {5, 6, 7, 8});
+  auto invalid_view = view;
+  invalid_view.position.x = std::numeric_limits<double>::quiet_NaN();
+  const auto invalid_result = renderer.render(system, invalid_view, untouched);
+  check(!invalid_result &&
+            invalid_result.error() == LocalSystemRenderError::invalid_view &&
+            std::ranges::all_of(untouched, [](Pixel value) {
+              return value == Pixel{5, 6, 7, 8};
+            }),
+        "non-finite system views must fail before touching the framebuffer");
+  invalid_view = view;
+  invalid_view.up = invalid_view.forward;
+  check(!renderer.render(system, invalid_view, untouched) &&
+            std::ranges::all_of(untouched, [](Pixel value) {
+              return value == Pixel{5, 6, 7, 8};
+            }),
+        "invalid system camera bases must fail transactionally");
+  invalid_view = view;
+  invalid_view.selected_planet = PlanetId{system.id.value};
+  const auto unknown = renderer.render(system, invalid_view, untouched);
+  check(!unknown &&
+            unknown.error() == LocalSystemRenderError::unknown_target,
+        "unknown selected planets must be rejected");
+
+  LocalSystemRenderer invalid_settings{
+      {.width = 0, .height = 120}};
+  const auto invalid_settings_result =
+      invalid_settings.render(system, view, untouched);
+  check(!invalid_settings_result &&
+            invalid_settings_result.error() ==
+                LocalSystemRenderError::invalid_settings &&
+            std::ranges::all_of(untouched, [](Pixel value) {
+              return value == Pixel{5, 6, 7, 8};
+            }),
+        "invalid system-render settings must fail transactionally");
+
+  struct ProfileGolden {
+    RenderProfile profile;
+    std::uint64_t checksum;
+  };
+  constexpr std::array goldens{
+      ProfileGolden{RenderProfile::remote, 2278210513076417452ULL},
+      ProfileGolden{RenderProfile::balanced, 12485442992023896220ULL},
+      ProfileGolden{RenderProfile::local, 12448240633158274672ULL},
+      ProfileGolden{RenderProfile::cinematic, 7286572350764431653ULL},
+  };
+  for (const auto golden : goldens) {
+    const auto viewport = profile_viewport(golden.profile);
+    LocalSystemRenderer profile_renderer{
+        {.width = viewport.width, .height = viewport.height,
+         .field_of_view_degrees = 60.0}};
+    std::vector<Pixel> frame(static_cast<std::size_t>(viewport.width) *
+                             static_cast<std::size_t>(viewport.height));
+    const auto rendered = profile_renderer.render(system, view, frame);
+    const auto checksum = pixel_checksum(frame);
+    if (rendered && checksum != golden.checksum) {
+      std::fprintf(stderr, "%.*s golden system checksum: %llu\n",
+                   static_cast<int>(profile_name(golden.profile).size()),
+                   profile_name(golden.profile).data(),
+                   static_cast<unsigned long long>(checksum));
+    }
+    check(rendered && checksum == golden.checksum,
+          "golden local-system profile checksums must remain stable");
   }
 }
 
@@ -4148,6 +4366,8 @@ auto sweep_selection_contract() -> void {
                 BenchmarkWorkload::orbital &&
             parse_benchmark_workload("planetary") ==
                 BenchmarkWorkload::planetary &&
+            parse_benchmark_workload("system") ==
+                BenchmarkWorkload::system &&
             !parse_benchmark_workload("unknown"),
         "benchmark workloads must parse only their documented names");
   check(workload_identifier(BenchmarkWorkload::landscape) ==
@@ -4155,7 +4375,9 @@ auto sweep_selection_contract() -> void {
             workload_identifier(BenchmarkWorkload::orbital) ==
                 "orbital-planet-rgba" &&
             workload_identifier(BenchmarkWorkload::planetary) ==
-                "planetary-presentation-rgba",
+                "planetary-presentation-rgba" &&
+            workload_identifier(BenchmarkWorkload::system) ==
+                "local-system-rgba",
         "benchmark workloads must retain stable report identifiers");
 
   const auto viewports = parse_sweep_viewports("remote,640x360,cinematic");
@@ -6239,6 +6461,7 @@ auto main() -> int {
   intersystem_identity_contract();
   intersystem_state_contract();
   local_system_contract();
+  local_system_rendering_contract();
   origin_station_contract();
   origin_onboarding_contract();
   save_schema_contract();

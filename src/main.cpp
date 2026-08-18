@@ -33,7 +33,9 @@
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
+#include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/landscape.hpp"
+#include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/planet.hpp"
@@ -46,6 +48,7 @@
 #include "apsis_drift/signal_run_acceptance.hpp"
 #include "apsis_drift/signal_scanner.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/title.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
@@ -293,9 +296,21 @@ class LandscapeApp final : public App {
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_planet(generate_planet_descriptor(Seed{seed})),
+        m_local_system(generate_local_system(
+            generate_first_intersystem_identities(Seed{seed})
+                .target_system_seed)),
         m_renderer(render_settings_for(render_configuration.viewport)),
         m_orbital_renderer(
             orbital_settings_for(render_configuration.viewport)),
+        m_system_renderer(
+            workload == BenchmarkWorkload::system
+                ? std::optional<LocalSystemRenderer>{
+                      std::in_place,
+                      LocalSystemRenderSettings{
+                          .width = render_configuration.viewport.width,
+                          .height = render_configuration.viewport.height,
+                          .field_of_view_degrees = 60.0}}
+                : std::nullopt),
         m_planetary_renderer(
             (workload == BenchmarkWorkload::planetary ||
              signal_navigation_acceptance || profile != nullptr)
@@ -629,6 +644,14 @@ class LandscapeApp final : public App {
   }
   [[nodiscard]] auto workload() const noexcept -> BenchmarkWorkload {
     return m_workload;
+  }
+  [[nodiscard]] auto system_render_stats() const noexcept
+      -> const LocalSystemRenderStats* {
+    return m_system_render ? &*m_system_render : nullptr;
+  }
+  [[nodiscard]] auto local_system() const noexcept
+      -> const LocalSystemDescriptor& {
+    return m_local_system;
   }
 
   [[nodiscard]] auto signal_run_save() const
@@ -995,7 +1018,32 @@ class LandscapeApp final : public App {
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 2, "TARGET", accent,
                       chrome_bg);
-    if ((m_signal_run && m_signal_run->flight) || m_signal_scenario) {
+    if (m_system_render) {
+      const auto navigation =
+          format_system_navigation(m_system_render->navigation);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 4, navigation.target,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 6, navigation.bearing,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 8, navigation.elevation,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 10, navigation.distance,
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 12, navigation.motion,
+                        m_system_render->navigation.motion ==
+                                SystemTargetMotion::opening
+                            ? warning
+                            : text,
+                        chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 16, navigation.cue,
+                        text, chrome_bg);
+    } else if ((m_signal_run && m_signal_run->flight) || m_signal_scenario) {
       const auto& navigation =
           m_signal_run && m_signal_run->flight
               ? m_signal_run->signal_navigation
@@ -1087,6 +1135,13 @@ class LandscapeApp final : public App {
     } else if (m_signal_scenario) {
       message =
           format_signal_collection(m_signal_scenario->collection).message;
+    } else if (m_system_render) {
+      const auto navigation =
+          format_system_navigation(m_system_render->navigation);
+      message = std::format(
+          " SYSTEM {} | {} | {} | {} ",
+          m_local_system.star.display_name, navigation.target,
+          navigation.distance, navigation.cue);
     } else {
       message = layout.mode == CockpitLayoutMode::wide
                     ? " L-hold fly | R-hold strafe/alt | M-click auto | "
@@ -1243,6 +1298,7 @@ class LandscapeApp final : public App {
   }
 
   auto render_viewport() -> void {
+    m_system_render.reset();
     if (m_signal_run && m_signal_run->flight) {
       if (!m_planetary_renderer) {
         throw std::runtime_error{"Signal Run presentation is unavailable"};
@@ -1333,6 +1389,33 @@ class LandscapeApp final : public App {
       return;
     }
     m_planetary_flight.reset();
+    if (m_workload == BenchmarkWorkload::system) {
+      const SystemPositionMetres camera_position{0.0, -92'000'000'000.0,
+                                                  26'000'000'000.0};
+      const LocalSystemView view{
+          .time = {m_flight.tick, 0.0},
+          .position = camera_position,
+          .velocity = {},
+          .forward = {-camera_position.x, -camera_position.y,
+                      -camera_position.z},
+          .up = {0.0, 0.0, 1.0},
+          .selected_planet = m_local_system.planets.front().descriptor.id,
+      };
+      if (!m_system_renderer) {
+        throw std::runtime_error{"local-system renderer is unavailable"};
+      }
+      const auto rendered = m_system_renderer->render(
+          m_local_system, view, m_surface.pixels());
+      if (!rendered) {
+        throw std::runtime_error{std::format(
+            "local-system renderer rejected the {}x{} surface ({})",
+            m_render_configuration.viewport.width,
+            m_render_configuration.viewport.height,
+            static_cast<unsigned>(rendered.error()))};
+      }
+      m_system_render = *rendered;
+      return;
+    }
     if (m_workload == BenchmarkWorkload::orbital) {
       const double radius = static_cast<double>(m_planet.radius.value) * 1'000.0;
       const double elapsed_seconds =
@@ -1383,8 +1466,10 @@ class LandscapeApp final : public App {
   RenderConfiguration m_render_configuration;
   Terrain m_terrain;
   PlanetDescriptor m_planet;
+  LocalSystemDescriptor m_local_system;
   VoxelRenderer m_renderer;
   OrbitalRenderer m_orbital_renderer;
+  std::optional<LocalSystemRenderer> m_system_renderer;
   std::optional<PlanetaryPresentationRenderer> m_planetary_renderer;
   PixelSurface m_surface;
   Frame m_left_frame{"FLIGHT"};
@@ -1395,6 +1480,7 @@ class LandscapeApp final : public App {
   FlightState m_flight;
   PlanetarySurfaceFixture m_planetary_surface;
   std::optional<PlanetaryFlightState> m_planetary_flight;
+  std::optional<LocalSystemRenderStats> m_system_render;
   std::optional<TerrainTileCache> m_signal_cache;
   std::optional<SignalNavigationAcceptanceState> m_signal_scenario;
   std::optional<TerrainTileCache> m_signal_run_cache;
@@ -1474,7 +1560,9 @@ auto print_summary(const BenchmarkSummary& summary,
           ? "orbital-planet"
           : (workload == BenchmarkWorkload::planetary
                  ? "planetary-presentation"
-                 : "voxel-landscape");
+                 : (workload == BenchmarkWorkload::system
+                        ? "local-system"
+                        : "voxel-landscape"));
   std::string presentation;
   if (summary.planetary_presentation) {
     const auto& value = *summary.planetary_presentation;
@@ -1527,6 +1615,37 @@ auto print_summary(const BenchmarkSummary& summary,
       presentation);
 }
 
+inline constexpr std::uint32_t kSystemNavigationAcceptanceSeed{42};
+
+[[nodiscard]] auto system_navigation_acceptance_json(
+    const BenchmarkSummary& summary,
+    const RenderConfiguration& configuration,
+    const LocalSystemDescriptor& system,
+    const LocalSystemRenderStats& render,
+    std::string_view presentation) -> std::string {
+  return std::format(
+      "{{\n"
+      "  \"schema_version\": 1,\n"
+      "  \"scenario\": \"v0.4.6-local-system-navigation\",\n"
+      "  \"presentation\": \"{}\",\n"
+      "  \"system_id\": \"{}\",\n"
+      "  \"star_id\": \"{}\",\n"
+      "  \"target_planet_id\": \"{}\",\n"
+      "  \"target_name\": \"{}\",\n"
+      "  \"distance_metres\": {:.3f},\n"
+      "  \"closing_speed_metres_per_second\": {:.3f},\n"
+      "  \"visible_planets\": {},\n"
+      "  \"selected_visible\": {},\n"
+      "  \"benchmark\": {}"
+      "}}\n",
+      presentation, system.id.value, system.star.id.value,
+      render.navigation.target.value, render.navigation.display_name,
+      render.navigation.distance_metres,
+      render.navigation.closing_speed_metres_per_second,
+      render.visible_planets, render.selected_visible,
+      summary_json(summary, configuration, BenchmarkWorkload::system));
+}
+
 template <typename T>
 [[nodiscard]] auto parse_positive(std::string_view text, T& value) -> bool {
   const auto [end, error] =
@@ -1558,7 +1677,7 @@ auto usage() -> void {
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
-      "                   [--workload landscape|orbital|planetary]\n"
+      "                   [--workload landscape|orbital|planetary|system]\n"
       "       apsis-drift --capture-seconds N [--seed N] --report PATH\n\n"
       "       apsis-drift --flight-deck-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
@@ -1567,6 +1686,8 @@ auto usage() -> void {
       "       apsis-drift --signal-navigation-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
       "       apsis-drift --signal-run-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "       apsis-drift --system-navigation-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
@@ -1594,6 +1715,7 @@ auto main(int argc, char** argv) -> int {
   bool planetfall_acceptance{};
   bool signal_navigation_acceptance{};
   bool signal_run_acceptance{};
+  bool system_navigation_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -1669,6 +1791,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--signal-run-acceptance") {
       signal_run_acceptance = true;
+      continue;
+    }
+    if (argument == "--system-navigation-acceptance") {
+      system_navigation_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -1806,12 +1932,37 @@ auto main(int argc, char** argv) -> int {
     return 2;
   }
 
+  const bool profile_options = !load_path.empty() || !save_path.empty() ||
+                               new_game_seed.has_value();
   if (benchmark_frames && capture_seconds > 0) {
     std::fprintf(stderr, "benchmark and capture modes are mutually exclusive\n");
     return 2;
   }
-  const bool profile_options = !load_path.empty() || !save_path.empty() ||
-                               new_game_seed.has_value();
+  if (system_navigation_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       profile_options || seed_specified || workload_specified ||
+       keyboard_specified)) {
+    std::fprintf(stderr,
+                 "System navigation acceptance is mutually exclusive with "
+                 "other run, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (system_navigation_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "System navigation acceptance requires --driver kitty or "
+                 "--driver ansi\n");
+    return 2;
+  }
+  if (system_navigation_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "System navigation acceptance requires --report PATH\n");
+    return 2;
+  }
   if (!load_path.empty() && new_game_seed) {
     std::fprintf(stderr,
                  "--load and --new-game-seed are mutually exclusive\n");
@@ -1972,6 +2123,61 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (system_navigation_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      LandscapeApp app{configuration, kSystemNavigationAcceptanceSeed,
+                       BenchmarkWorkload::system};
+      if (auto forced =
+              app.force_capabilities(driver_choice, KeyboardChoice::enhanced);
+          !forced) {
+        std::fprintf(stderr, "cannot force capabilities: %s\n",
+                     forced.error().message.c_str());
+        return 2;
+      }
+      constexpr int acceptance_frames{6};
+      app.benchmark(acceptance_frames);
+      const auto summary = app.summary();
+      const auto* render = app.system_render_stats();
+      if (summary.frames != acceptance_frames || render == nullptr ||
+          !render->selected_visible) {
+        std::fprintf(stderr,
+                     "System navigation acceptance ended before its final "
+                     "selected-target frame\n");
+        return 1;
+      }
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << system_navigation_acceptance_json(
+          summary, configuration, app.local_system(), *render,
+          presentation);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() && !app.write_snapshot(snapshot_path)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "system-navigation: seed=%u presentation=%.*s system=%llu "
+          "target=%llu frames=%zu checksum=%llu\n",
+          kSystemNavigationAcceptanceSeed,
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(app.local_system().id.value),
+          static_cast<unsigned long long>(render->navigation.target.value),
+          summary.frames,
+          static_cast<unsigned long long>(summary.checksum));
+      return 0;
+    }
     if (signal_run_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

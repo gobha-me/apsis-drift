@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.5 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.6 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -108,6 +108,7 @@ add_library(apsis_drift_lib STATIC
   src/signal_scanner.cpp
   src/simulation.cpp
   src/surface_signals.cpp
+  src/system_rendering.cpp
   src/terrain_tiles.cpp
   src/title.cpp
   src/world_delta_journal.cpp
@@ -150,6 +151,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --benchmark 1 --profile remote --workload orbital)
   add_test(NAME benchmark-orbital-local
     COMMAND apsis-drift --benchmark 1 --profile local --workload orbital)
+  add_test(NAME benchmark-system-remote
+    COMMAND apsis-drift --benchmark 1 --profile remote --workload system)
+  add_test(NAME benchmark-system-local
+    COMMAND apsis-drift --benchmark 1 --profile local --workload system)
+
+  add_test(NAME system-navigation-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_system_navigation_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -275,6 +286,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-signal-run-mode-conflict
     COMMAND apsis-drift --signal-run-acceptance --driver ansi --benchmark 1
             --report signal-run-invalid.json)
+  add_test(NAME reject-system-navigation-missing-report
+    COMMAND apsis-drift --system-navigation-acceptance --driver ansi)
+  add_test(NAME reject-system-navigation-missing-driver
+    COMMAND apsis-drift --system-navigation-acceptance
+            --report system-navigation-invalid.json)
+  add_test(NAME reject-system-navigation-mode-conflict
+    COMMAND apsis-drift --system-navigation-acceptance --driver kitty
+            --benchmark 1 --report system-navigation-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -313,6 +332,9 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-signal-run-missing-driver
     reject-signal-run-seed-override
     reject-signal-run-mode-conflict
+    reject-system-navigation-missing-report
+    reject-system-navigation-missing-driver
+    reject-system-navigation-mode-conflict
     PROPERTIES WILL_FAIL TRUE
   )
 endif ()

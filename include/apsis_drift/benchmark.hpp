@@ -12,7 +12,7 @@
 
 namespace apsis_drift {
 
-enum class BenchmarkWorkload { landscape, orbital, planetary };
+enum class BenchmarkWorkload { landscape, orbital, planetary, system };
 
 struct PlanetaryPresentationBenchmarkSummary {
   std::size_t orbital_frames{};
