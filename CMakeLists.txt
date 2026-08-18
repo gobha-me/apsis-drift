@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.12 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.13 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -87,6 +87,7 @@ add_library(apsis_drift_lib STATIC
   src/flight_deck_acceptance.cpp
   src/flight_input.cpp
   src/intersystem_contract.cpp
+  src/intersystem_contract_acceptance.cpp
   src/intersystem_jump.cpp
   src/intersystem_jump_acceptance.cpp
   src/intersystem_planetfall.cpp
@@ -190,6 +191,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_intersystem_return_acceptance.cmake")
+  add_test(NAME intersystem-contract-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_intersystem_contract_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -268,6 +274,20 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --intersystem-return-acceptance --driver ansi
             --benchmark 1 --report intersystem-return-invalid.json)
   set_tests_properties(reject-intersystem-return-mode-conflict
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-intersystem-contract-missing-report
+    COMMAND apsis-drift --intersystem-contract-acceptance --driver kitty)
+  set_tests_properties(reject-intersystem-contract-missing-report
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-intersystem-contract-missing-driver
+    COMMAND apsis-drift --intersystem-contract-acceptance
+            --report intersystem-contract-invalid.json)
+  set_tests_properties(reject-intersystem-contract-missing-driver
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-intersystem-contract-mode-conflict
+    COMMAND apsis-drift --intersystem-contract-acceptance --driver ansi
+            --benchmark 1 --report intersystem-contract-invalid.json)
+  set_tests_properties(reject-intersystem-contract-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-viewport-negative
     COMMAND apsis-drift --benchmark 1 --viewport -1x480)

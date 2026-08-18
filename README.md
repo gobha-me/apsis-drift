@@ -132,6 +132,9 @@ Interactive controls:
   spool the home jump
 - Origin return: follow the explicit Origin Station range and closing cues,
   then press Enter at `ENTER DOCK`; turn in the contract from the station board
+- Complete-loop verification: `--intersystem-contract-acceptance` replays the
+  fixed station-to-system contract and its save/resume matrix without terminal
+  timing entering authoritative state
 - Left-button hold in the exterior viewport: forward/back and turn
 - Right-button hold in the exterior viewport: strafe and change flight clearance
 - Middle-button click in the exterior viewport: toggle autopilot
@@ -217,6 +220,14 @@ spool, and arrives 40 km from an explicit Origin Station waypoint.
 Station-relative guidance, a 5 km rendezvous predicate, explicit docking
 confirmation, and idempotent mission turn-in resume from save format 7. See
 [docs/INTERSYSTEM_RETURN.md](docs/INTERSYSTEM_RETURN.md).
+
+The v0.4.13 complete-contract acceptance path now composes mission acceptance,
+outbound transit, the moving target system, Planetfall, recovery from a poor
+entry, orbital return, home transit, docking, and turn-in. Six independent
+save/resume continuations converge on one authoritative final checksum under
+GCC and Clang, while Kitty/ANSI pixels and live terminal/proxy timings remain
+separate evidence. See
+[docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md](docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -401,6 +412,9 @@ fixed-seed cockpit matrix with
 `--system-navigation-acceptance --driver kitty|ansi --report PATH`.
 The deterministic Assisted-jump matrix is available through
 `--intersystem-jump-acceptance --driver kitty|ansi --report PATH`.
+Run the complete first-contract matrix with
+`--intersystem-contract-acceptance --driver kitty|ansi --report PATH`; add
+`--snapshot PATH` for the bounded final Origin Station frame.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:
 
@@ -476,6 +490,7 @@ milestones; they are not implementation sessions themselves.
 - [v0.4 — Signal Run](https://github.com/gobha-me/apsis-drift/issues/35)
 - [v0.5 — First Light](https://github.com/gobha-me/apsis-drift/issues/36)
 - [First intersystem contract loop](https://github.com/gobha-me/apsis-drift/issues/91)
+  — complete in v0.4.13
 
 The v0.4 loop is grounded in the deterministic
 [origin-station and new-game contract](docs/ORIGIN_STATION.md), which defines

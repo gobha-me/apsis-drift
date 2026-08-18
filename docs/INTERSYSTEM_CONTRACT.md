@@ -211,7 +211,9 @@ fields.
 - #87 preserves entry-anywhere Planetfall and objective identity.
 - The v0.4.12 [return path](INTERSYSTEM_RETURN.md) implements #88's explicit
   departure, home jump, docking, and turn-in.
-- #89 composes the complete deterministic acceptance path.
+- The v0.4.13
+  [complete-contract acceptance](INTERSYSTEM_CONTRACT_ACCEPTANCE.md) composes
+  #89's deterministic station-to-system verification path.
 
 None of those systems may move terminal protocol handling into the game or
 extract a generic engine before repeated working systems demonstrate one.
