@@ -43,6 +43,12 @@ namespace {
   return false;
 }
 
+[[nodiscard]] auto valid_rule_profile(IntersystemRuleProfile profile) noexcept
+    -> bool {
+  return profile == IntersystemRuleProfile::assisted ||
+         profile == IntersystemRuleProfile::pilot;
+}
+
 }  // namespace
 
 auto generate_first_intersystem_identities(Seed universe_seed) noexcept
@@ -92,6 +98,15 @@ auto mission_id_string(MissionId id) -> std::string {
   return std::format("mission-{:016x}", id.value);
 }
 
+auto intersystem_rule_profile_name(IntersystemRuleProfile profile) noexcept
+    -> std::string_view {
+  switch (profile) {
+    case IntersystemRuleProfile::assisted: return "ASSISTED";
+    case IntersystemRuleProfile::pilot: return "PILOT";
+  }
+  return "INVALID";
+}
+
 auto initial_intersystem_contract_state(Seed universe_seed) noexcept
     -> IntersystemContractState {
   auto identities = generate_first_intersystem_identities(universe_seed);
@@ -100,6 +115,7 @@ auto initial_intersystem_contract_state(Seed universe_seed) noexcept
       .universe_tick = 0,
       .mission_phase = IntersystemMissionPhase::offered,
       .travel_phase = IntersystemTravelPhase::docked_at_origin,
+      .rule_profile = IntersystemRuleProfile::assisted,
       .current_system = identities.origin_system,
       .current_planet = std::nullopt,
       .committed_jump_destination = std::nullopt,
@@ -115,7 +131,8 @@ auto validate_intersystem_contract_state(
                               state.identities.universe_seed) ||
       state.identities.origin_system == state.identities.target_system ||
       !valid_mission_phase(state.mission_phase) ||
-      !valid_travel_phase(state.travel_phase)) {
+      !valid_travel_phase(state.travel_phase) ||
+      !valid_rule_profile(state.rule_profile)) {
     return std::unexpected{IntersystemContractError::invalid_state};
   }
 
@@ -304,6 +321,18 @@ auto advance_intersystem_contract(IntersystemContractState& state,
         std::unexpected{IntersystemContractError::invalid_transition}};
   };
   switch (command) {
+    case IntersystemContractCommand::select_assisted_profile:
+    case IntersystemContractCommand::select_pilot_profile:
+      if (next.travel_phase != IntersystemTravelPhase::docked_at_origin ||
+          (next.mission_phase != IntersystemMissionPhase::offered &&
+           next.mission_phase != IntersystemMissionPhase::accepted)) {
+        return reject();
+      }
+      next.rule_profile =
+          command == IntersystemContractCommand::select_assisted_profile
+              ? IntersystemRuleProfile::assisted
+              : IntersystemRuleProfile::pilot;
+      break;
     case IntersystemContractCommand::accept_mission:
       if (next.travel_phase != IntersystemTravelPhase::docked_at_origin ||
           next.mission_phase != IntersystemMissionPhase::offered) {

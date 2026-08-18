@@ -22,9 +22,12 @@ struct MissionBoardSnapshot {
   std::string objective;
   std::string return_destination;
   std::string status;
+  std::string rule_profile;
+  std::string rule_profile_description;
   std::string primary_action;
   bool primary_action_enabled{};
   bool launch_authorized{};
+  bool rule_profile_selection_enabled{};
 
   friend auto operator==(const MissionBoardSnapshot&,
                          const MissionBoardSnapshot&) -> bool = default;

@@ -4,6 +4,7 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/origin_station.hpp"
@@ -16,7 +17,7 @@ namespace apsis_drift {
 // This high-level contract is generated-world and save compatibility data.
 // It deliberately proves only identities, authoritative phases, and legal
 // transitions; later systems own ephemerides, flight, and presentation.
-inline constexpr std::uint32_t kIntersystemContractVersion{1};
+inline constexpr std::uint32_t kIntersystemContractVersion{2};
 inline constexpr std::uint64_t kFirstTargetSystemOrdinal{1};
 inline constexpr std::uint64_t kSystemStarOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionOrdinal{0};
@@ -106,11 +107,20 @@ enum class IntersystemTravelPhase : std::uint8_t {
   origin_system_return,
 };
 
+enum class IntersystemRuleProfile : std::uint8_t {
+  assisted,
+  pilot,
+};
+
+[[nodiscard]] auto intersystem_rule_profile_name(
+    IntersystemRuleProfile profile) noexcept -> std::string_view;
+
 struct IntersystemContractState {
   FirstIntersystemIdentities identities;
   SimulationTick universe_tick{};
   IntersystemMissionPhase mission_phase{IntersystemMissionPhase::offered};
   IntersystemTravelPhase travel_phase{IntersystemTravelPhase::docked_at_origin};
+  IntersystemRuleProfile rule_profile{IntersystemRuleProfile::assisted};
   SystemId current_system;
   std::optional<PlanetId> current_planet;
   std::optional<SystemId> committed_jump_destination;
@@ -122,6 +132,8 @@ struct IntersystemContractState {
 };
 
 enum class IntersystemContractCommand : std::uint8_t {
+  select_assisted_profile,
+  select_pilot_profile,
   accept_mission,
   launch,
   begin_outbound_jump,

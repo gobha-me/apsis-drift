@@ -71,9 +71,9 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 7; versions 1 and 2 load as legacy local Signal Runs, while released
-versions 3 through 6 retain their mission, jump, arrival, system-flight, and
-Planetfall state.
+version 8; versions 1 and 2 load as legacy local Signal Runs, while released
+versions 3 through 7 retain their mission, jump, arrival, system-flight,
+Planetfall, and return state and default to Assisted rules.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -123,6 +123,8 @@ Interactive controls:
 - First intersystem contract: accept and launch at the mission board, then
   press J to begin or cancel the three-second FTL spool; committed transit
   arrives automatically after two seconds
+- Rule profile: press Left/Right at the mission board before launch to select
+  Assisted or Pilot; launch locks the authoritative selection for the mission
 - Target-system flight: W/S thrust or brake, A/D turn, Q/E strafe, R/F rise
   or fall, Space toggles direct target assist, and `[`/`]` selects 1x/4x/16x
   time compression outside the six-radius approach boundary; press Enter when
@@ -228,6 +230,13 @@ save/resume continuations converge on one authoritative final checksum under
 GCC and Clang, while Kitty/ANSI pixels and live terminal/proxy timings remain
 separate evidence. See
 [docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md](docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md).
+
+The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
+or Pilot selection at the Origin Station. Assisted remains the complete-loop
+default; Pilot records the deterministic thermal-abort and alignment-quality
+boundaries consumed by the next flight systems. Formats 1 through 7 migrate to
+Assisted without changing generated truth or mission progress. See
+[docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact

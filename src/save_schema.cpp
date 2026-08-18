@@ -146,6 +146,15 @@ template <typename Id>
   return "unknown";
 }
 
+[[nodiscard]] auto rule_profile_name(IntersystemRuleProfile value)
+    -> std::string_view {
+  switch (value) {
+    case IntersystemRuleProfile::assisted: return "assisted";
+    case IntersystemRuleProfile::pilot: return "pilot";
+  }
+  return "unknown";
+}
+
 [[nodiscard]] auto travel_phase_name(IntersystemTravelPhase value)
     -> std::string_view {
   switch (value) {
@@ -462,6 +471,19 @@ template <typename Id>
                                  "unknown intersystem mission phase")};
 }
 
+[[nodiscard]] auto read_rule_profile(const Json& parent,
+                                     std::string_view name,
+                                     std::string path)
+    -> std::expected<IntersystemRuleProfile, SaveSchemaError> {
+  auto value = read_string(parent, name, path);
+  if (!value) return std::unexpected{value.error()};
+  if (*value == "assisted") return IntersystemRuleProfile::assisted;
+  if (*value == "pilot") return IntersystemRuleProfile::pilot;
+  return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                 std::format("{}.{}", path, name),
+                                 "unknown intersystem rule profile")};
+}
+
 [[nodiscard]] auto read_travel_phase(const Json& parent,
                                      std::string_view name,
                                      std::string path)
@@ -589,6 +611,7 @@ template <typename Id>
       {"universe_tick", decimal(state.universe_tick)},
       {"mission_phase", mission_phase_name(state.mission_phase)},
       {"travel_phase", travel_phase_name(state.travel_phase)},
+      {"rule_profile", rule_profile_name(state.rule_profile)},
       {"current_system_id", encoded_id("system-", state.current_system)},
       {"current_planet_id", std::move(current_planet)},
       {"committed_jump_destination_id", std::move(committed_destination)},
@@ -612,6 +635,11 @@ template <typename Id>
       read_mission_phase(json, "mission_phase", std::string{path});
   auto travel_phase =
       read_travel_phase(json, "travel_phase", std::string{path});
+  std::expected<IntersystemRuleProfile, SaveSchemaError> rule_profile{
+      IntersystemRuleProfile::assisted};
+  if (format_version >= 8U) {
+    rule_profile = read_rule_profile(json, "rule_profile", std::string{path});
+  }
   auto current_system = read_id<SystemId>(json, "current_system_id",
                                           std::string{path}, "system-");
   auto current_planet = read_optional_id<PlanetId>(
@@ -624,6 +652,7 @@ template <typename Id>
   if (!universe_tick) return std::unexpected{universe_tick.error()};
   if (!mission_phase) return std::unexpected{mission_phase.error()};
   if (!travel_phase) return std::unexpected{travel_phase.error()};
+  if (!rule_profile) return std::unexpected{rule_profile.error()};
   if (!current_system) return std::unexpected{current_system.error()};
   if (!current_planet) return std::unexpected{current_planet.error()};
   if (!destination) return std::unexpected{destination.error()};
@@ -742,6 +771,7 @@ template <typename Id>
       .universe_tick = *universe_tick,
       .mission_phase = *mission_phase,
       .travel_phase = *travel_phase,
+      .rule_profile = *rule_profile,
       .current_system = *current_system,
       .current_planet = *current_planet,
       .committed_jump_destination = *destination,
@@ -1543,6 +1573,7 @@ auto decode_save_document_json(std::string_view json_text)
   if (*format_version != 1U && *format_version != 2U &&
       *format_version != 3U && *format_version != 4U &&
       *format_version != 5U && *format_version != 6U &&
+      *format_version != 7U &&
       *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -1635,7 +1666,7 @@ auto decode_save_document_json(std::string_view json_text)
   if (!origin_return_version) {
     return std::unexpected{origin_return_version.error()};
   }
-  const SaveGeneratorVersions versions{
+  SaveGeneratorVersions versions{
       .seed_derivation = *seed_version,
       .planet_descriptor = *planet_version,
       .terrain_tiles = *terrain_version,
@@ -1649,6 +1680,15 @@ auto decode_save_document_json(std::string_view json_text)
       .system_flight = *system_flight_version,
       .origin_return = *origin_return_version,
   };
+  if (*format_version >= 3U && *format_version <= 7U) {
+    if (versions.intersystem_contract != 1U) {
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::incompatible_generator_version,
+                  "$.recipe.generator_versions.intersystem_contract",
+                  "released save format requires intersystem contract version 1")};
+    }
+    versions.intersystem_contract = kIntersystemContractVersion;
+  }
   if (versions != current_save_generator_versions()) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
