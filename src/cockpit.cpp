@@ -360,6 +360,48 @@ auto format_flight_instruments(const SystemFlightState& state)
   return readout;
 }
 
+auto format_flight_instruments(const OriginReturnState& state)
+    -> FlightInstrumentReadout {
+  FlightInstrumentReadout readout;
+  const double speed = std::hypot(state.velocity.x, state.velocity.y,
+                                  state.velocity.z);
+  const bool valid = std::isfinite(state.forward.x) &&
+                     std::isfinite(state.forward.y) &&
+                     std::isfinite(state.forward.z) && std::isfinite(speed) &&
+                     valid_mode(state.mode);
+  if (!valid) {
+    return {.heading = "HDG ---  ", .altitude = "SYS ---- ",
+            .clearance = "DOCK --- ", .speed = "SPD ---  ",
+            .mode = "MODE ----", .drive = "THR ---- ",
+            .alert = "TELEM ERR",
+            .alert_state = CockpitAlert::invalid_telemetry};
+  }
+  double heading = std::fmod(
+      std::atan2(state.forward.y, state.forward.x) * kRadiansToDegrees,
+      360.0);
+  if (heading < 0.0) heading += 360.0;
+  readout.heading = std::format(
+      "HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
+  readout.altitude = "SYS RTN  ";
+  readout.clearance = "DOCK ARMED";
+  readout.speed = format_speed(speed);
+  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
+                                                      : "MODE MAN ";
+  const bool maneuver = state.controls.turn_left || state.controls.turn_right ||
+                        state.controls.strafe_left ||
+                        state.controls.strafe_right || state.controls.rise ||
+                        state.controls.fall;
+  readout.drive = state.mode == FlightMode::autopilot
+                      ? "THR AUTO "
+                      : (state.controls.forward
+                             ? "THR FWD  "
+                             : (state.controls.backward
+                                    ? "BRAKING  "
+                                    : (maneuver ? "THR MANUV" : "COAST    ")));
+  readout.alert = std::string(kInstrumentLineWidth, ' ');
+  return readout;
+}
+
 auto format_flight_regime(const PlanetaryFlightState& state)
     -> FlightRegimeReadout {
   FlightRegimeReadout readout;

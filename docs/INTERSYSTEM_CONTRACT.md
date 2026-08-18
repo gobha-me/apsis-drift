@@ -174,11 +174,17 @@ world delta for the contract's immutable objective. Earlier intersystem
 formats that already recorded completion materialize that already-earned delta
 during migration; no location, tick, target, or mission phase is advanced.
 
+The v0.4.12 return path extends the projection as version 7. A cancelable
+return spool retains its frozen target-system craft state, committed transit
+does not, and origin arrival creates one matching station-approach state.
+Docking removes that craft state and changes the mission to `returned`; only
+the separate mission-board action changes it to `turned_in`.
+
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 through 5 remain readable. Formats 1 and 2 retain their saved
+Formats 1 through 6 remain readable. Formats 1 and 2 retain their saved
 origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
@@ -186,8 +192,9 @@ not moved to system ordinal 1, assigned a generated jump, or given synthetic
 mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. A released format-4
 target arrival initializes mutable flight from its already-bound immutable
-arrival solution. Released format-5 system flight remains exact. Older readers
-must reject format 6 before discarding any of these fields.
+arrival solution. Released format-5 system flight and format-6 Planetfall state
+remain exact. Older readers must reject format 7 before discarding any of these
+fields.
 
 ## Implementation boundaries
 
@@ -202,7 +209,8 @@ must reject format 6 before discarding any of these fields.
   guidance, and the preserved planet handoff described in
   [Deterministic Sub-light System Flight](SYSTEM_FLIGHT.md).
 - #87 preserves entry-anywhere Planetfall and objective identity.
-- #88 implements explicit return, docking, and turn-in.
+- The v0.4.12 [return path](INTERSYSTEM_RETURN.md) implements #88's explicit
+  departure, home jump, docking, and turn-in.
 - #89 composes the complete deterministic acceptance path.
 
 None of those systems may move terminal protocol handling into the game or

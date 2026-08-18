@@ -78,6 +78,7 @@ enum class SystemFlightError : std::uint8_t {
   tick_overflow,
   coordinate_failure,
   orbit_insertion_refused,
+  planet_departure_refused,
 };
 
 [[nodiscard]] auto initial_system_flight_state(
@@ -104,6 +105,12 @@ enum class SystemFlightError : std::uint8_t {
 [[nodiscard]] auto insert_system_flight_orbit(
     const LocalSystemDescriptor& system, const SystemFlightState& state)
     -> std::expected<PlanetaryFlightState, SystemFlightError>;
+
+// Converts an orbital planet-fixed craft state back into system-inertial
+// flight without changing the authoritative tick or mission target.
+[[nodiscard]] auto depart_planetary_orbit(
+    const LocalSystemDescriptor& system, const PlanetaryFlightState& state)
+    -> std::expected<SystemFlightState, SystemFlightError>;
 
 [[nodiscard]] auto system_flight_state_checksum(
     const SystemFlightState& state) noexcept -> std::uint64_t;

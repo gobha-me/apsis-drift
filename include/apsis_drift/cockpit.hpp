@@ -8,6 +8,7 @@
 #include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/system_flight.hpp"
+#include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "termforge/core/types.hpp"
 
@@ -111,6 +112,8 @@ struct CockpitLayout {
     const PlanetaryFlightState& state) -> FlightInstrumentReadout;
 [[nodiscard]] auto format_flight_instruments(
     const SystemFlightState& state) -> FlightInstrumentReadout;
+[[nodiscard]] auto format_flight_instruments(
+    const OriginReturnState& state) -> FlightInstrumentReadout;
 
 // Build cockpit-ready fixed-width regime and most-recent-transition lines.
 // Presentation decides when and where to show them; simulation remains the

@@ -283,6 +283,8 @@ auto make_legacy_signal_run_document(Seed universe_seed) -> SaveDocument {
               .first_objective = FirstObjectiveStatus::offered,
               .first_objective_target = {},
               .flight = std::nullopt,
+              .system_flight = std::nullopt,
+              .origin_return = std::nullopt,
               .discoveries = {},
               .world_deltas = {},
               .intersystem_contract = std::nullopt,

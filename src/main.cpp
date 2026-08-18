@@ -38,11 +38,13 @@
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
 #include "apsis_drift/intersystem_planetfall.hpp"
 #include "apsis_drift/intersystem_planetfall_acceptance.hpp"
+#include "apsis_drift/intersystem_return_acceptance.hpp"
 #include "apsis_drift/landscape.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/mission_board.hpp"
 #include "apsis_drift/orbital.hpp"
+#include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
@@ -66,6 +68,15 @@ namespace {
 using Clock = std::chrono::steady_clock;
 using namespace termforge;
 using namespace apsis_drift;
+
+template <typename ScreenType>
+auto clear_screen(ScreenType& screen, const Cell& fill) -> void {
+  if constexpr (requires { screen.clear(fill); }) {
+    screen.clear(fill);
+  } else {
+    screen.clear(fill.fg, fill.bg, fill.attrs);
+  }
+}
 
 struct FrameSample {
   std::uint64_t bytes{};
@@ -356,6 +367,8 @@ class LandscapeApp final : public App {
       if (profile->state.intersystem_contract) {
         m_intersystem_contract = *profile->state.intersystem_contract;
         m_system_flight = profile->state.system_flight;
+        m_origin_return = profile->state.origin_return;
+        m_intersystem_world_deltas = profile->state.world_deltas;
         if (profile->state.flight) {
           auto cache = TerrainTileCache::create();
           const auto body = find_local_system_planet(
@@ -501,7 +514,7 @@ class LandscapeApp final : public App {
 
     Cell background;
     background.bg = {7, 15, 24};
-    screen.clear(background);
+    clear_screen(screen, background);
     const Extent one_cell = driver().preferred_pixel_extent({0, 0, 1, 1});
     const auto layout = compute_cockpit_layout(
         screen.cols(), screen.rows(), one_cell,
@@ -658,6 +671,9 @@ class LandscapeApp final : public App {
     return m_display_tier;
   }
   [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
+    if (m_origin_return) {
+      return origin_return_state_checksum(*m_origin_return);
+    }
     if (m_system_flight) {
       return system_flight_state_checksum(*m_system_flight);
     }
@@ -708,6 +724,7 @@ class LandscapeApp final : public App {
       auto document = *m_save_profile;
       document.state.intersystem_contract = *m_intersystem_contract;
       document.state.system_flight = m_system_flight;
+      document.state.origin_return = m_origin_return;
       document.state.flight =
           m_intersystem_planetfall
               ? std::optional<PlanetaryFlightState>{
@@ -717,6 +734,8 @@ class LandscapeApp final : public App {
         document.state.world_deltas = std::vector<SaveWorldDelta>{
             m_intersystem_planetfall->journal.entries().begin(),
             m_intersystem_planetfall->journal.entries().end()};
+      } else {
+        document.state.world_deltas = m_intersystem_world_deltas;
       }
       return document;
     }
@@ -827,6 +846,9 @@ class LandscapeApp final : public App {
       } else if (m_system_flight) {
         m_input_mapper.suspend(m_system_flight->controls,
                                m_system_flight->tick);
+      } else if (m_origin_return) {
+        m_input_mapper.suspend(m_origin_return->controls,
+                               m_origin_return->tick);
       } else if (m_intersystem_planetfall) {
         m_input_mapper.suspend(m_intersystem_planetfall->flight.controls,
                                m_intersystem_planetfall->flight.tick);
@@ -962,7 +984,7 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "FIRST CONTRACT // v0.4.9", "CONTINUE");
+    draw_menu(screen, "FIRST CONTRACT // v0.4.12", "CONTINUE");
   }
 
   auto draw_station_screen(Screen& screen) -> void {
@@ -1089,6 +1111,8 @@ class LandscapeApp final : public App {
             ? format_flight_instruments(m_signal_scenario->flight)
             : m_system_flight
             ? format_flight_instruments(*m_system_flight)
+            : m_origin_return
+            ? format_flight_instruments(*m_origin_return)
             : m_intersystem_planetfall
                   ? format_flight_instruments(
                         m_intersystem_planetfall->flight)
@@ -1160,7 +1184,43 @@ class LandscapeApp final : public App {
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 2, "TARGET", accent,
                       chrome_bg);
-    if (m_system_render) {
+    if (m_origin_return && m_intersystem_contract) {
+      const auto guidance = resolve_origin_return_guidance(
+          *m_intersystem_contract, *m_origin_return);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 4, "ORIGIN STN", text,
+                        chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 6, "BRG CENTER", text,
+                        chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 8, "ELEV 000 ", text,
+                        chrome_bg);
+      screen.write_text(
+          layout.right_instruments.x + 2, layout.right_instruments.y + 10,
+          guidance ? std::format("DST {:>5.0f}", guidance->distance_metres)
+                   : "DST ---- ",
+          text, chrome_bg);
+      screen.write_text(
+          layout.right_instruments.x + 2, layout.right_instruments.y + 12,
+          guidance ? std::format(
+                         "CLS {:+5.0f}",
+                         guidance->closing_speed_metres_per_second)
+                   : "CLS ---- ",
+          guidance && (guidance->cue == OriginReturnCue::opening ||
+                       guidance->cue == OriginReturnCue::brake)
+              ? warning
+              : text,
+          chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 14,
+                        guidance && guidance->arrived ? "ETA ARRVD" : "ETA --:--",
+                        text, chrome_bg);
+      screen.write_text(layout.right_instruments.x + 2,
+                        layout.right_instruments.y + 16,
+                        guidance && guidance->arrived ? "ENTER DOCK" : "APPROACH ",
+                        accent, chrome_bg);
+    } else if (m_system_render) {
       const auto guidance = m_system_flight
                                 ? resolve_system_flight_guidance(
                                       m_local_system, *m_system_flight)
@@ -1303,7 +1363,7 @@ class LandscapeApp final : public App {
       if (m_intersystem_planetfall->collection.status ==
           SignalCollectionStatus::complete) {
         message = flight.regime == FlightRegime::orbital
-                      ? " OBJECTIVE COMPLETE | ORBIT ACHIEVED "
+                      ? " OBJECTIVE COMPLETE | ENTER DEPART PLANET "
                       : " OBJECTIVE COMPLETE | ASCEND TO ORBIT WITH R ";
       } else if (flight.regime == FlightRegime::orbital) {
         message = std::format(
@@ -1321,6 +1381,25 @@ class LandscapeApp final : public App {
       message = std::format(" {} | {} | {:3.0f}% | {} ", jump.phase,
                             jump.destination, jump.progress * 100.0,
                             jump.cancelable ? "J CANCEL" : "ARRIVAL BOUND");
+    } else if (m_origin_return && m_intersystem_contract) {
+      const auto guidance = resolve_origin_return_guidance(
+          *m_intersystem_contract, *m_origin_return);
+      if (guidance) {
+        std::string_view cue{"HOLD"};
+        switch (guidance->cue) {
+          case OriginReturnCue::closing: cue = "CLOSING"; break;
+          case OriginReturnCue::opening: cue = "OPENING"; break;
+          case OriginReturnCue::brake: cue = "BRAKE NOW"; break;
+          case OriginReturnCue::arrived: cue = "ENTER DOCK"; break;
+          case OriginReturnCue::hold: break;
+        }
+        message = std::format(
+            " ORIGIN STATION {:.0f} m | CLS {:+.0f} m/s | {} ",
+            guidance->distance_metres,
+            guidance->closing_speed_metres_per_second, cue);
+      } else {
+        message = " ORIGIN STATION GUIDANCE INVALID ";
+      }
     } else if (m_system_render) {
       const auto guidance = m_system_flight
                                 ? resolve_system_flight_guidance(
@@ -1370,6 +1449,8 @@ class LandscapeApp final : public App {
                          ? m_signal_scenario->flight.mode
                          : m_system_flight
                          ? m_system_flight->mode
+                         : m_origin_return
+                         ? m_origin_return->mode
                          : (m_intersystem_planetfall
                                 ? m_intersystem_planetfall->flight.mode
                             : (m_planetary_flight
@@ -1415,7 +1496,7 @@ class LandscapeApp final : public App {
           }
           auto planetfall = initialize_intersystem_planetfall(
               (*body)->descriptor, next_contract.identities.target_objective,
-              *orbital, {}, *cache);
+              *orbital, m_intersystem_world_deltas, *cache);
           if (!planetfall) {
             m_error = "target Planetfall initialization was rejected";
             return;
@@ -1429,18 +1510,78 @@ class LandscapeApp final : public App {
         }
         if (key.action == KeyAction::Press && key.key == Key::Char &&
             (key.ch == U'j' || key.ch == U'J')) {
-          m_error = "complete the planet objective before the return jump";
+          if (m_intersystem_contract->travel_phase ==
+              IntersystemTravelPhase::return_jump_spooling) {
+            if (!cancel_assisted_jump(*m_intersystem_contract)) {
+              m_error = "return jump cancellation was rejected";
+              return;
+            }
+            m_system_flight->tick = m_intersystem_contract->universe_tick;
+            m_system_flight->controls = {};
+          } else if (m_intersystem_contract->mission_phase ==
+                         IntersystemMissionPhase::objective_complete &&
+                     begin_assisted_jump(*m_intersystem_contract)) {
+            m_system_flight->controls = {};
+            m_input_mapper.suspend({},
+                                   m_intersystem_contract->universe_tick);
+          } else {
+            m_error = "complete the planet objective before the return jump";
+          }
           return;
         }
         m_input_mapper.enqueue(key, m_system_flight->tick, true);
         return;
       }
       if (m_intersystem_planetfall) {
+        if (key.key == Key::Enter && key.action == KeyAction::Press &&
+            m_intersystem_planetfall->flight.regime == FlightRegime::orbital) {
+          auto departed = depart_planetary_orbit(
+              m_local_system, m_intersystem_planetfall->flight);
+          auto next_contract = *m_intersystem_contract;
+          if (!departed ||
+              !advance_intersystem_contract(
+                  next_contract, next_contract.universe_tick,
+                  IntersystemContractCommand::leave_target_planet)) {
+            m_error = "planet departure requires a valid orbital state";
+            return;
+          }
+          m_intersystem_world_deltas.assign(
+              m_intersystem_planetfall->journal.entries().begin(),
+              m_intersystem_planetfall->journal.entries().end());
+          m_intersystem_contract = std::move(next_contract);
+          m_system_flight = std::move(*departed);
+          m_intersystem_planetfall.reset();
+          m_intersystem_planetfall_cache.reset();
+          m_input_mapper.suspend({}, m_system_flight->tick);
+          return;
+        }
         // The briefing binds one immutable objective; target-selection keys
         // cannot retarget the intersystem mission.
         if (apsis_drift::detail::signal_selection_command(key)) return;
         m_input_mapper.enqueue(key,
                                m_intersystem_planetfall->flight.tick);
+        return;
+      }
+      if (m_origin_return) {
+        if (key.key == Key::Enter && key.action == KeyAction::Press) {
+          const auto guidance = resolve_origin_return_guidance(
+              *m_intersystem_contract, *m_origin_return);
+          auto next_contract = *m_intersystem_contract;
+          if (!guidance || !guidance->arrived ||
+              !advance_intersystem_contract(
+                  next_contract, next_contract.universe_tick,
+                  IntersystemContractCommand::dock_at_origin)) {
+            m_error = "reach the Origin Station rendezvous before docking";
+            return;
+          }
+          m_intersystem_contract = std::move(next_contract);
+          m_origin_return.reset();
+          (void)m_session.dock_at_station();
+          m_simulation_clock.reset();
+          m_active_mouse_region = {};
+          return;
+        }
+        m_input_mapper.enqueue(key, m_origin_return->tick, true);
         return;
       }
       if (key.action != KeyAction::Press || key.key != Key::Char ||
@@ -1539,6 +1680,16 @@ class LandscapeApp final : public App {
               throw std::runtime_error{"cannot initialize target-system flight"};
             }
             m_system_flight = std::move(*flight);
+          } else if (advanced->arrived && !outbound) {
+            auto returning = initialize_origin_return(*m_intersystem_contract);
+            if (!returning) {
+              throw std::runtime_error{
+                  "cannot initialize Origin Station return flight"};
+            }
+            m_origin_return = std::move(*returning);
+          }
+          if (advanced->committed && !outbound) {
+            m_system_flight.reset();
           }
         } else if (m_system_flight) {
           auto next_flight = *m_system_flight;
@@ -1578,7 +1729,22 @@ class LandscapeApp final : public App {
             throw std::runtime_error{
                 "target objective completion was rejected"};
           }
+          if (advanced->objective_completed) {
+            m_intersystem_world_deltas.assign(
+                next_planetfall.journal.entries().begin(),
+                next_planetfall.journal.entries().end());
+          }
           m_intersystem_planetfall = std::move(next_planetfall);
+          m_intersystem_contract = std::move(next_contract);
+        } else if (m_origin_return) {
+          auto next_return = *m_origin_return;
+          auto next_contract = *m_intersystem_contract;
+          auto commands = m_input_mapper.take_commands(next_return.tick);
+          if (!advance_origin_return(next_contract, next_return, commands) ||
+              !advance_intersystem_time(next_contract, 1)) {
+            throw std::runtime_error{"Origin Station return flight failed"};
+          }
+          m_origin_return = std::move(next_return);
           m_intersystem_contract = std::move(next_contract);
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"universe clock failed"};
@@ -1696,6 +1862,11 @@ class LandscapeApp final : public App {
         camera_velocity = m_system_flight->velocity;
         forward = m_system_flight->forward;
         up = m_system_flight->up;
+      } else if (m_origin_return && m_origin_return->system == system.id) {
+        camera_position = m_origin_return->position;
+        camera_velocity = m_origin_return->velocity;
+        forward = m_origin_return->forward;
+        up = m_origin_return->up;
       }
       const PlanetId selected =
           at_target ? m_intersystem_contract->identities.target_planet
@@ -1711,7 +1882,7 @@ class LandscapeApp final : public App {
           .time = {m_intersystem_contract->universe_tick, 0.0},
           .position = camera_position,
           .velocity = camera_velocity,
-          .forward = m_system_flight
+          .forward = (m_system_flight || m_origin_return)
                          ? forward
                          : SystemDirection{
                                selected_ephemeris->position.x - camera_position.x,
@@ -1729,6 +1900,12 @@ class LandscapeApp final : public App {
         throw std::runtime_error{"intersystem presentation rejected frame"};
       }
       m_system_render = *rendered;
+      if (m_origin_return &&
+          !render_origin_station_marker(
+              m_render_configuration.viewport.width,
+              m_render_configuration.viewport.height, m_surface.pixels())) {
+        throw std::runtime_error{"origin station marker rejected frame"};
+      }
       return;
     }
     if (m_signal_run && m_signal_run->flight) {
@@ -1914,6 +2091,7 @@ class LandscapeApp final : public App {
   PlanetarySurfaceFixture m_planetary_surface;
   std::optional<PlanetaryFlightState> m_planetary_flight;
   std::optional<SystemFlightState> m_system_flight;
+  std::optional<OriginReturnState> m_origin_return;
   std::optional<TerrainTileCache> m_intersystem_planetfall_cache;
   std::optional<IntersystemPlanetfallState> m_intersystem_planetfall;
   std::optional<LocalSystemRenderStats> m_system_render;
@@ -1923,6 +2101,7 @@ class LandscapeApp final : public App {
   std::optional<SignalRunState> m_signal_run;
   std::optional<SaveDocument> m_save_profile;
   std::optional<IntersystemContractState> m_intersystem_contract;
+  std::vector<SaveWorldDelta> m_intersystem_world_deltas;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
@@ -2133,6 +2312,8 @@ auto usage() -> void {
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --intersystem-planetfall-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "       apsis-drift --intersystem-return-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME] [--snapshot PATH]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -2163,6 +2344,7 @@ auto main(int argc, char** argv) -> int {
   bool intersystem_jump_acceptance{};
   bool system_flight_acceptance{};
   bool intersystem_planetfall_acceptance{};
+  bool intersystem_return_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -2254,6 +2436,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--intersystem-planetfall-acceptance") {
       intersystem_planetfall_acceptance = true;
+      continue;
+    }
+    if (argument == "--intersystem-return-acceptance") {
+      intersystem_return_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -2393,6 +2579,33 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (intersystem_return_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       system_flight_acceptance || intersystem_planetfall_acceptance ||
+       profile_options || seed_specified || workload_specified ||
+       keyboard_specified)) {
+    std::fprintf(stderr,
+                 "Intersystem return acceptance is mutually exclusive with "
+                 "other run, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (intersystem_return_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "Intersystem return acceptance requires --driver kitty "
+                 "or --driver ansi\n");
+    return 2;
+  }
+  if (intersystem_return_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Intersystem return acceptance requires --report PATH\n");
+    return 2;
+  }
   if (intersystem_planetfall_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -2659,6 +2872,46 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (intersystem_return_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_intersystem_return_acceptance(
+          configuration.viewport.width, configuration.viewport.height);
+      if (!acceptance) {
+        std::fprintf(stderr, "Intersystem return acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      const std::string_view presentation =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << intersystem_return_acceptance_json(acceptance->report,
+                                                    presentation);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "intersystem-return: presentation=%.*s docking=%llu checksum=%llu\n",
+          static_cast<int>(presentation.size()), presentation.data(),
+          static_cast<unsigned long long>(acceptance->report.docking_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.docked_return_checksum));
+      return 0;
+    }
     if (intersystem_planetfall_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

@@ -42,6 +42,12 @@ relative position and velocity into geodetic and local east/north/up values.
 The resulting `PlanetaryFlightState` retains the arrival side, altitude,
 velocity, and heading; it never moves the craft above the mission objective.
 
+The v0.4.12 reverse handoff accepts only a valid orbital planetary state. It
+applies the inverse planet spin and tangent-frame transform at the same
+authoritative tick, restores a system-inertial craft state targeting the same
+planet, and permits later re-entry without changing mission or world-delta
+identity.
+
 ## Persistence and verification
 
 The system-flight projection introduced by save format 5 records finite

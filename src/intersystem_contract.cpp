@@ -366,7 +366,9 @@ auto advance_intersystem_contract(IntersystemContractState& state,
       break;
     case IntersystemContractCommand::enter_target_planet:
       if (next.travel_phase != IntersystemTravelPhase::target_system_flight ||
-          next.mission_phase != IntersystemMissionPhase::active) {
+          (next.mission_phase != IntersystemMissionPhase::active &&
+           next.mission_phase !=
+               IntersystemMissionPhase::objective_complete)) {
         return reject();
       }
       next.travel_phase = IntersystemTravelPhase::target_planet_flight;
