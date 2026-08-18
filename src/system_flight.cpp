@@ -167,6 +167,7 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
   }
   return SystemFlightGuidance{
       .target = state.target,
+      .target_radius_metres = *radius,
       .distance_metres = distance,
       .closing_speed_metres_per_second = closing,
       .relative_speed_metres_per_second = relative_speed,

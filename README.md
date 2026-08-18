@@ -54,6 +54,7 @@ cmake -S . -B build \
 
 ```bash
 ./build/apsis-drift
+./build/apsis-drift --version
 ```
 
 Choose an explicit save profile for an interactive run:
@@ -130,8 +131,9 @@ Interactive controls:
   the next correction before J can still cancel the spool
 - Target-system flight: W/S thrust or brake, A/D turn, Q/E strafe, R/F rise
   or fall, Space toggles direct target assist, and `[`/`]` selects 1x/4x/16x
-  time compression outside the six-radius approach boundary; press Enter when
-  the cockpit reports `ORBIT RDY`
+  time compression outside the six-radius approach boundary; the cockpit shows
+  the active mode, time scale, and approach cue. Press Enter only when it
+  reports `ORBIT RDY`; an early attempt lists every unmet insertion threshold.
 - Planet return: ascend to the orbital regime and press Enter to depart the
   planet; after completing the objective, press J in target-system flight to
   spool the home jump

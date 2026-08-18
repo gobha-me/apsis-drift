@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.15 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.16 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
+
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/apsis_drift/version.hpp.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/version.hpp"
+  @ONLY
+)
 
 option(APSIS_DRIFT_TESTS "Build the Apsis Drift tests" ON)
 set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
@@ -126,7 +132,9 @@ add_library(apsis_drift_lib STATIC
 add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
 target_include_directories(apsis_drift_lib
-  PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 target_compile_features(apsis_drift_lib PUBLIC cxx_std_23)
@@ -148,6 +156,9 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_definitions(apsis-drift-tests PRIVATE
     APSIS_DRIFT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
+  add_test(NAME version-report COMMAND apsis-drift --version)
+  set_tests_properties(version-report PROPERTIES
+    PASS_REGULAR_EXPRESSION "apsis-drift ${PROJECT_VERSION}")
 
   add_test(NAME benchmark-profile-remote
     COMMAND apsis-drift --benchmark 1 --profile remote)

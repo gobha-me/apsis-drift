@@ -53,6 +53,7 @@ struct SystemFlightState {
 
 struct SystemFlightGuidance {
   PlanetId target;
+  double target_radius_metres{};
   double distance_metres{};
   double closing_speed_metres_per_second{};
   double relative_speed_metres_per_second{};

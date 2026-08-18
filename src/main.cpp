@@ -60,6 +60,7 @@
 #include "apsis_drift/system_flight_acceptance.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/title.hpp"
+#include "apsis_drift/version.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
 #include "signal_input.hpp"
@@ -1002,7 +1003,9 @@ class LandscapeApp final : public App {
           std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen, "FIRST CONTRACT // v0.4.14", "CONTINUE");
+    draw_menu(screen,
+              std::format("FIRST CONTRACT // v{}", kApplicationVersion),
+              "CONTINUE");
   }
 
   auto draw_station_screen(Screen& screen) -> void {
@@ -1424,6 +1427,10 @@ class LandscapeApp final : public App {
                               jump.cancelable ? "J CANCEL"
                                               : "ARRIVAL BOUND");
       }
+    } else if (m_intersystem_contract &&
+               m_intersystem_contract->travel_phase ==
+                   IntersystemTravelPhase::origin_system_flight) {
+      message = " FTL READY | J BEGIN 3-SECOND SPOOL | J AGAIN TO CANCEL ";
     } else if (m_origin_return && m_intersystem_contract) {
       const auto guidance = resolve_origin_return_guidance(
           *m_intersystem_contract, *m_origin_return);
@@ -1451,20 +1458,10 @@ class LandscapeApp final : public App {
                                                 SystemFlightError>{
                                       std::unexpected{
                                           SystemFlightError::invalid_state}};
-      const auto navigation = guidance
-                                  ? format_system_navigation(
-                                        m_system_render->navigation, *guidance)
-                                  : format_system_navigation(
-                                        m_system_render->navigation);
-      message = std::format(
-          " SYSTEM {} | {} | {} | {} | {} | [] time | ENTER insert ",
-          (m_intersystem_contract &&
-                   m_intersystem_contract->current_system ==
-                       m_intersystem_contract->identities.origin_system
-               ? m_origin_system.star.display_name
-               : m_local_system.star.display_name),
-          navigation.target,
-          navigation.distance, navigation.arrival, navigation.cue);
+      message = guidance && m_system_flight
+                    ? format_system_flight_status(*m_system_flight, *guidance)
+                          .message
+                    : " SYSTEM GUIDANCE INVALID ";
     } else {
       message = layout.mode == CockpitLayoutMode::wide
                     ? " L-hold fly | R-hold strafe/alt | M-click auto | "
@@ -1515,11 +1512,16 @@ class LandscapeApp final : public App {
     if (m_intersystem_contract) {
       if (m_system_flight) {
         if (key.key == Key::Enter && key.action == KeyAction::Press) {
+          const auto guidance = resolve_system_flight_guidance(
+              m_local_system, *m_system_flight);
           auto orbital =
               insert_system_flight_orbit(m_local_system, *m_system_flight);
           if (!orbital) {
-            m_error = "orbit insertion requires <=3 radii, <=4 km/s, and "
-                      "<=250 m/s radial";
+            m_error = guidance
+                          ? format_system_flight_status(*m_system_flight,
+                                                        *guidance)
+                                .insertion_refusal
+                          : " INSERT BLOCKED | GUIDANCE INVALID ";
             return;
           }
           auto next_contract = *m_intersystem_contract;
@@ -1548,6 +1550,7 @@ class LandscapeApp final : public App {
           m_intersystem_planetfall_cache.emplace(std::move(*cache));
           m_intersystem_planetfall.emplace(std::move(*planetfall));
           m_system_flight.reset();
+          m_error.clear();
           m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
           return;
         }
@@ -1561,10 +1564,12 @@ class LandscapeApp final : public App {
             }
             m_system_flight->tick = m_intersystem_contract->universe_tick;
             m_system_flight->controls = {};
+            m_error.clear();
           } else if (m_intersystem_contract->mission_phase ==
                          IntersystemMissionPhase::objective_complete &&
                      begin_intersystem_jump(*m_intersystem_contract)) {
             m_system_flight->controls = {};
+            m_error.clear();
             m_input_mapper.suspend({},
                                    m_intersystem_contract->universe_tick);
           } else {
@@ -1572,6 +1577,7 @@ class LandscapeApp final : public App {
           }
           return;
         }
+        if (key.action != KeyAction::Release) m_error.clear();
         m_input_mapper.enqueue(key, m_system_flight->tick, true);
         return;
       }
@@ -1651,6 +1657,7 @@ class LandscapeApp final : public App {
       if (!changed) {
         m_error = "jump command refused in the current state";
       } else {
+        m_error.clear();
         m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
       }
       return;
@@ -2355,7 +2362,8 @@ template <typename T>
 
 auto usage() -> void {
   std::puts(
-      "Usage: apsis-drift [--seed N] [--profile NAME] "
+      "Usage: apsis-drift --version\n"
+      "       apsis-drift [--seed N] [--profile NAME] "
       "[--viewport WIDTHxHEIGHT]\n"
       "                   [--load PATH | --new-game-seed N] [--save PATH]\n"
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
@@ -2404,6 +2412,13 @@ auto usage() -> void {
 }  // namespace
 
 auto main(int argc, char** argv) -> int {
+  if (argc == 2 && std::string_view{argv[1]} == "--version") {
+    std::printf("apsis-drift %.*s\n",
+                static_cast<int>(kApplicationVersion.size()),
+                kApplicationVersion.data());
+    return 0;
+  }
+
   std::optional<int> benchmark_frames;
   std::optional<int> sweep_frames;
   int capture_seconds = 0;

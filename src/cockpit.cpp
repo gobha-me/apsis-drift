@@ -716,4 +716,83 @@ auto format_system_navigation(const SystemNavigationSolution& navigation,
   return result;
 }
 
+auto format_system_flight_status(const SystemFlightState& state,
+                                 const SystemFlightGuidance& guidance)
+    -> SystemFlightStatusReadout {
+  const auto valid_scale = [](SystemTimeScale scale) {
+    return scale == SystemTimeScale::one || scale == SystemTimeScale::four ||
+           scale == SystemTimeScale::sixteen;
+  };
+  const bool valid = valid_mode(state.mode) && valid_scale(state.time_scale) &&
+                     std::isfinite(guidance.target_radius_metres) &&
+                     guidance.target_radius_metres > 0.0 &&
+                     std::isfinite(guidance.distance_metres) &&
+                     guidance.distance_metres >= 0.0 &&
+                     std::isfinite(guidance.closing_speed_metres_per_second) &&
+                     std::isfinite(guidance.relative_speed_metres_per_second) &&
+                     guidance.relative_speed_metres_per_second >= 0.0;
+  if (!valid) {
+    return {.message = " SYSTEM GUIDANCE INVALID ",
+            .insertion_refusal = " INSERT BLOCKED | GUIDANCE INVALID ",
+            .insertion_ready = false};
+  }
+
+  const auto mode =
+      state.mode == FlightMode::autopilot ? "AUTO HOLD" : "MANUAL";
+  const auto scale = system_time_scale_value(state.time_scale);
+  std::string_view cue{"HOLD"};
+  switch (guidance.cue) {
+    case SystemFlightCue::hold: break;
+    case SystemFlightCue::closing: cue = "CLOSING"; break;
+    case SystemFlightCue::opening: cue = "OPENING"; break;
+    case SystemFlightCue::brake: cue = "BRAKE NOW"; break;
+    case SystemFlightCue::orbit_ready: cue = "ORBIT RDY"; break;
+  }
+
+  SystemFlightStatusReadout result{
+      .message = guidance.orbit_insertion_ready
+                     ? std::format(" ORBIT RDY | ENTER INSERT ORBIT | {} | {}x ",
+                                   mode, scale)
+                     : std::format(
+                           " {} | {}x | {} | [] time | SPACE mode | WAIT ORBIT RDY ",
+                           mode, scale, cue),
+      .insertion_refusal = " INSERT BLOCKED",
+      .insertion_ready = guidance.orbit_insertion_ready,
+  };
+  if (guidance.orbit_insertion_ready) {
+    result.insertion_refusal.clear();
+    return result;
+  }
+
+  const double distance_radii =
+      guidance.distance_metres / guidance.target_radius_metres;
+  const double altitude_metres =
+      guidance.distance_metres - guidance.target_radius_metres;
+  if (altitude_metres < kMinimumFlightClearanceMetres) {
+    result.insertion_refusal += std::format(
+        " | ALT {:.0f}<16m", altitude_metres);
+  }
+  if (distance_radii > kSystemOrbitInsertionRadiusRadii) {
+    result.insertion_refusal +=
+        std::format(" | RNG {:.1f}R>3R", distance_radii);
+  }
+  if (guidance.relative_speed_metres_per_second >
+      kSystemOrbitInsertionMaximumSpeed) {
+    result.insertion_refusal += std::format(
+        " | REL {:.1f}k>4k",
+        guidance.relative_speed_metres_per_second / 1'000.0);
+  }
+  const double radial_speed =
+      std::abs(guidance.closing_speed_metres_per_second);
+  if (radial_speed > kSystemOrbitInsertionMaximumRadialSpeed) {
+    result.insertion_refusal +=
+        std::format(" | RAD {:.0f}>250m/s", radial_speed);
+  }
+  if (result.insertion_refusal == " INSERT BLOCKED") {
+    result.insertion_refusal += " | OUTSIDE SAFE CORRIDOR";
+  }
+  result.insertion_refusal += " ";
+  return result;
+}
+
 }  // namespace apsis_drift
