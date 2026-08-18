@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 2 is a deterministic JSON document. It keeps
+Apsis Drift save format version 3 is a deterministic JSON document. It keeps
 the generated-world recipe separate from mutable player state and does not
 serialize terrain tiles, render state, terminal capabilities, preferences, or
 other reproducible presentation data.
@@ -30,25 +30,31 @@ remove the temporary file. A directory-synchronization failure is reported as
 a durability error after replacement rather than pretending the old file was
 retained.
 
-The current v0.4 flyover resolves this profile plumbing and persists only on a
-clean exit. The complete Signal Run in #24 owns projection of gameplay changes
-back into the mutable profile fields.
+The application persists only on a clean exit. The complete legacy Signal Run
+owns projection of its gameplay changes; the first intersystem mission board
+projects its authoritative contract state independently.
 
 ## Document shape
 
 Every document has three required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `2` for newly written saves;
+- `format_version` is the unsigned JSON integer `3` for newly written saves;
 - `recipe` and `state` are required objects.
 
 The recipe records the universe seed, origin-system and active-planet
-ordinals, the seed, planet, terrain-tile, origin-station, surface-signal, and
-local-sun generator versions, plus the expected regenerated station and planet
-IDs. Version 2 supports origin-system ordinal zero and any unsigned
-active-planet ordinal.
+ordinals, the seed, planet, terrain-tile, origin-station, surface-signal,
+local-sun, local-system, analytic-ephemeris, and intersystem-contract versions,
+plus the expected regenerated station and planet IDs.
 
-The mutable state records:
+`state.career_kind` selects one of two explicit projections:
+
+- `legacy_signal_run` retains the version 1/2 local planetary state;
+- `intersystem_contract` records the first-contract identities, universe tick,
+  mission/travel phases, current system/planet, committed destination, and
+  phase-start tick.
+
+Legacy mutable state records:
 
 - docked or in-flight location;
 - the First Signal Run status and bound target signal;
@@ -57,10 +63,9 @@ The mutable state records:
 - unique discovered signal records;
 - an ordered sparse world-delta journal.
 
-The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) is the
-canonical representative document and is reproduced byte-for-byte by the
-encoder. [`save-v1-golden.json`](../test/data/save-v1-golden.json) remains the
-legacy migration fixture.
+The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) and
+[`save-v1-golden.json`](../test/data/save-v1-golden.json) remain legacy
+migration fixtures. Newly encoded documents are canonical version 3.
 
 ## Encodings
 
@@ -69,9 +74,9 @@ strings. Zero is `"0"`; leading zeroes and signs are invalid. This avoids loss
 in JSON consumers whose numeric representation cannot exactly hold every
 64-bit integer.
 
-Stable IDs retain their existing canonical forms: `station-`, `planet-`, or
-`signal-` followed by exactly sixteen lowercase hexadecimal digits. Enums use
-the lowercase snake-case names emitted in the golden fixture.
+Stable IDs retain their canonical forms: `system-`, `star-`, `mission-`,
+`station-`, `planet-`, or `signal-` followed by exactly sixteen lowercase
+hexadecimal digits. Enums use lowercase snake-case names.
 
 Authoritative floating-point state is encoded as a finite decimal string with
 enough significant digits to reproduce the exact binary64 value. The encoder
@@ -90,19 +95,21 @@ behavior, and unknown-object policy are specified in the
 
 ## Validation and compatibility
 
-All version 1 fields are required. Unknown fields in otherwise supported JSON
-objects are ignored and discarded when the document is rewritten; this lets
+All fields for a selected supported format are required. Unknown fields in
+otherwise supported JSON objects are ignored and discarded when the document
+is rewritten; this lets
 new optional diagnostics travel through older readers without changing game
 state. Duplicate object keys are rejected rather than resolved by ordering.
 Unknown enum values and delta kinds are rejected because silently dropping
 their semantics could resurrect or duplicate generated content.
 
-Formats 1 and 2 and the generator versions compiled into the current build are
-supported. Version 1 is decoded with local-sun generator version 1 and rewrites
-as version 2 on the next explicit save. Other format versions fail as
-unsupported; other generator versions fail as incompatible. Older builds
-reject version 2 before reading fields, so they cannot silently discard the
-new compatibility version.
+Formats 1, 2, and 3 and the generator versions compiled into the current build
+are supported. Version 1 is decoded with local-sun generator version 1; formats
+1 and 2 rewrite as version 3 on the next explicit save. They remain
+`legacy_signal_run` careers and are never assigned the intersystem contract.
+Other format versions fail as unsupported and other generator versions fail as
+incompatible. Older builds reject version 3 before reading fields, so they
+cannot silently discard the new mission state.
 
 Local-sun geometry is regenerated from the active planet's independent
 celestial stream and the saved authoritative flight tick. The direction is not
@@ -121,13 +128,10 @@ The decoder accepts at most 1 MiB, 4,096 discoveries, 16,384 journal entries,
 and 128 bytes per object key. These are format bounds, not a target size;
 normal early saves should remain in the kilobyte range.
 
-## Planned intersystem format
+## Intersystem staging
 
-The current contract-only intersystem work does not change this format or its
-golden fixtures. The first implementation that persists system travel will use
-format version 3 for stable system/mission identities, one authoritative
-universe tick, the active location representation, and committed-jump state.
-Formats 1 and 2 will migrate as legacy origin-system Signal Runs without
-teleporting, retargeting, or synthesizing progress. The complete projection and
-presentation exclusions are specified in the
-[Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
+Version 3 reserves the full high-level travel-state envelope, but v0.4.7 fresh
+careers expose only offered and accepted mission-board states. FTL arrival
+solutions, system-space craft poses, and planetary handoffs enter only with the
+issues that implement those systems. Camera state, terminal capabilities,
+render profiles, caches, and presentation progress remain excluded.

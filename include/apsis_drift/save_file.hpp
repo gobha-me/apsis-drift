@@ -36,6 +36,8 @@ struct SaveFileError {
 
 [[nodiscard]] auto make_new_game_document(Seed universe_seed)
     -> SaveDocument;
+[[nodiscard]] auto make_legacy_signal_run_document(Seed universe_seed)
+    -> SaveDocument;
 
 [[nodiscard]] auto load_save_file(const std::filesystem::path& path)
     -> std::expected<SaveDocument, SaveFileError>;

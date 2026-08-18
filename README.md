@@ -68,11 +68,11 @@ New-game seeds use the full unsigned 64-bit range, including zero. A profile is
 loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
-their deterministic Origin Station; in-flight profiles restore the exact
-planetary craft, objective, discoveries, and compact world-delta journal.
-New writes use save format version 2 and record local-sun generator
-compatibility. Version 1 profiles load normally and migrate to version 2 on
-their next explicit save.
+their deterministic Origin Station with one bounded intersystem contract.
+Legacy in-flight profiles restore the exact planetary craft, objective,
+discoveries, and compact world-delta journal. New writes use save format
+version 3; version 1 and 2 profiles load as legacy local Signal Runs and
+migrate to version 3 without being teleported or retargeted.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -165,6 +165,13 @@ both Kitty and ANSI paths. Angular-size impostors blend into the existing
 orbital planet renderer during approach without changing target identity. The
 projection, overlap, handoff, and measurement rules are documented in
 [docs/SYSTEM_RENDERING.md](docs/SYSTEM_RENDERING.md).
+
+The v0.4.7 Origin Station mission board binds one deterministic mission,
+target system, planet, and existing surface-signal objective. Its semantic
+briefing and acceptance state are shared by Kitty and ANSI, persist in save
+format 3, and authorize the later launch route without implementing FTL or
+sub-light flight early. The exact boundary is documented in
+[docs/MISSION_BOARD.md](docs/MISSION_BOARD.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact

@@ -406,6 +406,7 @@ auto project_signal_run_save(const SignalRunState& state)
               .discoveries = state.discoveries,
               .world_deltas = {state.journal.entries().begin(),
                                state.journal.entries().end()},
+              .intersystem_contract = std::nullopt,
           },
   };
   if (!consistent_loaded_state(state) || !validate_save_document(document)) {
