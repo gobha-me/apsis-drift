@@ -52,5 +52,5 @@ The existing `--signal-navigation-acceptance` route now continues through the
 collection dwell. It reaches target `signal-945eaa623b2b8497` at tick `1072`,
 releases forward thrust, completes at tick `1491`, and emits one `collected`
 delta. Both supported presentations report authoritative flight checksum
-`4086686148596456340`; framebuffer and timing fields remain presentation-only
+`17407832030238464473`; framebuffer and timing fields remain presentation-only
 diagnostics.

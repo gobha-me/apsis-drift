@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "scenario": "v0.4.17-pilot-thermal-reentry",
+  "presentation": "ansi",
+  "planet_id": "planet-a1dc72d8fd111fbb",
+  "target_id": "signal-9936ac67f2245d20",
+  "entries": [
+    {"name": "correct-side", "terrain_tick": "13526", "flight_checksum": "3373146089180912027", "latitude_radians": 0.40066331259554033, "longitude_radians": 0.21279335991880632},
+    {"name": "early", "terrain_tick": "13705", "flight_checksum": "7216854357076586787", "latitude_radians": 0.40066331259563087, "longitude_radians": 1.7835896867137029},
+    {"name": "opposite-side", "terrain_tick": "13934", "flight_checksum": "5891354715947044230", "latitude_radians": -0.40066331259543958, "longitude_radians": -2.9287992936709868}
+  ],
+  "abort_orbit_tick": "3577",
+  "abort_orbit_checksum": "15160466842829483543",
+  "completion_tick": "1020",
+  "completed_flight_checksum": "1601798018321500146",
+  "world_delta_count": 1,
+  "thermal": {"universe_seed": "39", "planet_id": "planet-237709a6a1fd198b", "nominal_peak_load_units": 374, "shallow_peak_load_units": 58770, "manual_correction_peak_load_units": 35130, "assisted_peak_load_units": 1000000, "forced_abort_tick": "803", "recovery_orbit_tick": "11764", "deliberate_reentry_tick": "13108", "resumed_recovery_checksum": "12793732928174323102"},
+  "framebuffer_checksum": "15634582835738947125"
+}

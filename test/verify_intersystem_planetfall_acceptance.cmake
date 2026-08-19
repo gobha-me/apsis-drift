@@ -31,32 +31,54 @@ function(check_intersystem_planetfall driver)
     endif ()
     set("${field}" "${value}")
   endforeach ()
+  foreach(field universe_seed planet_id nominal_peak_load_units shallow_peak_load_units
+                manual_correction_peak_load_units assisted_peak_load_units
+                forced_abort_tick recovery_orbit_tick deliberate_reentry_tick
+                resumed_recovery_checksum)
+    string(JSON thermal_${field} ERROR_VARIABLE json_error
+      GET "${json}" thermal "${field}")
+    if (json_error)
+      message(FATAL_ERROR
+        "${driver} thermal field '${field}' failed to parse: ${json_error}")
+    endif ()
+  endforeach ()
   string(JSON entry_count LENGTH "${json}" entries)
   foreach(index RANGE 0 2)
     string(JSON entry_name_${index} GET "${json}" entries ${index} name)
     string(JSON entry_tick_${index} GET "${json}" entries ${index} terrain_tick)
     string(JSON entry_checksum_${index} GET "${json}" entries ${index} flight_checksum)
   endforeach ()
-  if (NOT schema_version STREQUAL "1" OR
-      NOT scenario STREQUAL "v0.4.11-entry-anywhere-planetfall" OR
+  if (NOT schema_version STREQUAL "2" OR
+      NOT scenario STREQUAL "v0.4.17-pilot-thermal-reentry" OR
       NOT presentation STREQUAL "${driver}" OR
       NOT planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT target_id STREQUAL "signal-9936ac67f2245d20" OR
       NOT entry_count STREQUAL "3" OR
       NOT entry_name_0 STREQUAL "correct-side" OR
       NOT entry_tick_0 STREQUAL "13526" OR
-      NOT entry_checksum_0 STREQUAL "17705752855609448626" OR
+      NOT entry_checksum_0 STREQUAL "3373146089180912027" OR
       NOT entry_name_1 STREQUAL "early" OR
       NOT entry_tick_1 STREQUAL "13705" OR
-      NOT entry_checksum_1 STREQUAL "16196634877403872426" OR
+      NOT entry_checksum_1 STREQUAL "7216854357076586787" OR
       NOT entry_name_2 STREQUAL "opposite-side" OR
       NOT entry_tick_2 STREQUAL "13934" OR
-      NOT entry_checksum_2 STREQUAL "459017227781827419" OR
+      NOT entry_checksum_2 STREQUAL "5891354715947044230" OR
       NOT abort_orbit_tick STREQUAL "3577" OR
-      NOT abort_orbit_checksum STREQUAL "7537708600294715479" OR
+      NOT abort_orbit_checksum STREQUAL "15160466842829483543" OR
       NOT completion_tick STREQUAL "1020" OR
-      NOT completed_flight_checksum STREQUAL "5463503741755767666" OR
+      NOT completed_flight_checksum STREQUAL "1601798018321500146" OR
       NOT world_delta_count STREQUAL "1" OR
+      NOT thermal_universe_seed STREQUAL "39" OR
+      NOT thermal_planet_id STREQUAL "planet-237709a6a1fd198b" OR
+      NOT thermal_nominal_peak_load_units STREQUAL "374" OR
+      NOT thermal_shallow_peak_load_units STREQUAL "58770" OR
+      NOT thermal_manual_correction_peak_load_units STREQUAL "35130" OR
+      NOT thermal_assisted_peak_load_units STREQUAL "1000000" OR
+      NOT thermal_forced_abort_tick STREQUAL "803" OR
+      NOT thermal_recovery_orbit_tick STREQUAL "11764" OR
+      NOT thermal_deliberate_reentry_tick STREQUAL "13108" OR
+      NOT thermal_resumed_recovery_checksum STREQUAL
+          "12793732928174323102" OR
       NOT framebuffer_checksum STREQUAL "15634582835738947125")
     message(FATAL_ERROR
       "${driver} intersystem Planetfall report is not canonical:\n${json}")
@@ -68,6 +90,8 @@ function(check_intersystem_planetfall driver)
   set("${driver}_flight" "${completed_flight_checksum}" PARENT_SCOPE)
   set("${driver}_frame" "${framebuffer_checksum}" PARENT_SCOPE)
   set("${driver}_snapshot" "${snapshot_sha}" PARENT_SCOPE)
+  set("${driver}_thermal" "${thermal_resumed_recovery_checksum}"
+      PARENT_SCOPE)
   set("${driver}_json" "${json}" PARENT_SCOPE)
 endfunction ()
 
@@ -77,6 +101,7 @@ if (NOT ansi_abort_tick STREQUAL kitty_abort_tick OR
     NOT ansi_abort STREQUAL kitty_abort OR
     NOT ansi_completion STREQUAL kitty_completion OR
     NOT ansi_flight STREQUAL kitty_flight OR
+    NOT ansi_thermal STREQUAL kitty_thermal OR
     NOT ansi_frame STREQUAL kitty_frame OR
     NOT ansi_snapshot STREQUAL kitty_snapshot)
   message(FATAL_ERROR

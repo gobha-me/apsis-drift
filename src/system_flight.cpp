@@ -476,6 +476,7 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       .controls = {},
       .regime = FlightRegime::orbital,
       .last_transition = std::nullopt,
+      .thermal = {},
   };
   if (!validate_planetary_flight_state((*body)->descriptor, result)) {
     return std::unexpected{SystemFlightError::coordinate_failure};

@@ -15,8 +15,9 @@
 namespace apsis_drift {
 
 inline constexpr std::uint64_t kIntersystemPlanetfallAcceptanceSeed{42};
+inline constexpr std::uint64_t kPilotThermalAcceptanceSeed{39};
 inline constexpr std::string_view kIntersystemPlanetfallAcceptanceScenario{
-    "v0.4.11-entry-anywhere-planetfall"};
+    "v0.4.17-pilot-thermal-reentry"};
 
 struct IntersystemPlanetfallEntryMeasurement {
   std::string name;
@@ -31,6 +32,23 @@ struct IntersystemPlanetfallEntryMeasurement {
       -> bool = default;
 };
 
+struct PilotThermalAcceptanceMeasurement {
+  Seed universe_seed{Seed{kPilotThermalAcceptanceSeed}};
+  PlanetId planet;
+  std::uint32_t nominal_peak_load_units{};
+  std::uint32_t shallow_peak_load_units{};
+  std::uint32_t manual_correction_peak_load_units{};
+  std::uint32_t assisted_peak_load_units{};
+  SimulationTick forced_abort_tick{};
+  SimulationTick recovery_orbit_tick{};
+  SimulationTick deliberate_reentry_tick{};
+  std::uint64_t resumed_recovery_checksum{};
+
+  friend auto operator==(const PilotThermalAcceptanceMeasurement&,
+                         const PilotThermalAcceptanceMeasurement&)
+      -> bool = default;
+};
+
 struct IntersystemPlanetfallAcceptanceReport {
   PlanetId planet;
   SurfaceSignalId target;
@@ -40,6 +58,7 @@ struct IntersystemPlanetfallAcceptanceReport {
   SimulationTick completion_tick{};
   std::uint64_t completed_flight_checksum{};
   std::size_t world_delta_count{};
+  PilotThermalAcceptanceMeasurement thermal;
   std::uint64_t framebuffer_checksum{};
 };
 

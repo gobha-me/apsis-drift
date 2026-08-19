@@ -639,7 +639,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v9 round trip");
+        "a committed arrival solution must survive a canonical v10 round trip");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -954,10 +954,10 @@ auto intersystem_jump_contract() -> void {
 
   auto pilot_v8_document = make_new_game_document(Seed{42});
   pilot_v8_document.state.intersystem_contract = pilot;
-  const auto pilot_v9_json = encode_save_document_json(pilot_v8_document);
-  if (pilot_v9_json) {
-    auto pilot_v8_json = replace_once(*pilot_v9_json,
-                                      "\"format_version\": 9",
+  const auto pilot_v10_json = encode_save_document_json(pilot_v8_document);
+  if (pilot_v10_json) {
+    auto pilot_v8_json = replace_once(*pilot_v10_json,
+                                      "\"format_version\": 10",
                                       "\"format_version\": 8");
     pilot_v8_json = replace_once(std::move(pilot_v8_json),
                                  "\"intersystem_contract\": 3",
@@ -1252,10 +1252,10 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v9 save/resume exactly");
+        "system flight must survive canonical v10 save/resume exactly");
   if (encoded && contract.arrival_solution) {
     auto released_v4 = replace_once(
-        *encoded, "\"format_version\": 9", "\"format_version\": 4");
+        *encoded, "\"format_version\": 10", "\"format_version\": 4");
     released_v4 = replace_once(std::move(released_v4),
                                "\"intersystem_contract\": 3",
                                "\"intersystem_contract\": 1");
@@ -1395,7 +1395,7 @@ auto intersystem_return_contract() -> void {
         "format 8 must preserve the exact origin-station approach state");
   if (encoded) {
     auto released_v6 = replace_once(
-        *encoded, "\"format_version\": 9", "\"format_version\": 6");
+        *encoded, "\"format_version\": 10", "\"format_version\": 6");
     released_v6 = replace_once(std::move(released_v6),
                                "\"intersystem_contract\": 3",
                                "\"intersystem_contract\": 1");
@@ -1420,7 +1420,7 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(result && result->report.checkpoints.size() == 6U &&
             result->report.final_tick == 31'535U &&
             result->report.final_authoritative_checksum ==
-                10'761'875'017'770'641'381ULL &&
+                11'076'438'379'560'989'059ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -1492,10 +1492,69 @@ auto intersystem_planetfall_contract() -> void {
         "Planetfall must bind the mission target without retargeting it");
   if (!planetfall) return;
 
+  auto pilot_contract = initial_intersystem_contract_state(Seed{42});
+  const auto pilot_command = [&](IntersystemContractCommand command) {
+    return advance_intersystem_contract(
+        pilot_contract, pilot_contract.universe_tick, command);
+  };
+  check(pilot_command(IntersystemContractCommand::select_pilot_profile) &&
+            pilot_command(IntersystemContractCommand::accept_mission) &&
+            pilot_command(IntersystemContractCommand::launch) &&
+            pilot_command(IntersystemContractCommand::begin_outbound_jump) &&
+            advance_intersystem_time(pilot_contract, kJumpSpoolTicks) &&
+            pilot_command(IntersystemContractCommand::commit_outbound_jump) &&
+            advance_intersystem_time(pilot_contract, kJumpTransitTicks) &&
+            pilot_command(IntersystemContractCommand::arrive_target_system) &&
+            pilot_command(IntersystemContractCommand::enter_target_planet),
+        "the thermal persistence fixture must reach Pilot Planetfall");
+  auto thermal_document = make_new_game_document(Seed{42});
+  thermal_document.state.intersystem_contract = pilot_contract;
+  thermal_document.state.flight = planetfall->flight;
+  thermal_document.state.flight->tick = pilot_contract.universe_tick;
+  thermal_document.state.flight->thermal = {825'000U, true};
+  const auto thermal_json = encode_save_document_json(thermal_document);
+  const auto thermal_restored =
+      thermal_json
+          ? decode_save_document_json(*thermal_json)
+          : std::expected<SaveDocument, SaveSchemaError>{
+                std::unexpected{SaveSchemaError{}}};
+  check(thermal_restored && thermal_restored->state.flight &&
+            thermal_restored->state.flight->thermal ==
+                PlanetaryThermalState{825'000U, true},
+        "save format 10 must preserve an active Pilot thermal abort exactly");
+  if (thermal_json) {
+    const auto corrupt_thermal = decode_save_document_json(replace_once(
+        *thermal_json, "\"load_units\": 825000",
+        "\"load_units\": 1000001"));
+    check(!corrupt_thermal &&
+              corrupt_thermal.error().code ==
+                  SaveSchemaErrorCode::invalid_state,
+          "out-of-range persisted thermal load must be rejected");
+
+    auto released_v9 = replace_once(*thermal_json,
+                                    "\"format_version\": 10",
+                                    "\"format_version\": 9");
+    const auto thermal_start = released_v9.find("      \"thermal\": {");
+    const auto thermal_end =
+        thermal_start == std::string::npos
+            ? std::string::npos
+            : released_v9.find("      },", thermal_start);
+    if (thermal_start != std::string::npos &&
+        thermal_end != std::string::npos) {
+      released_v9.erase(thermal_start,
+                        thermal_end + 9U - thermal_start);
+    }
+    const auto migrated_v9 = decode_save_document_json(released_v9);
+    check(migrated_v9 && migrated_v9->state.flight &&
+              migrated_v9->state.flight->thermal == PlanetaryThermalState{},
+          "released format 9 flight must migrate to zero thermal load without inventing history");
+  }
+
   bool completed{};
   for (SimulationTick tick = 0;
        tick < kSignalCollectionTotalInRangeTicks; ++tick) {
-    const auto update = advance_intersystem_planetfall(*planetfall, *cache, {});
+    const auto update = advance_intersystem_planetfall(
+        *planetfall, *cache, {}, IntersystemRuleProfile::assisted);
     if (!update) {
       check(false, "Planetfall must advance transactionally");
       return;
@@ -1553,8 +1612,32 @@ auto intersystem_planetfall_acceptance_contract() -> void {
             result->report.target == identities.target_objective &&
             result->report.world_delta_count == 1U &&
             result->report.completion_tick == 1020 &&
+            result->report.thermal.universe_seed == Seed{39} &&
+            result->report.thermal.planet ==
+                PlanetId{0x237709a6a1fd198bULL} &&
+            result->report.thermal.nominal_peak_load_units == 374U &&
+            result->report.thermal.shallow_peak_load_units == 58'770U &&
+            result->report.thermal.manual_correction_peak_load_units ==
+                35'130U &&
+            result->report.thermal.assisted_peak_load_units ==
+                kMaximumThermalLoadUnits &&
+            result->report.thermal.forced_abort_tick == 803U &&
+            result->report.thermal.recovery_orbit_tick == 11'764U &&
+            result->report.thermal.deliberate_reentry_tick == 13'108U &&
+            result->report.thermal.resumed_recovery_checksum ==
+                12'793'732'928'174'323'102ULL &&
             result->final_frame.size() == 96U * 64U,
-        "canonical Planetfall acceptance must enter anywhere, abort, collect, save, and render");
+        "canonical Planetfall acceptance must enter anywhere, measure thermal envelopes, recover, reenter, save, and render");
+  if (result) {
+    const auto json =
+        intersystem_planetfall_acceptance_json(result->report, "kitty");
+    check(json.find("\"schema_version\": 2") != std::string::npos &&
+              json.find("\"scenario\": \"v0.4.17-pilot-thermal-reentry\"") !=
+                  std::string::npos &&
+              json.find("\"presentation\": \"kitty\"") !=
+                  std::string::npos,
+          "thermal Planetfall JSON must retain versioned semantic presentation fields");
+  }
 }
 
 auto mission_board_contract() -> void {
@@ -1607,7 +1690,7 @@ auto mission_board_contract() -> void {
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
   if (fresh_json) {
-    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 9",
+    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 10",
                                     "\"format_version\": 3");
     released_v3 = replace_once(std::move(released_v3),
                                "\"intersystem_contract\": 3",
@@ -1626,9 +1709,9 @@ auto mission_board_contract() -> void {
     check(migrated_v3 &&
               migrated_v3->state.intersystem_contract ==
                   document.state.intersystem_contract &&
-              rewritten_v3 && rewritten_v3->find("\"format_version\": 9") !=
+              rewritten_v3 && rewritten_v3->find("\"format_version\": 10") !=
                                     std::string::npos,
-          "released v3 intersystem profiles must default to Assisted and rewrite as v9");
+          "released v3 intersystem profiles must default to Assisted and rewrite as v10");
 
     auto pilot_document = make_new_game_document(Seed{42});
     const auto selected = advance_intersystem_contract(
@@ -1645,7 +1728,7 @@ auto mission_board_contract() -> void {
               pilot_round_trip &&
               pilot_round_trip->state.intersystem_contract->rule_profile ==
                   IntersystemRuleProfile::pilot,
-          "format v9 must preserve the authoritative Pilot selection");
+          "format v10 must preserve the authoritative Pilot selection");
     if (pilot_json) {
       const auto invalid_profile = decode_save_document_json(replace_once(
           *pilot_json, "\"rule_profile\": \"pilot\"",
@@ -1655,9 +1738,9 @@ auto mission_board_contract() -> void {
                     SaveSchemaErrorCode::invalid_value &&
                 invalid_profile.error().path ==
                     "$.state.intersystem_contract.rule_profile",
-            "format v9 must reject unknown rule profiles before state commit");
+            "format v10 must reject unknown rule profiles before state commit");
 
-      auto released_v7 = replace_once(*pilot_json, "\"format_version\": 9",
+      auto released_v7 = replace_once(*pilot_json, "\"format_version\": 10",
                                       "\"format_version\": 7");
       released_v7 = replace_once(std::move(released_v7),
                                  "\"intersystem_contract\": 3",
@@ -1675,7 +1758,7 @@ auto mission_board_contract() -> void {
                     IntersystemRuleProfile::assisted,
             "released format v7 must normalize contract version 1 and default to Assisted");
 
-      auto dishonest_v7 = replace_once(*pilot_json, "\"format_version\": 9",
+      auto dishonest_v7 = replace_once(*pilot_json, "\"format_version\": 10",
                                        "\"format_version\": 7");
       dishonest_v7 = replace_once(std::move(dishonest_v7),
                                   "\"rule_profile\": \"pilot\",\n", "");
@@ -1754,15 +1837,15 @@ auto mission_board_contract() -> void {
           message);
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
-             "offered intersystem state must survive a v9 round trip");
-  round_trip(state, "accepted intersystem state must survive a v9 round trip");
+             "offered intersystem state must survive a v10 round trip");
+  round_trip(state, "accepted intersystem state must survive a v10 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
   };
   check(command(IntersystemContractCommand::launch).has_value(),
         "the accepted mission fixture must launch");
-  round_trip(state, "active intersystem state must survive a v9 round trip");
+  round_trip(state, "active intersystem state must survive a v10 round trip");
   check(command(IntersystemContractCommand::begin_outbound_jump).has_value() &&
             advance_intersystem_time(state, kJumpSpoolTicks).has_value() &&
             command(IntersystemContractCommand::commit_outbound_jump)
@@ -1776,10 +1859,10 @@ auto mission_board_contract() -> void {
                 .has_value(),
         "the persistence fixture must reach objective completion legally");
   round_trip(state,
-             "objective-complete intersystem state must survive a v9 round trip");
-  const auto completed_v9 = encode_save_document_json(document);
-  if (completed_v9) {
-    auto released_v5 = replace_once(*completed_v9, "\"format_version\": 9",
+             "objective-complete intersystem state must survive a v10 round trip");
+  const auto completed_v10 = encode_save_document_json(document);
+  if (completed_v10) {
+    auto released_v5 = replace_once(*completed_v10, "\"format_version\": 10",
                                     "\"format_version\": 5");
     released_v5 = replace_once(std::move(released_v5),
                                "\"intersystem_contract\": 3",
@@ -1806,7 +1889,7 @@ auto mission_board_contract() -> void {
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v9 completion must require its bound collected delta");
+        "format v10 completion must require its bound collected delta");
   check(command(IntersystemContractCommand::leave_target_planet).has_value() &&
             command(IntersystemContractCommand::begin_return_jump)
                 .has_value() &&
@@ -1818,10 +1901,10 @@ auto mission_board_contract() -> void {
                 .has_value() &&
             command(IntersystemContractCommand::dock_at_origin).has_value(),
         "the persistence fixture must return legally");
-  round_trip(state, "returned intersystem state must survive a v9 round trip");
+  round_trip(state, "returned intersystem state must survive a v10 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),
         "the persistence fixture must turn in legally");
-  round_trip(state, "turned-in intersystem state must survive a v9 round trip");
+  round_trip(state, "turned-in intersystem state must survive a v10 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -2477,9 +2560,9 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 9 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 10 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 9 identity and byte bound must remain stable");
+        "save format version 10 identity and byte bound must remain stable");
   const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
   const auto fixture = read_test_data("test/data/save-v2-golden.json");
   check(!legacy_fixture.empty() && !fixture.empty(),
@@ -2508,6 +2591,7 @@ auto save_schema_contract() -> void {
                           FlightRegimeTransition{FlightRegime::orbital,
                                                  FlightRegime::atmospheric,
                                                  1000},
+                      .thermal = {},
                   },
               .system_flight = std::nullopt,
               .origin_return = std::nullopt,
@@ -2528,11 +2612,11 @@ auto save_schema_contract() -> void {
   check(decoded && *decoded == expected,
         "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 9") !=
+  check(encoded && encoded->find("\"format_version\": 10") !=
                        std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must migrate legacy state into canonical version 9");
+        "the current encoder must migrate legacy state into canonical version 10");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected,
@@ -2541,7 +2625,7 @@ auto save_schema_contract() -> void {
   const auto migrated = decode_save_document_json(legacy_fixture);
   check(migrated && *migrated == expected &&
             encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 9");
+        "a version 1 save must migrate in memory and rewrite canonically as version 10");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -2572,13 +2656,13 @@ auto save_schema_contract() -> void {
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 10"),
+                   "\"format_version\": 11"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":10}",
+      "{\"application\":\"apsis-drift\",\"format_version\":11}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 9 fields are read");
+        "future formats must be identified before version 10 fields are read");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 2",
                    "\"format_version\": \"1\""),
@@ -3363,6 +3447,7 @@ auto signal_scanner_contract() -> void {
       .controls = {},
       .regime = FlightRegime::terrain_flight,
       .last_transition = std::nullopt,
+      .thermal = {},
   };
   const auto reached = resolve_signal_navigation(
       planet, *catalog, flight, target_selection);
@@ -3882,7 +3967,7 @@ auto signal_navigation_acceptance_contract() -> void {
   const auto second_checksum = planetary_flight_state_checksum(second->flight);
   constexpr SimulationTick expected_reached_tick{1'072};
   constexpr SimulationTick expected_completion_tick{1'491};
-  constexpr std::uint64_t expected_flight_checksum{4086686148596456340ULL};
+  constexpr std::uint64_t expected_flight_checksum{17407832030238464473ULL};
   check(first->reached_tick == expected_reached_tick &&
             first->flight.tick == expected_completion_tick &&
             first_checksum == expected_flight_checksum &&
@@ -5701,7 +5786,7 @@ auto deterministic_planetary_flight_replay() -> void {
   const auto at_60 = replay_planetary_at_render_rate(*fixture, 60);
   const auto actual_checksum =
       planetary_flight_state_checksum(fixture->expected);
-  constexpr std::uint64_t expected_checksum{10230861453511211273ULL};
+  constexpr std::uint64_t expected_checksum{5033951390750856009ULL};
   if (actual_checksum != expected_checksum) {
     std::fprintf(stderr, "planetary replay checksum: %llu\n",
                  static_cast<unsigned long long>(actual_checksum));
@@ -5796,6 +5881,142 @@ auto planetary_flight_failure_matrix() -> void {
             planet, {0.0, 0.0, 15.0}, environment, 0.0,
             FlightMode::manual),
         "initial state below minimum clearance must be rejected");
+}
+
+auto thermal_reentry_contract() -> void {
+  const auto dense = planet_with_atmosphere(
+      generate_planet_descriptor(Seed{0x7E4A1U}), AtmosphereClass::dense,
+      AtmospherePressureMillibars::max);
+  const auto temperate = planet_with_atmosphere(
+      dense, AtmosphereClass::temperate, 800);
+  const PlanetaryFlightEnvironment environment{};
+  auto initialized = initial_planetary_flight_state(
+      dense, {0.1, -0.2, 40'000.0}, environment, 0.0,
+      FlightMode::manual);
+  check(initialized.has_value(),
+        "the thermal reentry fixture must initialize in atmosphere");
+  if (!initialized) return;
+
+  initialized->velocity = {400.0, 0.0, -1'500.0};
+  initialized->controls.fall = true;
+  const auto dense_assessment =
+      resolve_thermal_assessment(dense, *initialized);
+  auto slower = *initialized;
+  slower.velocity = {250.0, 0.0, -150.0};
+  const auto slow_assessment = resolve_thermal_assessment(dense, slower);
+  auto temperate_state = *initialized;
+  temperate_state.planet = temperate.id;
+  const auto temperate_assessment =
+      resolve_thermal_assessment(temperate, temperate_state);
+  check(dense_assessment && slow_assessment && temperate_assessment &&
+            dense_assessment->trend == ThermalTrend::heating &&
+            dense_assessment->cue == ThermalCue::slow_and_rise &&
+            dense_assessment->load_change_per_second >
+                slow_assessment->load_change_per_second &&
+            dense_assessment->load_change_per_second >
+                temperate_assessment->load_change_per_second,
+        "faster, steeper, denser entry must produce stronger thermal loading");
+
+  auto assisted = *initialized;
+  for (int tick = 0; tick < 240; ++tick) {
+    if (!advance_planetary_flight(dense, environment, assisted, {},
+                                  kSimulationStep)) {
+      check(false, "Assisted thermal entry must advance");
+      return;
+    }
+  }
+  check(assisted.thermal.load_units == kMaximumThermalLoadUnits &&
+            !assisted.thermal.abort_latched,
+        "Assisted must teach the thermal limit without forcing an abort");
+
+  auto invalid_assisted_latch = assisted;
+  invalid_assisted_latch.thermal.abort_latched = true;
+  const auto invalid_assisted_before = invalid_assisted_latch;
+  check(!advance_planetary_flight(dense, environment,
+                                  invalid_assisted_latch, {},
+                                  kSimulationStep) &&
+            invalid_assisted_latch == invalid_assisted_before,
+        "Assisted must reject a Pilot-only abort latch transactionally");
+
+  auto resumed_at_limit = assisted;
+  resumed_at_limit.controls.fall = true;
+  check(advance_planetary_flight(
+            dense, environment, resumed_at_limit, {}, kSimulationStep,
+            {.enforce_thermal_abort = true}) &&
+            resumed_at_limit.thermal.abort_latched,
+        "Pilot must honor an exact-limit resumed state before cooling it");
+
+  auto pilot = *initialized;
+  std::optional<SimulationTick> abort_tick;
+  for (int tick = 0; tick < 1'000 && !abort_tick; ++tick) {
+    if (!advance_planetary_flight(
+            dense, environment, pilot, {}, kSimulationStep,
+            {.enforce_thermal_abort = true})) {
+      check(false, "Pilot thermal entry must advance");
+      return;
+    }
+    if (pilot.thermal.abort_latched) abort_tick = pilot.tick;
+  }
+  const auto abort_readout = format_thermal_instruments(dense, pilot);
+  check(abort_tick && pilot.thermal.load_units == kMaximumThermalLoadUnits &&
+            pilot.thermal.abort_latched && abort_readout.valid &&
+            abort_readout.load == "HEAT 100%" &&
+            abort_readout.trend == "TEMP +   " &&
+            abort_readout.limit == "LIM 100% " &&
+            abort_readout.flight_path_angle.size() == kInstrumentLineWidth &&
+            abort_readout.flight_path_angle.starts_with("FPA -") &&
+            abort_readout.cue == "ABRT CLMB",
+        "Pilot must latch one textual, information-complete forced skip-out");
+
+  bool recovered{};
+  for (int tick = 0; tick < 30'000; ++tick) {
+    if (!advance_planetary_flight(
+            dense, environment, pilot, {}, kSimulationStep,
+            {.enforce_thermal_abort = true})) {
+      check(false, "the Pilot skip-out must remain controllable");
+      return;
+    }
+    if (pilot.regime == FlightRegime::orbital &&
+        !pilot.thermal.abort_latched) {
+      recovered = true;
+      break;
+    }
+  }
+  check(recovered && !pilot.controls.fall &&
+            pilot.velocity.up_metres_per_second >= 0.0 &&
+            pilot.thermal.load_units < kMaximumThermalLoadUnits,
+        "the forced skip-out must cool, reach orbit, and require deliberate reentry input");
+
+  const auto airless = planet_with_atmosphere(
+      dense, AtmosphereClass::airless, 0);
+  auto cooling = initial_planetary_flight_state(
+      airless, {0.1, -0.2, 30'000.0}, environment, 0.0,
+      FlightMode::manual);
+  check(cooling.has_value(), "the airless cooling fixture must initialize");
+  if (cooling) {
+    cooling->thermal.load_units = 500'000U;
+    const auto before = cooling->thermal.load_units;
+    for (int tick = 0; tick < 120; ++tick) {
+      check(advance_planetary_flight(airless, environment, *cooling, {},
+                                     kSimulationStep)
+                .has_value(),
+            "airless cooling must remain finite");
+    }
+    check(cooling->thermal.load_units < before,
+          "sustained cooling must reduce thermal load predictably");
+  }
+
+  auto invalid = *initialized;
+  invalid.thermal.load_units = kMaximumThermalLoadUnits + 1U;
+  const auto invalid_checksum = planetary_flight_state_checksum(invalid);
+  check(!validate_planetary_flight_state(dense, invalid) &&
+            !advance_planetary_flight(dense, environment, invalid, {},
+                                      kSimulationStep) &&
+            planetary_flight_state_checksum(invalid) == invalid_checksum,
+        "out-of-range thermal state must be rejected transactionally");
+  check(thermal_trend_name(ThermalTrend::heating) == "heating" &&
+            thermal_cue_name(ThermalCue::abort_climb) == "abort-climb",
+        "thermal enums must expose stable diagnostic names");
 }
 
 auto sweep_selection_contract() -> void {
@@ -7517,6 +7738,7 @@ auto golden_orbital_profiles() -> void {
       .controls = {},
       .regime = regime,
       .last_transition = std::nullopt,
+      .thermal = {},
   };
 }
 
@@ -7949,7 +8171,7 @@ auto planetfall_acceptance_contract() -> void {
             result->report.final_state.tick ==
                 kPlanetfallAcceptanceTicks &&
             planetary_flight_state_checksum(result->report.final_state) ==
-                1628243202805637918ULL,
+                15251675909814434464ULL,
         "the canonical Planetfall path must retain its generated identity and final state");
   check(result->report.final_state.regime == FlightRegime::terrain_flight &&
             result->report.final_state.clearance_metres > 100.0 &&
@@ -7969,10 +8191,10 @@ auto planetfall_acceptance_contract() -> void {
   constexpr std::array<SimulationTick, 4> expected_ticks{
       0, 4'080, 15'555, kPlanetfallAcceptanceTicks};
   constexpr std::array<std::uint64_t, 4> expected_flight_checksums{
-      16209989626150487226ULL,
-      8671079691946332602ULL,
-      17709249730073023912ULL,
-      1628243202805637918ULL,
+      10201608541589742394ULL,
+      10298811930090958906ULL,
+      13755635873101133721ULL,
+      15251675909814434464ULL,
   };
   constexpr std::array<std::uint64_t, 4> expected_frame_checksums{
       10946652128119593424ULL,
@@ -8019,7 +8241,7 @@ auto planetfall_acceptance_contract() -> void {
             json.find("\"scenario\": \"v0.3-planetfall\"") !=
                 std::string::npos &&
             json.find("\"final_flight_checksum\": "
-                      "\"1628243202805637918\"") != std::string::npos &&
+                      "\"15251675909814434464\"") != std::string::npos &&
             json.find("\"presentation_mode\": \"terrain-blend\"") !=
                 std::string::npos,
         "Planetfall JSON must preserve its versioned scenario and deterministic fields");
@@ -8072,6 +8294,7 @@ auto main() -> int {
   orbital_motion_feedback_contract();
   deterministic_planetary_flight_replay();
   planetary_flight_failure_matrix();
+  thermal_reentry_contract();
   sweep_selection_contract();
   sweep_report_contract();
   fixed_step_clock_contract();

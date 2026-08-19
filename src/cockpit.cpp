@@ -431,6 +431,44 @@ auto format_flight_regime(const PlanetaryFlightState& state)
   return readout;
 }
 
+auto format_thermal_instruments(
+    const PlanetDescriptor& planet,
+    const PlanetaryFlightState& state) -> ThermalInstrumentReadout {
+  const auto assessment = resolve_thermal_assessment(planet, state);
+  if (!assessment) {
+    return {.load = "HEAT --- ",
+            .trend = "TEMP ?   ",
+            .limit = "LIM ---  ",
+            .flight_path_angle = "FPA ---- ",
+            .cue = "THERM ERR",
+            .valid = false};
+  }
+  const std::string_view trend =
+      assessment->trend == ThermalTrend::heating
+          ? "TEMP +   "
+          : (assessment->trend == ThermalTrend::cooling ? "TEMP -   "
+                                                         : "TEMP =   ");
+  const std::string_view cue =
+      assessment->cue == ThermalCue::abort_climb
+          ? "ABRT CLMB"
+          : (assessment->cue == ThermalCue::slow_and_rise
+                 ? "SLOW+RISE"
+                 : (assessment->cue == ThermalCue::cooling ? "COOLING  "
+                                                            : "HEAT OK  "));
+  return {
+      .load = std::format("HEAT {:03}%", assessment->load_percent),
+      .trend = std::string{trend},
+      .limit = "LIM 100% ",
+      .flight_path_angle = std::format(
+          "{:<9}", std::format("FPA {:+.0f}",
+                                assessment->flight_path_angle_degrees)),
+      .cue = std::string{cue},
+      .trend_state = assessment->trend,
+      .cue_state = assessment->cue,
+      .valid = true,
+  };
+}
+
 auto format_signal_scanner(const SignalNavigationSolution& navigation)
     -> SignalScannerReadout {
   SignalScannerReadout readout{

@@ -21,6 +21,48 @@ enum class FlightRegime : std::uint8_t {
 inline constexpr double kTerrainFlightEnterClearanceMetres{2'000.0};
 inline constexpr double kTerrainFlightExitClearanceMetres{2'500.0};
 inline constexpr double kMinimumFlightClearanceMetres{16.0};
+inline constexpr std::uint32_t kMaximumThermalLoadUnits{1'000'000U};
+
+struct PlanetaryThermalState {
+  // Fixed-point fraction of the thermal limit. One million is 100%.
+  std::uint32_t load_units{};
+  bool abort_latched{};
+
+  friend auto operator==(const PlanetaryThermalState&,
+                         const PlanetaryThermalState&) -> bool = default;
+};
+
+struct PlanetaryFlightRules {
+  bool enforce_thermal_abort{};
+
+  friend auto operator==(const PlanetaryFlightRules&,
+                         const PlanetaryFlightRules&) -> bool = default;
+};
+
+enum class ThermalTrend : std::uint8_t {
+  cooling,
+  steady,
+  heating,
+};
+
+enum class ThermalCue : std::uint8_t {
+  nominal,
+  slow_and_rise,
+  cooling,
+  abort_climb,
+};
+
+struct ThermalAssessment {
+  unsigned load_percent{};
+  double flight_path_angle_degrees{};
+  double load_change_per_second{};
+  ThermalTrend trend{ThermalTrend::steady};
+  ThermalCue cue{ThermalCue::nominal};
+  bool at_limit{};
+
+  friend auto operator==(const ThermalAssessment&,
+                         const ThermalAssessment&) -> bool = default;
+};
 
 struct FlightRegimeBands {
   double terrain_enter_clearance_metres{};
@@ -115,6 +157,7 @@ struct PlanetaryFlightState {
   FlightControls controls;
   FlightRegime regime{FlightRegime::orbital};
   std::optional<FlightRegimeTransition> last_transition;
+  PlanetaryThermalState thermal;
 
   friend auto operator==(const PlanetaryFlightState&,
                          const PlanetaryFlightState&) -> bool = default;
@@ -135,6 +178,10 @@ enum class PlanetaryFlightError : std::uint8_t {
     -> std::string_view;
 [[nodiscard]] auto planetary_flight_error_name(
     PlanetaryFlightError error) noexcept -> std::string_view;
+[[nodiscard]] auto thermal_trend_name(ThermalTrend trend) noexcept
+    -> std::string_view;
+[[nodiscard]] auto thermal_cue_name(ThermalCue cue) noexcept
+    -> std::string_view;
 
 [[nodiscard]] auto flight_regime_bands(
     const PlanetDescriptor& planet) noexcept
@@ -153,6 +200,10 @@ enum class PlanetaryFlightError : std::uint8_t {
     const PlanetDescriptor& planet, const PlanetaryFlightState& state,
     LocalPositionMetres target, double arrival_radius_metres) noexcept
     -> std::expected<TargetRelativeMotion, PlanetaryFlightError>;
+[[nodiscard]] auto resolve_thermal_assessment(
+    const PlanetDescriptor& planet,
+    const PlanetaryFlightState& state) noexcept
+    -> std::expected<ThermalAssessment, PlanetaryFlightError>;
 
 [[nodiscard]] auto initial_planetary_flight_state(
     const PlanetDescriptor& planet, GeodeticPosition position,
@@ -173,7 +224,8 @@ enum class PlanetaryFlightError : std::uint8_t {
 [[nodiscard]] auto advance_planetary_flight(
     const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
     PlanetaryFlightState& state,
-    std::span<const FlightCommand> commands, SimulationSeconds step) noexcept
+    std::span<const FlightCommand> commands, SimulationSeconds step,
+    PlanetaryFlightRules rules = {}) noexcept
     -> std::expected<void, PlanetaryFlightError>;
 
 [[nodiscard]] auto planetary_flight_state_checksum(

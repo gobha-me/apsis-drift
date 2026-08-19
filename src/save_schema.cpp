@@ -997,10 +997,13 @@ template <typename Id>
                         {"fall", state.controls.fall}}},
       {"regime", regime_name(state.regime)},
       {"last_transition", std::move(transition)},
+      {"thermal",
+       Json{{"load_units", state.thermal.load_units},
+            {"abort_latched", state.thermal.abort_latched}}},
   };
 }
 
-[[nodiscard]] auto decode_flight(const Json& json)
+[[nodiscard]] auto decode_flight(const Json& json, std::uint32_t format_version)
     -> std::expected<PlanetaryFlightState, SaveSchemaError> {
   constexpr std::string_view path{"$.state.flight"};
   if (!json.is_object()) {
@@ -1017,6 +1020,16 @@ template <typename Id>
   auto controls = read_object(json, "controls", std::string{path});
   auto regime = read_regime(json, "regime", std::string{path});
   auto transition = require_field(json, "last_transition", std::string{path});
+  std::expected<std::uint32_t, SaveSchemaError> thermal_load{0U};
+  std::expected<bool, SaveSchemaError> thermal_abort{false};
+  if (format_version >= 10U) {
+    auto thermal = read_object(json, "thermal", std::string{path});
+    if (!thermal) return std::unexpected{thermal.error()};
+    thermal_load =
+        read_u32(**thermal, "load_units", "$.state.flight.thermal");
+    thermal_abort =
+        read_bool(**thermal, "abort_latched", "$.state.flight.thermal");
+  }
   if (!tick) return std::unexpected{tick.error()};
   if (!planet) return std::unexpected{planet.error()};
   if (!pose) return std::unexpected{pose.error()};
@@ -1026,6 +1039,8 @@ template <typename Id>
   if (!controls) return std::unexpected{controls.error()};
   if (!regime) return std::unexpected{regime.error()};
   if (!transition) return std::unexpected{transition.error()};
+  if (!thermal_load) return std::unexpected{thermal_load.error()};
+  if (!thermal_abort) return std::unexpected{thermal_abort.error()};
 
   auto latitude =
       read_double(**pose, "latitude_radians", "$.state.flight.pose");
@@ -1096,6 +1111,7 @@ template <typename Id>
                    *strafe_right, *rise, *fall},
       .regime = *regime,
       .last_transition = last_transition,
+      .thermal = {*thermal_load, *thermal_abort},
   };
 }
 
@@ -1468,6 +1484,13 @@ auto validate_save_document(const SaveDocument& document)
             SaveSchemaErrorCode::invalid_state, "$.state.flight",
             "target-planet flight violates the planetary flight contract")};
       }
+      if (contract.rule_profile == IntersystemRuleProfile::assisted &&
+          document.state.flight->thermal.abort_latched) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state,
+            "$.state.flight.thermal.abort_latched",
+            "Assisted flight cannot contain a Pilot thermal-abort latch")};
+      }
     } else if (return_jump_spooling) {
       if (!document.state.system_flight || document.state.flight ||
           document.state.origin_return || !contract.phase_started_tick ||
@@ -1557,6 +1580,12 @@ auto validate_save_document(const SaveDocument& document)
           failure(SaveSchemaErrorCode::invalid_state, "$.state.flight",
                   "an in-flight save requires planetary flight state")};
     } else {
+      if (document.state.flight->thermal.abort_latched) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state,
+            "$.state.flight.thermal.abort_latched",
+            "legacy flight cannot contain a Pilot thermal-abort latch")};
+      }
       if (auto flight = validate_flight(document.recipe,
                                         document.state.flight.value());
           !flight) {
@@ -1750,6 +1779,7 @@ auto decode_save_document_json(std::string_view json_text)
       *format_version != 3U && *format_version != 4U &&
       *format_version != 5U && *format_version != 6U &&
       *format_version != 7U && *format_version != 8U &&
+      *format_version != 9U &&
       *format_version != kSaveFormatVersion) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
@@ -1965,7 +1995,7 @@ auto decode_save_document_json(std::string_view json_text)
 
   std::optional<PlanetaryFlightState> flight;
   if (!(**flight_json).is_null()) {
-    auto decoded = decode_flight(**flight_json);
+    auto decoded = decode_flight(**flight_json, *format_version);
     if (!decoded) return std::unexpected{decoded.error()};
     flight = std::move(*decoded);
   }

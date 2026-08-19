@@ -70,19 +70,19 @@ function(check_signal_run driver profile)
       NOT completion_tick STREQUAL "15713" OR
       NOT orbital_return_tick STREQUAL "38890" OR
       NOT resume_tick STREQUAL "600" OR
-      NOT checkpoint_flight_checksum STREQUAL "14947176626171235385" OR
+      NOT checkpoint_flight_checksum STREQUAL "17105790948075025017" OR
       NOT resumed_flight_checksum STREQUAL checkpoint_flight_checksum OR
       NOT sun_generator_version STREQUAL "1" OR
       NOT checkpoint_framebuffer_checksum STREQUAL
           resumed_framebuffer_checksum OR
       checkpoint_framebuffer_checksum STREQUAL "0" OR
-      NOT return_flight_checksum STREQUAL "11922358221174102146" OR
+      NOT return_flight_checksum STREQUAL "2042837005613050114" OR
       NOT framebuffer_checksum MATCHES "^[0-9]+$" OR
       framebuffer_checksum STREQUAL "0" OR
       NOT terrain_safety_probe_ticks STREQUAL "120000" OR
       NOT terrain_safety_minimum_clearance_metres MATCHES "^16[.]0" OR
       NOT terrain_safety_flight_checksum STREQUAL
-          "18312514460843648054" OR
+          "1432192862181970585" OR
       NOT discovery_count STREQUAL "1" OR
       NOT world_delta_count STREQUAL "1" OR
       NOT final_location STREQUAL "docked_at_origin" OR
@@ -133,9 +133,9 @@ function(check_signal_run driver profile)
   set(expected_atmosphere_ticks 3725 3736 4086)
   set(expected_terrain_ticks 15233 15722 16013)
   set(expected_return_checksums
-      11922358221174102146
-      4214422434418510385
-      10031173515611193648)
+      2042837005613050114
+      18428641151376042355
+      10268292150697909018)
   foreach(index RANGE 0 2)
     list(GET expected_seeds ${index} expected_seed)
     list(GET expected_atmospheres ${index} expected_atmosphere)

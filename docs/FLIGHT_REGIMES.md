@@ -10,7 +10,8 @@ orbital-mechanics integrator.
 
 The craft stores a planet identity, geodetic position in double-precision
 metres and radians, local east/north/up velocity, local heading, held controls,
-flight mode, current regime, clearance, and the most recent regime transition.
+flight mode, current regime, clearance, the most recent regime transition, and
+a fixed-point thermal load plus abort latch.
 Heading zero points east and positive heading turns north. Positions use the
 coordinate conventions in [Coordinate and Terrain LOD Contract](COORDINATE_SYSTEM.md).
 
@@ -69,14 +70,34 @@ downward velocity; ordinary contact applies the same clamp after motion. A
 transition clamps carried velocity to the new regime's limits before the
 resulting state is committed.
 
+## Thermal load and Pilot skip-out
+
+Thermal load is an integer fraction from `0` through `1,000,000`, where the
+upper bound is 100%. Each fixed step derives atmospheric density from the
+planet's generated surface pressure and squared normalized atmosphere depth.
+Heating scales with density, total speed cubed, and descent fraction; cooling
+scales with accumulated load and increases toward vacuum. Airless planets add
+no heating. The result is rounded back to the bounded fixed-point state after
+each step.
+
+Assisted and Pilot advance the same load. Assisted treats the limit as
+feedback only. Pilot latches an abort at the limit and commands a bounded
+climb while preserving horizontal control. Entering orbit clears the latch,
+clears held descent, and cancels downward velocity, allowing the player to
+cool and deliberately reenter. Load trend, flight-path angle, percentage, and
+the `SLOW+RISE`, `COOLING`, and `ABRT CLMB` strings are derived presentation;
+only load and latch enter the checksum and save document. The complete rule and
+acceptance evidence is in [Pilot Thermal Reentry](PILOT_REENTRY.md).
+
 ## Determinism and failure behavior
 
-Advancement applies commands, motion, clearance, tick increment, and any
-transition transactionally. Non-finite state or environment values, invalid
-planet properties, malformed regimes or transitions, invalid step lengths,
+Advancement applies commands, thermal integration, motion, clearance, tick
+increment, and any transition transactionally. Non-finite state or environment
+values, invalid planet properties, malformed regimes or transitions, invalid step lengths,
 unknown or mistimed commands, coordinate failures, and tick overflow leave the
 input state unchanged. A stable checksum covers all authoritative state,
-including control holds and transition telemetry.
+including control holds, transition telemetry, thermal load, and the abort
+latch.
 
 The current landscape flyover and orbital benchmark remain separate
 presentation paths. Their integration with this state belongs to the

@@ -144,9 +144,10 @@ unchanged.
 
 A poor entry may be recovered by atmospheric or surface travel, or by climbing
 back through the existing regimes into orbit and departing the planet again.
-No first-loop recovery requires fuel, repair, damage, or a new objective. Pilot
-thermal consequences may later make recovery harder, but they must remain
-bounded and cannot turn a valid location into corrupt mission state.
+No first-loop recovery requires fuel, repair, damage, or a new objective. At
+the thermal limit, Pilot forces a bounded climb to orbit, clears held descent,
+cools, and permits deliberate reentry. The consequence cannot turn a valid
+location into corrupt mission state.
 
 ## Rule profiles
 
@@ -204,11 +205,16 @@ Format 8 preserves existing arrival coordinates and assigns them the optimal
 grade; an active Pilot spool migrates to neutral alignment rather than
 inventing a released-version random sample.
 
+The v0.4.17 Pilot reentry path extends the projection as version 10. Every
+active planetary flight stores bounded fixed-point thermal load and an abort
+latch. Formats 1 through 9 migrate to zero load without inventing a prior
+abort. Assisted may reach the displayed limit but cannot persist a latch.
+
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 through 8 remain readable. Formats 1 and 2 retain their saved
+Formats 1 through 9 remain readable. Formats 1 and 2 retain their saved
 origin-system planet,
 flight state, objective, discoveries, and deltas as a legacy local Signal Run.
 An in-flight legacy save resumes in flight; a docked save resumes docked. It is
@@ -217,7 +223,8 @@ mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. A released format-4
 target arrival initializes mutable flight from its already-bound immutable
 arrival solution. Released format-5 system flight, format-6 Planetfall state,
-and format-7 return state remain exact. Older readers must reject format 9
+format-7 return state, format-8 profile, and format-9 alignment remain exact.
+Older readers must reject format 10
 before discarding any of these fields.
 
 ## Implementation boundaries
