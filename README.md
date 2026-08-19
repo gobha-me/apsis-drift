@@ -283,6 +283,12 @@ return-spool, and origin-return saves require that immutable solution; missing
 or altered destination, reference, tick, assessment, pose, or velocity data is
 rejected before gameplay or save commit instead of creating a stranded jump.
 
+The v0.4.21 authoritative clock prevents raw batch advances from crossing the
+fixed outbound or return spool and transit boundaries. Exact-boundary advances
+remain valid so the one-tick jump owner can reach them and commit or arrive
+atomically, while late transitions and cross-boundary batches reject without
+mutation.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in

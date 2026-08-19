@@ -102,6 +102,21 @@ namespace {
           .controls = {}};
 }
 
+[[nodiscard]] auto ticks_until_mandatory_boundary(
+    const IntersystemContractState& state) noexcept
+    -> std::optional<SimulationTick> {
+  switch (state.travel_phase) {
+    case IntersystemTravelPhase::outbound_jump_spooling:
+    case IntersystemTravelPhase::return_jump_spooling:
+      return kJumpSpoolTicks -
+             (state.universe_tick - *state.phase_started_tick);
+    case IntersystemTravelPhase::outbound_jump_committed:
+    case IntersystemTravelPhase::return_jump_committed:
+      return state.arrival_solution->arrival_tick - state.universe_tick;
+    default: return std::nullopt;
+  }
+}
+
 }  // namespace
 
 auto generate_first_intersystem_identities(Seed universe_seed) noexcept
@@ -261,6 +276,7 @@ auto validate_intersystem_contract_state(
           state.committed_jump_destination || !state.phase_started_tick ||
           state.arrival_solution ||
           *state.phase_started_tick > state.universe_tick ||
+          state.universe_tick - *state.phase_started_tick > kJumpSpoolTicks ||
           (state.rule_profile == IntersystemRuleProfile::pilot) !=
               state.jump_alignment.has_value() ||
           state.mission_phase != IntersystemMissionPhase::active) {
@@ -321,6 +337,7 @@ auto validate_intersystem_contract_state(
           state.committed_jump_destination || !state.phase_started_tick ||
           state.jump_alignment || !state.arrival_solution ||
           *state.phase_started_tick > state.universe_tick ||
+          state.universe_tick - *state.phase_started_tick > kJumpSpoolTicks ||
           state.mission_phase != IntersystemMissionPhase::objective_complete) {
         return std::unexpected{IntersystemContractError::invalid_state};
       }
@@ -377,7 +394,16 @@ auto advance_intersystem_time(IntersystemContractState& state,
       std::numeric_limits<SimulationTick>::max() - state.universe_tick) {
     return std::unexpected{IntersystemContractError::tick_overflow};
   }
-  state.universe_tick += ticks;
+  const auto until_boundary = ticks_until_mandatory_boundary(state);
+  if (until_boundary && ticks > *until_boundary) {
+    return std::unexpected{IntersystemContractError::invalid_time_advance};
+  }
+  auto next = state;
+  next.universe_tick += ticks;
+  if (!validate_intersystem_contract_state(next)) {
+    return std::unexpected{IntersystemContractError::invalid_state};
+  }
+  state = std::move(next);
   return {};
 }
 
