@@ -331,7 +331,9 @@ struct Replay {
        ++tick) {
     const auto previous = planetfall->flight.tick;
     const auto advanced =
-        advance_intersystem_planetfall(*planetfall, *terrain_cache, {});
+        advance_intersystem_planetfall(
+            *planetfall, *terrain_cache, {},
+            document.state.intersystem_contract->rule_profile);
     if (!advanced ||
         !advance_intersystem_time(*document.state.intersystem_contract,
                                   planetfall->flight.tick - previous)) {
@@ -394,8 +396,9 @@ struct Replay {
       ascent_commanded = true;
     }
     const auto previous = planetfall->flight.tick;
-    if (!advance_intersystem_planetfall(*planetfall, *terrain_cache,
-                                        commands) ||
+    if (!advance_intersystem_planetfall(*planetfall, *terrain_cache, commands,
+                                        document.state.intersystem_contract
+                                            ->rule_profile) ||
         !advance_intersystem_time(*document.state.intersystem_contract,
                                   planetfall->flight.tick - previous)) {
       return std::unexpected{

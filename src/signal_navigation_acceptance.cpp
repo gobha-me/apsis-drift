@@ -82,6 +82,7 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
       .controls = {},
       .regime = FlightRegime::terrain_flight,
       .last_transition = std::nullopt,
+      .thermal = {},
   };
   const auto environment = surface_environment(planet, probe, cache);
   if (!environment) return std::unexpected{environment.error()};

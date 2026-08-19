@@ -1145,6 +1145,13 @@ class LandscapeApp final : public App {
             : m_planetary_flight
                   ? format_flight_instruments(*m_planetary_flight)
                   : format_flight_instruments(m_flight);
+    const std::optional<ThermalInstrumentReadout> thermal =
+        m_intersystem_planetfall
+            ? std::optional<ThermalInstrumentReadout>{
+                  format_thermal_instruments(
+                      *m_intersystem_planetfall->planet,
+                      m_intersystem_planetfall->flight)}
+            : std::nullopt;
 
     screen.fill_rect(layout.header.x, layout.header.y, layout.header.w,
                      layout.header.h, text, status_bg);
@@ -1192,8 +1199,16 @@ class LandscapeApp final : public App {
                         ? m_intersystem_planetfall->flight
                         : *m_planetary_flight)));
       screen.write_text(layout.left_instruments.x + 2,
-                        layout.left_instruments.y + 8, regime.regime,
-                        regime.valid ? text : danger, chrome_bg);
+                        layout.left_instruments.y + 8,
+                        thermal ? thermal->load : regime.regime,
+                        thermal ? (thermal->cue_state == ThermalCue::abort_climb
+                                       ? danger
+                                       : (thermal->trend_state ==
+                                                  ThermalTrend::heating
+                                              ? warning
+                                              : text))
+                                : (regime.valid ? text : danger),
+                        chrome_bg);
     }
     screen.write_text(layout.left_instruments.x + 2,
                       layout.left_instruments.y + 10, instruments.speed,
@@ -1205,8 +1220,19 @@ class LandscapeApp final : public App {
                       layout.left_instruments.y + 14,
                       instruments.clearance, alert_color, chrome_bg);
     screen.write_text(layout.left_instruments.x + 2,
-                      layout.left_instruments.y + 16, instruments.alert,
-                      alert_color, chrome_bg);
+                      layout.left_instruments.y + 16,
+                      instruments.alert_state == CockpitAlert::none && thermal
+                          ? thermal->cue
+                          : instruments.alert,
+                      instruments.alert_state == CockpitAlert::none && thermal
+                          ? (thermal->cue_state == ThermalCue::abort_climb
+                                 ? danger
+                                 : (thermal->cue_state ==
+                                            ThermalCue::slow_and_rise
+                                        ? warning
+                                        : text))
+                          : alert_color,
+                      chrome_bg);
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 2, "TARGET", accent,
                       chrome_bg);
@@ -1351,6 +1377,11 @@ class LandscapeApp final : public App {
                 "ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
       message = " WARNING: LOW CLEARANCE | R to climb | ESC menu ";
+    } else if (thermal) {
+      message = std::format(
+          " {} | {} | {} | {} | {} | R rise / S brake ", thermal->load,
+          thermal->trend, thermal->limit, thermal->flight_path_angle,
+          thermal->cue);
     } else if (m_signal_run && m_signal_run->flight) {
       if (m_signal_run->onboarding.first_objective ==
               FirstObjectiveStatus::completed &&
@@ -1790,7 +1821,8 @@ class LandscapeApp final : public App {
           auto commands = m_input_mapper.take_commands(
               next_planetfall.flight.tick);
           const auto advanced = advance_intersystem_planetfall(
-              next_planetfall, *m_intersystem_planetfall_cache, commands);
+              next_planetfall, *m_intersystem_planetfall_cache, commands,
+              m_intersystem_contract->rule_profile);
           if (!advanced) {
             throw std::runtime_error{"target Planetfall simulation failed"};
           }
@@ -2058,6 +2090,7 @@ class LandscapeApp final : public App {
           .controls = {},
           .regime = regime,
           .last_transition = transition,
+          .thermal = {},
       };
       if (!m_planetary_renderer) {
         throw std::runtime_error{"planetary presentation is unavailable"};

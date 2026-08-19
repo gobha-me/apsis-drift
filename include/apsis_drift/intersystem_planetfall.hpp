@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 
+#include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
@@ -53,7 +54,8 @@ enum class IntersystemPlanetfallError : std::uint8_t {
 // flight, navigation, collection, and the journal commit together.
 [[nodiscard]] auto advance_intersystem_planetfall(
     IntersystemPlanetfallState& state, TerrainTileCache& cache,
-    std::span<const FlightCommand> commands)
+    std::span<const FlightCommand> commands,
+    IntersystemRuleProfile profile)
     -> std::expected<IntersystemPlanetfallUpdate, IntersystemPlanetfallError>;
 
 }  // namespace apsis_drift

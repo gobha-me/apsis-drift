@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 9 is a deterministic JSON document. It keeps
+Apsis Drift save format version 10 is a deterministic JSON document. It keeps
 the generated-world recipe separate from mutable player state and does not
 serialize terrain tiles, render state, terminal capabilities, preferences, or
 other reproducible presentation data.
@@ -39,7 +39,7 @@ projects its authoritative contract state independently.
 Every document has three required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `9` for newly written saves;
+- `format_version` is the unsigned JSON integer `10` for newly written saves;
 - `recipe` and `state` are required objects.
 
 The recipe records the universe seed, origin-system and active-planet
@@ -63,7 +63,8 @@ regenerated station and planet IDs.
   identities, inertial pose, controls, and mode. Version 8 records the
   authoritative `assisted` or `pilot` rule profile selected before launch.
   Version 9 adds fixed-point Pilot spool alignment and the immutable arrival
-  assessment bound at commitment.
+  assessment bound at commitment. Version 10 adds planetary thermal load and
+  the Pilot abort latch.
 
 Legacy mutable state records:
 
@@ -76,7 +77,7 @@ Legacy mutable state records:
 
 The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) and
 [`save-v1-golden.json`](../test/data/save-v1-golden.json) remain legacy
-migration fixtures. Newly encoded documents are canonical version 9.
+migration fixtures. Newly encoded documents are canonical version 10.
 
 ## Encodings
 
@@ -114,9 +115,9 @@ state. Duplicate object keys are rejected rather than resolved by ordering.
 Unknown enum values and delta kinds are rejected because silently dropping
 their semantics could resurrect or duplicate generated content.
 
-Formats 1 through 9 and the generator versions compiled into the current build
+Formats 1 through 10 and the generator versions compiled into the current build
 are supported. Version 1 is decoded with local-sun generator version 1;
-formats 1 and 2 rewrite as version 9 on the next explicit save. They remain
+formats 1 and 2 rewrite as version 10 on the next explicit save. They remain
 `legacy_signal_run` careers and are never assigned the intersystem contract.
 Released version 3 intersystem careers preserve every recorded phase and tick;
 their absent arrival solution remains absent rather than synthesizing progress.
@@ -133,9 +134,11 @@ version-1 intersystem contract recipe is normalized to contract version 3.
 Format 8 normalizes contract version 2 and jump version 1 to the current
 versions. Existing target arrivals retain their exact pose and receive an
 ALIGNED assessment. A Pilot spool receives neutral alignment because version
-8 had no authoritative alignment field. Other format versions fail as
+8 had no authoritative alignment field. Formats 1 through 9 initialize every
+planetary flight with zero thermal load and an unlatched abort because those
+releases recorded no thermal history. Other format versions fail as
 unsupported and other generator versions fail as incompatible. Older builds
-reject version 9 before reading fields, so they
+reject version 10 before reading fields, so they
 cannot silently discard the new mission state.
 
 Local-sun geometry is regenerated from the active planet's independent
@@ -186,3 +189,12 @@ spooling. Once committed, the active alignment is removed and its signed
 errors plus `aligned`, `offset`, or `opposed` grade are stored with the
 immutable arrival solution. Derived correction text, projected grade, reticle,
 and terminal presentation remain excluded.
+
+Version 10 extends every active planetary flight object with a required
+`thermal` object. `load_units` is an unsigned integer from `0` through
+`1,000,000`, representing zero through 100% of the limit. `abort_latched` is a
+boolean. A latch is valid only for Pilot intersystem Planetfall; Assisted and
+legacy Signal Run projections reject it. Derived temperature trend,
+flight-path angle, percentage formatting, correction cue, and cockpit color
+are excluded. Save/reload therefore preserves the exact consequence without
+serializing presentation or retroactively inventing load for released saves.

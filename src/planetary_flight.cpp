@@ -17,6 +17,17 @@ inline constexpr double kMinimumOrbitHysteresisMetres{10'000.0};
 inline constexpr double kAtmosphericDescentTargetSeconds{100.0};
 inline constexpr double kAtmosphericVerticalResponseSeconds{1.8};
 inline constexpr SimulationSeconds kMaximumPlanetaryFlightStep{0.25};
+inline constexpr double kThermalReferenceSpeedMetresPerSecond{1'000.0};
+inline constexpr double kThermalHeatingScalePerSecond{0.20};
+inline constexpr double kThermalMinimumCoolingPerSecond{0.015};
+inline constexpr double kThermalVacuumCoolingBonusPerSecond{0.060};
+inline constexpr double kThermalTrendThresholdPerSecond{0.0005};
+
+struct ThermalRates {
+  double density{};
+  double flight_path_angle_degrees{};
+  double net_load_per_second{};
+};
 
 [[nodiscard]] auto valid_mode(FlightMode mode) noexcept -> bool {
   return mode == FlightMode::manual || mode == FlightMode::autopilot;
@@ -102,6 +113,7 @@ inline constexpr SimulationSeconds kMaximumPlanetaryFlightStep{0.25};
          std::isfinite(state.velocity.up_metres_per_second) &&
          std::isfinite(state.clearance_metres) &&
          state.clearance_metres >= kMinimumFlightClearanceMetres &&
+         state.thermal.load_units <= kMaximumThermalLoadUnits &&
          valid_mode(state.mode) && valid_regime(state.regime) &&
          valid_transition(state);
 }
@@ -206,6 +218,71 @@ auto apply_command(PlanetaryFlightState& state,
     case AtmosphereClass::dense: return kDenseAtmosphereCeilingMetres;
   }
   return 0.0;
+}
+
+[[nodiscard]] auto thermal_rates(const PlanetDescriptor& planet,
+                                 const PlanetaryFlightState& state) noexcept
+    -> std::optional<ThermalRates> {
+  if (!valid_planet(planet) || !finite_state(state)) return std::nullopt;
+  const double horizontal_speed = std::hypot(
+      state.velocity.east_metres_per_second,
+      state.velocity.north_metres_per_second);
+  const double speed =
+      std::hypot(horizontal_speed, state.velocity.up_metres_per_second);
+  if (!std::isfinite(speed)) return std::nullopt;
+
+  double density{};
+  if (planet.atmosphere_class != AtmosphereClass::airless) {
+    const double ceiling = atmosphere_ceiling_for(planet.atmosphere_class);
+    const double depth = std::clamp(
+        1.0 - state.pose.position.altitude_metres / ceiling, 0.0, 1.0);
+    const double pressure =
+        static_cast<double>(planet.atmosphere_pressure.value) /
+        static_cast<double>(AtmospherePressureMillibars::max);
+    density = std::clamp(pressure * depth * depth, 0.0, 1.0);
+  }
+
+  const double descent_fraction =
+      speed > 1.0
+          ? std::clamp(-state.velocity.up_metres_per_second / speed, 0.0, 1.0)
+          : 0.0;
+  const double speed_ratio = speed / kThermalReferenceSpeedMetresPerSecond;
+  const double heating = density * speed_ratio * speed_ratio * speed_ratio *
+                         (0.5 + descent_fraction) *
+                         kThermalHeatingScalePerSecond;
+  const double load = static_cast<double>(state.thermal.load_units) /
+                      static_cast<double>(kMaximumThermalLoadUnits);
+  const double cooling =
+      load * (kThermalMinimumCoolingPerSecond +
+              kThermalVacuumCoolingBonusPerSecond * (1.0 - density));
+  const double angle = std::atan2(state.velocity.up_metres_per_second,
+                                  horizontal_speed) *
+                       180.0 / std::numbers::pi_v<double>;
+  const double net = heating - cooling;
+  if (!std::isfinite(density) || !std::isfinite(angle) ||
+      !std::isfinite(net)) {
+    return std::nullopt;
+  }
+  return ThermalRates{density, angle, net};
+}
+
+auto advance_thermal_state(const PlanetDescriptor& planet,
+                           PlanetaryFlightState& state,
+                           SimulationSeconds step) noexcept -> bool {
+  const auto rates = thermal_rates(planet, state);
+  if (!rates) return false;
+  const double delta = rates->net_load_per_second * step.count() *
+                       static_cast<double>(kMaximumThermalLoadUnits);
+  if (!std::isfinite(delta) ||
+      delta < static_cast<double>(std::numeric_limits<long long>::min()) ||
+      delta > static_cast<double>(std::numeric_limits<long long>::max())) {
+    return false;
+  }
+  const long long updated =
+      static_cast<long long>(state.thermal.load_units) + std::llround(delta);
+  state.thermal.load_units = static_cast<std::uint32_t>(std::clamp(
+      updated, 0LL, static_cast<long long>(kMaximumThermalLoadUnits)));
+  return true;
 }
 
 [[nodiscard]] auto parameters_for(const PlanetDescriptor& planet,
@@ -352,6 +429,25 @@ auto planetary_flight_error_name(PlanetaryFlightError error) noexcept
   return "unknown";
 }
 
+auto thermal_trend_name(ThermalTrend trend) noexcept -> std::string_view {
+  switch (trend) {
+    case ThermalTrend::cooling: return "cooling";
+    case ThermalTrend::steady: return "steady";
+    case ThermalTrend::heating: return "heating";
+  }
+  return "unknown";
+}
+
+auto thermal_cue_name(ThermalCue cue) noexcept -> std::string_view {
+  switch (cue) {
+    case ThermalCue::nominal: return "nominal";
+    case ThermalCue::slow_and_rise: return "slow-and-rise";
+    case ThermalCue::cooling: return "cooling";
+    case ThermalCue::abort_climb: return "abort-climb";
+  }
+  return "unknown";
+}
+
 auto flight_regime_bands(const PlanetDescriptor& planet) noexcept
     -> std::expected<FlightRegimeBands, PlanetaryFlightError> {
   if (!valid_planet(planet)) {
@@ -470,6 +566,46 @@ auto resolve_target_relative_motion(
   return motion;
 }
 
+auto resolve_thermal_assessment(
+    const PlanetDescriptor& planet,
+    const PlanetaryFlightState& state) noexcept
+    -> std::expected<ThermalAssessment, PlanetaryFlightError> {
+  if (state.planet != planet.id) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  const auto rates = thermal_rates(planet, state);
+  if (!rates) return std::unexpected{PlanetaryFlightError::invalid_state};
+  const ThermalTrend trend =
+      rates->net_load_per_second > kThermalTrendThresholdPerSecond
+          ? ThermalTrend::heating
+          : (rates->net_load_per_second < -kThermalTrendThresholdPerSecond
+                 ? ThermalTrend::cooling
+                 : ThermalTrend::steady);
+  ThermalCue cue{ThermalCue::nominal};
+  if (state.thermal.abort_latched) {
+    cue = ThermalCue::abort_climb;
+  } else if (trend == ThermalTrend::cooling) {
+    cue = ThermalCue::cooling;
+  } else if (trend == ThermalTrend::heating &&
+             (rates->flight_path_angle_degrees < -15.0 ||
+              std::hypot(state.velocity.east_metres_per_second,
+                         state.velocity.north_metres_per_second,
+                         state.velocity.up_metres_per_second) > 500.0)) {
+    cue = ThermalCue::slow_and_rise;
+  }
+  return ThermalAssessment{
+      .load_percent = static_cast<unsigned>(
+          (static_cast<std::uint64_t>(state.thermal.load_units) * 100U +
+           kMaximumThermalLoadUnits / 2U) /
+          kMaximumThermalLoadUnits),
+      .flight_path_angle_degrees = rates->flight_path_angle_degrees,
+      .load_change_per_second = rates->net_load_per_second,
+      .trend = trend,
+      .cue = cue,
+      .at_limit = state.thermal.load_units == kMaximumThermalLoadUnits,
+  };
+}
+
 auto initial_planetary_flight_state(
     const PlanetDescriptor& planet, GeodeticPosition position,
     PlanetaryFlightEnvironment environment, double heading_radians,
@@ -504,6 +640,7 @@ auto initial_planetary_flight_state(
       .regime = regime_for_initial(*bands, position.altitude_metres,
                                    clearance),
       .last_transition = std::nullopt,
+      .thermal = {},
   };
   if (!finite_state(state)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
@@ -528,10 +665,13 @@ auto validate_planetary_flight_state(
 auto advance_planetary_flight(
     const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
     PlanetaryFlightState& state, std::span<const FlightCommand> commands,
-    SimulationSeconds step) noexcept
+    SimulationSeconds step, PlanetaryFlightRules rules) noexcept
     -> std::expected<void, PlanetaryFlightError> {
   const auto bands = flight_regime_bands(planet);
   if (!bands) return std::unexpected{bands.error()};
+  if (!rules.enforce_thermal_abort && state.thermal.abort_latched) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
   if (state.planet != planet.id || !finite_state(state) ||
       !bounded_velocity(planet, state)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
@@ -566,6 +706,17 @@ auto advance_planetary_flight(
         std::max(0.0, next.velocity.up_metres_per_second);
   }
   for (const auto& command : commands) apply_command(next, command.kind);
+  if (rules.enforce_thermal_abort &&
+      next.thermal.load_units == kMaximumThermalLoadUnits) {
+    next.thermal.abort_latched = true;
+  }
+  if (!advance_thermal_state(planet, next, step)) {
+    return std::unexpected{PlanetaryFlightError::invalid_state};
+  }
+  if (rules.enforce_thermal_abort &&
+      next.thermal.load_units == kMaximumThermalLoadUnits) {
+    next.thermal.abort_latched = true;
+  }
 
   double forward = static_cast<double>(next.controls.forward) -
                    static_cast<double>(next.controls.backward);
@@ -580,6 +731,9 @@ auto advance_planetary_flight(
     turn = 0.055;
     strafe = 0.0;
     vertical = 0.0;
+  }
+  if (rules.enforce_thermal_abort && next.thermal.abort_latched) {
+    vertical = 1.0;
   }
 
   const auto parameters = parameters_for(planet, next.regime);
@@ -668,6 +822,13 @@ auto advance_planetary_flight(
         previous_regime, next.regime, next.tick};
     clamp_velocity(planet, next);
   }
+  if (rules.enforce_thermal_abort && next.thermal.abort_latched &&
+      next.regime == FlightRegime::orbital) {
+    next.thermal.abort_latched = false;
+    next.controls.fall = false;
+    next.velocity.up_metres_per_second =
+        std::max(0.0, next.velocity.up_metres_per_second);
+  }
 
   if (!finite_state(next) || !bounded_velocity(planet, next) ||
       !planet_fixed_from_geodetic(planet, next.pose.position)) {
@@ -714,6 +875,8 @@ auto planetary_flight_state_checksum(
     hash_word(hash, static_cast<std::uint8_t>(state.last_transition->to));
     hash_word(hash, state.last_transition->tick);
   }
+  hash_word(hash, state.thermal.load_units);
+  hash_bool(hash, state.thermal.abort_latched);
   return hash;
 }
 

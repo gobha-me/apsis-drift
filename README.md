@@ -72,9 +72,10 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
 Legacy in-flight profiles restore the exact planetary craft, objective,
 discoveries, and compact world-delta journal. New writes use save format
-version 9; versions 1 and 2 load as legacy local Signal Runs, while released
-versions 3 through 8 retain their mission, jump, arrival, system-flight,
-Planetfall, return, and rule-profile state.
+version 10; versions 1 and 2 load as legacy local Signal Runs, while released
+versions 3 through 9 retain their mission, jump, arrival, system-flight,
+Planetfall, return, rule-profile, and Pilot-alignment state. Released flights
+migrate with zero thermal load and no invented abort history.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -129,6 +130,10 @@ Interactive controls:
 - Pilot FTL spool: use A/D to correct heading and W/S to correct velocity;
   the cockpit shows signed error, projected ALIGNED/OFFSET/OPPOSED quality, and
   the next correction before J can still cancel the spool
+- Pilot atmospheric entry: watch `HEAT`, `TEMP`, `FPA`, and the textual cue;
+  slow and rise while heating. At 100%, `ABRT CLMB` forces a deterministic
+  climb to orbit, clears held descent, cools the craft, and permits another
+  entry. Assisted shows the same feedback without forcing the climb.
 - Target-system flight: W/S thrust or brake, A/D turn, Q/E strafe, R/F rise
   or fall, Space toggles direct target assist, and `[`/`]` selects 1x/4x/16x
   time compression outside the six-radius approach boundary; the cockpit shows
@@ -238,9 +243,8 @@ separate evidence. See
 
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
-default; Pilot records the deterministic thermal-abort and alignment-quality
-boundaries. The FTL boundary is now playable; thermal entry remains follow-up
-work. Formats 1 through 7 migrate to
+default; Pilot records deterministic thermal-abort and alignment-quality
+boundaries. Formats 1 through 7 migrate to
 Assisted without changing generated truth or mission progress. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
@@ -250,6 +254,15 @@ Assisted retains its exact ten-radius matched-velocity corridor, while poor
 Pilot execution changes only the recoverable target-system approach. Save
 format 9 prevents reloads from rerolling either alignment or placement. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
+
+The v0.4.17 Pilot reentry path derives thermal load from atmospheric pressure,
+altitude, total speed, descent angle, and fixed-step time. Fixed-point load and
+the Pilot abort latch are authoritative save state; trend, flight-path angle,
+and correction cues are derived cockpit presentation. Assisted retains the
+same mission path and feedback without enforcing the limit. Pilot reaches one
+bounded consequence at 100%: a forced skip-out to orbit that cools, releases
+held descent, and allows a deliberate retry. See
+[docs/PILOT_REENTRY.md](docs/PILOT_REENTRY.md).
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -379,7 +392,7 @@ Run the deterministic remote and local profiles directly:
 ```
 
 Both profiles and both compiler builds must report the final authoritative
-flight checksum `1628243202805637918` and the same ordered stage ticks `0`,
+flight checksum `15251675909814434464` and the same ordered stage ticks `0`,
 `4080`, `15555`, and `30089`. Timing fields and framebuffer checksums remain
 presentation diagnostics; they do not enter deterministic simulation state.
 Planetary frames derive their terminator, atmospheric daylight, visible sun,
@@ -405,7 +418,7 @@ presentations:
 Both routes select the same generated signal, reach it at tick `1072`, finish
 the acquisition and scan dwell at tick `1491`, and emit one persistent
 `collected` delta. They produce authoritative flight checksum
-`4086686148596456340`. Fixed-width navigation, progress, abort, and completion
+`17407832030238464473`. Fixed-width navigation, progress, abort, and completion
 cues are shared by Kitty and ANSI. The exact visibility and collection rules
 are documented in the [signal navigation contract](docs/SIGNAL_NAVIGATION.md)
 and [signal collection contract](docs/SIGNAL_COLLECTION.md).

@@ -18,7 +18,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{9};
+inline constexpr std::uint32_t kSaveFormatVersion{10};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
 inline constexpr std::size_t kMaximumSaveWorldDeltas{16'384};

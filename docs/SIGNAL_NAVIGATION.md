@@ -64,5 +64,5 @@ Run the two supported presentations with:
 
 Both reports must retain target `signal-945eaa623b2b8497`, reached tick `1072`,
 collection tick `1491`, one `collected` delta, and final flight checksum
-`4086686148596456340`. Framebuffer checksums and timings remain presentation
+`17407832030238464473`. Framebuffer checksums and timings remain presentation
 diagnostics and cannot affect selection, collection, or flight.

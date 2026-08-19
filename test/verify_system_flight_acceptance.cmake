@@ -40,7 +40,7 @@ function(check_system_flight driver)
       NOT insertion_tick STREQUAL "9047" OR
       NOT host_steps STREQUAL "4082" OR
       NOT system_flight_checksum STREQUAL "12996023908337151515" OR
-      NOT orbital_flight_checksum STREQUAL "12363798669694469075" OR
+      NOT orbital_flight_checksum STREQUAL "6543655391732023443" OR
       NOT framebuffer_checksum STREQUAL "2134678291051779558")
     message(FATAL_ERROR
       "${driver} system-flight report is not canonical:\n${json}")

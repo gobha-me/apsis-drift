@@ -42,6 +42,19 @@ struct FlightRegimeReadout {
   auto operator==(const FlightRegimeReadout&) const -> bool = default;
 };
 
+struct ThermalInstrumentReadout {
+  std::string load;
+  std::string trend;
+  std::string limit;
+  std::string flight_path_angle;
+  std::string cue;
+  ThermalTrend trend_state{ThermalTrend::steady};
+  ThermalCue cue_state{ThermalCue::nominal};
+  bool valid{};
+
+  auto operator==(const ThermalInstrumentReadout&) const -> bool = default;
+};
+
 struct SignalScannerReadout {
   std::string target;
   std::string bearing;
@@ -128,6 +141,13 @@ struct CockpitLayout {
 // sole owner of transition timing.
 [[nodiscard]] auto format_flight_regime(
     const PlanetaryFlightState& state) -> FlightRegimeReadout;
+
+// Thermal feedback is derived from authoritative planet and flight state.
+// Fixed-width text keeps load, trend, limit, angle, and correction equivalent
+// on Kitty and ANSI paths.
+[[nodiscard]] auto format_thermal_instruments(
+    const PlanetDescriptor& planet,
+    const PlanetaryFlightState& state) -> ThermalInstrumentReadout;
 
 // Scanner lines are fixed width and communicate direction and status in text,
 // so the Kitty and ANSI cockpit paths do not depend on color alone.

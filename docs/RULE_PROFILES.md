@@ -13,13 +13,12 @@ Launch locks the selected profile for the active mission. Returning, changing
 terminal driver, resizing, changing render cadence, or loading the save cannot
 change it.
 
-The selection is a tick-addressed intersystem contract command and save format
-9 stores it as authoritative state. Formats 1 through 7 migrate without a
-profile field and therefore select `ASSISTED`. Unknown profile values are
-invalid rather than silently downgraded.
+The selection is a tick-addressed intersystem contract command; save formats
+8 through 10 store it as authoritative state. Formats 1 through 7 migrate
+without a profile field and therefore select `ASSISTED`. Unknown profile
+values are invalid rather than silently downgraded.
 
-Pilot FTL alignment now consumes this boundary. Pilot thermal entry remains a
-separate follow-up.
+Pilot FTL alignment and thermal entry both consume this boundary.
 
 ## Assisted
 
@@ -35,7 +34,7 @@ Assisted remains the default complete-loop experience:
 ## Pilot thermal contract
 
 Pilot uses the same generated planet, atmosphere, terrain, objective, and
-flight controls. The follow-up thermal implementation derives heating from
+flight controls. Thermal integration derives heating from
 authoritative atmosphere, altitude, speed, flight-path angle, and fixed-step
 time.
 
@@ -69,8 +68,12 @@ direct travel-time measurements.
 Poor alignment never changes the target system, planet identity, ephemeris,
 mission, or objective and never requires fuel, repair, or permanent damage.
 
+The cockpit presents `HEAT`, `TEMP`, the 100% limit, signed flight-path angle,
+and an information-complete correction cue. See
+[Pilot Thermal Reentry](PILOT_REENTRY.md) for the formula, acceptance route,
+and save boundary.
+
 ## Deferred systems
 
-Thermal integration and reentry guidance belong to #93. Fuel, repair,
-permanent ship damage, installed hardware, additional profiles, sliders, and a generic
-difficulty framework remain outside this contract.
+Fuel, repair, permanent ship damage, installed hardware, additional profiles,
+sliders, and a generic difficulty framework remain outside this contract.

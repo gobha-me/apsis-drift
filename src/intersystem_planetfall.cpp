@@ -153,8 +153,15 @@ auto validate_intersystem_planetfall_state(
 
 auto advance_intersystem_planetfall(IntersystemPlanetfallState& state,
                                     TerrainTileCache& cache,
-                                    std::span<const FlightCommand> commands)
+                                    std::span<const FlightCommand> commands,
+                                    IntersystemRuleProfile profile)
     -> std::expected<IntersystemPlanetfallUpdate, IntersystemPlanetfallError> {
+  if ((profile != IntersystemRuleProfile::assisted &&
+       profile != IntersystemRuleProfile::pilot) ||
+      (profile == IntersystemRuleProfile::assisted &&
+       state.flight.thermal.abort_latched)) {
+    return std::unexpected{IntersystemPlanetfallError::invalid_state};
+  }
   if (!state.scanner.selected ||
       !validate_intersystem_planetfall_state(state, *state.scanner.selected)) {
     return std::unexpected{IntersystemPlanetfallError::invalid_state};
@@ -163,8 +170,10 @@ auto advance_intersystem_planetfall(IntersystemPlanetfallState& state,
   const auto environment =
       surface_environment(*next.planet, next.flight, cache);
   if (!environment) return std::unexpected{environment.error()};
-  if (!advance_planetary_flight(*next.planet, *environment, next.flight,
-                                commands, kSimulationStep)) {
+  if (!advance_planetary_flight(
+          *next.planet, *environment, next.flight, commands, kSimulationStep,
+          {.enforce_thermal_abort =
+               profile == IntersystemRuleProfile::pilot})) {
     return std::unexpected{IntersystemPlanetfallError::flight_failure};
   }
   const auto navigation = resolve_signal_navigation(*next.planet, next.catalog,

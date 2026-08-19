@@ -50,7 +50,7 @@ function(check_signal_acceptance driver profile)
       NOT world_delta_count STREQUAL "1" OR
       NOT world_delta_kind STREQUAL "collected" OR
       final_distance_metres GREATER 1000.0 OR
-      NOT flight_checksum STREQUAL "4086686148596456340" OR
+      NOT flight_checksum STREQUAL "17407832030238464473" OR
       NOT framebuffer_checksum MATCHES "^[0-9]+$" OR
       framebuffer_checksum STREQUAL "0" OR
       NOT render_profile STREQUAL "${profile}" OR

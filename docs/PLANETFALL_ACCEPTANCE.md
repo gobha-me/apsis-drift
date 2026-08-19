@@ -26,7 +26,7 @@ before advancing `PlanetaryFlightState`. With the v0.4.2 atmosphere-normalized
 envelope, the replay crosses the atmosphere at tick `4080`, enters the first
 mixed terrain frame at tick `15555`, releases descent at tick `20379`, and ends
 at tick `30089` in stable low-level forward flight. Its authoritative final
-flight checksum is `1628243202805637918`.
+flight checksum is `15251675909814434464`.
 
 The report retains one checkpoint for each presentation stage:
 
