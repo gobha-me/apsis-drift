@@ -54,6 +54,7 @@
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
+#include "apsis_drift/version.hpp"
 #include "apsis_drift/world_delta_journal.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
@@ -160,14 +161,6 @@ auto check(bool condition, const char* message) -> void {
   return text;
 }
 
-[[nodiscard]] auto read_test_data(std::string_view relative) -> std::string {
-  const auto path = std::string{APSIS_DRIFT_SOURCE_DIR} + "/" +
-                    std::string{relative};
-  std::ifstream input{path, std::ios::binary};
-  return {std::istreambuf_iterator<char>{input},
-          std::istreambuf_iterator<char>{}};
-}
-
 class TemporaryDirectory {
  public:
   TemporaryDirectory() {
@@ -199,6 +192,13 @@ auto write_test_file(const std::filesystem::path& path,
   std::ofstream output{path, std::ios::binary};
   output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
   return output.good();
+}
+
+[[nodiscard]] auto read_test_file(const std::filesystem::path& path)
+    -> std::string {
+  std::ifstream input{path, std::ios::binary};
+  return {std::istreambuf_iterator<char>{input},
+          std::istreambuf_iterator<char>{}};
 }
 
 auto generation_failure_matrix() -> void {
@@ -838,7 +838,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v10 round trip");
+        "a committed arrival solution must survive a canonical v11 round trip");
 
   auto missing_arrival = state;
   missing_arrival.arrival_solution.reset();
@@ -851,40 +851,6 @@ auto intersystem_jump_contract() -> void {
             missing_encoded.error().path ==
                 "$.state.intersystem_contract.arrival_solution",
         "current committed saves must reject a missing arrival at its exact schema path");
-  if (encoded_checkpoint) {
-    for (std::uint32_t format_version = 3; format_version <= 9;
-         ++format_version) {
-      auto released = replace_once(
-          *encoded_checkpoint, "\"format_version\": 10",
-          std::format("\"format_version\": {}", format_version));
-      released = replace_once(std::move(released),
-                              "\"arrival_solution\": {",
-                              "\"arrival_solution\": null,\n"
-                              "      \"discarded_arrival\": {");
-      if (format_version <= 7) {
-        released = replace_once(std::move(released),
-                                "\"intersystem_contract\": 3",
-                                "\"intersystem_contract\": 1");
-      } else if (format_version == 8) {
-        released = replace_once(std::move(released),
-                                "\"intersystem_contract\": 3",
-                                "\"intersystem_contract\": 2");
-      }
-      if (format_version >= 4 && format_version <= 8) {
-        released = replace_once(std::move(released),
-                                "\"intersystem_jump\": 2",
-                                "\"intersystem_jump\": 1");
-      }
-      const auto rejected = decode_save_document_json(released);
-      check(!rejected &&
-                rejected.error().code ==
-                    SaveSchemaErrorCode::incompatible_generator_version &&
-                rejected.error().path ==
-                    "$.state.intersystem_contract.arrival_solution",
-            "released committed saves without immutable arrival data must return an explicit compatibility error");
-    }
-  }
-
   auto finite_tamper = state;
   finite_tamper.arrival_solution->position.x += 1.0;
   const auto finite_tamper_before = finite_tamper;
@@ -1227,28 +1193,6 @@ auto intersystem_jump_contract() -> void {
   check(!begin_intersystem_jump(opposed_recommit) &&
             opposed_recommit == opposed_before_recommit,
         "a committed Pilot jump must reject recommit without mutation");
-
-  auto pilot_v8_document = make_new_game_document(Seed{42});
-  pilot_v8_document.state.intersystem_contract = pilot;
-  const auto pilot_v10_json = encode_save_document_json(pilot_v8_document);
-  if (pilot_v10_json) {
-    auto pilot_v8_json = replace_once(*pilot_v10_json,
-                                      "\"format_version\": 10",
-                                      "\"format_version\": 8");
-    pilot_v8_json = replace_once(std::move(pilot_v8_json),
-                                 "\"intersystem_contract\": 3",
-                                 "\"intersystem_contract\": 2");
-    pilot_v8_json = replace_once(std::move(pilot_v8_json),
-                                 "\"intersystem_jump\": 2",
-                                 "\"intersystem_jump\": 1");
-    const auto migrated_pilot_v8 =
-        decode_save_document_json(pilot_v8_json);
-    check(migrated_pilot_v8 &&
-              migrated_pilot_v8->state.intersystem_contract &&
-              migrated_pilot_v8->state.intersystem_contract->jump_alignment ==
-                  IntersystemJumpAlignmentState{},
-          "format v8 Pilot spool saves must migrate to one neutral deterministic alignment");
-  }
 
   auto overflow = initial_intersystem_contract_state(Seed{42});
   (void)advance_intersystem_contract(
@@ -1616,26 +1560,7 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v10 save/resume exactly");
-  if (encoded && contract.arrival_solution) {
-    auto released_v4 = replace_once(
-        *encoded, "\"format_version\": 10", "\"format_version\": 4");
-    released_v4 = replace_once(std::move(released_v4),
-                               "\"intersystem_contract\": 3",
-                               "\"intersystem_contract\": 1");
-    released_v4 = replace_once(std::move(released_v4),
-                               "\"intersystem_jump\": 2",
-                               "\"intersystem_jump\": 1");
-    released_v4 = replace_once(std::move(released_v4),
-                               "\"rule_profile\": \"assisted\",\n", "");
-    const auto migrated = decode_save_document_json(released_v4);
-    const auto expected_migration = initial_system_flight_state(
-        system, contract.identities.target_planet,
-        *contract.arrival_solution);
-    check(migrated && expected_migration &&
-              migrated->state.system_flight == *expected_migration,
-          "released format-4 target arrivals must migrate from the immutable handoff");
-  }
+        "system flight must survive canonical v11 save/resume exactly");
 }
 
 auto intersystem_return_contract() -> void {
@@ -1756,23 +1681,7 @@ auto intersystem_return_contract() -> void {
               : std::expected<SaveDocument, SaveSchemaError>{
                     std::unexpected{SaveSchemaError{}}};
   check(restored && restored->state.origin_return == returning,
-        "format 8 must preserve the exact origin-station approach state");
-  if (encoded) {
-    auto released_v6 = replace_once(
-        *encoded, "\"format_version\": 10", "\"format_version\": 6");
-    released_v6 = replace_once(std::move(released_v6),
-                               "\"intersystem_contract\": 3",
-                               "\"intersystem_contract\": 1");
-    released_v6 = replace_once(std::move(released_v6),
-                               "\"intersystem_jump\": 2",
-                               "\"intersystem_jump\": 1");
-    released_v6 = replace_once(std::move(released_v6),
-                               "\"rule_profile\": \"assisted\",\n", "");
-    const auto migrated = decode_save_document_json(released_v6);
-    check(migrated && migrated->state.origin_return == returning &&
-              migrated->state.intersystem_contract == contract,
-          "released format-6 origin arrival must materialize its immutable station approach");
-  }
+        "format 11 must preserve the exact origin-station approach state");
 }
 
 auto intersystem_contract_acceptance_contract() -> void {
@@ -1784,7 +1693,7 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(result && result->report.checkpoints.size() == 6U &&
             result->report.final_tick == 31'535U &&
             result->report.final_authoritative_checksum ==
-                11'076'438'379'560'989'059ULL &&
+                12'931'774'764'902'718'894ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -1893,7 +1802,7 @@ auto intersystem_planetfall_contract() -> void {
   check(thermal_restored && thermal_restored->state.flight &&
             thermal_restored->state.flight->thermal ==
                 PlanetaryThermalState{825'000U, true},
-        "save format 10 must preserve an active Pilot thermal abort exactly");
+        "save format 11 must preserve an active Pilot thermal abort exactly");
   if (thermal_json) {
     const auto corrupt_thermal = decode_save_document_json(replace_once(
         *thermal_json, "\"load_units\": 825000",
@@ -1902,24 +1811,6 @@ auto intersystem_planetfall_contract() -> void {
               corrupt_thermal.error().code ==
                   SaveSchemaErrorCode::invalid_state,
           "out-of-range persisted thermal load must be rejected");
-
-    auto released_v9 = replace_once(*thermal_json,
-                                    "\"format_version\": 10",
-                                    "\"format_version\": 9");
-    const auto thermal_start = released_v9.find("      \"thermal\": {");
-    const auto thermal_end =
-        thermal_start == std::string::npos
-            ? std::string::npos
-            : released_v9.find("      },", thermal_start);
-    if (thermal_start != std::string::npos &&
-        thermal_end != std::string::npos) {
-      released_v9.erase(thermal_start,
-                        thermal_end + 9U - thermal_start);
-    }
-    const auto migrated_v9 = decode_save_document_json(released_v9);
-    check(migrated_v9 && migrated_v9->state.flight &&
-              migrated_v9->state.flight->thermal == PlanetaryThermalState{},
-          "released format 9 flight must migrate to zero thermal load without inventing history");
   }
 
   bool completed{};
@@ -2060,85 +1951,32 @@ auto mission_board_contract() -> void {
                     "$.state.intersystem_contract.identities",
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
-  if (fresh_json) {
-    auto released_v3 = replace_once(*fresh_json, "\"format_version\": 10",
-                                    "\"format_version\": 3");
-    released_v3 = replace_once(std::move(released_v3),
-                               "\"intersystem_contract\": 3",
-                               "\"intersystem_contract\": 1");
-    released_v3 = replace_once(std::move(released_v3),
-                               "\"rule_profile\": \"assisted\",\n", "");
-    released_v3 = replace_once(std::move(released_v3),
-                               "\"arrival_solution\": null",
-                               "\"legacy_optional\": null");
-    const auto migrated_v3 = decode_save_document_json(released_v3);
-    const auto rewritten_v3 =
-        migrated_v3
-            ? encode_save_document_json(*migrated_v3)
-            : std::expected<std::string, SaveSchemaError>{
-                  std::unexpected{SaveSchemaError{}}};
-    check(migrated_v3 &&
-              migrated_v3->state.intersystem_contract ==
-                  document.state.intersystem_contract &&
-              rewritten_v3 && rewritten_v3->find("\"format_version\": 10") !=
-                                    std::string::npos,
-          "released v3 intersystem profiles must default to Assisted and rewrite as v10");
-
-    auto pilot_document = make_new_game_document(Seed{42});
-    const auto selected = advance_intersystem_contract(
-        *pilot_document.state.intersystem_contract, 0,
-        IntersystemContractCommand::select_pilot_profile);
-    const auto pilot_json = encode_save_document_json(pilot_document);
-    const auto pilot_round_trip =
-        pilot_json ? decode_save_document_json(*pilot_json)
-                   : std::expected<SaveDocument, SaveSchemaError>{
-                         std::unexpected{SaveSchemaError{}}};
-    check(selected && pilot_json &&
-              pilot_json->find("\"rule_profile\": \"pilot\"") !=
-                  std::string::npos &&
-              pilot_round_trip &&
-              pilot_round_trip->state.intersystem_contract->rule_profile ==
-                  IntersystemRuleProfile::pilot,
-          "format v10 must preserve the authoritative Pilot selection");
-    if (pilot_json) {
-      const auto invalid_profile = decode_save_document_json(replace_once(
-          *pilot_json, "\"rule_profile\": \"pilot\"",
-          "\"rule_profile\": \"simulation\""));
-      check(!invalid_profile &&
-                invalid_profile.error().code ==
-                    SaveSchemaErrorCode::invalid_value &&
-                invalid_profile.error().path ==
-                    "$.state.intersystem_contract.rule_profile",
-            "format v10 must reject unknown rule profiles before state commit");
-
-      auto released_v7 = replace_once(*pilot_json, "\"format_version\": 10",
-                                      "\"format_version\": 7");
-      released_v7 = replace_once(std::move(released_v7),
-                                 "\"intersystem_contract\": 3",
-                                 "\"intersystem_contract\": 1");
-      released_v7 = replace_once(std::move(released_v7),
-                                 "\"intersystem_jump\": 2",
-                                 "\"intersystem_jump\": 1");
-      released_v7 = replace_once(std::move(released_v7),
-                                 "\"rule_profile\": \"pilot\",\n", "");
-      const auto migrated_v7 = decode_save_document_json(released_v7);
-      check(migrated_v7 &&
-                migrated_v7->recipe.generator_versions.intersystem_contract ==
-                    kIntersystemContractVersion &&
-                migrated_v7->state.intersystem_contract->rule_profile ==
-                    IntersystemRuleProfile::assisted,
-            "released format v7 must normalize contract version 1 and default to Assisted");
-
-      auto dishonest_v7 = replace_once(*pilot_json, "\"format_version\": 10",
-                                       "\"format_version\": 7");
-      dishonest_v7 = replace_once(std::move(dishonest_v7),
-                                  "\"rule_profile\": \"pilot\",\n", "");
-      const auto rejected_v7 = decode_save_document_json(dishonest_v7);
-      check(!rejected_v7 &&
-                rejected_v7.error().code ==
-                    SaveSchemaErrorCode::incompatible_generator_version,
-            "released formats must reject contract-version metadata they could not encode");
-    }
+  auto pilot_document = make_new_game_document(Seed{42});
+  const auto selected = advance_intersystem_contract(
+      *pilot_document.state.intersystem_contract, 0,
+      IntersystemContractCommand::select_pilot_profile);
+  const auto pilot_json = encode_save_document_json(pilot_document);
+  const auto pilot_round_trip =
+      pilot_json ? decode_save_document_json(*pilot_json)
+                 : std::expected<SaveDocument, SaveSchemaError>{
+                       std::unexpected{SaveSchemaError{}}};
+  check(selected && pilot_json &&
+            pilot_json->find("\"rule_profile\": \"pilot\"") !=
+                std::string::npos &&
+            pilot_round_trip &&
+            pilot_round_trip->state.intersystem_contract->rule_profile ==
+                IntersystemRuleProfile::pilot,
+        "format v11 must preserve the authoritative Pilot selection");
+  if (pilot_json) {
+    const auto invalid_profile = decode_save_document_json(replace_once(
+        *pilot_json, "\"rule_profile\": \"pilot\"",
+        "\"rule_profile\": \"simulation\""));
+    check(!invalid_profile &&
+              invalid_profile.error().code ==
+                  SaveSchemaErrorCode::invalid_value &&
+              invalid_profile.error().path ==
+                  "$.state.intersystem_contract.rule_profile",
+          "format v11 must reject unknown rule profiles before state commit");
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
@@ -2192,8 +2030,8 @@ auto mission_board_contract() -> void {
           message);
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
-             "offered intersystem state must survive a v10 round trip");
-  round_trip(state, "accepted intersystem state must survive a v10 round trip");
+             "offered intersystem state must survive a v11 round trip");
+  round_trip(state, "accepted intersystem state must survive a v11 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
@@ -2202,7 +2040,7 @@ auto mission_board_contract() -> void {
                 .has_value() &&
             command(IntersystemContractCommand::launch).has_value(),
         "the released-save fixture must launch with its historical Assisted profile");
-  round_trip(state, "active intersystem state must survive a v10 round trip");
+  round_trip(state, "active intersystem state must survive a v11 round trip");
   bool objective_ready = begin_intersystem_jump(state).has_value();
   const auto target_system =
       generate_local_system(state.identities.target_system_seed);
@@ -2218,37 +2056,11 @@ auto mission_board_contract() -> void {
   check(objective_ready,
         "the persistence fixture must reach objective completion legally");
   round_trip(state,
-             "objective-complete intersystem state must survive a v10 round trip");
-  const auto completed_v10 = encode_save_document_json(document);
-  if (completed_v10) {
-    auto released_v5 = replace_once(*completed_v10, "\"format_version\": 10",
-                                    "\"format_version\": 5");
-    released_v5 = replace_once(std::move(released_v5),
-                               "\"intersystem_contract\": 3",
-                               "\"intersystem_contract\": 1");
-    released_v5 = replace_once(std::move(released_v5),
-                               "\"intersystem_jump\": 2",
-                               "\"intersystem_jump\": 1");
-    const auto deltas_start = released_v5.find("    \"world_deltas\": [");
-    const auto deltas_end =
-        deltas_start == std::string::npos
-            ? std::string::npos
-            : released_v5.find("    ]", deltas_start);
-    if (deltas_start != std::string::npos &&
-        deltas_end != std::string::npos) {
-      released_v5.replace(deltas_start, deltas_end + 5U - deltas_start,
-                          "    \"world_deltas\": []");
-    }
-    const auto migrated_v5 = decode_save_document_json(released_v5);
-    check(migrated_v5 &&
-              migrated_v5->state.world_deltas ==
-                  document.state.world_deltas,
-          "released v5 completion must materialize its earned target delta");
-  }
+             "objective-complete intersystem state must survive a v11 round trip");
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v10 completion must require its bound collected delta");
+        "format v11 completion must require its bound collected delta");
   bool returned =
       command(IntersystemContractCommand::leave_target_planet).has_value() &&
       begin_intersystem_jump(state).has_value();
@@ -2262,10 +2074,10 @@ auto mission_board_contract() -> void {
       returned && command(IntersystemContractCommand::dock_at_origin).has_value();
   check(returned,
         "the persistence fixture must return legally");
-  round_trip(state, "returned intersystem state must survive a v10 round trip");
+  round_trip(state, "returned intersystem state must survive a v11 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),
         "the persistence fixture must turn in legally");
-  round_trip(state, "turned-in intersystem state must survive a v10 round trip");
+  round_trip(state, "turned-in intersystem state must survive a v11 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -2921,14 +2733,10 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 10 && kSaveApplication == "apsis-drift" &&
-            kMaximumSaveDocumentBytes == (1U << 20U),
-        "save format version 10 identity and byte bound must remain stable");
-  const auto legacy_fixture = read_test_data("test/data/save-v1-golden.json");
-  const auto fixture = read_test_data("test/data/save-v2-golden.json");
-  check(!legacy_fixture.empty() && !fixture.empty(),
-        "the version 1 and version 2 golden save fixtures must be readable");
-
+  check(kSaveFormatVersion == 11 && kSaveApplication == "apsis-drift" &&
+            kMaximumSaveDocumentBytes == (1U << 20U) &&
+            kMaximumSaveApplicationVersionBytes == 64,
+        "save format version 11 identity and bounds must remain stable");
   auto recipe = make_save_recipe(Seed{42});
   const auto target = SurfaceSignalId{0x71d4c959dcd64423ULL};
   SaveDocument expected{
@@ -2969,24 +2777,25 @@ auto save_schema_contract() -> void {
   check(validate_save_document(expected).has_value(),
         "the representative legacy Signal Run save must validate");
 
-  const auto decoded = decode_save_document_json(fixture);
-  check(decoded && *decoded == expected,
-        "the golden save must decode to the complete semantic state");
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 10") !=
+  check(encoded && encoded->find("\"format_version\": 11") !=
                        std::string::npos &&
+            encoded->find(std::format("\"application_version\": \"{}\"",
+                                      kApplicationVersion)) !=
+                std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must migrate legacy state into canonical version 10");
+        "the current encoder must write canonical format-11 state with writer provenance");
+  const std::string fixture = encoded.value_or("{}");
+  const auto decoded = decode_save_document_json(fixture);
+  check(decoded && *decoded == expected,
+        "the canonical save must decode to the complete semantic state");
   if (encoded) {
     const auto round_trip = decode_save_document_json(*encoded);
-    check(round_trip && *round_trip == expected,
-          "save encode/decode must preserve semantic state");
+    check(round_trip && *round_trip == expected &&
+              encode_save_document_json(*round_trip) == encoded,
+          "save encode/decode/re-encode must preserve canonical format-11 state exactly");
   }
-  const auto migrated = decode_save_document_json(legacy_fixture);
-  check(migrated && *migrated == expected &&
-            encode_save_document_json(*migrated) == encoded,
-        "a version 1 save must migrate in memory and rewrite canonically as version 10");
 
   auto unknown = fixture;
   unknown.insert(2, "  \"future_optional\": {\"note\": true},\n");
@@ -3046,17 +2855,37 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::duplicate_key,
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": 11"),
+      replace_once(fixture, "\"format_version\": 11",
+                   "\"format_version\": 1"),
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "format-1 alpha saves must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 11",
+                   "\"format_version\": 10"),
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "format-10 alpha saves must be rejected explicitly");
+  expect_decode_error(
+      "{\"application\":\"apsis-drift\",\"format_version\":10}",
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "old alpha formats must be identified before nested fields are read");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 11",
+                   "\"format_version\": 12"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
+  const auto future_with_provenance = decode_save_document_json(replace_once(
+      fixture, "\"format_version\": 11", "\"format_version\": 12"));
+  check(!future_with_provenance &&
+            future_with_provenance.error().detail.find(kApplicationVersion) !=
+                std::string::npos,
+        "unknown newer saves must identify valid writer provenance");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":11}",
+      "{\"application\":\"apsis-drift\",\"format_version\":12}",
       SaveSchemaErrorCode::unsupported_format_version,
-        "future formats must be identified before version 10 fields are read");
+      "future formats must be identified before current fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 2",
-                   "\"format_version\": \"1\""),
+      replace_once(fixture, "\"format_version\": 11",
+                   "\"format_version\": \"11\""),
       SaveSchemaErrorCode::invalid_type,
       "schema integers with the wrong JSON type must be rejected");
   expect_decode_error(
@@ -3064,6 +2893,35 @@ auto save_schema_contract() -> void {
                    "\"application\": \"another-game\""),
       SaveSchemaErrorCode::invalid_value,
       "foreign application saves must be rejected");
+  expect_decode_error(
+      replace_once(fixture, "\"application_version\"",
+                   "\"missing_application_version\""),
+      SaveSchemaErrorCode::missing_field,
+      "format 11 must require writer-version provenance");
+  expect_decode_error(
+      replace_once(fixture,
+                   std::format("\"application_version\": \"{}\"",
+                               kApplicationVersion),
+                   "\"application_version\": \"\""),
+      SaveSchemaErrorCode::invalid_value,
+      "empty writer-version provenance must be rejected");
+  expect_decode_error(
+      replace_once(fixture,
+                   std::format("\"application_version\": \"{}\"",
+                               kApplicationVersion),
+                   std::format("\"application_version\": \"{}\"",
+                               std::string(
+                                   kMaximumSaveApplicationVersionBytes + 1U,
+                                   'v'))),
+      SaveSchemaErrorCode::invalid_value,
+      "oversized writer-version provenance must be rejected");
+  expect_decode_error(
+      replace_once(fixture,
+                   std::format("\"application_version\": \"{}\"",
+                               kApplicationVersion),
+                   "\"application_version\": \"\\u001b\""),
+      SaveSchemaErrorCode::invalid_value,
+      "control characters in writer-version provenance must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"seed_derivation\": 1",
                    "\"seed_derivation\": 2"),
@@ -3139,8 +2997,9 @@ auto save_schema_contract() -> void {
       "unknown world-delta kinds must be rejected");
 
   constexpr std::array required_sections{
-      "\"application\"", "\"format_version\"", "\"recipe\"",
-      "\"state\"",       "\"generator_versions\"", "\"local_sun\"",
+      "\"application\"", "\"application_version\"",
+      "\"format_version\"", "\"recipe\"", "\"state\"",
+      "\"generator_versions\"", "\"local_sun\"",
       "\"first_objective\"", "\"flight\"", "\"discoveries\"",
       "\"world_deltas\"",
   };
@@ -3267,15 +3126,13 @@ auto save_file_contract() -> void {
           "an explicitly different destination must support save-as without changing state");
   }
 
-  const auto representative = decode_save_document_json(
-      read_test_data("test/data/save-v1-golden.json"));
+  const auto representative = make_new_game_document(Seed{42});
   const bool representative_written =
-      representative &&
-      write_save_file_atomically(save_as_path, *representative).has_value();
+      write_save_file_atomically(save_as_path, representative).has_value();
   const auto representative_loaded = load_save_file(save_as_path);
   check(representative_written && representative_loaded &&
-            *representative_loaded == *representative,
-        "atomic replacement must preserve a complete in-flight authoritative profile");
+            *representative_loaded == representative,
+        "atomic replacement must preserve a complete authoritative profile");
 
   const auto replacement = make_new_game_document(Seed{42});
   const auto interrupted = detail::write_save_file_atomically_for_test(
@@ -3336,11 +3193,32 @@ auto save_file_contract() -> void {
           "save diagnostics must include the path and schema location");
   }
 
+  const auto unsupported_path = temporary.path() / "format-10.json";
+  constexpr std::string_view unsupported_contents{
+      "{\"application\":\"apsis-drift\",\"format_version\":10}\n"};
+  check(write_test_file(unsupported_path, unsupported_contents),
+        "the unsupported alpha save fixture must be writable");
+  live = zero;
+  const auto unsupported = load_save_file(unsupported_path);
+  if (unsupported) live = *unsupported;
+  check(!unsupported &&
+            unsupported.error().code == SaveFileErrorCode::invalid_document &&
+            unsupported.error().schema_error &&
+            unsupported.error().schema_error->code ==
+                SaveSchemaErrorCode::unsupported_alpha_format_version &&
+            live == zero &&
+            read_test_file(unsupported_path) == unsupported_contents,
+        "an unsupported alpha save must not replace live state or modify its source file");
+
   const auto inconsistent_path = temporary.path() / "inconsistent.json";
-  const auto inconsistent_fixture = replace_once(
-      read_test_data("test/data/save-v2-golden.json"),
-      "\"target_signal_id\": \"signal-71d4c959dcd64423\"",
-      "\"target_signal_id\": \"signal-0000000000000001\"");
+  const auto signal_document = make_legacy_signal_run_document(Seed{42});
+  const auto signal_json = encode_save_document_json(signal_document);
+  const auto inconsistent_fixture =
+      signal_json
+          ? replace_once(*signal_json,
+                         "\"target_signal_id\": \"signal-0000000000000000\"",
+                         "\"target_signal_id\": \"signal-0000000000000001\"")
+          : std::string{};
   check(write_test_file(inconsistent_path, inconsistent_fixture),
         "the inconsistent semantic save fixture must be writable");
   const auto inconsistent = load_save_file(inconsistent_path);
@@ -3348,10 +3226,10 @@ auto save_file_contract() -> void {
             inconsistent.error().code == SaveFileErrorCode::invalid_document &&
             inconsistent.error().schema_error &&
             inconsistent.error().schema_error->code ==
-                SaveSchemaErrorCode::identity_mismatch &&
+                SaveSchemaErrorCode::invalid_state &&
             inconsistent.error().schema_error->path ==
                 "$.state.first_objective.target_signal_id",
-        "file loading must reject generated Signal Run identity mismatches before commit");
+        "file loading must reject inconsistent Signal Run state before commit");
   if (!inconsistent) {
     const auto message = save_file_error_message(inconsistent.error());
     check(message.find(inconsistent_path.string()) != std::string::npos &&

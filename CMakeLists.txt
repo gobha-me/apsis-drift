@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.26 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.27 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -153,8 +153,6 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
   target_include_directories(apsis-drift-tests
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_compile_definitions(apsis-drift-tests PRIVATE
-    APSIS_DRIFT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
   add_test(NAME version-report COMMAND apsis-drift --version)
   set_tests_properties(version-report PROPERTIES
@@ -258,12 +256,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_signal_run_acceptance.cmake")
 
-  add_test(NAME reject-inconsistent-legacy-signal-save
+  add_test(NAME reject-unsupported-alpha-save
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
-            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_legacy_save_rejection.cmake")
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_unsupported_alpha_save.cmake")
 
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)

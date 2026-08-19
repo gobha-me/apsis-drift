@@ -1,15 +1,32 @@
 # Save Format and Compatibility
 
-Apsis Drift save format version 10 is a deterministic JSON document. It keeps
-the generated-world recipe separate from mutable player state and does not
-serialize terrain tiles, render state, terminal capabilities, preferences, or
-other reproducible presentation data.
+Apsis Drift save format 11 is a deterministic JSON document. It keeps the
+generated-world recipe separate from mutable player state and excludes terrain
+tiles, render state, terminal capabilities, user preferences, caches, and other
+reproducible presentation data.
 
-Issue #18 defines the document and validation contract only. Atomic files,
-profile paths, CLI load/save options, and live-state commit behavior belong to
-#19. Sparse-journal application and compaction belong to #20.
+## Compatibility policy
 
-## Profile files
+| Application version | Player-save promise |
+| --- | --- |
+| `< v0.8.0` | Alpha. A release may reject an earlier format, but rejection must be explicit, transactional, and non-destructive. |
+| `v0.8.0` through `< v1.0.0` | Every later beta must load every valid save created at or after `v0.8.0`. |
+| `v1.0.0` through `< v2.0.0` | Every later 1.x release must load valid 1.x saves and the supported v0.8+ beta lineage. |
+
+Format 11 is the intentional orbiting-home alpha reset. Formats 1 through 10
+are no longer supported player saves. A loader recognizes them from the root
+application and format fields, reports `unsupported_alpha_format_version`, and
+returns before decoding authoritative recipe or state. It never overwrites,
+renames, deletes, or partially migrates the source file.
+
+The beta compatibility floor is deliberately not reserved in advance. The
+`v0.8.0` release must record its actual current format as the minimum supported
+beta format after skippable onboarding, open exploration, and ordinary
+save/load UI are ready for durable careers. Generator recipes remain
+independently versioned; after the beta line, an incompatible recipe requires
+continued support, migration, or an explicit major-version policy.
+
+## Profile files and transactional loading
 
 Interactive runs may select a validated input profile with `--load PATH`, an
 explicit clean-exit destination with `--save PATH`, or a deterministic new
@@ -17,197 +34,80 @@ profile with `--new-game-seed N`. Loading and new-game selection are mutually
 exclusive. A different load and save path is an explicit save-as; a load path
 is never overwritten unless it is also named as the save path.
 
-The loader reads at most the format byte limit, decodes and validates into a
-temporary document, and returns it for application-owned commit only after all
-compatibility and regenerated-identity checks succeed. Failed loads therefore
-cannot partially mutate live state.
+The loader reads at most the format byte limit and decodes into a temporary
+document. Application state changes only after schema, generator, identity, and
+state validation all succeed. Missing files, malformed JSON, unsupported alpha
+formats, unknown newer formats, incompatible generator versions, and corrupt
+authoritative state remain distinct errors.
 
 Saving validates and encodes the complete document before opening the
 destination directory. It writes a private temporary file beside the target,
-synchronizes the file, atomically replaces the target, and synchronizes the
-directory. Failures before replacement preserve the previous valid file and
-remove the temporary file. A directory-synchronization failure is reported as
-a durability error after replacement rather than pretending the old file was
-retained.
+synchronizes it, atomically replaces the target, and synchronizes the directory.
+Failures before replacement preserve the previous file and remove the
+temporary file. Directory-synchronization failure is reported as a durability
+error after replacement.
 
-The application persists only on a clean exit. The complete legacy Signal Run
-owns projection of its gameplay changes; the first intersystem mission board
-projects its authoritative contract state independently.
+## Document shape and provenance
 
-## Document shape
-
-Every document has three required top-level fields:
+Every format-11 document has these required top-level fields:
 
 - `application` is exactly `apsis-drift`;
-- `format_version` is the unsigned JSON integer `10` for newly written saves;
+- `application_version` is the non-empty, printable ASCII version of the build
+  that most recently wrote the file, bounded to 64 bytes;
+- `format_version` is the unsigned JSON integer `11`;
 - `recipe` and `state` are required objects.
 
-The recipe records the universe seed, origin-system and active-planet
-ordinals, the seed, planet, terrain-tile, origin-station, surface-signal,
-local-sun, local-system, analytic-ephemeris, intersystem-contract, and
-intersystem-jump, system-flight, and origin-return versions, plus the expected
-regenerated station and planet IDs.
+Writer provenance is diagnostic metadata. It does not enter `SaveDocument`,
+simulation, generation, replay, or gameplay checksums. The encoder always emits
+the current build version. A reader of an unknown newer format may use this root
+field to identify the writing build without attempting to decode its state.
 
-`state.career_kind` selects one of two explicit projections:
+The recipe records the universe seed, origin-system and active-planet ordinals,
+all required generator versions, and the expected regenerated station and
+planet IDs. `state.career_kind` selects one current projection:
 
-- `legacy_signal_run` retains the version 1/2 local planetary state;
-- `intersystem_contract` records the first-contract identities, universe tick,
-  mission/travel phases, current system/planet, committed destination, and
-  phase-start tick. Version 4 additionally records the immutable Assisted
-  arrival solution bound at jump commitment: destination/reference identities,
-  arrival tick, and finite system-space position and velocity. Version 5 adds
-  the mutable system-flight tick, identities, position, velocity, attitude,
-  controls, flight mode, and bounded time scale. Version 6 admits the matching
-  target-planet flight state and one collected delta for the contract's bound
-  surface objective. Version 7 adds the origin-station approach tick,
-  identities, inertial pose, controls, and mode. Version 8 records the
-  authoritative `assisted` or `pilot` rule profile selected before launch.
-  Version 9 adds fixed-point Pilot spool alignment and the immutable arrival
-  assessment bound at commitment. Version 10 adds planetary thermal load and
-  the Pilot abort latch.
+- `legacy_signal_run` is the bounded local Signal Run scenario used by its
+  acceptance path;
+- `intersystem_contract` records the current early-game contract identities,
+  rule profile, universe tick, mission and travel phases, committed arrival,
+  system or planetary flight, origin return, discoveries, and sparse world
+  deltas.
 
-Legacy mutable state records:
+Format 11 requires the complete current representation. It does not synthesize
+missing arrivals, flight state, rule profiles, alignment, thermal history, or
+world deltas. Later orbiting-home and Guided/Skip work may advance the alpha
+format again rather than overloading format 11 with fields that do not yet have
+authoritative gameplay semantics.
 
-- docked or in-flight location;
-- the First Signal Run status and bound target signal;
-- either `null` flight state while docked or the complete authoritative
-  planetary flight state while in flight;
-- unique discovered signal records;
-- an ordered sparse world-delta journal.
-
-The checked-in [`save-v2-golden.json`](../test/data/save-v2-golden.json) and
-[`save-v1-golden.json`](../test/data/save-v1-golden.json) remain legacy
-migration fixtures. Newly encoded documents are canonical version 10.
-
-## Encodings
+## Encodings and bounds
 
 Unsigned 64-bit seeds, ordinals, and simulation ticks are canonical decimal
-strings. Zero is `"0"`; leading zeroes and signs are invalid. This avoids loss
-in JSON consumers whose numeric representation cannot exactly hold every
-64-bit integer.
-
-Stable IDs retain their canonical forms: `system-`, `star-`, `mission-`,
-`station-`, `planet-`, or `signal-` followed by exactly sixteen lowercase
+strings. Stable IDs use their type prefix followed by exactly sixteen lowercase
 hexadecimal digits. Enums use lowercase snake-case names.
 
-Authoritative floating-point state is encoded as a finite decimal string with
-enough significant digits to reproduce the exact binary64 value. The encoder
-uses `std::to_chars` with `max_digits10`; the decoder uses `std::from_chars`
-and rejects non-finite, overflowing, or partially parsed values. JSON numeric
-literals are not accepted for these fields.
+Authoritative binary64 values are finite decimal strings encoded with enough
+digits to reproduce the exact value. JSON numeric literals are not accepted for
+these fields. Duplicate object keys are rejected. Unknown fields in an otherwise
+supported object are ignored and discarded on canonical rewrite; unknown enum
+values are rejected.
 
-World-delta object keys are non-empty lowercase ASCII identifiers of at most
-128 bytes using letters, digits, `-`, `_`, `.`, `:`, or `/`. Version 1 defines
-the journal envelope and the `discovered`, `collected`, `completed`, and
-`removed` state names. The active version 1 application recognizes canonical
-surface-signal keys and applies their compact current state after deterministic
-regeneration. Stable key construction, duplicate resolution, terminal-state
-behavior, and unknown-object policy are specified in the
-[Sparse Generated-World Journal](WORLD_DELTAS.md) contract.
+The decoder accepts at most 1 MiB, 4,096 discoveries, 16,384 world-delta
+entries, 128 bytes per object key, and 64 bytes of application-version
+provenance. These are safety bounds, not target sizes.
 
-## Validation and compatibility
+## Deterministic validation
 
-All fields for a selected supported format are required. Unknown fields in
-otherwise supported JSON objects are ignored and discarded when the document
-is rewritten; this lets
-new optional diagnostics travel through older readers without changing game
-state. Duplicate object keys are rejected rather than resolved by ordering.
-Unknown enum values and delta kinds are rejected because silently dropping
-their semantics could resurrect or duplicate generated content.
+The validator regenerates station, system, planet, mission, and signal
+identities from the saved seed and exact generator versions before admitting
+mutable state. Identity mismatches and invalid/non-finite flight states are
+errors, never reasons to reroll or reposition the player.
 
-Formats 1 through 10 and the generator versions compiled into the current build
-are supported. Version 1 is decoded with local-sun generator version 1;
-formats 1 and 2 rewrite as version 10 on the next explicit save. They remain
-`legacy_signal_run` careers and are never assigned the intersystem contract.
-Released version 3 intersystem careers preserve every recorded phase and tick
-when the phase does not depend on an arrival. A phase requiring the absent
-arrival solution fails with a structured compatibility error rather than
-synthesizing progress.
-Released version 4 target arrivals initialize system flight from their immutable
-arrival solution after deterministic regeneration validates every field; no
-destination, tick, or mission progress is rerolled.
-Released version 5 system flight remains exact. For a version 3–5 contract that
-already recorded objective completion, migration materializes the matching
-collected delta at its saved universe tick; it does not advance a mission.
-Released version 6 Planetfall state remains exact. A released origin arrival
-with an immutable return solution materializes the matching station-approach
-state without changing its tick, mission phase, or world delta.
-Formats 1 through 7 have no rule-profile field and migrate to `assisted`; their
-version-1 intersystem contract recipe is normalized to contract version 3.
-Format 8 normalizes contract version 2 and jump version 1 to the current
-versions. Existing target arrivals retain their exact pose and receive an
-ALIGNED assessment. A Pilot spool receives neutral alignment because version
-8 had no authoritative alignment field. Formats 1 through 9 initialize every
-planetary flight with zero thermal load and an unlatched abort because those
-releases recorded no thermal history. Other format versions fail as
-unsupported and other generator versions fail as incompatible. Older builds
-reject version 10 before reading fields, so they
-cannot silently discard the new mission state.
+Contract phases must carry exactly the authoritative craft representation and
+immutable arrival data their phase requires. Planetary state must satisfy its
+flight regime, clearance, thermal, and journal invariants. Signal Run targets,
+discoveries, and deltas must belong to the regenerated bounded catalog and have
+monotonic, non-future ticks.
 
-Local-sun geometry is regenerated from the active planet's independent
-celestial stream and the saved authoritative flight tick. The direction is not
-serialized as mutable state: save/reload reproduces it from the recorded
-generator version, planet identity, and tick.
-
-The validator deterministically regenerates the origin station and active
-planet from the recipe. A stored identity mismatch is corrupt or incompatible
-data, never a reason to silently move the player. In-flight state must use that
-planet, finite valid coordinates, a known regime and mode, at least the minimum
-flight clearance, and a consistent optional regime transition. Docked state
-must not contain active flight state; in-flight state must contain it and
-cannot retain a merely offered objective.
-
-Legacy Signal Run validation also regenerates the bounded surface-signal
-catalog in a temporary cache before a decoded document is returned. Objective,
-discovery, and journal identities must belong to that catalog; offered, active,
-and completed objective state must agree with target discovery and collection;
-and persisted discovery or delta ticks cannot exceed an active flight tick or
-reverse discovery-before-delta ordering. Validation errors retain the indexed
-JSON path, and no generated cache becomes live state until hydration succeeds.
-
-The decoder accepts at most 1 MiB, 4,096 discoveries, 16,384 journal entries,
-and 128 bytes per object key. These are format bounds, not a target size;
-normal early saves should remain in the kilobyte range.
-
-## Intersystem staging
-
-Version 3 reserved the high-level travel-state envelope. Version 4 binds and
-persists the Assisted FTL arrival solution. Version 5 persists mutable
-target-system craft flight and permits exactly one matching system or target-
-planet flight representation for its travel phase. Version 6 makes the
-target-planet projection playable: it retains planetary flight and requires
-objective-complete, returned, and turned-in contracts to carry exactly one
-collected delta for the immutable target, at or before the universe tick.
-Pre-completion intersystem state cannot carry a world delta. Camera state,
-terminal capabilities, render profiles, caches, and presentation progress
-remain excluded.
-
-Version 7 preserves a frozen target-system craft state during cancelable
-return spooling together with the immutable target arrival needed to cancel
-back to that state exactly. Jump commitment atomically replaces it with the
-canonical origin arrival and removes the frozen craft state. Origin arrival
-admits exactly one matching `origin_return` state. Docked, returned, and
-turned-in states contain no active craft representation. The origin-return
-state must match the contract tick, origin system, and stable station identity
-and must contain only finite bounded inertial values.
-
-Version 8 adds the rule profile to the high-level intersystem contract. It may
-change only while docked with an offered or accepted mission and is locked by
-launch. Thermal load remains deferred to the system that first makes it
-authoritative.
-
-Version 9 records signed 32-bit Pilot heading error in millidegrees, velocity
-error in basis points, and the four alignment control latches during outbound
-spooling. Once committed, the active alignment is removed and its signed
-errors plus `aligned`, `offset`, or `opposed` grade are stored with the
-immutable arrival solution. Derived correction text, projected grade, reticle,
-and terminal presentation remain excluded.
-
-Version 10 extends every active planetary flight object with a required
-`thermal` object. `load_units` is an unsigned integer from `0` through
-`1,000,000`, representing zero through 100% of the limit. `abort_latched` is a
-boolean. A latch is valid only for Pilot intersystem Planetfall; Assisted and
-legacy Signal Run projections reject it. Derived temperature trend,
-flight-path angle, percentage formatting, correction cue, and cockpit color
-are excluded. Save/reload therefore preserves the exact consequence without
-serializing presentation or retroactively inventing load for released saves.
+Historical format-1-through-10 acceptance reports remain project evidence, not
+player-save compatibility fixtures. Their former migration code and golden save
+documents were removed at the format-11 reset.

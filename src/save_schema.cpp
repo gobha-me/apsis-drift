@@ -1,5 +1,6 @@
 #include "apsis_drift/save_schema.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -20,6 +21,7 @@
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/system_flight.hpp"
+#include "apsis_drift/version.hpp"
 #include "apsis_drift/world_delta_journal.hpp"
 
 namespace apsis_drift {
@@ -30,6 +32,15 @@ using Json = nlohmann::ordered_json;
 [[nodiscard]] auto failure(SaveSchemaErrorCode code, std::string path,
                            std::string detail) -> SaveSchemaError {
   return SaveSchemaError{code, std::move(path), std::move(detail)};
+}
+
+[[nodiscard]] auto valid_application_version(
+    std::string_view value) noexcept -> bool {
+  return !value.empty() &&
+         value.size() <= kMaximumSaveApplicationVersionBytes &&
+         std::ranges::none_of(value, [](unsigned char byte) {
+           return byte < 0x20U || byte > 0x7eU;
+         });
 }
 
 [[nodiscard]] auto target_arrival_required(
@@ -721,8 +732,7 @@ template <typename Id>
 }
 
 [[nodiscard]] auto decode_intersystem_contract(const Json& json,
-                                               Seed universe_seed,
-                                               std::uint32_t format_version)
+                                               Seed universe_seed)
     -> std::expected<IntersystemContractState, SaveSchemaError> {
   constexpr std::string_view path{"$.state.intersystem_contract"};
   if (!json.is_object()) {
@@ -735,11 +745,8 @@ template <typename Id>
       read_mission_phase(json, "mission_phase", std::string{path});
   auto travel_phase =
       read_travel_phase(json, "travel_phase", std::string{path});
-  std::expected<IntersystemRuleProfile, SaveSchemaError> rule_profile{
-      IntersystemRuleProfile::assisted};
-  if (format_version >= 8U) {
-    rule_profile = read_rule_profile(json, "rule_profile", std::string{path});
-  }
+  auto rule_profile =
+      read_rule_profile(json, "rule_profile", std::string{path});
   auto current_system = read_id<SystemId>(json, "current_system_id",
                                           std::string{path}, "system-");
   auto current_planet = read_optional_id<PlanetId>(
@@ -759,7 +766,7 @@ template <typename Id>
   if (!phase_tick) return std::unexpected{phase_tick.error()};
 
   std::optional<IntersystemJumpAlignmentState> jump_alignment;
-  if (format_version >= 9U) {
+  {
     auto alignment_field = require_field(json, "jump_alignment",
                                          std::string{path});
     if (!alignment_field) return std::unexpected{alignment_field.error()};
@@ -804,17 +811,10 @@ template <typename Id>
                        .turn_right = *turn_right},
       };
     }
-  } else if (*rule_profile == IntersystemRuleProfile::pilot &&
-             *travel_phase ==
-                 IntersystemTravelPhase::outbound_jump_spooling) {
-    // Version 8 made Pilot selectable before alignment had consequences.
-    // Resume an already-running legacy spool neutrally rather than inventing
-    // a penalty or changing its tick.
-    jump_alignment = IntersystemJumpAlignmentState{};
   }
 
   std::optional<IntersystemArrivalSolution> arrival_solution;
-  if (format_version >= 4U) {
+  {
     auto arrival_field = require_field(json, "arrival_solution",
                                        std::string{path});
     if (!arrival_field) return std::unexpected{arrival_field.error()};
@@ -871,7 +871,7 @@ template <typename Id>
       if (!vy) return std::unexpected{vy.error()};
       if (!vz) return std::unexpected{vz.error()};
       std::optional<IntersystemArrivalAssessment> assessment;
-      if (format_version >= 9U) {
+      {
         auto assessment_field = require_field(
             arrival, "assessment", std::string{arrival_path});
         if (!assessment_field) {
@@ -905,9 +905,6 @@ template <typename Id>
               .quality = *quality,
           };
         }
-      } else if (reference_planet->has_value()) {
-        assessment = IntersystemArrivalAssessment{
-            .quality = IntersystemArrivalQuality::aligned};
       }
       arrival_solution = IntersystemArrivalSolution{
           .destination = *arrival_destination,
@@ -976,13 +973,9 @@ template <typename Id>
   };
   if (arrival_required(state.travel_phase) && !state.arrival_solution) {
     return std::unexpected{failure(
-        format_version == kSaveFormatVersion
-            ? SaveSchemaErrorCode::invalid_state
-            : SaveSchemaErrorCode::incompatible_generator_version,
+        SaveSchemaErrorCode::invalid_state,
         "$.state.intersystem_contract.arrival_solution",
-        format_version == kSaveFormatVersion
-            ? "current travel phase requires an immutable arrival solution"
-            : "released travel phase has no immutable arrival solution and cannot be resumed exactly")};
+        "current travel phase requires an immutable arrival solution")};
   }
   if (!validate_intersystem_contract_state(state)) {
     return std::unexpected{failure(
@@ -1033,7 +1026,7 @@ template <typename Id>
   };
 }
 
-[[nodiscard]] auto decode_flight(const Json& json, std::uint32_t format_version)
+[[nodiscard]] auto decode_flight(const Json& json)
     -> std::expected<PlanetaryFlightState, SaveSchemaError> {
   constexpr std::string_view path{"$.state.flight"};
   if (!json.is_object()) {
@@ -1050,16 +1043,12 @@ template <typename Id>
   auto controls = read_object(json, "controls", std::string{path});
   auto regime = read_regime(json, "regime", std::string{path});
   auto transition = require_field(json, "last_transition", std::string{path});
-  std::expected<std::uint32_t, SaveSchemaError> thermal_load{0U};
-  std::expected<bool, SaveSchemaError> thermal_abort{false};
-  if (format_version >= 10U) {
-    auto thermal = read_object(json, "thermal", std::string{path});
-    if (!thermal) return std::unexpected{thermal.error()};
-    thermal_load =
-        read_u32(**thermal, "load_units", "$.state.flight.thermal");
-    thermal_abort =
-        read_bool(**thermal, "abort_latched", "$.state.flight.thermal");
-  }
+  auto thermal = read_object(json, "thermal", std::string{path});
+  if (!thermal) return std::unexpected{thermal.error()};
+  auto thermal_load =
+      read_u32(**thermal, "load_units", "$.state.flight.thermal");
+  auto thermal_abort =
+      read_bool(**thermal, "abort_latched", "$.state.flight.thermal");
   if (!tick) return std::unexpected{tick.error()};
   if (!planet) return std::unexpected{planet.error()};
   if (!pose) return std::unexpected{pose.error()};
@@ -1818,6 +1807,11 @@ auto encode_save_document_json(const SaveDocument& document)
   if (auto valid = validate_save_document(document); !valid) {
     return std::unexpected{valid.error()};
   }
+  if (!valid_application_version(kApplicationVersion)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_value, "$.application_version",
+        "the current build version cannot be encoded as save provenance")};
+  }
   const auto& versions = document.recipe.generator_versions;
   Json discoveries = Json::array();
   for (const auto& discovery : document.state.discoveries) {
@@ -1870,6 +1864,7 @@ auto encode_save_document_json(const SaveDocument& document)
   }
   const Json root{
       {"application", kSaveApplication},
+      {"application_version", kApplicationVersion},
       {"format_version", kSaveFormatVersion},
       {"recipe",
        Json{{"universe_seed", decimal(document.recipe.universe_seed.value)},
@@ -1961,15 +1956,38 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.application",
                                    "save belongs to another application")};
   }
-  if (*format_version != 1U && *format_version != 2U &&
-      *format_version != 3U && *format_version != 4U &&
-      *format_version != 5U && *format_version != 6U &&
-      *format_version != 7U && *format_version != 8U &&
-      *format_version != 9U &&
-      *format_version != kSaveFormatVersion) {
+  if (*format_version >= 1U && *format_version <= 10U) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::unsupported_alpha_format_version,
+        "$.format_version",
+        std::format(
+            "save format {} predates the format-11 alpha reset and is not supported; the source file was not modified",
+            *format_version))};
+  }
+  if (*format_version != kSaveFormatVersion) {
+    std::string detail = std::format(
+        "save format version {} is unsupported by this build", *format_version);
+    if (const auto writer = root.find("application_version");
+        writer != root.end() && writer->is_string()) {
+      const auto& value = writer->get_ref<const std::string&>();
+      if (valid_application_version(value)) {
+        detail += std::format(" (written by Apsis Drift {})", value);
+      }
+    }
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
-        "save format version is unsupported by this build")};
+        std::move(detail))};
+  }
+  auto application_version = read_string(root, "application_version", "$");
+  if (!application_version) {
+    return std::unexpected{application_version.error()};
+  }
+  if (!valid_application_version(*application_version)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_value, "$.application_version",
+        std::format(
+            "application version must contain 1 to {} printable ASCII bytes",
+            kMaximumSaveApplicationVersionBytes))};
   }
   auto recipe_json = read_object(root, "recipe", "$");
   auto state_json = read_object(root, "state", "$");
@@ -2004,44 +2022,20 @@ auto decode_save_document_json(std::string_view json_text)
                                   "$.recipe.generator_versions");
   auto signal_version = read_u32(**versions_json, "surface_signals",
                                  "$.recipe.generator_versions");
-  std::expected<std::uint32_t, SaveSchemaError> sun_version{
-      kLocalSunGeneratorVersion};
-  std::expected<std::uint32_t, SaveSchemaError> system_version{
-      kLocalSystemGeneratorVersion};
-  std::expected<std::uint32_t, SaveSchemaError> ephemeris_version{
-      kAnalyticEphemerisVersion};
-  std::expected<std::uint32_t, SaveSchemaError> contract_version{
-      kIntersystemContractVersion};
-  std::expected<std::uint32_t, SaveSchemaError> jump_version{
-      kIntersystemJumpVersion};
-  std::expected<std::uint32_t, SaveSchemaError> system_flight_version{
-      kSystemFlightVersion};
-  std::expected<std::uint32_t, SaveSchemaError> origin_return_version{
-      kOriginReturnVersion};
-  if (*format_version >= 2U) {
-    sun_version = read_u32(**versions_json, "local_sun",
-                           "$.recipe.generator_versions");
-  }
-  if (*format_version >= 3U) {
-    system_version = read_u32(**versions_json, "local_system",
+  auto sun_version = read_u32(**versions_json, "local_sun",
                               "$.recipe.generator_versions");
-    ephemeris_version = read_u32(**versions_json, "analytic_ephemeris",
+  auto system_version = read_u32(**versions_json, "local_system",
                                  "$.recipe.generator_versions");
-    contract_version = read_u32(**versions_json, "intersystem_contract",
-                                "$.recipe.generator_versions");
-  }
-  if (*format_version >= 4U) {
-    jump_version = read_u32(**versions_json, "intersystem_jump",
-                            "$.recipe.generator_versions");
-  }
-  if (*format_version >= 5U) {
-    system_flight_version = read_u32(**versions_json, "system_flight",
-                                     "$.recipe.generator_versions");
-  }
-  if (*format_version >= 7U) {
-    origin_return_version = read_u32(**versions_json, "origin_return",
-                                     "$.recipe.generator_versions");
-  }
+  auto ephemeris_version = read_u32(**versions_json, "analytic_ephemeris",
+                                    "$.recipe.generator_versions");
+  auto contract_version = read_u32(**versions_json, "intersystem_contract",
+                                   "$.recipe.generator_versions");
+  auto jump_version = read_u32(**versions_json, "intersystem_jump",
+                               "$.recipe.generator_versions");
+  auto system_flight_version = read_u32(**versions_json, "system_flight",
+                                        "$.recipe.generator_versions");
+  auto origin_return_version = read_u32(**versions_json, "origin_return",
+                                        "$.recipe.generator_versions");
   if (!seed_version) return std::unexpected{seed_version.error()};
   if (!planet_version) return std::unexpected{planet_version.error()};
   if (!terrain_version) return std::unexpected{terrain_version.error()};
@@ -2072,35 +2066,6 @@ auto decode_save_document_json(std::string_view json_text)
       .system_flight = *system_flight_version,
       .origin_return = *origin_return_version,
   };
-  if (*format_version >= 3U && *format_version <= 7U) {
-    if (versions.intersystem_contract != 1U) {
-      return std::unexpected{
-          failure(SaveSchemaErrorCode::incompatible_generator_version,
-                  "$.recipe.generator_versions.intersystem_contract",
-                  "released save format requires intersystem contract version 1")};
-    }
-    versions.intersystem_contract = kIntersystemContractVersion;
-    if (*format_version >= 4U) {
-      if (versions.intersystem_jump != 1U) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::incompatible_generator_version,
-            "$.recipe.generator_versions.intersystem_jump",
-            "released save format requires intersystem jump version 1")};
-      }
-      versions.intersystem_jump = kIntersystemJumpVersion;
-    }
-  }
-  if (*format_version == 8U) {
-    if (versions.intersystem_contract != 2U ||
-        versions.intersystem_jump != 1U) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::incompatible_generator_version,
-          "$.recipe.generator_versions",
-          "released save format 8 requires contract version 2 and jump version 1")};
-    }
-    versions.intersystem_contract = kIntersystemContractVersion;
-    versions.intersystem_jump = kIntersystemJumpVersion;
-  }
   if (versions != current_save_generator_versions()) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
@@ -2108,29 +2073,19 @@ auto decode_save_document_json(std::string_view json_text)
                 "save requires a generator version unsupported by this build")};
   }
 
-  bool intersystem{};
-  if (*format_version >= 3U) {
-    auto career_kind = read_string(**state_json, "career_kind", "$.state");
-    if (!career_kind) return std::unexpected{career_kind.error()};
-    if (*career_kind == "intersystem_contract") {
-      intersystem = true;
-    } else if (*career_kind != "legacy_signal_run") {
-      return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
-                                     "$.state.career_kind",
-                                     "unknown save career kind")};
-    }
+  auto career_kind = read_string(**state_json, "career_kind", "$.state");
+  if (!career_kind) return std::unexpected{career_kind.error()};
+  const bool intersystem = *career_kind == "intersystem_contract";
+  if (!intersystem && *career_kind != "legacy_signal_run") {
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                   "$.state.career_kind",
+                                   "unknown save career kind")};
   }
   auto flight_json = require_field(**state_json, "flight", "$.state");
-  std::expected<const Json*, SaveSchemaError> system_flight_json{nullptr};
-  std::expected<const Json*, SaveSchemaError> origin_return_json{nullptr};
-  if (*format_version >= 5U) {
-    system_flight_json =
-        require_field(**state_json, "system_flight", "$.state");
-  }
-  if (*format_version >= 7U) {
-    origin_return_json =
-        require_field(**state_json, "origin_return", "$.state");
-  }
+  auto system_flight_json =
+      require_field(**state_json, "system_flight", "$.state");
+  auto origin_return_json =
+      require_field(**state_json, "origin_return", "$.state");
   auto discoveries_json = read_array(**state_json, "discoveries", "$.state");
   auto deltas_json = read_array(**state_json, "world_deltas", "$.state");
   if (!flight_json) return std::unexpected{flight_json.error()};
@@ -2152,8 +2107,7 @@ auto decode_save_document_json(std::string_view json_text)
         read_object(**state_json, "intersystem_contract", "$.state");
     if (!contract_json) return std::unexpected{contract_json.error()};
     auto decoded =
-        decode_intersystem_contract(**contract_json, Seed{*universe_seed},
-                                    *format_version);
+        decode_intersystem_contract(**contract_json, Seed{*universe_seed});
     if (!decoded) return std::unexpected{decoded.error()};
     contract = std::move(*decoded);
   } else {
@@ -2181,91 +2135,27 @@ auto decode_save_document_json(std::string_view json_text)
 
   std::optional<PlanetaryFlightState> flight;
   if (!(**flight_json).is_null()) {
-    auto decoded = decode_flight(**flight_json, *format_version);
+    auto decoded = decode_flight(**flight_json);
     if (!decoded) return std::unexpected{decoded.error()};
     flight = std::move(*decoded);
   }
   std::optional<SystemFlightState> system_flight;
-  if (*format_version >= 5U && *system_flight_json != nullptr &&
-      !(**system_flight_json).is_null()) {
+  if (!(**system_flight_json).is_null()) {
     auto decoded = decode_system_flight(**system_flight_json);
     if (!decoded) return std::unexpected{decoded.error()};
     system_flight = std::move(*decoded);
-  } else if (*format_version == 4U && contract &&
-             contract->travel_phase ==
-                 IntersystemTravelPhase::target_system_flight &&
-             contract->arrival_solution) {
-    const auto system = generate_local_system(contract->identities.target_system_seed);
-    auto migrated = initial_system_flight_state(
-        system, contract->identities.target_planet,
-        *contract->arrival_solution);
-    if (!migrated) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
-          "format-4 arrival could not initialize system flight")};
-    }
-    system_flight = std::move(*migrated);
-  } else if (*format_version <= 6U && contract &&
-             contract->travel_phase ==
-                 IntersystemTravelPhase::return_jump_spooling &&
-             contract->phase_started_tick) {
-    const auto system =
-        generate_local_system(contract->identities.target_system_seed);
-    const auto body = find_local_system_planet(
-        system, contract->identities.target_planet);
-    const auto ephemeris = resolve_planet_ephemeris(
-        system, contract->identities.target_planet,
-        {.tick = *contract->phase_started_tick, .sub_tick_fraction = 0.0});
-    if (!body || !ephemeris) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
-          "released return spool could not resolve its target-system state")};
-    }
-    const double radius =
-        static_cast<double>((*body)->descriptor.radius.value) * 1'000.0;
-    const IntersystemArrivalSolution source{
-        .destination = system.id,
-        .reference_planet = contract->identities.target_planet,
-        .arrival_tick = *contract->phase_started_tick,
-        .position = {ephemeris->position.x +
-                         radius * kAssistedTargetArrivalStandoffRadii,
-                     ephemeris->position.y, ephemeris->position.z},
-        .velocity = ephemeris->velocity,
-        .assessment = IntersystemArrivalAssessment{
-            .quality = IntersystemArrivalQuality::aligned},
-    };
-    auto migrated = initial_system_flight_state(
-        system, contract->identities.target_planet, source);
-    if (!migrated) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
-          "released return spool could not initialize system flight")};
-    }
-    system_flight = std::move(*migrated);
   }
   std::optional<OriginReturnState> origin_return;
-  if (*format_version >= 7U && *origin_return_json != nullptr &&
-      !(**origin_return_json).is_null()) {
+  if (!(**origin_return_json).is_null()) {
     auto decoded = decode_origin_return(**origin_return_json);
     if (!decoded) return std::unexpected{decoded.error()};
     origin_return = std::move(*decoded);
-  } else if (*format_version <= 6U && contract &&
-             contract->travel_phase ==
-                 IntersystemTravelPhase::origin_system_return &&
-             contract->arrival_solution) {
-    auto migrated = initialize_origin_return(*contract);
-    if (!migrated) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
-          "released origin arrival could not initialize station return")};
-    }
-    origin_return = std::move(*migrated);
   }
   std::vector<SaveDiscovery> discoveries;
   if ((**discoveries_json).size() > kMaximumSaveDiscoveries) {
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
                                    "$.state.discoveries",
-                                   "discovery count exceeds the v1 bound")};
+                                   "discovery count exceeds the save bound")};
   }
   discoveries.reserve((**discoveries_json).size());
   for (std::size_t index = 0; index < (**discoveries_json).size(); ++index) {
@@ -2286,7 +2176,7 @@ auto decode_save_document_json(std::string_view json_text)
   if ((**deltas_json).size() > kMaximumSaveWorldDeltas) {
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
                                    "$.state.world_deltas",
-                                   "world-delta count exceeds the v1 bound")};
+                                   "world-delta count exceeds the save bound")};
   }
   deltas.reserve((**deltas_json).size());
   for (std::size_t index = 0; index < (**deltas_json).size(); ++index) {
@@ -2304,19 +2194,6 @@ auto decode_save_document_json(std::string_view json_text)
     if (!tick) return std::unexpected{tick.error()};
     deltas.push_back(SaveWorldDelta{std::move(*object_key), *kind, *tick});
   }
-  // Formats 3-5 could record objective_complete in the contract before the
-  // intersystem surface journal was admitted. Materialize the already-earned
-  // terminal projection during migration; this does not advance mission state.
-  if (*format_version <= 5U && contract && deltas.empty() &&
-      (contract->mission_phase ==
-           IntersystemMissionPhase::objective_complete ||
-       contract->mission_phase == IntersystemMissionPhase::returned ||
-       contract->mission_phase == IntersystemMissionPhase::turned_in)) {
-    deltas.push_back(
-        {surface_signal_object_key(contract->identities.target_objective),
-         SaveWorldDeltaKind::collected, contract->universe_tick});
-  }
-
   SaveDocument document{
       .recipe =
           SaveRecipe{

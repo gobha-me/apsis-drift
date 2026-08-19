@@ -5,6 +5,7 @@
 #include <chrono>
 #include <format>
 #include <limits>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -67,7 +68,15 @@ struct Replay {
     return std::unexpected{
         IntersystemContractAcceptanceError::persistence_failure};
   }
-  return hash_bytes(*encoded);
+  try {
+    const auto root = nlohmann::ordered_json::parse(*encoded);
+    const nlohmann::ordered_json authoritative{
+        {"recipe", root.at("recipe")}, {"state", root.at("state")}};
+    return hash_bytes(authoritative.dump());
+  } catch (const nlohmann::json::exception&) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::persistence_failure};
+  }
 }
 
 [[nodiscard]] auto record_checkpoint(
@@ -80,10 +89,12 @@ struct Replay {
     return std::unexpected{
         IntersystemContractAcceptanceError::persistence_failure};
   }
+  const auto checksum = document_checksum(document);
+  if (!checksum) return std::unexpected{checksum.error()};
   checkpoints.push_back(
       {.name = std::string{name},
        .tick = document.state.intersystem_contract->universe_tick,
-       .authoritative_checksum = hash_bytes(*encoded)});
+       .authoritative_checksum = *checksum});
   if (resume_stage != name)
     return {};
   const auto decoded = decode_save_document_json(*encoded);
