@@ -491,6 +491,12 @@ ordinary benchmark default. Explicit `kitty`, `ansi`, and diagnostic
 field and encoded-byte totals identify the active path. Fallback remains an
 unsupported interactive tier and is available headlessly only for degradation
 tests.
+Ordinary and capture report schema 1 encodes `checksum` and `total_bytes` as
+canonical decimal strings so 64-bit values round-trip through JSON consumers
+such as JavaScript without precision loss. Sweep schema 2 and system-navigation
+schema 2 use the same string representation, including the latter's nested
+benchmark summary. Historical checked-in performance reports are retained in
+their original schemas rather than silently rewritten.
 The optional `orbital` workload renders the generated planet with a
 deterministic moving camera, while `system` renders the generated star and
 moving multi-planet catalog; `landscape` remains the default. Workload

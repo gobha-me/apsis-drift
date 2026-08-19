@@ -26,7 +26,7 @@ function(check_headless_driver requested expected)
   endif ()
 
   file(READ "${report}" json)
-  foreach(field presentation frames total_bytes checksum)
+  foreach(field schema_version presentation frames total_bytes checksum)
     string(JSON value ERROR_VARIABLE json_error GET "${json}" "${field}")
     if (json_error)
       message(FATAL_ERROR
@@ -34,9 +34,14 @@ function(check_headless_driver requested expected)
     endif ()
     set("${field}" "${value}")
   endforeach ()
-  if (NOT presentation STREQUAL "${expected}" OR
+  string(JSON total_bytes_type TYPE "${json}" total_bytes)
+  string(JSON checksum_type TYPE "${json}" checksum)
+  if (NOT schema_version STREQUAL "1" OR
+      NOT presentation STREQUAL "${expected}" OR
       NOT frames STREQUAL "2" OR
-      total_bytes LESS 1 OR
+      NOT total_bytes_type STREQUAL "STRING" OR
+      NOT total_bytes MATCHES "^[1-9][0-9]*$" OR
+      NOT checksum_type STREQUAL "STRING" OR
       NOT checksum MATCHES "^[0-9]+$" OR
       checksum STREQUAL "0")
     message(FATAL_ERROR

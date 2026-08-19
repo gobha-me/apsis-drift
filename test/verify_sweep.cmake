@@ -33,7 +33,7 @@ string(JSON workload GET "${first_json}" workload)
 string(JSON seed GET "${first_json}" seed)
 string(JSON frame_count GET "${first_json}" frames_per_viewport)
 string(JSON measurement_count LENGTH "${first_json}" measurements)
-if (NOT schema_version EQUAL 1 OR
+if (NOT schema_version EQUAL 2 OR
     NOT workload STREQUAL "voxel-landscape-rgba" OR
     NOT seed EQUAL 12648430 OR
     NOT frame_count EQUAL 2 OR
@@ -58,8 +58,16 @@ foreach (index RANGE 0 2)
          summary frames)
   string(JSON checksum_first GET "${first_json}" measurements ${index}
          summary checksum)
+  string(JSON checksum_type_first TYPE "${first_json}" measurements ${index}
+         summary checksum)
   string(JSON checksum_second GET "${second_json}" measurements ${index}
          summary checksum)
+  string(JSON checksum_type_second TYPE "${second_json}" measurements
+         ${index} summary checksum)
+  string(JSON total_bytes GET "${first_json}" measurements ${index}
+         summary total_bytes)
+  string(JSON total_bytes_type TYPE "${first_json}" measurements ${index}
+         summary total_bytes)
   string(JSON target_count LENGTH "${first_json}" measurements ${index}
          targets)
   string(JSON first_target GET "${first_json}" measurements ${index}
@@ -72,7 +80,11 @@ foreach (index RANGE 0 2)
       NOT width EQUAL expected_width OR
       NOT height EQUAL expected_height OR
       NOT frames EQUAL 2 OR
+      NOT checksum_type_first STREQUAL "STRING" OR
+      NOT checksum_type_second STREQUAL "STRING" OR
       NOT checksum_first STREQUAL checksum_second OR
+      NOT total_bytes_type STREQUAL "STRING" OR
+      NOT total_bytes MATCHES "^[1-9][0-9]*$" OR
       NOT target_count EQUAL 2 OR
       NOT first_target EQUAL 30 OR
       NOT second_target EQUAL 60 OR
