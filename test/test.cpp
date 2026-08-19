@@ -431,22 +431,42 @@ auto intersystem_state_contract() -> void {
   rejected(IntersystemContractCommand::select_pilot_profile,
            IntersystemContractError::invalid_transition);
   accepted(IntersystemContractCommand::begin_outbound_jump);
-  advance_time(kJumpSpoolTicks - 1);
-  rejected(IntersystemContractCommand::commit_outbound_jump,
-           IntersystemContractError::invalid_transition);
+  const auto target_system =
+      generate_local_system(state.identities.target_system_seed);
+  const auto origin_system =
+      generate_local_system(state.identities.origin_system_seed);
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks - 1; ++tick) {
+    check(advance_intersystem_jump_tick(state, target_system).has_value(),
+          "outbound spooling must advance before its boundary");
+  }
+  check(state.travel_phase ==
+            IntersystemTravelPhase::outbound_jump_spooling &&
+            !state.arrival_solution,
+        "outbound commitment must not publish before the spool boundary");
   accepted(IntersystemContractCommand::cancel_jump);
   accepted(IntersystemContractCommand::begin_outbound_jump);
-  advance_time(kJumpSpoolTicks);
-  accepted(IntersystemContractCommand::commit_outbound_jump);
-  check(state.committed_jump_destination == state.identities.target_system,
-        "outbound commitment must bind the target before presentation");
+  IntersystemJumpAdvance outbound_boundary;
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
+    const auto advanced = advance_intersystem_jump_tick(state, target_system);
+    check(advanced.has_value(), "outbound spooling must reach commitment");
+    if (advanced) outbound_boundary = *advanced;
+  }
+  check(outbound_boundary.committed && state.arrival_solution &&
+            state.committed_jump_destination == state.identities.target_system,
+        "outbound commitment must atomically bind the target and arrival");
   rejected(IntersystemContractCommand::cancel_jump,
            IntersystemContractError::invalid_transition);
-  advance_time(kJumpTransitTicks - 1);
-  rejected(IntersystemContractCommand::arrive_target_system,
-           IntersystemContractError::invalid_transition);
-  advance_time(1);
-  accepted(IntersystemContractCommand::arrive_target_system);
+  for (SimulationTick tick = 0; tick < kJumpTransitTicks - 1; ++tick) {
+    check(advance_intersystem_jump_tick(state, target_system).has_value(),
+          "outbound transit must advance before arrival");
+  }
+  check(state.travel_phase ==
+            IntersystemTravelPhase::outbound_jump_committed,
+        "outbound arrival must not publish before the transit boundary");
+  const auto outbound_arrival =
+      advance_intersystem_jump_tick(state, target_system);
+  check(outbound_arrival && outbound_arrival->arrived,
+        "outbound arrival must publish at the transit boundary");
   accepted(IntersystemContractCommand::enter_target_planet);
   rejected(IntersystemContractCommand::begin_return_jump,
            IntersystemContractError::invalid_transition);
@@ -455,12 +475,23 @@ auto intersystem_state_contract() -> void {
   accepted(IntersystemContractCommand::begin_return_jump);
   accepted(IntersystemContractCommand::cancel_jump);
   accepted(IntersystemContractCommand::begin_return_jump);
-  advance_time(kJumpSpoolTicks);
-  accepted(IntersystemContractCommand::commit_return_jump);
-  check(state.committed_jump_destination == state.identities.origin_system,
-        "return commitment must bind the origin before presentation");
-  advance_time(kJumpTransitTicks);
-  accepted(IntersystemContractCommand::arrive_origin_system);
+  IntersystemJumpAdvance return_boundary;
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
+    const auto advanced = advance_intersystem_jump_tick(state, origin_system);
+    check(advanced.has_value(), "return spooling must reach commitment");
+    if (advanced) return_boundary = *advanced;
+  }
+  check(return_boundary.committed && state.arrival_solution &&
+            state.committed_jump_destination == state.identities.origin_system,
+        "return commitment must atomically bind the origin and arrival");
+  IntersystemJumpAdvance return_arrival;
+  for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
+    const auto advanced = advance_intersystem_jump_tick(state, origin_system);
+    check(advanced.has_value(), "return transit must reach arrival");
+    if (advanced) return_arrival = *advanced;
+  }
+  check(return_arrival.arrived,
+        "return arrival must publish at the transit boundary");
   accepted(IntersystemContractCommand::dock_at_origin);
   check(state.mission_phase == IntersystemMissionPhase::returned,
         "docking must preserve a distinct returned phase before turn-in");
@@ -640,6 +671,83 @@ auto intersystem_jump_contract() -> void {
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
         "a committed arrival solution must survive a canonical v10 round trip");
+
+  auto missing_arrival = state;
+  missing_arrival.arrival_solution.reset();
+  auto missing_document = make_new_game_document(Seed{42});
+  missing_document.state.intersystem_contract = missing_arrival;
+  const auto missing_encoded = encode_save_document_json(missing_document);
+  check(!validate_intersystem_contract_state(missing_arrival) &&
+            !missing_encoded &&
+            missing_encoded.error().code == SaveSchemaErrorCode::invalid_state &&
+            missing_encoded.error().path ==
+                "$.state.intersystem_contract.arrival_solution",
+        "current committed saves must reject a missing arrival at its exact schema path");
+  if (encoded_checkpoint) {
+    for (std::uint32_t format_version = 3; format_version <= 9;
+         ++format_version) {
+      auto released = replace_once(
+          *encoded_checkpoint, "\"format_version\": 10",
+          std::format("\"format_version\": {}", format_version));
+      released = replace_once(std::move(released),
+                              "\"arrival_solution\": {",
+                              "\"arrival_solution\": null,\n"
+                              "      \"discarded_arrival\": {");
+      if (format_version <= 7) {
+        released = replace_once(std::move(released),
+                                "\"intersystem_contract\": 3",
+                                "\"intersystem_contract\": 1");
+      } else if (format_version == 8) {
+        released = replace_once(std::move(released),
+                                "\"intersystem_contract\": 3",
+                                "\"intersystem_contract\": 2");
+      }
+      if (format_version >= 4 && format_version <= 8) {
+        released = replace_once(std::move(released),
+                                "\"intersystem_jump\": 2",
+                                "\"intersystem_jump\": 1");
+      }
+      const auto rejected = decode_save_document_json(released);
+      check(!rejected &&
+                rejected.error().code ==
+                    SaveSchemaErrorCode::incompatible_generator_version &&
+                rejected.error().path ==
+                    "$.state.intersystem_contract.arrival_solution",
+            "released committed saves without immutable arrival data must return an explicit compatibility error");
+    }
+  }
+
+  auto finite_tamper = state;
+  finite_tamper.arrival_solution->position.x += 1.0;
+  const auto finite_tamper_before = finite_tamper;
+  auto tampered_document = make_new_game_document(Seed{42});
+  tampered_document.state.intersystem_contract = finite_tamper;
+  const auto tampered_encoded = encode_save_document_json(tampered_document);
+  check(validate_intersystem_contract_state(finite_tamper) &&
+            !validate_intersystem_arrival_solution(
+                finite_tamper, target, *finite_tamper.arrival_solution) &&
+            advance_intersystem_jump_tick(finite_tamper, target) ==
+                std::unexpected{IntersystemJumpError::invalid_arrival} &&
+            finite_tamper == finite_tamper_before && !tampered_encoded &&
+            tampered_encoded.error().path ==
+                "$.state.intersystem_contract.arrival_solution",
+        "a finite altered arrival pose must fail canonical gameplay and save validation transactionally");
+
+  auto altered_velocity = state;
+  altered_velocity.arrival_solution->velocity.z += 1.0;
+  auto altered_tick = state;
+  ++altered_tick.arrival_solution->arrival_tick;
+  auto altered_reference = state;
+  altered_reference.arrival_solution->reference_planet.reset();
+  auto altered_destination = state;
+  altered_destination.arrival_solution->destination =
+      altered_destination.identities.origin_system;
+  check(!validate_intersystem_arrival_solution(
+            altered_velocity, target, *altered_velocity.arrival_solution) &&
+            !validate_intersystem_contract_state(altered_tick) &&
+            !validate_intersystem_contract_state(altered_reference) &&
+            !validate_intersystem_contract_state(altered_destination),
+        "altered arrival velocity, tick, reference, and destination must be rejected");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -1001,10 +1109,25 @@ auto intersystem_jump_contract() -> void {
                 IntersystemContractCommand::leave_target_planet) &&
             begin_intersystem_jump(return_state),
         "an objective-complete mission must begin the bounded return route");
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  const auto wrong_return_destination = return_state;
+  check(advance_intersystem_jump_tick(return_state, target) ==
+                std::unexpected{IntersystemJumpError::invalid_destination} &&
+            return_state == wrong_return_destination,
+        "return spooling must reject the wrong destination without mutation");
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
     check(advance_intersystem_jump_tick(return_state, origin).has_value(),
           "the Assisted return route must advance");
+  }
+  auto altered_return = return_state;
+  altered_return.arrival_solution->position.y += 1.0;
+  const auto altered_return_before = altered_return;
+  check(advance_intersystem_jump_tick(altered_return, origin) ==
+                std::unexpected{IntersystemJumpError::invalid_arrival} &&
+            altered_return == altered_return_before,
+        "a finite altered return arrival must reject without mutation");
+  for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
+    check(advance_intersystem_jump_tick(return_state, origin).has_value(),
+          "the Assisted return transit must advance");
   }
   check(return_state.travel_phase ==
                 IntersystemTravelPhase::origin_system_return &&
@@ -1499,15 +1622,21 @@ auto intersystem_planetfall_contract() -> void {
     return advance_intersystem_contract(
         pilot_contract, pilot_contract.universe_tick, command);
   };
-  check(pilot_command(IntersystemContractCommand::select_pilot_profile) &&
-            pilot_command(IntersystemContractCommand::accept_mission) &&
-            pilot_command(IntersystemContractCommand::launch) &&
-            pilot_command(IntersystemContractCommand::begin_outbound_jump) &&
-            advance_intersystem_time(pilot_contract, kJumpSpoolTicks) &&
-            pilot_command(IntersystemContractCommand::commit_outbound_jump) &&
-            advance_intersystem_time(pilot_contract, kJumpTransitTicks) &&
-            pilot_command(IntersystemContractCommand::arrive_target_system) &&
-            pilot_command(IntersystemContractCommand::enter_target_planet),
+  bool pilot_ready =
+      pilot_command(IntersystemContractCommand::select_pilot_profile) &&
+      pilot_command(IntersystemContractCommand::accept_mission) &&
+      pilot_command(IntersystemContractCommand::launch) &&
+      begin_intersystem_jump(pilot_contract);
+  for (SimulationTick tick = 0;
+       pilot_ready && tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    pilot_ready = advance_intersystem_jump_tick(pilot_contract, system)
+                      .has_value();
+  }
+  pilot_ready =
+      pilot_ready &&
+      pilot_command(IntersystemContractCommand::enter_target_planet)
+          .has_value();
+  check(pilot_ready,
         "the thermal persistence fixture must reach Pilot Planetfall");
   auto thermal_document = make_new_game_document(Seed{42});
   thermal_document.state.intersystem_contract = pilot_contract;
@@ -1791,27 +1920,11 @@ auto mission_board_contract() -> void {
         system, checkpoint.identities.target_planet);
     if (checkpoint.travel_phase ==
             IntersystemTravelPhase::target_system_flight &&
-        body) {
-      const auto ephemeris = resolve_planet_ephemeris(
+        body && checkpoint.arrival_solution) {
+      const auto system_flight = initial_system_flight_state(
           system, checkpoint.identities.target_planet,
-          {.tick = checkpoint.universe_tick, .sub_tick_fraction = 0.0});
-      if (ephemeris) {
-        const double radius =
-            static_cast<double>((*body)->descriptor.radius.value) * 1'000.0;
-        const IntersystemArrivalSolution arrival{
-            .destination = system.id,
-            .reference_planet = checkpoint.identities.target_planet,
-            .arrival_tick = checkpoint.universe_tick,
-            .position = {ephemeris->position.x - radius * 10.0,
-                         ephemeris->position.y, ephemeris->position.z},
-            .velocity = ephemeris->velocity,
-            .assessment = IntersystemArrivalAssessment{
-                .quality = IntersystemArrivalQuality::aligned},
-        };
-        const auto system_flight = initial_system_flight_state(
-            system, checkpoint.identities.target_planet, arrival);
-        if (system_flight) document.state.system_flight = *system_flight;
-      }
+          *checkpoint.arrival_solution);
+      if (system_flight) document.state.system_flight = *system_flight;
     } else if (checkpoint.travel_phase ==
                    IntersystemTravelPhase::target_planet_flight &&
                body) {
@@ -1844,20 +1957,24 @@ auto mission_board_contract() -> void {
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
   };
-  check(command(IntersystemContractCommand::launch).has_value(),
-        "the accepted mission fixture must launch");
+  check(command(IntersystemContractCommand::select_assisted_profile)
+                .has_value() &&
+            command(IntersystemContractCommand::launch).has_value(),
+        "the released-save fixture must launch with its historical Assisted profile");
   round_trip(state, "active intersystem state must survive a v10 round trip");
-  check(command(IntersystemContractCommand::begin_outbound_jump).has_value() &&
-            advance_intersystem_time(state, kJumpSpoolTicks).has_value() &&
-            command(IntersystemContractCommand::commit_outbound_jump)
-                .has_value() &&
-            advance_intersystem_time(state, kJumpTransitTicks).has_value() &&
-            command(IntersystemContractCommand::arrive_target_system)
-                .has_value() &&
-            command(IntersystemContractCommand::enter_target_planet)
-                .has_value() &&
-            command(IntersystemContractCommand::complete_objective)
-                .has_value(),
+  bool objective_ready = begin_intersystem_jump(state).has_value();
+  const auto target_system =
+      generate_local_system(state.identities.target_system_seed);
+  for (SimulationTick tick = 0;
+       objective_ready && tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    objective_ready =
+        advance_intersystem_jump_tick(state, target_system).has_value();
+  }
+  objective_ready =
+      objective_ready &&
+      command(IntersystemContractCommand::enter_target_planet).has_value() &&
+      command(IntersystemContractCommand::complete_objective).has_value();
+  check(objective_ready,
         "the persistence fixture must reach objective completion legally");
   round_trip(state,
              "objective-complete intersystem state must survive a v10 round trip");
@@ -1891,16 +2008,18 @@ auto mission_board_contract() -> void {
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
         "format v10 completion must require its bound collected delta");
-  check(command(IntersystemContractCommand::leave_target_planet).has_value() &&
-            command(IntersystemContractCommand::begin_return_jump)
-                .has_value() &&
-            advance_intersystem_time(state, kJumpSpoolTicks).has_value() &&
-            command(IntersystemContractCommand::commit_return_jump)
-                .has_value() &&
-            advance_intersystem_time(state, kJumpTransitTicks).has_value() &&
-            command(IntersystemContractCommand::arrive_origin_system)
-                .has_value() &&
-            command(IntersystemContractCommand::dock_at_origin).has_value(),
+  bool returned =
+      command(IntersystemContractCommand::leave_target_planet).has_value() &&
+      begin_intersystem_jump(state).has_value();
+  const auto origin_system =
+      generate_local_system(state.identities.origin_system_seed);
+  for (SimulationTick tick = 0;
+       returned && tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    returned = advance_intersystem_jump_tick(state, origin_system).has_value();
+  }
+  returned =
+      returned && command(IntersystemContractCommand::dock_at_origin).has_value();
+  check(returned,
         "the persistence fixture must return legally");
   round_trip(state, "returned intersystem state must survive a v10 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),

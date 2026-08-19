@@ -119,10 +119,13 @@ Formats 1 through 10 and the generator versions compiled into the current build
 are supported. Version 1 is decoded with local-sun generator version 1;
 formats 1 and 2 rewrite as version 10 on the next explicit save. They remain
 `legacy_signal_run` careers and are never assigned the intersystem contract.
-Released version 3 intersystem careers preserve every recorded phase and tick;
-their absent arrival solution remains absent rather than synthesizing progress.
+Released version 3 intersystem careers preserve every recorded phase and tick
+when the phase does not depend on an arrival. A phase requiring the absent
+arrival solution fails with a structured compatibility error rather than
+synthesizing progress.
 Released version 4 target arrivals initialize system flight from their immutable
-arrival solution; no destination, tick, or mission progress is rerolled.
+arrival solution after deterministic regeneration validates every field; no
+destination, tick, or mission progress is rerolled.
 Released version 5 system flight remains exact. For a version 3–5 contract that
 already recorded objective completion, migration materializes the matching
 collected delta at its saved universe tick; it does not advance a mission.
@@ -172,11 +175,13 @@ terminal capabilities, render profiles, caches, and presentation progress
 remain excluded.
 
 Version 7 preserves a frozen target-system craft state during cancelable
-return spooling, removes it at jump commitment, and admits exactly one matching
-`origin_return` state after origin arrival. Docked, returned, and turned-in
-states contain no active craft representation. The origin-return state must
-match the contract tick, origin system, and stable station identity and must
-contain only finite bounded inertial values.
+return spooling together with the immutable target arrival needed to cancel
+back to that state exactly. Jump commitment atomically replaces it with the
+canonical origin arrival and removes the frozen craft state. Origin arrival
+admits exactly one matching `origin_return` state. Docked, returned, and
+turned-in states contain no active craft representation. The origin-return
+state must match the contract tick, origin system, and stable station identity
+and must contain only finite bounded inertial values.
 
 Version 8 adds the rule profile to the high-level intersystem contract. It may
 change only while docked with an offered or accepted mission and is locked by

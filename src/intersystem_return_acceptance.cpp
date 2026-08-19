@@ -39,12 +39,20 @@ namespace {
   };
   if (!command(IntersystemContractCommand::accept_mission) ||
       !command(IntersystemContractCommand::launch) ||
-      !command(IntersystemContractCommand::begin_outbound_jump) ||
-      !advance_intersystem_time(contract, kJumpSpoolTicks) ||
-      !command(IntersystemContractCommand::commit_outbound_jump) ||
-      !advance_intersystem_time(contract, kJumpTransitTicks) ||
-      !command(IntersystemContractCommand::arrive_target_system) ||
-      !command(IntersystemContractCommand::enter_target_planet) ||
+      !begin_intersystem_jump(contract)) {
+    return std::unexpected{
+        IntersystemReturnAcceptanceError::transition_failure};
+  }
+  const auto target =
+      generate_local_system(contract.identities.target_system_seed);
+  for (SimulationTick tick = 0;
+       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    if (!advance_intersystem_jump_tick(contract, target)) {
+      return std::unexpected{
+          IntersystemReturnAcceptanceError::transition_failure};
+    }
+  }
+  if (!command(IntersystemContractCommand::enter_target_planet) ||
       !command(IntersystemContractCommand::complete_objective)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::transition_failure};

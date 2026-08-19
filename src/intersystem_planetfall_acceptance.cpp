@@ -7,6 +7,7 @@
 #include <numbers>
 #include <utility>
 
+#include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/save_file.hpp"
 #include "apsis_drift/save_schema.hpp"
 
@@ -120,12 +121,18 @@ struct Replay {
   if (!command(IntersystemContractCommand::select_pilot_profile) ||
       !command(IntersystemContractCommand::accept_mission) ||
       !command(IntersystemContractCommand::launch) ||
-      !command(IntersystemContractCommand::begin_outbound_jump) ||
-      !advance_intersystem_time(contract, kJumpSpoolTicks) ||
-      !command(IntersystemContractCommand::commit_outbound_jump) ||
-      !advance_intersystem_time(contract, kJumpTransitTicks) ||
-      !command(IntersystemContractCommand::arrive_target_system) ||
-      !command(IntersystemContractCommand::enter_target_planet)) {
+      !begin_intersystem_jump(contract)) {
+    return std::unexpected{
+        IntersystemPlanetfallAcceptanceError::initialization_failure};
+  }
+  for (SimulationTick tick = 0;
+       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    if (!advance_intersystem_jump_tick(contract, system)) {
+      return std::unexpected{
+          IntersystemPlanetfallAcceptanceError::initialization_failure};
+    }
+  }
+  if (!command(IntersystemContractCommand::enter_target_planet)) {
     return std::unexpected{
         IntersystemPlanetfallAcceptanceError::initialization_failure};
   }
@@ -311,18 +318,20 @@ struct Replay {
           IntersystemContractCommand::accept_mission) ||
       !advance_intersystem_contract(contract, contract.universe_tick,
                                     IntersystemContractCommand::launch) ||
-      !advance_intersystem_contract(
-          contract, contract.universe_tick,
-          IntersystemContractCommand::begin_outbound_jump) ||
-      !advance_intersystem_time(contract, kJumpSpoolTicks) ||
-      !advance_intersystem_contract(
-          contract, contract.universe_tick,
-          IntersystemContractCommand::commit_outbound_jump) ||
-      !advance_intersystem_time(contract, kJumpTransitTicks) ||
-      !advance_intersystem_contract(
-          contract, contract.universe_tick,
-          IntersystemContractCommand::arrive_target_system) ||
-      !advance_intersystem_contract(
+      !begin_intersystem_jump(contract)) {
+    return std::unexpected{
+        IntersystemPlanetfallAcceptanceError::initialization_failure};
+  }
+  const auto system =
+      generate_local_system(contract.identities.target_system_seed);
+  for (SimulationTick tick = 0;
+       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+    if (!advance_intersystem_jump_tick(contract, system)) {
+      return std::unexpected{
+          IntersystemPlanetfallAcceptanceError::initialization_failure};
+    }
+  }
+  if (!advance_intersystem_contract(
           contract, contract.universe_tick,
           IntersystemContractCommand::enter_target_planet)) {
     return std::unexpected{
