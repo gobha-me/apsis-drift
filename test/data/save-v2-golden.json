@@ -28,7 +28,7 @@
       "pose": {
         "latitude_radians": "0.25",
         "longitude_radians": "-0.5",
-        "altitude_metres": "100000",
+        "altitude_metres": "10000",
         "heading_radians": "0.75"
       },
       "velocity": {
@@ -36,7 +36,7 @@
         "north_metres_per_second": "-20.25",
         "up_metres_per_second": "-5"
       },
-      "clearance_metres": "99000",
+      "clearance_metres": "9000",
       "mode": "manual",
       "controls": {
         "forward": true,

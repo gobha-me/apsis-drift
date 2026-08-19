@@ -42,6 +42,22 @@ of surface clearance; terrain flight returns to atmospheric flight at or above
 hysteresis gap retain the current regime. At most one transition occurs per
 simulation step, and its tick is the tick of the produced state.
 
+Validation applies the same hysteresis to persisted and externally supplied
+states. Orbital state requires altitude strictly above the descending approach
+ceiling. Atmospheric state requires clearance strictly above 2,000 metres and
+altitude strictly below the ascending orbit boundary. Terrain-flight state
+requires clearance strictly below 2,500 metres. Consequently, orbital and
+atmospheric states are both valid strictly inside the altitude hysteresis gap,
+while atmospheric and terrain-flight states are both valid strictly inside the
+clearance gap. The exact descending, terrain-entry, orbit-entry, and
+terrain-exit edges belong to atmospheric, terrain-flight, orbital, and
+atmospheric state respectively.
+
+Most-recent-transition telemetry may record only adjacent orbital ↔
+atmospheric ↔ terrain-flight changes. Validation checks stored altitude and
+clearance but does not regenerate terrain elevation or involve terrain-cache or
+renderer state.
+
 ## Bounded controls
 
 Forward/reverse, strafe, turn, and rise/fall preserve their current meanings.

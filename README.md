@@ -289,6 +289,11 @@ remain valid so the one-tick jump owner can reach them and commit or arrive
 atomically, while late transitions and cross-boundary batches reject without
 mutation.
 
+The v0.4.22 planetary validator rejects flight regimes outside their documented
+altitude or clearance bands and accepts only adjacent regime-transition
+telemetry. Save loading and orbit departure share that contract, so changing a
+near-surface craft's regime label cannot bypass ascent into system flight.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in
