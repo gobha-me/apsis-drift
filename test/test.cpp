@@ -548,6 +548,174 @@ auto intersystem_state_contract() -> void {
            IntersystemContractError::invalid_transition);
 }
 
+auto intersystem_time_boundary_contract() -> void {
+  const auto make_outbound_spool = [] {
+    auto state = initial_intersystem_contract_state(Seed{42});
+    (void)advance_intersystem_contract(
+        state, state.universe_tick,
+        IntersystemContractCommand::accept_mission);
+    (void)advance_intersystem_contract(
+        state, state.universe_tick, IntersystemContractCommand::launch);
+    (void)begin_intersystem_jump(state);
+    return state;
+  };
+  const auto reject_advance = [](IntersystemContractState& state,
+                                 SimulationTick ticks,
+                                 IntersystemContractError error,
+                                 const char* message) {
+    const auto before = state;
+    const auto result = advance_intersystem_time(state, ticks);
+    check(!result && result.error() == error && state == before, message);
+  };
+
+  auto unrestricted = initial_intersystem_contract_state(Seed{42});
+  check(advance_intersystem_time(
+            unrestricted, kJumpSpoolTicks + kJumpTransitTicks + 1) &&
+            validate_intersystem_contract_state(unrestricted),
+        "phases without a pending jump boundary must retain batch time advancement");
+
+  auto invalid = initial_intersystem_contract_state(Seed{42});
+  invalid.identities.target_system.value ^= 1U;
+  reject_advance(invalid, 1, IntersystemContractError::invalid_state,
+                 "raw time advancement must reject invalid input without mutation");
+
+  const auto target = generate_local_system(
+      make_outbound_spool().identities.target_system_seed);
+  const auto origin = generate_local_system(
+      make_outbound_spool().identities.origin_system_seed);
+
+  const auto check_spool_boundary = [&](const IntersystemContractState& spool,
+                                        const LocalSystemDescriptor& destination,
+                                        const char* prefix) {
+    auto before_boundary = spool;
+    check(advance_intersystem_time(before_boundary, kJumpSpoolTicks - 1) &&
+              validate_intersystem_contract_state(before_boundary),
+          prefix);
+
+    auto at_boundary = spool;
+    check(advance_intersystem_time(at_boundary, kJumpSpoolTicks) &&
+              validate_intersystem_contract_state(at_boundary),
+          "raw time advancement must allow an exact spool boundary");
+
+    auto crossed = spool;
+    reject_advance(crossed, kJumpSpoolTicks + 1,
+                   IntersystemContractError::invalid_time_advance,
+                   "raw time advancement must reject crossing a spool boundary");
+    reject_advance(before_boundary, 2,
+                   IntersystemContractError::invalid_time_advance,
+                   "a partial batch must not cross the remaining spool boundary");
+
+    auto large_batch = spool;
+    reject_advance(large_batch,
+                   kJumpSpoolTicks + kJumpTransitTicks + 1,
+                   IntersystemContractError::invalid_time_advance,
+                   "a large batch must stop at the next spool boundary");
+
+    auto overflow = spool;
+    overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
+    overflow.phase_started_tick = overflow.universe_tick;
+    check(validate_intersystem_contract_state(overflow).has_value(),
+          "the jump overflow fixture must remain a valid spool state");
+    reject_advance(overflow, 1, IntersystemContractError::tick_overflow,
+                   "jump time overflow must reject without mutation");
+
+    const auto exact_before = at_boundary;
+    check(advance_intersystem_jump_tick(at_boundary, destination) ==
+                  std::unexpected{IntersystemJumpError::transition_failure} &&
+              at_boundary == exact_before,
+          "a late jump commitment must reject transactionally");
+
+    auto late = spool;
+    late.universe_tick = *late.phase_started_tick + kJumpSpoolTicks + 1;
+    check(!validate_intersystem_contract_state(late),
+          "a spool state beyond its canonical boundary must be invalid");
+  };
+
+  const auto check_transit_boundary = [&reject_advance](
+                                          const IntersystemContractState& transit,
+                                          const LocalSystemDescriptor& destination) {
+    auto before_boundary = transit;
+    check(advance_intersystem_time(before_boundary, kJumpTransitTicks - 1) &&
+              validate_intersystem_contract_state(before_boundary),
+          "raw time advancement must allow the tick before transit arrival");
+
+    auto at_boundary = transit;
+    check(advance_intersystem_time(at_boundary, kJumpTransitTicks) &&
+              validate_intersystem_contract_state(at_boundary) &&
+              at_boundary.arrival_solution &&
+              at_boundary.universe_tick ==
+                  at_boundary.arrival_solution->arrival_tick,
+          "raw time advancement must allow the exact transit boundary");
+
+    auto crossed = transit;
+    reject_advance(crossed, kJumpTransitTicks + 1,
+                   IntersystemContractError::invalid_time_advance,
+                   "raw time advancement must reject crossing a transit boundary");
+    reject_advance(before_boundary, 2,
+                   IntersystemContractError::invalid_time_advance,
+                   "a partial batch must not cross the remaining transit boundary");
+
+    auto large_batch = transit;
+    reject_advance(large_batch,
+                   kJumpSpoolTicks + kJumpTransitTicks + 1,
+                   IntersystemContractError::invalid_time_advance,
+                   "a large batch must stop at the next transit boundary");
+
+    const auto exact_before = at_boundary;
+    check(advance_intersystem_jump_tick(at_boundary, destination) ==
+                  std::unexpected{IntersystemJumpError::transition_failure} &&
+              at_boundary == exact_before,
+          "a late jump arrival must reject transactionally");
+
+    auto late = transit;
+    late.universe_tick = late.arrival_solution->arrival_tick + 1;
+    check(!validate_intersystem_contract_state(late),
+          "a committed transit beyond arrival must be invalid");
+  };
+
+  auto outbound_spool = make_outbound_spool();
+  check_spool_boundary(outbound_spool, target,
+                       "raw time advancement must allow the tick before outbound commitment");
+
+  auto outbound_transit = outbound_spool;
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
+    (void)advance_intersystem_jump_tick(outbound_transit, target);
+  }
+  check(outbound_transit.travel_phase ==
+            IntersystemTravelPhase::outbound_jump_committed,
+        "the outbound transit fixture must commit canonically");
+  check_transit_boundary(outbound_transit, target);
+
+  auto return_spool = outbound_transit;
+  for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
+    (void)advance_intersystem_jump_tick(return_spool, target);
+  }
+  (void)advance_intersystem_contract(
+      return_spool, return_spool.universe_tick,
+      IntersystemContractCommand::enter_target_planet);
+  (void)advance_intersystem_contract(
+      return_spool, return_spool.universe_tick,
+      IntersystemContractCommand::complete_objective);
+  (void)advance_intersystem_contract(
+      return_spool, return_spool.universe_tick,
+      IntersystemContractCommand::leave_target_planet);
+  (void)begin_intersystem_jump(return_spool);
+  check(return_spool.travel_phase ==
+            IntersystemTravelPhase::return_jump_spooling,
+        "the return spool fixture must begin canonically");
+  check_spool_boundary(return_spool, origin,
+                       "raw time advancement must allow the tick before return commitment");
+
+  auto return_transit = return_spool;
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
+    (void)advance_intersystem_jump_tick(return_transit, origin);
+  }
+  check(return_transit.travel_phase ==
+            IntersystemTravelPhase::return_jump_committed,
+        "the return transit fixture must commit canonically");
+  check_transit_boundary(return_transit, origin);
+}
+
 auto intersystem_jump_contract() -> void {
   auto refused = initial_intersystem_contract_state(Seed{42});
   const auto refused_before = refused;
@@ -8375,6 +8543,7 @@ auto main() -> int {
   seed_derivation_contract();
   intersystem_identity_contract();
   intersystem_state_contract();
+  intersystem_time_boundary_contract();
   intersystem_jump_contract();
   intersystem_jump_acceptance_contract();
   system_flight_contract();

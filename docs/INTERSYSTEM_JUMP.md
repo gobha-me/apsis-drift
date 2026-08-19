@@ -15,6 +15,11 @@ are published atomically. The following 240 ticks (two seconds) are
 irreversible transit; pause, skipped frames, terminal capability, and a
 headless/no-animation run cannot change the result.
 
+Raw universe-time batches may advance to either exact timing boundary but may
+not cross one. Commitment and arrival remain owned by the one-tick jump driver,
+which rejects late execution rather than stretching either fixed-duration
+phase.
+
 Outbound commitment resolves the mission planet ephemeris at the future
 arrival tick. Assisted mode places the handoff ten planet radii behind its
 velocity vector and matches the planet's system-inertial velocity. Pilot mode

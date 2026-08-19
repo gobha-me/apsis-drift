@@ -437,14 +437,18 @@ auto advance_intersystem_jump_tick(
     }
     integrate_alignment(*next.jump_alignment);
   }
-  if (!advance_intersystem_time(next, 1)) {
-    return std::unexpected{IntersystemJumpError::tick_overflow};
+  const auto time_advance = advance_intersystem_time(next, 1);
+  if (!time_advance) {
+    return std::unexpected{
+        time_advance.error() == IntersystemContractError::tick_overflow
+            ? IntersystemJumpError::tick_overflow
+            : IntersystemJumpError::transition_failure};
   }
   IntersystemJumpAdvance result;
   const bool spooling =
       next.travel_phase == IntersystemTravelPhase::outbound_jump_spooling ||
       next.travel_phase == IntersystemTravelPhase::return_jump_spooling;
-  if (spooling && elapsed(next) >= kJumpSpoolTicks) {
+  if (spooling && elapsed(next) == kJumpSpoolTicks) {
     auto solution = resolve_intersystem_jump_arrival(next, destination);
     if (!solution) return std::unexpected{solution.error()};
     const bool outbound_commit =
@@ -469,7 +473,7 @@ auto advance_intersystem_jump_tick(
         next.travel_phase ==
             IntersystemTravelPhase::outbound_jump_committed ||
         next.travel_phase == IntersystemTravelPhase::return_jump_committed;
-    if (committed && elapsed(next) >= kJumpTransitTicks) {
+    if (committed && elapsed(next) == kJumpTransitTicks) {
       if (!next.arrival_solution ||
           next.arrival_solution->arrival_tick != next.universe_tick) {
         return std::unexpected{IntersystemJumpError::invalid_arrival};

@@ -194,8 +194,9 @@ enum class IntersystemContractError : std::uint8_t {
     const IntersystemContractState& state) noexcept
     -> std::expected<void, IntersystemContractError>;
 
-// Time advances only through application-owned fixed simulation steps. A
-// failure leaves the state unchanged.
+// Time advances only through application-owned fixed simulation steps. A raw
+// advance may land on, but cannot cross, a mandatory jump boundary. A failure
+// leaves the state unchanged.
 [[nodiscard]] auto advance_intersystem_time(IntersystemContractState& state,
                                             SimulationTick ticks) noexcept
     -> std::expected<void, IntersystemContractError>;

@@ -61,6 +61,12 @@ Version 2 jump timing is intentionally short and explicit:
 - committed transit cannot be canceled or rerolled;
 - invalid preconditions are a refused command and never a committed failure.
 
+Raw batch advancement may land exactly on the next spool or committed-transit
+boundary but cannot cross it. The application-owned jump tick operation is the
+only path that publishes commitment or arrival, and it does so only when its
+one-tick advance reaches the canonical boundary. Late transitions and every
+cross-boundary batch reject without changing the contract.
+
 The committed state has no meaningful continuous interstellar position. It
 simulates a bounded deterministic transition and advances authoritative time;
 camera motion, flashes, skipped frames, and no-animation/headless completion
