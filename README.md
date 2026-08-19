@@ -294,6 +294,10 @@ altitude or clearance bands and accepts only adjacent regime-transition
 telemetry. Save loading and orbit departure share that contract, so changing a
 near-surface craft's regime label cannot bypass ascent into system flight.
 
+The v0.4.23 system-flight clock rechecks the six-radius approach boundary after
+every authoritative compressed substep. A host step that reaches the boundary
+stops immediately at 1x, so approach and insertion space cannot be skipped.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in

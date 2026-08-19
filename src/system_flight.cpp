@@ -415,6 +415,14 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
     if (auto advanced = advance_one_tick(system, next); !advanced) {
       return std::unexpected{advanced.error()};
     }
+    const auto updated_guidance = guidance(system, next);
+    if (!updated_guidance) {
+      return std::unexpected{updated_guidance.error()};
+    }
+    if (updated_guidance->inside_approach_boundary) {
+      next.time_scale = SystemTimeScale::one;
+      break;
+    }
   }
   state = std::move(next);
   return {};

@@ -38,7 +38,7 @@ function(check_system_flight)
       NOT planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT arrival_tick STREQUAL "600" OR
       NOT insertion_tick STREQUAL "9047" OR
-      NOT host_steps STREQUAL "4082" OR
+      NOT host_steps STREQUAL "4084" OR
       NOT system_flight_checksum STREQUAL "12996023908337151515" OR
       NOT orbital_flight_checksum STREQUAL "6543655391732023443" OR
       NOT framebuffer_checksum STREQUAL "2134678291051779558")

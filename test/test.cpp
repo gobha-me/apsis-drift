@@ -1439,6 +1439,66 @@ auto system_flight_contract() -> void {
             approach.time_scale == SystemTimeScale::one,
         "the six-radius approach boundary must force one-times simulation");
 
+  const auto crossing_state = [&](SystemTimeScale scale) {
+    auto state = *initial;
+    state.position = {ephemeris->position.x + radius * 6.0 + 1'000.0,
+                      ephemeris->position.y, ephemeris->position.z};
+    state.velocity = {ephemeris->velocity.x -
+                          kSystemFlightMaximumRelativeSpeed,
+                      ephemeris->velocity.y, ephemeris->velocity.z};
+    state.forward = {-1.0, 0.0, 0.0};
+    state.mode = FlightMode::manual;
+    state.time_scale = scale;
+    return state;
+  };
+  for (const auto scale :
+       {SystemTimeScale::four, SystemTimeScale::sixteen}) {
+    auto reference = crossing_state(SystemTimeScale::one);
+    auto compressed_crossing = crossing_state(scale);
+    const auto starting_guidance =
+        resolve_system_flight_guidance(system, compressed_crossing);
+    check(starting_guidance &&
+              !starting_guidance->inside_approach_boundary &&
+              advance_system_flight(system, reference, {}) &&
+              advance_system_flight(system, compressed_crossing, {}) &&
+              compressed_crossing == reference &&
+              compressed_crossing.tick == initial->tick + 1 &&
+              compressed_crossing.time_scale == SystemTimeScale::one &&
+              system_flight_state_checksum(compressed_crossing) ==
+                  system_flight_state_checksum(reference),
+          "compressed flight must stop at the first substep inside the approach boundary");
+  }
+
+  auto exact_boundary = *initial;
+  exact_boundary.position = {ephemeris->position.x, ephemeris->position.y,
+                             ephemeris->position.z + radius * 6.0};
+  exact_boundary.velocity = ephemeris->velocity;
+  exact_boundary.time_scale = SystemTimeScale::sixteen;
+  const auto boundary_guidance =
+      resolve_system_flight_guidance(system, exact_boundary);
+  check(boundary_guidance && boundary_guidance->distance_metres == radius * 6.0 &&
+            boundary_guidance->inside_approach_boundary &&
+            advance_system_flight(system, exact_boundary, {}) &&
+            exact_boundary.tick == initial->tick + 1 &&
+            exact_boundary.time_scale == SystemTimeScale::one,
+        "the inclusive approach boundary must retain one-step behavior");
+
+  auto outside = *initial;
+  outside.position = {ephemeris->position.x + radius * 7.0,
+                      ephemeris->position.y, ephemeris->position.z};
+  outside.velocity = ephemeris->velocity;
+  outside.mode = FlightMode::manual;
+  outside.time_scale = SystemTimeScale::sixteen;
+  const auto outside_advance = advance_system_flight(system, outside, {});
+  const auto outside_guidance =
+      resolve_system_flight_guidance(system, outside);
+  check(outside_advance &&
+            outside.tick == initial->tick + 16 &&
+            outside.time_scale == SystemTimeScale::sixteen &&
+            outside_guidance &&
+            !outside_guidance->inside_approach_boundary,
+        "compressed flight remaining outside must execute its full selected scale");
+
   auto opening = *initial;
   opening.position = {ephemeris->position.x + radius * 4.0,
                       ephemeris->position.y, ephemeris->position.z};
