@@ -6710,8 +6710,8 @@ auto sweep_report_contract() -> void {
       .work_p95_ms = 6.0,
       .bytes_per_frame = 1024.0,
       .mebibytes_per_second = 1.0,
-      .total_bytes = 12288,
-      .checksum = 123456789,
+      .total_bytes = std::numeric_limits<std::uint64_t>::max(),
+      .checksum = std::numeric_limits<std::uint64_t>::max() - 1,
       .planetary_presentation = std::nullopt,
   };
   const auto cadence = assess_cadence(summary, 50);
@@ -6726,7 +6726,7 @@ auto sweep_report_contract() -> void {
       resolve_render_configuration(RenderProfile::remote), summary}};
   const std::vector<std::uint32_t> targets{30, 60};
   const auto json = sweep_json(measurements, targets, 42, 12);
-  check(json.find("\"schema_version\": 1") != std::string::npos,
+  check(json.find("\"schema_version\": 2") != std::string::npos,
         "sweep JSON must identify its schema version");
   check(json.find("\"workload\": \"voxel-landscape-rgba\"") !=
             std::string::npos,
@@ -6735,7 +6735,11 @@ auto sweep_report_contract() -> void {
         "sweep JSON must identify its seed");
   check(json.find("\"frames_per_viewport\": 12") != std::string::npos,
         "sweep JSON must identify its frame count");
-  check(json.find("\"checksum\": \"123456789\"") != std::string::npos,
+  check(json.find("\"total_bytes\": \"18446744073709551615\"") !=
+            std::string::npos,
+        "sweep JSON must preserve byte totals exactly as strings");
+  check(json.find("\"checksum\": \"18446744073709551614\"") !=
+            std::string::npos,
         "sweep JSON must preserve checksums exactly as strings");
   check(json.find("\"target_fps\": 30") != std::string::npos &&
             json.find("\"target_fps\": 60") != std::string::npos,

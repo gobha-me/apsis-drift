@@ -33,11 +33,16 @@ function(check_system_acceptance driver)
     set("${field}" "${value}")
   endforeach ()
   string(JSON frames GET "${json}" benchmark frames)
+  string(JSON benchmark_schema_version GET "${json}" benchmark
+         schema_version)
   string(JSON checksum GET "${json}" benchmark checksum)
+  string(JSON checksum_type TYPE "${json}" benchmark checksum)
   string(JSON workload GET "${json}" benchmark workload)
   string(JSON benchmark_presentation GET "${json}" benchmark presentation)
   string(JSON total_bytes GET "${json}" benchmark total_bytes)
-  if (NOT schema_version STREQUAL "1" OR
+  string(JSON total_bytes_type TYPE "${json}" benchmark total_bytes)
+  if (NOT schema_version STREQUAL "2" OR
+      NOT benchmark_schema_version STREQUAL "1" OR
       NOT scenario STREQUAL "v0.4.6-local-system-navigation" OR
       NOT presentation STREQUAL "${driver}" OR
       NOT benchmark_presentation STREQUAL "${driver}" OR
@@ -48,7 +53,9 @@ function(check_system_acceptance driver)
       NOT workload STREQUAL "local-system-320x240-rgba" OR
       visible_planets LESS 1 OR
       NOT selected_visible OR
-      total_bytes LESS 1 OR
+      NOT total_bytes_type STREQUAL "STRING" OR
+      NOT total_bytes MATCHES "^[1-9][0-9]*$" OR
+      NOT checksum_type STREQUAL "STRING" OR
       NOT checksum MATCHES "^[0-9]+$" OR
       checksum STREQUAL "0")
     message(FATAL_ERROR

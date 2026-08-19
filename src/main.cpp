@@ -2343,6 +2343,7 @@ auto print_summary(const BenchmarkSummary& summary,
   }
   return std::format(
       "{{\n"
+      "  \"schema_version\": 1,\n"
       "  \"workload\": \"{}-{}x{}-rgba\",\n"
       "  \"presentation\": \"{}\",\n"
       "  \"render_profile\": \"{}\",\n"
@@ -2357,8 +2358,8 @@ auto print_summary(const BenchmarkSummary& summary,
       "  \"frame_work_p95_ms\": {:.6f},\n"
       "  \"bytes_per_frame\": {:.6f},\n"
       "  \"mebibytes_per_second\": {:.6f},\n"
-      "  \"total_bytes\": {},\n"
-      "  \"checksum\": {}{}\n"
+      "  \"total_bytes\": \"{}\",\n"
+      "  \"checksum\": \"{}\"{}\n"
       "}}\n",
       workload_prefix, configuration.viewport.width,
       configuration.viewport.height, presentation,
@@ -2381,7 +2382,7 @@ inline constexpr std::uint32_t kSystemNavigationAcceptanceSeed{42};
     std::string_view presentation) -> std::string {
   return std::format(
       "{{\n"
-      "  \"schema_version\": 1,\n"
+      "  \"schema_version\": 2,\n"
       "  \"scenario\": \"v0.4.6-local-system-navigation\",\n"
       "  \"presentation\": \"{}\",\n"
       "  \"system_id\": \"{}\",\n"

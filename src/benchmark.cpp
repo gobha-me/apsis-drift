@@ -48,7 +48,7 @@ auto append_summary_json(std::string& output,
       "        \"frame_work_p95_ms\": {:.6f},\n"
       "        \"bytes_per_frame\": {:.6f},\n"
       "        \"mebibytes_per_second\": {:.6f},\n"
-      "        \"total_bytes\": {},\n"
+      "        \"total_bytes\": \"{}\",\n"
       "        \"checksum\": \"{}\"",
       summary.frames, summary.elapsed_seconds, summary.achieved_fps,
       summary.render_avg_ms, summary.render_p95_ms, summary.work_avg_ms,
@@ -229,7 +229,7 @@ auto sweep_json(const std::vector<BenchmarkMeasurement>& measurements,
     -> std::string {
   std::string output = std::format(
       "{{\n"
-      "  \"schema_version\": 1,\n"
+      "  \"schema_version\": 2,\n"
       "  \"workload\": \"{}\",\n"
       "  \"seed\": {},\n"
       "  \"frames_per_viewport\": {},\n"
