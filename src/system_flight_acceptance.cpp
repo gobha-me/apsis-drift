@@ -188,13 +188,12 @@ auto run_system_flight_acceptance(int width, int height)
 }
 
 auto system_flight_acceptance_json(
-    const SystemFlightAcceptanceReport& report,
-    std::string_view presentation) -> std::string {
+    const SystemFlightAcceptanceReport& report) -> std::string {
   return std::format(
       "{{\n"
-      "  \"schema_version\": 1,\n"
+      "  \"schema_version\": 2,\n"
       "  \"scenario\": \"v0.4.9-system-flight\",\n"
-      "  \"presentation\": \"{}\",\n"
+      "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"system_id\": \"{}\",\n"
       "  \"planet_id\": \"planet-{:016x}\",\n"
       "  \"arrival_tick\": \"{}\",\n"
@@ -204,7 +203,7 @@ auto system_flight_acceptance_json(
       "  \"orbital_flight_checksum\": \"{}\",\n"
       "  \"framebuffer_checksum\": \"{}\"\n"
       "}}\n",
-      presentation, system_id_string(report.system), report.planet.value,
+      system_id_string(report.system), report.planet.value,
       report.arrival_tick, report.insertion_tick, report.host_steps,
       report.system_flight_checksum, report.orbital_flight_checksum,
       report.framebuffer_checksum);

@@ -58,18 +58,16 @@ requires exactly one matching system-flight state during target-system flight.
 A released format-4 save already at the target initializes this state from its
 immutable arrival solution. Formats 1–3 retain their existing migrations.
 
-Run the cadence, save/resume, rendering, and insertion acceptance on both
-supported presentation paths:
+Run the cadence, save/resume, rendering, and insertion acceptance through the
+application framebuffer path:
 
 ```sh
-./build/apsis-drift --system-flight-acceptance --driver kitty \
-  --profile remote --report system-flight-kitty.json \
-  --snapshot system-flight-kitty.ppm
-./build/apsis-drift --system-flight-acceptance --driver ansi \
-  --profile remote --report system-flight-ansi.json \
-  --snapshot system-flight-ansi.ppm
+./build/apsis-drift --system-flight-acceptance \
+  --profile remote --report system-flight-application-framebuffer.json \
+  --snapshot system-flight-application-framebuffer.ppm
 ```
 
-The report keeps authoritative system/orbital checksums separate from the
-application framebuffer checksum. Terminal or proxy throughput requires a
-separate live measurement and is never inferred from this acceptance run.
+The schema 2 report identifies `evidence_scope: application_framebuffer` and
+keeps authoritative system/orbital checksums separate from the application
+framebuffer checksum. Kitty/ANSI encoding and terminal or proxy throughput
+require separate measurements and are never inferred from this acceptance run.

@@ -85,13 +85,13 @@ available in both presentations; deterministic velocity streaks and the
 thrust marker provide immediate pixel-space motion feedback without entering
 simulation state.
 
-Run either supported presentation matrix:
+Run the renderer-neutral matrix at both retained render profiles:
 
 ```bash
 ./build/apsis-drift --signal-run-acceptance \
-  --driver kitty --profile local --report signal-run-kitty.json
+  --profile local --report signal-run-local.json
 ./build/apsis-drift --signal-run-acceptance \
-  --driver ansi --profile remote --report signal-run-ansi.json
+  --profile remote --report signal-run-remote.json
 ```
 
 The mode writes and reloads a private same-directory checkpoint during the
@@ -101,7 +101,9 @@ class plus the long terrain-safety probe, returns each scenario to the station,
 and emits a versioned report. The checkpoint also requires identical local-sun
 geometry and framebuffer output after reload. Three fixed-seed solar
 checkpoints at ticks 66800, 72000, and 77200 verify visible, planet-occluded,
-and re-emerged states with identical direction semantics under Kitty and ANSI.
+and re-emerged states with identical direction semantics across render profiles.
+Schema 5 reports `evidence_scope: application_framebuffer`; this mode does not
+construct a Kitty or ANSI encoder.
 `--snapshot PATH` retains the canonical final
-pre-docking planetary frame for visual inspection. Rendering cadence, driver
-choice, and framebuffer checksum never enter authoritative simulation.
+pre-docking planetary frame for visual inspection. Rendering cadence, render
+profile, and framebuffer checksum never enter authoritative simulation.

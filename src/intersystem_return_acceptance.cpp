@@ -294,13 +294,12 @@ auto run_intersystem_return_acceptance(int width, int height)
 }
 
 auto intersystem_return_acceptance_json(
-    const IntersystemReturnAcceptanceReport& report,
-    std::string_view presentation) -> std::string {
+    const IntersystemReturnAcceptanceReport& report) -> std::string {
   return std::format(
       "{{\n"
-      "  \"schema_version\": 1,\n"
+      "  \"schema_version\": 2,\n"
       "  \"scenario\": \"{}\",\n"
-      "  \"presentation\": \"{}\",\n"
+      "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"origin_station_id\": \"{}\",\n"
       "  \"departure_tick\": \"{}\",\n"
       "  \"return_commit_tick\": \"{}\",\n"
@@ -314,7 +313,7 @@ auto intersystem_return_acceptance_json(
       "  \"viewport\": {{\"width\": {}, \"height\": {}}},\n"
       "  \"framebuffer_checksum\": \"{}\"\n"
       "}}\n",
-      kIntersystemReturnAcceptanceScenario, presentation,
+      kIntersystemReturnAcceptanceScenario,
       origin_station_id_string(report.station), report.departure_tick,
       report.return_commit_tick, report.origin_arrival_tick,
       report.docking_tick, report.departure_checksum,

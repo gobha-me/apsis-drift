@@ -545,8 +545,7 @@ struct TerrainSafetyProbe {
 
 auto run_signal_run_acceptance(
     RenderConfiguration configuration,
-    const std::filesystem::path& checkpoint_path,
-    std::string_view presentation)
+    const std::filesystem::path& checkpoint_path)
     -> std::expected<SignalRunAcceptanceResult, SignalRunAcceptanceError> {
   std::error_code checkpoint_error;
   const bool checkpoint_exists =
@@ -559,7 +558,6 @@ auto run_signal_run_acceptance(
   const CheckpointCleanup cleanup{checkpoint_path};
   SignalRunAcceptanceReport report{};
   report.render_configuration = configuration;
-  report.presentation = presentation;
   constexpr std::array seeds{kSignalRunAcceptanceSeed,
                              kSignalRunDefaultSeed,
                              kSignalRunDenseSeed};
@@ -632,8 +630,9 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
   }
   return std::format(
       "{{\n"
-      "  \"schema_version\": 4,\n"
+      "  \"schema_version\": 5,\n"
       "  \"scenario\": \"{}\",\n"
+      "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"seed\": {},\n"
       "  \"station_id\": \"{}\",\n"
       "  \"target_id\": \"{}\",\n"
@@ -672,7 +671,6 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       "  \"scenarios\": [\n"
       "{}"
       "  ],\n"
-      "  \"presentation\": \"{}\",\n"
       "  \"render_profile\": \"{}\",\n"
       "  \"viewport_width\": {},\n"
       "  \"viewport_height\": {}\n"
@@ -698,7 +696,7 @@ auto signal_run_acceptance_json(const SignalRunAcceptanceReport& report)
       report.terrain_safety_minimum_clearance_metres,
       report.terrain_safety_flight_checksum,
       report.discovery_count,
-      report.world_delta_count, sun_cycle, scenarios, report.presentation,
+      report.world_delta_count, sun_cycle, scenarios,
       profile_name(report.render_configuration),
       report.render_configuration.viewport.width,
       report.render_configuration.viewport.height);

@@ -616,8 +616,7 @@ auto run_intersystem_contract_acceptance(int width, int height)
 }
 
 auto intersystem_contract_acceptance_json(
-    const IntersystemContractAcceptanceReport& report,
-    std::string_view presentation) -> std::string {
+    const IntersystemContractAcceptanceReport& report) -> std::string {
   std::string checkpoints;
   for (std::size_t index = 0; index < report.checkpoints.size(); ++index) {
     const auto& checkpoint = report.checkpoints[index];
@@ -631,9 +630,9 @@ auto intersystem_contract_acceptance_json(
   }
   return std::format(
       "{{\n"
-      "  \"schema_version\": 1,\n"
+      "  \"schema_version\": 2,\n"
       "  \"scenario\": \"{}\",\n"
-      "  \"presentation\": \"{}\",\n"
+      "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"seed\": \"{}\",\n"
       "  \"mission_id\": \"{}\",\n"
       "  \"target_system_id\": \"{}\",\n"
@@ -656,7 +655,7 @@ auto intersystem_contract_acceptance_json(
       "\"application_render_ms\": {:.3f}, "
       "\"terminal_proxy\": \"external-live-capture\"}}\n"
       "}}\n",
-      kIntersystemContractAcceptanceScenario, presentation,
+      kIntersystemContractAcceptanceScenario,
       kIntersystemContractAcceptanceSeed, mission_id_string(report.mission),
       system_id_string(report.target_system), report.target_planet.value,
       surface_signal_id_string(report.target_objective),

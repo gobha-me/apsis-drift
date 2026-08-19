@@ -57,16 +57,14 @@ origin system at tick 1260, and docks at tick 5923. It saves and reloads at
 departure, canceled spool, committed transit, origin arrival, mid-approach,
 docked, and turned-in boundaries.
 
-Run both semantic presentation paths:
+Run the application-owned simulation and framebuffer path:
 
 ```bash
 ./build/apsis-drift --intersystem-return-acceptance \
-  --driver ansi --profile remote --report return-ansi.json
-./build/apsis-drift --intersystem-return-acceptance \
-  --driver kitty --profile remote --report return-kitty.json
+  --profile remote --report return-application-framebuffer.json
 ```
 
-The reports must agree on departure, arrival, docking, world-delta, and
-framebuffer checksums. Invalid dimensions, buffer mismatches, non-finite craft
+The schema 2 report identifies `evidence_scope: application_framebuffer` and
+does not claim Kitty/ANSI encoding. Invalid dimensions, buffer mismatches, non-finite craft
 state, wrong identities, mistimed commands, repeated transitions, and
 out-of-order docking are rejected before visual smoke checks.

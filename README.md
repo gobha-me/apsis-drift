@@ -237,8 +237,8 @@ The v0.4.13 complete-contract acceptance path now composes mission acceptance,
 outbound transit, the moving target system, Planetfall, recovery from a poor
 entry, orbital return, home transit, docking, and turn-in. Six independent
 save/resume continuations converge on one authoritative final checksum under
-GCC and Clang, while Kitty/ANSI pixels and live terminal/proxy timings remain
-separate evidence. See
+GCC and Clang, while application framebuffer, TermForge encoding, and live
+terminal/proxy timings remain separate evidence. See
 [docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md](docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md).
 
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
@@ -270,6 +270,12 @@ of labeling Kitty output as ANSI. Ordinary benchmark JSON records the active
 acceptance rejects any mismatch between the requested and exercised driver.
 Application framebuffer checksums remain independent of the encoder; byte
 totals now describe the actual encoded stream.
+
+The v0.4.19 renderer-only acceptance paths no longer copy a requested
+Kitty/ANSI label into reports without exercising that encoder. Intersystem,
+system-flight, and Signal Run reports now identify their evidence as
+`application_framebuffer`; the headless benchmark and system-navigation
+acceptance remain the encoder-backed Kitty/ANSI checks.
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
@@ -461,9 +467,9 @@ selection is available only in benchmark and sweep modes. Run the complete
 fixed-seed cockpit matrix with
 `--system-navigation-acceptance --driver kitty|ansi --report PATH`.
 The deterministic Assisted-jump matrix is available through
-`--intersystem-jump-acceptance --driver kitty|ansi --report PATH`.
+`--intersystem-jump-acceptance --report PATH`.
 Run the complete first-contract matrix with
-`--intersystem-contract-acceptance --driver kitty|ansi --report PATH`; add
+`--intersystem-contract-acceptance --report PATH`; add
 `--snapshot PATH` for the bounded final Origin Station frame.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:

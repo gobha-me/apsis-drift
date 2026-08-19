@@ -633,8 +633,7 @@ auto run_intersystem_planetfall_acceptance(int width, int height)
 }
 
 auto intersystem_planetfall_acceptance_json(
-    const IntersystemPlanetfallAcceptanceReport& report,
-    std::string_view presentation) -> std::string {
+    const IntersystemPlanetfallAcceptanceReport& report) -> std::string {
   std::string entries;
   for (std::size_t index = 0; index < report.entries.size(); ++index) {
     const auto& entry = report.entries[index];
@@ -649,9 +648,9 @@ auto intersystem_planetfall_acceptance_json(
   }
   return std::format(
       "{{\n"
-      "  \"schema_version\": 2,\n"
+      "  \"schema_version\": 3,\n"
       "  \"scenario\": \"{}\",\n"
-      "  \"presentation\": \"{}\",\n"
+      "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"planet_id\": \"planet-{:016x}\",\n"
       "  \"target_id\": \"{}\",\n"
       "  \"entries\": [\n{}  ],\n"
@@ -672,7 +671,7 @@ auto intersystem_planetfall_acceptance_json(
       "\"resumed_recovery_checksum\": \"{}\"}},\n"
       "  \"framebuffer_checksum\": \"{}\"\n"
       "}}\n",
-      kIntersystemPlanetfallAcceptanceScenario, presentation,
+      kIntersystemPlanetfallAcceptanceScenario,
       report.planet.value, surface_signal_id_string(report.target), entries,
       report.abort_orbit_tick, report.abort_orbit_checksum,
       report.completion_tick, report.completed_flight_checksum,

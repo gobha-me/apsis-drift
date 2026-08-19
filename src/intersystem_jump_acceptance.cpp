@@ -247,13 +247,12 @@ auto run_intersystem_jump_acceptance(int width, int height)
 }
 
 auto intersystem_jump_acceptance_json(
-    const IntersystemJumpAcceptanceReport& report,
-    std::string_view presentation) -> std::string {
+    const IntersystemJumpAcceptanceReport& report) -> std::string {
   return std::format(
       "{{\n"
-      "  \"schema_version\": 2,\n"
+      "  \"schema_version\": 3,\n"
       "  \"scenario\": \"v0.4.15-pilot-ftl-alignment\",\n"
-      "  \"presentation\": \"{}\",\n"
+      "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"destination_system_id\": \"{}\",\n"
       "  \"reference_planet_id\": \"planet-{:016x}\",\n"
       "  \"committed_tick\": \"{}\",\n"
@@ -270,7 +269,7 @@ auto intersystem_jump_acceptance_json(
       "  \"viewport\": {{\"width\": {}, \"height\": {}}},\n"
       "  \"framebuffer_checksum\": \"{}\"\n"
       "}}\n",
-      presentation, system_id_string(report.destination),
+      system_id_string(report.destination),
       report.reference_planet.value, report.committed_tick,
       report.arrival_tick, report.arrival_checksum,
       intersystem_arrival_quality_name(report.assisted_quality),

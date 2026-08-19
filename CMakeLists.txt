@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.18 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.19 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -261,49 +261,54 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-viewport-zero
     COMMAND apsis-drift --benchmark 1 --viewport 0x480)
   add_test(NAME reject-system-flight-missing-report
-    COMMAND apsis-drift --system-flight-acceptance --driver kitty)
+    COMMAND apsis-drift --system-flight-acceptance)
   set_tests_properties(reject-system-flight-missing-report
     PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-system-flight-driver
+    COMMAND apsis-drift --system-flight-acceptance --driver kitty
+            --report system-flight-invalid.json)
+  set_tests_properties(reject-system-flight-driver
+    PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-intersystem-planetfall-missing-report
-    COMMAND apsis-drift --intersystem-planetfall-acceptance --driver kitty)
+    COMMAND apsis-drift --intersystem-planetfall-acceptance)
   set_tests_properties(reject-intersystem-planetfall-missing-report
     PROPERTIES WILL_FAIL TRUE)
-  add_test(NAME reject-intersystem-planetfall-missing-driver
-    COMMAND apsis-drift --intersystem-planetfall-acceptance
+  add_test(NAME reject-intersystem-planetfall-driver
+    COMMAND apsis-drift --intersystem-planetfall-acceptance --driver kitty
             --report intersystem-planetfall-invalid.json)
-  set_tests_properties(reject-intersystem-planetfall-missing-driver
+  set_tests_properties(reject-intersystem-planetfall-driver
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-intersystem-planetfall-mode-conflict
-    COMMAND apsis-drift --intersystem-planetfall-acceptance --driver ansi
-            --benchmark 1 --report intersystem-planetfall-invalid.json)
+    COMMAND apsis-drift --intersystem-planetfall-acceptance --benchmark 1
+            --report intersystem-planetfall-invalid.json)
   set_tests_properties(reject-intersystem-planetfall-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-intersystem-return-missing-report
-    COMMAND apsis-drift --intersystem-return-acceptance --driver kitty)
+    COMMAND apsis-drift --intersystem-return-acceptance)
   set_tests_properties(reject-intersystem-return-missing-report
     PROPERTIES WILL_FAIL TRUE)
-  add_test(NAME reject-intersystem-return-missing-driver
-    COMMAND apsis-drift --intersystem-return-acceptance
+  add_test(NAME reject-intersystem-return-driver
+    COMMAND apsis-drift --intersystem-return-acceptance --driver kitty
             --report intersystem-return-invalid.json)
-  set_tests_properties(reject-intersystem-return-missing-driver
+  set_tests_properties(reject-intersystem-return-driver
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-intersystem-return-mode-conflict
-    COMMAND apsis-drift --intersystem-return-acceptance --driver ansi
-            --benchmark 1 --report intersystem-return-invalid.json)
+    COMMAND apsis-drift --intersystem-return-acceptance --benchmark 1
+            --report intersystem-return-invalid.json)
   set_tests_properties(reject-intersystem-return-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-intersystem-contract-missing-report
-    COMMAND apsis-drift --intersystem-contract-acceptance --driver kitty)
+    COMMAND apsis-drift --intersystem-contract-acceptance)
   set_tests_properties(reject-intersystem-contract-missing-report
     PROPERTIES WILL_FAIL TRUE)
-  add_test(NAME reject-intersystem-contract-missing-driver
-    COMMAND apsis-drift --intersystem-contract-acceptance
+  add_test(NAME reject-intersystem-contract-driver
+    COMMAND apsis-drift --intersystem-contract-acceptance --driver kitty
             --report intersystem-contract-invalid.json)
-  set_tests_properties(reject-intersystem-contract-missing-driver
+  set_tests_properties(reject-intersystem-contract-driver
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-intersystem-contract-mode-conflict
-    COMMAND apsis-drift --intersystem-contract-acceptance --driver ansi
-            --benchmark 1 --report intersystem-contract-invalid.json)
+    COMMAND apsis-drift --intersystem-contract-acceptance --benchmark 1
+            --report intersystem-contract-invalid.json)
   set_tests_properties(reject-intersystem-contract-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-viewport-negative
@@ -374,15 +379,15 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --signal-navigation-acceptance --benchmark 1
             --report signal-navigation-invalid.json)
   add_test(NAME reject-signal-run-missing-report
-    COMMAND apsis-drift --signal-run-acceptance --driver ansi)
-  add_test(NAME reject-signal-run-missing-driver
-    COMMAND apsis-drift --signal-run-acceptance
+    COMMAND apsis-drift --signal-run-acceptance)
+  add_test(NAME reject-signal-run-driver
+    COMMAND apsis-drift --signal-run-acceptance --driver ansi
             --report signal-run-invalid.json)
   add_test(NAME reject-signal-run-seed-override
-    COMMAND apsis-drift --signal-run-acceptance --driver kitty --seed 42
+    COMMAND apsis-drift --signal-run-acceptance --seed 42
             --report signal-run-invalid.json)
   add_test(NAME reject-signal-run-mode-conflict
-    COMMAND apsis-drift --signal-run-acceptance --driver ansi --benchmark 1
+    COMMAND apsis-drift --signal-run-acceptance --benchmark 1
             --report signal-run-invalid.json)
   add_test(NAME reject-system-navigation-missing-report
     COMMAND apsis-drift --system-navigation-acceptance --driver ansi)
@@ -393,13 +398,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --system-navigation-acceptance --driver kitty
             --benchmark 1 --report system-navigation-invalid.json)
   add_test(NAME reject-intersystem-jump-missing-report
-    COMMAND apsis-drift --intersystem-jump-acceptance --driver ansi)
-  add_test(NAME reject-intersystem-jump-missing-driver
-    COMMAND apsis-drift --intersystem-jump-acceptance
+    COMMAND apsis-drift --intersystem-jump-acceptance)
+  add_test(NAME reject-intersystem-jump-driver
+    COMMAND apsis-drift --intersystem-jump-acceptance --driver ansi
             --report intersystem-jump-invalid.json)
   add_test(NAME reject-intersystem-jump-mode-conflict
-    COMMAND apsis-drift --intersystem-jump-acceptance --driver kitty
-            --benchmark 1 --report intersystem-jump-invalid.json)
+    COMMAND apsis-drift --intersystem-jump-acceptance --benchmark 1
+            --report intersystem-jump-invalid.json)
   add_test(NAME capability-floor-refusal
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -435,14 +440,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-signal-navigation-seed-override
     reject-signal-navigation-mode-conflict
     reject-signal-run-missing-report
-    reject-signal-run-missing-driver
+    reject-signal-run-driver
     reject-signal-run-seed-override
     reject-signal-run-mode-conflict
     reject-system-navigation-missing-report
     reject-system-navigation-missing-driver
     reject-system-navigation-mode-conflict
     reject-intersystem-jump-missing-report
-    reject-intersystem-jump-missing-driver
+    reject-intersystem-jump-driver
     reject-intersystem-jump-mode-conflict
     PROPERTIES WILL_FAIL TRUE
   )

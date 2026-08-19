@@ -58,9 +58,11 @@ The transit image and reticle are bounded code-rendered RGBA derived only from
 the semantic jump snapshot. Kitty and ANSI consume the same pixels and cockpit
 text. The snapshot exposes phase, destination, progress, commitment,
 cancelability, error, and quality without relying on color.
-`--intersystem-jump-acceptance` runs Assisted plus all Pilot placements, saves
-and resumes a committed Pilot result, and reports authoritative placement and
-framebuffer checksums separately.
+`--intersystem-jump-acceptance --report PATH` runs Assisted plus all Pilot
+placements, saves and resumes a committed Pilot result, and reports
+authoritative placement and framebuffer checksums separately. Its schema 3
+report identifies `evidence_scope: application_framebuffer`; actual Kitty/ANSI
+encoding is covered by the headless benchmark and system-navigation acceptance.
 
 Invalid systems, mission references, out-of-range alignment, non-finite
 arrival values, mistimed or unrelated controls, tick overflow, invalid

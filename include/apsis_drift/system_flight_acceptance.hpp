@@ -4,7 +4,6 @@
 #include <expected>
 #include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "apsis_drift/intersystem_contract.hpp"
@@ -47,7 +46,6 @@ struct SystemFlightAcceptanceResult {
                      SystemFlightAcceptanceError>;
 
 [[nodiscard]] auto system_flight_acceptance_json(
-    const SystemFlightAcceptanceReport& report,
-    std::string_view presentation) -> std::string;
+    const SystemFlightAcceptanceReport& report) -> std::string;
 
 }  // namespace apsis_drift

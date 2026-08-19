@@ -5,29 +5,29 @@ if (NOT DEFINED REPORT_DIR)
   message(FATAL_ERROR "REPORT_DIR is required")
 endif ()
 
-function(run_signal_run driver profile suffix output_variable)
-  set(report "${REPORT_DIR}/signal-run-${driver}-${suffix}.json")
+function(run_signal_run profile suffix output_variable)
+  set(report "${REPORT_DIR}/signal-run-${profile}-${suffix}.json")
   execute_process(
     COMMAND "${APSIS_DRIFT_BIN}" --signal-run-acceptance
-            --driver "${driver}" --profile "${profile}" --report "${report}"
+            --profile "${profile}" --report "${report}"
     RESULT_VARIABLE result
     OUTPUT_QUIET
     ERROR_VARIABLE error
   )
   if (NOT result EQUAL 0)
     message(FATAL_ERROR
-      "${driver} Signal Run failed (${result})\nstderr:\n${error}")
+      "${profile} Signal Run failed (${result})\nstderr:\n${error}")
   endif ()
   file(READ "${report}" json)
   set("${output_variable}" "${json}" PARENT_SCOPE)
 endfunction ()
 
-function(check_signal_run driver profile)
-  run_signal_run("${driver}" "${profile}" first first_json)
-  run_signal_run("${driver}" "${profile}" second second_json)
+function(check_signal_run profile)
+  run_signal_run("${profile}" first first_json)
+  run_signal_run("${profile}" second second_json)
   if (NOT first_json STREQUAL second_json)
     message(FATAL_ERROR
-      "${driver} Signal Run did not reproduce exactly")
+      "${profile} Signal Run did not reproduce exactly")
   endif ()
 
   foreach(field schema_version scenario seed station_id target_id launch_tick
@@ -44,16 +44,16 @@ function(check_signal_run driver profile)
                 terrain_safety_minimum_clearance_metres
                 terrain_safety_flight_checksum discovery_count
                 world_delta_count final_location final_objective sun_cycle
-                render_profile presentation viewport_width viewport_height)
+                render_profile evidence_scope viewport_width viewport_height)
     string(JSON value ERROR_VARIABLE json_error GET "${first_json}" "${field}")
     if (json_error)
       message(FATAL_ERROR
-        "${driver} Signal Run field '${field}' failed to parse: ${json_error}")
+        "${profile} Signal Run field '${field}' failed to parse: ${json_error}")
     endif ()
     set("${field}" "${value}")
   endforeach ()
 
-  if (NOT schema_version STREQUAL "4" OR
+  if (NOT schema_version STREQUAL "5" OR
       NOT scenario STREQUAL "v0.4.3-signal-run" OR
       NOT seed STREQUAL "42" OR
       NOT station_id STREQUAL "station-ce51e866ec4e032d" OR
@@ -88,16 +88,16 @@ function(check_signal_run driver profile)
       NOT final_location STREQUAL "docked_at_origin" OR
       NOT final_objective STREQUAL "completed" OR
       NOT render_profile STREQUAL "${profile}" OR
-      NOT presentation STREQUAL "${driver}")
+      NOT evidence_scope STREQUAL "application_framebuffer")
     message(FATAL_ERROR
-      "${driver} Signal Run report is not canonical:\n${first_json}")
+      "${profile} Signal Run report is not canonical:\n${first_json}")
   endif ()
 
   string(JSON sun_cycle_count ERROR_VARIABLE sun_cycle_error
          LENGTH "${first_json}" sun_cycle)
   if (sun_cycle_error OR NOT sun_cycle_count STREQUAL "3")
     message(FATAL_ERROR
-      "${driver} sun-cycle matrix is incomplete: ${sun_cycle_error}")
+      "${profile} sun-cycle matrix is incomplete: ${sun_cycle_error}")
   endif ()
   set(expected_sun_visibility visible planet_occluded reemerged)
   set(expected_sun_ticks 66800 72000 77200)
@@ -117,7 +117,7 @@ function(check_signal_run driver profile)
         (visibility STREQUAL "planet_occluded" AND NOT sun_pixels EQUAL 0) OR
         (NOT visibility STREQUAL "planet_occluded" AND sun_pixels EQUAL 0))
       message(FATAL_ERROR
-        "${driver} sun-cycle checkpoint ${index} is invalid:\n${first_json}")
+        "${profile} sun-cycle checkpoint ${index} is invalid:\n${first_json}")
     endif ()
     string(APPEND sun_signature "${visibility}:${tick}:${direction};")
   endforeach ()
@@ -126,7 +126,7 @@ function(check_signal_run driver profile)
          LENGTH "${first_json}" scenarios)
   if (scenario_error OR NOT scenario_count STREQUAL "3")
     message(FATAL_ERROR
-      "${driver} Signal Run scenario matrix is incomplete: ${scenario_error}")
+      "${profile} Signal Run scenario matrix is incomplete: ${scenario_error}")
   endif ()
   set(expected_seeds 42 12648430 1)
   set(expected_atmospheres airless temperate dense)
@@ -149,7 +149,7 @@ function(check_signal_run driver profile)
              GET "${first_json}" scenarios ${index} ${field})
       if (scenario_field_error)
         message(FATAL_ERROR
-          "${driver} Signal Run scenario ${index} field ${field}: ${scenario_field_error}")
+          "${profile} Signal Run scenario ${index} field ${field}: ${scenario_field_error}")
       endif ()
     endforeach ()
     math(EXPR atmospheric_leg
@@ -164,25 +164,25 @@ function(check_signal_run driver profile)
         scenario_atmospheric_framebuffer_checksum STREQUAL "0" OR
         NOT scenario_return_flight_checksum STREQUAL expected_return_checksum)
       message(FATAL_ERROR
-        "${driver} Signal Run scenario ${index} is not canonical:\n${first_json}")
+        "${profile} Signal Run scenario ${index} is not canonical:\n${first_json}")
     endif ()
   endforeach ()
 
-  set("${driver}_flight_checksum" "${return_flight_checksum}" PARENT_SCOPE)
-  set("${driver}_completion_tick" "${completion_tick}" PARENT_SCOPE)
-  set("${driver}_return_tick" "${orbital_return_tick}" PARENT_SCOPE)
-  set("${driver}_safety_checksum" "${terrain_safety_flight_checksum}" PARENT_SCOPE)
-  set("${driver}_sun_signature" "${sun_signature}" PARENT_SCOPE)
+  set("${profile}_flight_checksum" "${return_flight_checksum}" PARENT_SCOPE)
+  set("${profile}_completion_tick" "${completion_tick}" PARENT_SCOPE)
+  set("${profile}_return_tick" "${orbital_return_tick}" PARENT_SCOPE)
+  set("${profile}_safety_checksum" "${terrain_safety_flight_checksum}" PARENT_SCOPE)
+  set("${profile}_sun_signature" "${sun_signature}" PARENT_SCOPE)
 endfunction ()
 
-check_signal_run(ansi remote)
-check_signal_run(kitty local)
+check_signal_run(remote)
+check_signal_run(local)
 
-if (NOT ansi_flight_checksum STREQUAL kitty_flight_checksum OR
-    NOT ansi_completion_tick STREQUAL kitty_completion_tick OR
-    NOT ansi_return_tick STREQUAL kitty_return_tick OR
-    NOT ansi_safety_checksum STREQUAL kitty_safety_checksum OR
-    NOT ansi_sun_signature STREQUAL kitty_sun_signature)
+if (NOT remote_flight_checksum STREQUAL local_flight_checksum OR
+    NOT remote_completion_tick STREQUAL local_completion_tick OR
+    NOT remote_return_tick STREQUAL local_return_tick OR
+    NOT remote_safety_checksum STREQUAL local_safety_checksum OR
+    NOT remote_sun_signature STREQUAL local_sun_signature)
   message(FATAL_ERROR
-    "presentation path changed deterministic Signal Run state")
+    "render profile changed deterministic Signal Run state")
 endif ()

@@ -51,7 +51,6 @@ enum class IntersystemReturnAcceptanceError : std::uint8_t {
                      IntersystemReturnAcceptanceError>;
 
 [[nodiscard]] auto intersystem_return_acceptance_json(
-    const IntersystemReturnAcceptanceReport& report,
-    std::string_view presentation) -> std::string;
+    const IntersystemReturnAcceptanceReport& report) -> std::string;
 
 }  // namespace apsis_drift

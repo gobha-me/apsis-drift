@@ -5,22 +5,22 @@ if (NOT DEFINED REPORT_DIR)
   message(FATAL_ERROR "REPORT_DIR is required")
 endif ()
 
-function(check_jump_acceptance driver)
-  set(report "${REPORT_DIR}/intersystem-jump-${driver}.json")
+function(check_jump_acceptance)
+  set(report "${REPORT_DIR}/intersystem-jump-application-framebuffer.json")
   execute_process(
     COMMAND "${APSIS_DRIFT_BIN}" --intersystem-jump-acceptance
-            --driver "${driver}" --profile remote --report "${report}"
+            --profile remote --report "${report}"
     RESULT_VARIABLE result
     OUTPUT_QUIET
     ERROR_VARIABLE error
   )
   if (NOT result EQUAL 0)
     message(FATAL_ERROR
-      "${driver} jump acceptance failed (${result})\nstderr:\n${error}")
+      "jump acceptance failed (${result})\nstderr:\n${error}")
   endif ()
 
   file(READ "${report}" json)
-  foreach(field schema_version scenario presentation destination_system_id
+  foreach(field schema_version scenario evidence_scope destination_system_id
                 reference_planet_id committed_tick arrival_tick
                 arrival_checksum assisted_quality
                 pilot_initial_heading_error_millidegrees
@@ -31,13 +31,13 @@ function(check_jump_acceptance driver)
     string(JSON value ERROR_VARIABLE json_error GET "${json}" "${field}")
     if (json_error)
       message(FATAL_ERROR
-        "${driver} report field '${field}' failed to parse: ${json_error}")
+        "report field '${field}' failed to parse: ${json_error}")
     endif ()
     set("${field}" "${value}")
   endforeach ()
-  if (NOT schema_version STREQUAL "2" OR
+  if (NOT schema_version STREQUAL "3" OR
       NOT scenario STREQUAL "v0.4.15-pilot-ftl-alignment" OR
-      NOT presentation STREQUAL "${driver}" OR
+      NOT evidence_scope STREQUAL "application_framebuffer" OR
       NOT destination_system_id STREQUAL "system-28630482e6b15573" OR
       NOT reference_planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT committed_tick STREQUAL "360" OR
@@ -53,24 +53,9 @@ function(check_jump_acceptance driver)
       NOT pilot_opposed_distance_metres STREQUAL "14198903999.135" OR
       NOT framebuffer_checksum STREQUAL "4656956508158175312")
     message(FATAL_ERROR
-      "${driver} jump acceptance report is not canonical:\n${json}")
+      "jump acceptance report is not canonical:\n${json}")
   endif ()
 
-  set("${driver}_arrival_checksum" "${arrival_checksum}" PARENT_SCOPE)
-  set("${driver}_pilot_aligned_checksum" "${pilot_aligned_checksum}" PARENT_SCOPE)
-  set("${driver}_pilot_offset_checksum" "${pilot_offset_checksum}" PARENT_SCOPE)
-  set("${driver}_pilot_opposed_checksum" "${pilot_opposed_checksum}" PARENT_SCOPE)
-  set("${driver}_framebuffer_checksum" "${framebuffer_checksum}" PARENT_SCOPE)
 endfunction ()
 
-check_jump_acceptance(ansi)
-check_jump_acceptance(kitty)
-
-if (NOT ansi_arrival_checksum STREQUAL kitty_arrival_checksum OR
-    NOT ansi_pilot_aligned_checksum STREQUAL kitty_pilot_aligned_checksum OR
-    NOT ansi_pilot_offset_checksum STREQUAL kitty_pilot_offset_checksum OR
-    NOT ansi_pilot_opposed_checksum STREQUAL kitty_pilot_opposed_checksum OR
-    NOT ansi_framebuffer_checksum STREQUAL kitty_framebuffer_checksum)
-  message(FATAL_ERROR
-    "presentation path changed authoritative arrival or transit pixels")
-endif ()
+check_jump_acceptance()
