@@ -84,9 +84,11 @@ Exercise the complete cockpit and terminal presentation paths with:
 
 The JSON acceptance report records stable system/star/planet identity,
 navigation values, visible-body coverage, final framebuffer checksum, renderer
-timing, frame work, and encoded bytes. Renderer and full-frame results measure
-application work through TermForge's selected driver; any PTY, proxy, decoder,
-or display timing must be recorded separately.
+timing, frame work, the active driver, and encoded bytes. The requested ANSI or
+Kitty driver is constructed directly; acceptance fails instead of writing a
+mislabeled report if the active identity differs. Renderer and full-frame
+results measure application work through TermForge's selected driver; any PTY,
+proxy, decoder, or display timing must be recorded separately.
 
 ### 2026-08-18 headless baseline
 
@@ -102,10 +104,11 @@ measurements, not live terminal or proxy timings.
 | Clang | `local` | 0.51 / 0.54 ms | 1.01 / 1.05 ms | 32.28 ms | 15.61 ms |
 
 Both compilers produced framebuffer checksum `15685277948684615095` at
-`remote` and `10385222813185508075` at `local`. The paired ANSI and Kitty
-acceptance runs also agreed on the remote checksum while retaining separate
-encoded-byte measurements: 426,408 ANSI bytes and 426,426 Kitty bytes for six
-frames. Their generated 320x240 PPM smoke snapshots both had SHA-256
+`remote` and `10385222813185508075` at `local`. The corrected v0.4.18 ANSI and
+Kitty acceptance runs also agree on the remote checksum while retaining actual
+driver-specific encoded-byte measurements: about 54 KB for ANSI and 426 KB for
+Kitty over six frames. The previously published values both came from Kitty and
+were mislabeled. Their generated 320x240 PPM smoke snapshots both had SHA-256
 `e3532664b61d51f9dd3bbb89f4dc7a7434afe9a68b0a180a656eb8df3e146cad`.
 Those snapshots are generated verification artifacts and are not committed
 media assets. No terminal decoder, display, network, or remote proxy timing was

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.17 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.18 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -227,6 +227,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_fixed_step_benchmark.cmake")
+
+  add_test(NAME benchmark-headless-driver-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_headless_driver_benchmark.cmake")
 
   add_test(NAME flight-deck-acceptance-matrix
     COMMAND "${CMAKE_COMMAND}"
