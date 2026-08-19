@@ -124,7 +124,7 @@ enum class FlightError : std::uint8_t {
 
 // Applies all commands in their recorded order, advances exactly one fixed
 // step, and commits the result atomically. Every command must target the
-// state's current tick.
+// state's current tick, and step must equal kSimulationStep.
 [[nodiscard]] auto advance_flight(
     const Terrain& terrain, FlightState& state,
     std::span<const FlightCommand> commands, SimulationSeconds step) noexcept

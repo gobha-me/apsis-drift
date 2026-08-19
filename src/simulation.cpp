@@ -197,7 +197,7 @@ auto advance_flight(const Terrain& terrain, FlightState& state,
   if (!finite_state(state)) {
     return std::unexpected{FlightError::invalid_state};
   }
-  if (!std::isfinite(step.count()) || step <= SimulationSeconds::zero()) {
+  if (!std::isfinite(step.count()) || step != kSimulationStep) {
     return std::unexpected{FlightError::invalid_step};
   }
   if (state.tick == std::numeric_limits<SimulationTick>::max()) {
@@ -230,7 +230,7 @@ auto advance_flight(const Terrain& terrain, FlightState& state,
     vertical = 0.0F;
   }
 
-  const float dt = static_cast<float>(step.count());
+  const float dt = static_cast<float>(kSimulationStep.count());
   next.pose.yaw += turn * 1.15F * dt;
   const float forward_x = std::cos(next.pose.yaw);
   const float forward_y = std::sin(next.pose.yaw);

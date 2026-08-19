@@ -303,6 +303,11 @@ before returning a decoded save. Unknown targets, discoveries, world deltas,
 and inconsistent objective or tick relationships now fail with a precise save
 path instead of reaching a generic application hydration exception.
 
+The v0.4.25 flight-step APIs accept only the authoritative 120 Hz duration.
+Legacy and planetary motion, including thermal integration, use the shared
+`kSimulationStep`; invalid or near-miss durations reject without advancing the
+tick or mutating flight state.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in

@@ -16,7 +16,6 @@ inline constexpr double kDenseAtmosphereCeilingMetres{160'000.0};
 inline constexpr double kMinimumOrbitHysteresisMetres{10'000.0};
 inline constexpr double kAtmosphericDescentTargetSeconds{100.0};
 inline constexpr double kAtmosphericVerticalResponseSeconds{1.8};
-inline constexpr SimulationSeconds kMaximumPlanetaryFlightStep{0.25};
 inline constexpr double kThermalReferenceSpeedMetresPerSecond{1'000.0};
 inline constexpr double kThermalHeatingScalePerSecond{0.20};
 inline constexpr double kThermalMinimumCoolingPerSecond{0.015};
@@ -275,11 +274,10 @@ auto apply_command(PlanetaryFlightState& state,
 }
 
 auto advance_thermal_state(const PlanetDescriptor& planet,
-                           PlanetaryFlightState& state,
-                           SimulationSeconds step) noexcept -> bool {
+                           PlanetaryFlightState& state) noexcept -> bool {
   const auto rates = thermal_rates(planet, state);
   if (!rates) return false;
-  const double delta = rates->net_load_per_second * step.count() *
+  const double delta = rates->net_load_per_second * kSimulationStep.count() *
                        static_cast<double>(kMaximumThermalLoadUnits);
   if (!std::isfinite(delta) ||
       delta < static_cast<double>(std::numeric_limits<long long>::min()) ||
@@ -708,8 +706,7 @@ auto advance_planetary_flight(
   if (!std::isfinite(environment.surface_elevation_metres)) {
     return std::unexpected{PlanetaryFlightError::invalid_environment};
   }
-  if (!std::isfinite(step.count()) || step <= SimulationSeconds::zero() ||
-      step > kMaximumPlanetaryFlightStep) {
+  if (!std::isfinite(step.count()) || step != kSimulationStep) {
     return std::unexpected{PlanetaryFlightError::invalid_step};
   }
   if (state.tick == std::numeric_limits<SimulationTick>::max()) {
@@ -739,7 +736,7 @@ auto advance_planetary_flight(
       next.thermal.load_units == kMaximumThermalLoadUnits) {
     next.thermal.abort_latched = true;
   }
-  if (!advance_thermal_state(planet, next, step)) {
+  if (!advance_thermal_state(planet, next)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
   if (rules.enforce_thermal_abort &&
@@ -766,7 +763,7 @@ auto advance_planetary_flight(
   }
 
   const auto parameters = parameters_for(planet, next.regime);
-  const double dt = step.count();
+  const double dt = kSimulationStep.count();
   next.pose.heading_radians = canonical_heading(
       next.pose.heading_radians +
       turn * parameters.turn_rate_radians_per_second * dt);

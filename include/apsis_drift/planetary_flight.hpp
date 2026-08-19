@@ -218,9 +218,9 @@ enum class PlanetaryFlightError : std::uint8_t {
     -> std::expected<void, PlanetaryFlightError>;
 
 // Applies every command in recorded order and advances one application-owned
-// fixed step. The caller supplies the deterministic surface elevation for the
-// craft's current subpoint; rendering cadence and terrain cache state are not
-// inputs. Rejected steps leave state untouched.
+// fixed step. The caller supplies kSimulationStep and the deterministic surface
+// elevation for the craft's current subpoint; rendering cadence and terrain
+// cache state are not inputs. Rejected steps leave state untouched.
 [[nodiscard]] auto advance_planetary_flight(
     const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
     PlanetaryFlightState& state,
