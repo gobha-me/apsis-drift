@@ -1479,6 +1479,19 @@ auto system_flight_contract() -> void {
     check(depart_planetary_orbit(system, atmospheric) ==
               std::unexpected{SystemFlightError::planet_departure_refused},
           "planet departure must reject non-orbital craft state");
+
+    auto relabeled_surface_state = *orbital;
+    relabeled_surface_state.pose.position.altitude_metres =
+        kMinimumFlightClearanceMetres;
+    relabeled_surface_state.clearance_metres =
+        kMinimumFlightClearanceMetres;
+    const auto unchanged = relabeled_surface_state;
+    check(!validate_planetary_flight_state(
+              (*body)->descriptor, relabeled_surface_state) &&
+              depart_planetary_orbit(system, relabeled_surface_state) ==
+                  std::unexpected{SystemFlightError::invalid_state} &&
+              relabeled_surface_state == unchanged,
+          "a near-surface state relabeled as orbital must not depart into system flight");
   }
   auto below_surface = ready;
   below_surface.position.x = ephemeris->position.x + radius * 0.5;
@@ -2869,9 +2882,9 @@ auto save_schema_contract() -> void {
                   PlanetaryFlightState{
                       .tick = 1200,
                       .planet = recipe.active_planet,
-                      .pose = {{0.25, -0.5, 100'000.0}, 0.75},
+                      .pose = {{0.25, -0.5, 10'000.0}, 0.75},
                       .velocity = {125.5, -20.25, -5.0},
-                      .clearance_metres = 99'000.0,
+                      .clearance_metres = 9'000.0,
                       .mode = FlightMode::manual,
                       .controls = {.forward = true, .turn_right = true},
                       .regime = FlightRegime::atmospheric,
@@ -3012,6 +3025,18 @@ auto save_schema_contract() -> void {
                    "\"latitude_radians\": \"nan\""),
       SaveSchemaErrorCode::invalid_value,
       "non-finite flight values must be rejected");
+  auto impossible_orbit = replace_once(
+      fixture, "\"altitude_metres\": \"10000\"",
+      "\"altitude_metres\": \"16\"");
+  impossible_orbit = replace_once(
+      std::move(impossible_orbit), "\"clearance_metres\": \"9000\"",
+      "\"clearance_metres\": \"16\"");
+  impossible_orbit = replace_once(
+      std::move(impossible_orbit), "\"regime\": \"atmospheric\"",
+      "\"regime\": \"orbital\"");
+  expect_decode_error(
+      std::move(impossible_orbit), SaveSchemaErrorCode::invalid_state,
+      "save loading must reject a near-surface state relabeled as orbital");
   expect_decode_error(
       replace_once(fixture, "\"location\": \"in_flight\"",
                    "\"location\": \"somewhere\""),
@@ -3055,6 +3080,16 @@ auto save_schema_contract() -> void {
   check(!invalid_result &&
             invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
         "saved velocity must remain inside the active regime bounds");
+  invalid = expected;
+  invalid.state.flight->pose.position.altitude_metres =
+      kMinimumFlightClearanceMetres;
+  invalid.state.flight->clearance_metres = kMinimumFlightClearanceMetres;
+  invalid.state.flight->regime = FlightRegime::orbital;
+  invalid.state.flight->last_transition.reset();
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result &&
+            invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
+        "save encoding must reject a near-surface state relabeled as orbital");
   invalid = expected;
   invalid.state.discoveries.push_back(invalid.state.discoveries.front());
   invalid_result = encode_save_document_json(invalid);
@@ -5711,6 +5746,61 @@ auto planetary_flight_regime_contract() -> void {
               std::abs(performance->vertical_acceleration -
                        expected_vertical_speed / 1.8) < 1.0e-9,
           "atmospheric performance must normalize every approach band to the pacing target");
+
+    const auto fixture = initial_planetary_flight_state(
+        planet, {0.0, 0.0, bands->orbit_enter_altitude_metres + 1.0},
+        {}, 0.0, FlightMode::manual);
+    check(fixture.has_value(),
+          "every atmosphere class must provide a regime-validation fixture");
+    if (!fixture) continue;
+    const auto valid_at = [&](FlightRegime regime, double altitude,
+                              double clearance) {
+      auto state = *fixture;
+      state.pose.position.altitude_metres = altitude;
+      state.clearance_metres = clearance;
+      state.regime = regime;
+      state.last_transition.reset();
+      return validate_planetary_flight_state(planet, state).has_value();
+    };
+    const double atmospheric_clearance =
+        bands->terrain_exit_clearance_metres;
+    const double overlap_altitude =
+        (bands->atmosphere_enter_altitude_metres +
+         bands->orbit_enter_altitude_metres) *
+        0.5;
+    check(!valid_at(FlightRegime::orbital,
+                    bands->atmosphere_enter_altitude_metres,
+                    atmospheric_clearance) &&
+              valid_at(FlightRegime::orbital,
+                       bands->atmosphere_enter_altitude_metres + 1.0,
+                       atmospheric_clearance) &&
+              valid_at(FlightRegime::orbital, overlap_altitude,
+                       atmospheric_clearance),
+          "orbital validation must honor the exact descent edge and altitude hysteresis overlap");
+    check(valid_at(FlightRegime::atmospheric,
+                   bands->atmosphere_enter_altitude_metres,
+                   atmospheric_clearance) &&
+              valid_at(FlightRegime::atmospheric,
+                       bands->orbit_enter_altitude_metres - 1.0,
+                       atmospheric_clearance) &&
+              !valid_at(FlightRegime::atmospheric,
+                        bands->orbit_enter_altitude_metres,
+                        atmospheric_clearance),
+          "atmospheric validation must honor the exact ascent edge and altitude hysteresis overlap");
+    check(!valid_at(FlightRegime::atmospheric, overlap_altitude,
+                    bands->terrain_enter_clearance_metres) &&
+              valid_at(FlightRegime::atmospheric, overlap_altitude,
+                       bands->terrain_enter_clearance_metres + 1.0) &&
+              valid_at(FlightRegime::atmospheric, overlap_altitude,
+                       bands->terrain_exit_clearance_metres),
+          "atmospheric validation must honor the exact terrain-entry edge and clearance hysteresis overlap");
+    check(valid_at(FlightRegime::terrain_flight, overlap_altitude,
+                   bands->terrain_enter_clearance_metres) &&
+              valid_at(FlightRegime::terrain_flight, overlap_altitude,
+                       bands->terrain_exit_clearance_metres - 1.0) &&
+              !valid_at(FlightRegime::terrain_flight, overlap_altitude,
+                        bands->terrain_exit_clearance_metres),
+          "terrain validation must honor the exact exit edge and clearance hysteresis overlap");
   }
 
   const auto airless =
@@ -5739,11 +5829,38 @@ auto planetary_flight_regime_contract() -> void {
         "initial state must select the exact descending regime boundaries");
 
   if (!orbital || !atmospheric || !terrain) return;
+  constexpr std::array regimes{
+      FlightRegime::orbital,
+      FlightRegime::atmospheric,
+      FlightRegime::terrain_flight,
+  };
+  for (std::size_t from_index = 0; from_index < regimes.size(); ++from_index) {
+    for (std::size_t to_index = 0; to_index < regimes.size(); ++to_index) {
+      auto state = to_index == 0 ? *orbital
+                   : to_index == 1 ? *atmospheric
+                                   : *terrain;
+      state.last_transition = FlightRegimeTransition{
+          regimes[from_index], regimes[to_index], state.tick};
+      const bool adjacent =
+          from_index + 1 == to_index || to_index + 1 == from_index;
+      check(validate_planetary_flight_state(airless, state).has_value() ==
+                adjacent,
+            "saved transition metadata must permit only adjacent regime pairs");
+    }
+  }
+  auto unknown_transition = *atmospheric;
+  unknown_transition.last_transition = FlightRegimeTransition{
+      static_cast<FlightRegime>(255), FlightRegime::atmospheric,
+      unknown_transition.tick};
+  check(!validate_planetary_flight_state(airless, unknown_transition),
+        "saved transition metadata must reject unknown regime values");
+
   auto descending = *orbital;
   descending.pose.position.altitude_metres =
-      bands->atmosphere_enter_altitude_metres - 1.0;
+      bands->atmosphere_enter_altitude_metres + 1.0;
   descending.clearance_metres = descending.pose.position.altitude_metres -
                                 environment.surface_elevation_metres;
+  descending.velocity.up_metres_per_second = -240.0;
   check(advance_planetary_flight(airless, environment, descending, {},
                                  kSimulationStep) &&
             descending.regime == FlightRegime::atmospheric &&
@@ -5765,9 +5882,13 @@ auto planetary_flight_regime_contract() -> void {
 
   auto ascending = approach_gap;
   ascending.pose.position.altitude_metres =
-      bands->orbit_enter_altitude_metres + 1.0;
+      bands->orbit_enter_altitude_metres - 1.0;
   ascending.clearance_metres = ascending.pose.position.altitude_metres -
                                environment.surface_elevation_metres;
+  ascending.velocity.up_metres_per_second =
+      flight_performance(airless, FlightRegime::atmospheric)
+          ->maximum_vertical_speed;
+  ascending.controls.rise = true;
   check(advance_planetary_flight(airless, environment, ascending, {},
                                  kSimulationStep) &&
             ascending.regime == FlightRegime::orbital &&
@@ -5789,10 +5910,12 @@ auto planetary_flight_regime_contract() -> void {
         "the terrain hysteresis gap must retain terrain flight");
   terrain_gap.pose.position.altitude_metres =
       environment.surface_elevation_metres +
-      bands->terrain_exit_clearance_metres + 1.0;
+      bands->terrain_exit_clearance_metres - 0.1;
   terrain_gap.clearance_metres =
       terrain_gap.pose.position.altitude_metres -
       environment.surface_elevation_metres;
+  terrain_gap.velocity.up_metres_per_second = 45.0;
+  terrain_gap.controls.rise = true;
   check(advance_planetary_flight(airless, environment, terrain_gap, {},
                                  kSimulationStep) &&
             terrain_gap.regime == FlightRegime::atmospheric,

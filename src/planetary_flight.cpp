@@ -97,8 +97,16 @@ struct ThermalRates {
     const PlanetaryFlightState& state) noexcept -> bool {
   if (!state.last_transition) return true;
   const auto& transition = *state.last_transition;
+  const bool adjacent =
+      (transition.from == FlightRegime::orbital &&
+       transition.to == FlightRegime::atmospheric) ||
+      (transition.from == FlightRegime::atmospheric &&
+       (transition.to == FlightRegime::orbital ||
+        transition.to == FlightRegime::terrain_flight)) ||
+      (transition.from == FlightRegime::terrain_flight &&
+       transition.to == FlightRegime::atmospheric);
   return valid_regime(transition.from) && valid_regime(transition.to) &&
-         transition.from != transition.to && transition.to == state.regime &&
+         adjacent && transition.to == state.regime &&
          transition.tick <= state.tick;
 }
 
@@ -389,6 +397,24 @@ auto clamp_velocity(const PlanetDescriptor& planet,
   return current;
 }
 
+[[nodiscard]] auto valid_regime_position(
+    const FlightRegimeBands& bands,
+    const PlanetaryFlightState& state) noexcept -> bool {
+  switch (state.regime) {
+    case FlightRegime::orbital:
+      return state.pose.position.altitude_metres >
+             bands.atmosphere_enter_altitude_metres;
+    case FlightRegime::atmospheric:
+      return state.clearance_metres >
+                 bands.terrain_enter_clearance_metres &&
+             state.pose.position.altitude_metres <
+                 bands.orbit_enter_altitude_metres;
+    case FlightRegime::terrain_flight:
+      return state.clearance_metres < bands.terrain_exit_clearance_metres;
+  }
+  return false;
+}
+
 auto hash_word(std::uint64_t& hash, std::uint64_t value) noexcept -> void {
   constexpr std::uint64_t prime{1099511628211ULL};
   for (int byte = 0; byte < 8; ++byte) {
@@ -652,8 +678,10 @@ auto validate_planetary_flight_state(
     const PlanetDescriptor& planet,
     const PlanetaryFlightState& state) noexcept
     -> std::expected<void, PlanetaryFlightError> {
-  if (!valid_planet(planet) || state.planet != planet.id ||
-      !finite_state(state) || !bounded_velocity(planet, state)) {
+  const auto bands = flight_regime_bands(planet);
+  if (!bands || state.planet != planet.id || !finite_state(state) ||
+      !bounded_velocity(planet, state) ||
+      !valid_regime_position(*bands, state)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
   if (!planet_fixed_from_geodetic(planet, state.pose.position)) {
@@ -673,7 +701,8 @@ auto advance_planetary_flight(
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
   if (state.planet != planet.id || !finite_state(state) ||
-      !bounded_velocity(planet, state)) {
+      !bounded_velocity(planet, state) ||
+      !valid_regime_position(*bands, state)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
   if (!std::isfinite(environment.surface_elevation_metres)) {
@@ -831,6 +860,7 @@ auto advance_planetary_flight(
   }
 
   if (!finite_state(next) || !bounded_velocity(planet, next) ||
+      !valid_regime_position(*bands, next) ||
       !planet_fixed_from_geodetic(planet, next.pose.position)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
