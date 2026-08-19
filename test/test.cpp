@@ -6434,9 +6434,32 @@ auto planetary_flight_failure_matrix() -> void {
                  {std::numeric_limits<double>::infinity()}, {},
                  kSimulationStep, PlanetaryFlightError::invalid_environment,
                  "non-finite terrain elevation must be rejected transactionally");
-  check_rejected(*initialized, environment, {}, SimulationSeconds{0.0},
-                 PlanetaryFlightError::invalid_step,
-                 "a zero planetary step must be rejected transactionally");
+  const std::array invalid_steps{
+      SimulationSeconds::zero(),
+      SimulationSeconds{-kSimulationStep.count()},
+      SimulationSeconds{std::numeric_limits<double>::quiet_NaN()},
+      SimulationSeconds{std::numeric_limits<double>::infinity()},
+      kSimulationStep / 2.0,
+      kSimulationStep * 2.0,
+      SimulationSeconds{0.25},
+      SimulationSeconds{
+          std::nextafter(kSimulationStep.count(), 0.0)},
+      SimulationSeconds{std::nextafter(
+          kSimulationStep.count(),
+          std::numeric_limits<double>::infinity())},
+  };
+  for (const auto invalid_step : invalid_steps) {
+    check_rejected(*initialized, environment, {}, invalid_step,
+                   PlanetaryFlightError::invalid_step,
+                   "every non-canonical planetary step must be rejected "
+                   "transactionally");
+  }
+  auto canonical = *initialized;
+  check(advance_planetary_flight(planet, environment, canonical, {},
+                                 kSimulationStep) &&
+            canonical.tick == initialized->tick + 1U &&
+            planetary_flight_state_checksum(canonical) != unchanged,
+        "the canonical planetary step must advance exactly one tick");
 
   constexpr std::array invalid_command{FlightCommand{
       0, static_cast<FlightCommandKind>(std::numeric_limits<std::uint8_t>::max())}};
@@ -6985,13 +7008,32 @@ auto command_edge_contract() -> void {
   check(flight_state_checksum(mistimed) == unchanged,
         "a mistimed command must not mutate state");
 
-  auto bad_step = *initialized;
-  const auto bad_step_result =
-      advance_flight(*terrain, bad_step, {}, SimulationSeconds{0.0});
-  check(!bad_step_result && bad_step_result.error() == FlightError::invalid_step,
-        "a non-positive simulation step must be rejected");
-  check(flight_state_checksum(bad_step) == unchanged,
-        "an invalid step must not mutate state");
+  const std::array invalid_steps{
+      SimulationSeconds::zero(),
+      SimulationSeconds{-kSimulationStep.count()},
+      SimulationSeconds{std::numeric_limits<double>::quiet_NaN()},
+      SimulationSeconds{std::numeric_limits<double>::infinity()},
+      kSimulationStep / 2.0,
+      kSimulationStep * 2.0,
+      SimulationSeconds{0.25},
+      SimulationSeconds{
+          std::nextafter(kSimulationStep.count(), 0.0)},
+      SimulationSeconds{std::nextafter(
+          kSimulationStep.count(),
+          std::numeric_limits<double>::infinity())},
+  };
+  for (const auto invalid_step : invalid_steps) {
+    auto rejected = *initialized;
+    const auto result = advance_flight(*terrain, rejected, {}, invalid_step);
+    check(!result && result.error() == FlightError::invalid_step &&
+              flight_state_checksum(rejected) == unchanged,
+          "every non-canonical legacy step must be rejected transactionally");
+  }
+  auto canonical = *initialized;
+  check(advance_flight(*terrain, canonical, {}, kSimulationStep) &&
+            canonical.tick == initialized->tick + 1U &&
+            flight_state_checksum(canonical) != unchanged,
+        "the canonical legacy step must advance exactly one tick");
 
   auto non_finite = *initialized;
   non_finite.velocity.vertical =
