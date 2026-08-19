@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <expected>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "termforge/core/types.hpp"
@@ -53,7 +52,6 @@ struct IntersystemJumpAcceptanceResult {
                      IntersystemJumpAcceptanceError>;
 
 [[nodiscard]] auto intersystem_jump_acceptance_json(
-    const IntersystemJumpAcceptanceReport& report,
-    std::string_view presentation) -> std::string;
+    const IntersystemJumpAcceptanceReport& report) -> std::string;
 
 }  // namespace apsis_drift

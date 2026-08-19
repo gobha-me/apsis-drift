@@ -56,7 +56,7 @@ crossing rule-profile boundaries.
 
 ## Deterministic acceptance
 
-`--intersystem-planetfall-acceptance` now reports schema 2 and scenario
+`--intersystem-planetfall-acceptance` now reports schema 3 and scenario
 `v0.4.17-pilot-thermal-reentry`. Its generated dense-atmosphere thermal fixture
 uses universe seed `39` and `planet-237709a6a1fd198b`. It proves these
 canonical values under GCC and Clang:
@@ -73,7 +73,7 @@ canonical values under GCC and Clang:
 | Save/resumed recovery checksum | `12793732928174323102` |
 
 The same matrix retains the correct-side, early, and opposite-side Planetfall
-routes, explicit orbital abort route, objective completion, ANSI/Kitty semantic
-equivalence, and framebuffer diagnostics. Unit coverage separately proves
+routes, explicit orbital abort route, objective completion, and application
+framebuffer diagnostics. Unit coverage separately proves
 speed, descent angle, and pressure monotonicity; airless cooling; invalid-state
 transactionality; exact save round trips; and format-9 migration.

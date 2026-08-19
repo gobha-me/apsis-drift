@@ -5,12 +5,12 @@ if (NOT DEFINED REPORT_DIR)
   message(FATAL_ERROR "REPORT_DIR is required")
 endif ()
 
-function(check_intersystem_planetfall driver)
-  set(report "${REPORT_DIR}/intersystem-planetfall-${driver}.json")
-  set(snapshot "${REPORT_DIR}/intersystem-planetfall-${driver}.ppm")
+function(check_intersystem_planetfall)
+  set(report "${REPORT_DIR}/intersystem-planetfall-application-framebuffer.json")
+  set(snapshot "${REPORT_DIR}/intersystem-planetfall-application-framebuffer.ppm")
   execute_process(
     COMMAND "${APSIS_DRIFT_BIN}" --intersystem-planetfall-acceptance
-            --driver "${driver}" --profile remote --report "${report}"
+            --profile remote --report "${report}"
             --snapshot "${snapshot}"
     RESULT_VARIABLE result
     OUTPUT_QUIET
@@ -18,16 +18,16 @@ function(check_intersystem_planetfall driver)
   )
   if (NOT result EQUAL 0)
     message(FATAL_ERROR
-      "${driver} intersystem Planetfall acceptance failed (${result})\nstderr:\n${error}")
+      "intersystem Planetfall acceptance failed (${result})\nstderr:\n${error}")
   endif ()
   file(READ "${report}" json)
-  foreach(field schema_version scenario presentation planet_id target_id
+  foreach(field schema_version scenario evidence_scope planet_id target_id
                 abort_orbit_tick abort_orbit_checksum completion_tick
                 completed_flight_checksum world_delta_count framebuffer_checksum)
     string(JSON value ERROR_VARIABLE json_error GET "${json}" "${field}")
     if (json_error)
       message(FATAL_ERROR
-        "${driver} report field '${field}' failed to parse: ${json_error}")
+        "report field '${field}' failed to parse: ${json_error}")
     endif ()
     set("${field}" "${value}")
   endforeach ()
@@ -39,7 +39,7 @@ function(check_intersystem_planetfall driver)
       GET "${json}" thermal "${field}")
     if (json_error)
       message(FATAL_ERROR
-        "${driver} thermal field '${field}' failed to parse: ${json_error}")
+        "thermal field '${field}' failed to parse: ${json_error}")
     endif ()
   endforeach ()
   string(JSON entry_count LENGTH "${json}" entries)
@@ -48,9 +48,9 @@ function(check_intersystem_planetfall driver)
     string(JSON entry_tick_${index} GET "${json}" entries ${index} terrain_tick)
     string(JSON entry_checksum_${index} GET "${json}" entries ${index} flight_checksum)
   endforeach ()
-  if (NOT schema_version STREQUAL "2" OR
+  if (NOT schema_version STREQUAL "3" OR
       NOT scenario STREQUAL "v0.4.17-pilot-thermal-reentry" OR
-      NOT presentation STREQUAL "${driver}" OR
+      NOT evidence_scope STREQUAL "application_framebuffer" OR
       NOT planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT target_id STREQUAL "signal-9936ac67f2245d20" OR
       NOT entry_count STREQUAL "3" OR
@@ -81,29 +81,9 @@ function(check_intersystem_planetfall driver)
           "12793732928174323102" OR
       NOT framebuffer_checksum STREQUAL "15634582835738947125")
     message(FATAL_ERROR
-      "${driver} intersystem Planetfall report is not canonical:\n${json}")
+      "intersystem Planetfall report is not canonical:\n${json}")
   endif ()
   file(SHA256 "${snapshot}" snapshot_sha)
-  set("${driver}_abort_tick" "${abort_orbit_tick}" PARENT_SCOPE)
-  set("${driver}_abort" "${abort_orbit_checksum}" PARENT_SCOPE)
-  set("${driver}_completion" "${completion_tick}" PARENT_SCOPE)
-  set("${driver}_flight" "${completed_flight_checksum}" PARENT_SCOPE)
-  set("${driver}_frame" "${framebuffer_checksum}" PARENT_SCOPE)
-  set("${driver}_snapshot" "${snapshot_sha}" PARENT_SCOPE)
-  set("${driver}_thermal" "${thermal_resumed_recovery_checksum}"
-      PARENT_SCOPE)
-  set("${driver}_json" "${json}" PARENT_SCOPE)
 endfunction ()
 
-check_intersystem_planetfall(ansi)
-check_intersystem_planetfall(kitty)
-if (NOT ansi_abort_tick STREQUAL kitty_abort_tick OR
-    NOT ansi_abort STREQUAL kitty_abort OR
-    NOT ansi_completion STREQUAL kitty_completion OR
-    NOT ansi_flight STREQUAL kitty_flight OR
-    NOT ansi_thermal STREQUAL kitty_thermal OR
-    NOT ansi_frame STREQUAL kitty_frame OR
-    NOT ansi_snapshot STREQUAL kitty_snapshot)
-  message(FATAL_ERROR
-    "Kitty and ANSI intersystem Planetfall acceptance results diverged")
-endif ()
+check_intersystem_planetfall()

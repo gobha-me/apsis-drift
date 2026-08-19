@@ -55,7 +55,6 @@ struct SignalRunScenarioMeasurement {
 
 struct SignalRunAcceptanceReport {
   RenderConfiguration render_configuration;
-  std::string presentation;
   OriginStationId station_id;
   SurfaceSignalId target_id;
   SimulationTick launch_tick{};
@@ -105,8 +104,7 @@ enum class SignalRunAcceptanceError : std::uint8_t {
 
 [[nodiscard]] auto run_signal_run_acceptance(
     RenderConfiguration configuration,
-    const std::filesystem::path& checkpoint_path,
-    std::string_view presentation)
+    const std::filesystem::path& checkpoint_path)
     -> std::expected<SignalRunAcceptanceResult, SignalRunAcceptanceError>;
 
 [[nodiscard]] auto signal_run_acceptance_json(

@@ -5,12 +5,12 @@ if (NOT DEFINED REPORT_DIR)
   message(FATAL_ERROR "REPORT_DIR is required")
 endif ()
 
-function(check_intersystem_contract driver)
-  set(report "${REPORT_DIR}/intersystem-contract-${driver}.json")
-  set(snapshot "${REPORT_DIR}/intersystem-contract-${driver}.ppm")
+function(check_intersystem_contract)
+  set(report "${REPORT_DIR}/intersystem-contract-application-framebuffer.json")
+  set(snapshot "${REPORT_DIR}/intersystem-contract-application-framebuffer.ppm")
   execute_process(
     COMMAND "${APSIS_DRIFT_BIN}" --intersystem-contract-acceptance
-            --driver "${driver}" --profile remote --report "${report}"
+            --profile remote --report "${report}"
             --snapshot "${snapshot}"
     RESULT_VARIABLE result
     OUTPUT_QUIET
@@ -18,10 +18,10 @@ function(check_intersystem_contract driver)
   )
   if (NOT result EQUAL 0)
     message(FATAL_ERROR
-      "${driver} intersystem contract acceptance failed (${result})\nstderr:\n${error}")
+      "intersystem contract acceptance failed (${result})\nstderr:\n${error}")
   endif ()
   file(READ "${report}" json)
-  foreach(field schema_version scenario presentation seed mission_id
+  foreach(field schema_version scenario evidence_scope seed mission_id
                 target_system_id target_planet_id target_objective_id
                 origin_station_id final_tick final_mission_phase
                 final_authoritative_checksum wrong_side_recovery_checksum
@@ -32,14 +32,14 @@ function(check_intersystem_contract driver)
     string(JSON value ERROR_VARIABLE json_error GET "${json}" "${field}")
     if (json_error)
       message(FATAL_ERROR
-        "${driver} report field '${field}' failed to parse: ${json_error}")
+        "report field '${field}' failed to parse: ${json_error}")
     endif ()
     set("${field}" "${value}")
   endforeach ()
   string(JSON checkpoint_count LENGTH "${json}" checkpoints)
-  if (NOT schema_version STREQUAL "1" OR
+  if (NOT schema_version STREQUAL "2" OR
       NOT scenario STREQUAL "v0.4.13-intersystem-contract-loop" OR
-      NOT presentation STREQUAL "${driver}" OR
+      NOT evidence_scope STREQUAL "application_framebuffer" OR
       NOT seed STREQUAL "42" OR
       NOT mission_id STREQUAL "mission-d8e068532886e95b" OR
       NOT target_system_id STREQUAL "system-28630482e6b15573" OR
@@ -60,7 +60,7 @@ function(check_intersystem_contract driver)
       NOT framebuffer_checksum STREQUAL "15648935810629710496" OR
       NOT checkpoint_count STREQUAL "6")
     message(FATAL_ERROR
-      "${driver} intersystem contract report is not canonical:\n${json}")
+      "intersystem contract report is not canonical:\n${json}")
   endif ()
   set(expected_names docked outbound-transit target-system planet-side
                      origin-return returned-docked)
@@ -76,26 +76,10 @@ function(check_intersystem_contract driver)
     if (NOT name STREQUAL expected_name OR NOT tick STREQUAL expected_tick OR
         NOT resumed STREQUAL final_authoritative_checksum)
       message(FATAL_ERROR
-        "${driver} checkpoint ${index} is not canonical: ${name}/${tick}/${resumed}")
+        "checkpoint ${index} is not canonical: ${name}/${tick}/${resumed}")
     endif ()
   endforeach ()
   file(SHA256 "${snapshot}" snapshot_sha)
-  set("${driver}_final" "${final_authoritative_checksum}" PARENT_SCOPE)
-  set("${driver}_initial_frame"
-      "${target_system_initial_framebuffer_checksum}" PARENT_SCOPE)
-  set("${driver}_moved_frame"
-      "${target_system_moved_framebuffer_checksum}" PARENT_SCOPE)
-  set("${driver}_final_frame" "${framebuffer_checksum}" PARENT_SCOPE)
-  set("${driver}_snapshot" "${snapshot_sha}" PARENT_SCOPE)
 endfunction ()
 
-check_intersystem_contract(ansi)
-check_intersystem_contract(kitty)
-if (NOT ansi_final STREQUAL kitty_final OR
-    NOT ansi_initial_frame STREQUAL kitty_initial_frame OR
-    NOT ansi_moved_frame STREQUAL kitty_moved_frame OR
-    NOT ansi_final_frame STREQUAL kitty_final_frame OR
-    NOT ansi_snapshot STREQUAL kitty_snapshot)
-  message(FATAL_ERROR
-    "Kitty and ANSI complete contract acceptance results diverged")
-endif ()
+check_intersystem_contract()

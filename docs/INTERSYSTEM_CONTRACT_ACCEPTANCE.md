@@ -52,26 +52,26 @@ contents are excluded from that checksum.
 
 ## Run and capture
 
-Run both information-complete semantic presentation paths:
+Run the application-owned simulation and framebuffer path once:
 
 ```bash
 ./build/apsis-drift --intersystem-contract-acceptance \
-  --driver kitty --profile remote --report contract-kitty.json \
-  --snapshot contract-kitty.ppm
-./build/apsis-drift --intersystem-contract-acceptance \
-  --driver ansi --profile remote --report contract-ansi.json \
-  --snapshot contract-ansi.ppm
+  --profile remote --report contract-application-framebuffer.json \
+  --snapshot contract-application-framebuffer.ppm
 ```
 
-The reports compare authoritative checkpoints and framebuffer checksums across
-Kitty and ANSI. Their `simulation_ms` and `application_render_ms` values are
+Schema 2 reports `evidence_scope: application_framebuffer`; this mode does not
+construct a TermForge encoder. Its `simulation_ms` and
+`application_render_ms` values are
 diagnostic and machine-dependent. `terminal_proxy` is explicitly marked as an
 external live-capture measurement: use `--capture-seconds` in a real terminal
 session to measure PTY, proxy, decoder, and display throughput, and do not mix
-that result with renderer throughput. The publication capture and its explicit
+that result with renderer throughput. Use the headless benchmark or
+system-navigation acceptance for actual Kitty/ANSI encoded-byte evidence. The
+publication capture and its explicit
 RDP limitation are recorded in
 [`docs/performance/2026-08-18`](performance/2026-08-18/README.md).
 
 Invalid dimensions, pixel budgets and buffers, non-finite flight state, wrong
 stable identities, illegal transitions, and malformed saves are exercised by
-the unit and CLI rejection tests before the paired visual snapshots.
+the unit and CLI rejection tests before the optional visual snapshot.

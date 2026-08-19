@@ -66,7 +66,6 @@ enum class IntersystemContractAcceptanceError : std::uint8_t {
                      IntersystemContractAcceptanceError>;
 
 [[nodiscard]] auto intersystem_contract_acceptance_json(
-    const IntersystemContractAcceptanceReport& report,
-    std::string_view presentation) -> std::string;
+    const IntersystemContractAcceptanceReport& report) -> std::string;
 
 }  // namespace apsis_drift

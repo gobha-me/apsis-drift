@@ -82,7 +82,6 @@ enum class IntersystemPlanetfallAcceptanceError : std::uint8_t {
                      IntersystemPlanetfallAcceptanceError>;
 
 [[nodiscard]] auto intersystem_planetfall_acceptance_json(
-    const IntersystemPlanetfallAcceptanceReport& report,
-    std::string_view presentation) -> std::string;
+    const IntersystemPlanetfallAcceptanceReport& report) -> std::string;
 
 }  // namespace apsis_drift

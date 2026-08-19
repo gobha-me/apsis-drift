@@ -2445,19 +2445,19 @@ auto usage() -> void {
       "       apsis-drift --signal-navigation-acceptance --report PATH\n"
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
       "       apsis-drift --signal-run-acceptance --report PATH\n"
-      "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "                   [--profile NAME]\n\n"
       "       apsis-drift --system-navigation-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --intersystem-jump-acceptance --report PATH\n"
-      "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "                   [--profile NAME]\n\n"
       "       apsis-drift --system-flight-acceptance --report PATH\n"
-      "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "                   [--profile NAME]\n\n"
       "       apsis-drift --intersystem-planetfall-acceptance --report PATH\n"
-      "                   --driver kitty|ansi [--profile NAME]\n\n"
+      "                   [--profile NAME]\n\n"
       "       apsis-drift --intersystem-return-acceptance --report PATH\n"
-      "                   --driver kitty|ansi [--profile NAME] [--snapshot PATH]\n\n"
+      "                   [--profile NAME] [--snapshot PATH]\n\n"
       "       apsis-drift --intersystem-contract-acceptance --report PATH\n"
-      "                   --driver kitty|ansi [--profile NAME] [--snapshot PATH]\n\n"
+      "                   [--profile NAME] [--snapshot PATH]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -2742,19 +2742,11 @@ auto main(int argc, char** argv) -> int {
        system_navigation_acceptance || intersystem_jump_acceptance ||
        system_flight_acceptance || intersystem_planetfall_acceptance ||
        intersystem_return_acceptance || profile_options || seed_specified ||
-       workload_specified || keyboard_specified)) {
+       workload_specified || keyboard_specified || driver_specified)) {
     std::fprintf(stderr,
                  "Intersystem contract acceptance is mutually exclusive with "
-                 "other run, save, seed, workload, and keyboard options\n");
-    return 2;
-  }
-  if (intersystem_contract_acceptance &&
-      (!driver_specified ||
-       (driver_choice != DriverChoice::kitty &&
-        driver_choice != DriverChoice::ansi))) {
-    std::fprintf(stderr,
-                 "Intersystem contract acceptance requires --driver kitty "
-                 "or --driver ansi\n");
+                 "other run, save, seed, workload, keyboard, and driver "
+                 "options\n");
     return 2;
   }
   if (intersystem_contract_acceptance && report_path.empty()) {
@@ -2769,19 +2761,11 @@ auto main(int argc, char** argv) -> int {
        system_navigation_acceptance || intersystem_jump_acceptance ||
        system_flight_acceptance || intersystem_planetfall_acceptance ||
        profile_options || seed_specified || workload_specified ||
-       keyboard_specified)) {
+       keyboard_specified || driver_specified)) {
     std::fprintf(stderr,
                  "Intersystem return acceptance is mutually exclusive with "
-                 "other run, save, seed, workload, and keyboard options\n");
-    return 2;
-  }
-  if (intersystem_return_acceptance &&
-      (!driver_specified ||
-       (driver_choice != DriverChoice::kitty &&
-        driver_choice != DriverChoice::ansi))) {
-    std::fprintf(stderr,
-                 "Intersystem return acceptance requires --driver kitty "
-                 "or --driver ansi\n");
+                 "other run, save, seed, workload, keyboard, and driver "
+                 "options\n");
     return 2;
   }
   if (intersystem_return_acceptance && report_path.empty()) {
@@ -2795,19 +2779,11 @@ auto main(int argc, char** argv) -> int {
        signal_navigation_acceptance || signal_run_acceptance ||
        system_navigation_acceptance || intersystem_jump_acceptance ||
        system_flight_acceptance || profile_options || seed_specified ||
-       workload_specified || keyboard_specified)) {
+       workload_specified || keyboard_specified || driver_specified)) {
     std::fprintf(stderr,
                  "Intersystem Planetfall acceptance is mutually exclusive "
-                 "with other run, save, seed, workload, and keyboard options\n");
-    return 2;
-  }
-  if (intersystem_planetfall_acceptance &&
-      (!driver_specified ||
-       (driver_choice != DriverChoice::kitty &&
-        driver_choice != DriverChoice::ansi))) {
-    std::fprintf(stderr,
-                 "Intersystem Planetfall acceptance requires --driver kitty "
-                 "or --driver ansi\n");
+                 "with other run, save, seed, workload, keyboard, and driver "
+                 "options\n");
     return 2;
   }
   if (intersystem_planetfall_acceptance && report_path.empty()) {
@@ -2821,19 +2797,11 @@ auto main(int argc, char** argv) -> int {
        signal_navigation_acceptance || signal_run_acceptance ||
        system_navigation_acceptance || intersystem_jump_acceptance ||
        profile_options || seed_specified || workload_specified ||
-       keyboard_specified)) {
+       keyboard_specified || driver_specified)) {
     std::fprintf(stderr,
                  "System flight acceptance is mutually exclusive with "
-                 "other run, save, seed, workload, and keyboard options\n");
-    return 2;
-  }
-  if (system_flight_acceptance &&
-      (!driver_specified ||
-       (driver_choice != DriverChoice::kitty &&
-        driver_choice != DriverChoice::ansi))) {
-    std::fprintf(stderr,
-                 "System flight acceptance requires --driver kitty or "
-                 "--driver ansi\n");
+                 "other run, save, seed, workload, keyboard, and driver "
+                 "options\n");
     return 2;
   }
   if (system_flight_acceptance && report_path.empty()) {
@@ -2846,19 +2814,11 @@ auto main(int argc, char** argv) -> int {
        flight_deck_acceptance || planetfall_acceptance ||
        signal_navigation_acceptance || signal_run_acceptance ||
        system_navigation_acceptance || profile_options || seed_specified ||
-       workload_specified || keyboard_specified)) {
+       workload_specified || keyboard_specified || driver_specified)) {
     std::fprintf(stderr,
                  "Intersystem jump acceptance is mutually exclusive with "
-                 "other run, save, seed, workload, and keyboard options\n");
-    return 2;
-  }
-  if (intersystem_jump_acceptance &&
-      (!driver_specified ||
-       (driver_choice != DriverChoice::kitty &&
-        driver_choice != DriverChoice::ansi))) {
-    std::fprintf(stderr,
-                 "Intersystem jump acceptance requires --driver kitty or "
-                 "--driver ansi\n");
+                 "other run, save, seed, workload, keyboard, and driver "
+                 "options\n");
     return 2;
   }
   if (intersystem_jump_acceptance && report_path.empty()) {
@@ -2968,10 +2928,10 @@ auto main(int argc, char** argv) -> int {
   if (signal_run_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
-       signal_navigation_acceptance)) {
+       signal_navigation_acceptance || driver_specified)) {
     std::fprintf(stderr,
                  "Signal Run acceptance is mutually exclusive with other "
-                 "run modes\n");
+                 "run modes and does not accept --driver\n");
     return 2;
   }
   if (sweep_frames && (benchmark_frames || capture_seconds > 0)) {
@@ -3044,13 +3004,10 @@ auto main(int argc, char** argv) -> int {
     return 2;
   }
   if (signal_run_acceptance &&
-      (!driver_specified ||
-       (driver_choice != DriverChoice::kitty &&
-        driver_choice != DriverChoice::ansi) ||
-       keyboard_specified || workload_specified)) {
+      (keyboard_specified || workload_specified)) {
     std::fprintf(stderr,
-                 "Signal Run acceptance requires --driver kitty or ansi and "
-                 "does not accept keyboard or workload options\n");
+                 "Signal Run acceptance does not accept keyboard or workload "
+                 "options\n");
     return 2;
   }
 
@@ -3066,16 +3023,13 @@ auto main(int argc, char** argv) -> int {
                      static_cast<unsigned>(acceptance.error()));
         return 1;
       }
-      const std::string_view presentation =
-          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
-      report << intersystem_contract_acceptance_json(acceptance->report,
-                                                      presentation);
+      report << intersystem_contract_acceptance_json(acceptance->report);
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
                      report_path.string().c_str());
@@ -3089,8 +3043,8 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "intersystem-contract: presentation=%.*s final=%llu checksum=%llu\n",
-          static_cast<int>(presentation.size()), presentation.data(),
+          "intersystem-contract: evidence=application_framebuffer final=%llu "
+          "checksum=%llu\n",
           static_cast<unsigned long long>(acceptance->report.final_tick),
           static_cast<unsigned long long>(
               acceptance->report.final_authoritative_checksum));
@@ -3106,16 +3060,13 @@ auto main(int argc, char** argv) -> int {
                      static_cast<unsigned>(acceptance.error()));
         return 1;
       }
-      const std::string_view presentation =
-          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
-      report << intersystem_return_acceptance_json(acceptance->report,
-                                                    presentation);
+      report << intersystem_return_acceptance_json(acceptance->report);
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
                      report_path.string().c_str());
@@ -3129,8 +3080,8 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "intersystem-return: presentation=%.*s docking=%llu checksum=%llu\n",
-          static_cast<int>(presentation.size()), presentation.data(),
+          "intersystem-return: evidence=application_framebuffer docking=%llu "
+          "checksum=%llu\n",
           static_cast<unsigned long long>(acceptance->report.docking_tick),
           static_cast<unsigned long long>(
               acceptance->report.docked_return_checksum));
@@ -3147,16 +3098,13 @@ auto main(int argc, char** argv) -> int {
                      static_cast<unsigned>(acceptance.error()));
         return 1;
       }
-      const std::string_view presentation =
-          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
-      report << intersystem_planetfall_acceptance_json(acceptance->report,
-                                                       presentation);
+      report << intersystem_planetfall_acceptance_json(acceptance->report);
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
                      report_path.string().c_str());
@@ -3170,9 +3118,9 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "intersystem-planetfall: presentation=%.*s completion=%llu "
+          "intersystem-planetfall: evidence=application_framebuffer "
+          "completion=%llu "
           "checksum=%llu\n",
-          static_cast<int>(presentation.size()), presentation.data(),
           static_cast<unsigned long long>(acceptance->report.completion_tick),
           static_cast<unsigned long long>(
               acceptance->report.completed_flight_checksum));
@@ -3188,16 +3136,13 @@ auto main(int argc, char** argv) -> int {
                      static_cast<unsigned>(acceptance.error()));
         return 1;
       }
-      const std::string_view presentation =
-          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
-      report << system_flight_acceptance_json(acceptance->report,
-                                              presentation);
+      report << system_flight_acceptance_json(acceptance->report);
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
                      report_path.string().c_str());
@@ -3211,8 +3156,8 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "system-flight: presentation=%.*s insertion=%llu checksum=%llu\n",
-          static_cast<int>(presentation.size()), presentation.data(),
+          "system-flight: evidence=application_framebuffer insertion=%llu "
+          "checksum=%llu\n",
           static_cast<unsigned long long>(acceptance->report.insertion_tick),
           static_cast<unsigned long long>(
               acceptance->report.system_flight_checksum));
@@ -3228,16 +3173,13 @@ auto main(int argc, char** argv) -> int {
                      static_cast<unsigned>(acceptance.error()));
         return 1;
       }
-      const std::string_view presentation =
-          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
                      report_path.string().c_str());
         return 1;
       }
-      report << intersystem_jump_acceptance_json(acceptance->report,
-                                                 presentation);
+      report << intersystem_jump_acceptance_json(acceptance->report);
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
                      report_path.string().c_str());
@@ -3251,9 +3193,9 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "intersystem-jump: presentation=%.*s destination=%llu "
+          "intersystem-jump: evidence=application_framebuffer "
+          "destination=%llu "
           "commit=%llu arrival=%llu checksum=%llu\n",
-          static_cast<int>(presentation.size()), presentation.data(),
           static_cast<unsigned long long>(acceptance->report.destination.value),
           static_cast<unsigned long long>(acceptance->report.committed_tick),
           static_cast<unsigned long long>(acceptance->report.arrival_tick),
@@ -3333,10 +3275,8 @@ auto main(int argc, char** argv) -> int {
           std::format("apsis-signal-run-{}-{}.json",
                       static_cast<long long>(::getpid()),
                       Clock::now().time_since_epoch().count());
-      const std::string_view presentation =
-          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
       const auto acceptance = run_signal_run_acceptance(
-          configuration, checkpoint_path, presentation);
+          configuration, checkpoint_path);
       if (!acceptance) {
         std::fprintf(stderr, "Signal Run acceptance failed (%u)\n",
                      static_cast<unsigned>(acceptance.error()));
@@ -3362,10 +3302,10 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
       std::printf(
-          "signal-run: seed=%u presentation=%.*s atmosphere=%llu "
+          "signal-run: seed=%u evidence=application_framebuffer "
+          "atmosphere=%llu "
           "reached=%llu completion=%llu return=%llu checksum=%llu\n",
           kSignalRunAcceptanceSeed,
-          static_cast<int>(presentation.size()), presentation.data(),
           static_cast<unsigned long long>(
               acceptance->report.atmospheric_tick),
           static_cast<unsigned long long>(acceptance->report.reached_tick),

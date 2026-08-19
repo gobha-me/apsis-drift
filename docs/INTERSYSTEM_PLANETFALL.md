@@ -47,18 +47,16 @@ also proves an atmospheric abort can climb back to orbit, completes collection
 at the bound target, renders the final terrain frame, and replays the entire
 trace twice before producing a report.
 
-Run both supported presentation labels:
+Run the application-owned simulation and framebuffer path:
 
 ```sh
-./build/apsis-drift --intersystem-planetfall-acceptance --driver kitty \
-  --profile remote --report intersystem-planetfall-kitty.json \
-  --snapshot intersystem-planetfall-kitty.ppm
-./build/apsis-drift --intersystem-planetfall-acceptance --driver ansi \
-  --profile remote --report intersystem-planetfall-ansi.json \
-  --snapshot intersystem-planetfall-ansi.ppm
+./build/apsis-drift --intersystem-planetfall-acceptance \
+  --profile remote --report intersystem-planetfall-application-framebuffer.json \
+  --snapshot intersystem-planetfall-application-framebuffer.ppm
 ```
 
-The report separates authoritative flight and abort checksums from the final
-framebuffer checksum. The acceptance path is a semantic regression trace, not
+The schema 3 report identifies `evidence_scope: application_framebuffer` and
+separates authoritative flight and abort checksums from the final framebuffer
+checksum. The acceptance path is a semantic regression trace, not
 a terminal/proxy throughput measurement; the benchmark and live capture paths
 remain unchanged.

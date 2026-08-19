@@ -1057,13 +1057,13 @@ auto intersystem_jump_acceptance_contract() -> void {
             result->transit_frame.size() == 96U * 64U,
         "canonical headless jump acceptance must commit, resume, render, and arrive");
   if (!result) return;
-  const auto json = intersystem_jump_acceptance_json(result->report, "ansi");
+  const auto json = intersystem_jump_acceptance_json(result->report);
   check(json.find("\"scenario\": \"v0.4.15-pilot-ftl-alignment\"") !=
                 std::string::npos &&
-            json.find("\"schema_version\": 2") != std::string::npos &&
-            json.find("\"presentation\": \"ansi\"") !=
+            json.find("\"schema_version\": 3") != std::string::npos &&
+            json.find("\"evidence_scope\": \"application_framebuffer\"") !=
                 std::string::npos,
-        "jump acceptance JSON must retain its versioned semantic fields");
+        "jump acceptance JSON must name its renderer-neutral evidence scope");
 }
 
 auto system_flight_contract() -> void {
@@ -1297,13 +1297,13 @@ auto intersystem_return_contract() -> void {
             result->final_frame.size() == 96U * 64U,
         "canonical return acceptance must depart, cancel/resume, jump, rendezvous, dock, and turn in");
   if (result) {
-    const auto json =
-        intersystem_return_acceptance_json(result->report, "kitty");
+    const auto json = intersystem_return_acceptance_json(result->report);
     check(json.find("\"scenario\": \"v0.4.12-intersystem-return\"") !=
                   std::string::npos &&
-              json.find("\"presentation\": \"kitty\"") !=
+              json.find("\"schema_version\": 2") != std::string::npos &&
+              json.find("\"evidence_scope\": \"application_framebuffer\"") !=
                   std::string::npos,
-          "return acceptance JSON must retain semantic presentation fields");
+          "return acceptance JSON must name its renderer-neutral evidence scope");
   }
 
   auto pixels = std::vector<Pixel>(16U * 16U);
@@ -1438,9 +1438,11 @@ auto intersystem_contract_acceptance_contract() -> void {
                      result->report.final_authoritative_checksum;
             }),
         "every representative save/resume stage must reach the uninterrupted final checksum");
-  const auto json =
-      intersystem_contract_acceptance_json(result->report, "kitty");
+  const auto json = intersystem_contract_acceptance_json(result->report);
   check(json.find("\"scenario\": \"v0.4.13-intersystem-contract-loop\"") !=
+                std::string::npos &&
+            json.find("\"schema_version\": 2") != std::string::npos &&
+            json.find("\"evidence_scope\": \"application_framebuffer\"") !=
                 std::string::npos &&
             json.find("\"final_mission_phase\": \"turned_in\"") !=
                 std::string::npos &&
@@ -1629,14 +1631,13 @@ auto intersystem_planetfall_acceptance_contract() -> void {
             result->final_frame.size() == 96U * 64U,
         "canonical Planetfall acceptance must enter anywhere, measure thermal envelopes, recover, reenter, save, and render");
   if (result) {
-    const auto json =
-        intersystem_planetfall_acceptance_json(result->report, "kitty");
-    check(json.find("\"schema_version\": 2") != std::string::npos &&
+    const auto json = intersystem_planetfall_acceptance_json(result->report);
+    check(json.find("\"schema_version\": 3") != std::string::npos &&
               json.find("\"scenario\": \"v0.4.17-pilot-thermal-reentry\"") !=
                   std::string::npos &&
-              json.find("\"presentation\": \"kitty\"") !=
+              json.find("\"evidence_scope\": \"application_framebuffer\"") !=
                   std::string::npos,
-          "thermal Planetfall JSON must retain versioned semantic presentation fields");
+          "thermal Planetfall JSON must name its renderer-neutral evidence scope");
   }
 }
 
