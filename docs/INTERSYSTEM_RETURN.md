@@ -42,12 +42,12 @@ without changing state.
 
 ## Persistence
 
-Save format 7 admits one `origin_return` state only during
+Save format 11 admits one `origin_return` state only during
 `origin_system_return`. Target-system flight remains present during a
 cancelable return spool and is absent after commitment. Objective-complete,
 returned, and turned-in states retain the immutable target discovery and
-exactly one collected world delta. Loading and rewriting formats 1 through 6
-does not regenerate identities or advance mission progress.
+exactly one collected world delta. Earlier alpha formats are rejected before
+state decoding rather than being upgraded with synthesized return state.
 
 ## Acceptance replay
 

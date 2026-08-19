@@ -47,10 +47,10 @@ presentation and are not saved.
 
 ## Save compatibility
 
-Save format 10 requires a `thermal` object in every encoded planetary flight.
-It preserves both fixed-point load and the Pilot abort latch exactly. Formats
-1 through 9 migrate to zero load and an unlatched abort because those releases
-did not record thermal history. Assisted intersystem state and legacy Signal
+Save format 11 requires a `thermal` object in every encoded planetary flight
+and preserves both fixed-point load and the Pilot abort latch exactly. Formats
+1 through 10 are rejected by the current alpha boundary rather than receiving
+invented thermal history. Assisted intersystem state and the bounded Signal
 Run state reject a latched abort, preventing a Pilot-only consequence from
 crossing rule-profile boundaries.
 
@@ -76,4 +76,5 @@ The same matrix retains the correct-side, early, and opposite-side Planetfall
 routes, explicit orbital abort route, objective completion, and application
 framebuffer diagnostics. Unit coverage separately proves
 speed, descent angle, and pressure monotonicity; airless cooling; invalid-state
-transactionality; exact save round trips; and format-9 migration.
+transactionality; exact format-11 save round trips; and unsupported-alpha
+format rejection.

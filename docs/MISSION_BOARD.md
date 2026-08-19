@@ -38,7 +38,7 @@ implemented by the versioned system-flight path.
 
 Left and Right switch between `ASSISTED` and `PILOT` while the mission is
 offered or accepted at the station. Launch locks the selection for the active
-mission. Assisted is the fresh-career and migration default; the descriptions
+mission. Assisted is the fresh-career default; the descriptions
 remain textual and information-complete on Kitty and ANSI. The complete
 profile contract is recorded in [Deterministic Rule Profiles](RULE_PROFILES.md).
 
@@ -48,10 +48,9 @@ turned-in states for later loop stages. A returned contract exposes
 
 ## Persistence and compatibility
 
-Fresh careers use save format 10 and persist the high-level
-`IntersystemContractState`. Formats 1 and 2 decode as `legacy_signal_run`, keep
-their original planet-side objective and craft state, and rewrite as format 10
-without teleporting, retargeting, or synthesizing mission progress.
+Fresh careers use save format 11 and persist the high-level
+`IntersystemContractState`. Formats 1 through 10 are unsupported alpha saves
+and are rejected before mission state is decoded or applied.
 
 The save excludes terminal capabilities, render profiles, menu selection,
 camera state, ephemeris caches, and animation progress. See

@@ -158,7 +158,7 @@ location into corrupt mission state.
 ## Rule profiles
 
 Version 3 retains exactly two authoritative rule profiles. `ASSISTED` is the
-fresh-career and migration default. `PILOT` opts into deterministic thermal
+fresh-career default. `PILOT` opts into deterministic thermal
 consequences and the implemented alignment consequences. The player may select
 either profile only while docked with the mission offered or accepted; launch
 locks it for the active mission. Profile commands are tick-addressed and never
@@ -170,8 +170,7 @@ and recovery cap are specified in
 
 ## Save projection and compatibility
 
-The v0.4.7 mission board introduced save format version 3. The v0.4.8 Assisted
-jump extends that projection as version 4 and records:
+Current save format 11 requires the complete contract projection:
 
 - generator versions for the system catalog, ephemeris, and first mission;
 - stable origin/target system, star, mission-planet, station, mission, and
@@ -183,60 +182,28 @@ jump extends that projection as version 4 and records:
   bound when a jump commits;
 - existing discoveries and sparse world deltas unchanged.
 
-The v0.4.9 target approach extends the projection as version 5 with the active
-system-flight tick, system/target identities, inertial position and velocity,
-attitude basis, controls, flight mode, and bounded time scale. Target-system
-and target-planet phases require exactly one matching craft representation.
+Target-system flight stores its tick, identities, inertial position and
+velocity, attitude basis, controls, flight mode, and bounded time scale.
+Target-planet flight stores exact geodetic pose, local velocity, clearance,
+controls, regime, transition, thermal load, and abort latch. Return spooling
+retains the frozen target-system craft and immutable arrival required for exact
+cancellation; origin arrival owns one matching station-approach state.
 
-The v0.4.11 Planetfall path extends the projection as version 6. Target-planet
-flight retains its exact geodetic pose, local velocity, clearance, controls,
-regime, and transition. Mission completion requires exactly one `collected`
-world delta for the contract's immutable objective. Earlier intersystem
-formats that already recorded completion materialize that already-earned delta
-during migration; no location, tick, target, or mission phase is advanced.
-
-The v0.4.12 return path extends the projection as version 7. A cancelable
-return spool retains its frozen target-system craft state and the immutable
-target arrival needed for exact cancellation. Return commitment replaces that
-solution atomically with the origin arrival, and origin arrival creates one
-matching station-approach state. Docking removes that craft state and changes
-the mission to `returned`; only the separate mission-board action changes it
-to `turned_in`.
-
-The v0.4.14 rule-profile path extends the projection as version 8 and records
-the locked Assisted/Pilot selection. Formats 1 through 7 migrate to Assisted
-and retain every previously authoritative field unchanged.
-
-The v0.4.15 Pilot FTL path extends the projection as version 9 and records
-active fixed-point alignment controls plus the immutable committed assessment.
-Format 8 preserves existing arrival coordinates and assigns them the optimal
-grade; an active Pilot spool migrates to neutral alignment rather than
-inventing a released-version random sample.
-
-The v0.4.17 Pilot reentry path extends the projection as version 10. Every
-active planetary flight stores bounded fixed-point thermal load and an abort
-latch. Formats 1 through 9 migrate to zero load without inventing a prior
-abort. Assisted may reach the displayed limit but cannot persist a latch.
+The v0.4.7 through v0.4.17 releases introduced historical formats 3 through 10
+as the mission board, jump, system flight, Planetfall, return, rule profile,
+Pilot alignment, and thermal state landed. Those documents remain useful
+historical evidence but are not current player-save inputs. Format 11 rejects
+formats 1 through 10 at the root boundary with an explicit unsupported-alpha
+diagnostic and never synthesizes missing fields.
 
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Formats 1 through 9 remain readable. Formats 1 and 2 retain their saved
-origin-system planet,
-flight state, objective, discoveries, and deltas as a legacy local Signal Run.
-An in-flight legacy save resumes in flight; a docked save resumes docked. It is
-not moved to system ordinal 1, assigned a generated jump, or given synthetic
-mission progress. Legacy careers remain explicitly local;
-conversion into the intersystem career is not synthesized. A released format-4
-target arrival initializes mutable flight from its already-bound immutable
-arrival solution. Released format-5 system flight, format-6 Planetfall state,
-format-7 return state, format-8 profile, and format-9 alignment remain exact
-when their required arrival data is present and canonical. A released phase
-that lacks the immutable solution needed for exact continuation returns a
-compatibility error rather than receiving synthetic progress. Older readers
-must reject format 10
-before discarding any of these fields.
+Format 11 preserves current state exactly and rejects absent arrival, craft,
+profile, alignment, thermal, or journal data when the active phase requires it.
+The application version that most recently wrote the file is diagnostic root
+metadata and never changes deterministic contract state.
 
 ## Implementation boundaries
 

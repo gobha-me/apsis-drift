@@ -18,8 +18,9 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{10};
+inline constexpr std::uint32_t kSaveFormatVersion{11};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
+inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
 inline constexpr std::size_t kMaximumSaveWorldDeltas{16'384};
 inline constexpr std::size_t kMaximumSaveObjectKeyBytes{128};
@@ -87,8 +88,8 @@ struct SaveMutableState {
   std::optional<OriginReturnState> origin_return;
   std::vector<SaveDiscovery> discoveries;
   std::vector<SaveWorldDelta> world_deltas;
-  // Present for the v3 first-contract career. Absence identifies a migrated
-  // v1/v2 local Signal Run, which must never be silently retargeted.
+  // Present for the first-contract career. Absence identifies the bounded
+  // local Signal Run scenario, which must never be silently retargeted.
   std::optional<IntersystemContractState> intersystem_contract;
 
   friend auto operator==(const SaveMutableState&, const SaveMutableState&)
@@ -110,6 +111,7 @@ enum class SaveSchemaErrorCode : std::uint8_t {
   missing_field,
   invalid_type,
   invalid_value,
+  unsupported_alpha_format_version,
   unsupported_format_version,
   incompatible_generator_version,
   identity_mismatch,

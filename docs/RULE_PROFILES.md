@@ -7,16 +7,16 @@ selects a different mission.
 
 ## Selection and authority
 
-Fresh and migrated careers use `ASSISTED`. Left and Right select either
+Fresh careers use `ASSISTED`. Left and Right select either
 profile at the Origin Station while the first contract is offered or accepted.
 Launch locks the selected profile for the active mission. Returning, changing
 terminal driver, resizing, changing render cadence, or loading the save cannot
 change it.
 
-The selection is a tick-addressed intersystem contract command; save formats
-8 through 10 store it as authoritative state. Formats 1 through 7 migrate
-without a profile field and therefore select `ASSISTED`. Unknown profile
-values are invalid rather than silently downgraded.
+The selection is a tick-addressed intersystem contract command; save format 11
+stores it as authoritative state. Formats 1 through 10 are unsupported alpha
+inputs. Unknown or missing profile values are invalid rather than silently
+downgraded.
 
 Pilot FTL alignment and thermal entry both consume this boundary.
 

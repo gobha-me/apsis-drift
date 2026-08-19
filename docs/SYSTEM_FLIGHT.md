@@ -52,11 +52,10 @@ identity.
 
 ## Persistence and verification
 
-The system-flight projection introduced by save format 5 records finite
-binary64 values as canonical decimal strings and
+Save format 11 records finite binary64 values as canonical decimal strings and
 requires exactly one matching system-flight state during target-system flight.
-A released format-4 save already at the target initializes this state from its
-immutable arrival solution. Formats 1–3 retain their existing migrations.
+Formats 1 through 10 are unsupported alpha inputs; the loader does not
+manufacture system-flight state from an older projection.
 
 Run the cadence, save/resume, rendering, and insertion acceptance through the
 application framebuffer path:

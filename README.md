@@ -70,12 +70,12 @@ loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
-Legacy in-flight profiles restore the exact planetary craft, objective,
-discoveries, and compact world-delta journal. New writes use save format
-version 10; versions 1 and 2 load as legacy local Signal Runs, while released
-versions 3 through 9 retain their mission, jump, arrival, system-flight,
-Planetfall, return, rule-profile, and Pilot-alignment state. Released flights
-migrate with zero thermal load and no invented abort history.
+New writes use save format 11 and record the writing application version.
+Releases before v0.8.0 are alpha: formats 1 through 10 are intentionally
+unsupported after the format-11 reset and are rejected without modifying the
+source file. The durable forward-loading promise begins with the actual format
+shipped by v0.8.0; see
+[Save Format and Compatibility](docs/SAVE_FORMAT.md).
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -244,15 +244,14 @@ terminal/proxy timings remain separate evidence. See
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records deterministic thermal-abort and alignment-quality
-boundaries. Formats 1 through 7 migrate to
-Assisted without changing generated truth or mission progress. See
+boundaries. Current format-11 saves require the explicit selection. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment
 task. Commitment grades an immutable ALIGNED, OFFSET, or OPPOSED handoff;
 Assisted retains its exact ten-radius matched-velocity corridor, while poor
 Pilot execution changes only the recoverable target-system approach. Save
-format 9 prevents reloads from rerolling either alignment or placement. See
+format 11 retains the alignment and placement exactly. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The v0.4.17 Pilot reentry path derives thermal load from atmospheric pressure,
@@ -307,6 +306,13 @@ The v0.4.25 flight-step APIs accept only the authoritative 120 Hz duration.
 Legacy and planetary motion, including thermal integration, use the shared
 `kSimulationStep`; invalid or near-miss durations reject without advancing the
 tick or mutating flight state.
+
+The v0.4.27 format-11 reset establishes the pre-v0.8 alpha policy explicitly.
+Every current save carries bounded writer-version provenance; formats 1 through
+10 receive a distinct unsupported-alpha diagnostic before authoritative fields
+are decoded and remain byte-for-byte untouched. The
+[release checklist](docs/RELEASING.md) records the v0.8+ beta and 1.x
+forward-loading promises.
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact

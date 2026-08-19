@@ -52,14 +52,12 @@ station rendezvous and docking remain #88.
 
 ## Persistence and presentation
 
-Save format 9 introduced active Pilot alignment and the immutable committed
+Save format 11 stores active Pilot alignment and the immutable committed
 assessment in addition to the arrival solution's canonical finite binary64
 decimal strings, destination/reference identities, and arrival tick. A save
-after commitment restores the same solution rather than rerolling it. Released
-format 8 Pilot spools migrate to neutral alignment because that release did
-not define a sample. Existing format 8 target arrivals receive the optimal
-grade without changing their stored pose. Current format 10 retains those
-fields unchanged and adds only planetary thermal state.
+after commitment restores the same solution rather than rerolling it. Earlier
+alpha formats are rejected rather than receiving invented alignment or
+assessment state.
 
 Every current committed, target-flight, return-spool, and origin-return phase
 that depends on an arrival requires the solution. Validation regenerates the
@@ -67,9 +65,7 @@ applicable local system and compares the complete destination, reference,
 tick, assessment, position, and velocity before gameplay or save commit. A
 cancelable return spool retains the outbound solution so cancellation can
 restore the exact target-system state; return commitment atomically replaces
-it with the origin solution. Released states that never recorded enough data
-for exact continuation fail with a structured compatibility error rather than
-inventing an arrival.
+it with the origin solution.
 
 The transit image and reticle are bounded code-rendered RGBA derived only from
 the semantic jump snapshot. Kitty and ANSI consume the same pixels and cockpit
