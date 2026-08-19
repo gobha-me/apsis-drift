@@ -223,7 +223,7 @@ struct CreatedTemporary {
   if (!encoded) {
     return std::unexpected{SaveFileError{
         SaveFileErrorCode::invalid_document, path,
-        "authoritative state cannot be encoded as a version 1 save",
+        "authoritative state cannot be encoded in the current save format",
         encoded.error()}};
   }
 

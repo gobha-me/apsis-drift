@@ -7,6 +7,7 @@
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -1392,6 +1393,143 @@ template <typename Id>
   };
 }
 
+[[nodiscard]] auto validate_legacy_signal_run_semantics(
+    const SaveDocument& document) -> std::expected<void, SaveSchemaError> {
+  const auto& state = document.state;
+  if (state.first_objective == FirstObjectiveStatus::offered) {
+    if (state.first_objective_target.value != 0) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state,
+          "$.state.first_objective.target_signal_id",
+          "an offered objective cannot bind a generated signal")};
+    }
+    if (!state.discoveries.empty()) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.discoveries[0]",
+          "an offered objective cannot contain discovered signals")};
+    }
+    if (!state.world_deltas.empty()) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.world_deltas[0]",
+          "an offered objective cannot contain generated-world deltas")};
+    }
+    return {};
+  }
+
+  if (state.first_objective_target.value == 0) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state,
+        "$.state.first_objective.target_signal_id",
+        "an accepted objective requires a generated signal target")};
+  }
+
+  const auto system_seed =
+      derive_seed(document.recipe.universe_seed, SeedDomain::system,
+                  document.recipe.origin_system_ordinal);
+  const auto planet_seed =
+      derive_seed(system_seed, SeedDomain::planet,
+                  document.recipe.active_planet_ordinal);
+  const auto planet = generate_planet_descriptor(planet_seed);
+  auto cache = TerrainTileCache::create();
+  if (!cache) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state",
+        "cannot regenerate the deterministic Signal Run catalog")};
+  }
+  auto catalog = generate_surface_signals(planet, *cache);
+  if (!catalog) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state",
+        "cannot regenerate the deterministic Signal Run catalog")};
+  }
+  const auto signal_in_catalog = [&](SurfaceSignalId id) {
+    for (const auto& signal : catalog->signals) {
+      if (signal.id == id) return true;
+    }
+    return false;
+  };
+  if (!signal_in_catalog(state.first_objective_target)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::identity_mismatch,
+        "$.state.first_objective.target_signal_id",
+        "objective target does not match the deterministic signal catalog")};
+  }
+
+  std::unordered_map<std::uint64_t, SimulationTick> discovery_ticks;
+  discovery_ticks.reserve(state.discoveries.size());
+  for (std::size_t index = 0; index < state.discoveries.size(); ++index) {
+    const auto& discovery = state.discoveries[index];
+    if (!signal_in_catalog(discovery.signal)) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::identity_mismatch,
+          std::format("$.state.discoveries[{}].signal_id", index),
+          "discovery does not match the deterministic signal catalog")};
+    }
+    if (state.flight && discovery.tick > state.flight->tick) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state,
+          std::format("$.state.discoveries[{}].tick", index),
+          "discovery tick cannot be later than the active flight tick")};
+    }
+    discovery_ticks.emplace(discovery.signal.value, discovery.tick);
+  }
+
+  for (std::size_t index = 0; index < state.world_deltas.size(); ++index) {
+    const auto& delta = state.world_deltas[index];
+    const auto signal = parse_surface_signal_object_key(delta.object_key);
+    if (!signal || !signal_in_catalog(*signal)) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::identity_mismatch,
+          std::format("$.state.world_deltas[{}].object_key", index),
+          "world delta does not match the deterministic signal catalog")};
+    }
+    if (state.flight && delta.tick > state.flight->tick) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state,
+          std::format("$.state.world_deltas[{}].tick", index),
+          "world-delta tick cannot be later than the active flight tick")};
+    }
+    const auto discovered = discovery_ticks.find(signal->value);
+    if (discovered != discovery_ticks.end() &&
+        delta.tick < discovered->second) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state,
+          std::format("$.state.world_deltas[{}].tick", index),
+          "world-delta tick cannot precede discovery of the same signal")};
+    }
+  }
+
+  if (!discovery_ticks.contains(state.first_objective_target.value)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
+        "the objective target must have a matching discovery")};
+  }
+  const auto journal = WorldDeltaJournal::create(state.world_deltas);
+  if (!journal) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
+        "world deltas cannot form a valid Signal Run journal")};
+  }
+  const auto target_key =
+      surface_signal_object_key(state.first_objective_target);
+  const auto* target_delta = journal->state(target_key);
+  if (state.first_objective == FirstObjectiveStatus::active) {
+    if (target_delta &&
+        target_delta->kind != SaveWorldDeltaKind::discovered) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state,
+          "$.state.first_objective.status",
+          "an active objective cannot contain a terminal target delta")};
+    }
+  } else if (target_delta == nullptr ||
+             target_delta->kind != SaveWorldDeltaKind::collected) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
+        "a completed objective requires a collected target delta")};
+  }
+  return {};
+}
+
 }  // namespace
 
 auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
@@ -1668,6 +1806,9 @@ auto validate_save_document(const SaveDocument& document)
                   std::format("$.state.world_deltas[{}]", index),
                   "world delta has an invalid object key or kind")};
     }
+  }
+  if (!document.state.intersystem_contract) {
+    return validate_legacy_signal_run_semantics(document);
   }
   return {};
 }

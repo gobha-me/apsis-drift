@@ -157,6 +157,14 @@ flight clearance, and a consistent optional regime transition. Docked state
 must not contain active flight state; in-flight state must contain it and
 cannot retain a merely offered objective.
 
+Legacy Signal Run validation also regenerates the bounded surface-signal
+catalog in a temporary cache before a decoded document is returned. Objective,
+discovery, and journal identities must belong to that catalog; offered, active,
+and completed objective state must agree with target discovery and collection;
+and persisted discovery or delta ticks cannot exceed an active flight tick or
+reverse discovery-before-delta ordering. Validation errors retain the indexed
+JSON path, and no generated cache becomes live state until hydration succeeds.
+
 The decoder accepts at most 1 MiB, 4,096 discoveries, 16,384 journal entries,
 and 128 bytes per object key. These are format bounds, not a target size;
 normal early saves should remain in the kilobyte range.

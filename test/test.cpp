@@ -2998,6 +2998,36 @@ auto save_schema_contract() -> void {
             encode_save_document_json(*ignored) == encoded,
         "unknown optional fields must be ignored and discarded on rewrite");
 
+  const auto expect_semantic_decode_error =
+      [&](std::string text, SaveSchemaErrorCode code, std::string_view path,
+          const char* message) {
+        const auto result = decode_save_document_json(text);
+        check(!result && result.error().code == code &&
+                  result.error().path == path,
+              message);
+      };
+  expect_semantic_decode_error(
+      replace_once(fixture,
+                   "\"target_signal_id\": \"signal-71d4c959dcd64423\"",
+                   "\"target_signal_id\": \"signal-0000000000000001\""),
+      SaveSchemaErrorCode::identity_mismatch,
+      "$.state.first_objective.target_signal_id",
+      "decode must reject an objective outside the generated signal catalog");
+  expect_semantic_decode_error(
+      replace_once(fixture,
+                   "\"signal_id\": \"signal-71d4c959dcd64423\"",
+                   "\"signal_id\": \"signal-0000000000000001\""),
+      SaveSchemaErrorCode::identity_mismatch,
+      "$.state.discoveries[0].signal_id",
+      "decode must reject an indexed discovery outside the generated catalog");
+  expect_semantic_decode_error(
+      replace_once(fixture,
+                   "\"object_key\": \"signal-71d4c959dcd64423\"",
+                   "\"object_key\": \"signal-0000000000000001\""),
+      SaveSchemaErrorCode::identity_mismatch,
+      "$.state.world_deltas[0].object_key",
+      "decode must reject an indexed delta outside the generated catalog");
+
   const auto expect_decode_error = [&](std::string text,
                                        SaveSchemaErrorCode code,
                                        const char* message) {
@@ -3162,6 +3192,46 @@ auto save_schema_contract() -> void {
   check(!invalid_result &&
             invalid_result.error().code == SaveSchemaErrorCode::invalid_state,
         "invalid world-delta object keys must be rejected");
+  invalid = expected;
+  invalid.state.discoveries.clear();
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result &&
+            invalid_result.error().path == "$.state.discoveries",
+        "an accepted objective must retain its generated target discovery");
+  invalid = expected;
+  invalid.state.world_deltas.front().kind = SaveWorldDeltaKind::collected;
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result && invalid_result.error().path ==
+                               "$.state.first_objective.status",
+        "an active objective must reject a terminal collected delta");
+  invalid = expected;
+  invalid.state.first_objective = FirstObjectiveStatus::completed;
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result &&
+            invalid_result.error().path == "$.state.world_deltas",
+        "a completed objective must require a collected target delta");
+  invalid.state.world_deltas.front().kind = SaveWorldDeltaKind::collected;
+  check(encode_save_document_json(invalid).has_value(),
+        "a completed objective with its collected target must validate");
+  invalid = expected;
+  invalid.state.discoveries.front().tick = invalid.state.flight->tick + 1U;
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result && invalid_result.error().path ==
+                               "$.state.discoveries[0].tick",
+        "an in-flight discovery cannot come from a future tick");
+  invalid = expected;
+  invalid.state.world_deltas.front().tick = invalid.state.flight->tick + 1U;
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result && invalid_result.error().path ==
+                               "$.state.world_deltas[0].tick",
+        "an in-flight world delta cannot come from a future tick");
+  invalid = expected;
+  invalid.state.world_deltas.front().tick =
+      invalid.state.discoveries.front().tick - 1U;
+  invalid_result = encode_save_document_json(invalid);
+  check(!invalid_result && invalid_result.error().path ==
+                               "$.state.world_deltas[0].tick",
+        "a signal delta cannot precede discovery of the same signal");
 }
 
 auto save_file_contract() -> void {
@@ -3264,6 +3334,30 @@ auto save_file_contract() -> void {
     check(message.find(malformed_path.string()) != std::string::npos &&
               message.find("$") != std::string::npos,
           "save diagnostics must include the path and schema location");
+  }
+
+  const auto inconsistent_path = temporary.path() / "inconsistent.json";
+  const auto inconsistent_fixture = replace_once(
+      read_test_data("test/data/save-v2-golden.json"),
+      "\"target_signal_id\": \"signal-71d4c959dcd64423\"",
+      "\"target_signal_id\": \"signal-0000000000000001\"");
+  check(write_test_file(inconsistent_path, inconsistent_fixture),
+        "the inconsistent semantic save fixture must be writable");
+  const auto inconsistent = load_save_file(inconsistent_path);
+  check(!inconsistent &&
+            inconsistent.error().code == SaveFileErrorCode::invalid_document &&
+            inconsistent.error().schema_error &&
+            inconsistent.error().schema_error->code ==
+                SaveSchemaErrorCode::identity_mismatch &&
+            inconsistent.error().schema_error->path ==
+                "$.state.first_objective.target_signal_id",
+        "file loading must reject generated Signal Run identity mismatches before commit");
+  if (!inconsistent) {
+    const auto message = save_file_error_message(inconsistent.error());
+    check(message.find(inconsistent_path.string()) != std::string::npos &&
+              message.find("$.state.first_objective.target_signal_id") !=
+                  std::string::npos,
+          "semantic load diagnostics must include the file and indexed schema path");
   }
 
   const auto boundary_path = temporary.path() / "boundary.json";
@@ -3376,13 +3470,13 @@ auto signal_run_contract() -> void {
   auto invalid = *checkpoint;
   invalid.state.first_objective_target = SurfaceSignalId{1};
   check(hydrate_signal_run(invalid, *cache) ==
-            std::unexpected{SignalRunError::invalid_target},
-        "a valid-schema save with an unknown generated target must fail before commit");
+            std::unexpected{SignalRunError::invalid_document},
+        "an unknown generated target must fail at the schema boundary before hydration");
   invalid = *checkpoint;
   invalid.state.discoveries.clear();
   check(hydrate_signal_run(invalid, *cache) ==
-            std::unexpected{SignalRunError::inconsistent_state},
-        "an objective target missing its discovery must fail before commit");
+            std::unexpected{SignalRunError::invalid_document},
+        "an objective missing its discovery must fail at the schema boundary");
 }
 
 auto world_delta_journal_contract() -> void {
@@ -4260,19 +4354,39 @@ auto signal_collection_contract() -> void {
           "journal capacity failure must not expose a completed scan or partial delta");
   }
 
+  const auto saved_recipe = make_save_recipe(Seed{42});
+  const auto saved_system_seed =
+      derive_seed(saved_recipe.universe_seed, SeedDomain::system,
+                  saved_recipe.origin_system_ordinal);
+  const auto saved_planet_seed =
+      derive_seed(saved_system_seed, SeedDomain::planet,
+                  saved_recipe.active_planet_ordinal);
+  const auto saved_planet = generate_planet_descriptor(saved_planet_seed);
+  auto saved_cache = TerrainTileCache::create();
+  check(saved_cache.has_value(),
+        "save codec tests require a terrain cache");
+  if (!saved_cache) return;
+  auto saved_catalog = generate_surface_signals(saved_planet, *saved_cache);
+  check(saved_catalog.has_value(),
+        "save codec tests require the regenerated Signal Run catalog");
+  if (!saved_catalog) return;
+  const auto& saved_target = saved_catalog->signals.front();
   SaveDocument saved{
-      .recipe = make_save_recipe(Seed{42}),
+      .recipe = saved_recipe,
       .state =
           SaveMutableState{
               .location = OriginLocation::docked_at_origin,
               .first_objective = FirstObjectiveStatus::completed,
-              .first_objective_target = target.id,
+              .first_objective_target = saved_target.id,
               .flight = std::nullopt,
               .system_flight = std::nullopt,
               .origin_return = std::nullopt,
-              .discoveries = {{target.id, *state.completion_tick}},
-              .world_deltas = std::vector<SaveWorldDelta>(
-                  journal.entries().begin(), journal.entries().end()),
+              .discoveries = {
+                  {saved_target.id, *state.completion_tick}},
+              .world_deltas =
+                  {{surface_signal_object_key(saved_target.id),
+                    SaveWorldDeltaKind::collected,
+                    *state.completion_tick}},
               .intersystem_contract = std::nullopt,
           },
   };
@@ -4290,8 +4404,12 @@ auto signal_collection_contract() -> void {
     check(restored_journal.has_value(),
           "a saved collection journal must restore");
     if (restored_journal) {
+      const auto saved_reached = navigation_for(
+          saved_target, SignalScannerStatus::reached,
+          kSignalScannerReachedRadiusMetres);
       const auto restored = advance_signal_collection(
-          *catalog, reached, 10'000, *restored_journal, restored_state);
+          *saved_catalog, saved_reached, 10'000, *restored_journal,
+          restored_state);
       check(restored && !restored->delta_emitted &&
                 restored_state.status == SignalCollectionStatus::complete &&
                 restored_state.completion_tick == state.completion_tick &&
