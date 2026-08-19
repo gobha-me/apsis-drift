@@ -264,6 +264,13 @@ bounded consequence at 100%: a forced skip-out to orbit that cools, releases
 held descent, and allows a deliberate retry. See
 [docs/PILOT_REENTRY.md](docs/PILOT_REENTRY.md).
 
+The v0.4.18 headless path constructs the requested TermForge encoder instead
+of labeling Kitty output as ANSI. Ordinary benchmark JSON records the active
+`kitty`, `ansi`, or diagnostic `fallback` presentation, and system-navigation
+acceptance rejects any mismatch between the requested and exercised driver.
+Application framebuffer checksums remain independent of the encoder; byte
+totals now describe the actual encoded stream.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in
@@ -429,6 +436,8 @@ Run the deterministic headless benchmark:
 
 ```bash
 ./build/apsis-drift --benchmark 180
+./build/apsis-drift --benchmark 180 --driver ansi --report ansi.json
+./build/apsis-drift --benchmark 180 --driver kitty --report kitty.json
 ./build/apsis-drift --benchmark 1 --snapshot landscape.ppm
 ./build/apsis-drift --benchmark 1 --profile cinematic
 ./build/apsis-drift --benchmark 1 --profile local \
@@ -439,6 +448,12 @@ The benchmark measures CPU-side rendering and TermForge submission. It does not
 measure terminal, PTY, proxy, or display performance. Its frame clock is
 synthetic, so simulation follows the same fixed-step path without sleeping or
 mixing wall-clock jitter into deterministic framebuffer checksums.
+Headless `automatic` deterministically selects Kitty, preserving the sweep and
+ordinary benchmark default. Explicit `kitty`, `ansi`, and diagnostic
+`fallback` choices construct those drivers directly; the JSON `presentation`
+field and encoded-byte totals identify the active path. Fallback remains an
+unsupported interactive tier and is available headlessly only for degradation
+tests.
 The optional `orbital` workload renders the generated planet with a
 deterministic moving camera, while `system` renders the generated star and
 moving multi-planet catalog; `landscape` remains the default. Workload

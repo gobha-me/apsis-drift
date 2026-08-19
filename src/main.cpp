@@ -27,6 +27,7 @@
 
 #include "termforge/core/app.hpp"
 #include "termforge/drivers/ansi_rgb_driver.hpp"
+#include "termforge/drivers/fallback_driver.hpp"
 #include "termforge/drivers/kitty_driver.hpp"
 #include "termforge/widgets/frame.hpp"
 #include "termforge/widgets/pixel_surface.hpp"
@@ -92,6 +93,30 @@ using apsis_drift::detail::KeyboardChoice;
 [[nodiscard]] auto elapsed_ms(Clock::time_point from,
                               Clock::time_point to) noexcept -> double {
   return std::chrono::duration<double, std::milli>(to - from).count();
+}
+
+[[nodiscard]] auto make_headless_driver(DriverChoice choice)
+    -> std::unique_ptr<TerminalDriver> {
+  switch (choice) {
+    case DriverChoice::automatic:
+    case DriverChoice::kitty: {
+      auto driver = std::make_unique<KittyDriver>();
+      driver->set_cell_pixel_size({8, 16});
+      return driver;
+    }
+    case DriverChoice::ansi: return std::make_unique<AnsiRgbDriver>();
+    case DriverChoice::fallback: return std::make_unique<FallbackDriver>();
+  }
+  throw std::runtime_error{"unknown headless driver choice"};
+}
+
+[[nodiscard]] auto headless_presentation_name(
+    const TerminalDriver& driver) -> std::string_view {
+  if (driver.name() == "kitty") return "kitty";
+  if (driver.name() == "ansi-rgb") return "ansi";
+  if (driver.name() == "fallback") return "fallback";
+  throw std::runtime_error{
+      std::format("unsupported headless driver '{}'", driver.name())};
 }
 
 [[nodiscard]] auto write_snapshot(
@@ -566,7 +591,9 @@ class LandscapeApp final : public App {
     }
   }
 
-  auto benchmark(int frames) -> void {
+  auto benchmark(int frames,
+                 DriverChoice driver_choice = DriverChoice::automatic)
+      -> void {
     // TermForge issue #256: test_run_frames() skips setup(), so its real stdin
     // remains a blocking cooked TTY when a developer launches the benchmark
     // interactively. Give this headless run an EOF input until the framework
@@ -590,8 +617,8 @@ class LandscapeApp final : public App {
     m_synthetic_headless = true;
     set_clock(&m_headless_clock);
     set_frame_ms(33);
-    auto selected = std::make_unique<KittyDriver>();
-    selected->set_cell_pixel_size({8, 16});
+    auto selected = make_headless_driver(driver_choice);
+    const std::string presentation{headless_presentation_name(*selected)};
     try {
       test_run_frames(frames, 100, 40, nullptr, std::move(selected));
     } catch (...) {
@@ -603,8 +630,9 @@ class LandscapeApp final : public App {
     ::close(null_input);
     set_clock(nullptr);
     m_synthetic_headless = false;
-    m_display_tier = "kitty-headless";
-    m_display_path = "kitty (headless, /dev/null input workaround for #256)";
+    m_display_tier = presentation;
+    m_display_path = std::format(
+        "{} (headless, /dev/null input workaround for #256)", presentation);
   }
 
   [[nodiscard]] auto force_capabilities(DriverChoice driver_choice,
@@ -2279,7 +2307,8 @@ auto print_summary(const BenchmarkSummary& summary,
 
 [[nodiscard]] auto summary_json(const BenchmarkSummary& summary,
                                 const RenderConfiguration& configuration,
-                                BenchmarkWorkload workload)
+                                BenchmarkWorkload workload,
+                                std::string_view presentation)
     -> std::string {
   const std::string_view workload_prefix =
       workload == BenchmarkWorkload::orbital
@@ -2289,10 +2318,10 @@ auto print_summary(const BenchmarkSummary& summary,
                  : (workload == BenchmarkWorkload::system
                         ? "local-system"
                         : "voxel-landscape"));
-  std::string presentation;
+  std::string planetary_presentation_json;
   if (summary.planetary_presentation) {
     const auto& value = *summary.planetary_presentation;
-    presentation = std::format(
+    planetary_presentation_json = std::format(
         ",\n"
         "  \"planetary_presentation\": {{\n"
         "    \"mode_frames\": {{\"orbital\": {}, "
@@ -2315,6 +2344,7 @@ auto print_summary(const BenchmarkSummary& summary,
   return std::format(
       "{{\n"
       "  \"workload\": \"{}-{}x{}-rgba\",\n"
+      "  \"presentation\": \"{}\",\n"
       "  \"render_profile\": \"{}\",\n"
       "  \"viewport_width\": {},\n"
       "  \"viewport_height\": {},\n"
@@ -2331,14 +2361,14 @@ auto print_summary(const BenchmarkSummary& summary,
       "  \"checksum\": {}{}\n"
       "}}\n",
       workload_prefix, configuration.viewport.width,
-      configuration.viewport.height,
+      configuration.viewport.height, presentation,
       profile_name(configuration), configuration.viewport.width,
       configuration.viewport.height,
       summary.frames, summary.elapsed_seconds, summary.achieved_fps,
       summary.render_avg_ms, summary.render_p95_ms, summary.work_avg_ms,
       summary.work_p95_ms, summary.bytes_per_frame,
       summary.mebibytes_per_second, summary.total_bytes, summary.checksum,
-      presentation);
+      planetary_presentation_json);
 }
 
 inline constexpr std::uint32_t kSystemNavigationAcceptanceSeed{42};
@@ -2369,7 +2399,8 @@ inline constexpr std::uint32_t kSystemNavigationAcceptanceSeed{42};
       render.navigation.distance_metres,
       render.navigation.closing_speed_metres_per_second,
       render.visible_planets, render.selected_visible,
-      summary_json(summary, configuration, BenchmarkWorkload::system));
+      summary_json(summary, configuration, BenchmarkWorkload::system,
+                   presentation));
 }
 
 template <typename T>
@@ -2402,6 +2433,7 @@ auto usage() -> void {
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
       "                   [--keyboard enhanced|press-only]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
+      "                   [--driver automatic|kitty|ansi|fallback]\n"
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
       "                   [--workload landscape|orbital|planetary|system]\n"
@@ -3242,7 +3274,7 @@ auto main(int argc, char** argv) -> int {
         return 2;
       }
       constexpr int acceptance_frames{6};
-      app.benchmark(acceptance_frames);
+      app.benchmark(acceptance_frames, driver_choice);
       const auto summary = app.summary();
       const auto* render = app.system_render_stats();
       if (summary.frames != acceptance_frames || render == nullptr ||
@@ -3252,8 +3284,17 @@ auto main(int argc, char** argv) -> int {
                      "selected-target frame\n");
         return 1;
       }
-      const std::string_view presentation =
+      const std::string_view requested_presentation =
           driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      if (app.display_tier() != requested_presentation) {
+        std::fprintf(
+            stderr,
+            "System navigation acceptance requested %.*s but exercised %s\n",
+            static_cast<int>(requested_presentation.size()),
+            requested_presentation.data(), app.display_tier().c_str());
+        return 1;
+      }
+      const std::string_view presentation = app.display_tier();
       std::ofstream report{report_path};
       if (!report) {
         std::fprintf(stderr, "cannot open report '%s'\n",
@@ -3471,7 +3512,7 @@ auto main(int argc, char** argv) -> int {
     }
     int result{};
     if (benchmark_frames) {
-      app.benchmark(*benchmark_frames);
+      app.benchmark(*benchmark_frames, driver_choice);
     } else {
       result = app.run();
       if (app.requirements_failed()) result = 1;
@@ -3537,7 +3578,7 @@ auto main(int argc, char** argv) -> int {
         });
       } else {
         report << summary_json(summary, app.render_configuration(),
-                               app.workload());
+                               app.workload(), app.display_tier());
       }
       if (!report.good()) {
         std::fprintf(stderr, "cannot write report '%s'\n",
