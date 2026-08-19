@@ -277,6 +277,12 @@ system-flight, and Signal Run reports now identify their evidence as
 `application_framebuffer`; the headless benchmark and system-navigation
 acceptance remain the encoder-backed Kitty/ANSI checks.
 
+The v0.4.20 jump boundary resolves and validates the complete deterministic
+arrival before atomically publishing commitment. Committed, target-flight,
+return-spool, and origin-return saves require that immutable solution; missing
+or altered destination, reference, tick, assessment, pose, or velocity data is
+rejected before gameplay or save commit instead of creating a stranded jump.
+
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
 glyph coverage, origin, and license are recorded in

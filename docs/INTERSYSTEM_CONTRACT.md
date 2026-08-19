@@ -112,12 +112,12 @@ Travel phases are:
 | `docked_at_origin` | Origin system and station; no craft flight pose. |
 | `origin_system_flight` | Origin-system inertial craft state. |
 | `outbound_jump_spooling` | Origin system; cancelable timer. |
-| `outbound_jump_committed` | Origin system plus bound target destination and commit tick. |
-| `target_system_flight` | Target-system inertial craft state. |
-| `target_planet_flight` | Target planet and existing orbital/atmospheric/terrain state. |
-| `return_jump_spooling` | Target system; cancelable timer. |
-| `return_jump_committed` | Target system plus bound origin destination and commit tick. |
-| `origin_system_return` | Origin-system inertial state with station rendezvous available. |
+| `outbound_jump_committed` | Origin system plus bound target destination, commit tick, and canonical target arrival. |
+| `target_system_flight` | Target-system inertial craft state plus its immutable target arrival. |
+| `target_planet_flight` | Target planet and existing flight state plus its immutable target arrival. |
+| `return_jump_spooling` | Target system; cancelable timer retaining the target arrival needed to cancel exactly. |
+| `return_jump_committed` | Target system plus bound origin destination, commit tick, and canonical origin arrival. |
+| `origin_system_return` | Origin-system inertial state with its immutable origin arrival and station rendezvous available. |
 
 The legal first-loop sequence is:
 
@@ -190,10 +190,12 @@ formats that already recorded completion materialize that already-earned delta
 during migration; no location, tick, target, or mission phase is advanced.
 
 The v0.4.12 return path extends the projection as version 7. A cancelable
-return spool retains its frozen target-system craft state, committed transit
-does not, and origin arrival creates one matching station-approach state.
-Docking removes that craft state and changes the mission to `returned`; only
-the separate mission-board action changes it to `turned_in`.
+return spool retains its frozen target-system craft state and the immutable
+target arrival needed for exact cancellation. Return commitment replaces that
+solution atomically with the origin arrival, and origin arrival creates one
+matching station-approach state. Docking removes that craft state and changes
+the mission to `returned`; only the separate mission-board action changes it
+to `turned_in`.
 
 The v0.4.14 rule-profile path extends the projection as version 8 and records
 the locked Assisted/Pilot selection. Formats 1 through 7 migrate to Assisted
@@ -223,8 +225,11 @@ mission progress. Legacy careers remain explicitly local;
 conversion into the intersystem career is not synthesized. A released format-4
 target arrival initializes mutable flight from its already-bound immutable
 arrival solution. Released format-5 system flight, format-6 Planetfall state,
-format-7 return state, format-8 profile, and format-9 alignment remain exact.
-Older readers must reject format 10
+format-7 return state, format-8 profile, and format-9 alignment remain exact
+when their required arrival data is present and canonical. A released phase
+that lacks the immutable solution needed for exact continuation returns a
+compatibility error rather than receiving synthetic progress. Older readers
+must reject format 10
 before discarding any of these fields.
 
 ## Implementation boundaries

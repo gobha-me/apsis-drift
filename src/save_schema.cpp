@@ -31,6 +31,25 @@ using Json = nlohmann::ordered_json;
   return SaveSchemaError{code, std::move(path), std::move(detail)};
 }
 
+[[nodiscard]] auto target_arrival_required(
+    IntersystemTravelPhase phase) noexcept -> bool {
+  return phase == IntersystemTravelPhase::outbound_jump_committed ||
+         phase == IntersystemTravelPhase::target_system_flight ||
+         phase == IntersystemTravelPhase::target_planet_flight ||
+         phase == IntersystemTravelPhase::return_jump_spooling;
+}
+
+[[nodiscard]] auto origin_arrival_required(
+    IntersystemTravelPhase phase) noexcept -> bool {
+  return phase == IntersystemTravelPhase::return_jump_committed ||
+         phase == IntersystemTravelPhase::origin_system_return;
+}
+
+[[nodiscard]] auto arrival_required(IntersystemTravelPhase phase) noexcept
+    -> bool {
+  return target_arrival_required(phase) || origin_arrival_required(phase);
+}
+
 [[nodiscard]] auto decimal(std::uint64_t value) -> std::string {
   return std::to_string(value);
 }
@@ -954,6 +973,16 @@ template <typename Id>
       .jump_alignment = std::move(jump_alignment),
       .arrival_solution = std::move(arrival_solution),
   };
+  if (arrival_required(state.travel_phase) && !state.arrival_solution) {
+    return std::unexpected{failure(
+        format_version == kSaveFormatVersion
+            ? SaveSchemaErrorCode::invalid_state
+            : SaveSchemaErrorCode::incompatible_generator_version,
+        "$.state.intersystem_contract.arrival_solution",
+        format_version == kSaveFormatVersion
+            ? "current travel phase requires an immutable arrival solution"
+            : "released travel phase has no immutable arrival solution and cannot be resumed exactly")};
+  }
   if (!validate_intersystem_contract_state(state)) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::invalid_state,
@@ -1427,19 +1456,35 @@ auto validate_save_document(const SaveDocument& document)
   }
   if (document.state.intersystem_contract) {
     const auto& contract = *document.state.intersystem_contract;
-    if (contract.identities.universe_seed != document.recipe.universe_seed ||
-        !validate_intersystem_contract_state(contract)) {
+    if (contract.identities.universe_seed != document.recipe.universe_seed) {
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
           "intersystem contract does not match the save recipe or state machine")};
     }
-    if (contract.arrival_solution &&
-        !validate_intersystem_arrival_solution(
-            contract, *contract.arrival_solution)) {
+    if (arrival_required(contract.travel_phase) &&
+        !contract.arrival_solution) {
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state,
           "$.state.intersystem_contract.arrival_solution",
-          "intersystem arrival solution does not match the contract")};
+          "current travel phase requires an immutable arrival solution")};
+    }
+    if (!validate_intersystem_contract_state(contract)) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
+          "intersystem contract does not match the save recipe or state machine")};
+    }
+    if (contract.arrival_solution) {
+      const auto destination = generate_local_system(
+          target_arrival_required(contract.travel_phase)
+              ? contract.identities.target_system_seed
+              : contract.identities.origin_system_seed);
+      if (!validate_intersystem_arrival_solution(
+              contract, destination, *contract.arrival_solution)) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state,
+            "$.state.intersystem_contract.arrival_solution",
+            "intersystem arrival solution does not match deterministic regeneration")};
+      }
     }
     const bool target_system_flight =
         contract.travel_phase == IntersystemTravelPhase::target_system_flight;

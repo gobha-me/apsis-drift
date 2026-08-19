@@ -69,7 +69,8 @@ struct IntersystemJumpSnapshot {
 
 [[nodiscard]] auto validate_intersystem_arrival_solution(
     const IntersystemContractState& contract,
-    const IntersystemArrivalSolution& solution) noexcept
+    const LocalSystemDescriptor& destination,
+    const IntersystemArrivalSolution& solution)
     -> std::expected<void, IntersystemJumpError>;
 
 [[nodiscard]] auto resolve_intersystem_jump_arrival(
