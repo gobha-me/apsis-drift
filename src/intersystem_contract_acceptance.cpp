@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <format>
 #include <limits>
 #include <nlohmann/json.hpp>
@@ -23,6 +24,7 @@
 #include "apsis_drift/system_flight.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
+#include "apsis_drift/universe_navigation.hpp"
 
 namespace apsis_drift {
 namespace {
@@ -45,6 +47,9 @@ struct Replay {
   std::uint64_t framebuffer_checksum{};
   double simulation_ms{};
   double application_render_ms{};
+  SystemId outbound_selected_system;
+  SystemId return_selected_system;
+  std::size_t universe_navigation_rows{};
 };
 
 [[nodiscard]] auto milliseconds(Clock::time_point start,
@@ -80,6 +85,38 @@ struct Replay {
   }
 }
 
+[[nodiscard]] auto guided_contract_three_document()
+    -> std::expected<SaveDocument, IntersystemContractAcceptanceError> {
+  auto document = make_new_game_document(
+      Seed{kIntersystemContractAcceptanceSeed},
+      NewGameOnboardingChoice::guided);
+  auto contract_two =
+      initial_origin_system_contract(Seed{kIntersystemContractAcceptanceSeed});
+  if (!document.state.intersystem_contract || !contract_two) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::initialization_failure};
+  }
+  contract_two->phase = OriginSystemContractPhase::turned_in;
+  document.state.onboarding = {
+      .state = OnboardingState::guided,
+      .chapter = OnboardingChapter::contract_three};
+  document.state.first_objective = FirstObjectiveStatus::turned_in;
+  document.state.origin_system_contract = *contract_two;
+  document.state.origin_system_discoveries = {
+      {document.state.first_objective_target, 0},
+      {contract_two->binding.target_objective, 0}};
+  document.state.origin_system_world_deltas = {
+      {surface_signal_object_key(document.state.first_objective_target),
+       SaveWorldDeltaKind::collected, 0},
+      {surface_signal_object_key(contract_two->binding.target_objective),
+       SaveWorldDeltaKind::collected, 0}};
+  if (!validate_save_document(document)) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::initialization_failure};
+  }
+  return document;
+}
+
 [[nodiscard]] auto record_checkpoint(
     SaveDocument& document, std::string_view name,
     std::optional<std::string_view> resume_stage,
@@ -87,6 +124,12 @@ struct Replay {
     -> std::expected<void, IntersystemContractAcceptanceError> {
   const auto encoded = encode_save_document_json(document);
   if (!encoded || !document.state.intersystem_contract) {
+    if (!encoded) {
+      std::fprintf(stderr, "checkpoint %.*s save rejected at %s: %s\n",
+                   static_cast<int>(name.size()), name.data(),
+                   encoded.error().path.c_str(),
+                   encoded.error().detail.c_str());
+    }
     return std::unexpected{
         IntersystemContractAcceptanceError::persistence_failure};
   }
@@ -185,8 +228,11 @@ struct Replay {
     -> std::expected<Replay, IntersystemContractAcceptanceError> {
   const auto replay_start = Clock::now();
   double render_ms{};
-  auto document = make_new_game_document(
-      Seed{kIntersystemContractAcceptanceSeed}, NewGameOnboardingChoice::skip);
+  auto initial_document = guided_contract_three_document();
+  if (!initial_document) {
+    return std::unexpected{initial_document.error()};
+  }
+  auto document = std::move(*initial_document);
   if (!document.state.intersystem_contract ||
       !validate_save_document(document)) {
     return std::unexpected{
@@ -219,6 +265,22 @@ struct Replay {
         IntersystemContractAcceptanceError::initialization_failure};
   }
   document.state.origin_station_flight = *launched;
+  const auto route = generate_first_universe_route(
+      Seed{kIntersystemContractAcceptanceSeed});
+  const auto outbound_view = resolve_onboarding_navigation_view(
+      route, document.state.onboarding, route.origin);
+  UniverseNavigationSelectionState outbound_selection;
+  if (!outbound_view ||
+      !advance_universe_navigation_selection(
+          *outbound_view, outbound_selection,
+          UniverseNavigationSelectionCommand::next) ||
+      !advance_universe_navigation_selection(
+          *outbound_view, outbound_selection,
+          UniverseNavigationSelectionCommand::select) ||
+      outbound_selection.pending_destination != route.destination) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::transition_failure};
+  }
 
   const auto advance_origin_tick =
       [&](std::span<const FlightCommand> commands) -> bool {
@@ -308,8 +370,10 @@ struct Replay {
   }
   document.state.origin_station_flight = *launched;
   const auto frozen_flight = *document.state.origin_station_flight;
-  if (!begin_intersystem_jump(*document.state.intersystem_contract,
-                              *document.state.origin_station_flight)) {
+  if (!begin_intersystem_jump(
+          *document.state.intersystem_contract,
+          *document.state.origin_station_flight,
+          *outbound_selection.pending_destination)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
@@ -344,8 +408,10 @@ struct Replay {
       resolve_origin_station_flight_guidance(
           *document.state.intersystem_contract, origin_system,
           *document.state.origin_station_flight) != canceled_guidance ||
-      !begin_intersystem_jump(*document.state.intersystem_contract,
-                              *document.state.origin_station_flight)) {
+      !begin_intersystem_jump(
+          *document.state.intersystem_contract,
+          *document.state.origin_station_flight,
+          *outbound_selection.pending_destination)) {
     return std::unexpected{IntersystemContractAcceptanceError::resume_mismatch};
   }
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
@@ -570,7 +636,17 @@ struct Replay {
   }
   document.state.flight.reset();
   document.state.system_flight = *departing;
-  if (!begin_intersystem_jump(*document.state.intersystem_contract)) {
+  const auto return_view = resolve_onboarding_navigation_view(
+      route, document.state.onboarding, route.destination);
+  UniverseNavigationSelectionState return_selection;
+  if (!return_view ||
+      !advance_universe_navigation_selection(
+          *return_view, return_selection,
+          UniverseNavigationSelectionCommand::select) ||
+      return_selection.pending_destination != route.origin ||
+      !begin_intersystem_jump(
+          *document.state.intersystem_contract,
+          *return_selection.pending_destination)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
@@ -679,6 +755,8 @@ struct Replay {
           *document.state.intersystem_contract,
           document.state.intersystem_contract->universe_tick,
           IntersystemContractCommand::turn_in) ||
+      !advance_onboarding(document.state.onboarding,
+                          OnboardingCommand::complete_contract_three) ||
       !validate_save_document(document)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::persistence_failure};
@@ -689,6 +767,8 @@ struct Replay {
           IntersystemMissionPhase::turned_in ||
       document.state.intersystem_contract->travel_phase !=
           IntersystemTravelPhase::docked_at_origin ||
+      document.state.onboarding.state != OnboardingState::completed ||
+      document.state.onboarding.chapter ||
       document.state.discoveries.size() != 1U ||
       document.state.world_deltas.size() != 1U) {
     return std::unexpected{IntersystemContractAcceptanceError::incomplete_path};
@@ -705,6 +785,9 @@ struct Replay {
       .framebuffer_checksum = framebuffer_checksum,
       .simulation_ms = std::max(0.0, total_ms - render_ms),
       .application_render_ms = render_ms,
+      .outbound_selected_system = *outbound_selection.pending_destination,
+      .return_selected_system = *return_selection.pending_destination,
+      .universe_navigation_rows = outbound_view->destinations.size(),
   };
 }
 
@@ -744,7 +827,9 @@ auto run_intersystem_contract_acceptance(int width, int height)
   }
   const auto recovery = run_intersystem_planetfall_acceptance(width, height);
   const auto& contract = *baseline->final_document.state.intersystem_contract;
-  if (!recovery ||
+  const auto onboarding_access =
+      resolve_onboarding_access(baseline->final_document.state.onboarding);
+  if (!recovery || !onboarding_access ||
       recovery->report.planet != contract.identities.target_planet ||
       recovery->report.target != contract.identities.target_objective ||
       recovery->report.abort_orbit_checksum == 0U) {
@@ -757,6 +842,14 @@ auto run_intersystem_contract_acceptance(int width, int height)
                  .target_planet = contract.identities.target_planet,
                  .target_objective = contract.identities.target_objective,
                  .origin_station = contract.identities.origin_station,
+                 .outbound_selected_system =
+                     baseline->outbound_selected_system,
+                 .return_selected_system =
+                     baseline->return_selected_system,
+                 .universe_navigation_rows =
+                     baseline->universe_navigation_rows,
+                 .open_exploration_available =
+                     onboarding_access->open_exploration_available,
                  .checkpoints = std::move(baseline->checkpoints),
                  .final_tick = contract.universe_tick,
                  .final_authoritative_checksum = baseline->final_checksum,
@@ -795,7 +888,7 @@ auto intersystem_contract_acceptance_json(
   }
   return std::format(
       "{{\n"
-      "  \"schema_version\": 2,\n"
+      "  \"schema_version\": 3,\n"
       "  \"scenario\": \"{}\",\n"
       "  \"evidence_scope\": \"application_framebuffer\",\n"
       "  \"seed\": \"{}\",\n"
@@ -804,9 +897,14 @@ auto intersystem_contract_acceptance_json(
       "  \"target_planet_id\": \"planet-{:016x}\",\n"
       "  \"target_objective_id\": \"{}\",\n"
       "  \"origin_station_id\": \"{}\",\n"
+      "  \"outbound_selected_system_id\": \"{}\",\n"
+      "  \"return_selected_system_id\": \"{}\",\n"
+      "  \"universe_navigation_rows\": {},\n"
       "  \"checkpoints\": [\n{}  ],\n"
       "  \"final_tick\": \"{}\",\n"
       "  \"final_mission_phase\": \"turned_in\",\n"
+      "  \"final_onboarding_state\": \"completed\",\n"
+      "  \"open_exploration_available\": {},\n"
       "  \"final_authoritative_checksum\": \"{}\",\n"
       "  \"wrong_side_recovery_checksum\": \"{}\",\n"
       "  \"target_system_planet_count\": {},\n"
@@ -824,8 +922,12 @@ auto intersystem_contract_acceptance_json(
       kIntersystemContractAcceptanceSeed, mission_id_string(report.mission),
       system_id_string(report.target_system), report.target_planet.value,
       surface_signal_id_string(report.target_objective),
-      origin_station_id_string(report.origin_station), checkpoints,
-      report.final_tick, report.final_authoritative_checksum,
+      origin_station_id_string(report.origin_station),
+      system_id_string(report.outbound_selected_system),
+      system_id_string(report.return_selected_system),
+      report.universe_navigation_rows, checkpoints, report.final_tick,
+      report.open_exploration_available ? "true" : "false",
+      report.final_authoritative_checksum,
       report.wrong_side_recovery_checksum, report.target_system_planet_count,
       report.target_system_initial_framebuffer_checksum,
       report.target_system_moved_framebuffer_checksum, report.discovery_count,

@@ -412,6 +412,21 @@ auto begin_intersystem_jump(IntersystemContractState& contract) noexcept
   return {};
 }
 
+auto begin_intersystem_jump(IntersystemContractState& contract,
+                            SystemId selected_destination) noexcept
+    -> std::expected<void, IntersystemJumpError> {
+  const auto expected =
+      contract.travel_phase == IntersystemTravelPhase::origin_system_flight
+          ? contract.identities.target_system
+      : contract.travel_phase == IntersystemTravelPhase::target_system_flight
+          ? contract.identities.origin_system
+          : SystemId{};
+  if (selected_destination != expected) {
+    return std::unexpected{IntersystemJumpError::invalid_destination};
+  }
+  return begin_intersystem_jump(contract);
+}
+
 auto begin_intersystem_jump(
     IntersystemContractState& contract,
     const OriginStationFlightState& origin_flight) noexcept
@@ -439,6 +454,17 @@ auto begin_intersystem_jump(
   }
   contract = std::move(next);
   return {};
+}
+
+auto begin_intersystem_jump(
+    IntersystemContractState& contract,
+    const OriginStationFlightState& origin_flight,
+    SystemId selected_destination) noexcept
+    -> std::expected<void, IntersystemJumpError> {
+  if (selected_destination != contract.identities.target_system) {
+    return std::unexpected{IntersystemJumpError::invalid_destination};
+  }
+  return begin_intersystem_jump(contract, origin_flight);
 }
 
 auto cancel_intersystem_jump(IntersystemContractState& contract) noexcept

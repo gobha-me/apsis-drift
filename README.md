@@ -139,10 +139,12 @@ Interactive controls:
   `ORBIT RDY`. Complete the bound signal, ascend and press Enter to depart,
   intercept the home approach, rendezvous with the moving station, dock, and
   turn in.
-- First intersystem contract: accept and launch at the mission board, fly
-  freely around the moving Origin Station, then press J to begin or cancel the
-  three-second FTL spool; committed transit arrives automatically after two
-  seconds. Press Enter within the rendezvous boundary to redock before jumping.
+- First intersystem contract: after contracts one and two, accept and launch
+  at the mission board, fly freely around the moving Origin Station, press U
+  for the bounded universe view, use Tab/Shift-Tab and Enter to select TARGET,
+  then press J to begin or cancel the three-second FTL spool. Committed transit
+  arrives automatically after two seconds. Press Enter within the rendezvous
+  boundary to redock before jumping.
 - Rule profile: press Left/Right at the mission board before launch to select
   Assisted or Pilot; launch locks the authoritative selection for the mission
 - Pilot FTL spool: use A/D to correct heading and W/S to correct velocity;
@@ -158,8 +160,8 @@ Interactive controls:
   the active mode, time scale, and approach cue. Press Enter only when it
   reports `ORBIT RDY`; an early attempt lists every unmet insertion threshold.
 - Planet return: ascend to the orbital regime and press Enter to depart the
-  planet; after completing the objective, press J in target-system flight to
-  spool the home jump
+  planet; after completing the objective, use U to select ORIGIN, then press J
+  in target-system flight to spool the home jump
 - Origin return: follow the explicit Origin Station range and closing cues,
   then press Enter at `ENTER DOCK`; turn in the contract from the station board
 - Complete-loop verification: `--intersystem-contract-acceptance` replays the
@@ -301,6 +303,13 @@ proof compares the existing five-second FTL path with a continuous physical
 boundary-to-boundary cruise while keeping save, renderer, and terminal evidence
 separate. See
 [docs/UNIVERSE_NAVIGATION.md](docs/UNIVERSE_NAVIGATION.md).
+
+The v0.4.35 first-jump onboarding path turns that contract into the bounded
+contract-three cockpit flow. Guided careers receive the offer only after the
+origin-system transfer is turned in, route selection is explicit before each
+spool, cancellation preserves the live craft, and only station turn-in marks
+onboarding completed. See
+[docs/FIRST_JUMP_ONBOARDING.md](docs/FIRST_JUMP_ONBOARDING.md).
 
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop

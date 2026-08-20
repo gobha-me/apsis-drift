@@ -563,6 +563,51 @@ auto universe_navigation_contract() -> void {
                 NavigationDisabledReason::insufficient_endurance,
         "selection state and endurance must not change generated knowledge");
 
+  UniverseNavigationSelectionState selection;
+  const auto rejected_current = selection;
+  check(third_view &&
+            !advance_universe_navigation_selection(
+                *third_view, selection,
+                UniverseNavigationSelectionCommand::select) &&
+            selection == rejected_current &&
+            advance_universe_navigation_selection(
+                *third_view, selection,
+                UniverseNavigationSelectionCommand::next) &&
+            selection.focused_index == 1U &&
+            advance_universe_navigation_selection(
+                *third_view, selection,
+                UniverseNavigationSelectionCommand::select) &&
+            selection.pending_destination == route.destination &&
+            advance_universe_navigation_selection(
+                *third_view, selection,
+                UniverseNavigationSelectionCommand::previous) &&
+            selection.focused_index == 0U,
+        "universe navigation must focus disabled rows but select only the one available route");
+  if (closed_view) {
+    UniverseNavigationSelectionState closed_selection{.focused_index = 1U};
+    const auto before = closed_selection;
+    check(!advance_universe_navigation_selection(
+              *closed_view, closed_selection,
+              UniverseNavigationSelectionCommand::select) &&
+              closed_selection == before,
+          "closed travel selection must reject atomically");
+  }
+  if (return_view) {
+    UniverseNavigationSelectionState return_selection;
+    check(advance_universe_navigation_selection(
+              *return_view, return_selection,
+              UniverseNavigationSelectionCommand::select) &&
+              return_selection.pending_destination == route.origin,
+          "the visited origin must be selectable for the physical return leg");
+  }
+  UniverseNavigationSelectionState invalid_selection{
+      .focused_index = 99U};
+  check(third_view &&
+            !advance_universe_navigation_selection(
+                *third_view, invalid_selection,
+                UniverseNavigationSelectionCommand::next),
+        "out-of-range navigation focus must reject before mutation");
+
   const auto direct = make_direct_travel_plan(
       route, route.origin, route.destination, 7,
       static_cast<double>(kDirectCruiseMaximumSpeedMetresPerSecond));
@@ -1119,8 +1164,13 @@ auto intersystem_jump_contract() -> void {
                 std::unexpected{IntersystemJumpError::invalid_phase} &&
             state == ready_before,
         "the transit tick driver must refuse ready state without mutation");
-  check(begin_intersystem_jump(state).has_value(),
-        "an accepted mission must begin outbound jump spooling");
+  const auto wrong_selection_before = state;
+  check(begin_intersystem_jump(state, state.identities.origin_system) ==
+                std::unexpected{
+                    IntersystemJumpError::invalid_destination} &&
+            state == wrong_selection_before &&
+            begin_intersystem_jump(state, state.identities.target_system),
+        "outbound spooling must validate the selected destination atomically");
 
   const auto initial_snapshot = intersystem_jump_snapshot(state);
   check(initial_snapshot && initial_snapshot->phase == "SPOOLING" &&
@@ -2286,7 +2336,14 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(result && result->report.checkpoints.size() == 9U &&
             result->report.final_tick == 36'917U &&
             result->report.final_authoritative_checksum ==
-                17'961'910'855'145'637'046ULL &&
+                10'997'290'821'769'536'881ULL &&
+            result->report.outbound_selected_system ==
+                result->report.target_system &&
+            result->report.return_selected_system ==
+                generate_first_intersystem_identities(Seed{42})
+                    .origin_system &&
+            result->report.universe_navigation_rows == 2U &&
+            result->report.open_exploration_available &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -2305,12 +2362,16 @@ auto intersystem_contract_acceptance_contract() -> void {
             }),
         "every representative save/resume stage must reach the uninterrupted final checksum");
   const auto json = intersystem_contract_acceptance_json(result->report);
-  check(json.find("\"scenario\": \"v0.4.29-origin-system-free-flight\"") !=
+  check(json.find("\"scenario\": \"v0.4.35-first-jump-onboarding\"") !=
                 std::string::npos &&
-            json.find("\"schema_version\": 2") != std::string::npos &&
+            json.find("\"schema_version\": 3") != std::string::npos &&
             json.find("\"evidence_scope\": \"application_framebuffer\"") !=
                 std::string::npos &&
             json.find("\"final_mission_phase\": \"turned_in\"") !=
+                std::string::npos &&
+            json.find("\"final_onboarding_state\": \"completed\"") !=
+                std::string::npos &&
+            json.find("\"open_exploration_available\": true") !=
                 std::string::npos &&
             json.find("\"terminal_proxy\": \"external-live-capture\"") !=
                 std::string::npos,

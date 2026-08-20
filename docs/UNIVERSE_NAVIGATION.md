@@ -206,8 +206,9 @@ state replacement, rendering, or save commit.
 
 ## Follow-up ownership
 
-- #140 implements the contract-three universe view, teaching flow, selection,
-  spool, return, and open-exploration handoff using this boundary.
+- Contract three implements the universe view, teaching flow, selection,
+  spool, return, and open-exploration handoff using this boundary; see
+  [FIRST_JUMP_ONBOARDING.md](FIRST_JUMP_ONBOARDING.md).
 - #97 extends knowledge with observation provenance, probes, reports, and
   quantum relay state without changing generated truth.
 - #133 decides whether affordability remains unconditional or consumes a

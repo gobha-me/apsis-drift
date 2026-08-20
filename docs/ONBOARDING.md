@@ -55,6 +55,6 @@ flight-check observations are presentation-only and cannot advance this state;
 only an explicit dock and turn-in advances Guided to contract two. The later
 origin-system contract is the physical contract-two round trip documented in
 [ORIGIN_SYSTEM_CONTRACT.md](ORIGIN_SYSTEM_CONTRACT.md); the first-jump contract
-remains owned by #140. This
-boundary is deliberately not a generic tutorial, mission, knowledge, or
-campaign engine.
+is the implemented bounded flow in
+[FIRST_JUMP_ONBOARDING.md](FIRST_JUMP_ONBOARDING.md). This boundary is
+deliberately not a generic tutorial, mission, knowledge, or campaign engine.

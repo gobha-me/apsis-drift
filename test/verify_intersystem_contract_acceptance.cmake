@@ -23,7 +23,10 @@ function(check_intersystem_contract)
   file(READ "${report}" json)
   foreach(field schema_version scenario evidence_scope seed mission_id
                 target_system_id target_planet_id target_objective_id
-                origin_station_id final_tick final_mission_phase
+                origin_station_id outbound_selected_system_id
+                return_selected_system_id universe_navigation_rows final_tick
+                final_mission_phase final_onboarding_state
+                open_exploration_available
                 final_authoritative_checksum wrong_side_recovery_checksum
                 target_system_planet_count
                 target_system_initial_framebuffer_checksum
@@ -37,8 +40,8 @@ function(check_intersystem_contract)
     set("${field}" "${value}")
   endforeach ()
   string(JSON checkpoint_count LENGTH "${json}" checkpoints)
-  if (NOT schema_version STREQUAL "2" OR
-      NOT scenario STREQUAL "v0.4.29-origin-system-free-flight" OR
+  if (NOT schema_version STREQUAL "3" OR
+      NOT scenario STREQUAL "v0.4.35-first-jump-onboarding" OR
       NOT evidence_scope STREQUAL "application_framebuffer" OR
       NOT seed STREQUAL "42" OR
       NOT mission_id STREQUAL "mission-d8e068532886e95b" OR
@@ -46,9 +49,16 @@ function(check_intersystem_contract)
       NOT target_planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT target_objective_id STREQUAL "signal-9936ac67f2245d20" OR
       NOT origin_station_id STREQUAL "station-ce51e866ec4e032d" OR
+      NOT outbound_selected_system_id STREQUAL
+          "system-28630482e6b15573" OR
+      NOT return_selected_system_id STREQUAL
+          "system-09683d79dbc20b52" OR
+      NOT universe_navigation_rows STREQUAL "2" OR
       NOT final_tick STREQUAL "36917" OR
       NOT final_mission_phase STREQUAL "turned_in" OR
-      NOT final_authoritative_checksum STREQUAL "17961910855145637046" OR
+      NOT final_onboarding_state STREQUAL "completed" OR
+      NOT open_exploration_available OR
+      NOT final_authoritative_checksum STREQUAL "10997290821769536881" OR
       NOT wrong_side_recovery_checksum STREQUAL "15160466842829483543" OR
       NOT target_system_planet_count STREQUAL "6" OR
       NOT target_system_initial_framebuffer_checksum STREQUAL

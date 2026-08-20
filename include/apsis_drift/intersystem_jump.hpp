@@ -85,8 +85,18 @@ struct OriginStationFlightState;
     -> std::expected<void, IntersystemJumpError>;
 
 [[nodiscard]] auto begin_intersystem_jump(
+    IntersystemContractState& contract, SystemId selected_destination) noexcept
+    -> std::expected<void, IntersystemJumpError>;
+
+[[nodiscard]] auto begin_intersystem_jump(
     IntersystemContractState& contract,
     const OriginStationFlightState& origin_flight) noexcept
+    -> std::expected<void, IntersystemJumpError>;
+
+[[nodiscard]] auto begin_intersystem_jump(
+    IntersystemContractState& contract,
+    const OriginStationFlightState& origin_flight,
+    SystemId selected_destination) noexcept
     -> std::expected<void, IntersystemJumpError>;
 
 [[nodiscard]] auto cancel_intersystem_jump(
