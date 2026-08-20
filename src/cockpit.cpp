@@ -360,7 +360,7 @@ auto format_flight_instruments(const SystemFlightState& state)
   return readout;
 }
 
-auto format_flight_instruments(const OriginReturnState& state)
+auto format_flight_instruments(const OriginStationFlightState& state)
     -> FlightInstrumentReadout {
   FlightInstrumentReadout readout;
   const double speed =

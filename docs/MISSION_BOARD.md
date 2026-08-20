@@ -48,7 +48,7 @@ turned-in states for later loop stages. A returned contract exposes
 
 ## Persistence and compatibility
 
-Fresh careers use save format 12 and persist the high-level
+Fresh careers use save format 13 and persist the high-level
 `IntersystemContractState`. Formats 1 through 11 are unsupported alpha saves
 and are rejected before mission state is decoded or applied.
 

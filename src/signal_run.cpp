@@ -404,7 +404,7 @@ auto project_signal_run_save(const SignalRunState& state)
                   state.scanner.selected.value_or(SurfaceSignalId{}),
               .flight = state.flight,
               .system_flight = std::nullopt,
-              .origin_return = std::nullopt,
+              .origin_station_flight = std::nullopt,
               .discoveries = state.discoveries,
               .world_deltas = {state.journal.entries().begin(),
                                state.journal.entries().end()},

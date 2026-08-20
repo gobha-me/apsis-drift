@@ -6,6 +6,8 @@
 #include <limits>
 #include <numbers>
 
+#include "apsis_drift/origin_return.hpp"
+
 namespace apsis_drift {
 namespace {
 
@@ -18,6 +20,37 @@ namespace {
     -> bool {
   return std::isfinite(value.x) && std::isfinite(value.y) &&
          std::isfinite(value.z);
+}
+
+[[nodiscard]] auto wrap_heading_millidegrees(std::int64_t value) noexcept
+    -> std::int32_t {
+  constexpr std::int64_t turn{360'000};
+  value %= turn;
+  if (value > 180'000) value -= turn;
+  if (value < -180'000) value += turn;
+  return static_cast<std::int32_t>(value);
+}
+
+auto bind_live_origin_alignment(IntersystemJumpAlignmentState& alignment,
+                                const OriginStationFlightState& flight) noexcept
+    -> void {
+  const auto yaw_delta = static_cast<std::int64_t>(
+      std::llround(std::atan2(flight.forward.y, flight.forward.x) * 180'000.0 /
+                   std::numbers::pi_v<double>));
+  alignment.heading_error_millidegrees = wrap_heading_millidegrees(
+      static_cast<std::int64_t>(alignment.heading_error_millidegrees) +
+      yaw_delta);
+
+  const double relative_speed =
+      std::hypot(flight.relative_velocity.x, flight.relative_velocity.y,
+                 flight.relative_velocity.z);
+  const auto speed_delta = static_cast<std::int64_t>(std::llround(
+      std::clamp(relative_speed / kOriginStationFlightMaximumSpeed, 0.0, 1.0) *
+      10'000.0));
+  alignment.velocity_error_basis_points = static_cast<std::int32_t>(std::clamp(
+      static_cast<std::int64_t>(alignment.velocity_error_basis_points) +
+          speed_delta,
+      std::int64_t{-10'000}, std::int64_t{10'000}));
 }
 
 [[nodiscard]] auto elapsed(const IntersystemContractState& contract) noexcept
@@ -355,17 +388,53 @@ auto resolve_intersystem_jump_arrival(
 
 auto begin_intersystem_jump(IntersystemContractState& contract) noexcept
     -> std::expected<void, IntersystemJumpError> {
+  if (contract.travel_phase == IntersystemTravelPhase::origin_system_flight) {
+    const auto origin_system =
+        generate_origin_system(contract.identities.universe_seed);
+    const auto launch =
+        initialize_origin_station_launch(contract, origin_system);
+    if (!launch) {
+      return std::unexpected{IntersystemJumpError::invalid_contract};
+    }
+    return begin_intersystem_jump(contract, *launch);
+  }
   const auto command =
-      contract.travel_phase == IntersystemTravelPhase::origin_system_flight
-          ? IntersystemContractCommand::begin_outbound_jump
-          : contract.travel_phase ==
-                    IntersystemTravelPhase::target_system_flight &&
-                contract.mission_phase ==
-                    IntersystemMissionPhase::objective_complete
-            ? IntersystemContractCommand::begin_return_jump
-            : static_cast<IntersystemContractCommand>(255);
+      contract.travel_phase == IntersystemTravelPhase::target_system_flight &&
+              contract.mission_phase ==
+                  IntersystemMissionPhase::objective_complete
+          ? IntersystemContractCommand::begin_return_jump
+          : static_cast<IntersystemContractCommand>(255);
   auto next = contract;
   if (!advance_intersystem_contract(next, next.universe_tick, command)) {
+    return std::unexpected{IntersystemJumpError::transition_failure};
+  }
+  contract = std::move(next);
+  return {};
+}
+
+auto begin_intersystem_jump(
+    IntersystemContractState& contract,
+    const OriginStationFlightState& origin_flight) noexcept
+    -> std::expected<void, IntersystemJumpError> {
+  if (contract.travel_phase != IntersystemTravelPhase::origin_system_flight) {
+    return std::unexpected{IntersystemJumpError::invalid_phase};
+  }
+  const auto origin_system =
+      generate_origin_system(contract.identities.universe_seed);
+  if (!validate_origin_station_flight_state(contract, origin_system,
+                                            origin_flight)) {
+    return std::unexpected{IntersystemJumpError::invalid_contract};
+  }
+  auto next = contract;
+  if (!advance_intersystem_contract(
+          next, next.universe_tick,
+          IntersystemContractCommand::begin_outbound_jump)) {
+    return std::unexpected{IntersystemJumpError::transition_failure};
+  }
+  if (next.jump_alignment) {
+    bind_live_origin_alignment(*next.jump_alignment, origin_flight);
+  }
+  if (!validate_intersystem_contract_state(next)) {
     return std::unexpected{IntersystemJumpError::transition_failure};
   }
   contract = std::move(next);

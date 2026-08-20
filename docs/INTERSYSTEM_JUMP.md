@@ -1,14 +1,17 @@
 # Deterministic FTL Transit and Pilot Alignment
 
-Version 2 implements the bounded first-contract route without continuous
+Version 4 implements the bounded first-contract route without continuous
 interstellar flight. The application owns the authoritative fixed-step state,
 arrival solution, and transit rendering; TermForge only presents pixels and
 semantic input events.
 
 ## Authoritative sequence
 
-After mission acceptance, `LAUNCH` enters origin-system flight. `J` begins a
-360-tick (three-second) spool and cancels it while it remains uncommitted. At
+After mission acceptance, `LAUNCH` creates a live station-relative craft five
+kilometres from the Origin Station. Normal fixed-step flight, assist, guidance,
+and redocking remain available before departure. `J` freezes that exact craft
+state and begins a 360-tick (three-second) spool; pressing it again cancels the
+spool, retimes the unchanged relative state, and returns to free flight. At
 the exact boundary, the destination system is validated and the complete
 canonical arrival is regenerated before destination, commit tick, and solution
 are published atomically. The following 240 ticks (two seconds) are
@@ -23,11 +26,12 @@ phase.
 Outbound commitment resolves the mission planet ephemeris at the future
 arrival tick. Assisted mode places the handoff ten planet radii behind its
 velocity vector and matches the planet's system-inertial velocity. Pilot mode
-derives one alignment sample from the independent `jump_alignment=11` seed
-domain. During the cancelable spool, A/D changes heading error by 250
-millidegrees per tick and W/S changes velocity error by 10 basis points per
-tick. The cockpit and code-rendered reticle show both errors, the projected
-grade, and the next correction.
+derives its base alignment sample from the independent `jump_alignment=11`
+seed domain, then deterministically adds the live craft's station-local yaw and
+normalized relative speed. During the cancelable spool, A/D changes heading
+error by 250 millidegrees per tick and W/S changes velocity error by 10 basis
+points per tick. The cockpit and code-rendered reticle show both errors, the
+projected grade, and the next correction.
 
 Commit uses signed fixed-point integers and inclusive boundaries:
 
@@ -54,9 +58,10 @@ coordinate.
 
 ## Persistence and presentation
 
-Save format 12 stores active Pilot alignment and the immutable committed
-assessment in addition to the arrival solution's canonical finite binary64
-decimal strings, destination/reference identities, and arrival tick. A save
+Save format 13 stores the frozen outbound origin craft, active Pilot alignment,
+and the immutable committed assessment in addition to the arrival solution's
+canonical finite binary64 decimal strings, destination/reference identities,
+and arrival tick. A save
 after commitment restores the same solution rather than rerolling it. Earlier
 alpha formats are rejected rather than receiving invented alignment or
 assessment state.
@@ -65,9 +70,10 @@ Every current committed, target-flight, return-spool, and origin-return phase
 that depends on an arrival requires the solution. Validation regenerates the
 applicable local system and compares the complete destination, reference,
 tick, assessment, position, and velocity before gameplay or save commit. A
-cancelable return spool retains the outbound solution so cancellation can
-restore the exact target-system state; return commitment atomically replaces
-it with the origin solution.
+cancelable outbound spool retains the launch-side craft at its phase-start
+tick. A cancelable return spool retains the outbound solution so cancellation
+can restore the exact target-system state; return commitment atomically
+replaces it with the origin solution.
 
 The transit image and reticle are bounded code-rendered RGBA derived only from
 the semantic jump snapshot. Kitty and ANSI consume the same pixels and cockpit

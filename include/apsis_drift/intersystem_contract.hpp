@@ -17,7 +17,7 @@ namespace apsis_drift {
 // This high-level contract is generated-world and save compatibility data.
 // It deliberately proves only identities, authoritative phases, and legal
 // transitions; later systems own ephemerides, flight, and presentation.
-inline constexpr std::uint32_t kIntersystemContractVersion{3};
+inline constexpr std::uint32_t kIntersystemContractVersion{4};
 inline constexpr std::uint64_t kFirstTargetSystemOrdinal{1};
 inline constexpr std::uint64_t kSystemStarOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionOrdinal{0};
@@ -169,6 +169,7 @@ enum class IntersystemContractCommand : std::uint8_t {
   select_pilot_profile,
   accept_mission,
   launch,
+  dock_at_origin,
   begin_outbound_jump,
   cancel_jump,
   enter_target_planet,

@@ -66,10 +66,25 @@ quantizes position to metres and velocity to millimetres per second. One
 station period therefore repeats the host-relative pose exactly, including at
 maximum 64-bit ticks; absolute system position continues to follow the host.
 
-Launch presentation, the exterior marker, home-jump arrival, return pose,
-range/relative-speed guidance, and docking all consume this same resolver.
+Launch pose, free-flight rendering, the exterior marker, home-jump arrival,
+return pose, range/relative-speed guidance, and docking all consume this same resolver.
 Docking requires distance no greater than 5 km and relative speed no greater
 than 25 m/s at the current tick, so an obsolete station position cannot pass.
+
+## Origin-system free flight
+
+The intersystem mission launches into an application-owned station-relative
+craft state five kilometres along the station's positive-X corridor, with its
+velocity matched to the station. The ordinary fixed-step flight controls,
+assist, and cockpit guidance are active before the outbound jump. Enter may
+redock inside the bounded rendezvous envelope without advancing mission
+progress; J freezes the current craft and begins the cancelable jump spool.
+
+Pilot alignment adds the live station-local yaw and normalized relative speed
+to its independently seeded base sample. During outbound spool the craft does
+not integrate; cancellation retimes the unchanged relative state to the current
+universe tick. This keeps moving-station ephemeris, craft physics, and jump
+alignment deterministic without consuming a shared random stream.
 
 ## Fresh-universe flow
 
@@ -115,14 +130,14 @@ must introduce them behind a separate boundary.
 
 ## Save implications
 
-Save format 12 separates the generated recipe from mutable state:
+Save format 13 separates the generated recipe from mutable state:
 
 | Concern | Ownership and compatibility rule |
 | --- | --- |
 | Universe seed and generator versions | Saved recipe; regenerates the origin system, tutorial home, and station identity. |
 | Home and station orbit | Saved IDs and integer orbit recipe, validated exactly against regeneration. |
 | Origin station ID | Saved stable reference and validated against regeneration. A mismatch is an incompatible/corrupt save, not a reason to move the player. |
-| Active return craft | Saved as station-relative position and velocity at the authoritative universe tick. |
+| Active origin craft | Saved as station-relative position and velocity during outbound free flight, its frozen spool, and the return approach. |
 | Docked or in-flight location | Mutable session state. Loading must restore it exactly. |
 | First objective status and target ID | Mutable mission state. A target ID is required once #21 binds the offer. |
 | Discoveries and collected/completed deltas | Mutable sparse journal state; never folded into station generation. |
@@ -133,7 +148,7 @@ state. A future compatibility loader handling a pre-onboarding representation
 must preserve that in-flight/no-objective behavior rather than silently
 teleporting the craft or synthesizing mission progress.
 
-The format-12 field encodings and validation behavior are specified in the
+The format-13 field encodings and validation behavior are specified in the
 [Save Format and Compatibility](SAVE_FORMAT.md) contract.
 
 ## Presentation decision
@@ -163,6 +178,6 @@ the station's established derivation. See the
 [Deterministic Intersystem Mission and Travel Contract](INTERSYSTEM_CONTRACT.md).
 
 As of v0.4.7, fresh careers present that bounded contract through the shared
-[Origin Station Mission Board](MISSION_BOARD.md). Format 12 does not silently
-assign the new route to older alpha saves; formats 1 through 11 are rejected
+[Origin Station Mission Board](MISSION_BOARD.md). Format 13 does not silently
+assign the live origin craft to older alpha saves; formats 1 through 12 are rejected
 without modifying their source files.

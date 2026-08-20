@@ -38,7 +38,7 @@ function(check_intersystem_contract)
   endforeach ()
   string(JSON checkpoint_count LENGTH "${json}" checkpoints)
   if (NOT schema_version STREQUAL "2" OR
-      NOT scenario STREQUAL "v0.4.13-intersystem-contract-loop" OR
+      NOT scenario STREQUAL "v0.4.29-origin-system-free-flight" OR
       NOT evidence_scope STREQUAL "application_framebuffer" OR
       NOT seed STREQUAL "42" OR
       NOT mission_id STREQUAL "mission-d8e068532886e95b" OR
@@ -46,9 +46,9 @@ function(check_intersystem_contract)
       NOT target_planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT target_objective_id STREQUAL "signal-9936ac67f2245d20" OR
       NOT origin_station_id STREQUAL "station-ce51e866ec4e032d" OR
-      NOT final_tick STREQUAL "31541" OR
+      NOT final_tick STREQUAL "32075" OR
       NOT final_mission_phase STREQUAL "turned_in" OR
-      NOT final_authoritative_checksum STREQUAL "7087796790340415671" OR
+      NOT final_authoritative_checksum STREQUAL "8587354319391325309" OR
       NOT wrong_side_recovery_checksum STREQUAL "15160466842829483543" OR
       NOT target_system_planet_count STREQUAL "6" OR
       NOT target_system_initial_framebuffer_checksum STREQUAL
@@ -57,14 +57,15 @@ function(check_intersystem_contract)
           "5625436622452186767" OR
       NOT discovery_count STREQUAL "1" OR
       NOT world_delta_count STREQUAL "1" OR
-      NOT framebuffer_checksum STREQUAL "16472444604188491635" OR
-      NOT checkpoint_count STREQUAL "6")
+      NOT framebuffer_checksum STREQUAL "15854317145100766341" OR
+      NOT checkpoint_count STREQUAL "9")
     message(FATAL_ERROR
       "intersystem contract report is not canonical:\n${json}")
   endif ()
-  set(expected_names docked outbound-transit target-system planet-side
-                     origin-return returned-docked)
-  set(expected_ticks 0 360 600 9467 30472 31541)
+  set(expected_names docked origin-flight outbound-spool canceled-spool
+                     outbound-transit target-system planet-side origin-return
+                     returned-docked)
+  set(expected_ticks 0 121 534 534 894 1134 10001 31006 32075)
   math(EXPR final_index "${checkpoint_count} - 1")
   foreach(index RANGE 0 ${final_index})
     list(GET expected_names ${index} expected_name)

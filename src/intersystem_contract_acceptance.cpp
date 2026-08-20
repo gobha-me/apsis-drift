@@ -29,9 +29,10 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-constexpr std::array<std::string_view, 6> kResumeStages{
-    "docked",      "outbound-transit", "target-system",
-    "planet-side", "origin-return",    "returned-docked"};
+constexpr std::array<std::string_view, 9> kResumeStages{
+    "docked",           "origin-flight",    "outbound-spool",
+    "canceled-spool",   "outbound-transit", "target-system",
+    "planet-side",      "origin-return",    "returned-docked"};
 
 struct Replay {
   SaveDocument final_document;
@@ -203,8 +204,7 @@ struct Replay {
           IntersystemContractCommand::accept_mission) ||
       !advance_intersystem_contract(initial_contract,
                                     initial_contract.universe_tick,
-                                    IntersystemContractCommand::launch) ||
-      !begin_intersystem_jump(initial_contract)) {
+                                    IntersystemContractCommand::launch)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
@@ -212,6 +212,142 @@ struct Replay {
       generate_local_system(initial_contract.identities.target_system_seed);
   const auto origin_system =
       generate_origin_system(initial_contract.identities.universe_seed);
+  auto launched =
+      initialize_origin_station_launch(initial_contract, origin_system);
+  if (!launched) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::initialization_failure};
+  }
+  document.state.origin_station_flight = *launched;
+
+  const auto advance_origin_tick =
+      [&](std::span<const FlightCommand> commands) -> bool {
+    auto next_contract = *document.state.intersystem_contract;
+    auto next_flight = *document.state.origin_station_flight;
+    if (!advance_origin_station_flight(next_contract, origin_system,
+                                       next_flight, commands) ||
+        !advance_intersystem_time(next_contract, 1U)) {
+      return false;
+    }
+    document.state.intersystem_contract = std::move(next_contract);
+    document.state.origin_station_flight = std::move(next_flight);
+    return true;
+  };
+  {
+    const std::array press{
+        FlightCommand{document.state.origin_station_flight->tick,
+                      FlightCommandKind::press_forward}};
+    if (!advance_origin_tick(press)) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::simulation_failure};
+    }
+  }
+  for (SimulationTick tick = 1; tick < kSimulationHz; ++tick) {
+    if (!advance_origin_tick({})) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::simulation_failure};
+    }
+  }
+  {
+    const std::array release{
+        FlightCommand{document.state.origin_station_flight->tick,
+                      FlightCommandKind::release_forward}};
+    if (!advance_origin_tick(release) ||
+        !record_checkpoint(document, "origin-flight", resume_stage,
+                           checkpoints) ||
+        !document.state.origin_station_flight) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::persistence_failure};
+    }
+  }
+  {
+    const std::array assist{
+        FlightCommand{document.state.origin_station_flight->tick,
+                      FlightCommandKind::toggle_autopilot}};
+    if (!advance_origin_tick(assist)) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::simulation_failure};
+    }
+  }
+  constexpr SimulationTick redock_limit{30U * kSimulationHz};
+  SimulationTick redock_ticks{};
+  for (; redock_ticks < redock_limit; ++redock_ticks) {
+    const auto guidance = resolve_origin_station_flight_guidance(
+        *document.state.intersystem_contract, origin_system,
+        *document.state.origin_station_flight);
+    if (!guidance) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::simulation_failure};
+    }
+    if (guidance->arrived) break;
+    if (!advance_origin_tick({})) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::simulation_failure};
+    }
+  }
+  if (redock_ticks == redock_limit ||
+      !attempt_origin_docking(*document.state.intersystem_contract,
+                              origin_system,
+                              *document.state.origin_station_flight)) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::transition_failure};
+  }
+  document.state.origin_station_flight.reset();
+  if (!advance_intersystem_contract(
+          *document.state.intersystem_contract,
+          document.state.intersystem_contract->universe_tick,
+          IntersystemContractCommand::launch)) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::transition_failure};
+  }
+  launched = initialize_origin_station_launch(
+      *document.state.intersystem_contract, origin_system);
+  if (!launched) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::initialization_failure};
+  }
+  document.state.origin_station_flight = *launched;
+  const auto frozen_flight = *document.state.origin_station_flight;
+  if (!begin_intersystem_jump(*document.state.intersystem_contract,
+                              *document.state.origin_station_flight)) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::transition_failure};
+  }
+  constexpr SimulationTick canceled_spool_ticks{kSimulationHz / 2U};
+  for (SimulationTick tick = 0; tick < canceled_spool_ticks; ++tick) {
+    if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
+                                       target_system)) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::simulation_failure};
+    }
+  }
+  if (!record_checkpoint(document, "outbound-spool", resume_stage,
+                         checkpoints) ||
+      !document.state.origin_station_flight ||
+      !cancel_intersystem_jump(*document.state.intersystem_contract)) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::persistence_failure};
+  }
+  document.state.origin_station_flight->tick =
+      document.state.intersystem_contract->universe_tick;
+  document.state.origin_station_flight->controls = {};
+  auto retimed_frozen = frozen_flight;
+  retimed_frozen.tick = document.state.intersystem_contract->universe_tick;
+  const auto canceled_guidance = resolve_origin_station_flight_guidance(
+      *document.state.intersystem_contract, origin_system,
+      *document.state.origin_station_flight);
+  if (*document.state.origin_station_flight != retimed_frozen ||
+      !canceled_guidance ||
+      !record_checkpoint(document, "canceled-spool", resume_stage,
+                         checkpoints) ||
+      !document.state.origin_station_flight ||
+      resolve_origin_station_flight_guidance(
+          *document.state.intersystem_contract, origin_system,
+          *document.state.origin_station_flight) != canceled_guidance ||
+      !begin_intersystem_jump(*document.state.intersystem_contract,
+                              *document.state.origin_station_flight)) {
+    return std::unexpected{IntersystemContractAcceptanceError::resume_mismatch};
+  }
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
     if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
                                     target_system)) {
@@ -220,8 +356,12 @@ struct Replay {
     }
   }
   if (document.state.intersystem_contract->travel_phase !=
-          IntersystemTravelPhase::outbound_jump_committed ||
-      !record_checkpoint(document, "outbound-transit", resume_stage,
+      IntersystemTravelPhase::outbound_jump_committed) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::transition_failure};
+  }
+  document.state.origin_station_flight.reset();
+  if (!record_checkpoint(document, "outbound-transit", resume_stage,
                          checkpoints)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::persistence_failure};
@@ -451,13 +591,13 @@ struct Replay {
     return std::unexpected{
         IntersystemContractAcceptanceError::initialization_failure};
   }
-  document.state.origin_return = *origin_return;
+  document.state.origin_station_flight = *origin_return;
 
   constexpr SimulationTick approach_limit{90U * kSimulationHz};
   bool origin_checkpointed{};
   SimulationTick approach_ticks{};
   for (; approach_ticks < approach_limit; ++approach_ticks) {
-    const auto guidance = resolve_origin_return_guidance(
+    const auto guidance = resolve_origin_station_flight_guidance(
         *document.state.intersystem_contract, origin_system, *origin_return);
     if (!guidance) {
       return std::unexpected{
@@ -466,24 +606,24 @@ struct Replay {
     if (guidance->arrived)
       break;
     if (!origin_checkpointed && approach_ticks == approach_limit / 3U) {
-      document.state.origin_return = *origin_return;
+      document.state.origin_station_flight = *origin_return;
       if (!record_checkpoint(document, "origin-return", resume_stage,
                              checkpoints) ||
-          !document.state.origin_return) {
+          !document.state.origin_station_flight) {
         return std::unexpected{
             IntersystemContractAcceptanceError::persistence_failure};
       }
-      origin_return = *document.state.origin_return;
+      origin_return = *document.state.origin_station_flight;
       origin_checkpointed = true;
     }
-    if (!advance_origin_return(*document.state.intersystem_contract,
-                               origin_system, *origin_return, {}) ||
+    if (!advance_origin_station_flight(*document.state.intersystem_contract,
+                                       origin_system, *origin_return, {}) ||
         !advance_intersystem_time(*document.state.intersystem_contract, 1U)) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
   }
-  const auto final_guidance = resolve_origin_return_guidance(
+  const auto final_guidance = resolve_origin_station_flight_guidance(
       *document.state.intersystem_contract, origin_system, *origin_return);
   if (!origin_checkpointed || !final_guidance || !final_guidance->arrived) {
     return std::unexpected{IntersystemContractAcceptanceError::incomplete_path};
@@ -493,7 +633,7 @@ struct Replay {
                                             static_cast<std::size_t>(height));
   LocalSystemRenderer origin_renderer{{.width = width, .height = height}};
   const auto selected = origin_system.planets.front().descriptor.id;
-  const auto origin_pose = resolve_origin_return_pose(
+  const auto origin_pose = resolve_origin_station_flight_pose(
       *document.state.intersystem_contract, origin_system, *origin_return);
   if (!origin_pose) {
     return std::unexpected{
@@ -532,7 +672,7 @@ struct Replay {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
-  document.state.origin_return.reset();
+  document.state.origin_station_flight.reset();
   if (!record_checkpoint(document, "returned-docked", resume_stage,
                          checkpoints) ||
       !advance_intersystem_contract(

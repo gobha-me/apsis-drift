@@ -13,7 +13,7 @@ Launch locks the selected profile for the active mission. Returning, changing
 terminal driver, resizing, changing render cadence, or loading the save cannot
 change it.
 
-The selection is a tick-addressed intersystem contract command; save format 12
+The selection is a tick-addressed intersystem contract command; save format 13
 stores it as authoritative state. Formats 1 through 11 are unsupported alpha
 inputs. Unknown or missing profile values are invalid rather than silently
 downgraded.

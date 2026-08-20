@@ -18,7 +18,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{12};
+inline constexpr std::uint32_t kSaveFormatVersion{13};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
@@ -38,7 +38,7 @@ struct SaveGeneratorVersions {
   std::uint32_t intersystem_contract{};
   std::uint32_t intersystem_jump{};
   std::uint32_t system_flight{};
-  std::uint32_t origin_return{};
+  std::uint32_t origin_station_flight{};
 
   friend auto operator==(const SaveGeneratorVersions&,
                          const SaveGeneratorVersions&) -> bool = default;
@@ -90,7 +90,7 @@ struct SaveMutableState {
   SurfaceSignalId first_objective_target;
   std::optional<PlanetaryFlightState> flight;
   std::optional<SystemFlightState> system_flight;
-  std::optional<OriginReturnState> origin_return;
+  std::optional<OriginStationFlightState> origin_station_flight;
   std::vector<SaveDiscovery> discoveries;
   std::vector<SaveWorldDelta> world_deltas;
   // Present for the first-contract career. Absence identifies the bounded
