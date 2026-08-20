@@ -13,7 +13,7 @@ namespace apsis_drift {
 
 inline constexpr std::uint64_t kIntersystemContractAcceptanceSeed{42};
 inline constexpr std::string_view kIntersystemContractAcceptanceScenario{
-    "v0.4.29-origin-system-free-flight"};
+    "v0.4.35-first-jump-onboarding"};
 
 struct IntersystemContractAcceptanceCheckpoint {
   std::string name;
@@ -28,6 +28,10 @@ struct IntersystemContractAcceptanceReport {
   PlanetId target_planet;
   SurfaceSignalId target_objective;
   OriginStationId origin_station;
+  SystemId outbound_selected_system;
+  SystemId return_selected_system;
+  std::size_t universe_navigation_rows{};
+  bool open_exploration_available{};
   std::vector<IntersystemContractAcceptanceCheckpoint> checkpoints;
   SimulationTick final_tick{};
   std::uint64_t final_authoritative_checksum{};

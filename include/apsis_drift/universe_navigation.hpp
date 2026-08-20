@@ -139,6 +139,24 @@ struct DirectTravelPlan {
       -> bool = default;
 };
 
+// Focus and pending selection belong to the live universe-view interaction,
+// not to generated truth or save state. A load may therefore reopen the view
+// with a fresh focus without changing an authoritative checksum.
+struct UniverseNavigationSelectionState {
+  std::size_t focused_index{};
+  std::optional<SystemId> pending_destination;
+
+  friend auto operator==(const UniverseNavigationSelectionState&,
+                         const UniverseNavigationSelectionState&)
+      -> bool = default;
+};
+
+enum class UniverseNavigationSelectionCommand : std::uint8_t {
+  previous,
+  next,
+  select,
+};
+
 struct DirectTravelSample {
   SimulationTick tick{};
   UniversePositionMetres position;
@@ -184,6 +202,14 @@ enum class UniverseNavigationError : std::uint8_t {
     SystemId current_system, bool affordable = true,
     bool selection_open = true) noexcept
     -> std::expected<UniverseNavigationView, UniverseNavigationError>;
+
+// Applies one bounded view command atomically. Disabled rows may receive
+// focus for their explanation, but only a selectable row may become pending.
+[[nodiscard]] auto advance_universe_navigation_selection(
+    const UniverseNavigationView& view,
+    UniverseNavigationSelectionState& selection,
+    UniverseNavigationSelectionCommand command) noexcept
+    -> std::expected<void, UniverseNavigationError>;
 
 [[nodiscard]] auto make_direct_travel_plan(
     const FirstUniverseRoute& route, SystemId origin, SystemId destination,

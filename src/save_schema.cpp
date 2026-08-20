@@ -1809,9 +1809,17 @@ template <typename Id>
   }
   const auto& career = *state.intersystem_contract;
   const auto& contract = *state.origin_system_contract;
+  const bool guided_two = state.onboarding.state == OnboardingState::guided &&
+                          state.onboarding.chapter ==
+                              OnboardingChapter::contract_two;
+  const bool later =
+      (state.onboarding.state == OnboardingState::guided &&
+       state.onboarding.chapter == OnboardingChapter::contract_three) ||
+      state.onboarding.state == OnboardingState::completed;
   if (!validate_intersystem_contract_state(career) ||
-      career.mission_phase != IntersystemMissionPhase::offered ||
-      career.travel_phase != IntersystemTravelPhase::docked_at_origin ||
+      (guided_two &&
+       (career.mission_phase != IntersystemMissionPhase::offered ||
+        career.travel_phase != IntersystemTravelPhase::docked_at_origin)) ||
       !validate_origin_system_contract(document.recipe.universe_seed,
                                        contract)) {
     return std::unexpected{failure(
@@ -1820,13 +1828,6 @@ template <typename Id>
   }
   const bool turned_in =
       contract.phase == OriginSystemContractPhase::turned_in;
-  const bool guided_two = state.onboarding.state == OnboardingState::guided &&
-                          state.onboarding.chapter ==
-                              OnboardingChapter::contract_two;
-  const bool later =
-      (state.onboarding.state == OnboardingState::guided &&
-       state.onboarding.chapter == OnboardingChapter::contract_three) ||
-      state.onboarding.state == OnboardingState::completed;
   if ((!guided_two && !later) || (turned_in != later)) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::invalid_state, "$.state.onboarding.chapter",
@@ -1844,10 +1845,6 @@ template <typename Id>
     if (auto valid = validate_guided_home_signal_run(home_history); !valid) {
       return valid;
     }
-  } else if (!state.discoveries.empty() || !state.world_deltas.empty()) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
-        "completed contract two moves onboarding history out of the intersystem mission projection")};
   }
 
   const auto system = generate_origin_system(document.recipe.universe_seed);

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <format>
 #include <limits>
+#include <ranges>
 
 #include "apsis_drift/seed.hpp"
 
@@ -377,6 +378,50 @@ auto resolve_onboarding_navigation_view(
     view.destinations.push_back(*target);
   }
   return view;
+}
+
+auto advance_universe_navigation_selection(
+    const UniverseNavigationView& view,
+    UniverseNavigationSelectionState& selection,
+    UniverseNavigationSelectionCommand command) noexcept
+    -> std::expected<void, UniverseNavigationError> {
+  if (view.destinations.empty() ||
+      selection.focused_index >= view.destinations.size()) {
+    return std::unexpected{UniverseNavigationError::invalid_context};
+  }
+  if (selection.pending_destination) {
+    const auto selected = std::ranges::find(
+        view.destinations, *selection.pending_destination,
+        &NavigationDestinationStatus::system);
+    if (selected == view.destinations.end()) {
+      return std::unexpected{UniverseNavigationError::invalid_context};
+    }
+  }
+
+  auto next = selection;
+  switch (command) {
+    case UniverseNavigationSelectionCommand::previous:
+      next.focused_index = next.focused_index == 0
+                               ? view.destinations.size() - 1U
+                               : next.focused_index - 1U;
+      break;
+    case UniverseNavigationSelectionCommand::next:
+      next.focused_index =
+          (next.focused_index + 1U) % view.destinations.size();
+      break;
+    case UniverseNavigationSelectionCommand::select: {
+      const auto& destination = view.destinations[next.focused_index];
+      if (!destination.selectable) {
+        return std::unexpected{UniverseNavigationError::invalid_context};
+      }
+      next.pending_destination = destination.system;
+      break;
+    }
+    default:
+      return std::unexpected{UniverseNavigationError::invalid_context};
+  }
+  selection = next;
+  return {};
 }
 
 auto make_direct_travel_plan(const FirstUniverseRoute& route, SystemId origin,

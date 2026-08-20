@@ -113,6 +113,12 @@ one retains a dormant authored intersystem contract solely as the shared
 career clock and rule profile. Guided advances to contract two only after the
 home objective is docked and explicitly turned in.
 
+Guided advances to contract three only after the origin-system contract is
+turned in. Contract-three universe-view focus and pending selection are
+presentation state and do not enter the save; the existing committed jump
+destination remains authoritative once spool commitment occurs. Explicit
+station turn-in changes Guided onboarding to completed.
+
 Guided contract two additionally carries a nullable
 `origin_system_contract`, plus `origin_system_discoveries` and
 `origin_system_world_deltas`. The immutable binding regenerates the distinct
