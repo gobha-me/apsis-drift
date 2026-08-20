@@ -25,6 +25,12 @@ solution. Contract three exposes the one authored first-jump solution without
 opening unrestricted exploration. Skipped and completed careers expose that
 solution and the post-onboarding navigation baseline.
 
+The bounded universe view derives these facts through the versioned
+[universe-navigation contract](UNIVERSE_NAVIGATION.md). Guided contract one and
+two omit the target row entirely. Contract three, Skipped, and Completed show
+the origin plus the one resolved target; this projection is access, not an
+earned discovery or visit.
+
 These access facts are derived from onboarding progress. They do not consume a
 random stream or add a discovery, visit, completed objective, mission turn-in,
 reward, technology upgrade, probe report, or world delta. Guided and Skip with

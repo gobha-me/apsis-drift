@@ -25,6 +25,8 @@ The public domains and their permanent version 1 identifiers are:
 | `star` | 8 |
 | `orbit` | 9 |
 | `mission` | 10 |
+| `jump_alignment` | 11 |
+| `navigation` | 12 |
 
 ## Version 1 algorithm
 
@@ -78,6 +80,13 @@ station. The exact hierarchy and compatibility boundary are recorded in the
 The target system expands those stable children into a bounded catalog using
 additional named substreams documented in
 [Local System Generation and Analytic Ephemeris](LOCAL_SYSTEM_GENERATION.md).
+
+The version 1 bounded universe route adds `navigation=12`. It derives the
+origin/first-target coordinate recipe independently from system ordinal one;
+inspecting the route cannot perturb either local system or mutable knowledge.
+The exact direction, distance, knowledge-redaction, and direct-travel boundary
+are recorded in
+[Discovered-Universe Navigation and Direct Travel](UNIVERSE_NAVIGATION.md).
 
 The current v0.2 flyover continues to accept its existing 32-bit terrain seed
 directly. Migrating that path is intentionally outside derivation version 1's

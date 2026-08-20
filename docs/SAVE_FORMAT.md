@@ -169,3 +169,9 @@ New/Continue/Load/Save behavior, and CLI precedence. Catalog metadata will be
 non-authoritative and excluded from simulation checksums; duplicated header
 values must agree exactly with the fully validated recipe and state before a
 profile can replace the live session.
+
+Format 16 also does not carry an active direct-interstellar cruise. The
+version-1 [universe-navigation contract](UNIVERSE_NAVIGATION.md) defines the
+future bounded projection and proves it remains below 1 KiB, but this research
+change does not reserve a new format number or synthesize navigation state in
+existing saves.

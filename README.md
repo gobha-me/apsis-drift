@@ -293,6 +293,15 @@ round trip. Save format 16 records the contract and bounded origin-system
 knowledge while explicitly rejecting formats 1 through 15. See
 [docs/ORIGIN_SYSTEM_CONTRACT.md](docs/ORIGIN_SYSTEM_CONTRACT.md).
 
+The v0.4.34 universe-navigation contract gives the origin and authored first
+target independent fixed-point anchors, separates generated truth from
+CONTACT/PROBABLE/RESOLVED/VISITED knowledge, and defines valid, authorized,
+affordable, available, and selectable route status. Its executable seed-42
+proof compares the existing five-second FTL path with a continuous physical
+boundary-to-boundary cruise while keeping save, renderer, and terminal evidence
+separate. See
+[docs/UNIVERSE_NAVIGATION.md](docs/UNIVERSE_NAVIGATION.md).
+
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records deterministic thermal-abort and alignment-quality
@@ -589,6 +598,10 @@ The deterministic Assisted-jump matrix is available through
 Run the complete first-contract matrix with
 `--intersystem-contract-acceptance --report PATH`; add
 `--snapshot PATH` for the bounded final Origin Station frame.
+Generate the renderer-neutral universe-route, direct-cruise, and projected-save
+evidence with
+`--universe-navigation-acceptance --report PATH`. Contract-three presentation
+work must add its application-renderer and terminal-path evidence separately.
 
 Run a repeatable resolution and target-cadence sweep and retain its JSON report:
 
