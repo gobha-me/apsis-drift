@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.32 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.33 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -107,6 +107,8 @@ add_library(apsis_drift_lib STATIC
   src/orbital.cpp
   src/origin_station.cpp
   src/origin_return.cpp
+  src/origin_system_contract.cpp
+  src/origin_system_contract_acceptance.cpp
   src/planet.cpp
   src/planetfall_acceptance.cpp
   src/planetary_flight.cpp
@@ -206,6 +208,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_intersystem_contract_acceptance.cmake")
+  add_test(NAME origin-system-contract-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_origin_system_contract_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -315,6 +322,20 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --intersystem-contract-acceptance --benchmark 1
             --report intersystem-contract-invalid.json)
   set_tests_properties(reject-intersystem-contract-mode-conflict
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-origin-system-contract-missing-report
+    COMMAND apsis-drift --origin-system-contract-acceptance)
+  set_tests_properties(reject-origin-system-contract-missing-report
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-origin-system-contract-driver
+    COMMAND apsis-drift --origin-system-contract-acceptance --driver kitty
+            --report origin-system-contract-invalid.json)
+  set_tests_properties(reject-origin-system-contract-driver
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-origin-system-contract-mode-conflict
+    COMMAND apsis-drift --origin-system-contract-acceptance --benchmark 1
+            --report origin-system-contract-invalid.json)
+  set_tests_properties(reject-origin-system-contract-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-viewport-negative
     COMMAND apsis-drift --benchmark 1 --viewport -1x480)

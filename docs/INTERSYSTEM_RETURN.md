@@ -50,7 +50,7 @@ without changing state.
 
 ## Persistence
 
-Save format 15 admits one `origin_station_flight` state during live
+Save format 16 admits one `origin_station_flight` state during live
 `origin_system_flight`, frozen `outbound_jump_spooling`, or
 `origin_system_return`. Target-system flight remains present during a
 cancelable return spool and is absent after commitment. Objective-complete,

@@ -72,9 +72,9 @@ replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with authoritative Guided onboarding at
 contract one. The bounded New Game API can instead choose Skip without adding
 mission completions, rewards, discoveries, or world deltas; the expanded title
-setup remains tracked by #137. New writes use save format 15 and record the
+setup remains tracked by #137. New writes use save format 16 and record the
 writing application version. Releases before v0.8.0 are alpha: formats 1
-through 14 are intentionally unsupported after the home-contract format-15 reset
+through 15 are intentionally unsupported after the origin-transfer format-16 reset
 and are rejected without
 modifying the source file. The durable forward-loading promise begins with the
 actual format shipped by v0.8.0; see
@@ -84,7 +84,7 @@ The future local profile catalog, New/Continue/Load/Save transitions, dirty
 state, destructive confirmations, and CLI precedence are fixed by the
 [Menu and Local Profile Contract](docs/MENU_AND_PROFILE_CONTRACT.md). The
 contract keeps profile policy application-owned and does not change the current
-format-15 explicit-path CLI workflow.
+format-16 explicit-path CLI workflow.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -133,6 +133,12 @@ Interactive controls:
   flight check, press Enter outside the docking envelope for home Planetfall,
   collect the bound target, ascend, rendezvous with the moving station, dock,
   and explicitly turn in
+- Origin-system contract: accept contract two after the Signal Run, depart the
+  station and press Enter to begin the bound non-FTL transfer; use `[`/`]` for
+  1x/4x/16x, follow ETA/relative-speed/braking cues, and press Enter only at
+  `ORBIT RDY`. Complete the bound signal, ascend and press Enter to depart,
+  intercept the home approach, rendezvous with the moving station, dock, and
+  turn in.
 - First intersystem contract: accept and launch at the mission board, fly
   freely around the moving Origin Station, then press J to begin or cancel the
   three-second FTL spool; committed transit arrives automatically after two
@@ -256,7 +262,7 @@ terminal/proxy timings remain separate evidence. See
 
 The v0.4.30 local-profile contract fixes bounded catalog storage, metadata,
 ordering, dirty-state, confirmation, concurrency, and CLI-precedence behavior
-before the title and pause flows expand. It preserves explicit format-15 paths
+before the title and pause flows expand. It preserves explicit format-16 paths
 and keeps profile policy in Apsis Drift. See
 [docs/MENU_AND_PROFILE_CONTRACT.md](docs/MENU_AND_PROFILE_CONTRACT.md).
 
@@ -273,21 +279,31 @@ Run, begins with an optional action-observing station flight check, crosses the
 existing planetary regimes, and ends only after physical ascent, moving-station
 rendezvous, docking, and explicit turn-in. Eight save/resume boundaries, three
 Assisted seeds, and a bounded Pilot thermal run form its renderer-neutral
-acceptance matrix. Save format 15 records the stable local contract/target
+acceptance matrix. Save format 15 recorded the stable local contract/target
 binding and resets formats 1 through 14 explicitly. See
 [docs/SIGNAL_RUN.md](docs/SIGNAL_RUN.md).
+
+The v0.4.33 Guided contract two binds an independently seeded, distinct body
+and one existing signal-survey objective in the origin system. The player
+physically departs, intercepts the moving target under authoritative time
+compression, completes the objective, returns through the home-planet
+approach, rendezvouses with the moving station, docks, and turns in. Seven
+canonical save/resume boundaries and cadence-independent checksums prove the
+round trip. Save format 16 records the contract and bounded origin-system
+knowledge while explicitly rejecting formats 1 through 15. See
+[docs/ORIGIN_SYSTEM_CONTRACT.md](docs/ORIGIN_SYSTEM_CONTRACT.md).
 
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records deterministic thermal-abort and alignment-quality
-boundaries. Current format-15 saves require the explicit selection. See
+boundaries. Current format-16 saves require the explicit selection. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment
 task. Commitment grades an immutable ALIGNED, OFFSET, or OPPOSED handoff;
 Assisted retains its exact ten-radius matched-velocity corridor, while poor
 Pilot execution changes only the recoverable target-system approach. Save
-format 15 retains the alignment and placement exactly. See
+format 16 retains the alignment and placement exactly. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The v0.4.17 Pilot reentry path derives thermal load from atmospheric pressure,
@@ -362,7 +378,7 @@ The v0.4.29 origin-flight path launches into a deterministic station-relative
 craft state instead of jumping from a fixed camera. Normal flight controls,
 guidance, assist, and bounded docking work before the outbound jump; Pilot
 alignment begins from the live craft yaw and relative speed. Outbound spooling
-freezes that exact state so cancellation and format-15 save/resume restore the
+freezes that exact state so cancellation and format-16 save/resume restore the
 same craft without rerolling identities or advancing another random stream.
 
 | Kitty-scale local profile | ANSI-scale remote profile |

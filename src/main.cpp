@@ -47,6 +47,8 @@
 #include "apsis_drift/mission_board.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_return.hpp"
+#include "apsis_drift/origin_system_contract.hpp"
+#include "apsis_drift/origin_system_contract_acceptance.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
@@ -339,13 +341,13 @@ class LandscapeApp final : public App {
                         bool signal_navigation_acceptance = false,
                         const SaveDocument* profile = nullptr)
       : m_render_configuration(render_configuration),
+        m_universe_seed(profile ? profile->recipe.universe_seed : Seed{seed}),
         m_terrain(required_terrain(1024, seed)),
         m_planet(generate_planet_descriptor(Seed{seed})),
-        m_origin_system(generate_origin_system(
-            profile ? profile->recipe.universe_seed : Seed{seed})),
+        m_origin_system(generate_origin_system(m_universe_seed)),
         m_local_system(generate_local_system(
             generate_first_intersystem_identities(
-                profile ? profile->recipe.universe_seed : Seed{seed})
+                m_universe_seed)
                 .target_system_seed)),
         m_renderer(render_settings_for(render_configuration.viewport)),
         m_orbital_renderer(
@@ -376,7 +378,10 @@ class LandscapeApp final : public App {
                 : PlanetarySurfaceFixture{}),
         m_session(!interactive_controls,
                   profile != nullptr &&
-                      (profile->state.intersystem_contract
+                      (profile->state.origin_system_contract
+                           ? profile->state.location ==
+                                 OriginLocation::docked_at_origin
+                       : profile->state.intersystem_contract
                            ? profile->state.intersystem_contract->travel_phase ==
                                  IntersystemTravelPhase::docked_at_origin
                            : profile->state.location ==
@@ -389,16 +394,46 @@ class LandscapeApp final : public App {
         m_signal_navigation_acceptance(signal_navigation_acceptance) {
     if (profile != nullptr) {
       m_save_profile = *profile;
+      const bool guided_origin_system_contract =
+          profile->state.intersystem_contract &&
+          profile->state.origin_system_contract &&
+          profile->state.onboarding.state == OnboardingState::guided &&
+          profile->state.onboarding.chapter ==
+              OnboardingChapter::contract_two;
       const bool guided_signal_run =
           profile->state.intersystem_contract &&
           profile->state.onboarding.state == OnboardingState::guided &&
-          (profile->state.onboarding.chapter ==
-               OnboardingChapter::contract_one ||
-           (profile->state.onboarding.chapter ==
-                OnboardingChapter::contract_two &&
-            profile->state.first_objective ==
-                FirstObjectiveStatus::turned_in));
-      if (profile->state.intersystem_contract && !guided_signal_run) {
+          profile->state.onboarding.chapter ==
+              OnboardingChapter::contract_one;
+      if (guided_origin_system_contract) {
+        m_intersystem_contract = *profile->state.intersystem_contract;
+        m_origin_system_contract = *profile->state.origin_system_contract;
+        m_system_flight = profile->state.system_flight;
+        m_origin_station_flight = profile->state.origin_station_flight;
+        m_origin_system_world_deltas =
+            profile->state.origin_system_world_deltas;
+        if (profile->state.flight) {
+          auto cache = TerrainTileCache::create();
+          const auto body = find_local_system_planet(
+              m_origin_system,
+              m_origin_system_contract->binding.target_planet);
+          if (!cache || !body) {
+            throw std::runtime_error{
+                "cannot create contract-two Planetfall terrain state"};
+          }
+          auto planetfall = initialize_intersystem_planetfall(
+              (*body)->descriptor,
+              m_origin_system_contract->binding.target_objective,
+              *profile->state.flight,
+              profile->state.origin_system_world_deltas, *cache);
+          if (!planetfall) {
+            throw std::runtime_error{
+                "cannot hydrate contract-two Planetfall state"};
+          }
+          m_intersystem_planetfall_cache.emplace(std::move(*cache));
+          m_intersystem_planetfall.emplace(std::move(*planetfall));
+        }
+      } else if (profile->state.intersystem_contract && !guided_signal_run) {
         m_intersystem_contract = *profile->state.intersystem_contract;
         m_system_flight = profile->state.system_flight;
         m_origin_station_flight = profile->state.origin_station_flight;
@@ -761,6 +796,36 @@ class LandscapeApp final : public App {
 
   [[nodiscard]] auto signal_run_save() const
       -> std::expected<SaveDocument, SignalRunError> {
+    if (m_origin_system_contract && m_intersystem_contract &&
+        m_save_profile) {
+      auto document = *m_save_profile;
+      document.state.intersystem_contract = *m_intersystem_contract;
+      document.state.origin_system_contract = *m_origin_system_contract;
+      document.state.system_flight = m_system_flight;
+      document.state.origin_station_flight = m_origin_station_flight;
+      document.state.flight =
+          m_intersystem_planetfall
+              ? std::optional<PlanetaryFlightState>{
+                    m_intersystem_planetfall->flight}
+              : std::nullopt;
+      document.state.location =
+          m_origin_system_contract->phase == OriginSystemContractPhase::offered ||
+                  m_origin_system_contract->phase ==
+                      OriginSystemContractPhase::accepted ||
+                  m_origin_system_contract->phase ==
+                      OriginSystemContractPhase::returned ||
+                  m_origin_system_contract->phase ==
+                      OriginSystemContractPhase::turned_in
+              ? OriginLocation::docked_at_origin
+              : OriginLocation::in_flight;
+      document.state.origin_system_world_deltas =
+          m_intersystem_planetfall
+              ? std::vector<SaveWorldDelta>{
+                    m_intersystem_planetfall->journal.entries().begin(),
+                    m_intersystem_planetfall->journal.entries().end()}
+              : m_origin_system_world_deltas;
+      return document;
+    }
     if (m_intersystem_contract && m_save_profile) {
       auto document = *m_save_profile;
       document.state.intersystem_contract = *m_intersystem_contract;
@@ -830,6 +895,78 @@ class LandscapeApp final : public App {
     if (m_session.screen() == SessionScreen::station &&
         command == MenuCommand::activate &&
         m_session.selected() == MenuItem::primary) {
+      if (m_origin_system_contract && m_intersystem_contract) {
+        const auto phase = m_origin_system_contract->phase;
+        const bool actionable =
+            phase == OriginSystemContractPhase::offered ||
+            phase == OriginSystemContractPhase::accepted ||
+            phase == OriginSystemContractPhase::returned;
+        if (!actionable) return;
+        const auto contract_command =
+            phase == OriginSystemContractPhase::offered
+                ? OriginSystemContractCommand::accept
+            : phase == OriginSystemContractPhase::accepted
+                ? OriginSystemContractCommand::launch
+                : OriginSystemContractCommand::turn_in;
+        auto next = *m_origin_system_contract;
+        const auto tick = m_intersystem_contract->universe_tick;
+        if (!advance_origin_system_contract(next, tick, tick,
+                                            contract_command)) {
+          m_error = "contract-two mission board action was rejected";
+          return;
+        }
+        if (contract_command == OriginSystemContractCommand::accept) {
+          if (m_save_profile) {
+            m_save_profile->state.origin_system_discoveries = {
+                {next.binding.target_objective, tick}};
+          }
+          m_origin_system_contract = std::move(next);
+          return;
+        }
+        if (contract_command == OriginSystemContractCommand::launch) {
+          auto launched = initialize_origin_station_launch(
+              m_universe_seed, tick, m_origin_system);
+          if (!launched) {
+            m_error = "contract-two launch initialization was rejected";
+            return;
+          }
+          m_origin_system_contract = std::move(next);
+          m_origin_station_flight = std::move(*launched);
+          (void)m_session.start_flight();
+          m_simulation_clock.reset();
+          m_active_mouse_region = {};
+          m_input_mapper.suspend({}, m_origin_station_flight->tick);
+          return;
+        }
+        if (!m_save_profile ||
+            !advance_onboarding(m_save_profile->state.onboarding,
+                                OnboardingCommand::complete_contract_two)) {
+          m_error = "contract-two progression update was rejected";
+          return;
+        }
+        m_save_profile->state.origin_system_discoveries.insert(
+            m_save_profile->state.origin_system_discoveries.begin(),
+            m_save_profile->state.discoveries.begin(),
+            m_save_profile->state.discoveries.end());
+        m_save_profile->state.origin_system_world_deltas =
+            m_origin_system_world_deltas;
+        m_save_profile->state.origin_system_world_deltas.insert(
+            m_save_profile->state.origin_system_world_deltas.begin(),
+            m_save_profile->state.world_deltas.begin(),
+            m_save_profile->state.world_deltas.end());
+        m_save_profile->state.discoveries.clear();
+        m_save_profile->state.world_deltas.clear();
+        m_origin_system_world_deltas =
+            m_save_profile->state.origin_system_world_deltas;
+        m_save_profile->state.origin_system_contract = next;
+        m_save_profile->state.intersystem_contract = *m_intersystem_contract;
+        m_save_profile->state.location = OriginLocation::docked_at_origin;
+        m_save_profile->state.flight.reset();
+        m_save_profile->state.system_flight.reset();
+        m_save_profile->state.origin_station_flight.reset();
+        m_origin_system_contract.reset();
+        return;
+      }
       if (m_intersystem_contract) {
         const auto snapshot =
             mission_board_snapshot(*m_intersystem_contract);
@@ -891,7 +1028,21 @@ class LandscapeApp final : public App {
           FirstObjectiveStatus::returned) {
         if (!turn_in_signal_run(*m_signal_run)) {
           m_error = "Signal Run turn-in was rejected";
+          return;
         }
+        auto document = project_signal_run_save(*m_signal_run);
+        if (!document || !document->state.intersystem_contract ||
+            !document->state.origin_system_contract) {
+          m_error = "contract-two handoff was rejected";
+          return;
+        }
+        m_save_profile = *document;
+        m_intersystem_contract = *document->state.intersystem_contract;
+        m_origin_system_contract = *document->state.origin_system_contract;
+        m_origin_system_world_deltas =
+            document->state.origin_system_world_deltas;
+        m_signal_run.reset();
+        m_signal_run_cache.reset();
         return;
       }
       return;
@@ -939,6 +1090,26 @@ class LandscapeApp final : public App {
   }
 
   auto handle_menu_key(const KeyEvent& key) -> void {
+    if (m_session.screen() == SessionScreen::station &&
+        m_origin_system_contract && m_intersystem_contract &&
+        key.action == KeyAction::Press &&
+        (key.key == Key::Left || key.key == Key::Right)) {
+      if (m_origin_system_contract->phase !=
+          OriginSystemContractPhase::offered) {
+        return;
+      }
+      const auto command =
+          m_intersystem_contract->rule_profile ==
+                  IntersystemRuleProfile::assisted
+              ? IntersystemContractCommand::select_pilot_profile
+              : IntersystemContractCommand::select_assisted_profile;
+      if (!advance_intersystem_contract(*m_intersystem_contract,
+                                        m_intersystem_contract->universe_tick,
+                                        command)) {
+        m_error = "rule profile selection was rejected";
+      }
+      return;
+    }
     if (m_session.screen() == SessionScreen::station && m_signal_run &&
         m_signal_run->career && key.action == KeyAction::Press &&
         (key.key == Key::Left || key.key == Key::Right) &&
@@ -1101,6 +1272,68 @@ class LandscapeApp final : public App {
     m_surface.set_geometry({});
     m_surface.draw(screen);
     render_pixel_regions(m_surface);
+    if (m_origin_system_contract) {
+      std::string_view action{"CONTRACT IN FLIGHT"};
+      std::string_view status{"IN FLIGHT"};
+      bool enabled{};
+      switch (m_origin_system_contract->phase) {
+        case OriginSystemContractPhase::offered:
+          action = "ACCEPT BRIEFING";
+          status = "OFFERED";
+          enabled = true;
+          break;
+        case OriginSystemContractPhase::accepted:
+          action = "LAUNCH";
+          status = "ACCEPTED";
+          enabled = true;
+          break;
+        case OriginSystemContractPhase::returned:
+          action = "TURN IN";
+          status = "RETURNED";
+          enabled = true;
+          break;
+        case OriginSystemContractPhase::turned_in:
+          action = "CONTRACT THREE PENDING";
+          status = "TURNED IN";
+          break;
+        default: break;
+      }
+      draw_menu(screen, "ORIGIN STATION // CONTRACT TWO", action, enabled);
+      if (!m_menu_layout.supported()) return;
+      constexpr Rgb text{205, 222, 224};
+      constexpr Rgb muted{109, 143, 151};
+      constexpr Rgb accent{126, 214, 210};
+      constexpr Rgb background{7, 15, 24};
+      const auto target = find_local_system_planet(
+          m_origin_system, m_origin_system_contract->binding.target_planet);
+      const auto centered = [&](int row, std::string_view value, Rgb color) {
+        screen.write_text(
+            std::max(0, (screen.cols() - static_cast<int>(value.size())) / 2),
+            std::max(1, m_menu_layout.art.y + row), value, color, background);
+      };
+      centered(1, std::format("ORIGIN-SYSTEM TRANSFER // {}", status), accent);
+      centered(3,
+               std::format("DESTINATION: {}",
+                           target ? (*target)->descriptor.display_name
+                                  : "UNKNOWN"),
+               text);
+      centered(5, "OBJECTIVE: SURVEY BOUND SURFACE SIGNAL", text);
+      centered(7, "ROUTE: STATION > TARGET > HOME > STATION", muted);
+      centered(9, "1/4/16X CHANGES AUTHORITATIVE TICKS ONLY", accent);
+      centered(11, "GUIDANCE: ETA // RELATIVE SPEED // BRAKING", muted);
+      if (m_intersystem_contract) {
+        const bool selection_enabled =
+            m_origin_system_contract->phase ==
+            OriginSystemContractPhase::offered;
+        centered(13,
+                 std::format("RULE PROFILE: {} [{}]",
+                             intersystem_rule_profile_name(
+                                 m_intersystem_contract->rule_profile),
+                             selection_enabled ? "LEFT/RIGHT" : "LOCKED"),
+                 accent);
+      }
+      return;
+    }
     if (m_intersystem_contract) {
       const auto board = mission_board_snapshot(*m_intersystem_contract);
       if (!board) {
@@ -1352,6 +1585,11 @@ class LandscapeApp final : public App {
                     m_signal_run->recipe.universe_seed,
                     m_signal_run->career->universe_tick,
                     m_signal_run->origin_system, *m_signal_run->station_flight)
+          : m_origin_system_contract
+              ? resolve_origin_station_flight_guidance(
+                    m_universe_seed,
+                    m_intersystem_contract->universe_tick, m_origin_system,
+                    *m_origin_station_flight)
               : resolve_origin_station_flight_guidance(
                     *m_intersystem_contract, m_origin_system,
                     *m_origin_station_flight);
@@ -1391,7 +1629,10 @@ class LandscapeApp final : public App {
     } else if (m_system_render) {
       const auto guidance = m_system_flight
                                 ? resolve_system_flight_guidance(
-                                      m_local_system, *m_system_flight)
+                                      m_origin_system_contract
+                                          ? m_origin_system
+                                          : m_local_system,
+                                      *m_system_flight)
                                 : std::expected<SystemFlightGuidance,
                                                 SystemFlightError>{
                                       std::unexpected{
@@ -1611,8 +1852,15 @@ class LandscapeApp final : public App {
                                               : "ARRIVAL BOUND");
       }
     } else if (m_origin_station_flight && m_intersystem_contract) {
-      const auto guidance = resolve_origin_station_flight_guidance(
-          *m_intersystem_contract, m_origin_system, *m_origin_station_flight);
+      const auto guidance =
+          m_origin_system_contract
+              ? resolve_origin_station_flight_guidance(
+                    m_universe_seed,
+                    m_intersystem_contract->universe_tick, m_origin_system,
+                    *m_origin_station_flight)
+              : resolve_origin_station_flight_guidance(
+                    *m_intersystem_contract, m_origin_system,
+                    *m_origin_station_flight);
       if (guidance) {
         std::string_view cue{"HOLD"};
         switch (guidance->cue) {
@@ -1631,7 +1879,21 @@ class LandscapeApp final : public App {
           case OriginStationFlightCue::hold:
             break;
         }
-        message = m_intersystem_contract->travel_phase ==
+        message = m_origin_system_contract
+                      ? (m_origin_system_contract->phase ==
+                                 OriginSystemContractPhase::station_departure
+                             ? std::format(
+                                   " DEPART STATION {:.0f} m | CLS {:+.0f} "
+                                   "m/s | ENTER BEGIN TRANSFER ",
+                                   guidance->distance_metres,
+                                   guidance->closing_speed_metres_per_second)
+                             : std::format(
+                                   " STATION RENDEZVOUS {:.0f} m | CLS "
+                                   "{:+.0f} m/s | {} ",
+                                   guidance->distance_metres,
+                                   guidance->closing_speed_metres_per_second,
+                                   cue))
+                  : m_intersystem_contract->travel_phase ==
                           IntersystemTravelPhase::origin_system_flight
                       ? std::format(
                             " ORIGIN STATION {:.0f} m | CLS {:+.0f} m/s | {} "
@@ -1648,7 +1910,10 @@ class LandscapeApp final : public App {
     } else if (m_system_render) {
       const auto guidance = m_system_flight
                                 ? resolve_system_flight_guidance(
-                                      m_local_system, *m_system_flight)
+                                      m_origin_system_contract
+                                          ? m_origin_system
+                                          : m_local_system,
+                                      *m_system_flight)
                                 : std::expected<SystemFlightGuidance,
                                                 SystemFlightError>{
                                       std::unexpected{
@@ -1703,6 +1968,163 @@ class LandscapeApp final : public App {
   }
 
   auto handle_key(const KeyEvent& key) -> void {
+    if (m_origin_system_contract && m_intersystem_contract) {
+      auto& contract = *m_origin_system_contract;
+      auto& career = *m_intersystem_contract;
+      if (m_system_flight) {
+        if (key.key == Key::Enter && key.action == KeyAction::Press) {
+          if (contract.phase == OriginSystemContractPhase::outbound_transfer) {
+            const auto guidance = resolve_system_flight_guidance(
+                m_origin_system, *m_system_flight);
+            auto orbital =
+                insert_system_flight_orbit(m_origin_system, *m_system_flight);
+            auto next = contract;
+            if (!orbital ||
+                !advance_origin_system_contract(
+                    next, career.universe_tick, career.universe_tick,
+                    OriginSystemContractCommand::enter_target_planet)) {
+              m_error = guidance
+                            ? format_system_flight_status(*m_system_flight,
+                                                          *guidance)
+                                  .insertion_refusal
+                            : "target orbit insertion is unavailable";
+              return;
+            }
+            const auto body = find_local_system_planet(
+                m_origin_system, next.binding.target_planet);
+            auto cache = TerrainTileCache::create();
+            auto planetfall =
+                body && cache
+                    ? initialize_intersystem_planetfall(
+                          (*body)->descriptor, next.binding.target_objective,
+                          *orbital, m_origin_system_world_deltas, *cache)
+                    : std::expected<IntersystemPlanetfallState,
+                                    IntersystemPlanetfallError>{
+                          std::unexpected{
+                              IntersystemPlanetfallError::terrain_failure}};
+            if (!planetfall) {
+              m_error = "contract-two Planetfall initialization was rejected";
+              return;
+            }
+            contract = std::move(next);
+            m_intersystem_planetfall_cache.emplace(std::move(*cache));
+            m_intersystem_planetfall.emplace(std::move(*planetfall));
+            m_system_flight.reset();
+            m_error.clear();
+            m_input_mapper.suspend({}, career.universe_tick);
+            return;
+          }
+          if (contract.phase == OriginSystemContractPhase::return_transfer) {
+            auto rendezvous = initialize_origin_system_station_rendezvous(
+                m_universe_seed, m_origin_system, contract,
+                *m_system_flight);
+            auto next = contract;
+            if (!rendezvous ||
+                !advance_origin_system_contract(
+                    next, career.universe_tick, career.universe_tick,
+                    OriginSystemContractCommand::begin_station_rendezvous)) {
+              m_error =
+                  "intercept the home planet approach envelope before station "
+                  "rendezvous";
+              return;
+            }
+            contract = std::move(next);
+            m_origin_station_flight = std::move(*rendezvous);
+            m_system_flight.reset();
+            m_error.clear();
+            m_input_mapper.suspend({}, m_origin_station_flight->tick);
+            return;
+          }
+        }
+        if (key.action != KeyAction::Release) m_error.clear();
+        m_input_mapper.enqueue(key, m_system_flight->tick, true);
+        return;
+      }
+      if (m_intersystem_planetfall) {
+        if (key.key == Key::Enter && key.action == KeyAction::Press &&
+            contract.phase == OriginSystemContractPhase::objective_complete &&
+            m_intersystem_planetfall->flight.regime == FlightRegime::orbital) {
+          auto departure = depart_planetary_orbit(
+              m_origin_system, m_intersystem_planetfall->flight);
+          auto returning =
+              departure ? initialize_origin_system_return_transfer(
+                              m_universe_seed, m_origin_system, contract,
+                              *departure)
+                        : std::expected<SystemFlightState,
+                                        OriginSystemContractError>{
+                              std::unexpected{
+                                  OriginSystemContractError::invalid_flight}};
+          auto next = contract;
+          if (!returning ||
+              !advance_origin_system_contract(
+                  next, career.universe_tick, career.universe_tick,
+                  OriginSystemContractCommand::leave_target_planet)) {
+            m_error = "return departure requires a valid orbital state";
+            return;
+          }
+          m_origin_system_world_deltas.assign(
+              m_intersystem_planetfall->journal.entries().begin(),
+              m_intersystem_planetfall->journal.entries().end());
+          contract = std::move(next);
+          m_system_flight = std::move(*returning);
+          m_intersystem_planetfall.reset();
+          m_intersystem_planetfall_cache.reset();
+          m_input_mapper.suspend({}, m_system_flight->tick);
+          m_error.clear();
+          return;
+        }
+        if (apsis_drift::detail::signal_selection_command(key)) return;
+        m_input_mapper.enqueue(key, m_intersystem_planetfall->flight.tick);
+        return;
+      }
+      if (m_origin_station_flight) {
+        if (key.key == Key::Enter && key.action == KeyAction::Press) {
+          if (contract.phase == OriginSystemContractPhase::station_departure) {
+            auto outbound = initialize_origin_system_outbound_transfer(
+                m_universe_seed, career.universe_tick, m_origin_system,
+                contract, *m_origin_station_flight);
+            auto next = contract;
+            if (!outbound ||
+                !advance_origin_system_contract(
+                    next, career.universe_tick, career.universe_tick,
+                    OriginSystemContractCommand::begin_outbound_transfer)) {
+              m_error = "leave the station before beginning system transfer";
+              return;
+            }
+            contract = std::move(next);
+            m_system_flight = std::move(*outbound);
+            m_origin_station_flight.reset();
+            m_input_mapper.suspend({}, m_system_flight->tick);
+            m_error.clear();
+            return;
+          }
+          if (contract.phase == OriginSystemContractPhase::station_rendezvous) {
+            const auto guidance = resolve_origin_station_flight_guidance(
+                m_universe_seed, career.universe_tick, m_origin_system,
+                *m_origin_station_flight);
+            auto next = contract;
+            if (!guidance || !guidance->arrived ||
+                !advance_origin_system_contract(
+                    next, career.universe_tick, career.universe_tick,
+                    OriginSystemContractCommand::dock)) {
+              m_error = "reach the moving station rendezvous before docking";
+              return;
+            }
+            contract = std::move(next);
+            m_origin_station_flight.reset();
+            (void)m_session.dock_at_station();
+            m_simulation_clock.reset();
+            m_active_mouse_region = {};
+            m_error.clear();
+            return;
+          }
+        }
+        if (key.action != KeyAction::Release) m_error.clear();
+        m_input_mapper.enqueue(key, m_origin_station_flight->tick, true);
+        return;
+      }
+      return;
+    }
     if (m_intersystem_contract) {
       if (m_system_flight) {
         if (key.key == Key::Enter && key.action == KeyAction::Press) {
@@ -1958,6 +2380,74 @@ class LandscapeApp final : public App {
       throw std::runtime_error{"simulation clock rejected elapsed time"};
     }
     for (int step = 0; step < advance->steps; ++step) {
+      if (m_origin_system_contract && m_intersystem_contract) {
+        if (m_system_flight) {
+          auto next_flight = *m_system_flight;
+          auto next_career = *m_intersystem_contract;
+          const auto previous_tick = next_flight.tick;
+          const auto commands =
+              m_input_mapper.take_commands(next_flight.tick);
+          if (!advance_system_flight(m_origin_system, next_flight, commands) ||
+              !advance_intersystem_time(
+                  next_career, next_flight.tick - previous_tick)) {
+            throw std::runtime_error{
+                "contract-two system-flight simulation failed"};
+          }
+          m_system_flight = std::move(next_flight);
+          m_intersystem_contract = std::move(next_career);
+        } else if (m_intersystem_planetfall) {
+          if (!m_intersystem_planetfall_cache) {
+            throw std::runtime_error{
+                "contract-two Planetfall terrain cache is unavailable"};
+          }
+          auto next_planetfall = *m_intersystem_planetfall;
+          const auto commands = m_input_mapper.take_commands(
+              next_planetfall.flight.tick);
+          const auto advanced = advance_intersystem_planetfall(
+              next_planetfall, *m_intersystem_planetfall_cache, commands,
+              m_intersystem_contract->rule_profile);
+          auto next_career = *m_intersystem_contract;
+          auto next_contract = *m_origin_system_contract;
+          if (!advanced || !advance_intersystem_time(next_career, 1)) {
+            throw std::runtime_error{
+                "contract-two Planetfall simulation failed"};
+          }
+          if (advanced->objective_completed &&
+              !advance_origin_system_contract(
+                  next_contract, next_career.universe_tick,
+                  next_career.universe_tick,
+                  OriginSystemContractCommand::complete_objective)) {
+            throw std::runtime_error{
+                "contract-two objective completion was rejected"};
+          }
+          if (advanced->objective_completed) {
+            m_origin_system_world_deltas.assign(
+                next_planetfall.journal.entries().begin(),
+                next_planetfall.journal.entries().end());
+          }
+          m_intersystem_planetfall = std::move(next_planetfall);
+          m_intersystem_contract = std::move(next_career);
+          m_origin_system_contract = std::move(next_contract);
+        } else if (m_origin_station_flight) {
+          auto next_station = *m_origin_station_flight;
+          auto next_career = *m_intersystem_contract;
+          const auto commands =
+              m_input_mapper.take_commands(next_station.tick);
+          if (!advance_origin_station_flight(
+                  m_universe_seed,
+                  next_career.universe_tick, m_origin_system, next_station,
+                  commands) ||
+              !advance_intersystem_time(next_career, 1)) {
+            throw std::runtime_error{
+                "contract-two station-flight simulation failed"};
+          }
+          m_origin_station_flight = std::move(next_station);
+          m_intersystem_contract = std::move(next_career);
+        } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
+          throw std::runtime_error{"contract-two universe clock failed"};
+        }
+        continue;
+      }
       if (m_intersystem_contract) {
         const auto phase = m_intersystem_contract->travel_phase;
         const bool jumping =
@@ -2183,6 +2673,84 @@ class LandscapeApp final : public App {
                            view, *ephemeris, m_surface.pixels())) {
         throw std::runtime_error{
             "contract-one system presentation rejected frame"};
+      }
+      m_system_render = *rendered;
+      return;
+    }
+    if (m_origin_system_contract && m_intersystem_contract) {
+      if (m_intersystem_planetfall) {
+        if (!m_planetary_renderer) {
+          throw std::runtime_error{
+              "contract-two planetary presentation is unavailable"};
+        }
+        const auto rendered = m_planetary_renderer->render(
+            *m_intersystem_planetfall->planet,
+            m_intersystem_planetfall->flight, {.pitch_radians = -0.18},
+            m_surface.pixels());
+        if (!rendered) {
+          throw std::runtime_error{
+              "contract-two planetary presentation rejected frame"};
+        }
+        m_planetary_samples.push_back(*rendered);
+        return;
+      }
+      if (!m_system_renderer) {
+        throw std::runtime_error{
+            "contract-two system presentation is unavailable"};
+      }
+      const auto station = resolve_origin_station_ephemeris(
+          m_origin_system,
+          generate_origin_station(m_universe_seed),
+          {.tick = m_intersystem_contract->universe_tick,
+           .sub_tick_fraction = 0.0});
+      if (!station) {
+        throw std::runtime_error{
+            "cannot resolve contract-two Origin Station ephemeris"};
+      }
+      SystemPositionMetres position{0.0, -92'000'000'000.0,
+                                    26'000'000'000.0};
+      SystemVelocityMetresPerSecond velocity{};
+      SystemDirection forward{station->position.x - position.x,
+                              station->position.y - position.y,
+                              station->position.z - position.z};
+      SystemDirection up{0.0, 0.0, 1.0};
+      if (m_system_flight) {
+        position = m_system_flight->position;
+        velocity = m_system_flight->velocity;
+        forward = m_system_flight->forward;
+        up = m_system_flight->up;
+      } else if (m_origin_station_flight) {
+        const auto pose = resolve_origin_station_flight_pose(
+            m_universe_seed,
+            m_intersystem_contract->universe_tick, m_origin_system,
+            *m_origin_station_flight);
+        if (!pose) {
+          throw std::runtime_error{
+              "cannot resolve contract-two station-flight pose"};
+        }
+        position = pose->position;
+        velocity = pose->velocity;
+        forward = m_origin_station_flight->forward;
+        up = m_origin_station_flight->up;
+      }
+      const PlanetId selected =
+          m_system_flight
+              ? m_system_flight->target
+              : m_origin_system_contract->binding.home_planet;
+      const LocalSystemView view{
+          .time = {m_intersystem_contract->universe_tick, 0.0},
+          .position = position,
+          .velocity = velocity,
+          .forward = forward,
+          .up = up,
+          .selected_planet = selected,
+      };
+      const auto rendered = m_system_renderer->render(
+          m_origin_system, view, m_surface.pixels());
+      if (!rendered || !m_system_renderer->render_origin_station(
+                           view, *station, m_surface.pixels())) {
+        throw std::runtime_error{
+            "contract-two system presentation rejected frame"};
       }
       m_system_render = *rendered;
       return;
@@ -2474,6 +3042,7 @@ class LandscapeApp final : public App {
   }
 
   RenderConfiguration m_render_configuration;
+  Seed m_universe_seed;
   Terrain m_terrain;
   PlanetDescriptor m_planet;
   LocalSystemDescriptor m_origin_system;
@@ -2502,7 +3071,9 @@ class LandscapeApp final : public App {
   std::optional<SignalRunState> m_signal_run;
   std::optional<SaveDocument> m_save_profile;
   std::optional<IntersystemContractState> m_intersystem_contract;
+  std::optional<OriginSystemContractState> m_origin_system_contract;
   std::vector<SaveWorldDelta> m_intersystem_world_deltas;
+  std::vector<SaveWorldDelta> m_origin_system_world_deltas;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
@@ -2723,6 +3294,8 @@ auto usage() -> void {
       "                   [--profile NAME] [--snapshot PATH]\n\n"
       "       apsis-drift --intersystem-contract-acceptance --report PATH\n"
       "                   [--profile NAME] [--snapshot PATH]\n\n"
+      "       apsis-drift --origin-system-contract-acceptance --report PATH\n"
+      "                   [--profile NAME] [--snapshot PATH]\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -2762,6 +3335,7 @@ auto main(int argc, char** argv) -> int {
   bool intersystem_planetfall_acceptance{};
   bool intersystem_return_acceptance{};
   bool intersystem_contract_acceptance{};
+  bool origin_system_contract_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -2861,6 +3435,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--intersystem-contract-acceptance") {
       intersystem_contract_acceptance = true;
+      continue;
+    }
+    if (argument == "--origin-system-contract-acceptance") {
+      origin_system_contract_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -3000,6 +3578,26 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (origin_system_contract_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       system_flight_acceptance || intersystem_planetfall_acceptance ||
+       intersystem_return_acceptance || intersystem_contract_acceptance ||
+       profile_options || seed_specified || workload_specified ||
+       keyboard_specified || driver_specified)) {
+    std::fprintf(stderr,
+                 "Origin-system contract acceptance is mutually exclusive "
+                 "with other run, save, seed, workload, keyboard, and driver "
+                 "options\n");
+    return 2;
+  }
+  if (origin_system_contract_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Origin-system contract acceptance requires --report PATH\n");
+    return 2;
+  }
   if (intersystem_contract_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -3277,6 +3875,44 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (origin_system_contract_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, viewport_override);
+      const auto acceptance = run_origin_system_contract_acceptance(
+          configuration.viewport.width, configuration.viewport.height);
+      if (!acceptance) {
+        std::fprintf(stderr,
+                     "Origin-system contract acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << origin_system_contract_acceptance_json(acceptance->report);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "origin-system-contract: evidence=application_framebuffer "
+          "final=%llu checksum=%llu\n",
+          static_cast<unsigned long long>(acceptance->report.final_tick),
+          static_cast<unsigned long long>(
+              acceptance->report.final_station_checksum));
+      return 0;
+    }
     if (intersystem_contract_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

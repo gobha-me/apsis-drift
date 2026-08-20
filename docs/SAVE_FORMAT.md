@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format 15 is a deterministic JSON document. It keeps the
+Apsis Drift save format 16 is a deterministic JSON document. It keeps the
 generated-world recipe separate from mutable player state and excludes terrain
 tiles, render state, terminal capabilities, user preferences, caches, and other
 reproducible presentation data.
@@ -13,8 +13,8 @@ reproducible presentation data.
 | `v0.8.0` through `< v1.0.0` | Every later beta must load every valid save created at or after `v0.8.0`. |
 | `v1.0.0` through `< v2.0.0` | Every later 1.x release must load valid 1.x saves and the supported v0.8+ beta lineage. |
 
-Format 15 is the intentional home-contract alpha reset. Formats 1 through 14
-are no longer supported player saves. A loader recognizes them from the root
+Format 16 is the intentional origin-system-contract alpha reset. Formats 1
+through 15 are no longer supported player saves. A loader recognizes them from the root
 application and format fields, reports `unsupported_alpha_format_version`, and
 returns before decoding authoritative recipe or state. It never overwrites,
 renames, deletes, or partially migrates the source file.
@@ -49,12 +49,12 @@ error after replacement.
 
 ## Document shape and provenance
 
-Every format-15 document has these required top-level fields:
+Every format-16 document has these required top-level fields:
 
 - `application` is exactly `apsis-drift`;
 - `application_version` is the non-empty, printable ASCII version of the build
   that most recently wrote the file, bounded to 64 bytes;
-- `format_version` is the unsigned JSON integer `15`;
+- `format_version` is the unsigned JSON integer `16`;
 - `recipe` and `state` are required objects.
 
 Writer provenance is diagnostic metadata. It does not enter `SaveDocument`,
@@ -66,6 +66,8 @@ The recipe records the universe seed; origin-system, tutorial-home, and
 active-planet ordinals; all required generator versions; the regenerated home,
 station, host, and active-planet IDs; and the station's integer circular-orbit
 radius, period, epoch phase, inclination, and ascending node.
+The versioned `origin_system_contract` generator stream is independent from
+the home Signal Run and first intersystem-contract streams.
 `state.career_kind` selects one current projection:
 
 - `legacy_signal_run` is the bounded local Signal Run scenario used by its
@@ -75,7 +77,7 @@ radius, period, epoch phase, inclination, and ascending node.
   system or planetary flight, origin station flight, discoveries, and sparse
   world deltas.
 
-Format 15 requires the complete current representation. It does not synthesize
+Format 16 requires the complete current representation. It does not synthesize
 missing arrivals, flight state, rule profiles, alignment, thermal history, or
 world deltas. One `origin_station_flight` state stores craft position and
 velocity in the current station-relative frame during outbound free flight,
@@ -111,6 +113,19 @@ one retains a dormant authored intersystem contract solely as the shared
 career clock and rule profile. Guided advances to contract two only after the
 home objective is docked and explicitly turned in.
 
+Guided contract two additionally carries a nullable
+`origin_system_contract`, plus `origin_system_discoveries` and
+`origin_system_world_deltas`. The immutable binding regenerates the distinct
+destination planet and bound signal from the origin-system recipe. The mutable
+phase records offered, accepted, station departure, outbound transfer, target
+planet, objective completion, return transfer, station rendezvous, returned,
+or turned in. Exactly one craft representation is admitted for each in-flight
+phase. Until turn-in, the original `discoveries` and `world_deltas` remain the
+completed home-contract history and the origin-system arrays describe the
+target body. Turn-in moves both bounded histories into origin-system career
+knowledge in home-then-target order and clears the later intersystem mission's
+history vectors.
+
 ## Encodings and bounds
 
 Unsigned 64-bit seeds, ordinals, and simulation ticks are canonical decimal
@@ -140,13 +155,13 @@ flight regime, clearance, thermal, and journal invariants. Signal Run targets,
 discoveries, and deltas must belong to the regenerated bounded catalog and have
 monotonic, non-future ticks.
 
-Historical format-1-through-14 acceptance reports remain project evidence, not
+Historical format-1-through-15 acceptance reports remain project evidence, not
 player-save compatibility fixtures. Their former migration code and golden save
-documents are not supported by the format-15 loader.
+documents are not supported by the format-16 loader.
 
 ## Local catalog boundary
 
-Format 15 remains an explicit-path player-save format and does not yet carry a
+Format 16 remains an explicit-path player-save format and does not yet carry a
 local-catalog header. The version-1
 [Menu and Local Profile Contract](MENU_AND_PROFILE_CONTRACT.md) defines the
 future bounded metadata projection, header-derived ordering, transactional

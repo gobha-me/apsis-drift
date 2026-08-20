@@ -12,6 +12,7 @@
 #include "apsis_drift/onboarding.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
+#include "apsis_drift/origin_system_contract.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/surface_signals.hpp"
 #include "apsis_drift/system_flight.hpp"
@@ -19,7 +20,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{15};
+inline constexpr std::uint32_t kSaveFormatVersion{16};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
@@ -41,6 +42,7 @@ struct SaveGeneratorVersions {
   std::uint32_t intersystem_jump{};
   std::uint32_t system_flight{};
   std::uint32_t origin_station_flight{};
+  std::uint32_t origin_system_contract{};
 
   friend auto operator==(const SaveGeneratorVersions&,
                          const SaveGeneratorVersions&) -> bool = default;
@@ -97,6 +99,9 @@ struct SaveMutableState {
   std::optional<OriginStationFlightState> origin_station_flight;
   std::vector<SaveDiscovery> discoveries;
   std::vector<SaveWorldDelta> world_deltas;
+  std::optional<OriginSystemContractState> origin_system_contract;
+  std::vector<SaveDiscovery> origin_system_discoveries;
+  std::vector<SaveWorldDelta> origin_system_world_deltas;
   // Present for the first-contract career. Absence identifies the bounded
   // local Signal Run scenario, which must never be silently retargeted.
   std::optional<IntersystemContractState> intersystem_contract;

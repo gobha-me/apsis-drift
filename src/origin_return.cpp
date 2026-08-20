@@ -267,6 +267,12 @@ auto initialize_origin_station_approach(
   if (!forward) {
     return std::unexpected{OriginStationFlightError::invalid_arrival};
   }
+  Vec3 up = vec(departure.up);
+  if (const auto normalized_up = normalized(up);
+      !normalized_up || std::abs(dot(*forward, *normalized_up)) > 0.95) {
+    up = std::abs(forward->z) < 0.95 ? Vec3{0.0, 0.0, 1.0}
+                                      : Vec3{0.0, 1.0, 0.0};
+  }
   OriginStationFlightState result{
       .tick = departure.tick,
       .system = origin_system.id,
@@ -276,7 +282,7 @@ auto initialize_origin_station_approach(
       .relative_velocity = {relative_velocity.x, relative_velocity.y,
                             relative_velocity.z},
       .forward = {forward->x, forward->y, forward->z},
-      .up = departure.up,
+      .up = {up.x, up.y, up.z},
       .mode = FlightMode::autopilot,
       .controls = {},
   };

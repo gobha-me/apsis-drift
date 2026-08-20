@@ -15,6 +15,7 @@ namespace apsis_drift {
 
 inline constexpr std::uint32_t kSystemFlightVersion{1};
 inline constexpr double kSystemFlightMaximumRelativeSpeed{1'000'000.0};
+inline constexpr double kSystemFlightAutopilotMaximumRelativeSpeed{500'000.0};
 inline constexpr double kSystemFlightForwardAcceleration{50'000.0};
 inline constexpr double kSystemFlightManeuverAcceleration{25'000.0};
 inline constexpr double kSystemFlightTurnRateRadiansPerSecond{0.75};

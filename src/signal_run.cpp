@@ -215,6 +215,7 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
                      document.state.first_objective_target,
                      document.state.location, document.state.first_objective},
       .career = document.state.intersystem_contract,
+      .origin_system_contract = document.state.origin_system_contract,
       .origin_system = generate_origin_system(document.recipe.universe_seed),
       .planet = std::move(planet),
       .catalog = std::move(*catalog),
@@ -227,6 +228,8 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
       .journal = std::move(*journal),
       .collection = {},
       .discoveries = document.state.discoveries,
+      .origin_system_discoveries = document.state.origin_system_discoveries,
+      .origin_system_world_deltas = document.state.origin_system_world_deltas,
   };
   const auto binding =
       generate_home_signal_contract(document.recipe.universe_seed);
@@ -634,6 +637,11 @@ auto turn_in_signal_run(SignalRunState& state)
                             OnboardingCommand::complete_contract_one)) {
       return std::unexpected{SignalRunError::invalid_transition};
     }
+    auto contract = initial_origin_system_contract(next.recipe.universe_seed);
+    if (!contract) {
+      return std::unexpected{SignalRunError::invalid_transition};
+    }
+    next.origin_system_contract = std::move(*contract);
   }
   state = std::move(next);
   return {};
@@ -656,6 +664,9 @@ auto project_signal_run_save(const SignalRunState& state)
               .discoveries = state.discoveries,
               .world_deltas = {state.journal.entries().begin(),
                                state.journal.entries().end()},
+              .origin_system_contract = state.origin_system_contract,
+              .origin_system_discoveries = state.origin_system_discoveries,
+              .origin_system_world_deltas = state.origin_system_world_deltas,
               .intersystem_contract = state.career,
           },
   };

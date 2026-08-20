@@ -56,6 +56,7 @@ struct SignalRunState {
   OnboardingProgress career_onboarding;
   OriginOnboardingState onboarding;
   std::optional<IntersystemContractState> career;
+  std::optional<OriginSystemContractState> origin_system_contract;
   LocalSystemDescriptor origin_system;
   std::shared_ptr<const PlanetDescriptor> planet;
   SurfaceSignalCatalog catalog;
@@ -68,6 +69,8 @@ struct SignalRunState {
   WorldDeltaJournal journal;
   SignalCollectionState collection;
   std::vector<SaveDiscovery> discoveries;
+  std::vector<SaveDiscovery> origin_system_discoveries;
+  std::vector<SaveWorldDelta> origin_system_world_deltas;
   SignalRunGuidanceState guidance;
 };
 
