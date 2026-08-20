@@ -50,12 +50,12 @@ without changing state.
 
 ## Persistence
 
-Save format 13 admits one `origin_station_flight` state during live
+Save format 14 admits one `origin_station_flight` state during live
 `origin_system_flight`, frozen `outbound_jump_spooling`, or
 `origin_system_return`. Target-system flight remains present during a
 cancelable return spool and is absent after commitment. Objective-complete,
 returned, and turned-in states retain the immutable target discovery and
-exactly one collected world delta. Formats 1 through 12 are rejected before
+exactly one collected world delta. Formats 1 through 13 are rejected before
 state decoding rather than being upgraded with synthesized return state.
 
 ## Acceptance replay

@@ -58,7 +58,7 @@ coordinate.
 
 ## Persistence and presentation
 
-Save format 13 stores the frozen outbound origin craft, active Pilot alignment,
+Save format 14 stores the frozen outbound origin craft, active Pilot alignment,
 and the immutable committed assessment in addition to the arrival solution's
 canonical finite binary64 decimal strings, destination/reference identities,
 and arrival tick. A save

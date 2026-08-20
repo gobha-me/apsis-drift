@@ -69,10 +69,13 @@ New-game seeds use the full unsigned 64-bit range, including zero. A profile is
 loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
-their deterministic Origin Station with one bounded intersystem contract.
-New writes use save format 13 and record the writing application version.
-Releases before v0.8.0 are alpha: formats 1 through 12 are intentionally
-unsupported after the origin-flight format-13 reset and are rejected without
+their deterministic Origin Station with authoritative Guided onboarding at
+contract one. The bounded New Game API can instead choose Skip without adding
+mission completions, rewards, discoveries, or world deltas; the expanded title
+setup remains tracked by #137. New writes use save format 14 and record the
+writing application version. Releases before v0.8.0 are alpha: formats 1
+through 13 are intentionally unsupported after the onboarding format-14 reset
+and are rejected without
 modifying the source file. The durable forward-loading promise begins with the
 actual format shipped by v0.8.0; see
 [Save Format and Compatibility](docs/SAVE_FORMAT.md).
@@ -81,7 +84,7 @@ The future local profile catalog, New/Continue/Load/Save transitions, dirty
 state, destructive confirmations, and CLI precedence are fixed by the
 [Menu and Local Profile Contract](docs/MENU_AND_PROFILE_CONTRACT.md). The
 contract keeps profile policy application-owned and does not change the current
-format-13 CLI workflow.
+format-14 explicit-path CLI workflow.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -251,21 +254,28 @@ terminal/proxy timings remain separate evidence. See
 
 The v0.4.30 local-profile contract fixes bounded catalog storage, metadata,
 ordering, dirty-state, confirmation, concurrency, and CLI-precedence behavior
-before the title and pause flows expand. It preserves explicit format-13 paths
+before the title and pause flows expand. It preserves explicit format-14 paths
 and keeps profile policy in Apsis Drift. See
 [docs/MENU_AND_PROFILE_CONTRACT.md](docs/MENU_AND_PROFILE_CONTRACT.md).
+
+The v0.4.31 onboarding state adds the authoritative Guided, Skipped, and
+Completed career states with exact contract-one-through-three chapters.
+Guided is the New Game default; Skip exposes the post-onboarding navigation
+baseline without changing generated truth or fabricating history. Save format
+14 is the intentional onboarding alpha reset. See
+[docs/ONBOARDING.md](docs/ONBOARDING.md).
 
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records deterministic thermal-abort and alignment-quality
-boundaries. Current format-13 saves require the explicit selection. See
+boundaries. Current format-14 saves require the explicit selection. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment
 task. Commitment grades an immutable ALIGNED, OFFSET, or OPPOSED handoff;
 Assisted retains its exact ten-radius matched-velocity corridor, while poor
 Pilot execution changes only the recoverable target-system approach. Save
-format 13 retains the alignment and placement exactly. See
+format 14 retains the alignment and placement exactly. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The v0.4.17 Pilot reentry path derives thermal load from atmospheric pressure,
@@ -340,7 +350,7 @@ The v0.4.29 origin-flight path launches into a deterministic station-relative
 craft state instead of jumping from a fixed camera. Normal flight controls,
 guidance, assist, and bounded docking work before the outbound jump; Pilot
 alignment begins from the live craft yaw and relative speed. Outbound spooling
-freezes that exact state so cancellation and format-13 save/resume restore the
+freezes that exact state so cancellation and format-14 save/resume restore the
 same craft without rerolling identities or advancing another random stream.
 
 | Kitty-scale local profile | ANSI-scale remote profile |

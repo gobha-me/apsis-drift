@@ -163,6 +163,26 @@ template <typename Id>
   return "unknown";
 }
 
+[[nodiscard]] auto onboarding_state_name(OnboardingState value)
+    -> std::string_view {
+  switch (value) {
+    case OnboardingState::guided: return "guided";
+    case OnboardingState::skipped: return "skipped";
+    case OnboardingState::completed: return "completed";
+  }
+  return "unknown";
+}
+
+[[nodiscard]] auto onboarding_chapter_name(OnboardingChapter value)
+    -> std::string_view {
+  switch (value) {
+    case OnboardingChapter::contract_one: return "contract_one";
+    case OnboardingChapter::contract_two: return "contract_two";
+    case OnboardingChapter::contract_three: return "contract_three";
+  }
+  return "unknown";
+}
+
 [[nodiscard]] auto mission_phase_name(IntersystemMissionPhase value)
     -> std::string_view {
   switch (value) {
@@ -521,6 +541,57 @@ template <typename Id>
   return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
                                  std::format("{}.{}", path, name),
                                  "unknown world-delta kind")};
+}
+
+[[nodiscard]] auto decode_onboarding(const Json& object)
+    -> std::expected<OnboardingProgress, SaveSchemaError> {
+  auto state_name = read_string(object, "state", "$.state.onboarding");
+  if (!state_name) return std::unexpected{state_name.error()};
+
+  OnboardingState state;
+  if (*state_name == "guided") {
+    state = OnboardingState::guided;
+  } else if (*state_name == "skipped") {
+    state = OnboardingState::skipped;
+  } else if (*state_name == "completed") {
+    state = OnboardingState::completed;
+  } else {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_value, "$.state.onboarding.state",
+        "unknown onboarding state")};
+  }
+
+  auto chapter_json = require_field(
+      object, "chapter", "$.state.onboarding");
+  if (!chapter_json) return std::unexpected{chapter_json.error()};
+  std::optional<OnboardingChapter> chapter;
+  if (!(**chapter_json).is_null()) {
+    if (!(**chapter_json).is_string()) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_type, "$.state.onboarding.chapter",
+          "expected a string or null")};
+    }
+    const auto& name = (**chapter_json).get_ref<const std::string&>();
+    if (name == "contract_one") {
+      chapter = OnboardingChapter::contract_one;
+    } else if (name == "contract_two") {
+      chapter = OnboardingChapter::contract_two;
+    } else if (name == "contract_three") {
+      chapter = OnboardingChapter::contract_three;
+    } else {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_value, "$.state.onboarding.chapter",
+          "unknown onboarding chapter")};
+    }
+  }
+
+  OnboardingProgress progress{.state = state, .chapter = chapter};
+  if (!validate_onboarding_progress(progress)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
+        "onboarding state and active chapter are inconsistent")};
+  }
+  return progress;
 }
 
 [[nodiscard]] auto read_mission_phase(const Json& parent,
@@ -1570,6 +1641,19 @@ auto make_save_recipe(Seed universe_seed, std::uint64_t active_planet_ordinal)
 
 auto validate_save_document(const SaveDocument& document)
     -> std::expected<void, SaveSchemaError> {
+  if (!validate_onboarding_progress(document.state.onboarding)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
+        "onboarding state and active chapter are inconsistent")};
+  }
+  if (document.state.onboarding.state == OnboardingState::completed &&
+      (!document.state.intersystem_contract ||
+       document.state.intersystem_contract->mission_phase !=
+           IntersystemMissionPhase::turned_in)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.onboarding.state",
+        "completed onboarding requires the authored intersystem contract to be turned in")};
+  }
   if (document.recipe.generator_versions != current_save_generator_versions()) {
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
@@ -1881,10 +1965,20 @@ auto encode_save_document_json(const SaveDocument& document)
     origin_station_flight =
         encode_origin_station_flight(*document.state.origin_station_flight);
   }
+  Json onboarding_chapter = nullptr;
+  if (document.state.onboarding.chapter) {
+    onboarding_chapter =
+        onboarding_chapter_name(*document.state.onboarding.chapter);
+  }
+  Json onboarding{
+      {"state", onboarding_state_name(document.state.onboarding.state)},
+      {"chapter", std::move(onboarding_chapter)},
+  };
   Json state;
   if (document.state.intersystem_contract) {
     state = Json{
         {"career_kind", "intersystem_contract"},
+        {"onboarding", onboarding},
         {"intersystem_contract",
          encode_intersystem_contract(*document.state.intersystem_contract)},
         {"flight", std::move(flight)},
@@ -1896,6 +1990,7 @@ auto encode_save_document_json(const SaveDocument& document)
   } else {
     state = Json{
         {"career_kind", "legacy_signal_run"},
+        {"onboarding", onboarding},
         {"location", location_name(document.state.location)},
         {"first_objective",
          Json{{"status", objective_name(document.state.first_objective)},
@@ -2020,12 +2115,12 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.application",
                                    "save belongs to another application")};
   }
-  if (*format_version >= 1U && *format_version <= 12U) {
+  if (*format_version >= 1U && *format_version <= 13U) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_alpha_format_version,
         "$.format_version",
         std::format(
-            "save format {} predates the format-13 origin-flight alpha reset "
+            "save format {} predates the format-14 onboarding alpha reset "
             "and is not supported; the source file was not modified",
             *format_version))};
   }
@@ -2193,6 +2288,11 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.state.career_kind",
                                    "unknown save career kind")};
   }
+  auto onboarding_json =
+      read_object(**state_json, "onboarding", "$.state");
+  if (!onboarding_json) return std::unexpected{onboarding_json.error()};
+  auto onboarding = decode_onboarding(**onboarding_json);
+  if (!onboarding) return std::unexpected{onboarding.error()};
   auto flight_json = require_field(**state_json, "flight", "$.state");
   auto system_flight_json =
       require_field(**state_json, "system_flight", "$.state");
@@ -2330,6 +2430,7 @@ auto decode_save_document_json(std::string_view json_text)
           },
       .state =
           SaveMutableState{
+              .onboarding = *onboarding,
               .location = location,
               .first_objective = objective,
               .first_objective_target = target,

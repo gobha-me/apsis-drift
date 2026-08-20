@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format 13 is a deterministic JSON document. It keeps the
+Apsis Drift save format 14 is a deterministic JSON document. It keeps the
 generated-world recipe separate from mutable player state and excludes terrain
 tiles, render state, terminal capabilities, user preferences, caches, and other
 reproducible presentation data.
@@ -13,7 +13,7 @@ reproducible presentation data.
 | `v0.8.0` through `< v1.0.0` | Every later beta must load every valid save created at or after `v0.8.0`. |
 | `v1.0.0` through `< v2.0.0` | Every later 1.x release must load valid 1.x saves and the supported v0.8+ beta lineage. |
 
-Format 13 is the intentional origin-flight alpha reset. Formats 1 through 12
+Format 14 is the intentional onboarding alpha reset. Formats 1 through 13
 are no longer supported player saves. A loader recognizes them from the root
 application and format fields, reports `unsupported_alpha_format_version`, and
 returns before decoding authoritative recipe or state. It never overwrites,
@@ -49,12 +49,12 @@ error after replacement.
 
 ## Document shape and provenance
 
-Every format-13 document has these required top-level fields:
+Every format-14 document has these required top-level fields:
 
 - `application` is exactly `apsis-drift`;
 - `application_version` is the non-empty, printable ASCII version of the build
   that most recently wrote the file, bounded to 64 bytes;
-- `format_version` is the unsigned JSON integer `13`;
+- `format_version` is the unsigned JSON integer `14`;
 - `recipe` and `state` are required objects.
 
 Writer provenance is diagnostic metadata. It does not enter `SaveDocument`,
@@ -75,17 +75,33 @@ radius, period, epoch phase, inclination, and ascending node.
   system or planetary flight, origin station flight, discoveries, and sparse
   world deltas.
 
-Format 13 requires the complete current representation. It does not synthesize
+Format 14 requires the complete current representation. It does not synthesize
 missing arrivals, flight state, rule profiles, alignment, thermal history, or
 world deltas. One `origin_station_flight` state stores craft position and
 velocity in the current station-relative frame during outbound free flight,
 its frozen jump spool, and the return approach. System-space pose and guidance
 are regenerated from the state's validated tick; live flight matches
 `universe_tick`, while an outbound spool retains the phase-start tick until
-cancellation retimes it to the current contract tick. Later
-Guided/Skip work may advance the alpha format again rather than overloading
-format 13 with fields that do not yet have
-authoritative gameplay semantics.
+cancellation retimes it to the current contract tick.
+
+Every state projection also carries the authoritative bounded onboarding
+object:
+
+```json
+"onboarding": {
+  "state": "guided",
+  "chapter": "contract_one"
+}
+```
+
+`state` is `guided`, `skipped`, or `completed`. Guided requires exactly one
+chapter from `contract_one`, `contract_two`, or `contract_three`; skipped and
+completed require JSON `null`. The starting home station, home planet, and
+basic origin-system chart are derived access shared by every state. Contract
+three additionally exposes the first-jump solution, while skipped and
+completed expose the post-onboarding navigation baseline. These access facts
+do not change the generated recipe, consume random streams, or synthesize
+discoveries, visits, mission completions, rewards, or world deltas.
 
 ## Encodings and bounds
 
@@ -116,13 +132,13 @@ flight regime, clearance, thermal, and journal invariants. Signal Run targets,
 discoveries, and deltas must belong to the regenerated bounded catalog and have
 monotonic, non-future ticks.
 
-Historical format-1-through-12 acceptance reports remain project evidence, not
+Historical format-1-through-13 acceptance reports remain project evidence, not
 player-save compatibility fixtures. Their former migration code and golden save
-documents were removed at the format-13 reset.
+documents are not supported by the format-14 loader.
 
 ## Local catalog boundary
 
-Format 13 remains an explicit-path player-save format and does not yet carry a
+Format 14 remains an explicit-path player-save format and does not yet carry a
 local-catalog header. The version-1
 [Menu and Local Profile Contract](MENU_AND_PROFILE_CONTRACT.md) defines the
 future bounded metadata projection, header-derived ordering, transactional

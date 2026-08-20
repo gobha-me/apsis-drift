@@ -47,7 +47,7 @@ presentation and are not saved.
 
 ## Save compatibility
 
-Save format 13 requires a `thermal` object in every encoded planetary flight
+Save format 14 requires a `thermal` object in every encoded planetary flight
 and preserves both fixed-point load and the Pilot abort latch exactly. Formats
 1 through 10 are rejected by the current alpha boundary rather than receiving
 invented thermal history. Assisted intersystem state and the bounded Signal
@@ -76,5 +76,5 @@ The same matrix retains the correct-side, early, and opposite-side Planetfall
 routes, explicit orbital abort route, objective completion, and application
 framebuffer diagnostics. Unit coverage separately proves
 speed, descent angle, and pressure monotonicity; airless cooling; invalid-state
-transactionality; exact format-13 save round trips; and unsupported-alpha
+transactionality; exact format-14 save round trips; and unsupported-alpha
 format rejection.
