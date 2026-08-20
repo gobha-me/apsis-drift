@@ -12,7 +12,7 @@
 
 namespace apsis_drift {
 
-inline constexpr std::uint32_t kIntersystemJumpVersion{3};
+inline constexpr std::uint32_t kIntersystemJumpVersion{4};
 inline constexpr double kAssistedTargetArrivalStandoffRadii{10.0};
 inline constexpr double kAssistedOriginArrivalStandoffMetres{40'000.0};
 inline constexpr std::int32_t kAlignedHeadingErrorMillidegrees{3'000};
@@ -67,6 +67,8 @@ struct IntersystemJumpSnapshot {
                          const IntersystemJumpSnapshot&) -> bool = default;
 };
 
+struct OriginStationFlightState;
+
 [[nodiscard]] auto validate_intersystem_arrival_solution(
     const IntersystemContractState& contract,
     const LocalSystemDescriptor& destination,
@@ -80,6 +82,11 @@ struct IntersystemJumpSnapshot {
 
 [[nodiscard]] auto begin_intersystem_jump(
     IntersystemContractState& contract) noexcept
+    -> std::expected<void, IntersystemJumpError>;
+
+[[nodiscard]] auto begin_intersystem_jump(
+    IntersystemContractState& contract,
+    const OriginStationFlightState& origin_flight) noexcept
     -> std::expected<void, IntersystemJumpError>;
 
 [[nodiscard]] auto cancel_intersystem_jump(

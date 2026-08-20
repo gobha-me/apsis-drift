@@ -10,12 +10,13 @@
 
 namespace apsis_drift {
 
-inline constexpr std::uint32_t kOriginReturnVersion{2};
+inline constexpr std::uint32_t kOriginStationFlightVersion{3};
 inline constexpr double kOriginStationArrivalRadiusMetres{5'000.0};
 inline constexpr double kOriginStationDockingSpeedMetresPerSecond{25.0};
-inline constexpr double kOriginReturnAcceleration{250.0};
-inline constexpr double kOriginReturnMaximumSpeed{1'000.0};
-inline constexpr double kOriginReturnTurnRateRadiansPerSecond{0.75};
+inline constexpr double kOriginStationLaunchStandoffMetres{5'000.0};
+inline constexpr double kOriginStationFlightAcceleration{250.0};
+inline constexpr double kOriginStationFlightMaximumSpeed{1'000.0};
+inline constexpr double kOriginStationFlightTurnRateRadiansPerSecond{0.75};
 
 struct OriginStationWaypoint {
   SystemId system;
@@ -27,7 +28,7 @@ struct OriginStationWaypoint {
                          const OriginStationWaypoint&) -> bool = default;
 };
 
-enum class OriginReturnCue : std::uint8_t {
+enum class OriginStationFlightCue : std::uint8_t {
   hold,
   closing,
   opening,
@@ -35,7 +36,7 @@ enum class OriginReturnCue : std::uint8_t {
   arrived,
 };
 
-struct OriginReturnState {
+struct OriginStationFlightState {
   SimulationTick tick{};
   SystemId system;
   OriginStationId station;
@@ -46,32 +47,32 @@ struct OriginReturnState {
   FlightMode mode{FlightMode::autopilot};
   FlightControls controls;
 
-  friend auto operator==(const OriginReturnState&, const OriginReturnState&)
-      -> bool = default;
+  friend auto operator==(const OriginStationFlightState&,
+                         const OriginStationFlightState&) -> bool = default;
 };
 
-struct OriginReturnGuidance {
+struct OriginStationFlightGuidance {
   double distance_metres{};
   double closing_speed_metres_per_second{};
   double relative_speed_metres_per_second{};
   double stopping_distance_metres{};
-  OriginReturnCue cue{OriginReturnCue::hold};
+  OriginStationFlightCue cue{OriginStationFlightCue::hold};
   bool within_rendezvous{};
   bool arrived{};
 
-  friend auto operator==(const OriginReturnGuidance&,
-                         const OriginReturnGuidance&) -> bool = default;
+  friend auto operator==(const OriginStationFlightGuidance&,
+                         const OriginStationFlightGuidance&) -> bool = default;
 };
 
-struct OriginReturnPose {
+struct OriginStationFlightPose {
   SystemPositionMetres position;
   SystemVelocityMetresPerSecond velocity;
 
-  friend auto operator==(const OriginReturnPose&, const OriginReturnPose&)
-      -> bool = default;
+  friend auto operator==(const OriginStationFlightPose&,
+                         const OriginStationFlightPose&) -> bool = default;
 };
 
-enum class OriginReturnError : std::uint8_t {
+enum class OriginStationFlightError : std::uint8_t {
   invalid_contract,
   invalid_state,
   invalid_waypoint,
@@ -81,50 +82,52 @@ enum class OriginReturnError : std::uint8_t {
   tick_overflow,
 };
 
-[[nodiscard]] auto
-resolve_origin_station_waypoint(const FirstIntersystemIdentities& identities,
-                                const LocalSystemDescriptor& origin_system,
-                                EphemerisQueryTime time)
-    -> std::expected<OriginStationWaypoint, OriginReturnError>;
+[[nodiscard]] auto resolve_origin_station_waypoint(
+    const FirstIntersystemIdentities& identities,
+    const LocalSystemDescriptor& origin_system, EphemerisQueryTime time)
+    -> std::expected<OriginStationWaypoint, OriginStationFlightError>;
 
-[[nodiscard]] auto
-initialize_origin_return(const IntersystemContractState& contract,
-                         const LocalSystemDescriptor& origin_system)
-    -> std::expected<OriginReturnState, OriginReturnError>;
+[[nodiscard]] auto initialize_origin_station_launch(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system)
+    -> std::expected<OriginStationFlightState, OriginStationFlightError>;
 
-[[nodiscard]] auto
-validate_origin_return_state(const IntersystemContractState& contract,
-                             const LocalSystemDescriptor& origin_system,
-                             const OriginReturnState& state)
-    -> std::expected<void, OriginReturnError>;
+[[nodiscard]] auto initialize_origin_return(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system)
+    -> std::expected<OriginStationFlightState, OriginStationFlightError>;
 
-[[nodiscard]] auto
-resolve_origin_return_guidance(const IntersystemContractState& contract,
-                               const LocalSystemDescriptor& origin_system,
-                               const OriginReturnState& state)
-    -> std::expected<OriginReturnGuidance, OriginReturnError>;
+[[nodiscard]] auto validate_origin_station_flight_state(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<void, OriginStationFlightError>;
 
-[[nodiscard]] auto
-resolve_origin_return_pose(const IntersystemContractState& contract,
-                           const LocalSystemDescriptor& origin_system,
-                           const OriginReturnState& state)
-    -> std::expected<OriginReturnPose, OriginReturnError>;
+[[nodiscard]] auto resolve_origin_station_flight_guidance(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<OriginStationFlightGuidance, OriginStationFlightError>;
 
-[[nodiscard]] auto
-advance_origin_return(const IntersystemContractState& contract,
-                      const LocalSystemDescriptor& origin_system,
-                      OriginReturnState& state,
-                      std::span<const FlightCommand> commands)
-    -> std::expected<void, OriginReturnError>;
+[[nodiscard]] auto resolve_origin_station_flight_pose(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<OriginStationFlightPose, OriginStationFlightError>;
 
-[[nodiscard]] auto
-attempt_origin_docking(IntersystemContractState& contract,
-                       const LocalSystemDescriptor& origin_system,
-                       const OriginReturnState& state)
-    -> std::expected<void, OriginReturnError>;
+[[nodiscard]] auto advance_origin_station_flight(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system, OriginStationFlightState& state,
+    std::span<const FlightCommand> commands)
+    -> std::expected<void, OriginStationFlightError>;
 
-[[nodiscard]] auto
-origin_return_state_checksum(const OriginReturnState& state) noexcept
-    -> std::uint64_t;
+[[nodiscard]] auto attempt_origin_docking(
+    IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<void, OriginStationFlightError>;
+
+[[nodiscard]] auto origin_station_flight_state_checksum(
+    const OriginStationFlightState& state) noexcept -> std::uint64_t;
 
 }  // namespace apsis_drift

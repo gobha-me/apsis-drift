@@ -13,7 +13,7 @@ namespace apsis_drift {
 
 inline constexpr std::uint64_t kIntersystemContractAcceptanceSeed{42};
 inline constexpr std::string_view kIntersystemContractAcceptanceScenario{
-    "v0.4.13-intersystem-contract-loop"};
+    "v0.4.29-origin-system-free-flight"};
 
 struct IntersystemContractAcceptanceCheckpoint {
   std::string name;

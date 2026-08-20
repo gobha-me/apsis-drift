@@ -1,6 +1,6 @@
 # Deterministic Intersystem Mission and Travel Contract
 
-Version 3 defines the authoritative boundary for the first complete
+Version 4 defines the authoritative boundary for the first complete
 station-to-system contract loop. Version 1 established identities, time,
 coordinate ownership, legal travel phases, and save implications before the
 individual generation, rendering, flight, and mission-board systems implement
@@ -91,9 +91,13 @@ arrival side, position, and velocity; it cannot place the craft above the
 objective or synthesize mission progress.
 
 The origin station is an explicit generated waypoint in origin-system space.
-It is neither the system barycenter nor the universe origin. Docking uses a
-bounded rendezvous predicate and confirmation; detailed docking physics remain
-outside this contract.
+It is neither the system barycenter nor the universe origin. Launch creates a
+station-relative craft five kilometres along the positive-X corridor with
+matched station velocity. The same application-owned flight state supports
+free flight before the outbound jump and the return approach. Docking uses a
+bounded rendezvous predicate and confirmation; before departure it returns the
+mission to accepted/docked, while after objective completion it advances the
+mission to returned. Detailed docking physics remain outside this contract.
 
 ## Mission and travel state
 
@@ -116,8 +120,8 @@ Travel phases are:
 | Phase | Required location |
 | --- | --- |
 | `docked_at_origin` | Origin system and station; no craft flight pose. |
-| `origin_system_flight` | Origin-system inertial craft state. |
-| `outbound_jump_spooling` | Origin system; cancelable timer. |
+| `origin_system_flight` | Live station-relative origin craft state. |
+| `outbound_jump_spooling` | Origin system; cancelable timer with the launch-side craft frozen at spool start. |
 | `outbound_jump_committed` | Origin system plus bound target destination, commit tick, and canonical target arrival. |
 | `target_system_flight` | Target-system inertial craft state plus its immutable target arrival. |
 | `target_planet_flight` | Target planet and existing flight state plus its immutable target arrival. |
@@ -128,14 +132,16 @@ Travel phases are:
 The legal first-loop sequence is:
 
 ```text
-offer -> accept -> launch
--> outbound spool -> commit -> target arrival
+offer -> accept -> launch -> free flight
+-> redock and relaunch, or outbound spool -> commit -> target arrival
 -> target approach -> planet entry -> objective completion
 -> planet departure -> return spool -> commit -> origin arrival
 -> station rendezvous -> dock -> turn in
 ```
 
-Spooling may return to flight in its source system. Planetary flight may return
+Spooling may return to flight in its source system. Outbound cancellation
+retimes the unchanged station-relative craft to the current authoritative tick.
+Planetary flight may return
 to target-system flight before or after objective completion. Every other
 out-of-order, repeated, unknown, mistimed, or identity-inconsistent command is
 rejected transactionally. A committed destination, mission target, collected
@@ -157,7 +163,7 @@ location into corrupt mission state.
 
 ## Rule profiles
 
-Version 3 retains exactly two authoritative rule profiles. `ASSISTED` is the
+Version 4 retains exactly two authoritative rule profiles. `ASSISTED` is the
 fresh-career default. `PILOT` opts into deterministic thermal
 consequences and the implemented alignment consequences. The player may select
 either profile only while docked with the mission offered or accepted; launch
@@ -170,7 +176,7 @@ and recovery cap are specified in
 
 ## Save projection and compatibility
 
-Current save format 12 requires the complete contract projection:
+Current save format 13 requires the complete contract projection:
 
 - generator versions for the system catalog, ephemeris, and first mission;
 - stable origin/target system, star, mission-planet, station, mission, and
@@ -182,8 +188,11 @@ Current save format 12 requires the complete contract projection:
   bound when a jump commits;
 - existing discoveries and sparse world deltas unchanged.
 
-Target-system flight stores its tick, identities, inertial position and
-velocity, attitude basis, controls, flight mode, and bounded time scale.
+Origin-system free flight and return share one station-relative state. Outbound
+spooling retains it frozen at the phase-start tick for exact save/resume and
+cancellation. Target-system flight stores its tick, identities, inertial
+position and velocity, attitude basis, controls, flight mode, and bounded time
+scale.
 Target-planet flight stores exact geodetic pose, local velocity, clearance,
 controls, regime, transition, thermal load, and abort latch. Return spooling
 retains the frozen target-system craft and immutable arrival required for exact
@@ -192,15 +201,15 @@ cancellation; origin arrival owns one matching station-approach state.
 The v0.4.7 through v0.4.17 releases introduced historical formats 3 through 10
 as the mission board, jump, system flight, Planetfall, return, rule profile,
 Pilot alignment, and thermal state landed. Those documents remain useful
-historical evidence but are not current player-save inputs. Format 11 rejects
-formats 1 through 11 at the root boundary with an explicit unsupported-alpha
+historical evidence but are not current player-save inputs. Format 13 rejects
+formats 1 through 12 at the root boundary with an explicit unsupported-alpha
 diagnostic and never synthesizes missing fields.
 
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Format 11 preserves current state exactly and rejects absent arrival, craft,
+Format 13 preserves current state exactly and rejects absent arrival, craft,
 profile, alignment, thermal, or journal data when the active phase requires it.
 The application version that most recently wrote the file is diagnostic root
 metadata and never changes deterministic contract state.

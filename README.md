@@ -70,10 +70,10 @@ loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
-New writes use save format 12 and record the writing application version.
-Releases before v0.8.0 are alpha: formats 1 through 11 are intentionally
-unsupported after the orbiting-home format-12 reset and are rejected without modifying the
-source file. The durable forward-loading promise begins with the actual format
+New writes use save format 13 and record the writing application version.
+Releases before v0.8.0 are alpha: formats 1 through 12 are intentionally
+unsupported after the origin-flight format-13 reset and are rejected without
+modifying the source file. The durable forward-loading promise begins with the actual format
 shipped by v0.8.0; see
 [Save Format and Compatibility](docs/SAVE_FORMAT.md).
 
@@ -122,9 +122,10 @@ Interactive controls:
 - Signal navigation mode: Tab/Shift-Tab selects the next/previous target
 - Signal Run: accept the station briefing, launch, collect the bound target,
   ascend and follow the Origin Station cue, then press Enter at rendezvous
-- First intersystem contract: accept and launch at the mission board, then
-  press J to begin or cancel the three-second FTL spool; committed transit
-  arrives automatically after two seconds
+- First intersystem contract: accept and launch at the mission board, fly
+  freely around the moving Origin Station, then press J to begin or cancel the
+  three-second FTL spool; committed transit arrives automatically after two
+  seconds. Press Enter within the rendezvous boundary to redock before jumping.
 - Rule profile: press Left/Right at the mission board before launch to select
   Assisted or Pilot; launch locks the authoritative selection for the mission
 - Pilot FTL spool: use A/D to correct heading and W/S to correct velocity;
@@ -233,10 +234,11 @@ Station-relative guidance, a 5 km rendezvous predicate, explicit docking
 confirmation, and idempotent mission turn-in resume from save format 7. See
 [docs/INTERSYSTEM_RETURN.md](docs/INTERSYSTEM_RETURN.md).
 
-The v0.4.13 complete-contract acceptance path now composes mission acceptance,
-outbound transit, the moving target system, Planetfall, recovery from a poor
-entry, orbital return, home transit, docking, and turn-in. Six independent
-save/resume continuations converge on one authoritative final checksum under
+The v0.4.29 complete-contract acceptance path composes mission acceptance,
+origin free flight, redocking, canceled and resumed outbound spool, the moving
+target system, Planetfall, recovery from a poor entry, orbital return, home
+transit, docking, and turn-in. Nine independent save/resume continuations
+converge on one authoritative final checksum under
 GCC and Clang, while application framebuffer, TermForge encoding, and live
 terminal/proxy timings remain separate evidence. See
 [docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md](docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md).
@@ -244,14 +246,14 @@ terminal/proxy timings remain separate evidence. See
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records deterministic thermal-abort and alignment-quality
-boundaries. Current format-12 saves require the explicit selection. See
+boundaries. Current format-13 saves require the explicit selection. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment
 task. Commitment grades an immutable ALIGNED, OFFSET, or OPPOSED handoff;
 Assisted retains its exact ten-radius matched-velocity corridor, while poor
 Pilot execution changes only the recoverable target-system approach. Save
-format 12 retains the alignment and placement exactly. See
+format 13 retains the alignment and placement exactly. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The v0.4.17 Pilot reentry path derives thermal load from atmospheric pressure,
@@ -321,6 +323,13 @@ return arrival, rendering, guidance, save/resume, and docking all use the same
 tick-resolved position and velocity. Save format 12 stores the home/orbit
 recipe and station-relative approach state and intentionally rejects formats
 1 through 11 without touching the source file.
+
+The v0.4.29 origin-flight path launches into a deterministic station-relative
+craft state instead of jumping from a fixed camera. Normal flight controls,
+guidance, assist, and bounded docking work before the outbound jump; Pilot
+alignment begins from the live craft yaw and relative speed. Outbound spooling
+freezes that exact state so cancellation and format-13 save/resume restore the
+same craft without rerolling identities or advancing another random stream.
 
 | Kitty-scale local profile | ANSI-scale remote profile |
 | --- | --- |

@@ -19,7 +19,7 @@ saved while spooling; cancellation restores it at the current universe tick.
 Commitment removes that state, binds the existing origin arrival solution, and
 finishes after the same deterministic two-second transit as the outbound jump.
 
-## Origin Station approach
+## Origin Station flight and approach
 
 Origin Station version 2 carries a host planet and deterministic circular-orbit
 recipe. At every authoritative tick, the application composes the host-planet
@@ -28,10 +28,12 @@ station position, arrives 40 km along its positive-X corridor, and matches its
 velocity. The station is therefore neither the system barycenter nor a static
 launch-era waypoint.
 
-The approach state records the authoritative tick, origin system and station
-identities, station-relative position and velocity, attitude basis, flight
-mode, and held controls. Absolute render pose is derived from the same
-tick-resolved station ephemeris.
+One common station-flight state records the authoritative tick, origin system
+and station identities, station-relative position and velocity, attitude
+basis, flight mode, and held controls. Launch initializes it five kilometres
+along the positive-X corridor with matched station velocity; the home jump
+initializes it forty kilometres along the same corridor. Absolute render pose
+is derived from the same tick-resolved station ephemeris.
 Assisted flight is capped at 1,000 m/s with 250 m/s² acceleration. Kitty and
 ANSI consume the same station-relative distance, signed closing speed, braking
 cue, and code-authored center marker.
@@ -39,19 +41,21 @@ cue, and code-authored center marker.
 Docking physics is deliberately minimal. Distance at or below 5,000 metres and
 relative speed at or below 25 m/s produces `ENTER DOCK`; Enter is still
 required to dock. A craft at an obsolete station position or above the speed
-limit is refused. Docking atomically
-removes the flight state and advances the mission from `objective_complete` to
+limit is refused. Docking atomically removes the flight state. Before outbound
+commitment it returns the accepted mission to the station without progress;
+after the objective it advances the mission from `objective_complete` to
 `returned`. The station board then exposes a separate `TURN IN CONTRACT`
 action. Repeated or out-of-order docking and turn-in commands are rejected
 without changing state.
 
 ## Persistence
 
-Save format 12 admits one `origin_return` state only during
+Save format 13 admits one `origin_station_flight` state during live
+`origin_system_flight`, frozen `outbound_jump_spooling`, or
 `origin_system_return`. Target-system flight remains present during a
 cancelable return spool and is absent after commitment. Objective-complete,
 returned, and turned-in states retain the immutable target discovery and
-exactly one collected world delta. Formats 1 through 11 are rejected before
+exactly one collected world delta. Formats 1 through 12 are rejected before
 state decoding rather than being upgraded with synthesized return state.
 
 ## Acceptance replay

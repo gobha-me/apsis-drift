@@ -198,9 +198,10 @@ auto run_intersystem_return_acceptance(int width, int height)
     return std::unexpected{
         IntersystemReturnAcceptanceError::initialization_failure};
   }
-  const auto arrival_checksum = origin_return_state_checksum(*origin_return);
-  document.state.origin_return = *origin_return;
-  if (!persist() || !document.state.origin_return) {
+  const auto arrival_checksum =
+      origin_station_flight_state_checksum(*origin_return);
+  document.state.origin_station_flight = *origin_return;
+  if (!persist() || !document.state.origin_station_flight) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::persistence_failure};
   }
@@ -211,8 +212,8 @@ auto run_intersystem_return_acceptance(int width, int height)
                                 .height = height,
                                 .field_of_view_degrees = 60.0}};
   const auto selected = origin_system.planets.front().descriptor.id;
-  const auto origin_pose = resolve_origin_return_pose(
-      resumed_contract, origin_system, *document.state.origin_return);
+  const auto origin_pose = resolve_origin_station_flight_pose(
+      resumed_contract, origin_system, *document.state.origin_station_flight);
   const auto station_ephemeris = resolve_origin_station_ephemeris(
       origin_system,
       generate_origin_station(resumed_contract.identities.universe_seed),
@@ -254,21 +255,21 @@ auto run_intersystem_return_acceptance(int width, int height)
   constexpr SimulationTick approach_limit{90 * kSimulationHz};
   bool resumed_midway{};
   for (SimulationTick tick = 0; tick < approach_limit; ++tick) {
-    const auto guidance = resolve_origin_return_guidance(
-        resumed_contract, origin_system, *document.state.origin_return);
+    const auto guidance = resolve_origin_station_flight_guidance(
+        resumed_contract, origin_system, *document.state.origin_station_flight);
     if (!guidance) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
     }
     if (guidance->arrived) break;
-    auto next_return = *document.state.origin_return;
-    if (!advance_origin_return(resumed_contract, origin_system, next_return,
-                               {}) ||
+    auto next_return = *document.state.origin_station_flight;
+    if (!advance_origin_station_flight(resumed_contract, origin_system,
+                                       next_return, {}) ||
         !advance_intersystem_time(resumed_contract, 1)) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
     }
-    document.state.origin_return = std::move(next_return);
+    document.state.origin_station_flight = std::move(next_return);
     if (!resumed_midway && tick == approach_limit / 3) {
       if (!persist()) {
         return std::unexpected{
@@ -277,21 +278,21 @@ auto run_intersystem_return_acceptance(int width, int height)
       resumed_midway = true;
     }
   }
-  const auto final_guidance = resolve_origin_return_guidance(
-      resumed_contract, origin_system, *document.state.origin_return);
+  const auto final_guidance = resolve_origin_station_flight_guidance(
+      resumed_contract, origin_system, *document.state.origin_station_flight);
   if (!final_guidance || !final_guidance->arrived || !resumed_midway) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::incomplete_path};
   }
-  const auto docked_return_checksum =
-      origin_return_state_checksum(*document.state.origin_return);
+  const auto docked_return_checksum = origin_station_flight_state_checksum(
+      *document.state.origin_station_flight);
   if (!attempt_origin_docking(resumed_contract, origin_system,
-                              *document.state.origin_return)) {
+                              *document.state.origin_station_flight)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::transition_failure};
   }
   const auto docking_tick = resumed_contract.universe_tick;
-  document.state.origin_return.reset();
+  document.state.origin_station_flight.reset();
   if (!persist() ||
       !advance_intersystem_contract(
           resumed_contract, resumed_contract.universe_tick,

@@ -392,7 +392,7 @@ class LandscapeApp final : public App {
       if (profile->state.intersystem_contract) {
         m_intersystem_contract = *profile->state.intersystem_contract;
         m_system_flight = profile->state.system_flight;
-        m_origin_return = profile->state.origin_return;
+        m_origin_station_flight = profile->state.origin_station_flight;
         m_intersystem_world_deltas = profile->state.world_deltas;
         if (profile->state.flight) {
           auto cache = TerrainTileCache::create();
@@ -699,8 +699,8 @@ class LandscapeApp final : public App {
     return m_display_tier;
   }
   [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
-    if (m_origin_return) {
-      return origin_return_state_checksum(*m_origin_return);
+    if (m_origin_station_flight) {
+      return origin_station_flight_state_checksum(*m_origin_station_flight);
     }
     if (m_system_flight) {
       return system_flight_state_checksum(*m_system_flight);
@@ -752,7 +752,7 @@ class LandscapeApp final : public App {
       auto document = *m_save_profile;
       document.state.intersystem_contract = *m_intersystem_contract;
       document.state.system_flight = m_system_flight;
-      document.state.origin_return = m_origin_return;
+      document.state.origin_station_flight = m_origin_station_flight;
       document.state.flight =
           m_intersystem_planetfall
               ? std::optional<PlanetaryFlightState>{
@@ -823,19 +823,30 @@ class LandscapeApp final : public App {
             m_intersystem_contract->mission_phase ==
                     IntersystemMissionPhase::offered
                 ? IntersystemContractCommand::accept_mission
-                : m_intersystem_contract->mission_phase ==
-                          IntersystemMissionPhase::accepted
-                      ? IntersystemContractCommand::launch
-                      : IntersystemContractCommand::turn_in;
+            : m_intersystem_contract->mission_phase ==
+                    IntersystemMissionPhase::accepted
+                ? IntersystemContractCommand::launch
+                : IntersystemContractCommand::turn_in;
+        auto next_contract = *m_intersystem_contract;
         const auto advanced = advance_intersystem_contract(
-            *m_intersystem_contract,
-            m_intersystem_contract->universe_tick, board_command);
+            next_contract, next_contract.universe_tick, board_command);
         if (!advanced) {
           m_error = "mission board action was rejected";
         } else if (board_command == IntersystemContractCommand::launch) {
+          auto launched =
+              initialize_origin_station_launch(next_contract, m_origin_system);
+          if (!launched) {
+            m_error = "Origin Station launch initialization was rejected";
+            return;
+          }
+          m_intersystem_contract = std::move(next_contract);
+          m_origin_station_flight = std::move(*launched);
           (void)m_session.start_flight();
           m_simulation_clock.reset();
           m_active_mouse_region = {};
+          m_input_mapper.suspend({}, m_origin_station_flight->tick);
+        } else {
+          m_intersystem_contract = std::move(next_contract);
         }
         return;
       }
@@ -874,9 +885,18 @@ class LandscapeApp final : public App {
       } else if (m_system_flight) {
         m_input_mapper.suspend(m_system_flight->controls,
                                m_system_flight->tick);
-      } else if (m_origin_return) {
-        m_input_mapper.suspend(m_origin_return->controls,
-                               m_origin_return->tick);
+      } else if (m_origin_station_flight) {
+        if (m_intersystem_contract &&
+            m_intersystem_contract->travel_phase ==
+                IntersystemTravelPhase::outbound_jump_spooling &&
+            m_intersystem_contract->jump_alignment) {
+          m_input_mapper.suspend(
+              m_intersystem_contract->jump_alignment->controls,
+              m_intersystem_contract->universe_tick);
+        } else {
+          m_input_mapper.suspend(m_origin_station_flight->controls,
+                                 m_origin_station_flight->tick);
+        }
       } else if (m_intersystem_planetfall) {
         m_input_mapper.suspend(m_intersystem_planetfall->flight.controls,
                                m_intersystem_planetfall->flight.tick);
@@ -1161,16 +1181,13 @@ class LandscapeApp final : public App {
             ? format_flight_instruments(*m_signal_run->flight)
             : m_signal_scenario
             ? format_flight_instruments(m_signal_scenario->flight)
-            : m_system_flight
-            ? format_flight_instruments(*m_system_flight)
-            : m_origin_return
-            ? format_flight_instruments(*m_origin_return)
-            : m_intersystem_planetfall
-                  ? format_flight_instruments(
-                        m_intersystem_planetfall->flight)
-            : m_planetary_flight
-                  ? format_flight_instruments(*m_planetary_flight)
-                  : format_flight_instruments(m_flight);
+        : m_system_flight ? format_flight_instruments(*m_system_flight)
+        : m_origin_station_flight
+            ? format_flight_instruments(*m_origin_station_flight)
+        : m_intersystem_planetfall
+            ? format_flight_instruments(m_intersystem_planetfall->flight)
+        : m_planetary_flight ? format_flight_instruments(*m_planetary_flight)
+                             : format_flight_instruments(m_flight);
     const std::optional<ThermalInstrumentReadout> thermal =
         m_intersystem_planetfall
             ? std::optional<ThermalInstrumentReadout>{
@@ -1262,9 +1279,9 @@ class LandscapeApp final : public App {
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 2, "TARGET", accent,
                       chrome_bg);
-    if (m_origin_return && m_intersystem_contract) {
-      const auto guidance = resolve_origin_return_guidance(
-          *m_intersystem_contract, m_origin_system, *m_origin_return);
+    if (m_origin_station_flight && m_intersystem_contract) {
+      const auto guidance = resolve_origin_station_flight_guidance(
+          *m_intersystem_contract, m_origin_system, *m_origin_station_flight);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 4, "ORIGIN STN", text,
                         chrome_bg);
@@ -1285,8 +1302,8 @@ class LandscapeApp final : public App {
                          "CLS {:+5.0f}",
                          guidance->closing_speed_metres_per_second)
                    : "CLS ---- ",
-          guidance && (guidance->cue == OriginReturnCue::opening ||
-                       guidance->cue == OriginReturnCue::brake)
+          guidance && (guidance->cue == OriginStationFlightCue::opening ||
+                       guidance->cue == OriginStationFlightCue::brake)
               ? warning
               : text,
           chrome_bg);
@@ -1484,26 +1501,38 @@ class LandscapeApp final : public App {
                               jump.cancelable ? "J CANCEL"
                                               : "ARRIVAL BOUND");
       }
-    } else if (m_intersystem_contract &&
-               m_intersystem_contract->travel_phase ==
-                   IntersystemTravelPhase::origin_system_flight) {
-      message = " FTL READY | J BEGIN 3-SECOND SPOOL | J AGAIN TO CANCEL ";
-    } else if (m_origin_return && m_intersystem_contract) {
-      const auto guidance = resolve_origin_return_guidance(
-          *m_intersystem_contract, m_origin_system, *m_origin_return);
+    } else if (m_origin_station_flight && m_intersystem_contract) {
+      const auto guidance = resolve_origin_station_flight_guidance(
+          *m_intersystem_contract, m_origin_system, *m_origin_station_flight);
       if (guidance) {
         std::string_view cue{"HOLD"};
         switch (guidance->cue) {
-          case OriginReturnCue::closing: cue = "CLOSING"; break;
-          case OriginReturnCue::opening: cue = "OPENING"; break;
-          case OriginReturnCue::brake: cue = "BRAKE NOW"; break;
-          case OriginReturnCue::arrived: cue = "ENTER DOCK"; break;
-          case OriginReturnCue::hold: break;
+          case OriginStationFlightCue::closing:
+            cue = "CLOSING";
+            break;
+          case OriginStationFlightCue::opening:
+            cue = "OPENING";
+            break;
+          case OriginStationFlightCue::brake:
+            cue = "BRAKE NOW";
+            break;
+          case OriginStationFlightCue::arrived:
+            cue = "ENTER DOCK";
+            break;
+          case OriginStationFlightCue::hold:
+            break;
         }
-        message = std::format(
-            " ORIGIN STATION {:.0f} m | CLS {:+.0f} m/s | {} ",
-            guidance->distance_metres,
-            guidance->closing_speed_metres_per_second, cue);
+        message = m_intersystem_contract->travel_phase ==
+                          IntersystemTravelPhase::origin_system_flight
+                      ? std::format(
+                            " ORIGIN STATION {:.0f} m | CLS {:+.0f} m/s | {} "
+                            "| J SPOOL ",
+                            guidance->distance_metres,
+                            guidance->closing_speed_metres_per_second, cue)
+                      : std::format(
+                            " ORIGIN STATION {:.0f} m | CLS {:+.0f} m/s | {} ",
+                            guidance->distance_metres,
+                            guidance->closing_speed_metres_per_second, cue);
       } else {
         message = " ORIGIN STATION GUIDANCE INVALID ";
       }
@@ -1539,25 +1568,22 @@ class LandscapeApp final : public App {
                      layout.status.h, text, status_bg);
     screen.write_text(
         layout.status.x, layout.status.y,
-        std::format(" {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
-                    (m_signal_run && m_signal_run->flight
-                         ? m_signal_run->flight->mode
-                         : m_signal_scenario
-                         ? m_signal_scenario->flight.mode
-                         : m_system_flight
-                         ? m_system_flight->mode
-                         : m_origin_return
-                         ? m_origin_return->mode
-                         : (m_intersystem_planetfall
-                                ? m_intersystem_planetfall->flight.mode
-                            : (m_planetary_flight
-                                   ? m_planetary_flight->mode
-                                   : m_flight.mode))) ==
-                            FlightMode::autopilot
-                        ? "AUTOPILOT"
-                        : "MANUAL",
-                    m_input_tier, m_frame, render_time,
-                    static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
+        std::format(
+            " {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
+            (m_signal_run && m_signal_run->flight ? m_signal_run->flight->mode
+             : m_signal_scenario ? m_signal_scenario->flight.mode
+             : m_system_flight   ? m_system_flight->mode
+             : m_origin_station_flight
+                 ? m_origin_station_flight->mode
+                 : (m_intersystem_planetfall
+                        ? m_intersystem_planetfall->flight.mode
+                        : (m_planetary_flight ? m_planetary_flight->mode
+                                              : m_flight.mode))) ==
+                    FlightMode::autopilot
+                ? "AUTOPILOT"
+                : "MANUAL",
+            m_input_tier, m_frame, render_time,
+            static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
         text, status_bg);
 
     m_surface.set_geometry(layout.viewport);
@@ -1668,53 +1694,64 @@ class LandscapeApp final : public App {
                                m_intersystem_planetfall->flight.tick);
         return;
       }
-      if (m_origin_return) {
+      if (m_origin_station_flight) {
+        const bool jump_key = key.action == KeyAction::Press &&
+                              key.key == Key::Char &&
+                              (key.ch == U'j' || key.ch == U'J');
+        if (m_intersystem_contract->travel_phase ==
+            IntersystemTravelPhase::outbound_jump_spooling) {
+          if (jump_key) {
+            auto next_contract = *m_intersystem_contract;
+            if (!cancel_intersystem_jump(next_contract)) {
+              m_error = "outbound jump cancellation was rejected";
+              return;
+            }
+            m_intersystem_contract = std::move(next_contract);
+            m_origin_station_flight->tick =
+                m_intersystem_contract->universe_tick;
+            m_origin_station_flight->controls = {};
+            m_error.clear();
+            m_input_mapper.suspend({}, m_origin_station_flight->tick);
+          } else if (m_intersystem_contract->rule_profile ==
+                     IntersystemRuleProfile::pilot) {
+            m_input_mapper.enqueue(key, m_intersystem_contract->universe_tick);
+          }
+          return;
+        }
+        if (jump_key && m_intersystem_contract->travel_phase ==
+                            IntersystemTravelPhase::origin_system_flight) {
+          auto next_contract = *m_intersystem_contract;
+          if (!begin_intersystem_jump(next_contract,
+                                      *m_origin_station_flight)) {
+            m_error = "outbound jump command refused in the current state";
+            return;
+          }
+          m_intersystem_contract = std::move(next_contract);
+          m_origin_station_flight->controls = {};
+          m_error.clear();
+          m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
+          return;
+        }
         if (key.key == Key::Enter && key.action == KeyAction::Press) {
-          const auto guidance = resolve_origin_return_guidance(
-              *m_intersystem_contract, m_origin_system, *m_origin_return);
+          const auto guidance = resolve_origin_station_flight_guidance(
+              *m_intersystem_contract, m_origin_system,
+              *m_origin_station_flight);
           auto next_contract = *m_intersystem_contract;
           if (!guidance || !guidance->arrived ||
               !attempt_origin_docking(next_contract, m_origin_system,
-                                      *m_origin_return)) {
+                                      *m_origin_station_flight)) {
             m_error = "reach the Origin Station rendezvous before docking";
             return;
           }
           m_intersystem_contract = std::move(next_contract);
-          m_origin_return.reset();
+          m_origin_station_flight.reset();
           (void)m_session.dock_at_station();
           m_simulation_clock.reset();
           m_active_mouse_region = {};
           return;
         }
-        m_input_mapper.enqueue(key, m_origin_return->tick, true);
+        m_input_mapper.enqueue(key, m_origin_station_flight->tick, true);
         return;
-      }
-      const bool jump_key = key.action == KeyAction::Press &&
-                            key.key == Key::Char &&
-                            (key.ch == U'j' || key.ch == U'J');
-      if (!jump_key) {
-        if (m_intersystem_contract->travel_phase ==
-                IntersystemTravelPhase::outbound_jump_spooling &&
-            m_intersystem_contract->rule_profile ==
-                IntersystemRuleProfile::pilot) {
-          m_input_mapper.enqueue(key,
-                                 m_intersystem_contract->universe_tick);
-        }
-        return;
-      }
-      const bool spooling =
-          m_intersystem_contract->travel_phase ==
-              IntersystemTravelPhase::outbound_jump_spooling ||
-          m_intersystem_contract->travel_phase ==
-              IntersystemTravelPhase::return_jump_spooling;
-      const auto changed = spooling
-                               ? cancel_intersystem_jump(*m_intersystem_contract)
-                               : begin_intersystem_jump(*m_intersystem_contract);
-      if (!changed) {
-        m_error = "jump command refused in the current state";
-      } else {
-        m_error.clear();
-        m_input_mapper.suspend({}, m_intersystem_contract->universe_tick);
       }
       return;
     }
@@ -1815,10 +1852,13 @@ class LandscapeApp final : public App {
               throw std::runtime_error{
                   "cannot initialize Origin Station return flight"};
             }
-            m_origin_return = std::move(*returning);
+            m_origin_station_flight = std::move(*returning);
           }
           if (advanced->committed && !outbound) {
             m_system_flight.reset();
+          }
+          if (advanced->committed && outbound) {
+            m_origin_station_flight.reset();
           }
           if (advanced->committed) {
             m_input_mapper.suspend({},
@@ -1870,16 +1910,17 @@ class LandscapeApp final : public App {
           }
           m_intersystem_planetfall = std::move(next_planetfall);
           m_intersystem_contract = std::move(next_contract);
-        } else if (m_origin_return) {
-          auto next_return = *m_origin_return;
+        } else if (m_origin_station_flight) {
+          auto next_station_flight = *m_origin_station_flight;
           auto next_contract = *m_intersystem_contract;
-          auto commands = m_input_mapper.take_commands(next_return.tick);
-          if (!advance_origin_return(next_contract, m_origin_system,
-                                     next_return, commands) ||
+          auto commands =
+              m_input_mapper.take_commands(next_station_flight.tick);
+          if (!advance_origin_station_flight(next_contract, m_origin_system,
+                                             next_station_flight, commands) ||
               !advance_intersystem_time(next_contract, 1)) {
-            throw std::runtime_error{"Origin Station return flight failed"};
+            throw std::runtime_error{"Origin Station flight failed"};
           }
-          m_origin_return = std::move(next_return);
+          m_origin_station_flight = std::move(next_station_flight);
           m_intersystem_contract = std::move(next_contract);
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"universe clock failed"};
@@ -1996,15 +2037,6 @@ class LandscapeApp final : public App {
         }
         origin_station_ephemeris = *resolved_station;
       }
-      if (origin_station_ephemeris &&
-          m_intersystem_contract->travel_phase ==
-              IntersystemTravelPhase::origin_system_flight) {
-        camera_position = {origin_station_ephemeris->position.x +
-                               kAssistedOriginArrivalStandoffMetres,
-                           origin_station_ephemeris->position.y,
-                           origin_station_ephemeris->position.z};
-        camera_velocity = origin_station_ephemeris->velocity;
-      }
       if (m_intersystem_contract->arrival_solution &&
           m_intersystem_contract->arrival_solution->destination == system.id) {
         camera_position =
@@ -2019,16 +2051,17 @@ class LandscapeApp final : public App {
         camera_velocity = m_system_flight->velocity;
         forward = m_system_flight->forward;
         up = m_system_flight->up;
-      } else if (m_origin_return && m_origin_return->system == system.id) {
-        const auto pose = resolve_origin_return_pose(
-            *m_intersystem_contract, m_origin_system, *m_origin_return);
+      } else if (m_origin_station_flight &&
+                 m_origin_station_flight->system == system.id) {
+        const auto pose = resolve_origin_station_flight_pose(
+            *m_intersystem_contract, m_origin_system, *m_origin_station_flight);
         if (!pose) {
-          throw std::runtime_error{"cannot resolve Origin Station return pose"};
+          throw std::runtime_error{"cannot resolve Origin Station flight pose"};
         }
         camera_position = pose->position;
         camera_velocity = pose->velocity;
-        forward = m_origin_return->forward;
-        up = m_origin_return->up;
+        forward = m_origin_station_flight->forward;
+        up = m_origin_station_flight->up;
       }
       const PlanetId selected =
           at_target ? m_intersystem_contract->identities.target_planet
@@ -2045,7 +2078,7 @@ class LandscapeApp final : public App {
           .position = camera_position,
           .velocity = camera_velocity,
           .forward =
-              (m_system_flight || m_origin_return) ? forward
+              (m_system_flight || m_origin_station_flight) ? forward
               : origin_station_ephemeris && !at_target
                   ? SystemDirection{origin_station_ephemeris->position.x -
                                         camera_position.x,
@@ -2264,7 +2297,7 @@ class LandscapeApp final : public App {
   PlanetarySurfaceFixture m_planetary_surface;
   std::optional<PlanetaryFlightState> m_planetary_flight;
   std::optional<SystemFlightState> m_system_flight;
-  std::optional<OriginReturnState> m_origin_return;
+  std::optional<OriginStationFlightState> m_origin_station_flight;
   std::optional<TerrainTileCache> m_intersystem_planetfall_cache;
   std::optional<IntersystemPlanetfallState> m_intersystem_planetfall;
   std::optional<LocalSystemRenderStats> m_system_render;

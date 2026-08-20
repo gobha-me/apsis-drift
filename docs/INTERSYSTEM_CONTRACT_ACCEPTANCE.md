@@ -1,6 +1,6 @@
 # Complete Intersystem Contract Acceptance
 
-The v0.4.13 acceptance scenario composes the first-contract systems into one
+The v0.4.29 acceptance scenario composes the first-contract systems into one
 fixed seed-42 headless trace. It begins with a fresh save docked at the Origin
 Station and ends docked with the mission turned in, one discovery, and exactly
 one collected world delta.
@@ -15,8 +15,10 @@ mission state machine or terminal protocol.
 
 The canonical trace:
 
-1. accepts and launches the bounded mission from the stable Origin Station;
-2. commits the three-second outbound spool and completes the two-second jump;
+1. accepts and launches the bounded mission, flies away from the moving Origin
+   Station, returns under assist, docks, and relaunches;
+2. begins the outbound spool from the live craft, saves, cancels back to the
+   exact relative pose, respools, and completes the jump;
 3. renders the generated star and all six moving planets at two ephemeris
    times, then flies the Assisted arrival to orbit-insertion readiness;
 4. selects the bound objective entry, collects it through the existing
@@ -27,26 +29,29 @@ The canonical trace:
 
 The same scenario also runs the entry-anywhere recovery branch. A ninety-degree
 early entry descends through the atmosphere, reverses the descent, and reaches
-orbit again with authoritative checksum `7537708600294715479`. That branch
+orbit again with authoritative checksum `15160466842829483543`. That branch
 proves the poor entry is recoverable without changing the canonical completion
 trace or collected delta.
 
 ## Save/resume matrix
 
-The uninterrupted trace records these format-7 checkpoints:
+The uninterrupted trace records these format-13 checkpoints:
 
 | Checkpoint | Tick |
 | --- | ---: |
 | Docked, mission offered | 0 |
-| Outbound transit committed | 360 |
-| Target-system flight | 600 |
-| Planet-side objective complete | 9,467 |
-| Origin Station return | 30,472 |
-| Returned and docked | 31,535 |
+| Origin-system free flight | 121 |
+| Outbound spool with frozen craft | 534 |
+| Free flight after canceled spool | 534 |
+| Outbound transit committed | 894 |
+| Target-system flight | 1,134 |
+| Planet-side objective complete | 10,001 |
+| Origin Station return | 31,006 |
+| Returned and docked | 32,075 |
 
 Each checkpoint is encoded, decoded, and continued in an independent replay.
 Every resumed replay reaches final authoritative save checksum
-`9496404445183332939`, mission phase `turned_in`, one discovery, and one
+`8587354319391325309`, mission phase `turned_in`, one discovery, and one
 collected world delta. Rendering, timing, terminal capabilities, and cache
 contents are excluded from that checksum.
 

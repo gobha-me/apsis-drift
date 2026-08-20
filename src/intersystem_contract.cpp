@@ -451,6 +451,22 @@ auto advance_intersystem_contract(IntersystemContractState& state,
       next.mission_phase = IntersystemMissionPhase::active;
       next.travel_phase = IntersystemTravelPhase::origin_system_flight;
       break;
+    case IntersystemContractCommand::dock_at_origin:
+      if (next.travel_phase == IntersystemTravelPhase::origin_system_flight &&
+          next.mission_phase == IntersystemMissionPhase::active) {
+        next.travel_phase = IntersystemTravelPhase::docked_at_origin;
+        next.mission_phase = IntersystemMissionPhase::accepted;
+      } else if (next.travel_phase ==
+                     IntersystemTravelPhase::origin_system_return &&
+                 next.mission_phase ==
+                     IntersystemMissionPhase::objective_complete) {
+        next.travel_phase = IntersystemTravelPhase::docked_at_origin;
+        next.mission_phase = IntersystemMissionPhase::returned;
+        next.arrival_solution.reset();
+      } else {
+        return reject();
+      }
+      break;
     case IntersystemContractCommand::begin_outbound_jump:
       if (next.travel_phase != IntersystemTravelPhase::origin_system_flight ||
           next.mission_phase != IntersystemMissionPhase::active) {
