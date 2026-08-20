@@ -35,7 +35,7 @@ trace or collected delta.
 
 ## Save/resume matrix
 
-The uninterrupted trace records these format-14 checkpoints:
+The uninterrupted trace records these format-15 checkpoints:
 
 | Checkpoint | Tick |
 | --- | ---: |

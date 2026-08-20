@@ -36,19 +36,39 @@ struct OriginNavigationSolution {
                          const OriginNavigationSolution&) -> bool = default;
 };
 
+// Presentation-only observations for contextual cockpit guidance. These are
+// deliberately excluded from save projection and all authoritative checksums.
+struct SignalRunGuidanceState {
+  bool attitude_observed{};
+  bool translation_observed{};
+  bool thrust_observed{};
+  bool coast_observed{};
+  bool braking_observed{};
+  bool targeting_observed{};
+  bool redocking_observed{};
+
+  friend auto operator==(const SignalRunGuidanceState&,
+                         const SignalRunGuidanceState&) -> bool = default;
+};
+
 struct SignalRunState {
   SaveRecipe recipe;
+  OnboardingProgress career_onboarding;
   OriginOnboardingState onboarding;
+  std::optional<IntersystemContractState> career;
+  LocalSystemDescriptor origin_system;
   std::shared_ptr<const PlanetDescriptor> planet;
   SurfaceSignalCatalog catalog;
   std::optional<OriginRendezvous> rendezvous;
   std::optional<PlanetaryFlightState> flight;
+  std::optional<OriginStationFlightState> station_flight;
   SignalScannerState scanner;
   SignalNavigationSolution signal_navigation;
   std::optional<OriginNavigationSolution> origin_navigation;
   WorldDeltaJournal journal;
   SignalCollectionState collection;
   std::vector<SaveDiscovery> discoveries;
+  SignalRunGuidanceState guidance;
 };
 
 enum class SignalRunError : std::uint8_t {
@@ -77,8 +97,19 @@ enum class SignalRunError : std::uint8_t {
                                      TerrainTileCache& cache)
     -> std::expected<void, SignalRunError>;
 
-[[nodiscard]] auto select_signal_run_target(
-    SignalRunState& state, SignalSelectionCommand command)
+[[nodiscard]] auto begin_signal_run_planetfall(SignalRunState& state,
+                                               TerrainTileCache& cache)
+    -> std::expected<void, SignalRunError>;
+
+[[nodiscard]] auto advance_signal_run_station_flight(
+    SignalRunState& state, std::span<const FlightCommand> commands)
+    -> std::expected<void, SignalRunError>;
+
+[[nodiscard]] auto depart_signal_run_home_planet(SignalRunState& state)
+    -> std::expected<void, SignalRunError>;
+
+[[nodiscard]] auto select_signal_run_target(SignalRunState& state,
+                                            SignalSelectionCommand command)
     -> std::expected<void, SignalRunError>;
 
 // Advances exactly one fixed simulation tick. Rejected updates leave the
@@ -89,6 +120,9 @@ enum class SignalRunError : std::uint8_t {
     -> std::expected<void, SignalRunError>;
 
 [[nodiscard]] auto return_signal_run_to_origin(SignalRunState& state)
+    -> std::expected<void, SignalRunError>;
+
+[[nodiscard]] auto turn_in_signal_run(SignalRunState& state)
     -> std::expected<void, SignalRunError>;
 
 [[nodiscard]] auto project_signal_run_save(const SignalRunState& state)

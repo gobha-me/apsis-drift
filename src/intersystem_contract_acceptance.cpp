@@ -185,8 +185,8 @@ struct Replay {
     -> std::expected<Replay, IntersystemContractAcceptanceError> {
   const auto replay_start = Clock::now();
   double render_ms{};
-  auto document =
-      make_new_game_document(Seed{kIntersystemContractAcceptanceSeed});
+  auto document = make_new_game_document(
+      Seed{kIntersystemContractAcceptanceSeed}, NewGameOnboardingChoice::skip);
   if (!document.state.intersystem_contract ||
       !validate_save_document(document)) {
     return std::unexpected{

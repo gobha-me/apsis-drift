@@ -129,7 +129,8 @@ auto apply_command(OriginStationFlightState& state,
   }
 }
 
-[[nodiscard]] auto guidance(const OriginStationFlightState& state) noexcept
+[[nodiscard]] auto guidance(const OriginStationFlightState& state,
+                            double acceleration_limit) noexcept
     -> std::expected<OriginStationFlightGuidance, OriginStationFlightError> {
   const Vec3 offset = multiply(vec(state.relative_position), -1.0);
   const double distance = length(offset);
@@ -141,9 +142,7 @@ auto apply_command(OriginStationFlightState& state,
   }
   const double closing = dot(relative_velocity, *direction);
   const double stopping =
-      closing > 0.0
-          ? closing * closing / (2.0 * kOriginStationFlightAcceleration)
-          : 0.0;
+      closing > 0.0 ? closing * closing / (2.0 * acceleration_limit) : 0.0;
   const bool within_rendezvous = distance <= kOriginStationArrivalRadiusMetres;
   const bool arrived =
       within_rendezvous && speed <= kOriginStationDockingSpeedMetresPerSecond;
@@ -181,17 +180,55 @@ auto resolve_origin_station_waypoint(
       origin_system.id != identities.origin_system) {
     return std::unexpected{OriginStationFlightError::invalid_waypoint};
   }
+  return resolve_origin_station_waypoint(identities.universe_seed,
+                                         origin_system, time);
+}
+
+auto resolve_origin_station_waypoint(Seed universe_seed,
+                                     const LocalSystemDescriptor& origin_system,
+                                     EphemerisQueryTime time)
+    -> std::expected<OriginStationWaypoint, OriginStationFlightError> {
+  const auto station = generate_origin_station(universe_seed);
+  if (origin_system.id.value != station.home_system_seed.value ||
+      origin_system.kind != LocalSystemKind::origin_home) {
+    return std::unexpected{OriginStationFlightError::invalid_waypoint};
+  }
   const auto ephemeris =
       resolve_origin_station_ephemeris(origin_system, station, time);
   if (!ephemeris) {
     return std::unexpected{OriginStationFlightError::invalid_waypoint};
   }
   return OriginStationWaypoint{
-      .system = identities.origin_system,
-      .station = identities.origin_station,
+      .system = origin_system.id,
+      .station = station.id,
       .position = ephemeris->position,
       .velocity = ephemeris->velocity,
   };
+}
+
+auto initialize_origin_station_launch(
+    Seed universe_seed, SimulationTick tick,
+    const LocalSystemDescriptor& origin_system)
+    -> std::expected<OriginStationFlightState, OriginStationFlightError> {
+  const auto waypoint = resolve_origin_station_waypoint(
+      universe_seed, origin_system, {.tick = tick, .sub_tick_fraction = 0.0});
+  if (!waypoint) return std::unexpected{waypoint.error()};
+  OriginStationFlightState result{
+      .tick = tick,
+      .system = waypoint->system,
+      .station = waypoint->station,
+      .relative_position = {kOriginStationLaunchStandoffMetres, 0.0, 0.0},
+      .relative_velocity = {},
+      .forward = {1.0, 0.0, 0.0},
+      .up = {0.0, 0.0, 1.0},
+      .mode = FlightMode::manual,
+      .controls = {},
+  };
+  if (!validate_origin_station_flight_state(universe_seed, tick, origin_system,
+                                            result)) {
+    return std::unexpected{OriginStationFlightError::invalid_state};
+  }
+  return result;
 }
 
 auto initialize_origin_station_launch(
@@ -203,23 +240,49 @@ auto initialize_origin_station_launch(
       contract.mission_phase != IntersystemMissionPhase::active) {
     return std::unexpected{OriginStationFlightError::invalid_contract};
   }
+  return initialize_origin_station_launch(
+      contract.identities.universe_seed, contract.universe_tick, origin_system);
+}
+
+auto initialize_origin_station_approach(
+    Seed universe_seed, const LocalSystemDescriptor& origin_system,
+    const SystemFlightState& departure)
+    -> std::expected<OriginStationFlightState, OriginStationFlightError> {
+  const auto binding = generate_home_signal_contract(universe_seed);
+  if (departure.tick == std::numeric_limits<SimulationTick>::max() ||
+      departure.system != origin_system.id ||
+      departure.target != binding.home_planet ||
+      !validate_system_flight_state(origin_system, departure)) {
+    return std::unexpected{OriginStationFlightError::invalid_arrival};
+  }
   const auto waypoint = resolve_origin_station_waypoint(
-      contract.identities, origin_system,
-      {.tick = contract.universe_tick, .sub_tick_fraction = 0.0});
+      universe_seed, origin_system,
+      {.tick = departure.tick, .sub_tick_fraction = 0.0});
   if (!waypoint) return std::unexpected{waypoint.error()};
+  const Vec3 relative_position =
+      subtract(vec(departure.position), vec(waypoint->position));
+  const Vec3 relative_velocity =
+      subtract(vec(departure.velocity), vec(waypoint->velocity));
+  const auto forward = normalized(multiply(relative_position, -1.0));
+  if (!forward) {
+    return std::unexpected{OriginStationFlightError::invalid_arrival};
+  }
   OriginStationFlightState result{
-      .tick = contract.universe_tick,
-      .system = contract.identities.origin_system,
-      .station = contract.identities.origin_station,
-      .relative_position = {kOriginStationLaunchStandoffMetres, 0.0, 0.0},
-      .relative_velocity = {},
-      .forward = {1.0, 0.0, 0.0},
-      .up = {0.0, 0.0, 1.0},
-      .mode = FlightMode::manual,
+      .tick = departure.tick,
+      .system = origin_system.id,
+      .station = binding.station,
+      .relative_position = {relative_position.x, relative_position.y,
+                            relative_position.z},
+      .relative_velocity = {relative_velocity.x, relative_velocity.y,
+                            relative_velocity.z},
+      .forward = {forward->x, forward->y, forward->z},
+      .up = departure.up,
+      .mode = FlightMode::autopilot,
       .controls = {},
   };
-  if (!validate_origin_station_flight_state(contract, origin_system, result)) {
-    return std::unexpected{OriginStationFlightError::invalid_state};
+  if (!validate_origin_station_flight_state(universe_seed, departure.tick,
+                                            origin_system, result)) {
+    return std::unexpected{OriginStationFlightError::invalid_arrival};
   }
   return result;
 }
@@ -267,18 +330,16 @@ auto initialize_origin_return(const IntersystemContractState& contract,
 }
 
 auto validate_origin_station_flight_state(
-    const IntersystemContractState& contract,
+    Seed universe_seed, SimulationTick authoritative_tick,
     const LocalSystemDescriptor& origin_system,
     const OriginStationFlightState& state)
     -> std::expected<void, OriginStationFlightError> {
+  const auto binding = generate_home_signal_contract(universe_seed);
   const auto waypoint = resolve_origin_station_waypoint(
-      contract.identities, origin_system,
+      universe_seed, origin_system,
       {.tick = state.tick, .sub_tick_fraction = 0.0});
-  if (!validate_intersystem_contract_state(contract) ||
-      !station_flight_phase_supported(contract.travel_phase) ||
-      !station_flight_tick_matches(contract, state) ||
-      state.system != contract.identities.origin_system ||
-      state.station != contract.identities.origin_station || !waypoint ||
+  if (state.tick != authoritative_tick || state.system != origin_system.id ||
+      state.station != binding.station || !waypoint ||
       !finite(vec(state.relative_position)) ||
       !finite(vec(state.relative_velocity)) ||
       !normalized(vec(state.forward)) || !normalized(vec(state.up)) ||
@@ -295,6 +356,33 @@ auto validate_origin_station_flight_state(
   return {};
 }
 
+auto validate_origin_station_flight_state(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<void, OriginStationFlightError> {
+  if (!validate_intersystem_contract_state(contract) ||
+      !station_flight_phase_supported(contract.travel_phase) ||
+      !station_flight_tick_matches(contract, state) ||
+      !validate_origin_station_flight_state(contract.identities.universe_seed,
+                                            state.tick, origin_system, state)) {
+    return std::unexpected{OriginStationFlightError::invalid_state};
+  }
+  return {};
+}
+
+auto resolve_origin_station_flight_guidance(
+    Seed universe_seed, SimulationTick authoritative_tick,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<OriginStationFlightGuidance, OriginStationFlightError> {
+  if (!validate_origin_station_flight_state(universe_seed, authoritative_tick,
+                                            origin_system, state)) {
+    return std::unexpected{OriginStationFlightError::invalid_state};
+  }
+  return guidance(state, kHomeSignalStationFlightAcceleration);
+}
+
 auto resolve_origin_station_flight_guidance(
     const IntersystemContractState& contract,
     const LocalSystemDescriptor& origin_system,
@@ -303,19 +391,20 @@ auto resolve_origin_station_flight_guidance(
   if (!validate_origin_station_flight_state(contract, origin_system, state)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
-  return guidance(state);
+  return guidance(state, kOriginStationFlightAcceleration);
 }
 
 auto resolve_origin_station_flight_pose(
-    const IntersystemContractState& contract,
+    Seed universe_seed, SimulationTick authoritative_tick,
     const LocalSystemDescriptor& origin_system,
     const OriginStationFlightState& state)
     -> std::expected<OriginStationFlightPose, OriginStationFlightError> {
-  if (!validate_origin_station_flight_state(contract, origin_system, state)) {
+  if (!validate_origin_station_flight_state(universe_seed, authoritative_tick,
+                                            origin_system, state)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
   const auto waypoint = resolve_origin_station_waypoint(
-      contract.identities, origin_system,
+      universe_seed, origin_system,
       {.tick = state.tick, .sub_tick_fraction = 0.0});
   if (!waypoint) return std::unexpected{waypoint.error()};
   return OriginStationFlightPose{
@@ -328,16 +417,25 @@ auto resolve_origin_station_flight_pose(
   };
 }
 
-auto advance_origin_station_flight(const IntersystemContractState& contract,
-                                   const LocalSystemDescriptor& origin_system,
-                                   OriginStationFlightState& state,
-                                   std::span<const FlightCommand> commands)
-    -> std::expected<void, OriginStationFlightError> {
+auto resolve_origin_station_flight_pose(
+    const IntersystemContractState& contract,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<OriginStationFlightPose, OriginStationFlightError> {
   if (!validate_origin_station_flight_state(contract, origin_system, state)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
-  if (contract.travel_phase != IntersystemTravelPhase::origin_system_flight &&
-      contract.travel_phase != IntersystemTravelPhase::origin_system_return) {
+  return resolve_origin_station_flight_pose(contract.identities.universe_seed,
+                                            state.tick, origin_system, state);
+}
+
+static auto advance_origin_station_flight_with_limits(
+    Seed universe_seed, SimulationTick authoritative_tick,
+    const LocalSystemDescriptor& origin_system, OriginStationFlightState& state,
+    std::span<const FlightCommand> commands, double acceleration_limit,
+    double maximum_speed) -> std::expected<void, OriginStationFlightError> {
+  if (!validate_origin_station_flight_state(universe_seed, authoritative_tick,
+                                            origin_system, state)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
   if (state.tick == std::numeric_limits<SimulationTick>::max()) {
@@ -353,9 +451,8 @@ auto advance_origin_station_flight(const IntersystemContractState& contract,
     }
     apply_command(next, command.kind);
   }
-  const auto current = guidance(next);
-  if (!current)
-    return std::unexpected{current.error()};
+  const auto current = guidance(next, acceleration_limit);
+  if (!current) return std::unexpected{current.error()};
   const auto target_direction = direction_to_station(next);
   auto forward = normalized(vec(next.forward));
   auto up = normalized(vec(next.up));
@@ -366,6 +463,18 @@ auto advance_origin_station_flight(const IntersystemContractState& contract,
   if (next.mode == FlightMode::autopilot) {
     forward = target_direction;
     next.forward = {forward->x, forward->y, forward->z};
+    if (std::abs(dot(*forward, *up)) > 0.95) {
+      const Vec3 reference = std::abs(forward->z) < 0.95 ? Vec3{0.0, 0.0, 1.0}
+                                                         : Vec3{0.0, 1.0, 0.0};
+      const auto right = normalized(cross(*forward, reference));
+      const auto corrected_up =
+          right ? normalized(cross(*right, *forward)) : std::nullopt;
+      if (!corrected_up) {
+        return std::unexpected{OriginStationFlightError::invalid_state};
+      }
+      up = corrected_up;
+      next.up = {up->x, up->y, up->z};
+    }
   } else {
     const int turn = static_cast<int>(next.controls.turn_left) -
                      static_cast<int>(next.controls.turn_right);
@@ -384,45 +493,45 @@ auto advance_origin_station_flight(const IntersystemContractState& contract,
   Vec3 acceleration{};
   const Vec3 relative_velocity = vec(next.relative_velocity);
   if (next.mode == FlightMode::autopilot) {
-    const double remaining =
-        std::max(0.0, current->distance_metres -
-                          kOriginStationArrivalRadiusMetres);
-    const bool braking =
-        remaining <= current->stopping_distance_metres +
-                         current->relative_speed_metres_per_second * dt;
-    if (braking && current->relative_speed_metres_per_second > 0.1) {
-      const auto opposite = normalized(multiply(relative_velocity, -1.0));
-      if (opposite)
-        acceleration = multiply(*opposite, kOriginStationFlightAcceleration);
-    } else if (!current->arrived) {
-      acceleration =
-          multiply(*target_direction, kOriginStationFlightAcceleration);
+    const double remaining = std::max(
+        0.0, current->distance_metres - kOriginStationArrivalRadiusMetres);
+    const double desired_speed = std::min(
+        maximum_speed, std::sqrt(2.0 * acceleration_limit * remaining));
+    const Vec3 desired_velocity = multiply(*target_direction, desired_speed);
+    const Vec3 velocity_error = subtract(desired_velocity, relative_velocity);
+    const double error_speed = length(velocity_error);
+    if (!std::isfinite(error_speed)) {
+      return std::unexpected{OriginStationFlightError::invalid_state};
+    }
+    if (error_speed > 0.0) {
+      const double requested_acceleration = error_speed / dt;
+      acceleration = multiply(
+          velocity_error,
+          std::min(acceleration_limit, requested_acceleration) / error_speed);
     }
   } else {
     const int thrust = static_cast<int>(next.controls.forward) -
                        static_cast<int>(next.controls.backward);
-    acceleration = multiply(*forward, static_cast<double>(thrust) *
-                                          kOriginStationFlightAcceleration);
+    acceleration =
+        multiply(*forward, static_cast<double>(thrust) * acceleration_limit);
     const auto right = normalized(cross(*forward, *up));
     if (!right) return std::unexpected{OriginStationFlightError::invalid_state};
     const int strafe = static_cast<int>(next.controls.strafe_right) -
                        static_cast<int>(next.controls.strafe_left);
     const int rise = static_cast<int>(next.controls.rise) -
                      static_cast<int>(next.controls.fall);
-    acceleration =
-        add(acceleration,
-            add(multiply(*right, static_cast<double>(strafe) *
-                                     kOriginStationFlightAcceleration),
-                multiply(*up, static_cast<double>(rise) *
-                                  kOriginStationFlightAcceleration)));
+    acceleration = add(
+        acceleration,
+        add(multiply(*right, static_cast<double>(strafe) * acceleration_limit),
+            multiply(*up, static_cast<double>(rise) * acceleration_limit)));
   }
   Vec3 velocity = add(vec(next.relative_velocity), multiply(acceleration, dt));
   const double speed = length(velocity);
   if (!finite(velocity) || !std::isfinite(speed)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
-  if (speed > kOriginStationFlightMaximumSpeed) {
-    velocity = multiply(velocity, kOriginStationFlightMaximumSpeed / speed);
+  if (speed > maximum_speed) {
+    velocity = multiply(velocity, maximum_speed / speed);
   }
   const Vec3 position =
       add(vec(next.relative_position), multiply(velocity, dt));
@@ -431,14 +540,39 @@ auto advance_origin_station_flight(const IntersystemContractState& contract,
   next.relative_position = {position.x, position.y, position.z};
   next.relative_velocity = {velocity.x, velocity.y, velocity.z};
   ++next.tick;
-  auto next_contract = contract;
-  if (!advance_intersystem_time(next_contract, 1) ||
-      !validate_origin_station_flight_state(next_contract, origin_system,
-                                            next)) {
+  if (!validate_origin_station_flight_state(
+          universe_seed, authoritative_tick + 1, origin_system, next)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
   state = std::move(next);
   return {};
+}
+
+auto advance_origin_station_flight(Seed universe_seed,
+                                   SimulationTick authoritative_tick,
+                                   const LocalSystemDescriptor& origin_system,
+                                   OriginStationFlightState& state,
+                                   std::span<const FlightCommand> commands)
+    -> std::expected<void, OriginStationFlightError> {
+  return advance_origin_station_flight_with_limits(
+      universe_seed, authoritative_tick, origin_system, state, commands,
+      kHomeSignalStationFlightAcceleration,
+      kHomeSignalStationFlightMaximumSpeed);
+}
+
+auto advance_origin_station_flight(const IntersystemContractState& contract,
+                                   const LocalSystemDescriptor& origin_system,
+                                   OriginStationFlightState& state,
+                                   std::span<const FlightCommand> commands)
+    -> std::expected<void, OriginStationFlightError> {
+  if (contract.travel_phase != IntersystemTravelPhase::origin_system_flight &&
+      contract.travel_phase != IntersystemTravelPhase::origin_system_return) {
+    return std::unexpected{OriginStationFlightError::invalid_state};
+  }
+  return advance_origin_station_flight_with_limits(
+      contract.identities.universe_seed, contract.universe_tick, origin_system,
+      state, commands, kOriginStationFlightAcceleration,
+      kOriginStationFlightMaximumSpeed);
 }
 
 auto attempt_origin_docking(IntersystemContractState& contract,

@@ -15,11 +15,11 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSignalRunAcceptanceScenario{
-    "v0.4.3-signal-run"};
+    "v0.4.32-home-signal-run"};
 inline constexpr std::uint32_t kSignalRunAcceptanceSeed{42};
 inline constexpr std::uint32_t kSignalRunDefaultSeed{0xC0FFEEU};
 inline constexpr std::uint32_t kSignalRunDenseSeed{1U};
-inline constexpr SimulationTick kSignalRunAcceptanceMaximumTicks{500'000};
+inline constexpr SimulationTick kSignalRunAcceptanceMaximumTicks{750'000};
 inline constexpr SimulationTick kSignalRunAcceptanceResumeTick{600};
 inline constexpr SimulationTick kSignalRunAtmosphericPacingTargetTicks{4'200};
 inline constexpr SimulationTick kSignalRunReachedPacingTargetTicks{18'000};
@@ -42,6 +42,7 @@ struct SunCycleCheckpointMeasurement {
 
 struct SignalRunScenarioMeasurement {
   std::uint32_t seed{};
+  IntersystemRuleProfile rule_profile{IntersystemRuleProfile::assisted};
   AtmosphereClass atmosphere_class{};
   SimulationTick atmospheric_tick{};
   SimulationTick terrain_tick{};
@@ -51,11 +52,20 @@ struct SignalRunScenarioMeasurement {
   double minimum_clearance_metres{};
   std::uint64_t atmospheric_framebuffer_checksum{};
   std::uint64_t return_flight_checksum{};
+  std::uint32_t peak_thermal_load_units{};
+  bool thermal_abort_observed{};
+};
+
+struct SignalRunSaveCheckpointMeasurement {
+  std::string name;
+  SimulationTick tick{};
+  std::uint64_t save_checksum{};
 };
 
 struct SignalRunAcceptanceReport {
   RenderConfiguration render_configuration;
   OriginStationId station_id;
+  HomeSignalContractId contract_id;
   SurfaceSignalId target_id;
   SimulationTick launch_tick{};
   double initial_distance_metres{};
@@ -81,6 +91,7 @@ struct SignalRunAcceptanceReport {
   std::uint64_t terrain_safety_flight_checksum{};
   std::size_t discovery_count{};
   std::size_t world_delta_count{};
+  std::vector<SignalRunSaveCheckpointMeasurement> save_checkpoints;
   std::vector<SunCycleCheckpointMeasurement> sun_cycle;
   std::vector<SignalRunScenarioMeasurement> scenarios;
 };

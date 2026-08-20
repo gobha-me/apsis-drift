@@ -74,8 +74,8 @@ auto run_intersystem_return_acceptance(int width, int height)
     return std::unexpected{
         IntersystemReturnAcceptanceError::invalid_configuration};
   }
-  auto document =
-      make_new_game_document(Seed{kIntersystemReturnAcceptanceSeed});
+  auto document = make_new_game_document(Seed{kIntersystemReturnAcceptanceSeed},
+                                         NewGameOnboardingChoice::skip);
   if (!document.state.intersystem_contract) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::initialization_failure};

@@ -7,15 +7,18 @@
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/planetary_flight.hpp"
+#include "apsis_drift/system_flight.hpp"
 
 namespace apsis_drift {
 
-inline constexpr std::uint32_t kOriginStationFlightVersion{3};
+inline constexpr std::uint32_t kOriginStationFlightVersion{4};
 inline constexpr double kOriginStationArrivalRadiusMetres{5'000.0};
 inline constexpr double kOriginStationDockingSpeedMetresPerSecond{25.0};
 inline constexpr double kOriginStationLaunchStandoffMetres{5'000.0};
 inline constexpr double kOriginStationFlightAcceleration{250.0};
 inline constexpr double kOriginStationFlightMaximumSpeed{1'000.0};
+inline constexpr double kHomeSignalStationFlightAcceleration{5'000.0};
+inline constexpr double kHomeSignalStationFlightMaximumSpeed{100'000.0};
 inline constexpr double kOriginStationFlightTurnRateRadiansPerSecond{0.75};
 
 struct OriginStationWaypoint {
@@ -86,6 +89,45 @@ enum class OriginStationFlightError : std::uint8_t {
     const FirstIntersystemIdentities& identities,
     const LocalSystemDescriptor& origin_system, EphemerisQueryTime time)
     -> std::expected<OriginStationWaypoint, OriginStationFlightError>;
+
+[[nodiscard]] auto resolve_origin_station_waypoint(
+    Seed universe_seed, const LocalSystemDescriptor& origin_system,
+    EphemerisQueryTime time)
+    -> std::expected<OriginStationWaypoint, OriginStationFlightError>;
+
+[[nodiscard]] auto initialize_origin_station_launch(
+    Seed universe_seed, SimulationTick tick,
+    const LocalSystemDescriptor& origin_system)
+    -> std::expected<OriginStationFlightState, OriginStationFlightError>;
+
+[[nodiscard]] auto initialize_origin_station_approach(
+    Seed universe_seed, const LocalSystemDescriptor& origin_system,
+    const SystemFlightState& departure)
+    -> std::expected<OriginStationFlightState, OriginStationFlightError>;
+
+[[nodiscard]] auto validate_origin_station_flight_state(
+    Seed universe_seed, SimulationTick authoritative_tick,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<void, OriginStationFlightError>;
+
+[[nodiscard]] auto resolve_origin_station_flight_guidance(
+    Seed universe_seed, SimulationTick authoritative_tick,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<OriginStationFlightGuidance, OriginStationFlightError>;
+
+[[nodiscard]] auto resolve_origin_station_flight_pose(
+    Seed universe_seed, SimulationTick authoritative_tick,
+    const LocalSystemDescriptor& origin_system,
+    const OriginStationFlightState& state)
+    -> std::expected<OriginStationFlightPose, OriginStationFlightError>;
+
+[[nodiscard]] auto advance_origin_station_flight(
+    Seed universe_seed, SimulationTick authoritative_tick,
+    const LocalSystemDescriptor& origin_system, OriginStationFlightState& state,
+    std::span<const FlightCommand> commands)
+    -> std::expected<void, OriginStationFlightError>;
 
 [[nodiscard]] auto initialize_origin_station_launch(
     const IntersystemContractState& contract,

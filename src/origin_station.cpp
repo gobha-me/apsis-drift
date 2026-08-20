@@ -84,11 +84,16 @@ template <typename Integer>
 
 [[nodiscard]] auto valid_state(const OriginOnboardingState& state) noexcept
     -> bool {
+  if (state.origin_station.value == 0 || state.first_contract.value == 0 ||
+      state.first_target.value == 0) {
+    return false;
+  }
   switch (state.location) {
     case OriginLocation::docked_at_origin:
       return state.first_objective == FirstObjectiveStatus::offered ||
              state.first_objective == FirstObjectiveStatus::active ||
-             state.first_objective == FirstObjectiveStatus::completed;
+             state.first_objective == FirstObjectiveStatus::returned ||
+             state.first_objective == FirstObjectiveStatus::turned_in;
     case OriginLocation::in_flight:
       return state.first_objective == FirstObjectiveStatus::active ||
              state.first_objective == FirstObjectiveStatus::completed;
@@ -193,10 +198,34 @@ auto origin_station_id_string(OriginStationId id) -> std::string {
   return std::format("station-{:016x}", id.value);
 }
 
+auto home_signal_contract_id_string(HomeSignalContractId id) -> std::string {
+  return std::format("contract-{:016x}", id.value);
+}
+
+auto generate_home_signal_contract(Seed universe_seed) noexcept
+    -> HomeSignalContractBinding {
+  const auto station = generate_origin_station(universe_seed);
+  const auto home_planet_seed = derive_seed(
+      station.home_system_seed, SeedDomain::planet, kOriginHomePlanetOrdinal);
+  const auto contract_seed = derive_seed(
+      station.station_seed, SeedDomain::mission, kHomeSignalContractOrdinal);
+  const auto target_seed = derive_seed(home_planet_seed, SeedDomain::encounter,
+                                       kHomeSignalTargetOrdinal);
+  return {
+      .contract = HomeSignalContractId{contract_seed.value},
+      .station = station.id,
+      .home_planet = PlanetId{home_planet_seed.value},
+      .target = SurfaceSignalId{target_seed.value},
+  };
+}
+
 auto initial_origin_onboarding_state(
     const OriginStationDescriptor& station) noexcept -> OriginOnboardingState {
+  const auto binding = generate_home_signal_contract(station.universe_seed);
   return OriginOnboardingState{
       .origin_station = station.id,
+      .first_contract = binding.contract,
+      .first_target = binding.target,
       .location = OriginLocation::docked_at_origin,
       .first_objective = FirstObjectiveStatus::offered,
   };
@@ -225,6 +254,13 @@ auto advance_origin_onboarding(
       }
       next.location = OriginLocation::in_flight;
       break;
+    case OriginOnboardingCommand::redock:
+      if (state.location != OriginLocation::in_flight ||
+          state.first_objective != FirstObjectiveStatus::active) {
+        return std::unexpected{OriginOnboardingError::invalid_transition};
+      }
+      next.location = OriginLocation::docked_at_origin;
+      break;
     case OriginOnboardingCommand::complete_first_objective:
       if (state.location != OriginLocation::in_flight ||
           state.first_objective != FirstObjectiveStatus::active) {
@@ -232,12 +268,20 @@ auto advance_origin_onboarding(
       }
       next.first_objective = FirstObjectiveStatus::completed;
       break;
-    case OriginOnboardingCommand::return_to_origin:
+    case OriginOnboardingCommand::dock_at_origin:
       if (state.location != OriginLocation::in_flight ||
           state.first_objective != FirstObjectiveStatus::completed) {
         return std::unexpected{OriginOnboardingError::invalid_transition};
       }
       next.location = OriginLocation::docked_at_origin;
+      next.first_objective = FirstObjectiveStatus::returned;
+      break;
+    case OriginOnboardingCommand::turn_in:
+      if (state.location != OriginLocation::docked_at_origin ||
+          state.first_objective != FirstObjectiveStatus::returned) {
+        return std::unexpected{OriginOnboardingError::invalid_transition};
+      }
+      next.first_objective = FirstObjectiveStatus::turned_in;
       break;
     default:
       return std::unexpected{OriginOnboardingError::invalid_transition};

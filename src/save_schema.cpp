@@ -89,7 +89,9 @@ template <typename Id>
     -> bool {
   return value == FirstObjectiveStatus::offered ||
          value == FirstObjectiveStatus::active ||
-         value == FirstObjectiveStatus::completed;
+         value == FirstObjectiveStatus::completed ||
+         value == FirstObjectiveStatus::returned ||
+         value == FirstObjectiveStatus::turned_in;
 }
 
 [[nodiscard]] auto valid_delta_kind(SaveWorldDeltaKind value) noexcept -> bool {
@@ -116,12 +118,11 @@ template <typename Id>
 [[nodiscard]] auto objective_name(FirstObjectiveStatus value)
     -> std::string_view {
   switch (value) {
-    case FirstObjectiveStatus::offered:
-      return "offered";
-    case FirstObjectiveStatus::active:
-      return "active";
-    case FirstObjectiveStatus::completed:
-      return "completed";
+    case FirstObjectiveStatus::offered: return "offered";
+    case FirstObjectiveStatus::active: return "active";
+    case FirstObjectiveStatus::completed: return "completed";
+    case FirstObjectiveStatus::returned: return "returned";
+    case FirstObjectiveStatus::turned_in: return "turned_in";
   }
   return "unknown";
 }
@@ -267,7 +268,9 @@ template <typename Id>
                                        recipe.origin_system_ordinal);
   const auto planet_seed = derive_seed(system_seed, SeedDomain::planet,
                                        recipe.active_planet_ordinal);
-  const auto planet = generate_planet_descriptor(planet_seed);
+  const auto planet = recipe.active_planet_ordinal == kOriginHomePlanetOrdinal
+                          ? generate_origin_home_planet(system_seed)
+                          : generate_planet_descriptor(planet_seed);
   if (!validate_planetary_flight_state(planet, state)) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::invalid_state, "$.state.flight",
@@ -499,6 +502,8 @@ template <typename Id>
   if (*value == "offered") return FirstObjectiveStatus::offered;
   if (*value == "active") return FirstObjectiveStatus::active;
   if (*value == "completed") return FirstObjectiveStatus::completed;
+  if (*value == "returned") return FirstObjectiveStatus::returned;
+  if (*value == "turned_in") return FirstObjectiveStatus::turned_in;
   return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
                                  std::format("{}.{}", path, name),
                                  "unknown first-objective state")};
@@ -1463,12 +1468,6 @@ template <typename Id>
     const SaveDocument& document) -> std::expected<void, SaveSchemaError> {
   const auto& state = document.state;
   if (state.first_objective == FirstObjectiveStatus::offered) {
-    if (state.first_objective_target.value != 0) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state,
-          "$.state.first_objective.target_signal_id",
-          "an offered objective cannot bind a generated signal")};
-    }
     if (!state.discoveries.empty()) {
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state, "$.state.discoveries[0]",
@@ -1492,10 +1491,12 @@ template <typename Id>
   const auto system_seed =
       derive_seed(document.recipe.universe_seed, SeedDomain::system,
                   document.recipe.origin_system_ordinal);
-  const auto planet_seed =
-      derive_seed(system_seed, SeedDomain::planet,
-                  document.recipe.active_planet_ordinal);
-  const auto planet = generate_planet_descriptor(planet_seed);
+  const auto planet_seed = derive_seed(system_seed, SeedDomain::planet,
+                                       document.recipe.active_planet_ordinal);
+  const auto planet =
+      document.recipe.active_planet_ordinal == kOriginHomePlanetOrdinal
+          ? generate_origin_home_planet(system_seed)
+          : generate_planet_descriptor(planet_seed);
   auto cache = TerrainTileCache::create();
   if (!cache) {
     return std::unexpected{failure(
@@ -1596,6 +1597,82 @@ template <typename Id>
   return {};
 }
 
+[[nodiscard]] auto validate_guided_home_signal_run(const SaveDocument& document)
+    -> std::expected<void, SaveSchemaError> {
+  if (!document.state.intersystem_contract) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
+        "guided contract one requires the career clock")};
+  }
+  const auto& career = *document.state.intersystem_contract;
+  if (!validate_intersystem_contract_state(career) ||
+      career.mission_phase != IntersystemMissionPhase::offered ||
+      career.travel_phase != IntersystemTravelPhase::docked_at_origin ||
+      document.state.system_flight) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
+        "contract one requires a dormant authored intersystem contract")};
+  }
+  const bool has_planetary = document.state.flight.has_value();
+  const bool has_station = document.state.origin_station_flight.has_value();
+  if (has_planetary && has_station) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state",
+        "contract one cannot contain two active craft representations")};
+  }
+  const auto status = document.state.first_objective;
+  const auto location = document.state.location;
+  const bool in_flight = location == OriginLocation::in_flight;
+  const bool docked_only = status == FirstObjectiveStatus::offered ||
+                           status == FirstObjectiveStatus::returned ||
+                           status == FirstObjectiveStatus::turned_in;
+  const bool flight_only = status == FirstObjectiveStatus::completed;
+  if ((docked_only && in_flight) || (flight_only && !in_flight) ||
+      in_flight != (has_planetary || has_station)) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_state, "$.state",
+        "contract-one phase, location, and craft representation disagree")};
+  }
+  if (has_planetary) {
+    if (document.state.flight->tick != career.universe_tick ||
+        document.state.flight->planet != document.recipe.home_planet ||
+        !validate_flight(document.recipe, *document.state.flight) ||
+        (career.rule_profile == IntersystemRuleProfile::assisted &&
+         document.state.flight->thermal.abort_latched)) {
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                     "$.state.flight",
+                                     "home Planetfall state does not match the "
+                                     "contract-one clock and profile")};
+    }
+  }
+  if (has_station) {
+    const auto origin_system =
+        generate_origin_system(document.recipe.universe_seed);
+    if (!validate_origin_station_flight_state(
+            document.recipe.universe_seed, career.universe_tick, origin_system,
+            *document.state.origin_station_flight)) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.origin_station_flight",
+          "station flight does not match the contract-one clock")};
+    }
+  }
+  for (const auto& discovery : document.state.discoveries) {
+    if (discovery.tick > career.universe_tick) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
+          "contract-one discovery cannot be later than the career clock")};
+    }
+  }
+  for (const auto& delta : document.state.world_deltas) {
+    if (delta.tick > career.universe_tick) {
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
+          "contract-one world delta cannot be later than the career clock")};
+    }
+  }
+  return validate_legacy_signal_run_semantics(document);
+}
+
 }  // namespace
 
 auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
@@ -1605,6 +1682,7 @@ auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
       .origin_home_planet = kOriginHomePlanetGeneratorVersion,
       .terrain_tiles = kTerrainTileGeneratorVersion,
       .origin_station = kOriginStationGeneratorVersion,
+      .home_signal_contract = kHomeSignalContractGeneratorVersion,
       .surface_signals = kSurfaceSignalGeneratorVersion,
       .local_sun = kLocalSunGeneratorVersion,
       .local_system = kLocalSystemGeneratorVersion,
@@ -1624,7 +1702,9 @@ auto make_save_recipe(Seed universe_seed, std::uint64_t active_planet_ordinal)
       derive_seed(system_seed, SeedDomain::planet, active_planet_ordinal);
   const auto station = generate_origin_station(universe_seed);
   const auto home = generate_origin_home_planet(system_seed);
-  const auto planet = generate_planet_descriptor(planet_seed);
+  const auto planet = active_planet_ordinal == kOriginHomePlanetOrdinal
+                          ? home
+                          : generate_planet_descriptor(planet_seed);
   return SaveRecipe{
       .universe_seed = universe_seed,
       .origin_system_ordinal = kOriginSystemOrdinal,
@@ -1672,6 +1752,20 @@ auto validate_save_document(const SaveDocument& document)
   }
   const auto expected = make_save_recipe(document.recipe.universe_seed,
                                          document.recipe.active_planet_ordinal);
+  const auto home_contract =
+      generate_home_signal_contract(document.recipe.universe_seed);
+  if (document.state.first_objective_contract != home_contract.contract) {
+    return std::unexpected{failure(SaveSchemaErrorCode::identity_mismatch,
+                                   "$.state.first_objective.contract_id",
+                                   "stored home Signal Run contract does not "
+                                   "match deterministic regeneration")};
+  }
+  if (document.state.first_objective_target != home_contract.target) {
+    return std::unexpected{failure(SaveSchemaErrorCode::identity_mismatch,
+                                   "$.state.first_objective.target_signal_id",
+                                   "stored home Signal Run target does not "
+                                   "match deterministic regeneration")};
+  }
   if (document.recipe.origin_station != expected.origin_station) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::identity_mismatch, "$.recipe.origin_station_id",
@@ -1691,167 +1785,203 @@ auto validate_save_document(const SaveDocument& document)
         "stored active planet does not match deterministic regeneration")};
   }
   if (document.state.intersystem_contract) {
-    const auto& contract = *document.state.intersystem_contract;
-    if (contract.identities.universe_seed != document.recipe.universe_seed) {
+    const bool guided_contract_one =
+        document.state.onboarding.state == OnboardingState::guided &&
+        document.state.onboarding.chapter == OnboardingChapter::contract_one;
+    const bool completed_home_contract =
+        document.state.onboarding.state == OnboardingState::guided &&
+        document.state.onboarding.chapter == OnboardingChapter::contract_two &&
+        document.state.first_objective == FirstObjectiveStatus::turned_in;
+    if (document.state.onboarding.state == OnboardingState::guided &&
+        ((guided_contract_one &&
+          document.state.first_objective == FirstObjectiveStatus::turned_in) ||
+         (document.state.onboarding.chapter ==
+              OnboardingChapter::contract_two &&
+          !completed_home_contract))) {
       return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
-          "intersystem contract does not match the save recipe or state machine")};
+          SaveSchemaErrorCode::invalid_state, "$.state.onboarding.chapter",
+          "Guided onboarding chapter and home-contract progress disagree")};
     }
-    if (arrival_required(contract.travel_phase) &&
-        !contract.arrival_solution) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state,
-          "$.state.intersystem_contract.arrival_solution",
-          "current travel phase requires an immutable arrival solution")};
-    }
-    if (!validate_intersystem_contract_state(contract)) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
-          "intersystem contract does not match the save recipe or state machine")};
-    }
-    if (contract.arrival_solution) {
-      const auto destination =
-          target_arrival_required(contract.travel_phase)
-              ? generate_local_system(contract.identities.target_system_seed)
-              : generate_origin_system(contract.identities.universe_seed);
-      if (!validate_intersystem_arrival_solution(contract, destination,
-                                                 *contract.arrival_solution)) {
-        return std::unexpected{
-            failure(SaveSchemaErrorCode::invalid_state,
-                    "$.state.intersystem_contract.arrival_solution",
-                    "intersystem arrival solution does not match deterministic "
-                    "regeneration")};
+    if (guided_contract_one || completed_home_contract) {
+      if (auto valid = validate_guided_home_signal_run(document); !valid) {
+        return valid;
       }
-    }
-    const bool origin_system_flight =
-        contract.travel_phase == IntersystemTravelPhase::origin_system_flight;
-    const bool outbound_jump_spooling =
-        contract.travel_phase == IntersystemTravelPhase::outbound_jump_spooling;
-    const bool target_system_flight =
-        contract.travel_phase == IntersystemTravelPhase::target_system_flight;
-    const bool target_planet_flight =
-        contract.travel_phase == IntersystemTravelPhase::target_planet_flight;
-    const bool return_jump_spooling =
-        contract.travel_phase == IntersystemTravelPhase::return_jump_spooling;
-    const bool origin_system_return =
-        contract.travel_phase == IntersystemTravelPhase::origin_system_return;
-    if (origin_system_flight || outbound_jump_spooling) {
-      const auto origin_system =
-          generate_origin_system(contract.identities.universe_seed);
-      if (document.state.flight || document.state.system_flight ||
-          !document.state.origin_station_flight ||
-          !validate_origin_station_flight_state(
-              contract, origin_system, *document.state.origin_station_flight)) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.origin_station_flight",
-            "origin flight and outbound spool require one matching frozen or "
-            "live station-flight state")};
+    } else {
+      const auto& contract = *document.state.intersystem_contract;
+      if (contract.identities.universe_seed != document.recipe.universe_seed) {
+        return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                       "$.state.intersystem_contract",
+                                       "intersystem contract does not match "
+                                       "the save recipe or state machine")};
       }
-    } else if (target_system_flight) {
-      if (!document.state.system_flight || document.state.flight ||
-          document.state.origin_station_flight) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
-            "target-system flight requires exactly one system-flight state")};
-      }
-      const auto system = generate_local_system(contract.identities.target_system_seed);
-      if (document.state.system_flight->tick != contract.universe_tick ||
-          document.state.system_flight->target !=
-              contract.identities.target_planet ||
-          !validate_system_flight_state(system,
-                                        *document.state.system_flight)) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
-            "system flight does not match the target contract and clock")};
-      }
-    } else if (target_planet_flight) {
-      if (!document.state.flight || document.state.system_flight ||
-          document.state.origin_station_flight ||
-          document.state.flight->planet != contract.identities.target_planet ||
-          document.state.flight->tick != contract.universe_tick) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.flight",
-            "target-planet travel requires exactly one matching orbital state")};
-      }
-      const auto system = generate_local_system(contract.identities.target_system_seed);
-      const auto body = find_local_system_planet(
-          system, contract.identities.target_planet);
-      if (!body || !validate_planetary_flight_state((*body)->descriptor,
-                                                    *document.state.flight)) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.flight",
-            "target-planet flight violates the planetary flight contract")};
-      }
-      if (contract.rule_profile == IntersystemRuleProfile::assisted &&
-          document.state.flight->thermal.abort_latched) {
+      if (arrival_required(contract.travel_phase) &&
+          !contract.arrival_solution) {
         return std::unexpected{failure(
             SaveSchemaErrorCode::invalid_state,
-            "$.state.flight.thermal.abort_latched",
-            "Assisted flight cannot contain a Pilot thermal-abort latch")};
+            "$.state.intersystem_contract.arrival_solution",
+            "current travel phase requires an immutable arrival solution")};
       }
-    } else if (return_jump_spooling) {
-      if (!document.state.system_flight || document.state.flight ||
-          document.state.origin_station_flight ||
-          !contract.phase_started_tick ||
-          document.state.system_flight->tick != *contract.phase_started_tick ||
-          document.state.system_flight->target !=
-              contract.identities.target_planet) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
-            "return spooling requires its frozen target-system flight state")};
-      }
-      const auto system =
-          generate_local_system(contract.identities.target_system_seed);
-      if (!validate_system_flight_state(system,
-                                        *document.state.system_flight)) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
-            "return spool flight does not match the target system")};
-      }
-    } else if (origin_system_return) {
-      const auto origin_system =
-          generate_origin_system(contract.identities.universe_seed);
-      if (document.state.flight || document.state.system_flight ||
-          !document.state.origin_station_flight ||
-          !validate_origin_station_flight_state(
-              contract, origin_system, *document.state.origin_station_flight)) {
+      if (!validate_intersystem_contract_state(contract)) {
         return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
-                                       "$.state.origin_station_flight",
-                                       "origin flight requires exactly one "
-                                       "matching station-relative state")};
+                                       "$.state.intersystem_contract",
+                                       "intersystem contract does not match "
+                                       "the save recipe or state machine")};
       }
-    } else if (document.state.flight || document.state.system_flight ||
-               document.state.origin_station_flight) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state",
-          "the current travel phase cannot contain an active craft state")};
-    }
-    for (const auto& discovery : document.state.discoveries) {
-      if (discovery.signal != contract.identities.target_objective ||
-          discovery.tick > contract.universe_tick) {
+      if (contract.arrival_solution) {
+        const auto destination =
+            target_arrival_required(contract.travel_phase)
+                ? generate_local_system(contract.identities.target_system_seed)
+                : generate_origin_system(contract.identities.universe_seed);
+        if (!validate_intersystem_arrival_solution(
+                contract, destination, *contract.arrival_solution)) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state,
+              "$.state.intersystem_contract.arrival_solution",
+              "intersystem arrival solution does not match deterministic "
+              "regeneration")};
+        }
+      }
+      const bool origin_system_flight =
+          contract.travel_phase == IntersystemTravelPhase::origin_system_flight;
+      const bool outbound_jump_spooling =
+          contract.travel_phase ==
+          IntersystemTravelPhase::outbound_jump_spooling;
+      const bool target_system_flight =
+          contract.travel_phase == IntersystemTravelPhase::target_system_flight;
+      const bool target_planet_flight =
+          contract.travel_phase == IntersystemTravelPhase::target_planet_flight;
+      const bool return_jump_spooling =
+          contract.travel_phase == IntersystemTravelPhase::return_jump_spooling;
+      const bool origin_system_return =
+          contract.travel_phase == IntersystemTravelPhase::origin_system_return;
+      if (origin_system_flight || outbound_jump_spooling) {
+        const auto origin_system =
+            generate_origin_system(contract.identities.universe_seed);
+        if (document.state.flight || document.state.system_flight ||
+            !document.state.origin_station_flight ||
+            !validate_origin_station_flight_state(
+                contract, origin_system,
+                *document.state.origin_station_flight)) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state,
+              "$.state.origin_station_flight",
+              "origin flight and outbound spool require one matching frozen or "
+              "live station-flight state")};
+        }
+      } else if (target_system_flight) {
+        if (!document.state.system_flight || document.state.flight ||
+            document.state.origin_station_flight) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
+              "target-system flight requires exactly one system-flight state")};
+        }
+        const auto system =
+            generate_local_system(contract.identities.target_system_seed);
+        if (document.state.system_flight->tick != contract.universe_tick ||
+            document.state.system_flight->target !=
+                contract.identities.target_planet ||
+            !validate_system_flight_state(system,
+                                          *document.state.system_flight)) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
+              "system flight does not match the target contract and clock")};
+        }
+      } else if (target_planet_flight) {
+        if (!document.state.flight || document.state.system_flight ||
+            document.state.origin_station_flight ||
+            document.state.flight->planet !=
+                contract.identities.target_planet ||
+            document.state.flight->tick != contract.universe_tick) {
+          return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                         "$.state.flight",
+                                         "target-planet travel requires "
+                                         "exactly one matching orbital state")};
+        }
+        const auto system =
+            generate_local_system(contract.identities.target_system_seed);
+        const auto body =
+            find_local_system_planet(system, contract.identities.target_planet);
+        if (!body || !validate_planetary_flight_state((*body)->descriptor,
+                                                      *document.state.flight)) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state, "$.state.flight",
+              "target-planet flight violates the planetary flight contract")};
+        }
+        if (contract.rule_profile == IntersystemRuleProfile::assisted &&
+            document.state.flight->thermal.abort_latched) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state,
+              "$.state.flight.thermal.abort_latched",
+              "Assisted flight cannot contain a Pilot thermal-abort latch")};
+        }
+      } else if (return_jump_spooling) {
+        if (!document.state.system_flight || document.state.flight ||
+            document.state.origin_station_flight ||
+            !contract.phase_started_tick ||
+            document.state.system_flight->tick !=
+                *contract.phase_started_tick ||
+            document.state.system_flight->target !=
+                contract.identities.target_planet) {
+          return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                         "$.state.system_flight",
+                                         "return spooling requires its frozen "
+                                         "target-system flight state")};
+        }
+        const auto system =
+            generate_local_system(contract.identities.target_system_seed);
+        if (!validate_system_flight_state(system,
+                                          *document.state.system_flight)) {
+          return std::unexpected{failure(
+              SaveSchemaErrorCode::invalid_state, "$.state.system_flight",
+              "return spool flight does not match the target system")};
+        }
+      } else if (origin_system_return) {
+        const auto origin_system =
+            generate_origin_system(contract.identities.universe_seed);
+        if (document.state.flight || document.state.system_flight ||
+            !document.state.origin_station_flight ||
+            !validate_origin_station_flight_state(
+                contract, origin_system,
+                *document.state.origin_station_flight)) {
+          return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                         "$.state.origin_station_flight",
+                                         "origin flight requires exactly one "
+                                         "matching station-relative state")};
+        }
+      } else if (document.state.flight || document.state.system_flight ||
+                 document.state.origin_station_flight) {
         return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
-            "intersystem discoveries must name the bound target at a valid tick")};
+            SaveSchemaErrorCode::invalid_state, "$.state",
+            "the current travel phase cannot contain an active craft state")};
       }
-    }
-    const bool objective_complete =
-        contract.mission_phase ==
-            IntersystemMissionPhase::objective_complete ||
-        contract.mission_phase == IntersystemMissionPhase::returned ||
-        contract.mission_phase == IntersystemMissionPhase::turned_in;
-    const auto target_key =
-        surface_signal_object_key(contract.identities.target_objective);
-    const bool valid_completed_delta =
-        document.state.world_deltas.size() == 1U &&
-        document.state.world_deltas.front().object_key == target_key &&
-        document.state.world_deltas.front().kind ==
-            SaveWorldDeltaKind::collected &&
-        document.state.world_deltas.front().tick <= contract.universe_tick;
-    if ((objective_complete && !valid_completed_delta) ||
-        (!objective_complete && !document.state.world_deltas.empty())) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state",
-          "intersystem objective state and its collected delta disagree")};
+      for (const auto& discovery : document.state.discoveries) {
+        if (discovery.signal != contract.identities.target_objective ||
+            discovery.tick > contract.universe_tick) {
+          return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                         "$.state.discoveries",
+                                         "intersystem discoveries must name "
+                                         "the bound target at a valid tick")};
+        }
+      }
+      const bool objective_complete =
+          contract.mission_phase ==
+              IntersystemMissionPhase::objective_complete ||
+          contract.mission_phase == IntersystemMissionPhase::returned ||
+          contract.mission_phase == IntersystemMissionPhase::turned_in;
+      const auto target_key =
+          surface_signal_object_key(contract.identities.target_objective);
+      const bool valid_completed_delta =
+          document.state.world_deltas.size() == 1U &&
+          document.state.world_deltas.front().object_key == target_key &&
+          document.state.world_deltas.front().kind ==
+              SaveWorldDeltaKind::collected &&
+          document.state.world_deltas.front().tick <= contract.universe_tick;
+      if ((objective_complete && !valid_completed_delta) ||
+          (!objective_complete && !document.state.world_deltas.empty())) {
+        return std::unexpected{failure(
+            SaveSchemaErrorCode::invalid_state, "$.state",
+            "intersystem objective state and its collected delta disagree")};
+      }
     }
   } else {
     if (document.state.system_flight || document.state.origin_station_flight) {
@@ -1974,11 +2104,20 @@ auto encode_save_document_json(const SaveDocument& document)
       {"state", onboarding_state_name(document.state.onboarding.state)},
       {"chapter", std::move(onboarding_chapter)},
   };
+  Json first_objective{
+      {"contract_id",
+       encoded_id("contract-", document.state.first_objective_contract)},
+      {"status", objective_name(document.state.first_objective)},
+      {"target_signal_id",
+       encoded_id("signal-", document.state.first_objective_target)},
+  };
   Json state;
   if (document.state.intersystem_contract) {
     state = Json{
         {"career_kind", "intersystem_contract"},
         {"onboarding", onboarding},
+        {"location", location_name(document.state.location)},
+        {"first_objective", first_objective},
         {"intersystem_contract",
          encode_intersystem_contract(*document.state.intersystem_contract)},
         {"flight", std::move(flight)},
@@ -1992,10 +2131,7 @@ auto encode_save_document_json(const SaveDocument& document)
         {"career_kind", "legacy_signal_run"},
         {"onboarding", onboarding},
         {"location", location_name(document.state.location)},
-        {"first_objective",
-         Json{{"status", objective_name(document.state.first_objective)},
-              {"target_signal_id",
-               encoded_id("signal-", document.state.first_objective_target)}}},
+        {"first_objective", first_objective},
         {"flight", std::move(flight)},
         {"system_flight", std::move(system_flight)},
         {"origin_station_flight", std::move(origin_station_flight)},
@@ -2021,6 +2157,7 @@ auto encode_save_document_json(const SaveDocument& document)
                   {"origin_home_planet", versions.origin_home_planet},
                   {"terrain_tiles", versions.terrain_tiles},
                   {"origin_station", versions.origin_station},
+                  {"home_signal_contract", versions.home_signal_contract},
                   {"surface_signals", versions.surface_signals},
                   {"local_sun", versions.local_sun},
                   {"local_system", versions.local_system},
@@ -2115,12 +2252,12 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.application",
                                    "save belongs to another application")};
   }
-  if (*format_version >= 1U && *format_version <= 13U) {
+  if (*format_version >= 1U && *format_version <= 14U) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_alpha_format_version,
         "$.format_version",
         std::format(
-            "save format {} predates the format-14 onboarding alpha reset "
+            "save format {} predates the format-15 home-contract alpha reset "
             "and is not supported; the source file was not modified",
             *format_version))};
   }
@@ -2203,6 +2340,8 @@ auto decode_save_document_json(std::string_view json_text)
       read_u32(**versions_json, "terrain_tiles", "$.recipe.generator_versions");
   auto station_version = read_u32(**versions_json, "origin_station",
                                   "$.recipe.generator_versions");
+  auto home_signal_contract_version = read_u32(
+      **versions_json, "home_signal_contract", "$.recipe.generator_versions");
   auto signal_version = read_u32(**versions_json, "surface_signals",
                                  "$.recipe.generator_versions");
   auto sun_version = read_u32(**versions_json, "local_sun",
@@ -2224,6 +2363,9 @@ auto decode_save_document_json(std::string_view json_text)
   if (!home_version) return std::unexpected{home_version.error()};
   if (!terrain_version) return std::unexpected{terrain_version.error()};
   if (!station_version) return std::unexpected{station_version.error()};
+  if (!home_signal_contract_version) {
+    return std::unexpected{home_signal_contract_version.error()};
+  }
   if (!signal_version) return std::unexpected{signal_version.error()};
   if (!sun_version) return std::unexpected{sun_version.error()};
   if (!system_version) return std::unexpected{system_version.error()};
@@ -2242,6 +2384,7 @@ auto decode_save_document_json(std::string_view json_text)
       .origin_home_planet = *home_version,
       .terrain_tiles = *terrain_version,
       .origin_station = *station_version,
+      .home_signal_contract = *home_signal_contract_version,
       .surface_signals = *signal_version,
       .local_sun = *sun_version,
       .local_system = *system_version,
@@ -2310,9 +2453,27 @@ auto decode_save_document_json(std::string_view json_text)
   if (!discoveries_json) return std::unexpected{discoveries_json.error()};
   if (!deltas_json) return std::unexpected{deltas_json.error()};
 
-  OriginLocation location{OriginLocation::docked_at_origin};
-  FirstObjectiveStatus objective{FirstObjectiveStatus::offered};
-  SurfaceSignalId target{};
+  auto decoded_location = read_location(**state_json, "location", "$.state");
+  auto objective_json = read_object(**state_json, "first_objective", "$.state");
+  if (!decoded_location) return std::unexpected{decoded_location.error()};
+  if (!objective_json) return std::unexpected{objective_json.error()};
+  auto decoded_contract = read_id<HomeSignalContractId>(
+      **objective_json, "contract_id", "$.state.first_objective", "contract-");
+  auto decoded_objective =
+      read_objective(**objective_json, "status", "$.state.first_objective");
+  auto decoded_target =
+      read_id<SurfaceSignalId>(**objective_json, "target_signal_id",
+                               "$.state.first_objective", "signal-");
+  if (!decoded_contract) return std::unexpected{decoded_contract.error()};
+  if (!decoded_objective) {
+    return std::unexpected{decoded_objective.error()};
+  }
+  if (!decoded_target) return std::unexpected{decoded_target.error()};
+
+  OriginLocation location{*decoded_location};
+  FirstObjectiveStatus objective{*decoded_objective};
+  HomeSignalContractId first_contract{*decoded_contract};
+  SurfaceSignalId target{*decoded_target};
   std::optional<IntersystemContractState> contract;
   if (intersystem) {
     auto contract_json =
@@ -2322,27 +2483,6 @@ auto decode_save_document_json(std::string_view json_text)
         decode_intersystem_contract(**contract_json, Seed{*universe_seed});
     if (!decoded) return std::unexpected{decoded.error()};
     contract = std::move(*decoded);
-  } else {
-    auto decoded_location =
-        read_location(**state_json, "location", "$.state");
-    auto objective_json =
-        read_object(**state_json, "first_objective", "$.state");
-    if (!decoded_location) {
-      return std::unexpected{decoded_location.error()};
-    }
-    if (!objective_json) return std::unexpected{objective_json.error()};
-    auto decoded_objective = read_objective(
-        **objective_json, "status", "$.state.first_objective");
-    auto decoded_target = read_id<SurfaceSignalId>(
-        **objective_json, "target_signal_id", "$.state.first_objective",
-        "signal-");
-    if (!decoded_objective) {
-      return std::unexpected{decoded_objective.error()};
-    }
-    if (!decoded_target) return std::unexpected{decoded_target.error()};
-    location = *decoded_location;
-    objective = *decoded_objective;
-    target = *decoded_target;
   }
 
   std::optional<PlanetaryFlightState> flight;
@@ -2433,6 +2573,7 @@ auto decode_save_document_json(std::string_view json_text)
               .onboarding = *onboarding,
               .location = location,
               .first_objective = objective,
+              .first_objective_contract = first_contract,
               .first_objective_target = target,
               .flight = std::move(flight),
               .system_flight = std::move(system_flight),

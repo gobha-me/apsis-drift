@@ -19,7 +19,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{14};
+inline constexpr std::uint32_t kSaveFormatVersion{15};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
@@ -32,6 +32,7 @@ struct SaveGeneratorVersions {
   std::uint32_t origin_home_planet{};
   std::uint32_t terrain_tiles{};
   std::uint32_t origin_station{};
+  std::uint32_t home_signal_contract{};
   std::uint32_t surface_signals{};
   std::uint32_t local_sun{};
   std::uint32_t local_system{};
@@ -89,6 +90,7 @@ struct SaveMutableState {
   OnboardingProgress onboarding;
   OriginLocation location{OriginLocation::docked_at_origin};
   FirstObjectiveStatus first_objective{FirstObjectiveStatus::offered};
+  HomeSignalContractId first_objective_contract;
   SurfaceSignalId first_objective_target;
   std::optional<PlanetaryFlightState> flight;
   std::optional<SystemFlightState> system_flight;

@@ -7,6 +7,7 @@
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/surface_signals.hpp"
 
 namespace apsis_drift {
 
@@ -14,9 +15,12 @@ namespace apsis_drift {
 // its derivation path, ordinals, or identifier mapping requires a new version.
 inline constexpr std::uint32_t kOriginHomePlanetGeneratorVersion{1};
 inline constexpr std::uint32_t kOriginStationGeneratorVersion{2};
+inline constexpr std::uint32_t kHomeSignalContractGeneratorVersion{1};
 inline constexpr std::uint64_t kOriginSystemOrdinal{0};
 inline constexpr std::uint64_t kOriginHomePlanetOrdinal{0};
 inline constexpr std::uint64_t kOriginStationOrdinal{0};
+inline constexpr std::uint64_t kHomeSignalContractOrdinal{1};
+inline constexpr std::uint64_t kHomeSignalTargetOrdinal{0};
 inline constexpr std::uint32_t kOriginHomeMinimumRadiusKilometres{5'000};
 inline constexpr std::uint32_t kOriginHomeMaximumRadiusKilometres{6'500};
 inline constexpr std::uint16_t kOriginHomeMinimumGravityMilliG{750};
@@ -39,6 +43,23 @@ struct OriginStationId {
 
   friend auto operator==(const OriginStationId&, const OriginStationId&)
       -> bool = default;
+};
+
+struct HomeSignalContractId {
+  std::uint64_t value{};
+
+  friend auto operator==(const HomeSignalContractId&,
+                         const HomeSignalContractId&) -> bool = default;
+};
+
+struct HomeSignalContractBinding {
+  HomeSignalContractId contract;
+  OriginStationId station;
+  PlanetId home_planet;
+  SurfaceSignalId target;
+
+  friend auto operator==(const HomeSignalContractBinding&,
+                         const HomeSignalContractBinding&) -> bool = default;
 };
 
 struct OriginStationOrbit {
@@ -75,8 +96,11 @@ is_tutorial_safe_home_planet(const PlanetDescriptor& planet) noexcept -> bool;
 [[nodiscard]] auto generate_origin_station(Seed universe_seed) noexcept
     -> OriginStationDescriptor;
 
-[[nodiscard]] auto origin_station_id_string(OriginStationId id)
+[[nodiscard]] auto origin_station_id_string(OriginStationId id) -> std::string;
+[[nodiscard]] auto home_signal_contract_id_string(HomeSignalContractId id)
     -> std::string;
+[[nodiscard]] auto generate_home_signal_contract(Seed universe_seed) noexcept
+    -> HomeSignalContractBinding;
 
 enum class OriginLocation : std::uint8_t {
   docked_at_origin,
@@ -87,6 +111,8 @@ enum class FirstObjectiveStatus : std::uint8_t {
   offered,
   active,
   completed,
+  returned,
+  turned_in,
 };
 
 // This deliberately small model applies only to a fresh, zero-discovery
@@ -94,6 +120,8 @@ enum class FirstObjectiveStatus : std::uint8_t {
 // by the Signal Run persistence work.
 struct OriginOnboardingState {
   OriginStationId origin_station;
+  HomeSignalContractId first_contract;
+  SurfaceSignalId first_target;
   OriginLocation location{OriginLocation::docked_at_origin};
   FirstObjectiveStatus first_objective{FirstObjectiveStatus::offered};
 
@@ -104,8 +132,10 @@ struct OriginOnboardingState {
 enum class OriginOnboardingCommand : std::uint8_t {
   accept_first_objective,
   launch,
+  redock,
   complete_first_objective,
-  return_to_origin,
+  dock_at_origin,
+  turn_in,
 };
 
 enum class OriginOnboardingError : std::uint8_t {

@@ -108,10 +108,12 @@ Launch is rejected until the offer is accepted. Completion is rejected unless
 the objective is active in flight. Return is rejected until the objective is
 complete. Repeated or out-of-order actions do not change state.
 
-For the first slice, `return_to_origin` is a presentation-independent arrival
-signal emitted after the craft has navigated back to the tick-resolved station
-rendezvous and the player confirms return. Traffic, collision/damage, orbital
-decay, and walkable interiors remain outside this contract.
+Contract one now uses separate physical docking and turn-in transitions. A
+completed craft ascends, departs the home planet into a station-relative
+approach resolved from both physical poses, tracks the station's tick-resolved
+waypoint, and becomes `returned` only after docking. Station confirmation then
+changes it to `turned_in`. Traffic, collision/damage, orbital decay, and
+walkable interiors remain outside this contract.
 
 ## Signal Run handoff
 
@@ -130,7 +132,7 @@ must introduce them behind a separate boundary.
 
 ## Save implications
 
-Save format 14 separates the generated recipe from mutable state:
+Save format 15 separates the generated recipe from mutable state:
 
 | Concern | Ownership and compatibility rule |
 | --- | --- |
@@ -139,7 +141,7 @@ Save format 14 separates the generated recipe from mutable state:
 | Origin station ID | Saved stable reference and validated against regeneration. A mismatch is an incompatible/corrupt save, not a reason to move the player. |
 | Active origin craft | Saved as station-relative position and velocity during outbound free flight, its frozen spool, and the return approach. |
 | Docked or in-flight location | Mutable session state. Loading must restore it exactly. |
-| First objective status and target ID | Mutable mission state. A target ID is required once #21 binds the offer. |
+| First contract, objective status, and target ID | The contract and target are immutable regenerated bindings. Status is mutable across offered, active, completed, returned, and turned-in phases. |
 | Discoveries and collected/completed deltas | Mutable sparse journal state; never folded into station generation. |
 
 There are no released Apsis Drift save files yet. Existing Planetfall fixtures
@@ -148,7 +150,7 @@ state. A future compatibility loader handling a pre-onboarding representation
 must preserve that in-flight/no-objective behavior rather than silently
 teleporting the craft or synthesizing mission progress.
 
-The format-14 field encodings and validation behavior are specified in the
+The format-15 field encodings and validation behavior are specified in the
 [Save Format and Compatibility](SAVE_FORMAT.md) contract.
 
 ## Presentation decision
@@ -158,8 +160,8 @@ negotiated Kitty graphics and supported truecolor ANSI paths. It must expose,
 without relying on color alone:
 
 - the `ORIGIN STATION` role and stable station ID;
-- `FIRST SIGNAL RUN` with offered, active, or completed text;
-- separate `ACCEPT BRIEFING`, `LAUNCH`, and `RETURN COMPLETE` cues as they
+- `FIRST SIGNAL RUN` with offered, active, completed, returned, or turned-in text;
+- separate `ACCEPT BRIEFING`, `LAUNCH`, `TURN IN`, and contract-two cues as they
   become valid;
 - the station as the return destination before launch.
 
@@ -179,5 +181,5 @@ the station's established derivation. See the
 
 As of v0.4.7, fresh careers present that bounded contract through the shared
 [Origin Station Mission Board](MISSION_BOARD.md). Format 14 does not silently
-assign the live origin craft to older alpha saves; formats 1 through 13 are rejected
+assign the live origin craft to older alpha saves; formats 1 through 14 are rejected
 without modifying their source files.
