@@ -104,6 +104,14 @@ class LocalSystemRenderer {
       std::span<termforge::Pixel> destination)
       -> std::expected<LocalSystemRenderStats, LocalSystemRenderError>;
 
+  // Draws presentation-only station geometry at its resolved system-space
+  // location without feeding projection or terminal state back into simulation.
+  [[nodiscard]] auto
+  render_origin_station(const LocalSystemView& view,
+                        const OriginStationEphemeris& station,
+                        std::span<termforge::Pixel> destination)
+      -> std::expected<void, LocalSystemRenderError>;
+
  private:
   LocalSystemRenderSettings m_settings;
   OrbitalRenderer m_orbital_renderer;

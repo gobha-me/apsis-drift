@@ -21,20 +21,25 @@ finishes after the same deterministic two-second transit as the outbound jump.
 
 ## Origin Station approach
 
-The version-1 Origin Station waypoint is
-`(40,000, -80,000,000,000, 0)` metres in origin-system inertial space. The
-return corridor arrives at `(0, -80,000,000,000, 0)`, leaving an explicit
-40 km approach. The station is therefore neither the system barycenter nor the
-universe origin.
+Origin Station version 2 carries a host planet and deterministic circular-orbit
+recipe. At every authoritative tick, the application composes the host-planet
+ephemeris with that planet-relative orbit. The home jump resolves the future
+station position, arrives 40 km along its positive-X corridor, and matches its
+velocity. The station is therefore neither the system barycenter nor a static
+launch-era waypoint.
 
 The approach state records the authoritative tick, origin system and station
-identities, position, velocity, attitude basis, flight mode, and held controls.
+identities, station-relative position and velocity, attitude basis, flight
+mode, and held controls. Absolute render pose is derived from the same
+tick-resolved station ephemeris.
 Assisted flight is capped at 1,000 m/s with 250 m/s² acceleration. Kitty and
 ANSI consume the same station-relative distance, signed closing speed, braking
 cue, and code-authored center marker.
 
-Docking physics is deliberately minimal. Distance at or below 5,000 metres
-produces `ENTER DOCK`; Enter is still required to dock. Docking atomically
+Docking physics is deliberately minimal. Distance at or below 5,000 metres and
+relative speed at or below 25 m/s produces `ENTER DOCK`; Enter is still
+required to dock. A craft at an obsolete station position or above the speed
+limit is refused. Docking atomically
 removes the flight state and advances the mission from `objective_complete` to
 `returned`. The station board then exposes a separate `TURN IN CONTRACT`
 action. Repeated or out-of-order docking and turn-in commands are rejected
@@ -42,18 +47,18 @@ without changing state.
 
 ## Persistence
 
-Save format 11 admits one `origin_return` state only during
+Save format 12 admits one `origin_return` state only during
 `origin_system_return`. Target-system flight remains present during a
 cancelable return spool and is absent after commitment. Objective-complete,
 returned, and turned-in states retain the immutable target discovery and
-exactly one collected world delta. Earlier alpha formats are rejected before
+exactly one collected world delta. Formats 1 through 11 are rejected before
 state decoding rather than being upgraded with synthesized return state.
 
 ## Acceptance replay
 
 The fixed seed-42 replay departs from the opposite longitude at tick 600,
 cancels and resumes the return spool, commits at tick 1020, arrives in the
-origin system at tick 1260, and docks at tick 5923. It saves and reloads at
+origin system at tick 1260, and docks at tick 5929. It saves and reloads at
 departure, canceled spool, committed transit, origin arrival, mid-approach,
 docked, and turned-in boundaries.
 

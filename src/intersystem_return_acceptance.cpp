@@ -147,10 +147,9 @@ auto run_intersystem_return_acceptance(int width, int height)
   }
   const auto frozen_tick = document.state.system_flight->tick;
   for (SimulationTick tick = 0; tick < kSimulationHz / 2; ++tick) {
-    if (!advance_intersystem_jump_tick(resumed_contract,
-                                   generate_local_system(
-                                       resumed_contract.identities
-                                           .origin_system_seed))) {
+    if (!advance_intersystem_jump_tick(
+            resumed_contract, generate_origin_system(
+                                  resumed_contract.identities.universe_seed))) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
     }
@@ -168,7 +167,7 @@ auto run_intersystem_return_acceptance(int width, int height)
   }
 
   const auto origin_system =
-      generate_local_system(resumed_contract.identities.origin_system_seed);
+      generate_origin_system(resumed_contract.identities.universe_seed);
   SimulationTick commit_tick{};
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
     const auto advanced =
@@ -193,7 +192,8 @@ auto run_intersystem_return_acceptance(int width, int height)
     }
   }
   const auto arrival_tick = resumed_contract.universe_tick;
-  auto origin_return = initialize_origin_return(resumed_contract);
+  auto origin_return =
+      initialize_origin_return(resumed_contract, origin_system);
   if (!origin_return) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::initialization_failure};
@@ -211,16 +211,41 @@ auto run_intersystem_return_acceptance(int width, int height)
                                 .height = height,
                                 .field_of_view_degrees = 60.0}};
   const auto selected = origin_system.planets.front().descriptor.id;
+  const auto origin_pose = resolve_origin_return_pose(
+      resumed_contract, origin_system, *document.state.origin_return);
+  const auto station_ephemeris = resolve_origin_station_ephemeris(
+      origin_system,
+      generate_origin_station(resumed_contract.identities.universe_seed),
+      {.tick = resumed_contract.universe_tick, .sub_tick_fraction = 0.0});
+  if (!origin_pose || !station_ephemeris) {
+    return std::unexpected{
+        IntersystemReturnAcceptanceError::presentation_failure};
+  }
+  const SystemPositionMetres host_position{
+      station_ephemeris->position.x -
+          station_ephemeris->host_relative_position.x,
+      station_ephemeris->position.y -
+          station_ephemeris->host_relative_position.y,
+      station_ephemeris->position.z -
+          station_ephemeris->host_relative_position.z};
+  // A presentation-only observation camera makes the planet/station
+  // relationship visible in capture evidence. It never feeds back into the
+  // authoritative return pose resolved above.
+  const SystemPositionMetres camera_position{host_position.x,
+                                             host_position.y - 50'000'000.0,
+                                             host_position.z + 10'000'000.0};
   const LocalSystemView view{
       .time = {resumed_contract.universe_tick, 0.0},
-      .position = document.state.origin_return->position,
-      .velocity = document.state.origin_return->velocity,
-      .forward = document.state.origin_return->forward,
-      .up = document.state.origin_return->up,
+      .position = camera_position,
+      .velocity = station_ephemeris->velocity,
+      .forward = {host_position.x - camera_position.x,
+                  host_position.y - camera_position.y,
+                  host_position.z - camera_position.z},
+      .up = {0.0, 0.0, 1.0},
       .selected_planet = selected,
   };
   if (!renderer.render(origin_system, view, frame) ||
-      !render_origin_station_marker(width, height, frame)) {
+      !renderer.render_origin_station(view, *station_ephemeris, frame)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::presentation_failure};
   }
@@ -230,14 +255,15 @@ auto run_intersystem_return_acceptance(int width, int height)
   bool resumed_midway{};
   for (SimulationTick tick = 0; tick < approach_limit; ++tick) {
     const auto guidance = resolve_origin_return_guidance(
-        resumed_contract, *document.state.origin_return);
+        resumed_contract, origin_system, *document.state.origin_return);
     if (!guidance) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
     }
     if (guidance->arrived) break;
     auto next_return = *document.state.origin_return;
-    if (!advance_origin_return(resumed_contract, next_return, {}) ||
+    if (!advance_origin_return(resumed_contract, origin_system, next_return,
+                               {}) ||
         !advance_intersystem_time(resumed_contract, 1)) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
@@ -252,16 +278,15 @@ auto run_intersystem_return_acceptance(int width, int height)
     }
   }
   const auto final_guidance = resolve_origin_return_guidance(
-      resumed_contract, *document.state.origin_return);
+      resumed_contract, origin_system, *document.state.origin_return);
   if (!final_guidance || !final_guidance->arrived || !resumed_midway) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::incomplete_path};
   }
   const auto docked_return_checksum =
       origin_return_state_checksum(*document.state.origin_return);
-  if (!advance_intersystem_contract(
-          resumed_contract, resumed_contract.universe_tick,
-          IntersystemContractCommand::dock_at_origin)) {
+  if (!attempt_origin_docking(resumed_contract, origin_system,
+                              *document.state.origin_return)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::transition_failure};
   }

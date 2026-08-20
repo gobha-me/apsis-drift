@@ -511,15 +511,6 @@ auto advance_intersystem_contract(IntersystemContractState& state,
       next.phase_started_tick = next.universe_tick;
       next.jump_alignment.reset();
       break;
-    case IntersystemContractCommand::dock_at_origin:
-      if (next.travel_phase != IntersystemTravelPhase::origin_system_return ||
-          next.mission_phase != IntersystemMissionPhase::objective_complete) {
-        return reject();
-      }
-      next.travel_phase = IntersystemTravelPhase::docked_at_origin;
-      next.mission_phase = IntersystemMissionPhase::returned;
-      next.arrival_solution.reset();
-      break;
     case IntersystemContractCommand::turn_in:
       if (next.travel_phase != IntersystemTravelPhase::docked_at_origin ||
           next.mission_phase != IntersystemMissionPhase::returned) {

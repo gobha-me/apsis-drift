@@ -341,10 +341,8 @@ class LandscapeApp final : public App {
       : m_render_configuration(render_configuration),
         m_terrain(required_terrain(1024, seed)),
         m_planet(generate_planet_descriptor(Seed{seed})),
-        m_origin_system(generate_local_system(
-            generate_first_intersystem_identities(
-                profile ? profile->recipe.universe_seed : Seed{seed})
-                .origin_system_seed)),
+        m_origin_system(generate_origin_system(
+            profile ? profile->recipe.universe_seed : Seed{seed})),
         m_local_system(generate_local_system(
             generate_first_intersystem_identities(
                 profile ? profile->recipe.universe_seed : Seed{seed})
@@ -1266,7 +1264,7 @@ class LandscapeApp final : public App {
                       chrome_bg);
     if (m_origin_return && m_intersystem_contract) {
       const auto guidance = resolve_origin_return_guidance(
-          *m_intersystem_contract, *m_origin_return);
+          *m_intersystem_contract, m_origin_system, *m_origin_return);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 4, "ORIGIN STN", text,
                         chrome_bg);
@@ -1492,7 +1490,7 @@ class LandscapeApp final : public App {
       message = " FTL READY | J BEGIN 3-SECOND SPOOL | J AGAIN TO CANCEL ";
     } else if (m_origin_return && m_intersystem_contract) {
       const auto guidance = resolve_origin_return_guidance(
-          *m_intersystem_contract, *m_origin_return);
+          *m_intersystem_contract, m_origin_system, *m_origin_return);
       if (guidance) {
         std::string_view cue{"HOLD"};
         switch (guidance->cue) {
@@ -1673,12 +1671,11 @@ class LandscapeApp final : public App {
       if (m_origin_return) {
         if (key.key == Key::Enter && key.action == KeyAction::Press) {
           const auto guidance = resolve_origin_return_guidance(
-              *m_intersystem_contract, *m_origin_return);
+              *m_intersystem_contract, m_origin_system, *m_origin_return);
           auto next_contract = *m_intersystem_contract;
           if (!guidance || !guidance->arrived ||
-              !advance_intersystem_contract(
-                  next_contract, next_contract.universe_tick,
-                  IntersystemContractCommand::dock_at_origin)) {
+              !attempt_origin_docking(next_contract, m_origin_system,
+                                      *m_origin_return)) {
             m_error = "reach the Origin Station rendezvous before docking";
             return;
           }
@@ -1812,7 +1809,8 @@ class LandscapeApp final : public App {
             m_system_flight = std::move(*flight);
             m_input_mapper.suspend({}, m_system_flight->tick);
           } else if (advanced->arrived && !outbound) {
-            auto returning = initialize_origin_return(*m_intersystem_contract);
+            auto returning = initialize_origin_return(*m_intersystem_contract,
+                                                      m_origin_system);
             if (!returning) {
               throw std::runtime_error{
                   "cannot initialize Origin Station return flight"};
@@ -1876,7 +1874,8 @@ class LandscapeApp final : public App {
           auto next_return = *m_origin_return;
           auto next_contract = *m_intersystem_contract;
           auto commands = m_input_mapper.take_commands(next_return.tick);
-          if (!advance_origin_return(next_contract, next_return, commands) ||
+          if (!advance_origin_return(next_contract, m_origin_system,
+                                     next_return, commands) ||
               !advance_intersystem_time(next_contract, 1)) {
             throw std::runtime_error{"Origin Station return flight failed"};
           }
@@ -1984,6 +1983,28 @@ class LandscapeApp final : public App {
       SystemPositionMetres camera_position{0.0, -92'000'000'000.0,
                                             26'000'000'000.0};
       SystemVelocityMetresPerSecond camera_velocity{};
+      std::optional<OriginStationEphemeris> origin_station_ephemeris;
+      if (!at_target) {
+        const auto resolved_station = resolve_origin_station_ephemeris(
+            m_origin_system,
+            generate_origin_station(
+                m_intersystem_contract->identities.universe_seed),
+            {.tick = m_intersystem_contract->universe_tick,
+             .sub_tick_fraction = 0.0});
+        if (!resolved_station) {
+          throw std::runtime_error{"cannot resolve Origin Station ephemeris"};
+        }
+        origin_station_ephemeris = *resolved_station;
+      }
+      if (origin_station_ephemeris &&
+          m_intersystem_contract->travel_phase ==
+              IntersystemTravelPhase::origin_system_flight) {
+        camera_position = {origin_station_ephemeris->position.x +
+                               kAssistedOriginArrivalStandoffMetres,
+                           origin_station_ephemeris->position.y,
+                           origin_station_ephemeris->position.z};
+        camera_velocity = origin_station_ephemeris->velocity;
+      }
       if (m_intersystem_contract->arrival_solution &&
           m_intersystem_contract->arrival_solution->destination == system.id) {
         camera_position =
@@ -1999,8 +2020,13 @@ class LandscapeApp final : public App {
         forward = m_system_flight->forward;
         up = m_system_flight->up;
       } else if (m_origin_return && m_origin_return->system == system.id) {
-        camera_position = m_origin_return->position;
-        camera_velocity = m_origin_return->velocity;
+        const auto pose = resolve_origin_return_pose(
+            *m_intersystem_contract, m_origin_system, *m_origin_return);
+        if (!pose) {
+          throw std::runtime_error{"cannot resolve Origin Station return pose"};
+        }
+        camera_position = pose->position;
+        camera_velocity = pose->velocity;
         forward = m_origin_return->forward;
         up = m_origin_return->up;
       }
@@ -2018,12 +2044,21 @@ class LandscapeApp final : public App {
           .time = {m_intersystem_contract->universe_tick, 0.0},
           .position = camera_position,
           .velocity = camera_velocity,
-          .forward = (m_system_flight || m_origin_return)
-                         ? forward
-                         : SystemDirection{
-                               selected_ephemeris->position.x - camera_position.x,
-                               selected_ephemeris->position.y - camera_position.y,
-                               selected_ephemeris->position.z - camera_position.z},
+          .forward =
+              (m_system_flight || m_origin_return) ? forward
+              : origin_station_ephemeris && !at_target
+                  ? SystemDirection{origin_station_ephemeris->position.x -
+                                        camera_position.x,
+                                    origin_station_ephemeris->position.y -
+                                        camera_position.y,
+                                    origin_station_ephemeris->position.z -
+                                        camera_position.z}
+                  : SystemDirection{selected_ephemeris->position.x -
+                                        camera_position.x,
+                                    selected_ephemeris->position.y -
+                                        camera_position.y,
+                                    selected_ephemeris->position.z -
+                                        camera_position.z},
           .up = up,
           .selected_planet = selected,
       };
@@ -2036,11 +2071,12 @@ class LandscapeApp final : public App {
         throw std::runtime_error{"intersystem presentation rejected frame"};
       }
       m_system_render = *rendered;
-      if (m_origin_return &&
-          !render_origin_station_marker(
-              m_render_configuration.viewport.width,
-              m_render_configuration.viewport.height, m_surface.pixels())) {
-        throw std::runtime_error{"origin station marker rejected frame"};
+      if (!at_target) {
+        if (!origin_station_ephemeris ||
+            !m_system_renderer->render_origin_station(
+                view, *origin_station_ephemeris, m_surface.pixels())) {
+          throw std::runtime_error{"origin station marker rejected frame"};
+        }
       }
       return;
     }

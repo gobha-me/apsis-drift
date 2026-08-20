@@ -40,13 +40,13 @@ function(check_intersystem_return)
       NOT departure_tick STREQUAL "600" OR
       NOT return_commit_tick STREQUAL "1020" OR
       NOT origin_arrival_tick STREQUAL "1260" OR
-      NOT docking_tick STREQUAL "5923" OR
+      NOT docking_tick STREQUAL "5929" OR
       NOT departure_checksum STREQUAL "15121722808198037731" OR
-      NOT origin_arrival_checksum STREQUAL "2875013185579272227" OR
-      NOT docked_return_checksum STREQUAL "2911477713591731360" OR
+      NOT origin_arrival_checksum STREQUAL "6075957129980954659" OR
+      NOT docked_return_checksum STREQUAL "1010482090975392435" OR
       NOT discovery_count STREQUAL "1" OR
       NOT world_delta_count STREQUAL "1" OR
-      NOT framebuffer_checksum STREQUAL "15648935810629710496")
+      NOT framebuffer_checksum STREQUAL "7194522011593911474")
     message(FATAL_ERROR
       "intersystem return report is not canonical:\n${json}")
   endif ()

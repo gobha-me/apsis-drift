@@ -34,3 +34,26 @@ and license entries before publication.
   window bounds and metadata-stripped with ImageMagick 7.1.2-29
 - Edits: lossless crop only; no color, content, compositing, or generative edits
 - License: BSD 3-Clause, under the repository [license](../LICENSE.md)
+
+## Orbiting-home acceptance captures
+
+- Locations: `docs/media/origin-home-kitty.png` and
+  `docs/media/origin-home-ansi.png`
+- Purpose: deterministic visual evidence that the tutorial home and the
+  tick-resolved Origin Station marker share one system-space view
+- Origin: captured from Apsis Drift's repository-authored intersystem-return
+  acceptance path on 2026-08-19; no generative model, external image,
+  third-party art, or encoded source asset was used
+- Scenario: `v0.4.12-intersystem-return`, universe seed `42`, authoritative
+  origin-arrival tick `1260`, station `station-ce51e866ec4e032d`
+- Kitty-scale capture: local profile, logical viewport 640x480, framebuffer
+  checksum `11003545979043014705`
+- ANSI-scale capture: remote profile, logical viewport 320x240, framebuffer
+  checksum `7194522011593911474`
+- Tooling: application framebuffer written as binary PPM by Apsis Drift and
+  converted losslessly to stripped PNG with ImageMagick 6.9.12-98; the files
+  are renderer evidence at the viewports consumed by the supported Kitty and
+  ANSI paths, while encoder behavior is validated by the separate driver matrix
+- Edits: deterministic PPM-to-PNG encoding and metadata removal only; no color,
+  content, compositing, or generative edits
+- License: BSD 3-Clause, under the repository [license](../LICENSE.md)

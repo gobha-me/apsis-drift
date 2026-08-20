@@ -1271,14 +1271,14 @@ template <typename Id>
       {"tick", decimal(state.tick)},
       {"system_id", encoded_id("system-", state.system)},
       {"station_id", encoded_id("station-", state.station)},
-      {"position_metres",
-       Json{{"x", decimal(state.position.x)},
-            {"y", decimal(state.position.y)},
-            {"z", decimal(state.position.z)}}},
-      {"velocity_metres_per_second",
-       Json{{"x", decimal(state.velocity.x)},
-            {"y", decimal(state.velocity.y)},
-            {"z", decimal(state.velocity.z)}}},
+      {"station_relative_position_metres",
+       Json{{"x", decimal(state.relative_position.x)},
+            {"y", decimal(state.relative_position.y)},
+            {"z", decimal(state.relative_position.z)}}},
+      {"station_relative_velocity_metres_per_second",
+       Json{{"x", decimal(state.relative_velocity.x)},
+            {"y", decimal(state.relative_velocity.y)},
+            {"z", decimal(state.relative_velocity.z)}}},
       {"forward", Json{{"x", decimal(state.forward.x)},
                         {"y", decimal(state.forward.y)},
                         {"z", decimal(state.forward.z)}}},
@@ -1305,13 +1305,14 @@ template <typename Id>
                                    std::string{path}, "expected an object")};
   }
   auto tick = read_u64(json, "tick", std::string{path});
-  auto system = read_id<SystemId>(json, "system_id", std::string{path},
-                                  "system-");
-  auto station = read_id<OriginStationId>(json, "station_id",
-                                          std::string{path}, "station-");
-  auto position = read_object(json, "position_metres", std::string{path});
-  auto velocity = read_object(json, "velocity_metres_per_second",
-                              std::string{path});
+  auto system =
+      read_id<SystemId>(json, "system_id", std::string{path}, "system-");
+  auto station = read_id<OriginStationId>(json, "station_id", std::string{path},
+                                          "station-");
+  auto position =
+      read_object(json, "station_relative_position_metres", std::string{path});
+  auto velocity = read_object(
+      json, "station_relative_velocity_metres_per_second", std::string{path});
   auto forward = read_object(json, "forward", std::string{path});
   auto up = read_object(json, "up", std::string{path});
   auto mode = read_mode(json, "mode", std::string{path});
@@ -1335,10 +1336,11 @@ template <typename Id>
     if (!z) return std::unexpected{z.error()};
     return std::array<double, 3>{*x, *y, *z};
   };
-  auto decoded_position =
-      vector(**position, "$.state.origin_return.position_metres");
+  auto decoded_position = vector(
+      **position, "$.state.origin_return.station_relative_position_metres");
   auto decoded_velocity = vector(
-      **velocity, "$.state.origin_return.velocity_metres_per_second");
+      **velocity,
+      "$.state.origin_return.station_relative_velocity_metres_per_second");
   auto decoded_forward = vector(**forward, "$.state.origin_return.forward");
   auto decoded_up = vector(**up, "$.state.origin_return.up");
   if (!decoded_position) return std::unexpected{decoded_position.error()};
@@ -1369,10 +1371,10 @@ template <typename Id>
       .tick = *tick,
       .system = *system,
       .station = *station,
-      .position = {(*decoded_position)[0], (*decoded_position)[1],
-                   (*decoded_position)[2]},
-      .velocity = {(*decoded_velocity)[0], (*decoded_velocity)[1],
-                   (*decoded_velocity)[2]},
+      .relative_position = {(*decoded_position)[0], (*decoded_position)[1],
+                            (*decoded_position)[2]},
+      .relative_velocity = {(*decoded_velocity)[0], (*decoded_velocity)[1],
+                            (*decoded_velocity)[2]},
       .forward = {(*decoded_forward)[0], (*decoded_forward)[1],
                   (*decoded_forward)[2]},
       .up = {(*decoded_up)[0], (*decoded_up)[1], (*decoded_up)[2]},
@@ -1525,6 +1527,7 @@ auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
   return SaveGeneratorVersions{
       .seed_derivation = kSeedDerivationVersion,
       .planet_descriptor = kPlanetGeneratorVersion,
+      .origin_home_planet = kOriginHomePlanetGeneratorVersion,
       .terrain_tiles = kTerrainTileGeneratorVersion,
       .origin_station = kOriginStationGeneratorVersion,
       .surface_signals = kSurfaceSignalGeneratorVersion,
@@ -1545,13 +1548,18 @@ auto make_save_recipe(Seed universe_seed, std::uint64_t active_planet_ordinal)
   const auto planet_seed =
       derive_seed(system_seed, SeedDomain::planet, active_planet_ordinal);
   const auto station = generate_origin_station(universe_seed);
+  const auto home = generate_origin_home_planet(system_seed);
   const auto planet = generate_planet_descriptor(planet_seed);
   return SaveRecipe{
       .universe_seed = universe_seed,
       .origin_system_ordinal = kOriginSystemOrdinal,
+      .home_planet_ordinal = kOriginHomePlanetOrdinal,
       .active_planet_ordinal = active_planet_ordinal,
       .generator_versions = current_save_generator_versions(),
       .origin_station = station.id,
+      .home_planet = home.id,
+      .station_host_planet = station.orbit.host_planet,
+      .station_orbit = station.orbit,
       .active_planet = planet.id,
   };
 }
@@ -1569,12 +1577,25 @@ auto validate_save_document(const SaveDocument& document)
         SaveSchemaErrorCode::invalid_value, "$.recipe.origin_system_ordinal",
         "current save formats support only the origin system")};
   }
+  if (document.recipe.home_planet_ordinal != kOriginHomePlanetOrdinal) {
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::invalid_value, "$.recipe.home_planet_ordinal",
+        "current save formats support one tutorial home at ordinal zero")};
+  }
   const auto expected = make_save_recipe(document.recipe.universe_seed,
                                          document.recipe.active_planet_ordinal);
   if (document.recipe.origin_station != expected.origin_station) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::identity_mismatch, "$.recipe.origin_station_id",
         "stored origin station does not match deterministic regeneration")};
+  }
+  if (document.recipe.home_planet != expected.home_planet ||
+      document.recipe.station_host_planet != expected.station_host_planet ||
+      document.recipe.station_orbit != expected.station_orbit) {
+    return std::unexpected{failure(SaveSchemaErrorCode::identity_mismatch,
+                                   "$.recipe.station_orbit",
+                                   "stored home planet or station orbit does "
+                                   "not match deterministic regeneration")};
   }
   if (document.recipe.active_planet != expected.active_planet) {
     return std::unexpected{failure(
@@ -1601,16 +1622,17 @@ auto validate_save_document(const SaveDocument& document)
           "intersystem contract does not match the save recipe or state machine")};
     }
     if (contract.arrival_solution) {
-      const auto destination = generate_local_system(
+      const auto destination =
           target_arrival_required(contract.travel_phase)
-              ? contract.identities.target_system_seed
-              : contract.identities.origin_system_seed);
-      if (!validate_intersystem_arrival_solution(
-              contract, destination, *contract.arrival_solution)) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state,
-            "$.state.intersystem_contract.arrival_solution",
-            "intersystem arrival solution does not match deterministic regeneration")};
+              ? generate_local_system(contract.identities.target_system_seed)
+              : generate_origin_system(contract.identities.universe_seed);
+      if (!validate_intersystem_arrival_solution(contract, destination,
+                                                 *contract.arrival_solution)) {
+        return std::unexpected{
+            failure(SaveSchemaErrorCode::invalid_state,
+                    "$.state.intersystem_contract.arrival_solution",
+                    "intersystem arrival solution does not match deterministic "
+                    "regeneration")};
       }
     }
     const bool target_system_flight =
@@ -1682,10 +1704,12 @@ auto validate_save_document(const SaveDocument& document)
             "return spool flight does not match the target system")};
       }
     } else if (origin_system_return) {
+      const auto origin_system =
+          generate_origin_system(contract.identities.universe_seed);
       if (document.state.flight || document.state.system_flight ||
           (contract.arrival_solution && !document.state.origin_return) ||
           (document.state.origin_return &&
-           !validate_origin_return_state(contract,
+           !validate_origin_return_state(contract, origin_system,
                                          *document.state.origin_return))) {
         return std::unexpected{failure(
             SaveSchemaErrorCode::invalid_state, "$.state.origin_return",
@@ -1870,11 +1894,14 @@ auto encode_save_document_json(const SaveDocument& document)
        Json{{"universe_seed", decimal(document.recipe.universe_seed.value)},
             {"origin_system_ordinal",
              decimal(document.recipe.origin_system_ordinal)},
+            {"home_planet_ordinal",
+             decimal(document.recipe.home_planet_ordinal)},
             {"active_planet_ordinal",
              decimal(document.recipe.active_planet_ordinal)},
             {"generator_versions",
              Json{{"seed_derivation", versions.seed_derivation},
                   {"planet_descriptor", versions.planet_descriptor},
+                  {"origin_home_planet", versions.origin_home_planet},
                   {"terrain_tiles", versions.terrain_tiles},
                   {"origin_station", versions.origin_station},
                   {"surface_signals", versions.surface_signals},
@@ -1888,6 +1915,21 @@ auto encode_save_document_json(const SaveDocument& document)
                   {"origin_return", versions.origin_return}}},
             {"origin_station_id",
              encoded_id("station-", document.recipe.origin_station)},
+            {"home_planet_id",
+             encoded_id("planet-", document.recipe.home_planet)},
+            {"station_host_planet_id",
+             encoded_id("planet-", document.recipe.station_host_planet)},
+            {"station_orbit",
+             Json{{"radius_kilometres",
+                   decimal(document.recipe.station_orbit.radius_kilometres)},
+                  {"period_ticks",
+                   decimal(document.recipe.station_orbit.period_ticks)},
+                  {"epoch_phase_turns",
+                   document.recipe.station_orbit.epoch_phase_turns},
+                  {"inclination_microdegrees",
+                   document.recipe.station_orbit.inclination_microdegrees},
+                  {"ascending_node_turns",
+                   document.recipe.station_orbit.ascending_node_turns}}},
             {"active_planet_id",
              encoded_id("planet-", document.recipe.active_planet)}}},
       {"state", std::move(state)},
@@ -1956,12 +1998,13 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.application",
                                    "save belongs to another application")};
   }
-  if (*format_version >= 1U && *format_version <= 10U) {
+  if (*format_version >= 1U && *format_version <= 11U) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_alpha_format_version,
         "$.format_version",
         std::format(
-            "save format {} predates the format-11 alpha reset and is not supported; the source file was not modified",
+            "save format {} predates the format-12 orbiting-home alpha reset "
+            "and is not supported; the source file was not modified",
             *format_version))};
   }
   if (*format_version != kSaveFormatVersion) {
@@ -1997,25 +2040,48 @@ auto decode_save_document_json(std::string_view json_text)
   auto universe_seed = read_u64(**recipe_json, "universe_seed", "$.recipe");
   auto system_ordinal =
       read_u64(**recipe_json, "origin_system_ordinal", "$.recipe");
+  auto home_ordinal =
+      read_u64(**recipe_json, "home_planet_ordinal", "$.recipe");
   auto planet_ordinal =
       read_u64(**recipe_json, "active_planet_ordinal", "$.recipe");
   auto versions_json =
       read_object(**recipe_json, "generator_versions", "$.recipe");
   auto station = read_id<OriginStationId>(**recipe_json, "origin_station_id",
                                           "$.recipe", "station-");
+  auto home =
+      read_id<PlanetId>(**recipe_json, "home_planet_id", "$.recipe", "planet-");
+  auto station_host = read_id<PlanetId>(**recipe_json, "station_host_planet_id",
+                                        "$.recipe", "planet-");
+  auto station_orbit = read_object(**recipe_json, "station_orbit", "$.recipe");
   auto planet = read_id<PlanetId>(**recipe_json, "active_planet_id", "$.recipe",
                                   "planet-");
-  if (!universe_seed) return std::unexpected{universe_seed.error()};
-  if (!system_ordinal) return std::unexpected{system_ordinal.error()};
-  if (!planet_ordinal) return std::unexpected{planet_ordinal.error()};
-  if (!versions_json) return std::unexpected{versions_json.error()};
-  if (!station) return std::unexpected{station.error()};
-  if (!planet) return std::unexpected{planet.error()};
+  if (!universe_seed)
+    return std::unexpected{universe_seed.error()};
+  if (!system_ordinal)
+    return std::unexpected{system_ordinal.error()};
+  if (!home_ordinal)
+    return std::unexpected{home_ordinal.error()};
+  if (!planet_ordinal)
+    return std::unexpected{planet_ordinal.error()};
+  if (!versions_json)
+    return std::unexpected{versions_json.error()};
+  if (!station)
+    return std::unexpected{station.error()};
+  if (!home)
+    return std::unexpected{home.error()};
+  if (!station_host)
+    return std::unexpected{station_host.error()};
+  if (!station_orbit)
+    return std::unexpected{station_orbit.error()};
+  if (!planet)
+    return std::unexpected{planet.error()};
 
   auto seed_version = read_u32(**versions_json, "seed_derivation",
                                "$.recipe.generator_versions");
   auto planet_version = read_u32(**versions_json, "planet_descriptor",
                                  "$.recipe.generator_versions");
+  auto home_version = read_u32(**versions_json, "origin_home_planet",
+                               "$.recipe.generator_versions");
   auto terrain_version =
       read_u32(**versions_json, "terrain_tiles", "$.recipe.generator_versions");
   auto station_version = read_u32(**versions_json, "origin_station",
@@ -2032,20 +2098,32 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.recipe.generator_versions");
   auto jump_version = read_u32(**versions_json, "intersystem_jump",
                                "$.recipe.generator_versions");
-  auto system_flight_version = read_u32(**versions_json, "system_flight",
-                                        "$.recipe.generator_versions");
-  auto origin_return_version = read_u32(**versions_json, "origin_return",
-                                        "$.recipe.generator_versions");
-  if (!seed_version) return std::unexpected{seed_version.error()};
-  if (!planet_version) return std::unexpected{planet_version.error()};
-  if (!terrain_version) return std::unexpected{terrain_version.error()};
-  if (!station_version) return std::unexpected{station_version.error()};
-  if (!signal_version) return std::unexpected{signal_version.error()};
-  if (!sun_version) return std::unexpected{sun_version.error()};
-  if (!system_version) return std::unexpected{system_version.error()};
-  if (!ephemeris_version) return std::unexpected{ephemeris_version.error()};
-  if (!contract_version) return std::unexpected{contract_version.error()};
-  if (!jump_version) return std::unexpected{jump_version.error()};
+  auto system_flight_version =
+      read_u32(**versions_json, "system_flight", "$.recipe.generator_versions");
+  auto origin_return_version =
+      read_u32(**versions_json, "origin_return", "$.recipe.generator_versions");
+  if (!seed_version)
+    return std::unexpected{seed_version.error()};
+  if (!planet_version)
+    return std::unexpected{planet_version.error()};
+  if (!home_version)
+    return std::unexpected{home_version.error()};
+  if (!terrain_version)
+    return std::unexpected{terrain_version.error()};
+  if (!station_version)
+    return std::unexpected{station_version.error()};
+  if (!signal_version)
+    return std::unexpected{signal_version.error()};
+  if (!sun_version)
+    return std::unexpected{sun_version.error()};
+  if (!system_version)
+    return std::unexpected{system_version.error()};
+  if (!ephemeris_version)
+    return std::unexpected{ephemeris_version.error()};
+  if (!contract_version)
+    return std::unexpected{contract_version.error()};
+  if (!jump_version)
+    return std::unexpected{jump_version.error()};
   if (!system_flight_version) {
     return std::unexpected{system_flight_version.error()};
   }
@@ -2055,6 +2133,7 @@ auto decode_save_document_json(std::string_view json_text)
   SaveGeneratorVersions versions{
       .seed_derivation = *seed_version,
       .planet_descriptor = *planet_version,
+      .origin_home_planet = *home_version,
       .terrain_tiles = *terrain_version,
       .origin_station = *station_version,
       .surface_signals = *signal_version,
@@ -2072,6 +2151,28 @@ auto decode_save_document_json(std::string_view json_text)
                 "$.recipe.generator_versions",
                 "save requires a generator version unsupported by this build")};
   }
+
+  auto station_radius =
+      read_u64(**station_orbit, "radius_kilometres", "$.recipe.station_orbit");
+  auto station_period =
+      read_u64(**station_orbit, "period_ticks", "$.recipe.station_orbit");
+  auto station_phase =
+      read_u32(**station_orbit, "epoch_phase_turns", "$.recipe.station_orbit");
+  auto station_inclination = read_i32(
+      **station_orbit, "inclination_microdegrees", "$.recipe.station_orbit");
+  auto station_node = read_u32(**station_orbit, "ascending_node_turns",
+                               "$.recipe.station_orbit");
+  if (!station_radius)
+    return std::unexpected{station_radius.error()};
+  if (!station_period)
+    return std::unexpected{station_period.error()};
+  if (!station_phase)
+    return std::unexpected{station_phase.error()};
+  if (!station_inclination) {
+    return std::unexpected{station_inclination.error()};
+  }
+  if (!station_node)
+    return std::unexpected{station_node.error()};
 
   auto career_kind = read_string(**state_json, "career_kind", "$.state");
   if (!career_kind) return std::unexpected{career_kind.error()};
@@ -2199,9 +2300,21 @@ auto decode_save_document_json(std::string_view json_text)
           SaveRecipe{
               .universe_seed = Seed{*universe_seed},
               .origin_system_ordinal = *system_ordinal,
+              .home_planet_ordinal = *home_ordinal,
               .active_planet_ordinal = *planet_ordinal,
               .generator_versions = versions,
               .origin_station = *station,
+              .home_planet = *home,
+              .station_host_planet = *station_host,
+              .station_orbit =
+                  OriginStationOrbit{
+                      .host_planet = *station_host,
+                      .radius_kilometres = *station_radius,
+                      .period_ticks = *station_period,
+                      .epoch_phase_turns = *station_phase,
+                      .inclination_microdegrees = *station_inclination,
+                      .ascending_node_turns = *station_node,
+                  },
               .active_planet = *planet,
           },
       .state =

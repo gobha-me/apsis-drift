@@ -52,9 +52,9 @@ identity.
 
 ## Persistence and verification
 
-Save format 11 records finite binary64 values as canonical decimal strings and
+Save format 12 records finite binary64 values as canonical decimal strings and
 requires exactly one matching system-flight state during target-system flight.
-Formats 1 through 10 are unsupported alpha inputs; the loader does not
+Formats 1 through 11 are unsupported alpha inputs; the loader does not
 manufacture system-flight state from an older projection.
 
 Run the cadence, save/resume, rendering, and insertion acceptance through the

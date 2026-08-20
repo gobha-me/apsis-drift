@@ -175,11 +175,23 @@ struct Vector3 {
       .destination = destination.id,
       .reference_planet = std::nullopt,
       .arrival_tick = arrival_tick,
-      .position = {0.0, -kAssistedOriginArrivalRadiusMetres, 0.0},
+      .position = {},
       .velocity = {},
       .assessment = std::move(assessment),
   };
-  if (outbound) {
+  if (returning) {
+    const auto station =
+        generate_origin_station(contract.identities.universe_seed);
+    const auto ephemeris = resolve_origin_station_ephemeris(
+        destination, station, {.tick = arrival_tick, .sub_tick_fraction = 0.0});
+    if (!ephemeris) {
+      return std::unexpected{IntersystemJumpError::ephemeris_failure};
+    }
+    solution.position = {ephemeris->position.x +
+                             kAssistedOriginArrivalStandoffMetres,
+                         ephemeris->position.y, ephemeris->position.z};
+    solution.velocity = ephemeris->velocity;
+  } else if (outbound) {
     const auto body = find_local_system_planet(
         destination, contract.identities.target_planet);
     if (!body) {

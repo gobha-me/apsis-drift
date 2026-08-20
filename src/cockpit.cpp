@@ -363,8 +363,9 @@ auto format_flight_instruments(const SystemFlightState& state)
 auto format_flight_instruments(const OriginReturnState& state)
     -> FlightInstrumentReadout {
   FlightInstrumentReadout readout;
-  const double speed = std::hypot(state.velocity.x, state.velocity.y,
-                                  state.velocity.z);
+  const double speed =
+      std::hypot(state.relative_velocity.x, state.relative_velocity.y,
+                 state.relative_velocity.z);
   const bool valid = std::isfinite(state.forward.x) &&
                      std::isfinite(state.forward.y) &&
                      std::isfinite(state.forward.z) && std::isfinite(speed) &&

@@ -221,14 +221,35 @@ auto generate_local_system(Seed system_seed) -> LocalSystemDescriptor {
   return {
       .seed = system_seed,
       .id = SystemId{system_seed.value},
+      .kind = LocalSystemKind::procedural,
       .star = generate_star(system_seed),
       .planets = std::move(planets),
   };
 }
 
+auto generate_origin_system(Seed universe_seed) -> LocalSystemDescriptor {
+  const auto station = generate_origin_station(universe_seed);
+  auto generated = generate_local_system(station.home_system_seed);
+  generated.kind = LocalSystemKind::origin_home;
+  std::vector<LocalSystemPlanet> planets;
+  planets.reserve(generated.planets.size());
+  for (std::size_t index = 0; index < generated.planets.size(); ++index) {
+    if (index == kOriginHomePlanetOrdinal) {
+      planets.push_back({generate_origin_home_planet(station.home_system_seed),
+                         generated.planets[index].orbit});
+    } else {
+      planets.push_back(generated.planets[index]);
+    }
+  }
+  generated.planets = std::move(planets);
+  return generated;
+}
+
 auto validate_local_system(const LocalSystemDescriptor& system)
     -> std::expected<void, LocalSystemError> {
-  if (system.id.value != system.seed.value) {
+  if ((system.kind != LocalSystemKind::procedural &&
+       system.kind != LocalSystemKind::origin_home) ||
+      system.id.value != system.seed.value) {
     return std::unexpected{LocalSystemError::invalid_system};
   }
   if (!valid_star(system.star, system.seed)) {
@@ -248,7 +269,13 @@ auto validate_local_system(const LocalSystemDescriptor& system)
     const auto expected_seed =
         derive_seed(system.seed, SeedDomain::planet, ordinal);
     const auto& planet = system.planets[index];
-    if (!valid_planet_descriptor(planet.descriptor, expected_seed)) {
+    const bool home = system.kind == LocalSystemKind::origin_home &&
+                      ordinal == kOriginHomePlanetOrdinal;
+    const bool valid_descriptor =
+        home ? planet.descriptor == generate_origin_home_planet(system.seed) &&
+                   is_tutorial_safe_home_planet(planet.descriptor)
+             : valid_planet_descriptor(planet.descriptor, expected_seed);
+    if (!valid_descriptor) {
       return std::unexpected{LocalSystemError::invalid_planet_catalog};
     }
     if (!valid_orbit(planet.orbit, system.seed, ordinal,
@@ -352,6 +379,96 @@ auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
       .planet = planet,
       .position = position,
       .velocity = velocity,
+      .cycle_tick = cycle_tick,
+      .phase_radians = phase,
+  };
+}
+
+auto resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
+                                      const OriginStationDescriptor& station,
+                                      EphemerisQueryTime time)
+    -> std::expected<OriginStationEphemeris, LocalSystemError> {
+  if (system.kind != LocalSystemKind::origin_home ||
+      system.seed != station.home_system_seed ||
+      system.id.value != station.home_system_seed.value ||
+      station.orbit.period_ticks == 0 || station.orbit.radius_kilometres == 0 ||
+      !finite(time.sub_tick_fraction) || time.sub_tick_fraction < 0.0 ||
+      time.sub_tick_fraction >= 1.0) {
+    return std::unexpected{LocalSystemError::invalid_orbit};
+  }
+  const auto expected = generate_origin_station(station.universe_seed);
+  if (expected != station || station.orbit.host_planet !=
+                                 generate_origin_home_planet(system.seed).id) {
+    return std::unexpected{LocalSystemError::invalid_orbit};
+  }
+  const auto host =
+      resolve_planet_ephemeris(system, station.orbit.host_planet, time);
+  if (!host)
+    return std::unexpected{host.error()};
+
+  const auto cycle_tick = time.tick % station.orbit.period_ticks;
+  constexpr double turn_scale{1.0 / 4'294'967'296.0};
+  const double epoch_turns =
+      static_cast<double>(station.orbit.epoch_phase_turns) * turn_scale;
+  const double cycle_turns =
+      (static_cast<double>(cycle_tick) + time.sub_tick_fraction) /
+      static_cast<double>(station.orbit.period_ticks);
+  const double phase = std::numbers::pi_v<double> * 2.0 *
+                       std::fmod(epoch_turns + cycle_turns, 1.0);
+  const double inclination =
+      static_cast<double>(station.orbit.inclination_microdegrees) *
+      (std::numbers::pi_v<double> / 180'000'000.0);
+  const double node = std::numbers::pi_v<double> * 2.0 *
+                      static_cast<double>(station.orbit.ascending_node_turns) *
+                      turn_scale;
+  const double radius =
+      static_cast<double>(station.orbit.radius_kilometres) * 1'000.0;
+  const double cos_phase = std::cos(phase);
+  const double sin_phase = std::sin(phase);
+  const double cos_node = std::cos(node);
+  const double sin_node = std::sin(node);
+  const double cos_inclination = std::cos(inclination);
+  const double sin_inclination = std::sin(inclination);
+  const double relative_x =
+      radius * (cos_phase * cos_node - sin_phase * sin_node * cos_inclination);
+  const double relative_y =
+      radius * (cos_phase * sin_node + sin_phase * cos_node * cos_inclination);
+  const double relative_z = radius * sin_phase * sin_inclination;
+  const double radians_per_second =
+      std::numbers::pi_v<double> * 2.0 * static_cast<double>(kSimulationHz) /
+      static_cast<double>(station.orbit.period_ticks);
+  const double relative_vx =
+      radius * radians_per_second *
+      (-sin_phase * cos_node - cos_phase * sin_node * cos_inclination);
+  const double relative_vy =
+      radius * radians_per_second *
+      (-sin_phase * sin_node + cos_phase * cos_node * cos_inclination);
+  const double relative_vz =
+      radius * radians_per_second * cos_phase * sin_inclination;
+  const SystemPositionMetres position{
+      quantized_position(host->position.x + relative_x),
+      quantized_position(host->position.y + relative_y),
+      quantized_position(host->position.z + relative_z)};
+  const SystemVelocityMetresPerSecond velocity{
+      quantized_velocity(host->velocity.x + relative_vx),
+      quantized_velocity(host->velocity.y + relative_vy),
+      quantized_velocity(host->velocity.z + relative_vz)};
+  if (!finite(phase) || !finite(position.x) || !finite(position.y) ||
+      !finite(position.z) || !finite(velocity.x) || !finite(velocity.y) ||
+      !finite(velocity.z)) {
+    return std::unexpected{LocalSystemError::unsafe_arithmetic};
+  }
+  return OriginStationEphemeris{
+      .station = station.id,
+      .host_planet = station.orbit.host_planet,
+      .position = position,
+      .velocity = velocity,
+      .host_relative_position = {quantized_position(relative_x),
+                                 quantized_position(relative_y),
+                                 quantized_position(relative_z)},
+      .host_relative_velocity = {quantized_velocity(relative_vx),
+                                 quantized_velocity(relative_vy),
+                                 quantized_velocity(relative_vz)},
       .cycle_tick = cycle_tick,
       .phase_radians = phase,
   };

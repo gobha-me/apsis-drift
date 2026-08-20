@@ -19,6 +19,12 @@ its unchanged planet seed. Generating the catalog, looking up a body, or adding
 a later ordinal cannot consume mutable random state or alter existing planet,
 terrain, signal, station, or local-sun identity.
 
+The origin system is the one explicit role specialization. Planet ordinal zero
+keeps its existing seed and stable `PlanetId`, while origin-home generator
+version 1 constrains its physical descriptor to the starter-safe envelope in
+[Origin Station and Tutorial Home](ORIGIN_STATION.md). Other origin planets and
+every non-origin system use the unchanged local-system and planet generators.
+
 The star descriptor records its stable seed and ID, bounded ASCII name,
 spectral class, temperature in kelvin, radius in kilometres, and RGB
 presentation color. Version 1 generates temperatures from 2,800 through 7,500
@@ -79,3 +85,7 @@ Save format versions 3 through 5 record this generator and ephemeris version alo
 the stable mission-selected system, star, and planet identities. It regenerates
 rather than serializing mutable ephemeris or random state. Rendering, craft
 travel, and planet-fixed orientation remain separate systems.
+
+Save format 12 additionally records the origin-home role and the station's
+planet-relative orbit recipe. Loading regenerates and compares those values;
+ephemeris positions remain derived from the saved authoritative tick.

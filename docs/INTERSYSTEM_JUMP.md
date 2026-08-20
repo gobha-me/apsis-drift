@@ -46,13 +46,15 @@ normal sub-light approach. For OPPOSED, the bounded recovery is to cancel
 before commitment or use the existing target-hold system-flight assist after
 arrival; propulsion-specific travel-time progression is measured by #95.
 These are approach corridors, not orbit insertion or objective placement. The
-bounded return route uses `(0, -80,000,000,000, 0)` metres with zero velocity
-in origin-system coordinates. It is explicitly not the station waypoint;
-station rendezvous and docking remain #88.
+bounded return route resolves the Origin Station at the committed arrival
+tick, places the craft 40 km along the station-relative positive-X corridor,
+and matches the station's system-space velocity. The immutable arrival is
+therefore tied to the moving station rather than a launch-era or system-center
+coordinate.
 
 ## Persistence and presentation
 
-Save format 11 stores active Pilot alignment and the immutable committed
+Save format 12 stores active Pilot alignment and the immutable committed
 assessment in addition to the arrival solution's canonical finite binary64
 decimal strings, destination/reference identities, and arrival tick. A save
 after commitment restores the same solution rather than rerolling it. Earlier

@@ -1,6 +1,6 @@
 # Save Format and Compatibility
 
-Apsis Drift save format 11 is a deterministic JSON document. It keeps the
+Apsis Drift save format 12 is a deterministic JSON document. It keeps the
 generated-world recipe separate from mutable player state and excludes terrain
 tiles, render state, terminal capabilities, user preferences, caches, and other
 reproducible presentation data.
@@ -13,7 +13,7 @@ reproducible presentation data.
 | `v0.8.0` through `< v1.0.0` | Every later beta must load every valid save created at or after `v0.8.0`. |
 | `v1.0.0` through `< v2.0.0` | Every later 1.x release must load valid 1.x saves and the supported v0.8+ beta lineage. |
 
-Format 11 is the intentional orbiting-home alpha reset. Formats 1 through 10
+Format 12 is the intentional orbiting-home alpha reset. Formats 1 through 11
 are no longer supported player saves. A loader recognizes them from the root
 application and format fields, reports `unsupported_alpha_format_version`, and
 returns before decoding authoritative recipe or state. It never overwrites,
@@ -49,12 +49,12 @@ error after replacement.
 
 ## Document shape and provenance
 
-Every format-11 document has these required top-level fields:
+Every format-12 document has these required top-level fields:
 
 - `application` is exactly `apsis-drift`;
 - `application_version` is the non-empty, printable ASCII version of the build
   that most recently wrote the file, bounded to 64 bytes;
-- `format_version` is the unsigned JSON integer `11`;
+- `format_version` is the unsigned JSON integer `12`;
 - `recipe` and `state` are required objects.
 
 Writer provenance is diagnostic metadata. It does not enter `SaveDocument`,
@@ -62,9 +62,11 @@ simulation, generation, replay, or gameplay checksums. The encoder always emits
 the current build version. A reader of an unknown newer format may use this root
 field to identify the writing build without attempting to decode its state.
 
-The recipe records the universe seed, origin-system and active-planet ordinals,
-all required generator versions, and the expected regenerated station and
-planet IDs. `state.career_kind` selects one current projection:
+The recipe records the universe seed; origin-system, tutorial-home, and
+active-planet ordinals; all required generator versions; the regenerated home,
+station, host, and active-planet IDs; and the station's integer circular-orbit
+radius, period, epoch phase, inclination, and ascending node.
+`state.career_kind` selects one current projection:
 
 - `legacy_signal_run` is the bounded local Signal Run scenario used by its
   acceptance path;
@@ -73,10 +75,12 @@ planet IDs. `state.career_kind` selects one current projection:
   system or planetary flight, origin return, discoveries, and sparse world
   deltas.
 
-Format 11 requires the complete current representation. It does not synthesize
+Format 12 requires the complete current representation. It does not synthesize
 missing arrivals, flight state, rule profiles, alignment, thermal history, or
-world deltas. Later orbiting-home and Guided/Skip work may advance the alpha
-format again rather than overloading format 11 with fields that do not yet have
+world deltas. An origin-return state stores craft position and velocity in the
+current station-relative frame; system-space pose and guidance are regenerated
+from `universe_tick`. Later Guided/Skip work may advance the alpha format again
+rather than overloading format 12 with fields that do not yet have
 authoritative gameplay semantics.
 
 ## Encodings and bounds
@@ -108,6 +112,6 @@ flight regime, clearance, thermal, and journal invariants. Signal Run targets,
 discoveries, and deltas must belong to the regenerated bounded catalog and have
 monotonic, non-future ticks.
 
-Historical format-1-through-10 acceptance reports remain project evidence, not
+Historical format-1-through-11 acceptance reports remain project evidence, not
 player-save compatibility fixtures. Their former migration code and golden save
-documents were removed at the format-11 reset.
+documents were removed at the format-12 reset.

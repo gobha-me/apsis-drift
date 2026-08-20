@@ -4,15 +4,35 @@
 #include <expected>
 #include <string>
 
+#include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
+#include "apsis_drift/simulation.hpp"
 
 namespace apsis_drift {
 
 // Origin-station generation is generated-world compatibility data. Changing
 // its derivation path, ordinals, or identifier mapping requires a new version.
-inline constexpr std::uint32_t kOriginStationGeneratorVersion{1};
+inline constexpr std::uint32_t kOriginHomePlanetGeneratorVersion{1};
+inline constexpr std::uint32_t kOriginStationGeneratorVersion{2};
 inline constexpr std::uint64_t kOriginSystemOrdinal{0};
+inline constexpr std::uint64_t kOriginHomePlanetOrdinal{0};
 inline constexpr std::uint64_t kOriginStationOrdinal{0};
+inline constexpr std::uint32_t kOriginHomeMinimumRadiusKilometres{5'000};
+inline constexpr std::uint32_t kOriginHomeMaximumRadiusKilometres{6'500};
+inline constexpr std::uint16_t kOriginHomeMinimumGravityMilliG{750};
+inline constexpr std::uint16_t kOriginHomeMaximumGravityMilliG{1'100};
+inline constexpr std::uint16_t kOriginHomeMinimumPressureMillibars{700};
+inline constexpr std::uint16_t kOriginHomeMaximumPressureMillibars{1'200};
+inline constexpr std::uint16_t kOriginHomeMinimumWaterBasisPoints{1'000};
+inline constexpr std::uint16_t kOriginHomeMaximumWaterBasisPoints{4'500};
+inline constexpr std::uint32_t kOriginStationMinimumAltitudeKilometres{400};
+inline constexpr std::uint32_t kOriginStationMaximumAltitudeKilometres{600};
+inline constexpr SimulationTick kOriginStationMinimumPeriodTicks{90U * 60U *
+                                                                 kSimulationHz};
+inline constexpr SimulationTick kOriginStationMaximumPeriodTicks{120U * 60U *
+                                                                 kSimulationHz};
+inline constexpr std::int32_t kOriginStationMaximumInclinationMicrodegrees{
+    5'000'000};
 
 struct OriginStationId {
   std::uint64_t value{};
@@ -21,15 +41,34 @@ struct OriginStationId {
       -> bool = default;
 };
 
+struct OriginStationOrbit {
+  PlanetId host_planet;
+  std::uint64_t radius_kilometres{};
+  SimulationTick period_ticks{};
+  std::uint32_t epoch_phase_turns{};
+  std::int32_t inclination_microdegrees{};
+  std::uint32_t ascending_node_turns{};
+
+  friend auto operator==(const OriginStationOrbit&, const OriginStationOrbit&)
+      -> bool = default;
+};
+
 struct OriginStationDescriptor {
   const Seed universe_seed;
   const Seed home_system_seed;
   const Seed station_seed;
   const OriginStationId id;
+  const OriginStationOrbit orbit;
 
   friend auto operator==(const OriginStationDescriptor&,
                          const OriginStationDescriptor&) -> bool = default;
 };
+
+[[nodiscard]] auto generate_origin_home_planet(Seed home_system_seed)
+    -> PlanetDescriptor;
+
+[[nodiscard]] auto
+is_tutorial_safe_home_planet(const PlanetDescriptor& planet) noexcept -> bool;
 
 // The station is a child of the origin system's settlement domain. It is not
 // the universe root, system barycenter, or parent of unrelated content.
