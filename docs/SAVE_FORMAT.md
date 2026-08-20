@@ -119,3 +119,14 @@ monotonic, non-future ticks.
 Historical format-1-through-12 acceptance reports remain project evidence, not
 player-save compatibility fixtures. Their former migration code and golden save
 documents were removed at the format-13 reset.
+
+## Local catalog boundary
+
+Format 13 remains an explicit-path player-save format and does not yet carry a
+local-catalog header. The version-1
+[Menu and Local Profile Contract](MENU_AND_PROFILE_CONTRACT.md) defines the
+future bounded metadata projection, header-derived ordering, transactional
+New/Continue/Load/Save behavior, and CLI precedence. Catalog metadata will be
+non-authoritative and excluded from simulation checksums; duplicated header
+values must agree exactly with the fully validated recipe and state before a
+profile can replace the live session.

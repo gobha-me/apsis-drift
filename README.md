@@ -73,9 +73,15 @@ their deterministic Origin Station with one bounded intersystem contract.
 New writes use save format 13 and record the writing application version.
 Releases before v0.8.0 are alpha: formats 1 through 12 are intentionally
 unsupported after the origin-flight format-13 reset and are rejected without
-modifying the source file. The durable forward-loading promise begins with the actual format
-shipped by v0.8.0; see
+modifying the source file. The durable forward-loading promise begins with the
+actual format shipped by v0.8.0; see
 [Save Format and Compatibility](docs/SAVE_FORMAT.md).
+
+The future local profile catalog, New/Continue/Load/Save transitions, dirty
+state, destructive confirmations, and CLI precedence are fixed by the
+[Menu and Local Profile Contract](docs/MENU_AND_PROFILE_CONTRACT.md). The
+contract keeps profile policy application-owned and does not change the current
+format-13 CLI workflow.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -242,6 +248,12 @@ converge on one authoritative final checksum under
 GCC and Clang, while application framebuffer, TermForge encoding, and live
 terminal/proxy timings remain separate evidence. See
 [docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md](docs/INTERSYSTEM_CONTRACT_ACCEPTANCE.md).
+
+The v0.4.30 local-profile contract fixes bounded catalog storage, metadata,
+ordering, dirty-state, confirmation, concurrency, and CLI-precedence behavior
+before the title and pause flows expand. It preserves explicit format-13 paths
+and keeps profile policy in Apsis Drift. See
+[docs/MENU_AND_PROFILE_CONTRACT.md](docs/MENU_AND_PROFILE_CONTRACT.md).
 
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
