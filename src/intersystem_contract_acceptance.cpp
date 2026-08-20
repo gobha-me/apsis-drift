@@ -211,7 +211,7 @@ struct Replay {
   const auto target_system =
       generate_local_system(initial_contract.identities.target_system_seed);
   const auto origin_system =
-      generate_local_system(initial_contract.identities.origin_system_seed);
+      generate_origin_system(initial_contract.identities.universe_seed);
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
     if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
                                     target_system)) {
@@ -445,8 +445,8 @@ struct Replay {
     if (advanced->committed)
       document.state.system_flight.reset();
   }
-  auto origin_return =
-      initialize_origin_return(*document.state.intersystem_contract);
+  auto origin_return = initialize_origin_return(
+      *document.state.intersystem_contract, origin_system);
   if (!origin_return) {
     return std::unexpected{
         IntersystemContractAcceptanceError::initialization_failure};
@@ -458,7 +458,7 @@ struct Replay {
   SimulationTick approach_ticks{};
   for (; approach_ticks < approach_limit; ++approach_ticks) {
     const auto guidance = resolve_origin_return_guidance(
-        *document.state.intersystem_contract, *origin_return);
+        *document.state.intersystem_contract, origin_system, *origin_return);
     if (!guidance) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
@@ -477,14 +477,14 @@ struct Replay {
       origin_checkpointed = true;
     }
     if (!advance_origin_return(*document.state.intersystem_contract,
-                               *origin_return, {}) ||
+                               origin_system, *origin_return, {}) ||
         !advance_intersystem_time(*document.state.intersystem_contract, 1U)) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
   }
   const auto final_guidance = resolve_origin_return_guidance(
-      *document.state.intersystem_contract, *origin_return);
+      *document.state.intersystem_contract, origin_system, *origin_return);
   if (!origin_checkpointed || !final_guidance || !final_guidance->arrived) {
     return std::unexpected{IntersystemContractAcceptanceError::incomplete_path};
   }
@@ -493,17 +493,33 @@ struct Replay {
                                             static_cast<std::size_t>(height));
   LocalSystemRenderer origin_renderer{{.width = width, .height = height}};
   const auto selected = origin_system.planets.front().descriptor.id;
+  const auto origin_pose = resolve_origin_return_pose(
+      *document.state.intersystem_contract, origin_system, *origin_return);
+  if (!origin_pose) {
+    return std::unexpected{
+        IntersystemContractAcceptanceError::presentation_failure};
+  }
   const auto render_start = Clock::now();
-  const auto rendered = origin_renderer.render(
+  const LocalSystemView origin_view{
+      .time = {document.state.intersystem_contract->universe_tick, 0.0},
+      .position = origin_pose->position,
+      .velocity = origin_pose->velocity,
+      .forward = origin_return->forward,
+      .up = origin_return->up,
+      .selected_planet = selected};
+  const auto rendered =
+      origin_renderer.render(origin_system, origin_view, final_frame);
+  const auto station_ephemeris = resolve_origin_station_ephemeris(
       origin_system,
-      {.time = {document.state.intersystem_contract->universe_tick, 0.0},
-       .position = origin_return->position,
-       .velocity = origin_return->velocity,
-       .forward = origin_return->forward,
-       .up = origin_return->up,
-       .selected_planet = selected},
-      final_frame);
-  const auto marked = render_origin_station_marker(width, height, final_frame);
+      generate_origin_station(
+          document.state.intersystem_contract->identities.universe_seed),
+      origin_view.time);
+  const auto marked =
+      station_ephemeris
+          ? origin_renderer.render_origin_station(
+                origin_view, *station_ephemeris, final_frame)
+          : std::expected<void, LocalSystemRenderError>{
+                std::unexpected{LocalSystemRenderError::ephemeris_failure}};
   render_ms += milliseconds(render_start, Clock::now());
   if (!rendered || !marked) {
     return std::unexpected{
@@ -511,10 +527,8 @@ struct Replay {
   }
   const auto framebuffer_checksum = pixel_checksum(final_frame);
 
-  if (!advance_intersystem_contract(
-          *document.state.intersystem_contract,
-          document.state.intersystem_contract->universe_tick,
-          IntersystemContractCommand::dock_at_origin)) {
+  if (!attempt_origin_docking(*document.state.intersystem_contract,
+                              origin_system, *origin_return)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }

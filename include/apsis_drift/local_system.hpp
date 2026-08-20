@@ -21,6 +21,11 @@ inline constexpr std::uint32_t kAnalyticEphemerisVersion{1};
 inline constexpr std::uint32_t kMinimumLocalSystemPlanets{3};
 inline constexpr std::uint32_t kMaximumLocalSystemPlanets{6};
 
+enum class LocalSystemKind : std::uint8_t {
+  procedural,
+  origin_home,
+};
+
 enum class StarSpectralClass : std::uint8_t {
   m,
   k,
@@ -69,11 +74,26 @@ struct LocalSystemPlanet {
 struct LocalSystemDescriptor {
   Seed seed;
   SystemId id;
+  LocalSystemKind kind{LocalSystemKind::procedural};
   StarDescriptor star;
   std::vector<LocalSystemPlanet> planets;
 
   friend auto operator==(const LocalSystemDescriptor&,
                          const LocalSystemDescriptor&) -> bool = default;
+};
+
+struct OriginStationEphemeris {
+  OriginStationId station;
+  PlanetId host_planet;
+  SystemPositionMetres position;
+  SystemVelocityMetresPerSecond velocity;
+  SystemPositionMetres host_relative_position;
+  SystemVelocityMetresPerSecond host_relative_velocity;
+  SimulationTick cycle_tick{};
+  double phase_radians{};
+
+  friend auto operator==(const OriginStationEphemeris&,
+                         const OriginStationEphemeris&) -> bool = default;
 };
 
 // Authoritative simulation queries use a zero fraction. Renderers may sample
@@ -108,8 +128,10 @@ enum class LocalSystemError : std::uint8_t {
 [[nodiscard]] auto generate_local_system(Seed system_seed)
     -> LocalSystemDescriptor;
 
-[[nodiscard]] auto validate_local_system(
-    const LocalSystemDescriptor& system)
+[[nodiscard]] auto generate_origin_system(Seed universe_seed)
+    -> LocalSystemDescriptor;
+
+[[nodiscard]] auto validate_local_system(const LocalSystemDescriptor& system)
     -> std::expected<void, LocalSystemError>;
 
 [[nodiscard]] auto find_local_system_planet(
@@ -121,8 +143,14 @@ enum class LocalSystemError : std::uint8_t {
     EphemerisQueryTime time)
     -> std::expected<PlanetEphemeris, LocalSystemError>;
 
-[[nodiscard]] auto star_spectral_class_name(
-    StarSpectralClass value) noexcept -> std::string_view;
+[[nodiscard]] auto
+resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
+                                 const OriginStationDescriptor& station,
+                                 EphemerisQueryTime time)
+    -> std::expected<OriginStationEphemeris, LocalSystemError>;
+
+[[nodiscard]] auto star_spectral_class_name(StarSpectralClass value) noexcept
+    -> std::string_view;
 
 [[nodiscard]] auto local_system_diagnostic_json(
     const LocalSystemDescriptor& system)

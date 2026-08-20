@@ -434,7 +434,7 @@ auto intersystem_state_contract() -> void {
   const auto target_system =
       generate_local_system(state.identities.target_system_seed);
   const auto origin_system =
-      generate_local_system(state.identities.origin_system_seed);
+      generate_origin_system(state.identities.universe_seed);
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks - 1; ++tick) {
     check(advance_intersystem_jump_tick(state, target_system).has_value(),
           "outbound spooling must advance before its boundary");
@@ -492,7 +492,16 @@ auto intersystem_state_contract() -> void {
   }
   check(return_arrival.arrived,
         "return arrival must publish at the transit boundary");
-  accepted(IntersystemContractCommand::dock_at_origin);
+  auto approach = initialize_origin_return(state, origin_system);
+  check(approach.has_value(),
+        "return arrival must initialize the moving-station approach");
+  if (!approach)
+    return;
+  approach->relative_position = {kOriginStationArrivalRadiusMetres, 0.0, 0.0};
+  approach->relative_velocity = {};
+  approach->forward = {-1.0, 0.0, 0.0};
+  check(attempt_origin_docking(state, origin_system, *approach).has_value(),
+        "a bounded moving-station rendezvous must permit docking");
   check(state.mission_phase == IntersystemMissionPhase::returned,
         "docking must preserve a distinct returned phase before turn-in");
   accepted(IntersystemContractCommand::turn_in);
@@ -581,8 +590,7 @@ auto intersystem_time_boundary_contract() -> void {
 
   const auto target = generate_local_system(
       make_outbound_spool().identities.target_system_seed);
-  const auto origin = generate_local_system(
-      make_outbound_spool().identities.origin_system_seed);
+  const auto origin = generate_origin_system(Seed{42});
 
   const auto check_spool_boundary = [&](const IntersystemContractState& spool,
                                         const LocalSystemDescriptor& destination,
@@ -728,8 +736,9 @@ auto intersystem_jump_contract() -> void {
         "jump must be refused transactionally from an invalid system state");
 
   auto state = initial_intersystem_contract_state(Seed{42});
-  const auto origin = generate_local_system(state.identities.origin_system_seed);
-  const auto target = generate_local_system(state.identities.target_system_seed);
+  const auto origin = generate_origin_system(state.identities.universe_seed);
+  const auto target =
+      generate_local_system(state.identities.target_system_seed);
   const auto persists_exactly = [&target](
                                     const IntersystemContractState& expected) {
     auto document = make_new_game_document(Seed{42});
@@ -750,9 +759,9 @@ auto intersystem_jump_contract() -> void {
     return decoded && decoded->state.intersystem_contract == expected &&
            decoded->state.system_flight == document.state.system_flight;
   };
-  check(kIntersystemJumpVersion == 2 &&
+  check(kIntersystemJumpVersion == 3 &&
             kAssistedTargetArrivalStandoffRadii == 10.0 &&
-            kAssistedOriginArrivalRadiusMetres == 80'000'000'000.0,
+            kAssistedOriginArrivalStandoffMetres == 40'000.0,
         "Assisted jump version and arrival constants must remain stable");
   check(advance_intersystem_contract(
             state, state.universe_tick,
@@ -838,7 +847,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v11 round trip");
+        "a committed arrival solution must survive a canonical v12 round trip");
 
   auto missing_arrival = state;
   missing_arrival.arrival_solution.reset();
@@ -1185,9 +1194,9 @@ auto intersystem_jump_contract() -> void {
                 std::unexpected{SystemFlightError::invalid_arrival}};
   check(opposed_flight && opposed_guidance &&
             !opposed_guidance->orbit_insertion_ready &&
-            opposed_guidance->distance_metres >
-                kAssistedOriginArrivalRadiusMetres / 10.0,
-        "an opposed arrival must initialize the existing target-hold sub-light recovery route");
+            opposed_guidance->distance_metres > 8'000'000'000.0,
+        "an opposed arrival must initialize the existing target-hold sub-light "
+        "recovery route");
   const auto opposed_before_recommit = opposed_edge;
   auto opposed_recommit = opposed_edge;
   check(!begin_intersystem_jump(opposed_recommit) &&
@@ -1241,20 +1250,30 @@ auto intersystem_jump_contract() -> void {
     check(advance_intersystem_jump_tick(return_state, origin).has_value(),
           "the Assisted return transit must advance");
   }
+  const auto expected_station = resolve_origin_station_ephemeris(
+      origin, generate_origin_station(return_state.identities.universe_seed),
+      {.tick = return_state.universe_tick, .sub_tick_fraction = 0.0});
   check(return_state.travel_phase ==
                 IntersystemTravelPhase::origin_system_return &&
             return_state.current_system ==
                 return_state.identities.origin_system &&
-            return_state.arrival_solution &&
+            return_state.arrival_solution && expected_station &&
             !return_state.arrival_solution->reference_planet &&
             return_state.arrival_solution->position ==
-                SystemPositionMetres{0.0,
-                                     -kAssistedOriginArrivalRadiusMetres,
-                                     0.0},
-        "the return jump must arrive on the stable non-station origin corridor");
-  check(advance_intersystem_contract(
-            return_state, return_state.universe_tick,
-            IntersystemContractCommand::dock_at_origin) &&
+                SystemPositionMetres{expected_station->position.x +
+                                         kAssistedOriginArrivalStandoffMetres,
+                                     expected_station->position.y,
+                                     expected_station->position.z},
+        "the return jump must arrive on the station's tick-resolved corridor");
+  auto return_approach = initialize_origin_return(return_state, origin);
+  if (return_approach) {
+    return_approach->relative_position = {kOriginStationArrivalRadiusMetres,
+                                          0.0, 0.0};
+    return_approach->relative_velocity = {};
+    return_approach->forward = {-1.0, 0.0, 0.0};
+  }
+  check(return_approach &&
+            attempt_origin_docking(return_state, origin, *return_approach) &&
             return_state.travel_phase ==
                 IntersystemTravelPhase::docked_at_origin &&
             !return_state.arrival_solution,
@@ -1560,11 +1579,11 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v11 save/resume exactly");
+        "system flight must survive canonical v12 save/resume exactly");
 }
 
 auto intersystem_return_contract() -> void {
-  check(kOriginReturnVersion == 1 &&
+  check(kOriginReturnVersion == 2 &&
             !run_intersystem_return_acceptance(0, 64) &&
             !run_intersystem_return_acceptance(
                 std::numeric_limits<int>::max(), 1),
@@ -1595,19 +1614,14 @@ auto intersystem_return_contract() -> void {
           "return acceptance JSON must name its renderer-neutral evidence scope");
   }
 
-  auto pixels = std::vector<Pixel>(16U * 16U);
-  check(!render_origin_station_marker(0, 16, pixels) &&
-            !render_origin_station_marker(16, 16,
-                                          std::span<Pixel>{pixels}.first(12)) &&
-            render_origin_station_marker(16, 16, pixels),
-        "station marker rendering must validate dimensions and buffer bounds before drawing");
-
   auto contract = initial_intersystem_contract_state(Seed{42});
-  check(advance_intersystem_contract(
-            contract, contract.universe_tick,
-            IntersystemContractCommand::dock_at_origin) ==
-            std::unexpected{IntersystemContractError::invalid_transition},
-        "out-of-order docking must reject without mutating the offered contract");
+  const auto offered_before = contract;
+  check(
+      attempt_origin_docking(contract, generate_origin_system(Seed{42}),
+                             OriginReturnState{}) ==
+              std::unexpected{OriginReturnError::invalid_arrival} &&
+          contract == offered_before,
+      "out-of-order docking must reject without mutating the offered contract");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(contract, contract.universe_tick,
@@ -1616,7 +1630,7 @@ auto intersystem_return_contract() -> void {
   const auto target_system =
       generate_local_system(contract.identities.target_system_seed);
   const auto origin_system =
-      generate_local_system(contract.identities.origin_system_seed);
+      generate_origin_system(contract.identities.universe_seed);
   check(command(IntersystemContractCommand::accept_mission) &&
             command(IntersystemContractCommand::launch) &&
             begin_intersystem_jump(contract),
@@ -1634,38 +1648,97 @@ auto intersystem_return_contract() -> void {
        tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
     (void)advance_intersystem_jump_tick(contract, origin_system);
   }
-  const auto returning = initialize_origin_return(contract);
-  check(returning && validate_origin_return_state(contract, *returning),
+  const auto returning = initialize_origin_return(contract, origin_system);
+  check(returning &&
+            validate_origin_return_state(contract, origin_system, *returning),
         "origin arrival must initialize a valid station-relative craft state");
-  if (!returning) return;
-  const auto waypoint = generate_origin_station_waypoint(contract.identities);
+  if (!returning)
+    return;
   auto outside = *returning;
-  outside.position = {
-      waypoint.position.x + kOriginStationArrivalRadiusMetres + 1.0,
-      waypoint.position.y, waypoint.position.z};
-  outside.velocity = {};
+  outside.relative_position = {kOriginStationArrivalRadiusMetres + 1.0, 0.0,
+                               0.0};
+  outside.relative_velocity = {};
   outside.forward = {-1.0, 0.0, 0.0};
   const auto outside_guidance =
-      resolve_origin_return_guidance(contract, outside);
-  outside.position.x =
-      waypoint.position.x + kOriginStationArrivalRadiusMetres;
+      resolve_origin_return_guidance(contract, origin_system, outside);
+  outside.relative_position.x = kOriginStationArrivalRadiusMetres;
   const auto boundary_guidance =
-      resolve_origin_return_guidance(contract, outside);
+      resolve_origin_return_guidance(contract, origin_system, outside);
+  auto centered = outside;
+  centered.relative_position = {};
+  const auto centered_guidance =
+      resolve_origin_return_guidance(contract, origin_system, centered);
+  auto speed_boundary = outside;
+  speed_boundary.relative_velocity = {kOriginStationDockingSpeedMetresPerSecond,
+                                      0.0, 0.0};
+  const auto speed_boundary_guidance =
+      resolve_origin_return_guidance(contract, origin_system, speed_boundary);
+  auto too_fast = speed_boundary;
+  too_fast.relative_velocity.x =
+      std::nextafter(kOriginStationDockingSpeedMetresPerSecond,
+                     std::numeric_limits<double>::infinity());
+  const auto too_fast_guidance =
+      resolve_origin_return_guidance(contract, origin_system, too_fast);
+  auto docking_contract = contract;
+  const auto before_fast_docking = docking_contract;
   check(outside_guidance && !outside_guidance->arrived && boundary_guidance &&
-            boundary_guidance->arrived,
-        "station rendezvous must use an inclusive exact 5 km arrival boundary");
+            boundary_guidance->arrived && centered_guidance &&
+            centered_guidance->arrived && speed_boundary_guidance &&
+            speed_boundary_guidance->arrived && too_fast_guidance &&
+            !too_fast_guidance->arrived &&
+            attempt_origin_docking(docking_contract, origin_system, too_fast) ==
+                std::unexpected{OriginReturnError::invalid_arrival} &&
+            docking_contract == before_fast_docking,
+        "station docking must admit zero range and inclusive 5 km and 25 m/s "
+        "boundaries while rejecting excess speed transactionally");
+
+  const auto old_station = resolve_origin_station_waypoint(
+      contract.identities, origin_system,
+      {.tick = contract.universe_tick, .sub_tick_fraction = 0.0});
+  auto later_contract = contract;
+  const auto later_ticks =
+      generate_origin_station(Seed{42}).orbit.period_ticks / 4U;
+  check(advance_intersystem_time(later_contract, later_ticks).has_value(),
+        "the stale-waypoint fixture must advance return time");
+  const auto current_station = resolve_origin_station_waypoint(
+      later_contract.identities, origin_system,
+      {.tick = later_contract.universe_tick, .sub_tick_fraction = 0.0});
+  auto stale = *returning;
+  stale.tick = later_contract.universe_tick;
+  if (old_station && current_station) {
+    stale.relative_position = {
+        old_station->position.x - current_station->position.x,
+        old_station->position.y - current_station->position.y,
+        old_station->position.z - current_station->position.z};
+    stale.relative_velocity = {
+        old_station->velocity.x - current_station->velocity.x,
+        old_station->velocity.y - current_station->velocity.y,
+        old_station->velocity.z - current_station->velocity.z};
+  }
+  const auto stale_guidance =
+      resolve_origin_return_guidance(later_contract, origin_system, stale);
+  const auto stale_before = later_contract;
+  check(old_station && current_station && stale_guidance &&
+            !stale_guidance->within_rendezvous &&
+            attempt_origin_docking(later_contract, origin_system, stale) ==
+                std::unexpected{OriginReturnError::invalid_arrival} &&
+            later_contract == stale_before,
+        "docking must reject a craft parked at the station's obsolete "
+        "system-space waypoint");
   auto invalid = *returning;
-  invalid.position.x = std::numeric_limits<double>::quiet_NaN();
-  const auto invalid_bits = std::bit_cast<std::uint64_t>(invalid.position.x);
-  check(validate_origin_return_state(contract, invalid) ==
+  invalid.relative_position.x = std::numeric_limits<double>::quiet_NaN();
+  const auto invalid_bits =
+      std::bit_cast<std::uint64_t>(invalid.relative_position.x);
+  check(validate_origin_return_state(contract, origin_system, invalid) ==
                 std::unexpected{OriginReturnError::invalid_state} &&
-            advance_origin_return(contract, invalid, {}) ==
+            advance_origin_return(contract, origin_system, invalid, {}) ==
                 std::unexpected{OriginReturnError::invalid_state} &&
-            std::bit_cast<std::uint64_t>(invalid.position.x) == invalid_bits,
+            std::bit_cast<std::uint64_t>(invalid.relative_position.x) ==
+                invalid_bits,
         "non-finite station return state must reject without partial mutation");
   auto wrong_station = *returning;
   wrong_station.station.value ^= 1U;
-  check(validate_origin_return_state(contract, wrong_station) ==
+  check(validate_origin_return_state(contract, origin_system, wrong_station) ==
             std::unexpected{OriginReturnError::invalid_state},
         "station return state must reject the wrong stable station identity");
 
@@ -1681,7 +1754,7 @@ auto intersystem_return_contract() -> void {
               : std::expected<SaveDocument, SaveSchemaError>{
                     std::unexpected{SaveSchemaError{}}};
   check(restored && restored->state.origin_return == returning,
-        "format 11 must preserve the exact origin-station approach state");
+        "format 12 must preserve the exact origin-station approach state");
 }
 
 auto intersystem_contract_acceptance_contract() -> void {
@@ -1691,9 +1764,9 @@ auto intersystem_contract_acceptance_contract() -> void {
         "contract-loop acceptance must reject invalid dimensions before allocation");
   const auto result = run_intersystem_contract_acceptance(96, 64);
   check(result && result->report.checkpoints.size() == 6U &&
-            result->report.final_tick == 31'535U &&
+            result->report.final_tick == 31'541U &&
             result->report.final_authoritative_checksum ==
-                12'931'774'764'902'718'894ULL &&
+                7'087'796'790'340'415'671ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -1802,7 +1875,7 @@ auto intersystem_planetfall_contract() -> void {
   check(thermal_restored && thermal_restored->state.flight &&
             thermal_restored->state.flight->thermal ==
                 PlanetaryThermalState{825'000U, true},
-        "save format 11 must preserve an active Pilot thermal abort exactly");
+        "save format 12 must preserve an active Pilot thermal abort exactly");
   if (thermal_json) {
     const auto corrupt_thermal = decode_save_document_json(replace_once(
         *thermal_json, "\"load_units\": 825000",
@@ -1966,7 +2039,7 @@ auto mission_board_contract() -> void {
             pilot_round_trip &&
             pilot_round_trip->state.intersystem_contract->rule_profile ==
                 IntersystemRuleProfile::pilot,
-        "format v11 must preserve the authoritative Pilot selection");
+        "format v12 must preserve the authoritative Pilot selection");
   if (pilot_json) {
     const auto invalid_profile = decode_save_document_json(replace_once(
         *pilot_json, "\"rule_profile\": \"pilot\"",
@@ -1976,7 +2049,7 @@ auto mission_board_contract() -> void {
                   SaveSchemaErrorCode::invalid_value &&
               invalid_profile.error().path ==
                   "$.state.intersystem_contract.rule_profile",
-          "format v11 must reject unknown rule profiles before state commit");
+          "format v12 must reject unknown rule profiles before state commit");
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
@@ -2030,8 +2103,8 @@ auto mission_board_contract() -> void {
           message);
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
-             "offered intersystem state must survive a v11 round trip");
-  round_trip(state, "accepted intersystem state must survive a v11 round trip");
+             "offered intersystem state must survive a v12 round trip");
+  round_trip(state, "accepted intersystem state must survive a v12 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
@@ -2039,8 +2112,9 @@ auto mission_board_contract() -> void {
   check(command(IntersystemContractCommand::select_assisted_profile)
                 .has_value() &&
             command(IntersystemContractCommand::launch).has_value(),
-        "the released-save fixture must launch with its historical Assisted profile");
-  round_trip(state, "active intersystem state must survive a v11 round trip");
+        "the released-save fixture must launch with its historical Assisted "
+        "profile");
+  round_trip(state, "active intersystem state must survive a v12 round trip");
   bool objective_ready = begin_intersystem_jump(state).has_value();
   const auto target_system =
       generate_local_system(state.identities.target_system_seed);
@@ -2055,29 +2129,42 @@ auto mission_board_contract() -> void {
       command(IntersystemContractCommand::complete_objective).has_value();
   check(objective_ready,
         "the persistence fixture must reach objective completion legally");
-  round_trip(state,
-             "objective-complete intersystem state must survive a v11 round trip");
+  round_trip(
+      state,
+      "objective-complete intersystem state must survive a v12 round trip");
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v11 completion must require its bound collected delta");
+        "format v12 completion must require its bound collected delta");
   bool returned =
       command(IntersystemContractCommand::leave_target_planet).has_value() &&
       begin_intersystem_jump(state).has_value();
   const auto origin_system =
-      generate_local_system(state.identities.origin_system_seed);
+      generate_origin_system(state.identities.universe_seed);
   for (SimulationTick tick = 0;
        returned && tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
     returned = advance_intersystem_jump_tick(state, origin_system).has_value();
   }
-  returned =
-      returned && command(IntersystemContractCommand::dock_at_origin).has_value();
-  check(returned,
-        "the persistence fixture must return legally");
-  round_trip(state, "returned intersystem state must survive a v11 round trip");
+  auto return_approach =
+      returned ? initialize_origin_return(state, origin_system)
+               : std::expected<OriginReturnState, OriginReturnError>{
+                     std::unexpected{OriginReturnError::invalid_arrival}};
+  if (return_approach) {
+    return_approach->relative_position = {kOriginStationArrivalRadiusMetres,
+                                          0.0, 0.0};
+    return_approach->relative_velocity = {};
+    return_approach->forward = {-1.0, 0.0, 0.0};
+    returned = attempt_origin_docking(state, origin_system, *return_approach)
+                   .has_value();
+  } else {
+    returned = false;
+  }
+  check(returned, "the persistence fixture must return legally");
+  round_trip(state, "returned intersystem state must survive a v12 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),
         "the persistence fixture must turn in legally");
-  round_trip(state, "turned-in intersystem state must survive a v11 round trip");
+  round_trip(state,
+             "turned-in intersystem state must survive a v12 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -2554,6 +2641,78 @@ auto local_system_rendering_contract() -> void {
             }),
         "invalid system-render settings must fail transactionally");
 
+  const auto origin_system = generate_origin_system(Seed{42});
+  const auto station = generate_origin_station(Seed{42});
+  const auto station_epoch = resolve_origin_station_ephemeris(
+      origin_system, station, {.tick = 0, .sub_tick_fraction = 0.0});
+  const auto station_quarter = resolve_origin_station_ephemeris(
+      origin_system, station,
+      {.tick = station.orbit.period_ticks / 4U, .sub_tick_fraction = 0.0});
+  const auto station_view = [&](const OriginStationEphemeris& ephemeris,
+                                SimulationTick tick) {
+    const SystemPositionMetres camera{
+        ephemeris.position.x - ephemeris.host_relative_position.x,
+        ephemeris.position.y - ephemeris.host_relative_position.y -
+            50'000'000.0,
+        ephemeris.position.z - ephemeris.host_relative_position.z +
+            10'000'000.0};
+    return LocalSystemView{
+        .time = {.tick = tick, .sub_tick_fraction = 0.0},
+        .position = camera,
+        .velocity = ephemeris.velocity,
+        .forward = {-camera.x + ephemeris.position.x -
+                        ephemeris.host_relative_position.x,
+                    -camera.y + ephemeris.position.y -
+                        ephemeris.host_relative_position.y,
+                    -camera.z + ephemeris.position.z -
+                        ephemeris.host_relative_position.z},
+        .up = {0.0, 0.0, 1.0},
+        .selected_planet = station.orbit.host_planet,
+    };
+  };
+  if (station_epoch && station_quarter) {
+    const auto epoch_view = station_view(*station_epoch, 0);
+    const auto quarter_view =
+        station_view(*station_quarter, station.orbit.period_ticks / 4U);
+    std::vector<Pixel> epoch_frame(first.size());
+    std::vector<Pixel> quarter_frame(first.size());
+    const auto epoch_background =
+        renderer.render(origin_system, epoch_view, epoch_frame);
+    const auto epoch_overlay =
+        renderer.render_origin_station(epoch_view, *station_epoch, epoch_frame);
+    const auto quarter_background =
+        renderer.render(origin_system, quarter_view, quarter_frame);
+    const auto quarter_overlay = renderer.render_origin_station(
+        quarter_view, *station_quarter, quarter_frame);
+    check(epoch_background && epoch_overlay && quarter_background &&
+              quarter_overlay &&
+              pixel_checksum(epoch_frame) != pixel_checksum(quarter_frame),
+          "the home planet and station marker must render their tick-resolved "
+          "orbital relationship");
+
+    std::vector<Pixel> station_short(first.size() - 1U, {9, 8, 7, 6});
+    auto non_finite_station = *station_epoch;
+    non_finite_station.position.x = std::numeric_limits<double>::quiet_NaN();
+    std::vector<Pixel> station_untouched(first.size(), {9, 8, 7, 6});
+    check(
+        renderer.render_origin_station(epoch_view, *station_epoch,
+                                       station_short) ==
+                std::unexpected{LocalSystemRenderError::invalid_framebuffer} &&
+            std::ranges::all_of(
+                station_short,
+                [](Pixel value) { return value == Pixel{9, 8, 7, 6}; }) &&
+            renderer.render_origin_station(epoch_view, non_finite_station,
+                                           station_untouched) ==
+                std::unexpected{LocalSystemRenderError::ephemeris_failure} &&
+            std::ranges::all_of(
+                station_untouched,
+                [](Pixel value) { return value == Pixel{9, 8, 7, 6}; }),
+        "station overlays must reject buffer boundaries and non-finite "
+        "ephemerides before drawing");
+  } else {
+    check(false, "the station-render fixture ephemerides must resolve");
+  }
+
   struct ProfileGolden {
     RenderProfile profile;
     std::uint64_t checksum;
@@ -2585,8 +2744,8 @@ auto local_system_rendering_contract() -> void {
 }
 
 auto origin_station_contract() -> void {
-  check(kOriginStationGeneratorVersion == 1,
-        "origin-station generator version 1 must remain stable");
+  check(kOriginStationGeneratorVersion == 2,
+        "origin-station generator version 2 must remain stable");
   check(kOriginSystemOrdinal == 0 && kOriginStationOrdinal == 0,
         "the version 1 origin path must retain its named ordinals");
 
@@ -2632,15 +2791,124 @@ auto origin_station_contract() -> void {
   const auto encounter_before =
       derive_seed(planet_before, SeedDomain::encounter, 0);
   (void)generate_origin_station(universe);
-  check(system_before ==
-                derive_seed(universe, SeedDomain::system,
-                            kOriginSystemOrdinal) &&
-            planet_before == derive_seed(system_before, SeedDomain::planet, 0) &&
-            terrain_before == derive_seed(planet_before, SeedDomain::terrain, 0) &&
-            weather_before == derive_seed(planet_before, SeedDomain::weather, 0) &&
-            encounter_before ==
-                derive_seed(planet_before, SeedDomain::encounter, 0),
-        "origin-station derivation must not perturb unrelated world streams");
+  check(
+      system_before ==
+              derive_seed(universe, SeedDomain::system, kOriginSystemOrdinal) &&
+          planet_before == derive_seed(system_before, SeedDomain::planet, 0) &&
+          terrain_before ==
+              derive_seed(planet_before, SeedDomain::terrain, 0) &&
+          weather_before ==
+              derive_seed(planet_before, SeedDomain::weather, 0) &&
+          encounter_before ==
+              derive_seed(planet_before, SeedDomain::encounter, 0),
+      "origin-station derivation must not perturb unrelated world streams");
+
+  for (std::uint64_t value = 0; value < 1'024; ++value) {
+    const Seed sample{value};
+    const auto station = generate_origin_station(sample);
+    const auto system = generate_origin_system(sample);
+    const auto home =
+        find_local_system_planet(system, station.orbit.host_planet);
+    check(validate_local_system(system) && home &&
+              system.kind == LocalSystemKind::origin_home &&
+              system.planets.front().descriptor.id ==
+                  station.orbit.host_planet &&
+              is_tutorial_safe_home_planet((*home)->descriptor) &&
+              station.orbit.radius_kilometres >=
+                  static_cast<std::uint64_t>((*home)->descriptor.radius.value) +
+                      kOriginStationMinimumAltitudeKilometres &&
+              station.orbit.radius_kilometres <=
+                  static_cast<std::uint64_t>((*home)->descriptor.radius.value) +
+                      kOriginStationMaximumAltitudeKilometres &&
+              station.orbit.period_ticks >= kOriginStationMinimumPeriodTicks &&
+              station.orbit.period_ticks <= kOriginStationMaximumPeriodTicks,
+          "every sampled universe must generate one bounded tutorial home and "
+          "station orbit");
+    if (!home)
+      continue;
+    const auto at_epoch = resolve_origin_station_ephemeris(
+        system, station, {.tick = 0, .sub_tick_fraction = 0.0});
+    const auto one_period = resolve_origin_station_ephemeris(
+        system, station,
+        {.tick = station.orbit.period_ticks, .sub_tick_fraction = 0.0});
+    const auto at_tick_limit = resolve_origin_station_ephemeris(
+        system, station,
+        {.tick = std::numeric_limits<SimulationTick>::max(),
+         .sub_tick_fraction = 0.0});
+    check(at_epoch && one_period && at_tick_limit &&
+              at_epoch->host_relative_position ==
+                  one_period->host_relative_position &&
+              at_epoch->host_relative_velocity ==
+                  one_period->host_relative_velocity,
+          "station ephemerides must repeat exactly and remain finite at tick "
+          "extremes");
+  }
+
+  const auto station = generate_origin_station(universe);
+  const auto origin_system = generate_origin_system(universe);
+  auto wrong_kind = origin_system;
+  wrong_kind.kind = LocalSystemKind::procedural;
+  auto unknown_kind = origin_system;
+  unknown_kind.kind = static_cast<LocalSystemKind>(255);
+  const auto station_with_orbit = [&](OriginStationOrbit orbit) {
+    return OriginStationDescriptor{
+        .universe_seed = station.universe_seed,
+        .home_system_seed = station.home_system_seed,
+        .station_seed = station.station_seed,
+        .id = station.id,
+        .orbit = orbit,
+    };
+  };
+  auto wrong_host_orbit = station.orbit;
+  wrong_host_orbit.host_planet.value ^= 1U;
+  auto zero_period_orbit = station.orbit;
+  zero_period_orbit.period_ticks = 0;
+  auto overflow_period_orbit = station.orbit;
+  overflow_period_orbit.period_ticks =
+      std::numeric_limits<SimulationTick>::max();
+  check(
+      !resolve_origin_station_ephemeris(
+          wrong_kind, station, {.tick = 0, .sub_tick_fraction = 0.0}) &&
+          !validate_local_system(unknown_kind) &&
+          !resolve_origin_station_ephemeris(
+              origin_system, station_with_orbit(wrong_host_orbit),
+              {.tick = 0, .sub_tick_fraction = 0.0}) &&
+          !resolve_origin_station_ephemeris(
+              origin_system, station_with_orbit(zero_period_orbit),
+              {.tick = 0, .sub_tick_fraction = 0.0}) &&
+          !resolve_origin_station_ephemeris(
+              origin_system, station_with_orbit(overflow_period_orbit),
+              {.tick = 0, .sub_tick_fraction = 0.0}) &&
+          !resolve_origin_station_ephemeris(
+              origin_system, station,
+              {.tick = 0,
+               .sub_tick_fraction = std::numeric_limits<double>::quiet_NaN()}),
+      "station ephemeris resolution must reject wrong systems, hosts, periods, "
+      "and non-finite time");
+
+  const auto& safe_home = origin_system.planets.front().descriptor;
+  std::vector<LocalSystemPlanet> unsafe_planets;
+  unsafe_planets.reserve(origin_system.planets.size());
+  unsafe_planets.push_back(
+      {PlanetDescriptor{
+           .seed = safe_home.seed,
+           .id = safe_home.id,
+           .display_name = safe_home.display_name,
+           .radius = PlanetRadiusKm{kOriginHomeMinimumRadiusKilometres - 1U},
+           .surface_gravity = safe_home.surface_gravity,
+           .atmosphere_class = safe_home.atmosphere_class,
+           .atmosphere_pressure = safe_home.atmosphere_pressure,
+           .terrain_character = safe_home.terrain_character,
+           .water_coverage = safe_home.water_coverage,
+           .palette = safe_home.palette},
+       origin_system.planets.front().orbit});
+  for (std::size_t index = 1; index < origin_system.planets.size(); ++index) {
+    unsafe_planets.push_back(origin_system.planets[index]);
+  }
+  auto unsafe_system = origin_system;
+  unsafe_system.planets = std::move(unsafe_planets);
+  check(!validate_local_system(unsafe_system),
+        "an impossible tutorial-home safety descriptor must be rejected");
 }
 
 auto origin_onboarding_contract() -> void {
@@ -2733,10 +3001,10 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 11 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 12 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U) &&
             kMaximumSaveApplicationVersionBytes == 64,
-        "save format version 11 identity and bounds must remain stable");
+        "save format version 12 identity and bounds must remain stable");
   auto recipe = make_save_recipe(Seed{42});
   const auto target = SurfaceSignalId{0x71d4c959dcd64423ULL};
   SaveDocument expected{
@@ -2778,14 +3046,15 @@ auto save_schema_contract() -> void {
         "the representative legacy Signal Run save must validate");
 
   const auto encoded = encode_save_document_json(expected);
-  check(encoded && encoded->find("\"format_version\": 11") !=
-                       std::string::npos &&
+  check(encoded &&
+            encoded->find("\"format_version\": 12") != std::string::npos &&
             encoded->find(std::format("\"application_version\": \"{}\"",
                                       kApplicationVersion)) !=
                 std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
                 std::string::npos,
-        "the current encoder must write canonical format-11 state with writer provenance");
+        "the current encoder must write canonical format-12 state with writer "
+        "provenance");
   const std::string fixture = encoded.value_or("{}");
   const auto decoded = decode_save_document_json(fixture);
   check(decoded && *decoded == expected,
@@ -2794,7 +3063,8 @@ auto save_schema_contract() -> void {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected &&
               encode_save_document_json(*round_trip) == encoded,
-          "save encode/decode/re-encode must preserve canonical format-11 state exactly");
+          "save encode/decode/re-encode must preserve canonical format-12 "
+          "state exactly");
   }
 
   auto unknown = fixture;
@@ -2855,49 +3125,48 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::duplicate_key,
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 11",
-                   "\"format_version\": 1"),
+      replace_once(fixture, "\"format_version\": 12", "\"format_version\": 1"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-1 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 11",
-                   "\"format_version\": 10"),
+      replace_once(fixture, "\"format_version\": 12", "\"format_version\": 10"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-10 alpha saves must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 12", "\"format_version\": 11"),
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "format-11 alpha saves must be rejected explicitly");
   expect_decode_error(
       "{\"application\":\"apsis-drift\",\"format_version\":10}",
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "old alpha formats must be identified before nested fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 11",
-                   "\"format_version\": 12"),
+      replace_once(fixture, "\"format_version\": 12", "\"format_version\": 13"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   const auto future_with_provenance = decode_save_document_json(replace_once(
-      fixture, "\"format_version\": 11", "\"format_version\": 12"));
+      fixture, "\"format_version\": 12", "\"format_version\": 13"));
   check(!future_with_provenance &&
             future_with_provenance.error().detail.find(kApplicationVersion) !=
                 std::string::npos,
         "unknown newer saves must identify valid writer provenance");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":12}",
+      "{\"application\":\"apsis-drift\",\"format_version\":13}",
       SaveSchemaErrorCode::unsupported_format_version,
       "future formats must be identified before current fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 11",
-                   "\"format_version\": \"11\""),
+      replace_once(fixture, "\"format_version\": 12",
+                   "\"format_version\": \"12\""),
       SaveSchemaErrorCode::invalid_type,
       "schema integers with the wrong JSON type must be rejected");
-  expect_decode_error(
-      replace_once(fixture, "\"application\": \"apsis-drift\"",
-                   "\"application\": \"another-game\""),
-      SaveSchemaErrorCode::invalid_value,
-      "foreign application saves must be rejected");
-  expect_decode_error(
-      replace_once(fixture, "\"application_version\"",
-                   "\"missing_application_version\""),
-      SaveSchemaErrorCode::missing_field,
-      "format 11 must require writer-version provenance");
+  expect_decode_error(replace_once(fixture, "\"application\": \"apsis-drift\"",
+                                   "\"application\": \"another-game\""),
+                      SaveSchemaErrorCode::invalid_value,
+                      "foreign application saves must be rejected");
+  expect_decode_error(replace_once(fixture, "\"application_version\"",
+                                   "\"missing_application_version\""),
+                      SaveSchemaErrorCode::missing_field,
+                      "format 12 must require writer-version provenance");
   expect_decode_error(
       replace_once(fixture,
                    std::format("\"application_version\": \"{}\"",
@@ -2927,6 +3196,11 @@ auto save_schema_contract() -> void {
                    "\"seed_derivation\": 2"),
       SaveSchemaErrorCode::incompatible_generator_version,
       "unsupported generator versions must be rejected explicitly");
+  expect_decode_error(replace_once(fixture, "\"origin_home_planet\": 1",
+                                   "\"origin_home_planet\": 2"),
+                      SaveSchemaErrorCode::incompatible_generator_version,
+                      "unsupported tutorial-home generator versions must be "
+                      "rejected explicitly");
   expect_decode_error(
       replace_once(fixture, "\"local_sun\": 1", "\"local_sun\": 2"),
       SaveSchemaErrorCode::incompatible_generator_version,
@@ -2948,8 +3222,8 @@ auto save_schema_contract() -> void {
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported first-contract versions must be rejected explicitly");
     expect_decode_error(
-        replace_once(*encoded, "\"intersystem_jump\": 2",
-                     "\"intersystem_jump\": 3"),
+        replace_once(*encoded, "\"intersystem_jump\": 3",
+                     "\"intersystem_jump\": 4"),
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported Assisted-jump versions must be rejected explicitly");
   }
@@ -2958,6 +3232,20 @@ auto save_schema_contract() -> void {
                    "station-ce51e866ec4e032e"),
       SaveSchemaErrorCode::identity_mismatch,
       "regenerated station identity mismatches must be rejected");
+  expect_decode_error(
+      replace_once(fixture,
+                   "\"station_host_planet_id\": \"planet-435b7b7e8ce489e8\"",
+                   "\"station_host_planet_id\": \"planet-435b7b7e8ce489e9\""),
+      SaveSchemaErrorCode::identity_mismatch,
+      "a saved station host outside the regenerated home role must be "
+      "rejected");
+  expect_decode_error(
+      replace_once(fixture,
+                   std::format("\"period_ticks\": \"{}\"",
+                               recipe.station_orbit.period_ticks),
+                   "\"period_ticks\": \"0\""),
+      SaveSchemaErrorCode::identity_mismatch,
+      "a zero or altered saved station period must be rejected");
   expect_decode_error(
       replace_once(fixture, "planet-435b7b7e8ce489e8",
                    "planet-435B7b7e8ce489e8"),

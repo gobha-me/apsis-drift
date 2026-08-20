@@ -175,7 +175,6 @@ enum class IntersystemContractCommand : std::uint8_t {
   complete_objective,
   leave_target_planet,
   begin_return_jump,
-  dock_at_origin,
   turn_in,
 };
 

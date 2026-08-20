@@ -473,4 +473,56 @@ auto LocalSystemRenderer::render(
   return stats;
 }
 
+auto LocalSystemRenderer::render_origin_station(
+    const LocalSystemView& view, const OriginStationEphemeris& station,
+    std::span<termforge::Pixel> destination)
+    -> std::expected<void, LocalSystemRenderError> {
+  if (!valid_settings(m_settings)) {
+    return std::unexpected{LocalSystemRenderError::invalid_settings};
+  }
+  if (destination.size() != m_system_frame.size()) {
+    return std::unexpected{LocalSystemRenderError::invalid_framebuffer};
+  }
+  if (!valid_view_numbers(view)) {
+    return std::unexpected{LocalSystemRenderError::invalid_view};
+  }
+  if (!finite(station.position.x) || !finite(station.position.y) ||
+      !finite(station.position.z) || !finite(station.velocity.x) ||
+      !finite(station.velocity.y) || !finite(station.velocity.z) ||
+      !finite(station.host_relative_position.x) ||
+      !finite(station.host_relative_position.y) ||
+      !finite(station.host_relative_position.z) ||
+      !finite(station.host_relative_velocity.x) ||
+      !finite(station.host_relative_velocity.y) ||
+      !finite(station.host_relative_velocity.z) ||
+      !finite(station.phase_radians)) {
+    return std::unexpected{LocalSystemRenderError::ephemeris_failure};
+  }
+  const auto basis = camera_basis(view);
+  if (!basis)
+    return std::unexpected{basis.error()};
+  const auto projected = project_body(
+      m_settings, *basis, vector(view.position), vector(station.position),
+      1'000.0, BodyKind::planet, 0, station.host_planet, Rgb8{126, 214, 210});
+  if (!projected)
+    return {};
+  const int center_x = static_cast<int>(std::lround(projected->screen_x));
+  const int center_y = static_cast<int>(std::lround(projected->screen_y));
+  const auto set = [&](int x, int y) {
+    if (x < 0 || x >= m_settings.width || y < 0 || y >= m_settings.height) {
+      return;
+    }
+    destination[static_cast<std::size_t>(y) *
+                    static_cast<std::size_t>(m_settings.width) +
+                static_cast<std::size_t>(x)] = {126, 214, 210, 255};
+  };
+  for (int offset = -8; offset <= 8; ++offset) {
+    if (std::abs(offset) >= 4) {
+      set(center_x + offset, center_y);
+      set(center_x, center_y + offset);
+    }
+  }
+  return {};
+}
+
 }  // namespace apsis_drift

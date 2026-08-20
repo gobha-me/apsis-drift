@@ -12,9 +12,9 @@
 
 namespace apsis_drift {
 
-inline constexpr std::uint32_t kIntersystemJumpVersion{2};
+inline constexpr std::uint32_t kIntersystemJumpVersion{3};
 inline constexpr double kAssistedTargetArrivalStandoffRadii{10.0};
-inline constexpr double kAssistedOriginArrivalRadiusMetres{80'000'000'000.0};
+inline constexpr double kAssistedOriginArrivalStandoffMetres{40'000.0};
 inline constexpr std::int32_t kAlignedHeadingErrorMillidegrees{3'000};
 inline constexpr std::int32_t kAlignedVelocityErrorBasisPoints{200};
 inline constexpr std::int32_t kOffsetHeadingErrorMillidegrees{45'000};

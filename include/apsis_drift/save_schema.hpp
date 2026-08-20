@@ -18,7 +18,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{11};
+inline constexpr std::uint32_t kSaveFormatVersion{12};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
@@ -28,6 +28,7 @@ inline constexpr std::size_t kMaximumSaveObjectKeyBytes{128};
 struct SaveGeneratorVersions {
   std::uint32_t seed_derivation{};
   std::uint32_t planet_descriptor{};
+  std::uint32_t origin_home_planet{};
   std::uint32_t terrain_tiles{};
   std::uint32_t origin_station{};
   std::uint32_t surface_signals{};
@@ -46,9 +47,13 @@ struct SaveGeneratorVersions {
 struct SaveRecipe {
   Seed universe_seed;
   std::uint64_t origin_system_ordinal{};
+  std::uint64_t home_planet_ordinal{};
   std::uint64_t active_planet_ordinal{};
   SaveGeneratorVersions generator_versions;
   OriginStationId origin_station;
+  PlanetId home_planet;
+  PlanetId station_host_planet;
+  OriginStationOrbit station_orbit;
   PlanetId active_planet;
 
   friend auto operator==(const SaveRecipe&, const SaveRecipe&)

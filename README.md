@@ -70,9 +70,9 @@ loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with one bounded intersystem contract.
-New writes use save format 11 and record the writing application version.
-Releases before v0.8.0 are alpha: formats 1 through 10 are intentionally
-unsupported after the format-11 reset and are rejected without modifying the
+New writes use save format 12 and record the writing application version.
+Releases before v0.8.0 are alpha: formats 1 through 11 are intentionally
+unsupported after the orbiting-home format-12 reset and are rejected without modifying the
 source file. The durable forward-loading promise begins with the actual format
 shipped by v0.8.0; see
 [Save Format and Compatibility](docs/SAVE_FORMAT.md).
@@ -228,7 +228,7 @@ advance transactionally and resume from save format 6. See
 
 The v0.4.12 return path reverses the planet-fixed handoff from any orbital
 longitude, preserves the collected world delta through a cancelable home-jump
-spool, and arrives 40 km from an explicit Origin Station waypoint.
+spool, and arrives 40 km from the Origin Station rendezvous corridor.
 Station-relative guidance, a 5 km rendezvous predicate, explicit docking
 confirmation, and idempotent mission turn-in resume from save format 7. See
 [docs/INTERSYSTEM_RETURN.md](docs/INTERSYSTEM_RETURN.md).
@@ -244,14 +244,14 @@ terminal/proxy timings remain separate evidence. See
 The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
 or Pilot selection at the Origin Station. Assisted remains the complete-loop
 default; Pilot records deterministic thermal-abort and alignment-quality
-boundaries. Current format-11 saves require the explicit selection. See
+boundaries. Current format-12 saves require the explicit selection. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment
 task. Commitment grades an immutable ALIGNED, OFFSET, or OPPOSED handoff;
 Assisted retains its exact ten-radius matched-velocity corridor, while poor
 Pilot execution changes only the recoverable target-system approach. Save
-format 11 retains the alignment and placement exactly. See
+format 12 retains the alignment and placement exactly. See
 [docs/INTERSYSTEM_JUMP.md](docs/INTERSYSTEM_JUMP.md).
 
 The v0.4.17 Pilot reentry path derives thermal load from atmospheric pressure,
@@ -308,11 +308,27 @@ Legacy and planetary motion, including thermal integration, use the shared
 tick or mutating flight state.
 
 The v0.4.27 format-11 reset establishes the pre-v0.8 alpha policy explicitly.
-Every current save carries bounded writer-version provenance; formats 1 through
-10 receive a distinct unsupported-alpha diagnostic before authoritative fields
-are decoded and remain byte-for-byte untouched. The
+It added bounded writer-version provenance and gave formats 1 through 10 a
+distinct unsupported-alpha diagnostic before authoritative fields were
+decoded; rejected files remain byte-for-byte untouched. The
 [release checklist](docs/RELEASING.md) records the v0.8+ beta and 1.x
 forward-loading promises.
+
+The v0.4.28 orbiting-home boundary gives origin planet zero a versioned,
+tutorial-safe role without changing its seed or any unrelated stream. The
+Origin Station now has a deterministic circular orbit around that planet;
+return arrival, rendering, guidance, save/resume, and docking all use the same
+tick-resolved position and velocity. Save format 12 stores the home/orbit
+recipe and station-relative approach state and intentionally rejects formats
+1 through 11 without touching the source file.
+
+| Kitty-scale local profile | ANSI-scale remote profile |
+| --- | --- |
+| ![Tutorial home and orbiting Origin Station at the local Kitty viewport](docs/media/origin-home-kitty.png) | ![Tutorial home and orbiting Origin Station at the remote ANSI viewport](docs/media/origin-home-ansi.png) |
+
+These deterministic application-framebuffer captures use the logical
+viewports consumed by the Kitty and ANSI paths; the encoder-backed driver smoke
+matrix remains separate from renderer evidence.
 
 The title uses an original code-authored bitmap alphabet and palette with
 integer scaling; it does not load an encoded font or image asset. Its exact
