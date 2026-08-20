@@ -86,6 +86,6 @@ the stable mission-selected system, star, and planet identities. It regenerates
 rather than serializing mutable ephemeris or random state. Rendering, craft
 travel, and planet-fixed orientation remain separate systems.
 
-Save format 13 additionally records the origin-home role and the station's
+Save format 14 additionally records the origin-home role and the station's
 planet-relative orbit recipe. Loading regenerates and compares those values;
 ephemeris positions remain derived from the saved authoritative tick.

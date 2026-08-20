@@ -4,7 +4,7 @@ endif()
 
 set(unsupported_save "${REPORT_DIR}/unsupported-alpha-save.json")
 file(WRITE "${unsupported_save}"
-  "{\"application\":\"apsis-drift\",\"format_version\":12}\n")
+  "{\"application\":\"apsis-drift\",\"format_version\":13}\n")
 file(SHA256 "${unsupported_save}" before_checksum)
 
 execute_process(
@@ -20,7 +20,7 @@ if(NOT result EQUAL 1)
     "unsupported alpha save returned ${result}\nstdout:\n${output}\nstderr:\n${error}")
 endif()
 string(FIND "${error}" "${unsupported_save}" path_index)
-string(FIND "${error}" "format-13 origin-flight alpha reset" reset_index)
+string(FIND "${error}" "format-14 onboarding alpha reset" reset_index)
 string(FIND "${error}" "source file was not modified" untouched_index)
 if(path_index EQUAL -1 OR reset_index EQUAL -1 OR untouched_index EQUAL -1 OR
    NOT before_checksum STREQUAL after_checksum)

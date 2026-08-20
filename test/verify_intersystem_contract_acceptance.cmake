@@ -48,7 +48,7 @@ function(check_intersystem_contract)
       NOT origin_station_id STREQUAL "station-ce51e866ec4e032d" OR
       NOT final_tick STREQUAL "32075" OR
       NOT final_mission_phase STREQUAL "turned_in" OR
-      NOT final_authoritative_checksum STREQUAL "8587354319391325309" OR
+      NOT final_authoritative_checksum STREQUAL "4317126435439109687" OR
       NOT wrong_side_recovery_checksum STREQUAL "15160466842829483543" OR
       NOT target_system_planet_count STREQUAL "6" OR
       NOT target_system_initial_framebuffer_checksum STREQUAL

@@ -176,7 +176,7 @@ and recovery cap are specified in
 
 ## Save projection and compatibility
 
-Current save format 13 requires the complete contract projection:
+Current save format 14 requires the complete contract projection:
 
 - generator versions for the system catalog, ephemeris, and first mission;
 - stable origin/target system, star, mission-planet, station, mission, and
@@ -201,15 +201,15 @@ cancellation; origin arrival owns one matching station-approach state.
 The v0.4.7 through v0.4.17 releases introduced historical formats 3 through 10
 as the mission board, jump, system flight, Planetfall, return, rule profile,
 Pilot alignment, and thermal state landed. Those documents remain useful
-historical evidence but are not current player-save inputs. Format 13 rejects
-formats 1 through 12 at the root boundary with an explicit unsupported-alpha
+historical evidence but are not current player-save inputs. Format 14 rejects
+formats 1 through 13 at the root boundary with an explicit unsupported-alpha
 diagnostic and never synthesizes missing fields.
 
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
 animation progress, interpolation remainder, and cockpit formatting are never
 save state.
 
-Format 13 preserves current state exactly and rejects absent arrival, craft,
+Format 14 preserves current state exactly and rejects absent arrival, craft,
 profile, alignment, thermal, or journal data when the active phase requires it.
 The application version that most recently wrote the file is diagnostic root
 metadata and never changes deterministic contract state.

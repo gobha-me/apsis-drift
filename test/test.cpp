@@ -33,6 +33,7 @@
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/mission_board.hpp"
+#include "apsis_drift/onboarding.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
@@ -864,7 +865,7 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v13 round trip");
+        "a committed arrival solution must survive a canonical v14 round trip");
 
   auto missing_arrival = state;
   missing_arrival.arrival_solution.reset();
@@ -1596,7 +1597,7 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v13 save/resume exactly");
+        "system flight must survive canonical v14 save/resume exactly");
 }
 
 auto intersystem_return_contract() -> void {
@@ -1777,7 +1778,7 @@ auto intersystem_return_contract() -> void {
   check(spool_round_trip &&
             spool_round_trip->state.intersystem_contract == live_spool &&
             spool_round_trip->state.origin_station_flight == relaunched,
-        "format 13 must preserve the frozen live craft throughout outbound "
+        "format 14 must preserve the frozen live craft throughout outbound "
         "spool");
   auto invalid_spool = spool_document;
   ++invalid_spool.state.origin_station_flight->tick;
@@ -1941,7 +1942,7 @@ auto intersystem_return_contract() -> void {
                                 : std::expected<SaveDocument, SaveSchemaError>{
                                       std::unexpected{SaveSchemaError{}}};
   check(restored && restored->state.origin_station_flight == returning,
-        "format 13 must preserve the exact origin-station approach state");
+        "format 14 must preserve the exact origin-station approach state");
 }
 
 auto intersystem_contract_acceptance_contract() -> void {
@@ -1953,7 +1954,7 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(result && result->report.checkpoints.size() == 9U &&
             result->report.final_tick == 32'075U &&
             result->report.final_authoritative_checksum ==
-                8'587'354'319'391'325'309ULL &&
+                4'317'126'435'439'109'687ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -2062,7 +2063,7 @@ auto intersystem_planetfall_contract() -> void {
   check(thermal_restored && thermal_restored->state.flight &&
             thermal_restored->state.flight->thermal ==
                 PlanetaryThermalState{825'000U, true},
-        "save format 13 must preserve an active Pilot thermal abort exactly");
+        "save format 14 must preserve an active Pilot thermal abort exactly");
   if (thermal_json) {
     const auto corrupt_thermal = decode_save_document_json(replace_once(
         *thermal_json, "\"load_units\": 825000",
@@ -2226,7 +2227,7 @@ auto mission_board_contract() -> void {
             pilot_round_trip &&
             pilot_round_trip->state.intersystem_contract->rule_profile ==
                 IntersystemRuleProfile::pilot,
-        "format v13 must preserve the authoritative Pilot selection");
+        "format v14 must preserve the authoritative Pilot selection");
   if (pilot_json) {
     const auto invalid_profile = decode_save_document_json(replace_once(
         *pilot_json, "\"rule_profile\": \"pilot\"",
@@ -2236,11 +2237,18 @@ auto mission_board_contract() -> void {
                   SaveSchemaErrorCode::invalid_value &&
               invalid_profile.error().path ==
                   "$.state.intersystem_contract.rule_profile",
-          "format v13 must reject unknown rule profiles before state commit");
+          "format v14 must reject unknown rule profiles before state commit");
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
     document.state.intersystem_contract = checkpoint;
+    document.state.onboarding =
+        checkpoint.mission_phase == IntersystemMissionPhase::turned_in
+            ? OnboardingProgress{.state = OnboardingState::completed,
+                                 .chapter = std::nullopt}
+            : OnboardingProgress{
+                  .state = OnboardingState::guided,
+                  .chapter = OnboardingChapter::contract_three};
     document.state.system_flight.reset();
     document.state.origin_station_flight.reset();
     document.state.flight.reset();
@@ -2296,12 +2304,13 @@ auto mission_board_contract() -> void {
       return;
     }
     const auto decoded = decode_save_document_json(*encoded);
-    check(decoded && decoded->state.intersystem_contract == checkpoint,
+    check(decoded && decoded->state.intersystem_contract == checkpoint &&
+              decoded->state.onboarding == document.state.onboarding,
           message);
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
-             "offered intersystem state must survive a v13 round trip");
-  round_trip(state, "accepted intersystem state must survive a v13 round trip");
+             "offered intersystem state must survive a v14 round trip");
+  round_trip(state, "accepted intersystem state must survive a v14 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
@@ -2311,7 +2320,7 @@ auto mission_board_contract() -> void {
             command(IntersystemContractCommand::launch).has_value(),
         "the released-save fixture must launch with its historical Assisted "
         "profile");
-  round_trip(state, "active intersystem state must survive a v13 round trip");
+  round_trip(state, "active intersystem state must survive a v14 round trip");
   bool objective_ready = begin_intersystem_jump(state).has_value();
   const auto target_system =
       generate_local_system(state.identities.target_system_seed);
@@ -2328,11 +2337,11 @@ auto mission_board_contract() -> void {
         "the persistence fixture must reach objective completion legally");
   round_trip(
       state,
-      "objective-complete intersystem state must survive a v13 round trip");
+      "objective-complete intersystem state must survive a v14 round trip");
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v13 completion must require its bound collected delta");
+        "format v14 completion must require its bound collected delta");
   bool returned =
       command(IntersystemContractCommand::leave_target_planet).has_value() &&
       begin_intersystem_jump(state).has_value();
@@ -2358,11 +2367,11 @@ auto mission_board_contract() -> void {
     returned = false;
   }
   check(returned, "the persistence fixture must return legally");
-  round_trip(state, "returned intersystem state must survive a v13 round trip");
+  round_trip(state, "returned intersystem state must survive a v14 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),
         "the persistence fixture must turn in legally");
   round_trip(state,
-             "turned-in intersystem state must survive a v13 round trip");
+             "turned-in intersystem state must survive a v14 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -3198,11 +3207,143 @@ auto origin_onboarding_contract() -> void {
         "unknown onboarding commands must fail without mutation");
 }
 
+auto career_onboarding_contract() -> void {
+  auto guided =
+      initial_onboarding_progress(NewGameOnboardingChoice::guided);
+  const auto skipped =
+      initial_onboarding_progress(NewGameOnboardingChoice::skip);
+  check(guided == OnboardingProgress{} &&
+            guided.chapter == OnboardingChapter::contract_one &&
+            skipped.state == OnboardingState::skipped &&
+            !skipped.chapter,
+        "Guided must begin at contract one while Skip has no tutorial chapter");
+
+  const auto guided_access = resolve_onboarding_access(guided);
+  const auto skipped_access = resolve_onboarding_access(skipped);
+  check(guided_access && skipped_access &&
+            guided_access->origin_station_known &&
+            guided_access->home_planet_known &&
+            guided_access->origin_system_chart_known &&
+            !guided_access->first_jump_solution_available &&
+            !guided_access->open_exploration_available &&
+            skipped_access->origin_station_known &&
+            skipped_access->home_planet_known &&
+            skipped_access->origin_system_chart_known &&
+            skipped_access->first_jump_solution_available &&
+            skipped_access->open_exploration_available,
+        "Guided and Skip must expose their exact bounded starting knowledge");
+
+  const auto unchanged_on_failure = [&](OnboardingCommand command) {
+    const auto before = guided;
+    const auto result = advance_onboarding(guided, command);
+    check(!result && result.error() == OnboardingError::invalid_transition &&
+              guided == before,
+          "out-of-order onboarding completion must not mutate progress");
+  };
+  unchanged_on_failure(OnboardingCommand::complete_contract_two);
+  unchanged_on_failure(OnboardingCommand::complete_contract_three);
+  check(advance_onboarding(guided,
+                           OnboardingCommand::complete_contract_one) &&
+            guided.chapter == OnboardingChapter::contract_two,
+        "contract one completion must advance Guided to contract two");
+  unchanged_on_failure(OnboardingCommand::complete_contract_one);
+  check(advance_onboarding(guided,
+                           OnboardingCommand::complete_contract_two) &&
+            guided.chapter == OnboardingChapter::contract_three,
+        "contract two completion must advance Guided to contract three");
+  const auto contract_three_access = resolve_onboarding_access(guided);
+  check(contract_three_access &&
+            contract_three_access->first_jump_solution_available &&
+            !contract_three_access->open_exploration_available,
+        "contract three must expose one first-jump solution before open exploration");
+  check(advance_onboarding(guided,
+                           OnboardingCommand::complete_contract_three) &&
+            guided.state == OnboardingState::completed && !guided.chapter,
+        "contract three completion must atomically open exploration");
+  const auto completed_access = resolve_onboarding_access(guided);
+  check(completed_access && completed_access->open_exploration_available,
+        "completed onboarding must retain the post-onboarding access baseline");
+  const auto completed_before = guided;
+  check(advance_onboarding(guided,
+                           OnboardingCommand::complete_contract_three) ==
+                std::unexpected{OnboardingError::invalid_transition} &&
+            guided == completed_before,
+        "completed onboarding must reject repeated completion without mutation");
+  auto unknown_command_progress =
+      initial_onboarding_progress(NewGameOnboardingChoice::guided);
+  const auto unknown_command_before = unknown_command_progress;
+  check(advance_onboarding(unknown_command_progress,
+                           static_cast<OnboardingCommand>(255)) ==
+                std::unexpected{OnboardingError::invalid_transition} &&
+            unknown_command_progress == unknown_command_before,
+        "unknown onboarding commands must fail without mutation");
+
+  const OnboardingProgress invalid_guided{
+      .state = OnboardingState::guided, .chapter = std::nullopt};
+  const OnboardingProgress invalid_skipped{
+      .state = OnboardingState::skipped,
+      .chapter = OnboardingChapter::contract_one};
+  const OnboardingProgress invalid_enum{
+      .state = static_cast<OnboardingState>(255), .chapter = std::nullopt};
+  const OnboardingProgress invalid_chapter{
+      .state = OnboardingState::guided,
+      .chapter = static_cast<OnboardingChapter>(255)};
+  check(!validate_onboarding_progress(invalid_guided) &&
+            !validate_onboarding_progress(invalid_skipped) &&
+            !validate_onboarding_progress(invalid_enum) &&
+            !validate_onboarding_progress(invalid_chapter) &&
+            resolve_onboarding_access(invalid_skipped) ==
+                std::unexpected{OnboardingError::invalid_state},
+        "invalid state/chapter combinations and unknown enums must be rejected");
+
+  const auto guided_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::guided);
+  const auto skipped_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
+  check(guided_document.recipe == skipped_document.recipe &&
+            guided_document.state.intersystem_contract ==
+                skipped_document.state.intersystem_contract &&
+            skipped_document.state.onboarding == skipped &&
+            skipped_document.state.discoveries.empty() &&
+            skipped_document.state.world_deltas.empty() &&
+            skipped_document.state.first_objective ==
+                FirstObjectiveStatus::offered &&
+            skipped_document.state.first_objective_target.value == 0,
+        "Skip must preserve generated truth and add no fabricated history");
+  const auto encoded_skip = encode_save_document_json(skipped_document);
+  check(encoded_skip && decode_save_document_json(*encoded_skip) ==
+                            std::expected<SaveDocument, SaveSchemaError>{
+                                skipped_document},
+        "Skip must round-trip with a null chapter and unchanged generated truth");
+
+  const auto invalid_choice = make_new_game_document(
+      Seed{42}, static_cast<NewGameOnboardingChoice>(255));
+  check(!validate_save_document(invalid_choice) &&
+            validate_save_document(invalid_choice).error().path ==
+                "$.state.onboarding",
+        "unknown New Game onboarding choices must produce rejected state");
+
+  auto invalid_document = skipped_document;
+  invalid_document.state.onboarding.chapter =
+      OnboardingChapter::contract_one;
+  check(!validate_save_document(invalid_document) &&
+            validate_save_document(invalid_document).error().path ==
+                "$.state.onboarding",
+        "save validation must reject skipped onboarding with tutorial progress");
+  invalid_document = guided_document;
+  invalid_document.state.onboarding = {
+      .state = OnboardingState::completed, .chapter = std::nullopt};
+  check(!validate_save_document(invalid_document) &&
+            validate_save_document(invalid_document).error().path ==
+                "$.state.onboarding.state",
+        "completed onboarding must reject an unfinished authored contract");
+}
+
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 13 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 14 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U) &&
             kMaximumSaveApplicationVersionBytes == 64,
-        "save format version 13 identity and bounds must remain stable");
+        "save format version 14 identity and bounds must remain stable");
   auto recipe = make_save_recipe(Seed{42});
   const auto target = SurfaceSignalId{0x71d4c959dcd64423ULL};
   SaveDocument expected{
@@ -3245,13 +3386,17 @@ auto save_schema_contract() -> void {
 
   const auto encoded = encode_save_document_json(expected);
   check(encoded &&
-            encoded->find("\"format_version\": 13") != std::string::npos &&
+            encoded->find("\"format_version\": 14") != std::string::npos &&
             encoded->find(std::format("\"application_version\": \"{}\"",
                                       kApplicationVersion)) !=
                 std::string::npos &&
             encoded->find("\"career_kind\": \"legacy_signal_run\"") !=
+                std::string::npos &&
+            encoded->find("\"onboarding\":") != std::string::npos &&
+            encoded->find("\"state\": \"guided\"") != std::string::npos &&
+            encoded->find("\"chapter\": \"contract_one\"") !=
                 std::string::npos,
-        "the current encoder must write canonical format-13 state with writer "
+        "the current encoder must write canonical format-14 onboarding state with writer "
         "provenance");
   const std::string fixture = encoded.value_or("{}");
   const auto decoded = decode_save_document_json(fixture);
@@ -3261,8 +3406,19 @@ auto save_schema_contract() -> void {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected &&
               encode_save_document_json(*round_trip) == encoded,
-          "save encode/decode/re-encode must preserve canonical format-13 "
+          "save encode/decode/re-encode must preserve canonical format-14 "
           "state exactly");
+  }
+  for (const auto chapter :
+       {OnboardingChapter::contract_one, OnboardingChapter::contract_two,
+        OnboardingChapter::contract_three}) {
+    auto chapter_document = expected;
+    chapter_document.state.onboarding.chapter = chapter;
+    const auto chapter_json = encode_save_document_json(chapter_document);
+    check(chapter_json && decode_save_document_json(*chapter_json) ==
+                              std::expected<SaveDocument, SaveSchemaError>{
+                                  chapter_document},
+          "every Guided chapter must survive a canonical format-14 round trip");
   }
 
   auto unknown = fixture;
@@ -3323,42 +3479,46 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::duplicate_key,
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 13", "\"format_version\": 1"),
+      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 1"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-1 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 13", "\"format_version\": 10"),
+      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 10"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-10 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 13", "\"format_version\": 11"),
+      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 11"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-11 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 13", "\"format_version\": 12"),
+      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 12"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-12 alpha saves must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 13"),
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "format-13 alpha saves must be rejected explicitly");
   expect_decode_error(
       "{\"application\":\"apsis-drift\",\"format_version\":10}",
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "old alpha formats must be identified before nested fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 13", "\"format_version\": 14"),
+      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 15"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   const auto future_with_provenance = decode_save_document_json(replace_once(
-      fixture, "\"format_version\": 13", "\"format_version\": 14"));
+      fixture, "\"format_version\": 14", "\"format_version\": 15"));
   check(!future_with_provenance &&
             future_with_provenance.error().detail.find(kApplicationVersion) !=
                 std::string::npos,
         "unknown newer saves must identify valid writer provenance");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":14}",
+      "{\"application\":\"apsis-drift\",\"format_version\":15}",
       SaveSchemaErrorCode::unsupported_format_version,
       "future formats must be identified before current fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 13",
-                   "\"format_version\": \"13\""),
+      replace_once(fixture, "\"format_version\": 14",
+                   "\"format_version\": \"14\""),
       SaveSchemaErrorCode::invalid_type,
       "schema integers with the wrong JSON type must be rejected");
   expect_decode_error(replace_once(fixture, "\"application\": \"apsis-drift\"",
@@ -3368,7 +3528,7 @@ auto save_schema_contract() -> void {
   expect_decode_error(replace_once(fixture, "\"application_version\"",
                                    "\"missing_application_version\""),
                       SaveSchemaErrorCode::missing_field,
-                      "format 13 must require writer-version provenance");
+                      "format 14 must require writer-version provenance");
   expect_decode_error(
       replace_once(fixture,
                    std::format("\"application_version\": \"{}\"",
@@ -3485,12 +3645,38 @@ auto save_schema_contract() -> void {
                    "\"kind\": \"future_kind\""),
       SaveSchemaErrorCode::invalid_value,
       "unknown world-delta kinds must be rejected");
+  expect_semantic_decode_error(
+      replace_once(fixture, "\"state\": \"guided\"",
+                   "\"state\": \"future_state\""),
+      SaveSchemaErrorCode::invalid_value, "$.state.onboarding.state",
+      "unknown onboarding states must be rejected before application");
+  expect_semantic_decode_error(
+      replace_once(fixture, "\"chapter\": \"contract_one\"",
+                   "\"chapter\": \"future_chapter\""),
+      SaveSchemaErrorCode::invalid_value, "$.state.onboarding.chapter",
+      "unknown onboarding chapters must be rejected before application");
+  expect_semantic_decode_error(
+      replace_once(fixture, "\"chapter\": \"contract_one\"",
+                   "\"chapter\": null"),
+      SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
+      "Guided onboarding must retain one active authored chapter");
+  auto skipped_with_progress = replace_once(
+      fixture, "\"state\": \"guided\"", "\"state\": \"skipped\"");
+  expect_semantic_decode_error(
+      std::move(skipped_with_progress), SaveSchemaErrorCode::invalid_state,
+      "$.state.onboarding",
+      "Skip must reject a persisted tutorial chapter");
+  expect_semantic_decode_error(
+      replace_once(fixture, "\"chapter\": \"contract_one\"",
+                   "\"chapter\": 1"),
+      SaveSchemaErrorCode::invalid_type, "$.state.onboarding.chapter",
+      "onboarding chapters must reject the wrong JSON type");
 
   constexpr std::array required_sections{
       "\"application\"", "\"application_version\"",
       "\"format_version\"", "\"recipe\"", "\"state\"",
       "\"generator_versions\"", "\"local_sun\"",
-      "\"first_objective\"", "\"flight\"", "\"discoveries\"",
+      "\"onboarding\"", "\"first_objective\"", "\"flight\"", "\"discoveries\"",
       "\"world_deltas\"",
   };
   for (const auto section : required_sections) {
@@ -3588,13 +3774,22 @@ auto save_file_contract() -> void {
   const auto zero_again = make_new_game_document(Seed{0});
   const auto maximum =
       make_new_game_document(Seed{std::numeric_limits<std::uint64_t>::max()});
+  const auto skipped =
+      make_new_game_document(Seed{0}, NewGameOnboardingChoice::skip);
   check(zero == zero_again && validate_save_document(zero).has_value() &&
-            validate_save_document(maximum).has_value(),
+            validate_save_document(maximum).has_value() &&
+            validate_save_document(skipped).has_value(),
         "new-game profiles must accept the complete unsigned seed range and reproduce deterministically");
   check(zero.state.location == OriginLocation::docked_at_origin &&
             zero.state.first_objective == FirstObjectiveStatus::offered &&
             !zero.state.flight && zero.state.discoveries.empty() &&
-            zero.state.world_deltas.empty(),
+            zero.state.world_deltas.empty() &&
+            zero.state.onboarding == OnboardingProgress{} &&
+            skipped.recipe == zero.recipe &&
+            skipped.state.onboarding.state == OnboardingState::skipped &&
+            !skipped.state.onboarding.chapter &&
+            skipped.state.discoveries.empty() &&
+            skipped.state.world_deltas.empty(),
         "a new-game profile must begin docked without mutable generated-world state");
 
   TemporaryDirectory temporary;
@@ -9271,6 +9466,7 @@ auto main() -> int {
   local_system_rendering_contract();
   origin_station_contract();
   origin_onboarding_contract();
+  career_onboarding_contract();
   save_schema_contract();
   save_file_contract();
   signal_run_contract();

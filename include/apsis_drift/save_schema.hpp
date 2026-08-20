@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "apsis_drift/intersystem_contract.hpp"
+#include "apsis_drift/onboarding.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/planetary_flight.hpp"
@@ -18,7 +19,7 @@
 namespace apsis_drift {
 
 inline constexpr std::string_view kSaveApplication{"apsis-drift"};
-inline constexpr std::uint32_t kSaveFormatVersion{13};
+inline constexpr std::uint32_t kSaveFormatVersion{14};
 inline constexpr std::size_t kMaximumSaveDocumentBytes{1U << 20U};
 inline constexpr std::size_t kMaximumSaveApplicationVersionBytes{64};
 inline constexpr std::size_t kMaximumSaveDiscoveries{4'096};
@@ -85,6 +86,7 @@ struct SaveWorldDelta {
 };
 
 struct SaveMutableState {
+  OnboardingProgress onboarding;
   OriginLocation location{OriginLocation::docked_at_origin};
   FirstObjectiveStatus first_objective{FirstObjectiveStatus::offered};
   SurfaceSignalId first_objective_target;

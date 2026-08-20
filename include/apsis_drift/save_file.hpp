@@ -34,7 +34,9 @@ struct SaveFileError {
       -> bool = default;
 };
 
-[[nodiscard]] auto make_new_game_document(Seed universe_seed)
+[[nodiscard]] auto make_new_game_document(
+    Seed universe_seed,
+    NewGameOnboardingChoice onboarding = NewGameOnboardingChoice::guided)
     -> SaveDocument;
 [[nodiscard]] auto make_legacy_signal_run_document(Seed universe_seed)
     -> SaveDocument;

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.30 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.31 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -103,6 +103,7 @@ add_library(apsis_drift_lib STATIC
   src/local_system.cpp
   src/menu.cpp
   src/mission_board.cpp
+  src/onboarding.cpp
   src/orbital.cpp
   src/origin_station.cpp
   src/origin_return.cpp

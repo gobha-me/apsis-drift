@@ -48,8 +48,8 @@ turned-in states for later loop stages. A returned contract exposes
 
 ## Persistence and compatibility
 
-Fresh careers use save format 13 and persist the high-level
-`IntersystemContractState`. Formats 1 through 11 are unsupported alpha saves
+Fresh careers use save format 14 and persist the high-level
+`IntersystemContractState`. Formats 1 through 13 are unsupported alpha saves
 and are rejected before mission state is decoded or applied.
 
 The save excludes terminal capabilities, render profiles, menu selection,
