@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.33 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.34 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -130,6 +130,8 @@ add_library(apsis_drift_lib STATIC
   src/system_rendering.cpp
   src/terrain_tiles.cpp
   src/title.cpp
+  src/universe_navigation.cpp
+  src/universe_navigation_acceptance.cpp
   src/world_delta_journal.cpp
 )
 add_library(apsis-drift::lib ALIAS apsis_drift_lib)
@@ -213,6 +215,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_origin_system_contract_acceptance.cmake")
+  add_test(NAME universe-navigation-acceptance
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_universe_navigation_acceptance.cmake")
   add_test(NAME benchmark-planetary-remote
     COMMAND apsis-drift --benchmark 4 --profile remote --workload planetary)
   add_test(NAME benchmark-planetary-local
@@ -336,6 +343,20 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --origin-system-contract-acceptance --benchmark 1
             --report origin-system-contract-invalid.json)
   set_tests_properties(reject-origin-system-contract-mode-conflict
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-universe-navigation-missing-report
+    COMMAND apsis-drift --universe-navigation-acceptance)
+  set_tests_properties(reject-universe-navigation-missing-report
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-universe-navigation-driver
+    COMMAND apsis-drift --universe-navigation-acceptance --driver kitty
+            --report universe-navigation-invalid.json)
+  set_tests_properties(reject-universe-navigation-driver
+    PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME reject-universe-navigation-mode-conflict
+    COMMAND apsis-drift --universe-navigation-acceptance --benchmark 1
+            --report universe-navigation-invalid.json)
+  set_tests_properties(reject-universe-navigation-mode-conflict
     PROPERTIES WILL_FAIL TRUE)
   add_test(NAME reject-viewport-negative
     COMMAND apsis-drift --benchmark 1 --viewport -1x480)

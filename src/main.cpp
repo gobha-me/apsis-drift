@@ -63,6 +63,7 @@
 #include "apsis_drift/system_flight_acceptance.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/title.hpp"
+#include "apsis_drift/universe_navigation_acceptance.hpp"
 #include "apsis_drift/version.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
@@ -3296,6 +3297,7 @@ auto usage() -> void {
       "                   [--profile NAME] [--snapshot PATH]\n\n"
       "       apsis-drift --origin-system-contract-acceptance --report PATH\n"
       "                   [--profile NAME] [--snapshot PATH]\n\n"
+      "       apsis-drift --universe-navigation-acceptance --report PATH\n\n"
       "Profiles: remote (320x240), balanced (512x320), local (640x480, "
       "default),\n"
       "and cinematic (1024x768). An explicit viewport overrides the "
@@ -3336,6 +3338,7 @@ auto main(int argc, char** argv) -> int {
   bool intersystem_return_acceptance{};
   bool intersystem_contract_acceptance{};
   bool origin_system_contract_acceptance{};
+  bool universe_navigation_acceptance{};
   std::uint32_t seed = 0xC0FFEEU;
   DriverChoice driver_choice{DriverChoice::automatic};
   KeyboardChoice keyboard_choice{KeyboardChoice::enhanced};
@@ -3439,6 +3442,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--origin-system-contract-acceptance") {
       origin_system_contract_acceptance = true;
+      continue;
+    }
+    if (argument == "--universe-navigation-acceptance") {
+      universe_navigation_acceptance = true;
       continue;
     }
     if (argument == "--seed" && i + 1 < argc) {
@@ -3578,6 +3585,28 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (universe_navigation_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       system_flight_acceptance || intersystem_planetfall_acceptance ||
+       intersystem_return_acceptance || intersystem_contract_acceptance ||
+       origin_system_contract_acceptance || profile_options ||
+       profile_specified || viewport_specified || seed_specified ||
+       workload_specified || keyboard_specified || driver_specified ||
+       !snapshot_path.empty())) {
+    std::fprintf(stderr,
+                 "Universe-navigation acceptance is mutually exclusive with "
+                 "other run, profile, viewport, save, seed, workload, "
+                 "keyboard, driver, and snapshot options\n");
+    return 2;
+  }
+  if (universe_navigation_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Universe-navigation acceptance requires --report PATH\n");
+    return 2;
+  }
   if (origin_system_contract_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -3875,6 +3904,39 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (universe_navigation_acceptance) {
+      const auto acceptance = run_universe_navigation_acceptance();
+      if (!acceptance) {
+        std::fprintf(stderr,
+                     "Universe-navigation acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << universe_navigation_acceptance_json(*acceptance);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "universe-navigation: evidence=application_contract "
+          "destination=%llu distance=%llu ticks=%llu checksum=%llu\n",
+          static_cast<unsigned long long>(
+              acceptance->route.destination.value),
+          static_cast<unsigned long long>(acceptance->route.distance_metres),
+          static_cast<unsigned long long>(
+              acceptance->direct_plan.arrival_tick -
+              acceptance->direct_plan.departure_tick),
+          static_cast<unsigned long long>(
+              acceptance->direct_arrival_checksum));
+      return 0;
+    }
     if (origin_system_contract_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, viewport_override);

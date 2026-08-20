@@ -73,6 +73,9 @@ entry-anywhere recovery, and future save projection are recorded in the
 The bounded destination star, ordered planet catalog, independent orbit
 streams, and tick-addressed analytic positions are recorded in
 [Local System Generation and Analytic Ephemeris](LOCAL_SYSTEM_GENERATION.md).
+The bounded origin/first-target anchors, discovered-system projection,
+destination status vocabulary, and optional continuous route are recorded in
+[Discovered-Universe Navigation and Direct Travel](UNIVERSE_NAVIGATION.md).
 The stable objective identities, independent encounter streams, bounded
 terrain-vetted placement, and immutable signal metadata are recorded in the
 [Deterministic Surface Signal Contract](SURFACE_SIGNALS.md).

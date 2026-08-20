@@ -57,6 +57,8 @@
 #include "apsis_drift/system_rendering.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/title.hpp"
+#include "apsis_drift/universe_navigation.hpp"
+#include "apsis_drift/universe_navigation_acceptance.hpp"
 #include "apsis_drift/version.hpp"
 #include "apsis_drift/world_delta_journal.hpp"
 #include "capability_floor.hpp"
@@ -304,7 +306,8 @@ auto intersystem_identity_contract() -> void {
   check(static_cast<std::uint64_t>(SeedDomain::star) == 8 &&
             static_cast<std::uint64_t>(SeedDomain::orbit) == 9 &&
             static_cast<std::uint64_t>(SeedDomain::mission) == 10 &&
-            static_cast<std::uint64_t>(SeedDomain::jump_alignment) == 11,
+            static_cast<std::uint64_t>(SeedDomain::jump_alignment) == 11 &&
+            static_cast<std::uint64_t>(SeedDomain::navigation) == 12,
         "new seed domains must retain their permanent identifiers");
   check(kJumpSpoolTicks == 360 && kJumpTransitTicks == 240,
         "version 1 jump timing must retain its fixed-step durations");
@@ -378,6 +381,326 @@ auto intersystem_identity_contract() -> void {
             settlement == derive_seed(origin, SeedDomain::settlement, 0) &&
             encounter == derive_seed(original_planet, SeedDomain::encounter, 0),
         "new intersystem derivations must not perturb existing world streams");
+}
+
+auto universe_navigation_contract() -> void {
+  check(kUniverseNavigationVersion == 1 &&
+            static_cast<std::uint64_t>(SeedDomain::navigation) == 12,
+        "universe navigation must retain its version and permanent seed domain");
+  check(kMinimumFirstRouteLightSeconds == 172'800U &&
+            kMaximumFirstRouteLightSeconds == 345'600U &&
+            kLocalSystemBoundaryMetres == 100'000'000'000LL &&
+            kDirectCruiseMaximumTimeScale == 65'536U,
+        "the bounded first-route scale must retain its documented constants");
+
+  constexpr std::array seeds{
+      Seed{0}, Seed{42},
+      Seed{std::numeric_limits<std::uint64_t>::max()},
+  };
+  struct RouteGolden {
+    std::uint64_t route_seed;
+    UniverseAxisDirection direction;
+    std::uint64_t distance_light_seconds;
+    std::uint64_t distance_metres;
+  };
+  constexpr std::array route_goldens{
+      RouteGolden{11957133562145355735ULL,
+                  UniverseAxisDirection::negative_x, 228'505U,
+                  68'504'075'615'290ULL},
+      RouteGolden{4490051804352235517ULL,
+                  UniverseAxisDirection::negative_z, 321'457U,
+                  96'370'384'171'306ULL},
+      RouteGolden{12613896438947289695ULL,
+                  UniverseAxisDirection::negative_y, 299'680U,
+                  89'841'803'813'440ULL},
+  };
+  for (std::size_t index = 0; index < seeds.size(); ++index) {
+    const auto seed = seeds[index];
+    const auto identities = generate_first_intersystem_identities(seed);
+    const auto origin_before = generate_origin_system(seed);
+    const auto target_before =
+        generate_local_system(identities.target_system_seed);
+    const auto route = generate_first_universe_route(seed);
+    check(route == generate_first_universe_route(seed) &&
+              validate_first_universe_route(route).has_value() &&
+              route.origin == identities.origin_system &&
+              route.destination == identities.target_system &&
+              route.origin_position == UniversePositionMetres{} &&
+              route.distance_light_seconds >=
+                  kMinimumFirstRouteLightSeconds &&
+              route.distance_light_seconds <=
+                  kMaximumFirstRouteLightSeconds &&
+              route.distance_metres ==
+                  route.distance_light_seconds *
+                      static_cast<std::uint64_t>(kMetresPerLightSecond) &&
+              route.route_seed.value == route_goldens[index].route_seed &&
+              route.direction == route_goldens[index].direction &&
+              route.distance_light_seconds ==
+                  route_goldens[index].distance_light_seconds &&
+              route.distance_metres == route_goldens[index].distance_metres,
+          "fixed route seeds must retain their golden coordinates and distances");
+    const auto nonzero_axes =
+        (route.destination_position.x != 0 ? 1 : 0) +
+        (route.destination_position.y != 0 ? 1 : 0) +
+        (route.destination_position.z != 0 ? 1 : 0);
+    check(nonzero_axes == 1,
+          "the bounded first route must use one explicit cardinal axis");
+    check(generate_origin_system(seed) == origin_before &&
+              generate_local_system(identities.target_system_seed) ==
+                  target_before &&
+              generate_first_intersystem_identities(seed) == identities,
+          "inspecting universe navigation must not perturb existing generated streams");
+  }
+
+  const auto route = generate_first_universe_route(Seed{42});
+  const auto resolved = resolve_navigation_destination(
+      route,
+      {.system = route.destination,
+       .level = NavigationKnowledgeLevel::resolved},
+      route.origin, true, true, true);
+  check(resolved && resolved->known && resolved->valid &&
+            resolved->authorized && resolved->affordable &&
+            resolved->available && resolved->selectable &&
+            resolved->disabled_reason == NavigationDisabledReason::none &&
+            resolved->position == route.destination_position &&
+            resolved->distance_metres == route.distance_metres,
+        "a resolved authorized affordable destination must be selectable");
+
+  const auto contact = resolve_navigation_destination(
+      route,
+      {.system = route.destination,
+       .level = NavigationKnowledgeLevel::contact},
+      route.origin, true, true, true);
+  const auto probable = resolve_navigation_destination(
+      route,
+      {.system = route.destination,
+       .level = NavigationKnowledgeLevel::probable},
+      route.origin, true, true, true);
+  check(contact && probable && contact->known && probable->known &&
+            !contact->valid && !probable->valid && !contact->position &&
+            !probable->position &&
+            contact->disabled_reason ==
+                NavigationDisabledReason::requires_resolved_position &&
+            probable->disabled_reason ==
+                NavigationDisabledReason::requires_resolved_position,
+        "contact and probable knowledge must redact exact route geometry");
+  const auto locked = resolve_navigation_destination(
+      route,
+      {.system = route.destination,
+       .level = NavigationKnowledgeLevel::resolved},
+      route.origin, false, false, false);
+  const auto unaffordable = resolve_navigation_destination(
+      route,
+      {.system = route.destination,
+       .level = NavigationKnowledgeLevel::resolved},
+      route.origin, true, false, false);
+  const auto in_transit = resolve_navigation_destination(
+      route,
+      {.system = route.destination,
+       .level = NavigationKnowledgeLevel::resolved},
+      route.origin, true, true, false);
+  const auto current = resolve_navigation_destination(
+      route,
+      {.system = route.origin, .level = NavigationKnowledgeLevel::visited},
+      route.origin, false, false, false);
+  check(locked &&
+            locked->disabled_reason ==
+                NavigationDisabledReason::onboarding_locked &&
+            unaffordable &&
+            unaffordable->disabled_reason ==
+                NavigationDisabledReason::insufficient_endurance &&
+            in_transit && in_transit->available && !in_transit->selectable &&
+            in_transit->disabled_reason ==
+                NavigationDisabledReason::unavailable_during_travel &&
+            current && current->disabled_reason ==
+                           NavigationDisabledReason::current_system,
+        "navigation disabled reasons must follow one stable precedence");
+
+  const OnboardingProgress guided_one{
+      .state = OnboardingState::guided,
+      .chapter = OnboardingChapter::contract_one,
+  };
+  const OnboardingProgress guided_three{
+      .state = OnboardingState::guided,
+      .chapter = OnboardingChapter::contract_three,
+  };
+  const OnboardingProgress completed{
+      .state = OnboardingState::completed, .chapter = std::nullopt};
+  const auto first_view = resolve_onboarding_navigation_view(
+      route, guided_one, route.origin);
+  const auto third_view = resolve_onboarding_navigation_view(
+      route, guided_three, route.origin);
+  const auto skip_view = resolve_onboarding_navigation_view(
+      route, initial_onboarding_progress(NewGameOnboardingChoice::skip),
+      route.origin);
+  const auto return_view = resolve_onboarding_navigation_view(
+      route, completed, route.destination);
+  check(first_view && first_view->destinations.size() == 1 &&
+            !first_view->destinations.front().selectable && third_view &&
+            third_view->destinations.size() == 2 &&
+            std::ranges::count_if(
+                third_view->destinations,
+                [](const auto& row) { return row.selectable; }) == 1 &&
+            skip_view && skip_view->destinations == third_view->destinations &&
+            return_view && return_view->destinations.size() == 2 &&
+            return_view->destinations.front().selectable &&
+            return_view->destinations.back().disabled_reason ==
+                NavigationDisabledReason::current_system,
+        "onboarding must reveal only its bounded navigation baseline");
+  check(!resolve_onboarding_navigation_view(
+            route, guided_one, route.destination),
+        "a pre-jump onboarding chapter must reject an unreachable current system");
+
+  const auto closed_view = resolve_onboarding_navigation_view(
+      route, guided_three, route.origin, true, false);
+  const auto no_endurance = resolve_onboarding_navigation_view(
+      route, guided_three, route.origin, false, true);
+  check(closed_view &&
+            closed_view->destinations.back().available &&
+            !closed_view->destinations.back().selectable && no_endurance &&
+            !no_endurance->destinations.back().affordable &&
+            no_endurance->destinations.back().disabled_reason ==
+                NavigationDisabledReason::insufficient_endurance,
+        "selection state and endurance must not change generated knowledge");
+
+  const auto direct = make_direct_travel_plan(
+      route, route.origin, route.destination, 7,
+      static_cast<double>(kDirectCruiseMaximumSpeedMetresPerSecond));
+  const auto reverse = make_direct_travel_plan(
+      route, route.destination, route.origin, 7,
+      static_cast<double>(kDirectCruiseMaximumSpeedMetresPerSecond));
+  check(direct && reverse &&
+            direct->cruise_distance_metres ==
+                route.distance_metres -
+                    static_cast<std::uint64_t>(
+                        2 * kLocalSystemBoundaryMetres) &&
+            direct->cruise_distance_metres == reverse->cruise_distance_metres &&
+            direct->departure_position == reverse->arrival_position &&
+            direct->arrival_position == reverse->departure_position,
+        "direct cruise must preserve one reversible physical boundary handoff");
+  if (direct) {
+    const auto departure =
+        resolve_direct_travel(*direct, direct->departure_tick);
+    const auto midpoint_tick =
+        direct->departure_tick +
+        (direct->arrival_tick - direct->departure_tick) / 2U;
+    const auto midpoint = resolve_direct_travel(*direct, midpoint_tick);
+    const auto arrival = resolve_direct_travel(*direct, direct->arrival_tick);
+    check(departure && !departure->arrived &&
+              departure->position == direct->departure_position && midpoint &&
+              !midpoint->arrived && arrival && arrival->arrived &&
+              arrival->position == direct->arrival_position,
+          "analytic direct cruise must resolve departure, progress, and exact arrival");
+
+    auto tick = direct->departure_tick;
+    while (tick < direct->arrival_tick) {
+      const auto next = advance_direct_travel(
+          *direct, tick,
+          DirectCruiseTimeScale::sixty_five_thousand_five_hundred_thirty_six);
+      check(next && *next > tick,
+            "maximum direct-cruise scale must make bounded progress");
+      if (!next) break;
+      tick = *next;
+    }
+    check(tick == direct->arrival_tick &&
+              resolve_direct_travel(*direct, tick) == arrival,
+          "time-scale sampling must clamp to the same authoritative arrival");
+
+    const auto projection = direct_travel_save_projection_json(
+        *direct, midpoint_tick,
+        DirectCruiseTimeScale::sixty_five_thousand_five_hundred_thirty_six);
+    check(projection && projection->size() < 1'024U &&
+              projection->find("\"navigation_version\": 1") !=
+                  std::string::npos &&
+              projection->find(system_id_string(route.destination)) !=
+                  std::string::npos,
+          "the proposed direct-cruise save projection must remain canonical and bounded");
+  }
+
+  auto malformed_route = route;
+  malformed_route.distance_light_seconds =
+      kMinimumFirstRouteLightSeconds - 1U;
+  check(!validate_first_universe_route(malformed_route) &&
+            !resolve_navigation_destination(
+                malformed_route,
+                {.system = route.destination,
+                 .level = NavigationKnowledgeLevel::resolved},
+                route.origin, true, true, true),
+        "malformed generated route data must reject before projection");
+  check(!resolve_navigation_destination(
+            route,
+            {.system = route.destination,
+             .level = static_cast<NavigationKnowledgeLevel>(255)},
+            route.origin, true, true, true) &&
+            !resolve_navigation_destination(
+                route,
+                {.system = SystemId{1},
+                 .level = NavigationKnowledgeLevel::resolved},
+                route.origin, true, true, true) &&
+            !resolve_onboarding_navigation_view(
+                route,
+                {.state = OnboardingState::guided, .chapter = std::nullopt},
+                route.origin),
+        "invalid knowledge, identities, and onboarding combinations must reject");
+  check(!make_direct_travel_plan(
+            route, route.origin, route.destination, 0,
+            std::numeric_limits<double>::quiet_NaN()) &&
+            !make_direct_travel_plan(route, route.origin, route.destination, 0,
+                                     0.0) &&
+            !make_direct_travel_plan(route, route.origin, route.destination, 0,
+                                     1.5) &&
+            !make_direct_travel_plan(
+                route, route.origin, route.destination, 0,
+                static_cast<double>(
+                    kDirectCruiseMaximumSpeedMetresPerSecond + 1U)) &&
+            !make_direct_travel_plan(route, route.origin, route.origin, 0,
+                                     1'000'000.0) &&
+            !make_direct_travel_plan(
+                route, route.origin, route.destination,
+                std::numeric_limits<SimulationTick>::max(), 1.0),
+        "invalid speeds, routes, and tick overflow must reject before cruise");
+  if (direct) {
+    check(!resolve_direct_travel(*direct, direct->departure_tick - 1U) &&
+              !advance_direct_travel(
+                  *direct, direct->departure_tick,
+                  static_cast<DirectCruiseTimeScale>(3)),
+          "out-of-range cruise ticks and unknown time scales must reject");
+    auto corrupt_plan = *direct;
+    corrupt_plan.velocity_metres_per_second.x += 1;
+    check(!resolve_direct_travel(corrupt_plan, corrupt_plan.departure_tick) &&
+              !advance_direct_travel(
+                  corrupt_plan, corrupt_plan.departure_tick,
+                  DirectCruiseTimeScale::one),
+          "corrupt direct-cruise geometry must reject before advancement");
+    corrupt_plan = *direct;
+    corrupt_plan.departure_position.x =
+        std::numeric_limits<std::int64_t>::min();
+    check(!resolve_direct_travel(corrupt_plan, corrupt_plan.departure_tick),
+          "extreme direct-cruise coordinates must reject without unsafe arithmetic");
+  }
+}
+
+auto universe_navigation_acceptance_contract() -> void {
+  const auto result = run_universe_navigation_acceptance();
+  check(result && result->route.universe_seed == Seed{42} &&
+            result->visible_rows == 2 && result->selectable_rows == 1 &&
+            result->ftl_total_ticks == 600 &&
+            result->direct_plan.arrival_tick >
+                result->direct_plan.departure_tick &&
+            result->maximum_scale_updates > 0 &&
+            result->projected_save_bytes < 1'024U &&
+            result->direct_arrival_checksum != 0,
+        "the universe-navigation acceptance report must prove the bounded route");
+  if (!result) return;
+  const auto json = universe_navigation_acceptance_json(*result);
+  check(json.find("\"schema_version\": 1") != std::string::npos &&
+            json.find("\"scenario\": \"v0.4.34-universe-navigation-contract\"") !=
+                std::string::npos &&
+            json.find("\"resource_cost_units\": \"0\"") !=
+                std::string::npos &&
+            json.find("separate-live-capture-required-by-contract-three") !=
+                std::string::npos,
+        "the navigation report must distinguish contract, resource, and transport evidence");
 }
 
 auto intersystem_state_contract() -> void {
@@ -9669,6 +9992,8 @@ auto main() -> int {
   deterministic_generation();
   seed_derivation_contract();
   intersystem_identity_contract();
+  universe_navigation_contract();
+  universe_navigation_acceptance_contract();
   intersystem_state_contract();
   intersystem_time_boundary_contract();
   intersystem_jump_contract();

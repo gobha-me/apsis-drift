@@ -39,6 +39,12 @@ The first route deliberately has one target system, one mission planet, and
 one existing Signal Run objective. Later catalogs may add destinations without
 changing these ordinals or deriving them through mutable selection state.
 
+The target's universe anchor and navigation state are independently derived by
+the versioned [universe-navigation contract](UNIVERSE_NAVIGATION.md). The
+player selects the stable target system; jump commitment retains ownership of
+the immutable arrival solution. Generated systems not present in career
+knowledge are absent from the view.
+
 ## Authoritative time
 
 One unsigned 64-bit `universe_tick` is the time authority for system
