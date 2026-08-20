@@ -90,7 +90,8 @@ struct Replay {
       return std::unexpected{SystemFlightAcceptanceError::flight_failure};
     }
     if (!resumed && guidance->inside_approach_boundary) {
-      auto document = make_new_game_document(Seed{kSystemFlightAcceptanceSeed});
+      auto document = make_new_game_document(Seed{kSystemFlightAcceptanceSeed},
+                                             NewGameOnboardingChoice::skip);
       document.state.intersystem_contract = contract;
       document.state.system_flight = flight;
       const auto encoded = encode_save_document_json(document);

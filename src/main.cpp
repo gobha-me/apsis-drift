@@ -389,7 +389,16 @@ class LandscapeApp final : public App {
         m_signal_navigation_acceptance(signal_navigation_acceptance) {
     if (profile != nullptr) {
       m_save_profile = *profile;
-      if (profile->state.intersystem_contract) {
+      const bool guided_signal_run =
+          profile->state.intersystem_contract &&
+          profile->state.onboarding.state == OnboardingState::guided &&
+          (profile->state.onboarding.chapter ==
+               OnboardingChapter::contract_one ||
+           (profile->state.onboarding.chapter ==
+                OnboardingChapter::contract_two &&
+            profile->state.first_objective ==
+                FirstObjectiveStatus::turned_in));
+      if (profile->state.intersystem_contract && !guided_signal_run) {
         m_intersystem_contract = *profile->state.intersystem_contract;
         m_system_flight = profile->state.system_flight;
         m_origin_station_flight = profile->state.origin_station_flight;
@@ -699,6 +708,10 @@ class LandscapeApp final : public App {
     return m_display_tier;
   }
   [[nodiscard]] auto flight_checksum() const noexcept -> std::uint64_t {
+    if (m_signal_run && m_signal_run->station_flight) {
+      return origin_station_flight_state_checksum(
+          *m_signal_run->station_flight);
+    }
     if (m_origin_station_flight) {
       return origin_station_flight_state_checksum(*m_origin_station_flight);
     }
@@ -790,9 +803,11 @@ class LandscapeApp final : public App {
     if (m_intersystem_contract) {
       return m_intersystem_contract->universe_tick;
     }
-    return m_signal_run && m_signal_run->flight
-               ? m_signal_run->flight->tick
-               : m_flight.tick;
+    if (m_signal_run && m_signal_run->station_flight) {
+      return m_signal_run->station_flight->tick;
+    }
+    return m_signal_run && m_signal_run->flight ? m_signal_run->flight->tick
+                                                : m_flight.tick;
   }
 
   [[nodiscard]] auto menu_command_for(const KeyEvent& key) const noexcept
@@ -872,6 +887,13 @@ class LandscapeApp final : public App {
         m_active_mouse_region = {};
         return;
       }
+      if (m_signal_run->onboarding.first_objective ==
+          FirstObjectiveStatus::returned) {
+        if (!turn_in_signal_run(*m_signal_run)) {
+          m_error = "Signal Run turn-in was rejected";
+        }
+        return;
+      }
       return;
     }
     const auto transition = m_session.dispatch(command);
@@ -882,6 +904,9 @@ class LandscapeApp final : public App {
       if (m_signal_run && m_signal_run->flight) {
         m_input_mapper.suspend(m_signal_run->flight->controls,
                                m_signal_run->flight->tick);
+      } else if (m_signal_run && m_signal_run->station_flight) {
+        m_input_mapper.suspend(m_signal_run->station_flight->controls,
+                               m_signal_run->station_flight->tick);
       } else if (m_system_flight) {
         m_input_mapper.suspend(m_system_flight->controls,
                                m_system_flight->tick);
@@ -914,6 +939,24 @@ class LandscapeApp final : public App {
   }
 
   auto handle_menu_key(const KeyEvent& key) -> void {
+    if (m_session.screen() == SessionScreen::station && m_signal_run &&
+        m_signal_run->career && key.action == KeyAction::Press &&
+        (key.key == Key::Left || key.key == Key::Right) &&
+        (m_signal_run->onboarding.first_objective ==
+             FirstObjectiveStatus::offered ||
+         m_signal_run->onboarding.first_objective ==
+             FirstObjectiveStatus::active)) {
+      const auto command =
+          m_signal_run->career->rule_profile == IntersystemRuleProfile::assisted
+              ? IntersystemContractCommand::select_pilot_profile
+              : IntersystemContractCommand::select_assisted_profile;
+      if (!advance_intersystem_contract(*m_signal_run->career,
+                                        m_signal_run->career->universe_tick,
+                                        command)) {
+        m_error = "rule profile selection was rejected";
+      }
+      return;
+    }
     if (m_session.screen() == SessionScreen::station &&
         m_intersystem_contract && key.action == KeyAction::Press &&
         (key.key == Key::Left || key.key == Key::Right)) {
@@ -1102,8 +1145,8 @@ class LandscapeApp final : public App {
       draw_menu(screen, "ORIGIN STATION", "UNAVAILABLE");
       return;
     }
-    std::string_view action{"RETURN COMPLETE"};
-    std::string_view status{"COMPLETED"};
+    std::string_view action{"CONTRACT IN FLIGHT"};
+    std::string_view status{"OBJECTIVE COMPLETE"};
     if (m_signal_run->onboarding.first_objective ==
         FirstObjectiveStatus::offered) {
       action = "ACCEPT BRIEFING";
@@ -1112,6 +1155,14 @@ class LandscapeApp final : public App {
                FirstObjectiveStatus::active) {
       action = "LAUNCH";
       status = "ACTIVE";
+    } else if (m_signal_run->onboarding.first_objective ==
+               FirstObjectiveStatus::returned) {
+      action = "TURN IN";
+      status = "RETURNED";
+    } else if (m_signal_run->onboarding.first_objective ==
+               FirstObjectiveStatus::turned_in) {
+      action = "CONTRACT TWO PENDING";
+      status = "TURNED IN";
     }
     draw_menu(screen, "ORIGIN STATION", action);
     if (!m_menu_layout.supported()) return;
@@ -1139,13 +1190,20 @@ class LandscapeApp final : public App {
     if (m_signal_run->onboarding.first_objective ==
         FirstObjectiveStatus::active) {
       constexpr std::string_view launch_help{
-          "MATCH BRG | W/F THRUST | S/R BRAKE"};
+          "FLIGHT CHECK: A/D attitude | Q/E translate | R/F vertical"};
+      constexpr std::string_view planetfall_help{
+          "W thrust | release to coast | S brake | ENTER targets home"};
       screen.write_text(
           std::max(0, (screen.cols() -
                        static_cast<int>(launch_help.size())) /
                           2),
           std::max(4, m_menu_layout.art.y + 8), launch_help, accent,
           background);
+      screen.write_text(std::max(0, (screen.cols() -
+                                     static_cast<int>(planetfall_help.size())) /
+                                        2),
+                        std::max(5, m_menu_layout.art.y + 10), planetfall_help,
+                        muted, background);
     }
   }
 
@@ -1179,7 +1237,9 @@ class LandscapeApp final : public App {
     const auto instruments =
         m_signal_run && m_signal_run->flight
             ? format_flight_instruments(*m_signal_run->flight)
-            : m_signal_scenario
+        : m_signal_run && m_signal_run->station_flight
+            ? format_flight_instruments(*m_signal_run->station_flight)
+        : m_signal_scenario
             ? format_flight_instruments(m_signal_scenario->flight)
         : m_system_flight ? format_flight_instruments(*m_system_flight)
         : m_origin_station_flight
@@ -1189,11 +1249,15 @@ class LandscapeApp final : public App {
         : m_planetary_flight ? format_flight_instruments(*m_planetary_flight)
                              : format_flight_instruments(m_flight);
     const std::optional<ThermalInstrumentReadout> thermal =
-        m_intersystem_planetfall
-            ? std::optional<ThermalInstrumentReadout>{
-                  format_thermal_instruments(
-                      *m_intersystem_planetfall->planet,
-                      m_intersystem_planetfall->flight)}
+        m_signal_run && m_signal_run->flight && m_signal_run->career
+            ? std::optional<
+                  ThermalInstrumentReadout>{format_thermal_instruments(
+                  *m_signal_run->planet, *m_signal_run->flight)}
+        : m_intersystem_planetfall
+            ? std::optional<
+                  ThermalInstrumentReadout>{format_thermal_instruments(
+                  *m_intersystem_planetfall->planet,
+                  m_intersystem_planetfall->flight)}
             : std::nullopt;
 
     screen.fill_rect(layout.header.x, layout.header.y, layout.header.w,
@@ -1279,9 +1343,18 @@ class LandscapeApp final : public App {
     screen.write_text(layout.right_instruments.x + 2,
                       layout.right_instruments.y + 2, "TARGET", accent,
                       chrome_bg);
-    if (m_origin_station_flight && m_intersystem_contract) {
-      const auto guidance = resolve_origin_station_flight_guidance(
-          *m_intersystem_contract, m_origin_system, *m_origin_station_flight);
+    if ((m_origin_station_flight && m_intersystem_contract) ||
+        (m_signal_run && m_signal_run->station_flight &&
+         m_signal_run->career)) {
+      const auto guidance =
+          m_signal_run && m_signal_run->station_flight && m_signal_run->career
+              ? resolve_origin_station_flight_guidance(
+                    m_signal_run->recipe.universe_seed,
+                    m_signal_run->career->universe_tick,
+                    m_signal_run->origin_system, *m_signal_run->station_flight)
+              : resolve_origin_station_flight_guidance(
+                    *m_intersystem_contract, m_origin_system,
+                    *m_origin_station_flight);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 4, "ORIGIN STN", text,
                         chrome_bg);
@@ -1420,6 +1493,36 @@ class LandscapeApp final : public App {
                 "ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::low_clearance) {
       message = " WARNING: LOW CLEARANCE | R to climb | ESC menu ";
+    } else if (m_signal_run && m_signal_run->station_flight &&
+               m_signal_run->career) {
+      const auto guidance = resolve_origin_station_flight_guidance(
+          m_signal_run->recipe.universe_seed,
+          m_signal_run->career->universe_tick, m_signal_run->origin_system,
+          *m_signal_run->station_flight);
+      const auto& observed = m_signal_run->guidance;
+      if (m_signal_run->onboarding.first_objective ==
+          FirstObjectiveStatus::completed) {
+        message = guidance && guidance->arrived
+                      ? " STATION RENDEZVOUS COMPLETE | ENTER DOCK "
+                      : " STATION RENDEZVOUS | SPACE autopilot | S brake | "
+                        "ENTER when stopped inside 5 km ";
+      } else if (!observed.attitude_observed) {
+        message = " FLIGHT CHECK 1/7 | A/D attitude | controls remain free ";
+      } else if (!observed.translation_observed) {
+        message = " FLIGHT CHECK 2/7 | Q/E translate | R/F vertical ";
+      } else if (!observed.thrust_observed) {
+        message = " FLIGHT CHECK 3/7 | W thrust away from station ";
+      } else if (!observed.coast_observed) {
+        message = " FLIGHT CHECK 4/7 | release W to coast ";
+      } else if (!observed.braking_observed) {
+        message = " FLIGHT CHECK 5/7 | S braking | station remains available ";
+      } else {
+        message =
+            guidance && guidance->arrived
+                ? " FLIGHT CHECK REPEATABLE | W leave dock envelope | "
+                  "ENTER redock "
+                : " FLIGHT CHECK 6/7 | HOME TARGET LOCKED | ENTER PLANETFALL ";
+      }
     } else if (thermal) {
       message = std::format(
           " {} | {} | {} | {} | {} | R rise / S brake ", thermal->load,
@@ -1428,7 +1531,13 @@ class LandscapeApp final : public App {
     } else if (m_signal_run && m_signal_run->flight) {
       if (m_signal_run->onboarding.first_objective ==
               FirstObjectiveStatus::completed &&
-          m_signal_run->origin_navigation) {
+          m_signal_run->career) {
+        message = m_signal_run->flight->regime == FlightRegime::orbital
+                      ? " OBJECTIVE COMPLETE | ENTER BEGIN STATION RENDEZVOUS "
+                      : " OBJECTIVE COMPLETE | ASCEND TO ORBIT WITH R ";
+      } else if (m_signal_run->onboarding.first_objective ==
+                     FirstObjectiveStatus::completed &&
+                 m_signal_run->origin_navigation) {
         const auto& origin = *m_signal_run->origin_navigation;
         const std::string_view cue =
             origin.motion.cue == TargetMotionCue::brake
@@ -1568,22 +1677,24 @@ class LandscapeApp final : public App {
                      layout.status.h, text, status_bg);
     screen.write_text(
         layout.status.x, layout.status.y,
-        std::format(
-            " {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
-            (m_signal_run && m_signal_run->flight ? m_signal_run->flight->mode
-             : m_signal_scenario ? m_signal_scenario->flight.mode
-             : m_system_flight   ? m_system_flight->mode
-             : m_origin_station_flight
-                 ? m_origin_station_flight->mode
-                 : (m_intersystem_planetfall
-                        ? m_intersystem_planetfall->flight.mode
-                        : (m_planetary_flight ? m_planetary_flight->mode
-                                              : m_flight.mode))) ==
-                    FlightMode::autopilot
-                ? "AUTOPILOT"
-                : "MANUAL",
-            m_input_tier, m_frame, render_time,
-            static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
+        std::format(" {} | {} | frame {} | {:.2f} ms | {:.1f} MiB ",
+                    (m_signal_run && m_signal_run->flight
+                         ? m_signal_run->flight->mode
+                     : m_signal_run && m_signal_run->station_flight
+                         ? m_signal_run->station_flight->mode
+                     : m_signal_scenario ? m_signal_scenario->flight.mode
+                     : m_system_flight   ? m_system_flight->mode
+                     : m_origin_station_flight
+                         ? m_origin_station_flight->mode
+                         : (m_intersystem_planetfall
+                                ? m_intersystem_planetfall->flight.mode
+                                : (m_planetary_flight ? m_planetary_flight->mode
+                                                      : m_flight.mode))) ==
+                            FlightMode::autopilot
+                        ? "AUTOPILOT"
+                        : "MANUAL",
+                    m_input_tier, m_frame, render_time,
+                    static_cast<double>(totals.total()) / (1024.0 * 1024.0)),
         text, status_bg);
 
     m_surface.set_geometry(layout.viewport);
@@ -1755,11 +1866,51 @@ class LandscapeApp final : public App {
       }
       return;
     }
+    if (m_signal_run && m_signal_run->station_flight) {
+      if (key.key == Key::Enter && key.action == KeyAction::Press) {
+        const auto guidance =
+            m_signal_run->career
+                ? resolve_origin_station_flight_guidance(
+                      m_signal_run->recipe.universe_seed,
+                      m_signal_run->career->universe_tick,
+                      m_signal_run->origin_system,
+                      *m_signal_run->station_flight)
+                : std::expected<OriginStationFlightGuidance,
+                                OriginStationFlightError>{
+                      std::unexpected{OriginStationFlightError::invalid_state}};
+        if (guidance && guidance->arrived) {
+          if (!return_signal_run_to_origin(*m_signal_run)) {
+            m_error = "Origin Station docking was rejected";
+            return;
+          }
+          (void)m_session.dock_at_station();
+          m_simulation_clock.reset();
+          m_active_mouse_region = {};
+        } else if (!begin_signal_run_planetfall(*m_signal_run,
+                                                *m_signal_run_cache)) {
+          m_error = "leave the docking envelope before home Planetfall";
+        } else {
+          m_input_mapper.suspend({}, m_signal_run->flight->tick);
+          m_error.clear();
+        }
+        return;
+      }
+      if (key.action != KeyAction::Release) m_error.clear();
+      m_input_mapper.enqueue(key, m_signal_run->station_flight->tick, true);
+      return;
+    }
     if (m_signal_run && m_signal_run->flight) {
       if (key.key == Key::Enter && key.action == KeyAction::Press &&
           m_signal_run->onboarding.first_objective ==
               FirstObjectiveStatus::completed) {
-        if (return_signal_run_to_origin(*m_signal_run)) {
+        if (m_signal_run->career) {
+          if (depart_signal_run_home_planet(*m_signal_run)) {
+            m_input_mapper.suspend({}, m_signal_run->station_flight->tick);
+            m_error.clear();
+          } else {
+            m_error = "reach orbital flight before station rendezvous";
+          }
+        } else if (return_signal_run_to_origin(*m_signal_run)) {
           (void)m_session.dock_at_station();
           m_simulation_clock.reset();
           m_active_mouse_region = {};
@@ -1927,6 +2078,14 @@ class LandscapeApp final : public App {
         }
         continue;
       }
+      if (m_signal_run && m_signal_run->station_flight) {
+        auto commands =
+            m_input_mapper.take_commands(m_signal_run->station_flight->tick);
+        if (!advance_signal_run_station_flight(*m_signal_run, commands)) {
+          throw std::runtime_error{"Signal Run station flight failed"};
+        }
+        continue;
+      }
       if (m_signal_run && m_signal_run->flight) {
         if (!m_signal_run_cache) {
           throw std::runtime_error{"Signal Run cache is unavailable"};
@@ -1992,6 +2151,42 @@ class LandscapeApp final : public App {
 
   auto render_viewport() -> void {
     m_system_render.reset();
+    if (m_signal_run && m_signal_run->station_flight && m_signal_run->career) {
+      if (!m_system_renderer) {
+        throw std::runtime_error{
+            "contract-one system presentation is unavailable"};
+      }
+      const auto station =
+          generate_origin_station(m_signal_run->recipe.universe_seed);
+      const auto ephemeris = resolve_origin_station_ephemeris(
+          m_signal_run->origin_system, station,
+          {.tick = m_signal_run->career->universe_tick,
+           .sub_tick_fraction = 0.0});
+      const auto pose = resolve_origin_station_flight_pose(
+          m_signal_run->recipe.universe_seed,
+          m_signal_run->career->universe_tick, m_signal_run->origin_system,
+          *m_signal_run->station_flight);
+      if (!ephemeris || !pose) {
+        throw std::runtime_error{"cannot resolve contract-one station flight"};
+      }
+      const LocalSystemView view{
+          .time = {m_signal_run->career->universe_tick, 0.0},
+          .position = pose->position,
+          .velocity = pose->velocity,
+          .forward = m_signal_run->station_flight->forward,
+          .up = m_signal_run->station_flight->up,
+          .selected_planet = m_signal_run->recipe.home_planet,
+      };
+      const auto rendered = m_system_renderer->render(
+          m_signal_run->origin_system, view, m_surface.pixels());
+      if (!rendered || !m_system_renderer->render_origin_station(
+                           view, *ephemeris, m_surface.pixels())) {
+        throw std::runtime_error{
+            "contract-one system presentation rejected frame"};
+      }
+      m_system_render = *rendered;
+      return;
+    }
     if (m_intersystem_contract) {
       if (const auto jump =
               intersystem_jump_snapshot(*m_intersystem_contract)) {

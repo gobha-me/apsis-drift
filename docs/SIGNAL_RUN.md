@@ -1,91 +1,106 @@
-# Signal Run Acceptance Path
+# Home-Planet Signal Run
 
-The v0.4 Signal Run composes the deterministic origin station, planetary
-flight, generated surface signals, scanner, collection state machine, sparse
-world journal, and atomic save loader into one application-owned objective.
-Terminal protocols and degradation remain TermForge-owned.
+The v0.4.32 Signal Run is Guided onboarding contract one. It composes the
+deterministic Origin Station, origin-system flight, tutorial-safe home planet,
+planetary regimes, scanner, collection journal, moving-station rendezvous, and
+atomic save loader into one application-owned objective. Terminal protocols
+and degradation remain TermForge-owned.
 
-## Playable loop
+## Contract binding and progression
 
-A fresh profile starts docked at its generated Origin Station. Select
-`ACCEPT BRIEFING`, then `LAUNCH`. The briefing binds the first compatibility-
-ordered signal and records it as the sole initial discovery. In flight:
+The contract is regenerated from independent deterministic streams. For one
+universe seed it binds exactly one stable contract ID, the existing Origin
+Station, the tutorial-safe home planet, and surface-signal ordinal zero. It
+does not reroll terrain, reorder the signal catalog, or consume mutable
+discovery state.
 
-- steer with arrows or W/A/S/D, strafe with Q/E, and descend/ascend with F/R;
-- the cockpit reports target bearing, distance, signed closing speed, arrival
-  estimate, braking cue, strength, and scan progress;
-- orbital flight coasts when thrust is released; use opposing W/S or R/F
-  thrust to brake before the target;
-- remain within 1,000 metres through acquisition and scan completion;
-- after collection, follow the textual Origin Station distance cue, ascend to
-  the orbital regime, and press Enter after `RENDEZVOUS` appears;
-- exit cleanly to write the projected state when `--save PATH` was supplied.
+The authoritative local objective progresses only through:
 
-Loading an in-flight profile restores the exact craft, objective target,
-discovery list, and compact world-delta journal before terminal startup. A
-restored collected objective is terminal: it cannot emit the collected delta
-again. A returned profile is docked with no active flight state while retaining
-the completed objective, discovery, and collected delta.
+```text
+offered -> active -> completed -> returned -> turned_in
+```
 
-The rendezvous is an explicit planet-relative waypoint derived from the
-independent Origin Station identity and the active first target. It is neither
-the system barycenter nor a procedural parent of planet, terrain, or signal
-generation.
+Acceptance occurs while docked. Launch creates a real station-relative craft.
+Moving outside the 5 km docking envelope and pressing Enter hands the craft's
+physical system-space position to home Planetfall. Collection changes the
+objective to `completed`; ascent returns to orbital flight, then the physical
+planetary departure initializes a station-relative approach to the station's
+current analytic waypoint. Docking changes the objective to `returned`, and an
+explicit station turn-in changes it to `turned_in` and advances Guided
+onboarding atomically to contract two.
 
-## v0.4.3 acceptance matrix
+Redocking before Planetfall leaves the accepted objective active. The flight
+check may therefore be completed, ignored, or repeated without falsely
+advancing mission state. Flying away costs time but never moves or rerolls the
+bound target.
 
-Seed `42` produces station `station-ce51e866ec4e032d` and target
-`signal-71d4c959dcd64423`. Its initial three-dimensional range is 87,889.861
-metres. The canonical deterministic guidance replay launches at tick 0, reloads
-an in-flight checkpoint at tick 600, enters atmosphere at tick 3725, enters
-terrain flight at tick 15233, reaches the signal at tick 15294, completes
-collection at tick 15713, and returns to the orbital rendezvous at tick 38890.
-The checkpoint and reload both have flight checksum
-`14947176626171235385`; the return flight checksum is
-`11922358221174102146`.
+## Contextual flight check
 
-The v0.4.3 matrix repeats the full launch, collection, return, and docking path
-across airless, temperate, and dense atmosphere classes. Atmospheric descent
-must enter terrain flight within 120 seconds, stored flight states must retain
-at least 16 metres of terrain clearance, and each approach must produce a
-nonzero atmospheric framebuffer checksum.
+The station briefing presents every required concept before launch: A/D
+attitude, Q/E translation, R/F vertical translation, W thrust, released-input
+coast, S braking, Enter targeting/Planetfall, and the later Enter redock. The
+cockpit then advances contextual prompts only after observing those real input
+commands. It never disables unrelated controls or gates mission progress on
+the prompts.
 
-| Seed | Atmosphere class | Atmosphere tick | Terrain | Target | Complete | Return | Minimum clearance |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | airless | 3725 | 15233 | 15294 | 15713 | 38890 | 1972.975030 m |
-| 12648430 | temperate | 3736 | 15722 | 15983 | 16402 | 40571 | 1723.154200 m |
-| 1 | dense | 4086 | 16013 | 16615 | 17034 | 34545 | 1974.678256 m |
+Observed prompt history is presentation-only. It is excluded from save
+projection, simulation checksums, generation, and mission state, so a reload
+may repeat useful guidance without changing the career. The same semantic
+COMMS and instrument text is drawn into the application framebuffer before
+Kitty or ANSI presentation.
 
-A separate seed-`12648430` safety probe holds forward and fall controls for
-120,000 fixed ticks (1,000 seconds). It must remain valid while crossing rising
-terrain, maintain the exact 16 metre contact floor, and produce authoritative
-flight checksum `18312514460843648054`.
+## Planetfall and return rules
 
-### First-launch pacing
+Assisted and Pilot share the same physical route and immutable target.
+Planetfall begins in a bounded orbital state derived from the station craft;
+the player can take an early or opposite-side entry and continue around the
+home planet. The acceptance guidance holds orbital altitude until the target
+corridor is near, then crosses orbital, atmospheric, and terrain regimes.
 
-The pacing target is an atmospheric handoff within 35 seconds and target
-arrival within 150 seconds, without moving the generated rendezvous or signal.
-The deterministic probe measures 90% cruise acceleration and counter-thrust
-braking through zero from the same launch state.
+Pilot retains the implemented thermal load and forced-abort rules. Its starter
+guidance reacts to rising load by braking and climbing until the craft cools,
+then resumes entry. The contract remains completable without suppressing or
+rewriting Pilot consequences. Assisted reports the same thermal information
+without enforcing an abort.
 
-| Seed-42 measurement | v0.4.0 | v0.4.1–v0.4.3 |
-| --- | ---: | ---: |
-| First authoritative motion | tick 1 | tick 1 |
-| 90% orbital acceleration | 4.50 s | 3.60 s |
-| Counter-thrust braking | 4.50 s | 3.61 s |
-| Atmospheric handoff | 101.40 s | 31.04 s |
-| Target reached | 202.53 s | 127.45 s |
-| Collection complete | 206.02 s | 130.94 s |
-| Orbital return | 443.09 s | 324.08 s |
+After collection, R ascends to the orbital regime. Enter creates a physical
+station-return state from the planetary departure pose and velocity. The home
+contract uses a bounded high-speed station-flight envelope for the long local
+transfer; the established intersystem station-flight envelope is unchanged.
+Autopilot continuously resolves the moving station and brakes to the inclusive
+5 km / 25 m/s docking boundary.
 
-The tuned orbital envelope is 4,000 m/s horizontal, 2,000 m/s vertical, and
-1,000 m/s² acceleration/braking. The replay peaks at 4,472.136 m/s total
-speed. Textual thrust, coast, closing/opening, ETA, and `BRAKE NOW` cues are
-available in both presentations; deterministic velocity streaks and the
-thrust marker provide immediate pixel-space motion feedback without entering
-simulation state.
+## v0.4.32 acceptance matrix
 
-Run the renderer-neutral matrix at both retained render profiles:
+Seed `42` binds:
+
+- station `station-ce51e866ec4e032d`;
+- contract `contract-b9e5a14a1d979f3a`;
+- home signal `signal-71d4c959dcd64423`.
+
+The schema-6 renderer-neutral report runs the complete Assisted route for
+seeds `42`, `12648430`, and `1`, then completes seed `42` under Pilot thermal
+rules. All generated tutorial homes are temperate by contract. The report
+records nonzero thermal, planetary, return-flight, and framebuffer evidence.
+
+The canonical run verifies exact save/encode/decode/hydrate equivalence at
+eight ordered boundaries:
+
+1. accepted while docked;
+2. station flight;
+3. home orbit;
+4. atmospheric flight;
+5. terrain flight;
+6. objective complete;
+7. ascent back to orbit;
+8. moving-station rendezvous.
+
+It also writes and reloads a private same-directory checkpoint at planetary
+tick 600, compares the authoritative flight and framebuffer checksums, and
+removes the private file. Invalid viewports and missing report destinations
+fail before allocation.
+
+Run both retained render profiles with:
 
 ```bash
 ./build/apsis-drift --signal-run-acceptance \
@@ -94,16 +109,6 @@ Run the renderer-neutral matrix at both retained render profiles:
   --profile remote --report signal-run-remote.json
 ```
 
-The mode writes and reloads a private same-directory checkpoint during the
-canonical seed's first orbital leg, verifies the complete semantic document
-and flight checksum, removes the private checkpoint, runs every atmosphere
-class plus the long terrain-safety probe, returns each scenario to the station,
-and emits a versioned report. The checkpoint also requires identical local-sun
-geometry and framebuffer output after reload. Three fixed-seed solar
-checkpoints at ticks 66800, 72000, and 77200 verify visible, planet-occluded,
-and re-emerged states with identical direction semantics across render profiles.
-Schema 5 reports `evidence_scope: application_framebuffer`; this mode does not
-construct a Kitty or ANSI encoder.
-`--snapshot PATH` retains the canonical final
-pre-docking planetary frame for visual inspection. Rendering cadence, render
-profile, and framebuffer checksum never enter authoritative simulation.
+`--snapshot PATH` retains the canonical final pre-departure planetary frame
+for visual inspection. Rendering cadence, render profile, prompt history, and
+framebuffer checksums never enter authoritative simulation.

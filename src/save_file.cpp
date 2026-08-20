@@ -1,5 +1,9 @@
 #include "apsis_drift/save_file.hpp"
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -10,10 +14,6 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
-
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "save_file_internal.hpp"
 
@@ -278,13 +278,15 @@ auto make_new_game_document(Seed universe_seed,
 }
 
 auto make_legacy_signal_run_document(Seed universe_seed) -> SaveDocument {
+  const auto binding = generate_home_signal_contract(universe_seed);
   return SaveDocument{
       .recipe = make_save_recipe(universe_seed),
       .state =
           SaveMutableState{
               .location = OriginLocation::docked_at_origin,
               .first_objective = FirstObjectiveStatus::offered,
-              .first_objective_target = {},
+              .first_objective_contract = binding.contract,
+              .first_objective_target = binding.target,
               .flight = std::nullopt,
               .system_flight = std::nullopt,
               .origin_station_flight = std::nullopt,

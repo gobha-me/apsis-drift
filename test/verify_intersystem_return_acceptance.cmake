@@ -43,7 +43,7 @@ function(check_intersystem_return)
       NOT docking_tick STREQUAL "5929" OR
       NOT departure_checksum STREQUAL "15121722808198037731" OR
       NOT origin_arrival_checksum STREQUAL "6075957129980954659" OR
-      NOT docked_return_checksum STREQUAL "1010482090975392435" OR
+      NOT docked_return_checksum STREQUAL "1077216484693038431" OR
       NOT discovery_count STREQUAL "1" OR
       NOT world_delta_count STREQUAL "1" OR
       NOT framebuffer_checksum STREQUAL "7194522011593911474")

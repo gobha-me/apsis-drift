@@ -37,12 +37,16 @@ Guided is the default `NewGameOnboardingChoice`. Skip must be supplied only
 while constructing a new career; no API converts an existing Guided career to
 Skipped. The full title setup and confirmation UX remain owned by #137.
 
-Save format 14 stores the state and nullable chapter in every career
+Save format 15 stores the state and nullable chapter in every career
 projection. Invalid enums, Guided without a chapter, Skipped/Completed with a
 chapter, and Completed with an unfinished authored intersystem contract are
-rejected before live state is replaced. Formats 1 through 13 are unsupported
+rejected before live state is replaced. Guided contract two additionally
+requires the home Signal Run to be explicitly turned in. Formats 1 through 14 are unsupported
 alpha saves and remain untouched when rejected.
 
-The home-planet, origin-system, and first-jump contract implementations remain
-owned by #144, #146, and #140 respectively. This boundary is deliberately not
-a generic tutorial, mission, knowledge, or campaign engine.
+Contract one is the home-planet Signal Run owned by #144. Its contextual
+flight-check observations are presentation-only and cannot advance this state;
+only an explicit dock and turn-in advances Guided to contract two. The later
+origin-system and first-jump contracts remain owned by #146 and #140. This
+boundary is deliberately not a generic tutorial, mission, knowledge, or
+campaign engine.

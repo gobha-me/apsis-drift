@@ -237,7 +237,8 @@ struct Replay {
         IntersystemPlanetfallAcceptanceError::incomplete_path};
   }
   contract.universe_tick = forced->tick;
-  auto document = make_new_game_document(universe_seed);
+  auto document =
+      make_new_game_document(universe_seed, NewGameOnboardingChoice::skip);
   document.state.intersystem_contract = contract;
   document.state.flight = *forced;
   const auto encoded = encode_save_document_json(document);
@@ -395,7 +396,8 @@ struct Replay {
       if (!contract) return std::unexpected{contract.error()};
       contract->universe_tick = state.flight.tick;
       auto document =
-          make_new_game_document(Seed{kIntersystemPlanetfallAcceptanceSeed});
+          make_new_game_document(Seed{kIntersystemPlanetfallAcceptanceSeed},
+                                 NewGameOnboardingChoice::skip);
       document.state.intersystem_contract = *contract;
       document.state.flight = state.flight;
       const auto encoded = encode_save_document_json(document);

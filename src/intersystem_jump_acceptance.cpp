@@ -22,7 +22,8 @@ struct PilotArrival {
 [[nodiscard]] auto run_pilot_arrival(
     IntersystemJumpAlignmentState alignment, bool persist_at_commit)
     -> std::expected<PilotArrival, IntersystemJumpAcceptanceError> {
-  auto document = make_new_game_document(Seed{kIntersystemJumpAcceptanceSeed});
+  auto document = make_new_game_document(Seed{kIntersystemJumpAcceptanceSeed},
+                                         NewGameOnboardingChoice::skip);
   if (!document.state.intersystem_contract) {
     return std::unexpected{
         IntersystemJumpAcceptanceError::transition_failure};
@@ -120,7 +121,8 @@ auto run_intersystem_jump_acceptance(int width, int height)
     return std::unexpected{
         IntersystemJumpAcceptanceError::invalid_configuration};
   }
-  auto document = make_new_game_document(Seed{kIntersystemJumpAcceptanceSeed});
+  auto document = make_new_game_document(Seed{kIntersystemJumpAcceptanceSeed},
+                                         NewGameOnboardingChoice::skip);
   if (!document.state.intersystem_contract) {
     return std::unexpected{
         IntersystemJumpAcceptanceError::transition_failure};

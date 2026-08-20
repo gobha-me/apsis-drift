@@ -15,8 +15,11 @@ namespace {
     -> PlanetDescriptor {
   const auto system = derive_seed(recipe.universe_seed, SeedDomain::system,
                                   recipe.origin_system_ordinal);
-  const auto planet = derive_seed(system, SeedDomain::planet,
-                                  recipe.active_planet_ordinal);
+  if (recipe.active_planet_ordinal == kOriginHomePlanetOrdinal) {
+    return generate_origin_home_planet(system);
+  }
+  const auto planet =
+      derive_seed(system, SeedDomain::planet, recipe.active_planet_ordinal);
   return generate_planet_descriptor(planet);
 }
 
@@ -128,12 +131,16 @@ namespace {
 [[nodiscard]] auto consistent_loaded_state(const SignalRunState& state)
     -> bool {
   const auto status = state.onboarding.first_objective;
+  const bool guided_contract_one =
+      state.career &&
+      state.career_onboarding.state == OnboardingState::guided &&
+      state.career_onboarding.chapter == OnboardingChapter::contract_one;
   const bool has_target = state.scanner.selected.has_value();
   if (status == FirstObjectiveStatus::offered) {
-    return !has_target && state.onboarding.location ==
-                              OriginLocation::docked_at_origin &&
-           !state.flight && state.discoveries.empty() &&
-           state.journal.entries().empty();
+    return !has_target &&
+           state.onboarding.location == OriginLocation::docked_at_origin &&
+           !state.flight && !state.station_flight &&
+           state.discoveries.empty() && state.journal.entries().empty();
   }
   if (!has_target || signal_for(state.catalog, *state.scanner.selected) ==
                          nullptr) {
@@ -146,14 +153,21 @@ namespace {
   if (!target_discovered) return false;
   const auto target_key = surface_signal_object_key(*state.scanner.selected);
   const auto* delta = state.journal.state(target_key);
-  const bool collected = delta != nullptr &&
-                         delta->kind == SaveWorldDeltaKind::collected;
-  if (status == FirstObjectiveStatus::completed && !collected) return false;
+  const bool collected =
+      delta != nullptr && delta->kind == SaveWorldDeltaKind::collected;
+  const bool complete = status == FirstObjectiveStatus::completed ||
+                        status == FirstObjectiveStatus::returned ||
+                        status == FirstObjectiveStatus::turned_in;
+  if (complete && !collected) return false;
   if (status == FirstObjectiveStatus::active && collected) return false;
   if (state.onboarding.location == OriginLocation::in_flight) {
-    return state.flight.has_value();
+    return state.flight.has_value() != state.station_flight.has_value();
   }
-  return !state.flight;
+  if (state.flight || state.station_flight) return false;
+  if (guided_contract_one) {
+    return status != FirstObjectiveStatus::turned_in;
+  }
+  return true;
 }
 
 }  // namespace
@@ -195,13 +209,18 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
 
   SignalRunState state{
       .recipe = document.recipe,
+      .career_onboarding = document.state.onboarding,
       .onboarding = {document.recipe.origin_station,
-                     document.state.location,
-                     document.state.first_objective},
+                     document.state.first_objective_contract,
+                     document.state.first_objective_target,
+                     document.state.location, document.state.first_objective},
+      .career = document.state.intersystem_contract,
+      .origin_system = generate_origin_system(document.recipe.universe_seed),
       .planet = std::move(planet),
       .catalog = std::move(*catalog),
       .rendezvous = std::nullopt,
       .flight = document.state.flight,
+      .station_flight = document.state.origin_station_flight,
       .scanner = {},
       .signal_navigation = {},
       .origin_navigation = std::nullopt,
@@ -209,13 +228,21 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
       .collection = {},
       .discoveries = document.state.discoveries,
   };
+  const auto binding =
+      generate_home_signal_contract(document.recipe.universe_seed);
+  if (state.onboarding.first_contract != binding.contract ||
+      state.onboarding.first_target != binding.target ||
+      state.onboarding.origin_station != binding.station ||
+      state.planet->id != binding.home_planet) {
+    return std::unexpected{SignalRunError::invalid_target};
+  }
   if (document.state.first_objective != FirstObjectiveStatus::offered) {
     state.scanner.selected = document.state.first_objective_target;
-    auto rendezvous = derive_rendezvous(state);
-    if (!rendezvous) return std::unexpected{rendezvous.error()};
-    state.rendezvous = *rendezvous;
-  } else if (document.state.first_objective_target.value != 0) {
-    return std::unexpected{SignalRunError::inconsistent_state};
+    if (!state.career) {
+      auto rendezvous = derive_rendezvous(state);
+      if (!rendezvous) return std::unexpected{rendezvous.error()};
+      state.rendezvous = *rendezvous;
+    }
   }
   if (!consistent_loaded_state(state)) {
     return std::unexpected{SignalRunError::inconsistent_state};
@@ -240,11 +267,13 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
                                      *state.scanner.selected))
                                  ->tick,
       };
-      auto origin = local_navigation(*state.planet, *state.flight,
-                                     state.rendezvous->position,
-                                     state.rendezvous->arrival_radius_metres);
-      if (!origin) return std::unexpected{origin.error()};
-      state.origin_navigation = *origin;
+      if (state.rendezvous) {
+        auto origin = local_navigation(*state.planet, *state.flight,
+                                       state.rendezvous->position,
+                                       state.rendezvous->arrival_radius_metres);
+        if (!origin) return std::unexpected{origin.error()};
+        state.origin_navigation = *origin;
+      }
     }
   }
   return state;
@@ -258,19 +287,44 @@ auto accept_signal_run(SignalRunState& state)
           OriginOnboardingCommand::accept_first_objective)) {
     return std::unexpected{SignalRunError::invalid_transition};
   }
-  next.scanner.selected = next.catalog.signals.front().id;
-  next.discoveries.push_back({*next.scanner.selected, 0});
-  auto rendezvous = derive_rendezvous(next);
-  if (!rendezvous) {
-    return std::unexpected{rendezvous.error()};
+  if (signal_for(next.catalog, next.onboarding.first_target) == nullptr) {
+    return std::unexpected{SignalRunError::invalid_target};
   }
-  next.rendezvous = *rendezvous;
+  next.scanner.selected = next.onboarding.first_target;
+  const SimulationTick tick = next.career ? next.career->universe_tick : 0;
+  next.discoveries.push_back({*next.scanner.selected, tick});
+  if (!next.career) {
+    auto rendezvous = derive_rendezvous(next);
+    if (!rendezvous) {
+      return std::unexpected{rendezvous.error()};
+    }
+    next.rendezvous = *rendezvous;
+  }
   state = std::move(next);
   return {};
 }
 
 auto launch_signal_run(SignalRunState& state, TerrainTileCache& cache)
     -> std::expected<void, SignalRunError> {
+  if (state.career) {
+    auto next = state;
+    auto onboarding = next.onboarding;
+    if (!advance_origin_onboarding(onboarding,
+                                   OriginOnboardingCommand::launch)) {
+      return std::unexpected{SignalRunError::invalid_transition};
+    }
+    auto station_flight = initialize_origin_station_launch(
+        next.recipe.universe_seed, next.career->universe_tick,
+        next.origin_system);
+    if (!station_flight) {
+      return std::unexpected{SignalRunError::flight_failure};
+    }
+    next.onboarding = onboarding;
+    next.station_flight = std::move(*station_flight);
+    next.flight.reset();
+    state = std::move(next);
+    return {};
+  }
   if (!state.rendezvous) {
     return std::unexpected{SignalRunError::invalid_transition};
   }
@@ -306,6 +360,150 @@ auto launch_signal_run(SignalRunState& state, TerrainTileCache& cache)
   return {};
 }
 
+auto begin_signal_run_planetfall(SignalRunState& state, TerrainTileCache& cache)
+    -> std::expected<void, SignalRunError> {
+  (void)cache;
+  if (!state.career || !state.station_flight || state.flight ||
+      state.onboarding.first_objective != FirstObjectiveStatus::active ||
+      state.onboarding.location != OriginLocation::in_flight) {
+    return std::unexpected{SignalRunError::invalid_transition};
+  }
+  const auto station_guidance = resolve_origin_station_flight_guidance(
+      state.recipe.universe_seed, state.career->universe_tick,
+      state.origin_system, *state.station_flight);
+  const auto pose = resolve_origin_station_flight_pose(
+      state.recipe.universe_seed, state.career->universe_tick,
+      state.origin_system, *state.station_flight);
+  const auto home = resolve_planet_ephemeris(
+      state.origin_system, state.recipe.home_planet,
+      {.tick = state.career->universe_tick, .sub_tick_fraction = 0.0});
+  if (!station_guidance || station_guidance->arrived || !pose || !home) {
+    return std::unexpected{SignalRunError::invalid_transition};
+  }
+  const double dx = home->position.x - pose->position.x;
+  const double dy = home->position.y - pose->position.y;
+  const double dz = home->position.z - pose->position.z;
+  const double magnitude = std::hypot(dx, dy, dz);
+  if (!std::isfinite(magnitude) || magnitude <= 1.0e-9) {
+    return std::unexpected{SignalRunError::navigation_failure};
+  }
+  SystemDirection forward{dx / magnitude, dy / magnitude, dz / magnitude};
+  auto up = state.station_flight->up;
+  const double alignment =
+      forward.x * up.x + forward.y * up.y + forward.z * up.z;
+  if (std::abs(alignment) > 0.95) up = {0.0, 1.0, 0.0};
+  SystemFlightState approach{
+      .tick = state.career->universe_tick,
+      .system = state.origin_system.id,
+      .target = state.recipe.home_planet,
+      .position = pose->position,
+      // Preserve the physical station-flight position while matching the
+      // host's inertial velocity. The generated station orbit is
+      // presentation-scale rather than a physically integrated launch
+      // velocity, so it does not enter the bounded starter-entry corridor.
+      .velocity = home->velocity,
+      .forward = forward,
+      .up = up,
+      .mode = FlightMode::manual,
+      .controls = {},
+      .time_scale = SystemTimeScale::one,
+  };
+  auto flight = insert_system_flight_orbit(state.origin_system, approach);
+  if (!flight) return std::unexpected{SignalRunError::flight_failure};
+  auto navigation = resolve_signal_navigation(*state.planet, state.catalog,
+                                              *flight, state.scanner);
+  if (!navigation) {
+    return std::unexpected{SignalRunError::navigation_failure};
+  }
+  auto next = state;
+  next.guidance.targeting_observed = true;
+  next.flight = std::move(*flight);
+  next.station_flight.reset();
+  next.signal_navigation = *navigation;
+  next.collection = {};
+  state = std::move(next);
+  return {};
+}
+
+auto advance_signal_run_station_flight(SignalRunState& state,
+                                       std::span<const FlightCommand> commands)
+    -> std::expected<void, SignalRunError> {
+  if (!state.career || !state.station_flight || state.flight ||
+      state.onboarding.location != OriginLocation::in_flight) {
+    return std::unexpected{SignalRunError::invalid_transition};
+  }
+  auto next = state;
+  if (!advance_origin_station_flight(
+          next.recipe.universe_seed, next.career->universe_tick,
+          next.origin_system, *next.station_flight, commands) ||
+      !advance_intersystem_time(*next.career, 1)) {
+    return std::unexpected{SignalRunError::flight_failure};
+  }
+  for (const auto& command : commands) {
+    switch (command.kind) {
+      case FlightCommandKind::press_turn_left:
+      case FlightCommandKind::press_turn_right:
+        next.guidance.attitude_observed = true;
+        break;
+      case FlightCommandKind::press_strafe_left:
+      case FlightCommandKind::press_strafe_right:
+      case FlightCommandKind::press_rise:
+      case FlightCommandKind::press_fall:
+        next.guidance.translation_observed = true;
+        break;
+      case FlightCommandKind::press_forward:
+        next.guidance.thrust_observed = true;
+        break;
+      case FlightCommandKind::press_backward:
+        next.guidance.braking_observed = true;
+        break;
+      case FlightCommandKind::release_forward:
+      case FlightCommandKind::release_backward:
+        if (next.guidance.thrust_observed || next.guidance.braking_observed) {
+          next.guidance.coast_observed = true;
+        }
+        break;
+      case FlightCommandKind::toggle_autopilot:
+      case FlightCommandKind::decrease_time_scale:
+      case FlightCommandKind::increase_time_scale:
+      case FlightCommandKind::release_turn_left:
+      case FlightCommandKind::release_turn_right:
+      case FlightCommandKind::release_strafe_left:
+      case FlightCommandKind::release_strafe_right:
+      case FlightCommandKind::release_rise:
+      case FlightCommandKind::release_fall: break;
+    }
+  }
+  state = std::move(next);
+  return {};
+}
+
+auto depart_signal_run_home_planet(SignalRunState& state)
+    -> std::expected<void, SignalRunError> {
+  if (!state.career || !state.flight || state.station_flight ||
+      state.onboarding.first_objective != FirstObjectiveStatus::completed ||
+      state.flight->regime != FlightRegime::orbital) {
+    return std::unexpected{SignalRunError::invalid_transition};
+  }
+  const auto departure =
+      depart_planetary_orbit(state.origin_system, *state.flight);
+  auto station_flight =
+      departure
+          ? initialize_origin_station_approach(state.recipe.universe_seed,
+                                               state.origin_system, *departure)
+          : std::expected<OriginStationFlightState, OriginStationFlightError>{
+                std::unexpected{OriginStationFlightError::invalid_arrival}};
+  if (!departure || !station_flight) {
+    return std::unexpected{SignalRunError::flight_failure};
+  }
+  auto next = state;
+  next.flight.reset();
+  next.station_flight = std::move(*station_flight);
+  next.origin_navigation.reset();
+  state = std::move(next);
+  return {};
+}
+
 auto select_signal_run_target(SignalRunState& state,
                               SignalSelectionCommand command)
     -> std::expected<void, SignalRunError> {
@@ -336,8 +534,13 @@ auto advance_signal_run(SignalRunState& state, TerrainTileCache& cache,
   if (!environment) {
     return std::unexpected{environment.error()};
   }
+  const PlanetaryFlightRules rules{.enforce_thermal_abort =
+                                       next.career &&
+                                       next.career->rule_profile ==
+                                           IntersystemRuleProfile::pilot};
   if (!advance_planetary_flight(*next.planet, *environment, *next.flight,
-                                commands, kSimulationStep)) {
+                                commands, kSimulationStep, rules) ||
+      (next.career && !advance_intersystem_time(*next.career, 1))) {
     return std::unexpected{SignalRunError::flight_failure};
   }
   auto navigation = resolve_signal_navigation(
@@ -362,13 +565,15 @@ auto advance_signal_run(SignalRunState& state, TerrainTileCache& cache,
     }
   }
   if (next.onboarding.first_objective == FirstObjectiveStatus::completed) {
-    auto origin = local_navigation(*next.planet, *next.flight,
-                                   next.rendezvous->position,
-                                   next.rendezvous->arrival_radius_metres);
-    if (!origin) {
-      return std::unexpected{origin.error()};
+    if (next.rendezvous) {
+      auto origin = local_navigation(*next.planet, *next.flight,
+                                     next.rendezvous->position,
+                                     next.rendezvous->arrival_radius_metres);
+      if (!origin) {
+        return std::unexpected{origin.error()};
+      }
+      next.origin_navigation = *origin;
     }
-    next.origin_navigation = *origin;
   }
   state = std::move(next);
   return {};
@@ -376,6 +581,29 @@ auto advance_signal_run(SignalRunState& state, TerrainTileCache& cache,
 
 auto return_signal_run_to_origin(SignalRunState& state)
     -> std::expected<void, SignalRunError> {
+  if (state.career) {
+    if (!state.station_flight || state.flight) {
+      return std::unexpected{SignalRunError::invalid_transition};
+    }
+    const auto guidance = resolve_origin_station_flight_guidance(
+        state.recipe.universe_seed, state.career->universe_tick,
+        state.origin_system, *state.station_flight);
+    if (!guidance || !guidance->arrived) {
+      return std::unexpected{SignalRunError::invalid_transition};
+    }
+    auto next = state;
+    const auto command =
+        next.onboarding.first_objective == FirstObjectiveStatus::active
+            ? OriginOnboardingCommand::redock
+            : OriginOnboardingCommand::dock_at_origin;
+    if (!advance_origin_onboarding(next.onboarding, command)) {
+      return std::unexpected{SignalRunError::invalid_transition};
+    }
+    next.guidance.redocking_observed = true;
+    next.station_flight.reset();
+    state = std::move(next);
+    return {};
+  }
   if (!state.flight || !state.origin_navigation ||
       state.flight->regime != FlightRegime::orbital ||
       !state.origin_navigation->arrived) {
@@ -383,12 +611,31 @@ auto return_signal_run_to_origin(SignalRunState& state)
   }
   auto onboarding = state.onboarding;
   if (!advance_origin_onboarding(onboarding,
-                                 OriginOnboardingCommand::return_to_origin)) {
+                                 OriginOnboardingCommand::dock_at_origin)) {
     return std::unexpected{SignalRunError::invalid_transition};
   }
   state.onboarding = onboarding;
   state.flight.reset();
   state.origin_navigation.reset();
+  return {};
+}
+
+auto turn_in_signal_run(SignalRunState& state)
+    -> std::expected<void, SignalRunError> {
+  auto next = state;
+  if (!advance_origin_onboarding(next.onboarding,
+                                 OriginOnboardingCommand::turn_in)) {
+    return std::unexpected{SignalRunError::invalid_transition};
+  }
+  if (next.career) {
+    if (next.career_onboarding.state != OnboardingState::guided ||
+        next.career_onboarding.chapter != OnboardingChapter::contract_one ||
+        !advance_onboarding(next.career_onboarding,
+                            OnboardingCommand::complete_contract_one)) {
+      return std::unexpected{SignalRunError::invalid_transition};
+    }
+  }
+  state = std::move(next);
   return {};
 }
 
@@ -398,17 +645,18 @@ auto project_signal_run_save(const SignalRunState& state)
       .recipe = state.recipe,
       .state =
           SaveMutableState{
+              .onboarding = state.career_onboarding,
               .location = state.onboarding.location,
               .first_objective = state.onboarding.first_objective,
-              .first_objective_target =
-                  state.scanner.selected.value_or(SurfaceSignalId{}),
+              .first_objective_contract = state.onboarding.first_contract,
+              .first_objective_target = state.onboarding.first_target,
               .flight = state.flight,
               .system_flight = std::nullopt,
-              .origin_station_flight = std::nullopt,
+              .origin_station_flight = state.station_flight,
               .discoveries = state.discoveries,
               .world_deltas = {state.journal.entries().begin(),
                                state.journal.entries().end()},
-              .intersystem_contract = std::nullopt,
+              .intersystem_contract = state.career,
           },
   };
   if (!consistent_loaded_state(state) || !validate_save_document(document)) {

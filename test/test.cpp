@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -14,8 +16,6 @@
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include <unistd.h>
 
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/celestial.hpp"
@@ -742,7 +742,8 @@ auto intersystem_jump_contract() -> void {
       generate_local_system(state.identities.target_system_seed);
   const auto persists_exactly = [&target](
                                     const IntersystemContractState& expected) {
-    auto document = make_new_game_document(Seed{42});
+    auto document =
+        make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
     document.state.intersystem_contract = expected;
     if (expected.travel_phase == IntersystemTravelPhase::origin_system_flight ||
         expected.travel_phase ==
@@ -856,7 +857,8 @@ auto intersystem_jump_contract() -> void {
                                      std::span<Pixel>{jump_frame}.first(10)),
         "jump rendering must be deterministic and reject invalid dimensions or buffers");
 
-  auto checkpoint = make_new_game_document(Seed{42});
+  auto checkpoint =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   checkpoint.state.intersystem_contract = state;
   const auto encoded_checkpoint = encode_save_document_json(checkpoint);
   const auto decoded_checkpoint =
@@ -865,11 +867,12 @@ auto intersystem_jump_contract() -> void {
                                std::unexpected{SaveSchemaError{}}};
   check(decoded_checkpoint &&
             decoded_checkpoint->state.intersystem_contract == state,
-        "a committed arrival solution must survive a canonical v14 round trip");
+        "a committed arrival solution must survive a canonical v15 round trip");
 
   auto missing_arrival = state;
   missing_arrival.arrival_solution.reset();
-  auto missing_document = make_new_game_document(Seed{42});
+  auto missing_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   missing_document.state.intersystem_contract = missing_arrival;
   const auto missing_encoded = encode_save_document_json(missing_document);
   check(!validate_intersystem_contract_state(missing_arrival) &&
@@ -881,7 +884,8 @@ auto intersystem_jump_contract() -> void {
   auto finite_tamper = state;
   finite_tamper.arrival_solution->position.x += 1.0;
   const auto finite_tamper_before = finite_tamper;
-  auto tampered_document = make_new_game_document(Seed{42});
+  auto tampered_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   tampered_document.state.intersystem_contract = finite_tamper;
   const auto tampered_encoded = encode_save_document_json(tampered_document);
   check(validate_intersystem_contract_state(finite_tamper) &&
@@ -1586,7 +1590,8 @@ auto system_flight_contract() -> void {
 
   auto saved_contract = contract;
   saved_contract.universe_tick = ready.tick;
-  auto document = make_new_game_document(Seed{42});
+  auto document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   document.state.intersystem_contract = saved_contract;
   document.state.system_flight = ready;
   const auto encoded = encode_save_document_json(document);
@@ -1597,11 +1602,11 @@ auto system_flight_contract() -> void {
             decoded->state.intersystem_contract == saved_contract &&
             system_flight_state_checksum(*decoded->state.system_flight) ==
                 system_flight_state_checksum(ready),
-        "system flight must survive canonical v14 save/resume exactly");
+        "system flight must survive canonical v15 save/resume exactly");
 }
 
 auto intersystem_return_contract() -> void {
-  check(kOriginStationFlightVersion == 3 &&
+  check(kOriginStationFlightVersion == 4 &&
             !run_intersystem_return_acceptance(0, 64) &&
             !run_intersystem_return_acceptance(
                 std::numeric_limits<int>::max(), 1),
@@ -1767,7 +1772,8 @@ auto intersystem_return_contract() -> void {
         "Pilot spool must bind the live craft yaw and relative speed into "
         "deterministic alignment");
 
-  auto spool_document = make_new_game_document(Seed{42});
+  auto spool_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   spool_document.state.intersystem_contract = live_spool;
   spool_document.state.origin_station_flight = *relaunched;
   const auto spool_json = encode_save_document_json(spool_document);
@@ -1778,7 +1784,7 @@ auto intersystem_return_contract() -> void {
   check(spool_round_trip &&
             spool_round_trip->state.intersystem_contract == live_spool &&
             spool_round_trip->state.origin_station_flight == relaunched,
-        "format 14 must preserve the frozen live craft throughout outbound "
+        "format 15 must preserve the frozen live craft throughout outbound "
         "spool");
   auto invalid_spool = spool_document;
   ++invalid_spool.state.origin_station_flight->tick;
@@ -1931,7 +1937,8 @@ auto intersystem_return_contract() -> void {
             std::unexpected{OriginStationFlightError::invalid_state},
         "station return state must reject the wrong stable station identity");
 
-  auto document = make_new_game_document(Seed{42});
+  auto document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   document.state.intersystem_contract = contract;
   document.state.origin_station_flight = *returning;
   document.state.world_deltas = {
@@ -1942,7 +1949,7 @@ auto intersystem_return_contract() -> void {
                                 : std::expected<SaveDocument, SaveSchemaError>{
                                       std::unexpected{SaveSchemaError{}}};
   check(restored && restored->state.origin_station_flight == returning,
-        "format 14 must preserve the exact origin-station approach state");
+        "format 15 must preserve the exact origin-station approach state");
 }
 
 auto intersystem_contract_acceptance_contract() -> void {
@@ -1952,9 +1959,9 @@ auto intersystem_contract_acceptance_contract() -> void {
         "contract-loop acceptance must reject invalid dimensions before allocation");
   const auto result = run_intersystem_contract_acceptance(96, 64);
   check(result && result->report.checkpoints.size() == 9U &&
-            result->report.final_tick == 32'075U &&
+            result->report.final_tick == 32'073U &&
             result->report.final_authoritative_checksum ==
-                4'317'126'435'439'109'687ULL &&
+                8'088'546'214'365'816'373ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -2049,7 +2056,8 @@ auto intersystem_planetfall_contract() -> void {
           .has_value();
   check(pilot_ready,
         "the thermal persistence fixture must reach Pilot Planetfall");
-  auto thermal_document = make_new_game_document(Seed{42});
+  auto thermal_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   thermal_document.state.intersystem_contract = pilot_contract;
   thermal_document.state.flight = planetfall->flight;
   thermal_document.state.flight->tick = pilot_contract.universe_tick;
@@ -2063,7 +2071,7 @@ auto intersystem_planetfall_contract() -> void {
   check(thermal_restored && thermal_restored->state.flight &&
             thermal_restored->state.flight->thermal ==
                 PlanetaryThermalState{825'000U, true},
-        "save format 14 must preserve an active Pilot thermal abort exactly");
+        "save format 15 must preserve an active Pilot thermal abort exactly");
   if (thermal_json) {
     const auto corrupt_thermal = decode_save_document_json(replace_once(
         *thermal_json, "\"load_units\": 825000",
@@ -2201,7 +2209,8 @@ auto mission_board_contract() -> void {
             std::unexpected{MissionBoardError::invalid_contract},
         "the mission board must reject corrupt deterministic references");
 
-  auto document = make_new_game_document(Seed{42});
+  auto document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   const auto fresh_json = encode_save_document_json(document);
   check(fresh_json &&
             decode_save_document_json(replace_once(
@@ -2212,7 +2221,8 @@ auto mission_board_contract() -> void {
                     "$.state.intersystem_contract.identities",
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
-  auto pilot_document = make_new_game_document(Seed{42});
+  auto pilot_document =
+      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   const auto selected = advance_intersystem_contract(
       *pilot_document.state.intersystem_contract, 0,
       IntersystemContractCommand::select_pilot_profile);
@@ -2227,7 +2237,7 @@ auto mission_board_contract() -> void {
             pilot_round_trip &&
             pilot_round_trip->state.intersystem_contract->rule_profile ==
                 IntersystemRuleProfile::pilot,
-        "format v14 must preserve the authoritative Pilot selection");
+        "format v15 must preserve the authoritative Pilot selection");
   if (pilot_json) {
     const auto invalid_profile = decode_save_document_json(replace_once(
         *pilot_json, "\"rule_profile\": \"pilot\"",
@@ -2237,7 +2247,7 @@ auto mission_board_contract() -> void {
                   SaveSchemaErrorCode::invalid_value &&
               invalid_profile.error().path ==
                   "$.state.intersystem_contract.rule_profile",
-          "format v14 must reject unknown rule profiles before state commit");
+          "format v15 must reject unknown rule profiles before state commit");
   }
   const auto round_trip = [&](const IntersystemContractState& checkpoint,
                               const char* message) {
@@ -2309,8 +2319,8 @@ auto mission_board_contract() -> void {
           message);
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
-             "offered intersystem state must survive a v14 round trip");
-  round_trip(state, "accepted intersystem state must survive a v14 round trip");
+             "offered intersystem state must survive a v15 round trip");
+  round_trip(state, "accepted intersystem state must survive a v15 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
@@ -2320,7 +2330,7 @@ auto mission_board_contract() -> void {
             command(IntersystemContractCommand::launch).has_value(),
         "the released-save fixture must launch with its historical Assisted "
         "profile");
-  round_trip(state, "active intersystem state must survive a v14 round trip");
+  round_trip(state, "active intersystem state must survive a v15 round trip");
   bool objective_ready = begin_intersystem_jump(state).has_value();
   const auto target_system =
       generate_local_system(state.identities.target_system_seed);
@@ -2337,11 +2347,11 @@ auto mission_board_contract() -> void {
         "the persistence fixture must reach objective completion legally");
   round_trip(
       state,
-      "objective-complete intersystem state must survive a v14 round trip");
+      "objective-complete intersystem state must survive a v15 round trip");
   auto inconsistent_completion = document;
   inconsistent_completion.state.world_deltas.clear();
   check(!encode_save_document_json(inconsistent_completion),
-        "format v14 completion must require its bound collected delta");
+        "format v15 completion must require its bound collected delta");
   bool returned =
       command(IntersystemContractCommand::leave_target_planet).has_value() &&
       begin_intersystem_jump(state).has_value();
@@ -2367,11 +2377,11 @@ auto mission_board_contract() -> void {
     returned = false;
   }
   check(returned, "the persistence fixture must return legally");
-  round_trip(state, "returned intersystem state must survive a v14 round trip");
+  round_trip(state, "returned intersystem state must survive a v15 round trip");
   check(command(IntersystemContractCommand::turn_in).has_value(),
         "the persistence fixture must turn in legally");
   round_trip(state,
-             "turned-in intersystem state must survive a v14 round trip");
+             "turned-in intersystem state must survive a v15 round trip");
 }
 
 auto local_system_contract() -> void {
@@ -3120,11 +3130,14 @@ auto origin_station_contract() -> void {
 
 auto origin_onboarding_contract() -> void {
   const auto station = generate_origin_station(Seed{42});
+  const auto binding = generate_home_signal_contract(Seed{42});
   auto state = initial_origin_onboarding_state(station);
-  check(state == OriginOnboardingState{station.id,
-                                        OriginLocation::docked_at_origin,
-                                        FirstObjectiveStatus::offered},
-        "a zero-discovery universe must begin docked with one offered objective");
+  check(
+      state == OriginOnboardingState{station.id, binding.contract,
+                                     binding.target,
+                                     OriginLocation::docked_at_origin,
+                                     FirstObjectiveStatus::offered},
+      "a zero-discovery universe must begin docked with one offered objective");
 
   const auto unchanged_on_failure = [&](OriginOnboardingCommand command,
                                         OriginOnboardingError error) {
@@ -3138,7 +3151,7 @@ auto origin_onboarding_contract() -> void {
                        OriginOnboardingError::invalid_transition);
   unchanged_on_failure(OriginOnboardingCommand::complete_first_objective,
                        OriginOnboardingError::invalid_transition);
-  unchanged_on_failure(OriginOnboardingCommand::return_to_origin,
+  unchanged_on_failure(OriginOnboardingCommand::dock_at_origin,
                        OriginOnboardingError::invalid_transition);
 
   check(advance_origin_onboarding(
@@ -3156,7 +3169,7 @@ auto origin_onboarding_contract() -> void {
         "launch must enter flight with the first objective active");
   unchanged_on_failure(OriginOnboardingCommand::launch,
                        OriginOnboardingError::invalid_transition);
-  unchanged_on_failure(OriginOnboardingCommand::return_to_origin,
+  unchanged_on_failure(OriginOnboardingCommand::dock_at_origin,
                        OriginOnboardingError::invalid_transition);
   check(advance_origin_onboarding(
             state, OriginOnboardingCommand::complete_first_objective)
@@ -3164,19 +3177,26 @@ auto origin_onboarding_contract() -> void {
             state.location == OriginLocation::in_flight &&
             state.first_objective == FirstObjectiveStatus::completed,
         "objective completion must remain in flight until return");
-  check(advance_origin_onboarding(
-            state, OriginOnboardingCommand::return_to_origin)
-            .has_value() &&
-            state.location == OriginLocation::docked_at_origin &&
-            state.first_objective == FirstObjectiveStatus::completed,
-        "return must finish docked at the stable origin station");
-  unchanged_on_failure(OriginOnboardingCommand::return_to_origin,
+  check(
+      advance_origin_onboarding(state, OriginOnboardingCommand::dock_at_origin)
+              .has_value() &&
+          state.location == OriginLocation::docked_at_origin &&
+          state.first_objective == FirstObjectiveStatus::returned,
+      "return must finish docked at the stable origin station");
+  unchanged_on_failure(OriginOnboardingCommand::dock_at_origin,
                        OriginOnboardingError::invalid_transition);
   unchanged_on_failure(OriginOnboardingCommand::launch,
                        OriginOnboardingError::invalid_transition);
+  check(advance_origin_onboarding(state, OriginOnboardingCommand::turn_in)
+                .has_value() &&
+            state.first_objective == FirstObjectiveStatus::turned_in,
+        "turn-in must remain distinct from physical return");
+  unchanged_on_failure(OriginOnboardingCommand::turn_in,
+                       OriginOnboardingError::invalid_transition);
 
-  OriginOnboardingState malformed{
-      station.id, OriginLocation::in_flight, FirstObjectiveStatus::offered};
+  OriginOnboardingState malformed{station.id, binding.contract, binding.target,
+                                  OriginLocation::in_flight,
+                                  FirstObjectiveStatus::offered};
   const auto malformed_before = malformed;
   const auto malformed_result = advance_origin_onboarding(
       malformed, OriginOnboardingCommand::accept_first_objective);
@@ -3186,8 +3206,8 @@ auto origin_onboarding_contract() -> void {
         "impossible onboarding combinations must fail without mutation");
 
   malformed = OriginOnboardingState{
-      station.id, static_cast<OriginLocation>(255),
-      FirstObjectiveStatus::active};
+      station.id, binding.contract, binding.target,
+      static_cast<OriginLocation>(255), FirstObjectiveStatus::active};
   const auto invalid_location_before = malformed;
   const auto invalid_location = advance_origin_onboarding(
       malformed, OriginOnboardingCommand::launch);
@@ -3308,7 +3328,8 @@ auto career_onboarding_contract() -> void {
             skipped_document.state.world_deltas.empty() &&
             skipped_document.state.first_objective ==
                 FirstObjectiveStatus::offered &&
-            skipped_document.state.first_objective_target.value == 0,
+            skipped_document.state.first_objective_contract.value != 0 &&
+            skipped_document.state.first_objective_target.value != 0,
         "Skip must preserve generated truth and add no fabricated history");
   const auto encoded_skip = encode_save_document_json(skipped_document);
   check(encoded_skip && decode_save_document_json(*encoded_skip) ==
@@ -3340,18 +3361,21 @@ auto career_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 14 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 15 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U) &&
             kMaximumSaveApplicationVersionBytes == 64,
-        "save format version 14 identity and bounds must remain stable");
+        "save format version 15 identity and bounds must remain stable");
   auto recipe = make_save_recipe(Seed{42});
-  const auto target = SurfaceSignalId{0x71d4c959dcd64423ULL};
+  const auto binding = generate_home_signal_contract(Seed{42});
+  const auto target = binding.target;
+  const auto target_key = surface_signal_object_key(target);
   SaveDocument expected{
       .recipe = recipe,
       .state =
           SaveMutableState{
               .location = OriginLocation::in_flight,
               .first_objective = FirstObjectiveStatus::active,
+              .first_objective_contract = binding.contract,
               .first_objective_target = target,
               .flight =
                   PlanetaryFlightState{
@@ -3372,9 +3396,8 @@ auto save_schema_contract() -> void {
               .system_flight = std::nullopt,
               .origin_station_flight = std::nullopt,
               .discoveries = {{target, 1100}},
-              .world_deltas =
-                  {{"signal-71d4c959dcd64423",
-                    SaveWorldDeltaKind::discovered, 1100}},
+              .world_deltas = {{target_key, SaveWorldDeltaKind::discovered,
+                                1100}},
               .intersystem_contract = std::nullopt,
           },
   };
@@ -3386,7 +3409,7 @@ auto save_schema_contract() -> void {
 
   const auto encoded = encode_save_document_json(expected);
   check(encoded &&
-            encoded->find("\"format_version\": 14") != std::string::npos &&
+            encoded->find("\"format_version\": 15") != std::string::npos &&
             encoded->find(std::format("\"application_version\": \"{}\"",
                                       kApplicationVersion)) !=
                 std::string::npos &&
@@ -3394,9 +3417,9 @@ auto save_schema_contract() -> void {
                 std::string::npos &&
             encoded->find("\"onboarding\":") != std::string::npos &&
             encoded->find("\"state\": \"guided\"") != std::string::npos &&
-            encoded->find("\"chapter\": \"contract_one\"") !=
-                std::string::npos,
-        "the current encoder must write canonical format-14 onboarding state with writer "
+            encoded->find("\"chapter\": \"contract_one\"") != std::string::npos,
+        "the current encoder must write canonical format-15 onboarding state "
+        "with writer "
         "provenance");
   const std::string fixture = encoded.value_or("{}");
   const auto decoded = decode_save_document_json(fixture);
@@ -3406,7 +3429,7 @@ auto save_schema_contract() -> void {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected &&
               encode_save_document_json(*round_trip) == encoded,
-          "save encode/decode/re-encode must preserve canonical format-14 "
+          "save encode/decode/re-encode must preserve canonical format-15 "
           "state exactly");
   }
   for (const auto chapter :
@@ -3418,7 +3441,7 @@ auto save_schema_contract() -> void {
     check(chapter_json && decode_save_document_json(*chapter_json) ==
                               std::expected<SaveDocument, SaveSchemaError>{
                                   chapter_document},
-          "every Guided chapter must survive a canonical format-14 round trip");
+          "every Guided chapter must survive a canonical format-15 round trip");
   }
 
   auto unknown = fixture;
@@ -3441,21 +3464,19 @@ auto save_schema_contract() -> void {
       };
   expect_semantic_decode_error(
       replace_once(fixture,
-                   "\"target_signal_id\": \"signal-71d4c959dcd64423\"",
+                   std::format("\"target_signal_id\": \"{}\"", target_key),
                    "\"target_signal_id\": \"signal-0000000000000001\""),
       SaveSchemaErrorCode::identity_mismatch,
       "$.state.first_objective.target_signal_id",
       "decode must reject an objective outside the generated signal catalog");
   expect_semantic_decode_error(
-      replace_once(fixture,
-                   "\"signal_id\": \"signal-71d4c959dcd64423\"",
+      replace_once(fixture, std::format("\"signal_id\": \"{}\"", target_key),
                    "\"signal_id\": \"signal-0000000000000001\""),
       SaveSchemaErrorCode::identity_mismatch,
       "$.state.discoveries[0].signal_id",
       "decode must reject an indexed discovery outside the generated catalog");
   expect_semantic_decode_error(
-      replace_once(fixture,
-                   "\"object_key\": \"signal-71d4c959dcd64423\"",
+      replace_once(fixture, std::format("\"object_key\": \"{}\"", target_key),
                    "\"object_key\": \"signal-0000000000000001\""),
       SaveSchemaErrorCode::identity_mismatch,
       "$.state.world_deltas[0].object_key",
@@ -3479,46 +3500,50 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::duplicate_key,
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 1"),
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 1"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-1 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 10"),
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 10"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-10 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 11"),
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 11"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-11 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 12"),
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 12"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-12 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 13"),
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 13"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-13 alpha saves must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 14"),
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "format-14 alpha saves must be rejected explicitly");
   expect_decode_error(
       "{\"application\":\"apsis-drift\",\"format_version\":10}",
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "old alpha formats must be identified before nested fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14", "\"format_version\": 15"),
+      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 16"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   const auto future_with_provenance = decode_save_document_json(replace_once(
-      fixture, "\"format_version\": 14", "\"format_version\": 15"));
+      fixture, "\"format_version\": 15", "\"format_version\": 16"));
   check(!future_with_provenance &&
             future_with_provenance.error().detail.find(kApplicationVersion) !=
                 std::string::npos,
         "unknown newer saves must identify valid writer provenance");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":15}",
+      "{\"application\":\"apsis-drift\",\"format_version\":16}",
       SaveSchemaErrorCode::unsupported_format_version,
       "future formats must be identified before current fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 14",
-                   "\"format_version\": \"14\""),
+      replace_once(fixture, "\"format_version\": 15",
+                   "\"format_version\": \"15\""),
       SaveSchemaErrorCode::invalid_type,
       "schema integers with the wrong JSON type must be rejected");
   expect_decode_error(replace_once(fixture, "\"application\": \"apsis-drift\"",
@@ -3528,7 +3553,7 @@ auto save_schema_contract() -> void {
   expect_decode_error(replace_once(fixture, "\"application_version\"",
                                    "\"missing_application_version\""),
                       SaveSchemaErrorCode::missing_field,
-                      "format 14 must require writer-version provenance");
+                      "format 15 must require writer-version provenance");
   expect_decode_error(
       replace_once(fixture,
                    std::format("\"application_version\": \"{}\"",
@@ -3898,11 +3923,14 @@ auto save_file_contract() -> void {
   const auto inconsistent_path = temporary.path() / "inconsistent.json";
   const auto signal_document = make_legacy_signal_run_document(Seed{42});
   const auto signal_json = encode_save_document_json(signal_document);
+  const auto signal_target =
+      surface_signal_object_key(signal_document.state.first_objective_target);
   const auto inconsistent_fixture =
       signal_json
-          ? replace_once(*signal_json,
-                         "\"target_signal_id\": \"signal-0000000000000000\"",
-                         "\"target_signal_id\": \"signal-0000000000000001\"")
+          ? replace_once(
+                *signal_json,
+                std::format("\"target_signal_id\": \"{}\"", signal_target),
+                "\"target_signal_id\": \"signal-0000000000000001\"")
           : std::string{};
   check(write_test_file(inconsistent_path, inconsistent_fixture),
         "the inconsistent semantic save fixture must be writable");
@@ -3911,7 +3939,7 @@ auto save_file_contract() -> void {
             inconsistent.error().code == SaveFileErrorCode::invalid_document &&
             inconsistent.error().schema_error &&
             inconsistent.error().schema_error->code ==
-                SaveSchemaErrorCode::invalid_state &&
+                SaveSchemaErrorCode::identity_mismatch &&
             inconsistent.error().schema_error->path ==
                 "$.state.first_objective.target_signal_id",
         "file loading must reject inconsistent Signal Run state before commit");
@@ -4025,8 +4053,7 @@ auto signal_run_contract() -> void {
         "an arrived completed craft must return to the origin station");
   const auto returned = project_signal_run_save(*resumed);
   check(returned.has_value() && !returned->state.flight &&
-            returned->state.first_objective ==
-                FirstObjectiveStatus::completed &&
+            returned->state.first_objective == FirstObjectiveStatus::returned &&
             returned->state.world_deltas.size() == 1,
         "the returned save must retain mission and sparse world state");
 
@@ -4040,6 +4067,41 @@ auto signal_run_contract() -> void {
   check(hydrate_signal_run(invalid, *cache) ==
             std::unexpected{SignalRunError::invalid_document},
         "an objective missing its discovery must fail at the schema boundary");
+
+  const auto career_document = make_new_game_document(Seed{42});
+  auto career_cache = TerrainTileCache::create();
+  auto career = career_cache
+                    ? hydrate_signal_run(career_document, *career_cache)
+                    : std::expected<SignalRunState, SignalRunError>{
+                          std::unexpected{SignalRunError::terrain_failure}};
+  check(career && accept_signal_run(*career) &&
+            launch_signal_run(*career, *career_cache) && career->station_flight,
+        "Guided contract one must launch into physical station flight");
+  if (!career || !career->station_flight) return;
+  const auto guidance_tick = career->station_flight->tick;
+  const std::array guidance_commands{
+      FlightCommand{guidance_tick, FlightCommandKind::press_turn_left},
+      FlightCommand{guidance_tick, FlightCommandKind::press_strafe_right},
+      FlightCommand{guidance_tick, FlightCommandKind::press_forward},
+      FlightCommand{guidance_tick, FlightCommandKind::release_forward},
+      FlightCommand{guidance_tick, FlightCommandKind::press_backward},
+      FlightCommand{guidance_tick, FlightCommandKind::release_backward},
+  };
+  check(advance_signal_run_station_flight(*career, guidance_commands) &&
+            career->guidance.attitude_observed &&
+            career->guidance.translation_observed &&
+            career->guidance.thrust_observed &&
+            career->guidance.coast_observed &&
+            career->guidance.braking_observed &&
+            career->onboarding.first_objective == FirstObjectiveStatus::active,
+        "the optional flight check must observe real controls without "
+        "advancing the objective");
+  auto without_presentation_history = *career;
+  without_presentation_history.guidance = {};
+  check(project_signal_run_save(*career) ==
+            project_signal_run_save(without_presentation_history),
+        "contextual guidance observations must not enter saves or "
+        "authoritative state");
 }
 
 auto world_delta_journal_contract() -> void {
@@ -4111,8 +4173,9 @@ auto world_delta_journal_contract() -> void {
 
 auto regenerated_world_delta_contract() -> void {
   const auto recipe = make_save_recipe(Seed{42});
-  const auto planet =
-      generate_planet_descriptor(Seed{recipe.active_planet.value});
+  const auto system_seed = derive_seed(recipe.universe_seed, SeedDomain::system,
+                                       recipe.origin_system_ordinal);
+  const auto planet = generate_origin_home_planet(system_seed);
   auto first_cache = TerrainTileCache::create(1);
   check(first_cache.has_value(),
         "world-delta regeneration requires a bounded terrain cache");
@@ -4122,13 +4185,15 @@ auto regenerated_world_delta_contract() -> void {
         "world-delta regeneration requires a generated signal catalog");
   if (!original) return;
 
-  const auto target = original->signals.front().id;
+  const auto binding = generate_home_signal_contract(Seed{42});
+  const auto target = binding.target;
   SaveDocument saved{
       .recipe = recipe,
       .state =
           SaveMutableState{
               .location = OriginLocation::docked_at_origin,
               .first_objective = FirstObjectiveStatus::completed,
+              .first_objective_contract = binding.contract,
               .first_objective_target = target,
               .flight = std::nullopt,
               .system_flight = std::nullopt,
@@ -4921,10 +4986,7 @@ auto signal_collection_contract() -> void {
   const auto saved_system_seed =
       derive_seed(saved_recipe.universe_seed, SeedDomain::system,
                   saved_recipe.origin_system_ordinal);
-  const auto saved_planet_seed =
-      derive_seed(saved_system_seed, SeedDomain::planet,
-                  saved_recipe.active_planet_ordinal);
-  const auto saved_planet = generate_planet_descriptor(saved_planet_seed);
+  const auto saved_planet = generate_origin_home_planet(saved_system_seed);
   auto saved_cache = TerrainTileCache::create();
   check(saved_cache.has_value(),
         "save codec tests require a terrain cache");
@@ -4933,13 +4995,22 @@ auto signal_collection_contract() -> void {
   check(saved_catalog.has_value(),
         "save codec tests require the regenerated Signal Run catalog");
   if (!saved_catalog) return;
-  const auto& saved_target = saved_catalog->signals.front();
+  const auto saved_binding = generate_home_signal_contract(Seed{42});
+  const auto saved_target_iterator = std::ranges::find_if(
+      saved_catalog->signals, [&](const SurfaceSignal& signal) {
+        return signal.id == saved_binding.target;
+      });
+  check(saved_target_iterator != saved_catalog->signals.end(),
+        "the saved home contract target must regenerate in its catalog");
+  if (saved_target_iterator == saved_catalog->signals.end()) return;
+  const auto& saved_target = *saved_target_iterator;
   SaveDocument saved{
       .recipe = saved_recipe,
       .state =
           SaveMutableState{
               .location = OriginLocation::docked_at_origin,
               .first_objective = FirstObjectiveStatus::completed,
+              .first_objective_contract = saved_binding.contract,
               .first_objective_target = saved_target.id,
               .flight = std::nullopt,
               .system_flight = std::nullopt,

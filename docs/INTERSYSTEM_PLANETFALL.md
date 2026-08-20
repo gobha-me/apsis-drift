@@ -27,7 +27,7 @@ delta and advances the contract at the same resulting universe tick.
 
 ## Persistence
 
-Save format 14 retains the authoritative target-planet flight and the compact
+Save format 15 retains the authoritative target-planet flight and the compact
 world-delta journal. An active objective carries no delta. Objective-complete,
 returned, and turned-in contracts require exactly one collected delta whose key
 matches the immutable mission target and whose tick is not in the future.
