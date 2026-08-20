@@ -793,8 +793,11 @@ auto format_system_flight_status(const SystemFlightState& state,
                      ? std::format(" ORBIT RDY | ENTER INSERT ORBIT | {} | {}x ",
                                    mode, scale)
                      : std::format(
-                           " {} | {}x | {} | [] time | SPACE mode | WAIT ORBIT RDY ",
-                           mode, scale, cue),
+                           " {} | {}x | {} | REL {:.0f}km/s | STOP {:.0f}km | "
+                           "[] time | SPACE mode ",
+                           mode, scale, cue,
+                           guidance.relative_speed_metres_per_second / 1'000.0,
+                           guidance.stopping_distance_metres / 1'000.0),
       .insertion_refusal = " INSERT BLOCKED",
       .insertion_ready = guidance.orbit_insertion_ready,
   };

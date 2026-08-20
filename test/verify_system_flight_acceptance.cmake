@@ -37,11 +37,11 @@ function(check_system_flight)
       NOT system_id STREQUAL "system-28630482e6b15573" OR
       NOT planet_id STREQUAL "planet-a1dc72d8fd111fbb" OR
       NOT arrival_tick STREQUAL "600" OR
-      NOT insertion_tick STREQUAL "9047" OR
-      NOT host_steps STREQUAL "4084" OR
-      NOT system_flight_checksum STREQUAL "12996023908337151515" OR
-      NOT orbital_flight_checksum STREQUAL "6543655391732023443" OR
-      NOT framebuffer_checksum STREQUAL "2134678291051779558")
+      NOT insertion_tick STREQUAL "13891" OR
+      NOT host_steps STREQUAL "6252" OR
+      NOT system_flight_checksum STREQUAL "12386634424233569027" OR
+      NOT orbital_flight_checksum STREQUAL "5369299951525600646" OR
+      NOT framebuffer_checksum STREQUAL "15265263308321786588")
     message(FATAL_ERROR
       "system-flight report is not canonical:\n${json}")
   endif ()

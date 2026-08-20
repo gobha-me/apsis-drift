@@ -262,9 +262,13 @@ auto advance_one_tick(const LocalSystemDescriptor& system,
   if (!finite(velocity) || !std::isfinite(relative_speed)) {
     return std::unexpected{SystemFlightError::invalid_state};
   }
-  if (relative_speed > kSystemFlightMaximumRelativeSpeed) {
-    new_relative = multiply(new_relative,
-                            kSystemFlightMaximumRelativeSpeed / relative_speed);
+  const double maximum_relative_speed =
+      state.mode == FlightMode::autopilot
+          ? kSystemFlightAutopilotMaximumRelativeSpeed
+          : kSystemFlightMaximumRelativeSpeed;
+  if (relative_speed > maximum_relative_speed) {
+    new_relative =
+        multiply(new_relative, maximum_relative_speed / relative_speed);
     velocity = add(vec(target->velocity), new_relative);
   }
   const Vec3 position = add(vec(state.position), multiply(velocity, dt));

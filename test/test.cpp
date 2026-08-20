@@ -37,6 +37,8 @@
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
+#include "apsis_drift/origin_system_contract.hpp"
+#include "apsis_drift/origin_system_contract_acceptance.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
@@ -1784,7 +1786,7 @@ auto intersystem_return_contract() -> void {
   check(spool_round_trip &&
             spool_round_trip->state.intersystem_contract == live_spool &&
             spool_round_trip->state.origin_station_flight == relaunched,
-        "format 15 must preserve the frozen live craft throughout outbound "
+        "format 16 must preserve the frozen live craft throughout outbound "
         "spool");
   auto invalid_spool = spool_document;
   ++invalid_spool.state.origin_station_flight->tick;
@@ -1949,7 +1951,7 @@ auto intersystem_return_contract() -> void {
                                 : std::expected<SaveDocument, SaveSchemaError>{
                                       std::unexpected{SaveSchemaError{}}};
   check(restored && restored->state.origin_station_flight == returning,
-        "format 15 must preserve the exact origin-station approach state");
+        "format 16 must preserve the exact origin-station approach state");
 }
 
 auto intersystem_contract_acceptance_contract() -> void {
@@ -1959,9 +1961,9 @@ auto intersystem_contract_acceptance_contract() -> void {
         "contract-loop acceptance must reject invalid dimensions before allocation");
   const auto result = run_intersystem_contract_acceptance(96, 64);
   check(result && result->report.checkpoints.size() == 9U &&
-            result->report.final_tick == 32'073U &&
+            result->report.final_tick == 36'917U &&
             result->report.final_authoritative_checksum ==
-                8'088'546'214'365'816'373ULL &&
+                17'961'910'855'145'637'046ULL &&
             result->report.wrong_side_recovery_checksum != 0U &&
             result->report.target_system_planet_count >= 3U &&
             result->report.target_system_initial_framebuffer_checksum !=
@@ -1990,6 +1992,146 @@ auto intersystem_contract_acceptance_contract() -> void {
             json.find("\"terminal_proxy\": \"external-live-capture\"") !=
                 std::string::npos,
         "contract-loop JSON must separate authoritative, render, and live presentation evidence");
+}
+
+auto origin_system_contract_contract() -> void {
+  constexpr Seed seed{42};
+  const auto binding = generate_origin_system_contract(seed);
+  const auto initial = initial_origin_system_contract(seed);
+  const auto system = generate_origin_system(seed);
+  check(binding && initial && binding->system == system.id &&
+            binding->mission_seed ==
+                derive_seed(system.seed, SeedDomain::mission,
+                            kOriginSystemContractMissionOrdinal) &&
+            binding->contract == MissionId{binding->mission_seed.value} &&
+            binding->home_planet == system.planets.front().descriptor.id &&
+            binding->target_planet == system.planets[1].descriptor.id &&
+            binding->target_planet != binding->home_planet &&
+            binding->target_objective.value ==
+                derive_seed(system.planets[1].descriptor.seed,
+                            SeedDomain::encounter, 0)
+                    .value,
+        "contract two must bind the first non-home planet and its first signal independently");
+  if (!initial) return;
+  auto state = *initial;
+  const auto unchanged = state;
+  check(advance_origin_system_contract(
+            state, 10, 9, OriginSystemContractCommand::accept) ==
+            std::unexpected{OriginSystemContractError::wrong_command_tick} &&
+            state == unchanged,
+        "contract-two commands must reject the wrong tick without mutation");
+  constexpr std::array commands{
+      OriginSystemContractCommand::accept,
+      OriginSystemContractCommand::launch,
+      OriginSystemContractCommand::begin_outbound_transfer,
+      OriginSystemContractCommand::enter_target_planet,
+      OriginSystemContractCommand::complete_objective,
+      OriginSystemContractCommand::leave_target_planet,
+      OriginSystemContractCommand::begin_station_rendezvous,
+      OriginSystemContractCommand::dock,
+      OriginSystemContractCommand::turn_in,
+  };
+  for (const auto command : commands) {
+    check(advance_origin_system_contract(state, 10, 10, command).has_value(),
+          "contract two must accept its bounded ordered transition sequence");
+  }
+  check(state.phase == OriginSystemContractPhase::turned_in &&
+            validate_origin_system_contract(seed, state).has_value(),
+        "contract two must finish in a valid explicit turn-in state");
+  auto corrupt = state;
+  corrupt.binding.target_planet.value ^= 1U;
+  check(validate_origin_system_contract(seed, corrupt) ==
+            std::unexpected{OriginSystemContractError::invalid_binding},
+        "contract two must reject corrupt regenerated identities");
+
+  constexpr std::array route_seeds{Seed{0}, Seed{1}, Seed{42},
+                                   Seed{0xffffffffffffffffULL}};
+  for (const auto route_seed : route_seeds) {
+    const auto route_system = generate_origin_system(route_seed);
+    auto route_contract = initial_origin_system_contract(route_seed);
+    check(route_contract && route_system.planets.size() > 1U,
+          "the tested contract-two seed matrix must generate its bounded route");
+    if (!route_contract || route_system.planets.size() <= 1U) continue;
+    const double maximum_separation_metres =
+        static_cast<double>(route_system.planets[0].orbit.radius_kilometres +
+                            route_system.planets[1].orbit.radius_kilometres) *
+        1'000.0;
+    const double maximum_cruise_ticks =
+        maximum_separation_metres /
+        kSystemFlightAutopilotMaximumRelativeSpeed *
+        static_cast<double>(kSimulationHz);
+    check(std::isfinite(maximum_cruise_ticks) &&
+              maximum_cruise_ticks < 400'000.0 * 16.0,
+          "every tested origin-system target must fit the bounded starter return margin");
+    check(advance_origin_system_contract(
+              *route_contract, 0, 0,
+              OriginSystemContractCommand::accept) &&
+              advance_origin_system_contract(
+                  *route_contract, 0, 0,
+                  OriginSystemContractCommand::launch),
+          "each tested route must enter station departure deterministically");
+    auto route_station =
+        initialize_origin_station_launch(route_seed, 0, route_system);
+    const std::array departure_commands{
+        FlightCommand{0, FlightCommandKind::press_forward}};
+    const bool departed =
+        route_station &&
+        advance_origin_station_flight(route_seed, 0, route_system,
+                                      *route_station, departure_commands);
+    const auto route_outbound =
+        departed ? initialize_origin_system_outbound_transfer(
+                       route_seed, 1, route_system, *route_contract,
+                       *route_station)
+                 : std::expected<SystemFlightState,
+                                 OriginSystemContractError>{
+                       std::unexpected{
+                           OriginSystemContractError::invalid_flight}};
+    check(route_outbound && route_outbound->tick == 1 &&
+              route_outbound->target == route_contract->binding.target_planet,
+          "each tested seed must preserve a valid physical starting ephemeris");
+  }
+
+  auto completed = *initial;
+  completed.phase = OriginSystemContractPhase::objective_complete;
+  SystemFlightState invalid_departure{
+      .system = completed.binding.system,
+      .target = completed.binding.target_planet,
+      .position = {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0},
+  };
+  check(initialize_origin_system_return_transfer(
+            seed, system, completed, invalid_departure) ==
+            std::unexpected{OriginSystemContractError::invalid_flight},
+        "contract two must reject non-finite transfer state before mutation");
+}
+
+auto origin_system_contract_acceptance_contract() -> void {
+  check(!run_origin_system_contract_acceptance(0, 64) &&
+            !run_origin_system_contract_acceptance(
+                std::numeric_limits<int>::max(), 1),
+        "contract-two acceptance must reject invalid dimensions before allocation");
+  const auto result = run_origin_system_contract_acceptance(96, 64);
+  check(result && result->report.checkpoints.size() == 7U &&
+            result->report.binding.home_planet !=
+                result->report.binding.target_planet &&
+            result->report.target_insertion_tick >
+                result->report.outbound_tick &&
+            result->report.objective_tick >
+                result->report.target_insertion_tick &&
+            result->report.final_tick > result->report.rendezvous_tick &&
+            result->report.outbound_checksum != 0U &&
+            result->report.return_checksum != 0U &&
+            result->report.final_station_checksum != 0U &&
+            result->report.framebuffer_checksum != 0U &&
+            result->report.target_insertion_tick == 2'948'802U &&
+            result->report.objective_tick == 3'992'789U &&
+            result->report.rendezvous_tick == 7'490'650U &&
+            result->report.final_tick == 7'535'733U &&
+            result->returned_save.state.onboarding.chapter ==
+                OnboardingChapter::contract_three &&
+            result->returned_save.state.origin_system_contract &&
+            result->returned_save.state.origin_system_contract->phase ==
+                OriginSystemContractPhase::turned_in,
+        "contract-two acceptance must complete the physical deterministic round trip");
 }
 
 auto intersystem_planetfall_contract() -> void {
@@ -2071,7 +2213,7 @@ auto intersystem_planetfall_contract() -> void {
   check(thermal_restored && thermal_restored->state.flight &&
             thermal_restored->state.flight->thermal ==
                 PlanetaryThermalState{825'000U, true},
-        "save format 15 must preserve an active Pilot thermal abort exactly");
+        "save format 16 must preserve an active Pilot thermal abort exactly");
   if (thermal_json) {
     const auto corrupt_thermal = decode_save_document_json(replace_once(
         *thermal_json, "\"load_units\": 825000",
@@ -3361,10 +3503,10 @@ auto career_onboarding_contract() -> void {
 }
 
 auto save_schema_contract() -> void {
-  check(kSaveFormatVersion == 15 && kSaveApplication == "apsis-drift" &&
+  check(kSaveFormatVersion == 16 && kSaveApplication == "apsis-drift" &&
             kMaximumSaveDocumentBytes == (1U << 20U) &&
             kMaximumSaveApplicationVersionBytes == 64,
-        "save format version 15 identity and bounds must remain stable");
+        "save format version 16 identity and bounds must remain stable");
   auto recipe = make_save_recipe(Seed{42});
   const auto binding = generate_home_signal_contract(Seed{42});
   const auto target = binding.target;
@@ -3409,7 +3551,7 @@ auto save_schema_contract() -> void {
 
   const auto encoded = encode_save_document_json(expected);
   check(encoded &&
-            encoded->find("\"format_version\": 15") != std::string::npos &&
+            encoded->find("\"format_version\": 16") != std::string::npos &&
             encoded->find(std::format("\"application_version\": \"{}\"",
                                       kApplicationVersion)) !=
                 std::string::npos &&
@@ -3418,7 +3560,7 @@ auto save_schema_contract() -> void {
             encoded->find("\"onboarding\":") != std::string::npos &&
             encoded->find("\"state\": \"guided\"") != std::string::npos &&
             encoded->find("\"chapter\": \"contract_one\"") != std::string::npos,
-        "the current encoder must write canonical format-15 onboarding state "
+        "the current encoder must write canonical format-16 onboarding state "
         "with writer "
         "provenance");
   const std::string fixture = encoded.value_or("{}");
@@ -3429,7 +3571,7 @@ auto save_schema_contract() -> void {
     const auto round_trip = decode_save_document_json(*encoded);
     check(round_trip && *round_trip == expected &&
               encode_save_document_json(*round_trip) == encoded,
-          "save encode/decode/re-encode must preserve canonical format-15 "
+          "save encode/decode/re-encode must preserve canonical format-16 "
           "state exactly");
   }
   for (const auto chapter :
@@ -3441,7 +3583,7 @@ auto save_schema_contract() -> void {
     check(chapter_json && decode_save_document_json(*chapter_json) ==
                               std::expected<SaveDocument, SaveSchemaError>{
                                   chapter_document},
-          "every Guided chapter must survive a canonical format-15 round trip");
+          "every Guided chapter must survive a canonical format-16 round trip");
   }
 
   auto unknown = fixture;
@@ -3500,27 +3642,27 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::duplicate_key,
       "duplicate JSON object keys must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 1"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 1"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-1 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 10"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 10"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-10 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 11"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 11"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-11 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 12"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 12"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-12 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 13"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 13"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-13 alpha saves must be rejected explicitly");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 14"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 14"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "format-14 alpha saves must be rejected explicitly");
   expect_decode_error(
@@ -3528,22 +3670,26 @@ auto save_schema_contract() -> void {
       SaveSchemaErrorCode::unsupported_alpha_format_version,
       "old alpha formats must be identified before nested fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15", "\"format_version\": 16"),
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 15"),
+      SaveSchemaErrorCode::unsupported_alpha_format_version,
+      "format-16 alpha saves must be rejected explicitly");
+  expect_decode_error(
+      replace_once(fixture, "\"format_version\": 16", "\"format_version\": 17"),
       SaveSchemaErrorCode::unsupported_format_version,
       "future save versions must be rejected explicitly");
   const auto future_with_provenance = decode_save_document_json(replace_once(
-      fixture, "\"format_version\": 15", "\"format_version\": 16"));
+      fixture, "\"format_version\": 16", "\"format_version\": 17"));
   check(!future_with_provenance &&
             future_with_provenance.error().detail.find(kApplicationVersion) !=
                 std::string::npos,
         "unknown newer saves must identify valid writer provenance");
   expect_decode_error(
-      "{\"application\":\"apsis-drift\",\"format_version\":16}",
+      "{\"application\":\"apsis-drift\",\"format_version\":17}",
       SaveSchemaErrorCode::unsupported_format_version,
       "future formats must be identified before current fields are read");
   expect_decode_error(
-      replace_once(fixture, "\"format_version\": 15",
-                   "\"format_version\": \"15\""),
+      replace_once(fixture, "\"format_version\": 16",
+                   "\"format_version\": \"16\""),
       SaveSchemaErrorCode::invalid_type,
       "schema integers with the wrong JSON type must be rejected");
   expect_decode_error(replace_once(fixture, "\"application\": \"apsis-drift\"",
@@ -3553,7 +3699,7 @@ auto save_schema_contract() -> void {
   expect_decode_error(replace_once(fixture, "\"application_version\"",
                                    "\"missing_application_version\""),
                       SaveSchemaErrorCode::missing_field,
-                      "format 15 must require writer-version provenance");
+                      "format 16 must require writer-version provenance");
   expect_decode_error(
       replace_once(fixture,
                    std::format("\"application_version\": \"{}\"",
@@ -9530,6 +9676,8 @@ auto main() -> int {
   system_flight_contract();
   intersystem_return_contract();
   intersystem_contract_acceptance_contract();
+  origin_system_contract_contract();
+  origin_system_contract_acceptance_contract();
   intersystem_planetfall_contract();
   intersystem_planetfall_acceptance_contract();
   mission_board_contract();

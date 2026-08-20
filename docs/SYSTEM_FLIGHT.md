@@ -15,8 +15,10 @@ preserves momentum.
 
 Forward/reverse thrust is bounded to 50 km/s², maneuver thrust to 25 km/s²,
 turning to 0.75 radians/s, and target-relative speed to 1,000 km/s. Assisted
-target hold is a direct intercept/braking controller for the bound mission
-planet, not a general route planner.
+target hold uses a 500 km/s cruise envelope so the same 50 km/s² authority can
+turn and brake against faster-moving inner bodies instead of repeatedly
+overshooting them. It is a direct intercept/braking controller for the bound
+mission planet, not a general route planner.
 
 Time compression has only three saved values: 1x, 4x, and 16x. Each host step
 executes that many ordinary authoritative 120 Hz substeps rather than one large
@@ -52,9 +54,9 @@ identity.
 
 ## Persistence and verification
 
-Save format 15 records finite binary64 values as canonical decimal strings and
+Save format 16 records finite binary64 values as canonical decimal strings and
 requires exactly one matching system-flight state during target-system flight.
-Formats 1 through 13 are unsupported alpha inputs; the loader does not
+Formats 1 through 15 are unsupported alpha inputs; the loader does not
 manufacture system-flight state from an older projection.
 
 Run the cadence, save/resume, rendering, and insertion acceptance through the

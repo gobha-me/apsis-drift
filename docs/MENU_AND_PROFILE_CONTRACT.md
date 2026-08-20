@@ -8,7 +8,7 @@ files or decide whether a game session may be replaced.
 
 This contract records the behavior consumed by the later title, pause,
 settings, preferences, and Guided/Skip work. It does not implement those
-screens, add an autosave system, or change save format 15.
+screens, add an autosave system, or change save format 16.
 
 ## Storage ownership and bounds
 
@@ -226,7 +226,7 @@ change marks it dirty. Presentation frames, menu focus, terminal resize,
 settings, benchmark results, and dismissed explanatory prompts do not.
 
 Every currently valid docked, origin-flight, jump-spool, system-flight,
-planetary-flight, return, and turned-in format-15 phase is saveable when its
+planetary-flight, return, and turned-in format-16 phase is saveable when its
 complete projected document validates. Setup screens, confirmation dialogs,
 and menus are not gameplay phases and are not saved. If projection or
 validation fails, Save is disabled with the precise stable reason; it never

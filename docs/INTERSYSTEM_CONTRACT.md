@@ -176,7 +176,7 @@ and recovery cap are specified in
 
 ## Save projection and compatibility
 
-Current save format 15 requires the complete contract projection:
+Current save format 16 requires the complete contract projection:
 
 - generator versions for the system catalog, ephemeris, and first mission;
 - stable origin/target system, star, mission-planet, station, mission, and
@@ -202,7 +202,7 @@ The v0.4.7 through v0.4.17 releases introduced historical formats 3 through 10
 as the mission board, jump, system flight, Planetfall, return, rule profile,
 Pilot alignment, and thermal state landed. Those documents remain useful
 historical evidence but are not current player-save inputs. Format 14 rejects
-formats 1 through 14 at the root boundary with an explicit unsupported-alpha
+formats 1 through 15 at the root boundary with an explicit unsupported-alpha
 diagnostic and never synthesizes missing fields.
 
 Camera state, terminal capabilities, render profile, ephemeris caches, transit
