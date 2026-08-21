@@ -188,7 +188,9 @@ enum class IntersystemContractError : std::uint8_t {
 };
 
 [[nodiscard]] auto initial_intersystem_contract_state(
-    Seed universe_seed) noexcept -> IntersystemContractState;
+    Seed universe_seed,
+    IntersystemRuleProfile penalty_mode = IntersystemRuleProfile::assisted)
+    noexcept -> IntersystemContractState;
 
 [[nodiscard]] auto validate_intersystem_contract_state(
     const IntersystemContractState& state) noexcept

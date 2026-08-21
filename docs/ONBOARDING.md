@@ -1,7 +1,7 @@
 # Guided and Skipped Onboarding
 
-Version 1 defines the authoritative career choice consumed by the future New
-Game setup. It is application-owned gameplay state, not a presentation
+Version 1 defines the authoritative career choice consumed by New Game. It is
+application-owned gameplay state, not a presentation
 preference, tutorial prompt setting, or generated-world input.
 
 ## Progression state
@@ -39,9 +39,10 @@ bodies, station, terrain, signals, and mission identities.
 
 ## New Game and persistence
 
-Guided is the default `NewGameOnboardingChoice`. Skip must be supplied only
+Guided is the default `NewGameOnboardingChoice`. Skip may be supplied only
 while constructing a new career; no API converts an existing Guided career to
-Skipped. The full title setup and confirmation UX remain owned by #137.
+Skipped. The title requires a separate cancel-first confirmation before it
+persists a skipped career.
 
 Save format 16 stores the state and nullable chapter in every career
 projection. Invalid enums, Guided without a chapter, Skipped/Completed with a

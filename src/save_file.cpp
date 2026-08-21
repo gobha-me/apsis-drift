@@ -270,10 +270,19 @@ struct CreatedTemporary {
 auto make_new_game_document(Seed universe_seed,
                             NewGameOnboardingChoice onboarding)
     -> SaveDocument {
-  auto document = make_legacy_signal_run_document(universe_seed);
-  document.state.onboarding = initial_onboarding_progress(onboarding);
+  return make_new_game_document(NewGameOptions{
+      .universe_seed = universe_seed,
+      .penalty_mode = IntersystemRuleProfile::assisted,
+      .onboarding = onboarding,
+  });
+}
+
+auto make_new_game_document(const NewGameOptions& options) -> SaveDocument {
+  auto document = make_legacy_signal_run_document(options.universe_seed);
+  document.state.onboarding = initial_onboarding_progress(options.onboarding);
   document.state.intersystem_contract =
-      initial_intersystem_contract_state(universe_seed);
+      initial_intersystem_contract_state(options.universe_seed,
+                                         options.penalty_mode);
   return document;
 }
 

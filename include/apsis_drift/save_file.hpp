@@ -10,6 +10,15 @@
 
 namespace apsis_drift {
 
+struct NewGameOptions {
+  Seed universe_seed;
+  IntersystemRuleProfile penalty_mode{IntersystemRuleProfile::assisted};
+  NewGameOnboardingChoice onboarding{NewGameOnboardingChoice::guided};
+
+  friend auto operator==(const NewGameOptions&, const NewGameOptions&)
+      -> bool = default;
+};
+
 enum class SaveFileErrorCode : std::uint8_t {
   invalid_path,
   not_found,
@@ -37,6 +46,8 @@ struct SaveFileError {
 [[nodiscard]] auto make_new_game_document(
     Seed universe_seed,
     NewGameOnboardingChoice onboarding = NewGameOnboardingChoice::guided)
+    -> SaveDocument;
+[[nodiscard]] auto make_new_game_document(const NewGameOptions& options)
     -> SaveDocument;
 [[nodiscard]] auto make_legacy_signal_run_document(Seed universe_seed)
     -> SaveDocument;

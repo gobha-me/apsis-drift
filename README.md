@@ -70,9 +70,11 @@ loaded and validated before terminal startup and is written only after a clean
 exit. Load failures do not mutate live state, and failed writes before atomic
 replacement leave the previous valid profile intact. Fresh profiles begin at
 their deterministic Origin Station with authoritative Guided onboarding at
-contract one. The bounded New Game API can instead choose Skip without adding
-mission completions, rewards, discoveries, or world deltas; the expanded title
-setup remains tracked by #137. New writes use save format 16 and record the
+contract one. An ordinary no-option run opens the title menu: New creates a
+private local career from a random or edited full-range seed, Assisted or
+Advanced Piloting, and Guided or explicitly confirmed Skip onboarding.
+Continue and Load revalidate catalog profiles before activation. Skip adds no
+mission completions, rewards, discoveries, or world deltas. New writes use save format 16 and record the
 writing application version. Releases before v0.8.0 are alpha: formats 1
 through 15 are intentionally unsupported after the origin-transfer format-16 reset
 and are rejected without
@@ -80,11 +82,12 @@ modifying the source file. The durable forward-loading promise begins with the
 actual format shipped by v0.8.0; see
 [Save Format and Compatibility](docs/SAVE_FORMAT.md).
 
-The future local profile catalog, New/Continue/Load/Save transitions, dirty
-state, destructive confirmations, and CLI precedence are fixed by the
+The local profile catalog and New/Continue/Load title transitions are
+implemented; later Save/Save As, dirty-state, and destructive-confirmation
+work plus CLI precedence are fixed by the
 [Menu and Local Profile Contract](docs/MENU_AND_PROFILE_CONTRACT.md). The
-contract keeps profile policy application-owned and does not change the current
-format-16 explicit-path CLI workflow.
+contract keeps profile policy application-owned and preserves the format-16
+explicit-path CLI workflow.
 
 Named viewport profiles make the logical render resolution explicit:
 
@@ -145,12 +148,12 @@ Interactive controls:
   then press J to begin or cancel the three-second FTL spool. Committed transit
   arrives automatically after two seconds. Press Enter within the rendezvous
   boundary to redock before jumping.
-- Rule profile: press Left/Right at the mission board before launch to select
-  Assisted or Pilot; launch locks the authoritative selection for the mission
-- Pilot FTL spool: use A/D to correct heading and W/S to correct velocity;
+- Penalty mode: New Game chooses Assisted or Advanced Piloting once for the
+  career; this is separate from the cockpit's Manual/Autopilot control
+- Advanced FTL spool: use A/D to correct heading and W/S to correct velocity;
   the cockpit shows signed error, projected ALIGNED/OFFSET/OPPOSED quality, and
   the next correction before J can still cancel the spool
-- Pilot atmospheric entry: watch `HEAT`, `TEMP`, `FPA`, and the textual cue;
+- Advanced atmospheric entry: watch `HEAT`, `TEMP`, `FPA`, and the textual cue;
   slow and rise while heating. At 100%, `ABRT CLMB` forces a deterministic
   climb to orbit, clears held descent, cools the craft, and permits another
   entry. Assisted shows the same feedback without forcing the climb.
@@ -311,10 +314,19 @@ spool, cancellation preserves the live craft, and only station turn-in marks
 onboarding completed. See
 [docs/FIRST_JUMP_ONBOARDING.md](docs/FIRST_JUMP_ONBOARDING.md).
 
-The v0.4.14 rule-profile contract adds an authoritative, save-backed Assisted
-or Pilot selection at the Origin Station. Assisted remains the complete-loop
-default; Pilot records deterministic thermal-abort and alignment-quality
-boundaries. Current format-16 saves require the explicit selection. See
+The v0.4.36 title flow adds New, Continue, Load, Settings information, and Exit
+with keyboard and mouse parity. New persists a bounded local career before
+activation, uses OS entropy for rerollable universe seeds, and locks Assisted
+or Advanced Piloting for the career. Guided remains the default, while Skip
+requires a separate cancel-first confirmation. See
+[docs/MENU_AND_PROFILE_CONTRACT.md](docs/MENU_AND_PROFILE_CONTRACT.md).
+
+The v0.4.14 rule-profile contract added an authoritative, save-backed Assisted
+or Advanced penalty mode. New Game now locks that mode for the career;
+runtime Manual/Autopilot remains a separate cockpit control. Assisted remains
+the complete-loop default; Advanced records deterministic thermal-abort and
+alignment-quality boundaries. The internal format-16 token remains `pilot` for
+wire compatibility. See
 [docs/RULE_PROFILES.md](docs/RULE_PROFILES.md).
 
 The v0.4.15 Pilot FTL path turns that selection into a fixed-point alignment

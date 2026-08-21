@@ -113,13 +113,13 @@ struct Replay {
         IntersystemPlanetfallAcceptanceError::initialization_failure};
   }
   const PlanetDescriptor& dense = (*body)->descriptor;
-  auto contract = initial_intersystem_contract_state(universe_seed);
+  auto contract = initial_intersystem_contract_state(
+      universe_seed, IntersystemRuleProfile::pilot);
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(contract, contract.universe_tick,
                                         value);
   };
-  if (!command(IntersystemContractCommand::select_pilot_profile) ||
-      !command(IntersystemContractCommand::accept_mission) ||
+  if (!command(IntersystemContractCommand::accept_mission) ||
       !command(IntersystemContractCommand::launch) ||
       !begin_intersystem_jump(contract)) {
     return std::unexpected{

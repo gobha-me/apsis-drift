@@ -59,10 +59,7 @@ auto mission_board_snapshot(const IntersystemContractState& state)
       .primary_action_enabled = false,
       .launch_authorized =
           state.mission_phase == IntersystemMissionPhase::accepted,
-      .rule_profile_selection_enabled =
-          state.travel_phase == IntersystemTravelPhase::docked_at_origin &&
-          (state.mission_phase == IntersystemMissionPhase::offered ||
-           state.mission_phase == IntersystemMissionPhase::accepted),
+      .rule_profile_selection_enabled = false,
   };
   if (state.mission_phase == IntersystemMissionPhase::offered) {
     snapshot.primary_action = "ACCEPT CONTRACT";

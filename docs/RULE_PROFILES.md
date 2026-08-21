@@ -1,24 +1,25 @@
 # Deterministic Rule Profiles
 
-Version 1 defines exactly two rule profiles for the intersystem career:
-`ASSISTED` and `PILOT`. “Rule profile” is the player-facing term; neither
-profile claims high-fidelity simulation, changes generated-world truth, or
-selects a different mission.
+Version 2 defines exactly two New Game penalty modes for an intersystem career:
+`ASSISTED PILOTING` and `ADVANCED PILOTING`. Neither mode is the cockpit's
+runtime `MANUAL`/`AUTOPILOT` flight control, claims high-fidelity simulation,
+changes generated-world truth, or selects a different mission. Save format 16
+retains the historical internal `pilot` token for wire compatibility; menus and
+mission presentation call that value Advanced.
 
 ## Selection and authority
 
-Fresh careers use `ASSISTED`. Left and Right select either
-profile at the Origin Station while the first contract is offered or accepted.
-Launch locks the selected profile for the active mission. Returning, changing
-terminal driver, resizing, changing render cadence, or loading the save cannot
-change it.
+New Game defaults to Assisted and may choose Advanced before career creation.
+The choice is permanent for that career. It cannot be changed from the mission
+board, cockpit, or Settings. Returning, changing terminal driver, resizing,
+changing render cadence, or loading the save cannot change it.
 
-The selection is a tick-addressed intersystem contract command; save format 16
-stores it as authoritative state. Formats 1 through 13 are unsupported alpha
-inputs. Unknown or missing profile values are invalid rather than silently
-downgraded.
+Save format 16 stores the choice as authoritative state. The former
+tick-addressed profile-selection commands are rejected compatibility inputs.
+Formats 1 through 15 are unsupported alpha inputs. Unknown or missing values
+are invalid rather than silently downgraded.
 
-Pilot FTL alignment and thermal entry both consume this boundary.
+Advanced FTL alignment and thermal entry both consume this boundary.
 
 ## Assisted
 
@@ -31,9 +32,9 @@ Assisted remains the default complete-loop experience:
   approach corridor;
 - the current keyboard-only controls can complete the full contract.
 
-## Pilot thermal contract
+## Advanced thermal contract
 
-Pilot uses the same generated planet, atmosphere, terrain, objective, and
+Advanced uses the same generated planet, atmosphere, terrain, objective, and
 flight controls. Thermal integration derives heating from
 authoritative atmosphere, altitude, speed, flight-path angle, and fixed-step
 time.
@@ -46,9 +47,9 @@ until the craft returns to the orbital regime. It does not create permanent
 damage, consume fuel, change the objective, or mutate generated truth. The
 player may cool and retry.
 
-## Pilot FTL contract
+## Advanced FTL contract
 
-Pilot commitment grades a deterministic alignment sample into three arrival
+Advanced commitment grades a deterministic alignment sample into three arrival
 quality bands:
 
 - `ALIGNED` uses the Assisted ten-radius matched-velocity corridor;

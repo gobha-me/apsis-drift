@@ -1,6 +1,11 @@
 #include "apsis_drift/menu.hpp"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
+#include <cerrno>
+
+#include <sys/random.h>
 
 namespace apsis_drift {
 namespace {
@@ -10,6 +15,8 @@ inline constexpr int kMinimumMenuRows{16};
 inline constexpr int kMaximumTerminalAxis{65535};
 inline constexpr int kPanelWidth{36};
 inline constexpr int kPanelHeight{8};
+inline constexpr int kTitlePanelHeight{16};
+inline constexpr int kTitlePanelWidth{64};
 
 }  // namespace
 
@@ -98,6 +105,83 @@ auto menu_item_at(const MenuLayout& layout, int x, int y) noexcept
   if (!layout.supported()) return std::nullopt;
   if (layout.primary_action.contains(x, y)) return MenuItem::primary;
   if (layout.exit_action.contains(x, y)) return MenuItem::exit;
+  return std::nullopt;
+}
+
+auto system_random_seed() noexcept
+    -> std::expected<std::uint64_t, SeedEntropyError> {
+  std::uint64_t value{};
+  auto* bytes = reinterpret_cast<unsigned char*>(&value);
+  std::size_t offset{};
+  while (offset < sizeof(value)) {
+    const auto count =
+        ::getrandom(bytes + offset, sizeof(value) - offset, 0);
+    if (count > 0) {
+      offset += static_cast<std::size_t>(count);
+      continue;
+    }
+    if (count < 0 && errno == EINTR) continue;
+    return std::unexpected{SeedEntropyError::unavailable};
+  }
+  return value;
+}
+
+auto request_new_game_seed(SeedEntropySource source) noexcept
+    -> std::expected<std::uint64_t, SeedEntropyError> {
+  if (source == nullptr) {
+    return std::unexpected{SeedEntropyError::unavailable};
+  }
+  return source();
+}
+
+auto parse_new_game_seed(std::string_view text) noexcept
+    -> std::optional<std::uint64_t> {
+  if (text.empty() || text.front() == '+' || text.front() == '-' ||
+      (text.size() > 1 && text.front() == '0')) {
+    return std::nullopt;
+  }
+  std::uint64_t value{};
+  const auto [end, error] =
+      std::from_chars(text.data(), text.data() + text.size(), value);
+  if (error != std::errc{} || end != text.data() + text.size()) {
+    return std::nullopt;
+  }
+  return value;
+}
+
+auto compute_title_menu_layout(int cols, int rows) noexcept
+    -> TitleMenuLayout {
+  TitleMenuLayout layout;
+  if (cols <= 0 || rows <= 0 || cols > kMaximumTerminalAxis ||
+      rows > kMaximumTerminalAxis || cols < kMinimumMenuCols ||
+      rows < kTitlePanelHeight + 8) {
+    return layout;
+  }
+  layout.screen = {0, 0, cols, rows};
+  const int panel_width = std::min(kTitlePanelWidth, cols - 4);
+  const int panel_x = (cols - panel_width) / 2;
+  const int panel_y = rows - kTitlePanelHeight - 1;
+  layout.panel = {panel_x, panel_y, panel_width, kTitlePanelHeight};
+  layout.heading = {panel_x + 2, panel_y + 1, panel_width - 4, 1};
+  for (std::size_t index = 0; index < layout.actions.size(); ++index) {
+    layout.actions[index] = {panel_x + 2,
+                             panel_y + 3 + static_cast<int>(index) * 2,
+                             panel_width - 4, 1};
+  }
+  layout.detail = {panel_x + 2, panel_y + 13, panel_width - 4, 1};
+  layout.hint = {panel_x + 2, panel_y + 15, panel_width - 4, 1};
+  layout.art = {2, 1, cols - 4, std::max(0, panel_y - 2)};
+  return layout;
+}
+
+auto title_action_at(const TitleMenuLayout& layout, int x, int y) noexcept
+    -> std::optional<TitleAction> {
+  if (!layout.supported()) return std::nullopt;
+  for (std::size_t index = 0; index < layout.actions.size(); ++index) {
+    if (layout.actions[index].contains(x, y)) {
+      return static_cast<TitleAction>(index);
+    }
+  }
   return std::nullopt;
 }
 

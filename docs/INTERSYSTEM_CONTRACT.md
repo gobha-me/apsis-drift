@@ -169,12 +169,12 @@ location into corrupt mission state.
 
 ## Rule profiles
 
-Version 4 retains exactly two authoritative rule profiles. `ASSISTED` is the
-fresh-career default. `PILOT` opts into deterministic thermal
-consequences and the implemented alignment consequences. The player may select
-either profile only while docked with the mission offered or accepted; launch
-locks it for the active mission. Profile commands are tick-addressed and never
-change seeds, identities, ephemerides, terrain, objectives, or mission phases.
+Version 4 retains exactly two authoritative penalty modes. Assisted Piloting is
+the fresh-career default. Advanced Piloting opts into deterministic thermal and
+alignment consequences. New Game chooses the mode once and it remains locked
+for the career; it is separate from the cockpit's Manual/Autopilot state. The
+historical save token for Advanced remains `pilot`. Neither mode changes seeds,
+identities, ephemerides, terrain, objectives, or mission phases.
 
 The thermal abort, arrival-quality bands, authoritative/derived state boundary,
 and recovery cap are specified in

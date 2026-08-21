@@ -1,14 +1,16 @@
 # Menu and Local Profile Contract
 
 Version 1 defines how Apsis Drift owns local careers and destructive session
-transitions before the title and pause menus grow beyond their current two
-actions. This is an application policy. TermForge continues to own terminal
+transitions. The v0.4.36 title flow implements the bounded local catalog,
+New/Continue/Load, random or edited seeds, New Game penalty mode, and
+Guided/Skip confirmation. Pause-menu Save/Save As and dirty-session prompts
+remain later stages of this contract. This is an application policy. TermForge continues to own terminal
 input, focus, capability detection, and degradation; it does not discover save
 files or decide whether a game session may be replaced.
 
-This contract records the behavior consumed by the later title, pause,
-settings, preferences, and Guided/Skip work. It does not implement those
-screens, add an autosave system, or change save format 16.
+The implementation does not add autosave or change save format 16. Explicit
+`--load`, `--new-game-seed`, and `--save` paths continue to bypass the title
+catalog.
 
 ## Storage ownership and bounds
 
@@ -45,7 +47,7 @@ within the bound. It never chooses an arbitrary subset.
 
 ## Header-derived catalog
 
-There is no separate catalog index in version 1. Each future catalog-managed
+There is no separate catalog index in version 1. Each catalog-managed
 save carries a bounded, non-authoritative root `profile` header alongside the
 existing application, writer, format, recipe, and state data. The header is a
 projection for listing; it does not enter `SaveDocument`, simulation,
@@ -60,25 +62,23 @@ struct ProfileMetadata {
   std::string application_version; // printable ASCII, at most 64 bytes
   std::uint32_t format_version;
   Seed universe_seed;
-  IntersystemRuleProfile rule_profile;
+  IntersystemRuleProfile penalty_mode;
   OnboardingState onboarding_state;
   std::optional<OnboardingChapter> onboarding_chapter;
   ProfileLocation location;
   SimulationTick tick;
-  std::optional<std::string> saved_at_utc; // display only
 };
 ```
 
-The future JSON projection is exact at this boundary:
+The JSON projection is exact at this boundary:
 
 ```json
 "profile": {
   "id": "1",
   "save_sequence": "7",
-  "saved_at_utc": "2026-08-20T12:00:00Z",
   "summary": {
     "universe_seed": "42",
-    "rule_profile": "assisted",
+    "penalty_mode": "assisted",
     "onboarding_state": "guided",
     "onboarding_chapter": "contract_one",
     "location": "docked_at_origin",
@@ -99,10 +99,8 @@ names: `docked_at_origin`, `origin_system_flight`,
 `return_jump_committed`, and `origin_system_return`.
 
 `ProfileId`, `save_sequence`, the seed, and the tick use canonical decimal
-strings in JSON. Enums use lowercase snake-case names. `saved_at_utc`, when
-present, is a printable UTC RFC 3339 value of at most 32 bytes. It is advisory
-display text and never controls ordering, Continue, simulation, or checksums.
-The UI derives an initial label such as `CAREER 0001` from the profile ID;
+strings in JSON. Enums use lowercase snake-case names. The UI derives an
+initial label such as `CAREER 0001` from the profile ID;
 editable career names are deferred. Catalog diagnostics are bounded to 160
 printable bytes before display; longer filesystem or decoder details are
 truncated without terminal control characters.
@@ -117,7 +115,7 @@ Header values that duplicate authoritative state are hints until full load.
 Full validation must prove that seed, rule profile, onboarding state/chapter,
 location, and tick exactly match the decoded recipe and state. A mismatch is a
 corrupt profile, not a reason to rewrite metadata or trust whichever value is
-newer. Format-13 files without a `profile` header remain valid explicit CLI
+newer. Format-16 files without a `profile` header remain valid explicit CLI
 files but do not silently enter the local catalog; Save As may import them into
 a new catalog slot once a later format defines the header.
 
@@ -167,7 +165,8 @@ entropy request leaves New open with a diagnostic and no partial career.
 The pending choices are exactly:
 
 - the visible editable universe seed;
-- `ASSISTED` or `PILOT`, with Assisted selected and explained by default;
+- `ASSISTED PILOTING` or `ADVANCED PILOTING`, with Assisted selected and
+  explained by default;
 - `Guided onboarding: On | Skip`, with Guided selected and explained by
   default.
 
@@ -185,9 +184,8 @@ an existing slot and is disabled when the 64-profile bound is reached.
 Skip confirmation is deliberately separate from general New confirmation.
 It explains that tutorial contracts cannot later be synthesized as completed
 missions, rewards, discoveries, visits, or world deltas. The authoritative
-Guided/Skip representation and baseline knowledge remain owned by #143; this
-contract only requires them to be stored in the profile and compared during
-metadata validation.
+Guided/Skip representation and baseline knowledge are stored in the profile
+and compared during metadata validation.
 
 ## Continue and Load
 
@@ -290,8 +288,8 @@ that write.
 ## Implementation ownership
 
 - #30 owns the separate versioned preference file.
-- #143 owns authoritative Guided/Skip state and starting knowledge.
-- #137 consumes this contract for New, Continue, Load, Settings, and Exit.
+- The onboarding model owns authoritative Guided/Skip state and starting knowledge.
+- The title flow consumes this contract for New, Continue, Load, Settings, and Exit.
 - #136 consumes it for Save, Load, Settings, Title, and dirty confirmations.
 - #135 owns the shared Settings screen without entering deterministic saves.
 
