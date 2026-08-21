@@ -36,11 +36,11 @@ mutation. The accepted board reports `LAUNCH ROUTE AUTHORIZED` and exposes
 Sub-light system-space craft movement and the target-planet orbital handoff are
 implemented by the versioned system-flight path.
 
-Left and Right switch between `ASSISTED` and `PILOT` while the mission is
-offered or accepted at the station. Launch locks the selection for the active
-mission. Assisted is the fresh-career default; the descriptions
-remain textual and information-complete on Kitty and ANSI. The complete
-profile contract is recorded in [Deterministic Rule Profiles](RULE_PROFILES.md).
+The mission board displays the career's locked `ASSISTED PILOTING` or
+`ADVANCED PILOTING` penalty mode and an information-complete explanation on
+both Kitty and ANSI. It never changes the mode: New Game chooses it once for
+the career. The complete contract is recorded in
+[Deterministic Rule Profiles](RULE_PROFILES.md).
 
 The same semantic model names active, objective-complete, returned, and
 turned-in states for later loop stages. A returned contract exposes

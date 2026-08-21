@@ -170,7 +170,7 @@ auto intersystem_rule_profile_name(IntersystemRuleProfile profile) noexcept
     -> std::string_view {
   switch (profile) {
     case IntersystemRuleProfile::assisted: return "ASSISTED";
-    case IntersystemRuleProfile::pilot: return "PILOT";
+    case IntersystemRuleProfile::pilot: return "ADVANCED";
   }
   return "INVALID";
 }
@@ -185,15 +185,20 @@ auto intersystem_arrival_quality_name(
   return "INVALID";
 }
 
-auto initial_intersystem_contract_state(Seed universe_seed) noexcept
+auto initial_intersystem_contract_state(
+    Seed universe_seed, IntersystemRuleProfile penalty_mode) noexcept
     -> IntersystemContractState {
   auto identities = generate_first_intersystem_identities(universe_seed);
+  if (penalty_mode != IntersystemRuleProfile::assisted &&
+      penalty_mode != IntersystemRuleProfile::pilot) {
+    penalty_mode = IntersystemRuleProfile::assisted;
+  }
   return {
       .identities = identities,
       .universe_tick = 0,
       .mission_phase = IntersystemMissionPhase::offered,
       .travel_phase = IntersystemTravelPhase::docked_at_origin,
-      .rule_profile = IntersystemRuleProfile::assisted,
+      .rule_profile = penalty_mode,
       .current_system = identities.origin_system,
       .current_planet = std::nullopt,
       .committed_jump_destination = std::nullopt,
@@ -426,16 +431,7 @@ auto advance_intersystem_contract(IntersystemContractState& state,
   switch (command) {
     case IntersystemContractCommand::select_assisted_profile:
     case IntersystemContractCommand::select_pilot_profile:
-      if (next.travel_phase != IntersystemTravelPhase::docked_at_origin ||
-          (next.mission_phase != IntersystemMissionPhase::offered &&
-           next.mission_phase != IntersystemMissionPhase::accepted)) {
-        return reject();
-      }
-      next.rule_profile =
-          command == IntersystemContractCommand::select_assisted_profile
-              ? IntersystemRuleProfile::assisted
-              : IntersystemRuleProfile::pilot;
-      break;
+      return reject();
     case IntersystemContractCommand::accept_mission:
       if (next.travel_phase != IntersystemTravelPhase::docked_at_origin ||
           next.mission_phase != IntersystemMissionPhase::offered) {

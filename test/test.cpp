@@ -43,6 +43,7 @@
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
+#include "apsis_drift/profile_catalog.hpp"
 #include "apsis_drift/save_file.hpp"
 #include "apsis_drift/save_schema.hpp"
 #include "apsis_drift/seed.hpp"
@@ -74,6 +75,13 @@ using termforge::Pixel;
 using termforge::Rect;
 
 int failures{};
+int fake_entropy_requests{};
+
+[[nodiscard]] auto fake_seed_entropy() noexcept
+    -> std::expected<std::uint64_t, SeedEntropyError> {
+  ++fake_entropy_requests;
+  return 0x0123456789abcdefULL;
+}
 
 auto check(bool condition, const char* message) -> void {
   if (condition) return;
@@ -779,10 +787,19 @@ auto intersystem_state_contract() -> void {
 
   rejected(IntersystemContractCommand::launch,
            IntersystemContractError::invalid_transition);
-  accepted(IntersystemContractCommand::select_pilot_profile);
-  check(state.rule_profile == IntersystemRuleProfile::pilot &&
-            intersystem_rule_profile_name(state.rule_profile) == "PILOT",
-        "a docked offered contract must accept the Pilot rule profile");
+  rejected(IntersystemContractCommand::select_pilot_profile,
+           IntersystemContractError::invalid_transition);
+  auto advanced_profile = initial_intersystem_contract_state(
+      Seed{42}, IntersystemRuleProfile::pilot);
+  const auto advanced_before = advanced_profile;
+  const auto advanced_change = advance_intersystem_contract(
+      advanced_profile, advanced_profile.universe_tick,
+      IntersystemContractCommand::select_assisted_profile);
+  check(advanced_profile.rule_profile == IntersystemRuleProfile::pilot &&
+            intersystem_rule_profile_name(advanced_profile.rule_profile) ==
+                "ADVANCED" &&
+            !advanced_change && advanced_profile == advanced_before,
+        "the New Game penalty mode must remain locked for the career");
   const auto wrong_tick_before = state;
   const auto wrong_tick =
       advance_intersystem_contract(state, state.universe_tick + 1,
@@ -793,9 +810,8 @@ auto intersystem_state_contract() -> void {
           state == wrong_tick_before,
       "commands must address the exact authoritative universe tick");
   accepted(IntersystemContractCommand::accept_mission);
-  accepted(IntersystemContractCommand::select_assisted_profile);
   check(state.rule_profile == IntersystemRuleProfile::assisted,
-        "a docked accepted contract must remain profile-selectable");
+        "an accepted contract must retain its career penalty mode");
   rejected(IntersystemContractCommand::accept_mission,
            IntersystemContractError::invalid_transition);
   accepted(IntersystemContractCommand::launch);
@@ -1364,11 +1380,9 @@ auto intersystem_jump_contract() -> void {
                 intersystem_arrival_checksum(at_60),
         "render cadence must not affect authoritative jump arrival");
 
-  auto pilot = initial_intersystem_contract_state(Seed{42});
+  auto pilot = initial_intersystem_contract_state(
+      Seed{42}, IntersystemRuleProfile::pilot);
   check(advance_intersystem_contract(
-            pilot, pilot.universe_tick,
-            IntersystemContractCommand::select_pilot_profile) &&
-            advance_intersystem_contract(
                 pilot, pilot.universe_tick,
                 IntersystemContractCommand::accept_mission) &&
             advance_intersystem_contract(
@@ -1455,10 +1469,8 @@ auto intersystem_jump_contract() -> void {
 
   const auto pilot_commit = [&target](std::int32_t heading,
                                       std::int32_t velocity) {
-    auto candidate = initial_intersystem_contract_state(Seed{42});
-    (void)advance_intersystem_contract(
-        candidate, candidate.universe_tick,
-        IntersystemContractCommand::select_pilot_profile);
+    auto candidate = initial_intersystem_contract_state(
+        Seed{42}, IntersystemRuleProfile::pilot);
     (void)advance_intersystem_contract(
         candidate, candidate.universe_tick,
         IntersystemContractCommand::accept_mission);
@@ -1500,10 +1512,8 @@ auto intersystem_jump_contract() -> void {
                 IntersystemArrivalQuality::opposed,
         "Pilot grading must include its exact documented threshold edges");
   const auto pilot_replay_at_rate = [&target](int frames_per_second) {
-    auto replay = initial_intersystem_contract_state(Seed{42});
-    (void)advance_intersystem_contract(
-        replay, replay.universe_tick,
-        IntersystemContractCommand::select_pilot_profile);
+    auto replay = initial_intersystem_contract_state(
+        Seed{42}, IntersystemRuleProfile::pilot);
     (void)advance_intersystem_contract(
         replay, replay.universe_tick,
         IntersystemContractCommand::accept_mission);
@@ -2012,15 +2022,15 @@ auto intersystem_return_contract() -> void {
           "return acceptance JSON must name its renderer-neutral evidence scope");
   }
 
-  auto launch_contract = initial_intersystem_contract_state(Seed{42});
+  auto launch_contract = initial_intersystem_contract_state(
+      Seed{42}, IntersystemRuleProfile::pilot);
   const auto launch_command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(launch_contract,
                                         launch_contract.universe_tick, value);
   };
   const auto launch_origin =
       generate_origin_system(launch_contract.identities.universe_seed);
-  check(launch_command(IntersystemContractCommand::select_pilot_profile) &&
-            launch_command(IntersystemContractCommand::accept_mission) &&
+  check(launch_command(IntersystemContractCommand::accept_mission) &&
             launch_command(IntersystemContractCommand::launch),
         "the station-flight fixture must enter origin-system flight");
   auto launched =
@@ -2561,13 +2571,13 @@ auto intersystem_planetfall_contract() -> void {
         "Planetfall must bind the mission target without retargeting it");
   if (!planetfall) return;
 
-  auto pilot_contract = initial_intersystem_contract_state(Seed{42});
+  auto pilot_contract = initial_intersystem_contract_state(
+      Seed{42}, IntersystemRuleProfile::pilot);
   const auto pilot_command = [&](IntersystemContractCommand command) {
     return advance_intersystem_contract(
         pilot_contract, pilot_contract.universe_tick, command);
   };
   bool pilot_ready =
-      pilot_command(IntersystemContractCommand::select_pilot_profile) &&
       pilot_command(IntersystemContractCommand::accept_mission) &&
       pilot_command(IntersystemContractCommand::launch) &&
       begin_intersystem_jump(pilot_contract);
@@ -2709,27 +2719,27 @@ auto mission_board_contract() -> void {
             offered->rule_profile == "ASSISTED" &&
             offered->rule_profile_description ==
                 "FORGIVING ENTRY // OPTIMAL FTL ARRIVAL" &&
-            offered->rule_profile_selection_enabled &&
+            !offered->rule_profile_selection_enabled &&
             offered->primary_action == "ACCEPT CONTRACT" &&
             offered->primary_action_enabled && !offered->launch_authorized,
         "the offered mission board must expose one complete semantic contract");
 
+  auto advanced = initial_intersystem_contract_state(
+      Seed{42}, IntersystemRuleProfile::pilot);
   const auto accept = advance_intersystem_contract(
-      state, state.universe_tick, IntersystemContractCommand::accept_mission);
-  const auto pilot = advance_intersystem_contract(
-      state, state.universe_tick,
-      IntersystemContractCommand::select_pilot_profile);
-  const auto accepted = mission_board_snapshot(state);
-  check(accept && pilot && accepted && accepted->status == "ACCEPTED" &&
-            accepted->rule_profile == "PILOT" &&
+      advanced, advanced.universe_tick,
+      IntersystemContractCommand::accept_mission);
+  const auto accepted = mission_board_snapshot(advanced);
+  check(accept && accepted && accepted->status == "ACCEPTED" &&
+            accepted->rule_profile == "ADVANCED" &&
             accepted->rule_profile_description ==
                 "THERMAL ABORTS // ALIGNMENT-GRADED ARRIVAL" &&
-            accepted->rule_profile_selection_enabled &&
+            !accepted->rule_profile_selection_enabled &&
             accepted->primary_action == "LAUNCH" &&
             accepted->primary_action_enabled && accepted->launch_authorized,
         "acceptance must authorize an explicit intersystem launch");
 
-  auto corrupted = state;
+  auto corrupted = advanced;
   corrupted.identities.target_objective.value ^= 1U;
   check(mission_board_snapshot(corrupted) ==
             std::unexpected{MissionBoardError::invalid_contract},
@@ -2747,17 +2757,17 @@ auto mission_board_contract() -> void {
                     "$.state.intersystem_contract.identities",
                     "stored first-contract identities do not match deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
-  auto pilot_document =
-      make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
-  const auto selected = advance_intersystem_contract(
-      *pilot_document.state.intersystem_contract, 0,
-      IntersystemContractCommand::select_pilot_profile);
+  auto pilot_document = make_new_game_document(NewGameOptions{
+      .universe_seed = Seed{42},
+      .penalty_mode = IntersystemRuleProfile::pilot,
+      .onboarding = NewGameOnboardingChoice::skip,
+  });
   const auto pilot_json = encode_save_document_json(pilot_document);
   const auto pilot_round_trip =
       pilot_json ? decode_save_document_json(*pilot_json)
                  : std::expected<SaveDocument, SaveSchemaError>{
                        std::unexpected{SaveSchemaError{}}};
-  check(selected && pilot_json &&
+  check(pilot_json &&
             pilot_json->find("\"rule_profile\": \"pilot\"") !=
                 std::string::npos &&
             pilot_round_trip &&
@@ -2846,14 +2856,17 @@ auto mission_board_contract() -> void {
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
              "offered intersystem state must survive a v15 round trip");
+  check(advance_intersystem_contract(
+            state, state.universe_tick,
+            IntersystemContractCommand::accept_mission)
+            .has_value(),
+        "the released-save fixture must accept its locked Assisted profile");
   round_trip(state, "accepted intersystem state must survive a v15 round trip");
 
   const auto command = [&](IntersystemContractCommand value) {
     return advance_intersystem_contract(state, state.universe_tick, value);
   };
-  check(command(IntersystemContractCommand::select_assisted_profile)
-                .has_value() &&
-            command(IntersystemContractCommand::launch).has_value(),
+  check(command(IntersystemContractCommand::launch).has_value(),
         "the released-save fixture must launch with its historical Assisted "
         "profile");
   round_trip(state, "active intersystem state must survive a v15 round trip");
@@ -4494,6 +4507,141 @@ auto save_file_contract() -> void {
   check(oversized_written && !oversized &&
             oversized.error().code == SaveFileErrorCode::document_too_large,
         "a save one byte beyond the format bound must fail before decoding");
+}
+
+auto profile_catalog_contract() -> void {
+  fake_entropy_requests = 0;
+  const auto injected_seed = request_new_game_seed(fake_seed_entropy);
+  check(injected_seed && *injected_seed == 0x0123456789abcdefULL &&
+            fake_entropy_requests == 1 && !request_new_game_seed(nullptr),
+        "New Game entropy must be injectable, called once per request, and fail closed without a source");
+  check(parse_new_game_seed("0") == 0U &&
+            parse_new_game_seed("18446744073709551615") ==
+                std::numeric_limits<std::uint64_t>::max(),
+        "New Game seed parsing must accept the complete canonical unsigned range");
+  for (const std::string_view invalid :
+       {"", "+1", "-1", "00", "01", "18446744073709551616", "1x"}) {
+    check(!parse_new_game_seed(invalid),
+          "New Game seed parsing must reject non-canonical or overflowing values");
+  }
+
+  TemporaryDirectory temporary;
+  const auto xdg = resolve_profile_directory(
+      temporary.path().string(), std::string{"/unused"});
+  check(xdg && *xdg == temporary.path() / "apsis-drift" / "profiles",
+        "an absolute XDG data home must own the profile catalog");
+  const auto home = resolve_profile_directory(
+      std::string{"relative-xdg"}, temporary.path().string());
+  check(home && *home == temporary.path() / ".local" / "share" /
+                             "apsis-drift" / "profiles",
+        "a non-absolute XDG data home must fall back to the absolute HOME path");
+  check(!resolve_profile_directory(std::string{}, std::string{"relative-home"}),
+        "profile directory resolution must reject a relative HOME fallback");
+  if (!xdg) return;
+
+  const NewGameOptions assisted_options{
+      .universe_seed = Seed{42},
+      .penalty_mode = IntersystemRuleProfile::assisted,
+      .onboarding = NewGameOnboardingChoice::guided,
+  };
+  const auto assisted_document = make_new_game_document(assisted_options);
+  const auto assisted = create_catalog_profile(*xdg, assisted_document);
+  check(assisted && assisted->metadata.id == ProfileId{1} &&
+            assisted->metadata.save_sequence == 1U &&
+            assisted->metadata.universe_seed == Seed{42} &&
+            assisted->metadata.penalty_mode ==
+                IntersystemRuleProfile::assisted &&
+            assisted->metadata.onboarding_state == OnboardingState::guided &&
+            assisted->metadata.location ==
+                ProfileLocation::docked_at_origin &&
+            assisted->document == assisted_document,
+        "catalog creation must persist an exact Guided Assisted career and its bounded summary");
+  if (!assisted) return;
+
+  auto snapshot = scan_profile_catalog(*xdg);
+  check(snapshot.writable && !snapshot.overflow &&
+            snapshot.entries.size() == 1U &&
+            snapshot.continue_index == 0U &&
+            snapshot.entries.front().activatable(),
+        "a newly created catalog must expose its career as Continue");
+  const auto loaded = load_catalog_profile(snapshot.entries.front());
+  check(loaded && loaded->document == assisted_document &&
+            loaded->metadata == assisted->metadata &&
+            loaded->source_bytes == assisted->source_bytes,
+        "catalog loading must revalidate and preserve the exact authoritative document");
+  const auto scanned_assisted = snapshot.entries.front();
+  check(write_test_file(assisted->path, assisted->source_bytes + "\n"),
+        "the stale-entry fixture must preserve a valid document with changed bytes");
+  const auto stale = load_catalog_profile(scanned_assisted);
+  check(!stale && stale.error().code == ProfileCatalogErrorCode::stale_entry,
+        "activation must reject a profile whose source bytes changed after cataloging");
+  check(write_test_file(assisted->path, assisted->source_bytes),
+        "the stale-entry fixture must restore the catalog profile exactly");
+
+  const NewGameOptions advanced_options{
+      .universe_seed = Seed{42},
+      .penalty_mode = IntersystemRuleProfile::pilot,
+      .onboarding = NewGameOnboardingChoice::skip,
+  };
+  const auto advanced_document = make_new_game_document(advanced_options);
+  const auto advanced = create_catalog_profile(*xdg, advanced_document);
+  check(advanced && advanced->metadata.id == ProfileId{2} &&
+            advanced->metadata.save_sequence == 2U &&
+            advanced->metadata.penalty_mode == IntersystemRuleProfile::pilot &&
+            advanced->metadata.onboarding_state == OnboardingState::skipped &&
+            advanced->document.recipe == assisted_document.recipe &&
+            advanced->document.state.onboarding !=
+                assisted_document.state.onboarding,
+        "the same universe seed must retain generated identity while New Game choices remain career state");
+  snapshot = scan_profile_catalog(*xdg);
+  check(snapshot.entries.size() == 2U && snapshot.continue_index == 0U &&
+            snapshot.entries.front().metadata &&
+            snapshot.entries.front().metadata->id == ProfileId{2},
+        "Continue must select the newest valid save sequence deterministically");
+
+  const auto symlink_path = *xdg / "profile-0000000000000003.json";
+  std::error_code link_error;
+  std::filesystem::create_symlink(assisted->path, symlink_path, link_error);
+  snapshot = scan_profile_catalog(*xdg);
+  check(!link_error && snapshot.entries.size() == 2U,
+        "catalog scans must ignore canonical-name symbolic links");
+
+  auto mismatched = assisted->source_bytes;
+  mismatched = replace_once(mismatched,
+                            "\"penalty_mode\": \"assisted\"",
+                            "\"penalty_mode\": \"pilot\"");
+  check(write_test_file(assisted->path, mismatched),
+        "the invalid profile-header fixture must be writable");
+  snapshot = scan_profile_catalog(*xdg);
+  const auto invalid = std::ranges::find_if(
+      snapshot.entries, [&](const ProfileCatalogEntry& entry) {
+        return entry.path == assisted->path;
+      });
+  check(invalid != snapshot.entries.end() &&
+            invalid->status == ProfileCatalogStatus::invalid_header &&
+            !invalid->activatable() && snapshot.continue_index == 0U &&
+            snapshot.entries[*snapshot.continue_index].metadata->id ==
+                ProfileId{2},
+        "an inconsistent header must remain visible without displacing the newest usable Continue profile");
+
+  TemporaryDirectory full;
+  for (std::uint64_t id = 1; id <= kMaximumLocalProfiles; ++id) {
+    check(write_test_file(
+              full.path() / std::format("profile-{:016x}.json", id), "{}"),
+          "the full-catalog fixture must create each bounded candidate");
+  }
+  const auto full_snapshot = scan_profile_catalog(full.path());
+  const auto refused = create_catalog_profile(full.path(), assisted_document);
+  check(full_snapshot.entries.size() == kMaximumLocalProfiles &&
+            !full_snapshot.overflow && !refused &&
+            refused.error().code == ProfileCatalogErrorCode::catalog_full,
+        "a 64-entry profile catalog must refuse a 65th career without overwriting data");
+  check(write_test_file(
+            full.path() / "profile-0000000000000041.json", "{}"),
+        "the overflow catalog fixture must create one extra canonical candidate");
+  const auto overflow = scan_profile_catalog(full.path());
+  check(overflow.overflow && !overflow.writable && overflow.entries.empty(),
+        "more than 64 canonical profile files must fail catalog enumeration closed");
 }
 
 auto signal_run_contract() -> void {
@@ -6856,6 +7004,33 @@ auto menu_session_contract() -> void {
         "menu borders must not activate an action");
   check(compact == compute_menu_layout(80, 24),
         "menu layout must be deterministic");
+
+  for (const auto& [cols, rows] :
+       std::array{std::pair{0, 24}, std::pair{80, 0},
+                  std::pair{31, 24}, std::pair{80, 23},
+                  std::pair{65536, 24}}) {
+    check(!compute_title_menu_layout(cols, rows).supported(),
+          "invalid title-menu dimensions must be rejected");
+  }
+  const auto title_layout = compute_title_menu_layout(80, 24);
+  check(title_layout.supported() &&
+            contained_by(title_layout.art, title_layout.screen) &&
+            contained_by(title_layout.panel, title_layout.screen) &&
+            title_layout.art.intersect(title_layout.panel).empty() &&
+            std::ranges::all_of(title_layout.actions, [&](Rect action) {
+              return contained_by(action, title_layout.panel);
+            }),
+        "the minimum title terminal must retain bounded art and five usable actions");
+  for (std::size_t index = 0; index < title_layout.actions.size(); ++index) {
+    const auto row = title_layout.actions[index];
+    check(title_action_at(title_layout, row.x + row.w - 1, row.y) ==
+              static_cast<TitleAction>(index),
+          "title-menu hit testing must include every action's right boundary");
+  }
+  check(!title_action_at(title_layout, title_layout.panel.x,
+                         title_layout.panel.y) &&
+            title_layout == compute_title_menu_layout(80, 24),
+        "title-menu borders must be inert and layout deterministic");
 }
 
 auto title_render_contract() -> void {
@@ -10074,6 +10249,7 @@ auto main() -> int {
   career_onboarding_contract();
   save_schema_contract();
   save_file_contract();
+  profile_catalog_contract();
   signal_run_contract();
   world_delta_journal_contract();
   regenerated_world_delta_contract();

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.35 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.36 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -113,6 +113,7 @@ add_library(apsis_drift_lib STATIC
   src/planetfall_acceptance.cpp
   src/planetary_flight.cpp
   src/planetary_presentation.cpp
+  src/profile_catalog.cpp
   src/render_profile.cpp
   src/save_file.cpp
   src/save_schema.cpp

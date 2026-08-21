@@ -52,6 +52,7 @@
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
+#include "apsis_drift/profile_catalog.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/save_file.hpp"
 #include "apsis_drift/signal_navigation_acceptance.hpp"
@@ -395,82 +396,8 @@ class LandscapeApp final : public App {
         m_flight_deck_acceptance(flight_deck_acceptance),
         m_signal_navigation_acceptance(signal_navigation_acceptance) {
     if (profile != nullptr) {
-      m_save_profile = *profile;
-      const bool guided_origin_system_contract =
-          profile->state.intersystem_contract &&
-          profile->state.origin_system_contract &&
-          profile->state.onboarding.state == OnboardingState::guided &&
-          profile->state.onboarding.chapter ==
-              OnboardingChapter::contract_two;
-      const bool guided_signal_run =
-          profile->state.intersystem_contract &&
-          profile->state.onboarding.state == OnboardingState::guided &&
-          profile->state.onboarding.chapter ==
-              OnboardingChapter::contract_one;
-      if (guided_origin_system_contract) {
-        m_intersystem_contract = *profile->state.intersystem_contract;
-        m_origin_system_contract = *profile->state.origin_system_contract;
-        m_system_flight = profile->state.system_flight;
-        m_origin_station_flight = profile->state.origin_station_flight;
-        m_origin_system_world_deltas =
-            profile->state.origin_system_world_deltas;
-        if (profile->state.flight) {
-          auto cache = TerrainTileCache::create();
-          const auto body = find_local_system_planet(
-              m_origin_system,
-              m_origin_system_contract->binding.target_planet);
-          if (!cache || !body) {
-            throw std::runtime_error{
-                "cannot create contract-two Planetfall terrain state"};
-          }
-          auto planetfall = initialize_intersystem_planetfall(
-              (*body)->descriptor,
-              m_origin_system_contract->binding.target_objective,
-              *profile->state.flight,
-              profile->state.origin_system_world_deltas, *cache);
-          if (!planetfall) {
-            throw std::runtime_error{
-                "cannot hydrate contract-two Planetfall state"};
-          }
-          m_intersystem_planetfall_cache.emplace(std::move(*cache));
-          m_intersystem_planetfall.emplace(std::move(*planetfall));
-        }
-      } else if (profile->state.intersystem_contract && !guided_signal_run) {
-        m_intersystem_contract = *profile->state.intersystem_contract;
-        m_system_flight = profile->state.system_flight;
-        m_origin_station_flight = profile->state.origin_station_flight;
-        m_intersystem_world_deltas = profile->state.world_deltas;
-        if (profile->state.flight) {
-          auto cache = TerrainTileCache::create();
-          const auto body = find_local_system_planet(
-              m_local_system,
-              m_intersystem_contract->identities.target_planet);
-          if (!cache || !body) {
-            throw std::runtime_error{
-                "cannot create target Planetfall terrain state"};
-          }
-          auto planetfall = initialize_intersystem_planetfall(
-              (*body)->descriptor,
-              m_intersystem_contract->identities.target_objective,
-              *profile->state.flight, profile->state.world_deltas, *cache);
-          if (!planetfall) {
-            throw std::runtime_error{
-                "cannot hydrate target Planetfall state"};
-          }
-          m_intersystem_planetfall_cache.emplace(std::move(*cache));
-          m_intersystem_planetfall.emplace(std::move(*planetfall));
-        }
-      } else {
-        auto cache = TerrainTileCache::create();
-        if (!cache) {
-          throw std::runtime_error{"cannot create Signal Run terrain cache"};
-        }
-        m_signal_run_cache.emplace(std::move(*cache));
-        auto run = hydrate_signal_run(*profile, *m_signal_run_cache);
-        if (!run) {
-          throw std::runtime_error{"cannot hydrate Signal Run profile"};
-        }
-        m_signal_run.emplace(std::move(*run));
+      if (auto activated = activate_profile(*profile); !activated) {
+        throw std::runtime_error{activated.error()};
       }
     }
     if (m_signal_navigation_acceptance) {
@@ -501,6 +428,7 @@ class LandscapeApp final : public App {
     m_sink.set_fd(terminal().io().out);
     driver().set_output(&m_sink);
     m_output_bound = true;
+    if (m_interactive_controls && !m_save_profile) refresh_profile_catalog();
     const auto& caps = capabilities();
     const std::string_view tier = caps.kitty_graphics ? "kitty" : "ansi";
     const auto input = input_capabilities();
@@ -536,19 +464,25 @@ class LandscapeApp final : public App {
           if (m_universe_navigation_open) {
             m_universe_navigation_open = false;
             m_error.clear();
+          } else if (m_session.screen() == SessionScreen::title) {
+            handle_title_escape();
           } else {
             apply_session_command(MenuCommand::escape);
           }
         }
         return;
       }
-      if (m_session.menu_visible()) {
+      if (m_session.screen() == SessionScreen::title) {
+        handle_title_key(*key);
+      } else if (m_session.menu_visible()) {
         handle_menu_key(*key);
       } else if (m_session.screen() == SessionScreen::flight) {
         handle_key(*key);
       }
     } else if (const auto* mouse = std::get_if<MouseEvent>(&event)) {
-      if (m_session.menu_visible()) {
+      if (m_session.screen() == SessionScreen::title) {
+        handle_title_mouse(*mouse);
+      } else if (m_session.menu_visible()) {
         handle_menu_mouse(*mouse);
       } else if (m_interactive_controls &&
                  m_session.screen() == SessionScreen::flight) {
@@ -559,6 +493,8 @@ class LandscapeApp final : public App {
       m_input_mapper.neutralize_mouse(current_flight_tick());
       m_active_mouse_region = {};
       m_menu_layout = compute_menu_layout(resize->cols, resize->rows);
+      m_title_menu_layout =
+          compute_title_menu_layout(resize->cols, resize->rows);
     }
     App::on_event(event);
   }
@@ -871,6 +807,136 @@ class LandscapeApp final : public App {
   }
 
  private:
+  [[nodiscard]] auto activate_profile(const SaveDocument& profile)
+      -> std::expected<void, std::string> {
+    if (const auto valid = validate_save_document(profile); !valid) {
+      return std::unexpected{valid.error().detail};
+    }
+
+    const Seed universe_seed = profile.recipe.universe_seed;
+    auto origin_system = generate_origin_system(universe_seed);
+    auto local_system = generate_local_system(
+        generate_first_intersystem_identities(universe_seed)
+            .target_system_seed);
+    std::optional<SystemFlightState> system_flight;
+    std::optional<OriginStationFlightState> station_flight;
+    std::optional<TerrainTileCache> planetfall_cache;
+    std::optional<IntersystemPlanetfallState> planetfall;
+    std::optional<TerrainTileCache> signal_cache;
+    std::optional<SignalRunState> signal_run;
+    std::optional<IntersystemContractState> career;
+    std::optional<OriginSystemContractState> origin_contract;
+    std::vector<SaveWorldDelta> intersystem_deltas;
+    std::vector<SaveWorldDelta> origin_deltas;
+
+    const bool guided_origin_contract =
+        profile.state.intersystem_contract &&
+        profile.state.origin_system_contract &&
+        profile.state.onboarding.state == OnboardingState::guided &&
+        profile.state.onboarding.chapter == OnboardingChapter::contract_two;
+    const bool guided_signal_run =
+        profile.state.intersystem_contract &&
+        profile.state.onboarding.state == OnboardingState::guided &&
+        profile.state.onboarding.chapter == OnboardingChapter::contract_one;
+    if (guided_origin_contract) {
+      career = *profile.state.intersystem_contract;
+      origin_contract = *profile.state.origin_system_contract;
+      system_flight = profile.state.system_flight;
+      station_flight = profile.state.origin_station_flight;
+      origin_deltas = profile.state.origin_system_world_deltas;
+      if (profile.state.flight) {
+        auto cache = TerrainTileCache::create();
+        const auto body = find_local_system_planet(
+            origin_system, origin_contract->binding.target_planet);
+        if (!cache || !body) {
+          return std::unexpected{
+              "cannot create contract-two Planetfall terrain state"};
+        }
+        auto hydrated = initialize_intersystem_planetfall(
+            (*body)->descriptor, origin_contract->binding.target_objective,
+            *profile.state.flight, profile.state.origin_system_world_deltas,
+            *cache);
+        if (!hydrated) {
+          return std::unexpected{
+              "cannot hydrate contract-two Planetfall state"};
+        }
+        planetfall_cache.emplace(std::move(*cache));
+        planetfall.emplace(std::move(*hydrated));
+      }
+    } else if (profile.state.intersystem_contract && !guided_signal_run) {
+      career = *profile.state.intersystem_contract;
+      system_flight = profile.state.system_flight;
+      station_flight = profile.state.origin_station_flight;
+      intersystem_deltas = profile.state.world_deltas;
+      if (profile.state.flight) {
+        auto cache = TerrainTileCache::create();
+        const auto body = find_local_system_planet(
+            local_system, career->identities.target_planet);
+        if (!cache || !body) {
+          return std::unexpected{
+              "cannot create target Planetfall terrain state"};
+        }
+        auto hydrated = initialize_intersystem_planetfall(
+            (*body)->descriptor, career->identities.target_objective,
+            *profile.state.flight, profile.state.world_deltas, *cache);
+        if (!hydrated) {
+          return std::unexpected{"cannot hydrate target Planetfall state"};
+        }
+        planetfall_cache.emplace(std::move(*cache));
+        planetfall.emplace(std::move(*hydrated));
+      }
+    } else {
+      auto cache = TerrainTileCache::create();
+      if (!cache) {
+        return std::unexpected{"cannot create Signal Run terrain cache"};
+      }
+      auto hydrated = hydrate_signal_run(profile, *cache);
+      if (!hydrated) {
+        return std::unexpected{"cannot hydrate Signal Run profile"};
+      }
+      signal_cache.emplace(std::move(*cache));
+      signal_run.emplace(std::move(*hydrated));
+    }
+
+    m_universe_seed = universe_seed;
+    m_origin_system = std::move(origin_system);
+    m_local_system = std::move(local_system);
+    m_system_flight = std::move(system_flight);
+    m_origin_station_flight = std::move(station_flight);
+    m_intersystem_planetfall_cache = std::move(planetfall_cache);
+    m_intersystem_planetfall = std::move(planetfall);
+    m_signal_run_cache = std::move(signal_cache);
+    m_signal_run = std::move(signal_run);
+    m_save_profile = profile;
+    m_intersystem_contract = std::move(career);
+    m_origin_system_contract = std::move(origin_contract);
+    m_intersystem_world_deltas = std::move(intersystem_deltas);
+    m_origin_system_world_deltas = std::move(origin_deltas);
+    m_system_renderer.emplace(LocalSystemRenderSettings{
+        .width = m_render_configuration.viewport.width,
+        .height = m_render_configuration.viewport.height,
+        .field_of_view_degrees = 60.0});
+    m_planetary_renderer.emplace(
+        planetary_settings_for(m_render_configuration.viewport));
+    m_seed = static_cast<std::uint32_t>(universe_seed.value ^
+                                        (universe_seed.value >> 32U));
+
+    const bool docked =
+        profile.state.origin_system_contract
+            ? profile.state.location == OriginLocation::docked_at_origin
+        : profile.state.intersystem_contract
+            ? profile.state.intersystem_contract->travel_phase ==
+                  IntersystemTravelPhase::docked_at_origin
+            : profile.state.location == OriginLocation::docked_at_origin;
+    m_session = SessionController(false, docked);
+    (void)m_session.dispatch(MenuCommand::activate);
+    m_simulation_clock.reset();
+    m_input_mapper.suspend({}, current_flight_tick());
+    m_active_mouse_region = {};
+    m_error.clear();
+    return {};
+  }
+
   [[nodiscard]] auto current_flight_tick() const noexcept -> SimulationTick {
     if (m_intersystem_contract) {
       return m_intersystem_contract->universe_tick;
@@ -900,6 +966,311 @@ class LandscapeApp final : public App {
         generate_first_universe_route(m_universe_seed),
         m_save_profile->state.onboarding,
         m_intersystem_contract->current_system, true, selection_open);
+  }
+
+  auto refresh_profile_catalog() -> void {
+    const auto directory = resolve_profile_directory();
+    if (!directory) {
+      m_profile_directory.reset();
+      m_profile_catalog = {};
+      m_profile_catalog.diagnostic = directory.error().detail;
+      return;
+    }
+    m_profile_directory = *directory;
+    m_profile_catalog = scan_profile_catalog(*directory);
+  }
+
+  auto handle_title_escape() -> void {
+    if (m_title_page == TitlePage::root) return;
+    if (m_title_page == TitlePage::skip_confirmation) {
+      m_title_page = TitlePage::new_game;
+      m_skip_confirmation_proceed = false;
+      return;
+    }
+    m_title_page = TitlePage::root;
+    m_error.clear();
+    refresh_profile_catalog();
+  }
+
+  auto activate_catalog_entry(std::size_t index) -> void {
+    if (index >= m_profile_catalog.entries.size()) return;
+    const auto loaded =
+        load_catalog_profile(m_profile_catalog.entries[index]);
+    if (!loaded) {
+      m_error = profile_catalog_error_message(loaded.error());
+      refresh_profile_catalog();
+      return;
+    }
+    if (auto activated = activate_profile(loaded->document); !activated) {
+      m_error = activated.error();
+      return;
+    }
+    m_loaded_profile = *loaded;
+  }
+
+  auto create_pending_profile() -> void {
+    const auto seed = parse_new_game_seed(m_new_seed_text);
+    if (!seed) {
+      m_error = "seed must be a canonical unsigned 64-bit integer";
+      return;
+    }
+    if (!m_profile_directory) {
+      m_error = "local profile storage is unavailable";
+      return;
+    }
+    const auto document = make_new_game_document(NewGameOptions{
+        .universe_seed = Seed{*seed},
+        .penalty_mode = m_new_penalty_mode,
+        .onboarding = m_new_onboarding,
+    });
+    const auto created =
+        create_catalog_profile(*m_profile_directory, document);
+    if (!created) {
+      m_error = profile_catalog_error_message(created.error());
+      return;
+    }
+    if (auto activated = activate_profile(created->document); !activated) {
+      m_error = activated.error();
+      return;
+    }
+    m_loaded_profile = *created;
+  }
+
+  auto reroll_new_seed() -> bool {
+    const auto seed = request_new_game_seed();
+    if (!seed) {
+      m_error = "operating-system entropy is unavailable";
+      return false;
+    }
+    m_new_seed_text = std::to_string(*seed);
+    m_new_seed_replace_on_type = true;
+    m_error.clear();
+    return true;
+  }
+
+  auto activate_title_action() -> void {
+    switch (m_title_action) {
+      case TitleAction::new_game:
+        if (!m_profile_catalog.writable || m_profile_catalog.overflow ||
+            m_profile_catalog.entries.size() >= kMaximumLocalProfiles) {
+          m_error = m_profile_catalog.diagnostic.empty()
+                        ? "local profile storage is unavailable"
+                        : m_profile_catalog.diagnostic;
+          return;
+        }
+        if (!reroll_new_seed()) return;
+        m_new_penalty_mode = IntersystemRuleProfile::assisted;
+        m_new_onboarding = NewGameOnboardingChoice::guided;
+        m_new_game_field = NewGameField::seed;
+        m_title_page = TitlePage::new_game;
+        return;
+      case TitleAction::continue_game:
+        if (!m_profile_catalog.continue_index) {
+          m_error = m_profile_catalog.diagnostic.empty()
+                        ? "no usable local profile"
+                        : m_profile_catalog.diagnostic;
+          return;
+        }
+        activate_catalog_entry(*m_profile_catalog.continue_index);
+        return;
+      case TitleAction::load:
+        if (m_profile_catalog.entries.empty()) {
+          m_error = "no local profiles to load";
+          return;
+        }
+        m_load_index = 0;
+        m_title_page = TitlePage::load;
+        m_error.clear();
+        return;
+      case TitleAction::settings:
+        m_title_page = TitlePage::settings_information;
+        m_error.clear();
+        return;
+      case TitleAction::exit: quit(); return;
+    }
+  }
+
+  auto activate_new_game_field() -> void {
+    switch (m_new_game_field) {
+      case NewGameField::seed: return;
+      case NewGameField::reroll: (void)reroll_new_seed(); return;
+      case NewGameField::penalty_mode:
+        m_new_penalty_mode =
+            m_new_penalty_mode == IntersystemRuleProfile::assisted
+                ? IntersystemRuleProfile::pilot
+                : IntersystemRuleProfile::assisted;
+        return;
+      case NewGameField::onboarding:
+        m_new_onboarding =
+            m_new_onboarding == NewGameOnboardingChoice::guided
+                ? NewGameOnboardingChoice::skip
+                : NewGameOnboardingChoice::guided;
+        return;
+      case NewGameField::confirm:
+        if (!parse_new_game_seed(m_new_seed_text)) {
+          m_error = "seed must be a canonical unsigned 64-bit integer";
+          return;
+        }
+        if (m_new_onboarding == NewGameOnboardingChoice::skip) {
+          m_skip_confirmation_proceed = false;
+          m_title_page = TitlePage::skip_confirmation;
+          return;
+        }
+        create_pending_profile();
+        return;
+      case NewGameField::cancel:
+        m_title_page = TitlePage::root;
+        m_error.clear();
+        refresh_profile_catalog();
+        return;
+    }
+  }
+
+  auto handle_title_key(const KeyEvent& key) -> void {
+    if (key.action == KeyAction::Release) return;
+    if (m_title_page == TitlePage::settings_information) {
+      if (key.action == KeyAction::Press &&
+          (key.key == Key::Enter || key.key == Key::Backspace)) {
+        handle_title_escape();
+      }
+      return;
+    }
+    if (m_title_page == TitlePage::skip_confirmation) {
+      if (key.key == Key::Left || key.key == Key::Right ||
+          key.key == Key::Up || key.key == Key::Down || key.key == Key::Tab) {
+        m_skip_confirmation_proceed = !m_skip_confirmation_proceed;
+        return;
+      }
+      if (key.action == KeyAction::Press && key.key == Key::Enter) {
+        if (m_skip_confirmation_proceed) create_pending_profile();
+        else handle_title_escape();
+      }
+      return;
+    }
+    if (m_title_page == TitlePage::load) {
+      if (m_profile_catalog.entries.empty()) return;
+      if (key.key == Key::Up || (key.key == Key::Tab && key.shift)) {
+        m_load_index =
+            (m_load_index + m_profile_catalog.entries.size() - 1U) %
+            m_profile_catalog.entries.size();
+      } else if (key.key == Key::Down || key.key == Key::Tab) {
+        m_load_index = (m_load_index + 1U) % m_profile_catalog.entries.size();
+      } else if (key.action == KeyAction::Press && key.key == Key::Enter) {
+        activate_catalog_entry(m_load_index);
+      }
+      return;
+    }
+    if (m_title_page == TitlePage::new_game) {
+      if (m_new_game_field == NewGameField::seed &&
+          key.key == Key::Char && key.ch >= U'0' && key.ch <= U'9' &&
+          (m_new_seed_replace_on_type || m_new_seed_text.size() < 20U)) {
+        if (m_new_seed_replace_on_type) m_new_seed_text.clear();
+        m_new_seed_replace_on_type = false;
+        m_new_seed_text.push_back(static_cast<char>(key.ch));
+        m_error.clear();
+        return;
+      }
+      if (m_new_game_field == NewGameField::seed &&
+          key.key == Key::Backspace && !m_new_seed_text.empty()) {
+        if (m_new_seed_replace_on_type) m_new_seed_text.clear();
+        else m_new_seed_text.pop_back();
+        m_new_seed_replace_on_type = false;
+        m_error.clear();
+        return;
+      }
+      if (key.key == Key::Up || (key.key == Key::Tab && key.shift)) {
+        const auto value = static_cast<unsigned>(m_new_game_field);
+        m_new_game_field =
+            static_cast<NewGameField>((value + 5U) % 6U);
+        return;
+      }
+      if (key.key == Key::Down || key.key == Key::Tab) {
+        const auto value = static_cast<unsigned>(m_new_game_field);
+        m_new_game_field =
+            static_cast<NewGameField>((value + 1U) % 6U);
+        return;
+      }
+      if ((key.key == Key::Left || key.key == Key::Right) &&
+          (m_new_game_field == NewGameField::penalty_mode ||
+           m_new_game_field == NewGameField::onboarding)) {
+        activate_new_game_field();
+        return;
+      }
+      if (key.action == KeyAction::Press && key.key == Key::Enter) {
+        activate_new_game_field();
+      }
+      return;
+    }
+
+    if (key.key == Key::Up || (key.key == Key::Tab && key.shift)) {
+      const auto value = static_cast<unsigned>(m_title_action);
+      m_title_action = static_cast<TitleAction>((value + 4U) % 5U);
+    } else if (key.key == Key::Down || key.key == Key::Tab) {
+      const auto value = static_cast<unsigned>(m_title_action);
+      m_title_action = static_cast<TitleAction>((value + 1U) % 5U);
+    } else if (key.action == KeyAction::Press && key.key == Key::Enter) {
+      activate_title_action();
+    }
+  }
+
+  auto handle_title_mouse(const MouseEvent& mouse) -> void {
+    if (!mouse.pressed || mouse.button != 0 || mouse.scroll_up ||
+        mouse.scroll_down || !m_title_menu_layout.supported()) {
+      return;
+    }
+    if (m_title_page == TitlePage::root) {
+      const auto selected =
+          title_action_at(m_title_menu_layout, mouse.x, mouse.y);
+      if (!selected) return;
+      m_title_action = *selected;
+      activate_title_action();
+      return;
+    }
+    const auto row_at = [&](std::size_t index, int first_y = 3) {
+      return Rect{m_title_menu_layout.panel.x + 2,
+                  m_title_menu_layout.panel.y + first_y +
+                      static_cast<int>(index) * 2,
+                  m_title_menu_layout.panel.w - 4, 1}
+          .contains(mouse.x, mouse.y);
+    };
+    if (m_title_page == TitlePage::new_game) {
+      for (std::size_t index = 0; index < 6U; ++index) {
+        if (!row_at(index)) continue;
+        m_new_game_field = static_cast<NewGameField>(index);
+        if (m_new_game_field == NewGameField::seed) {
+          m_new_seed_replace_on_type = true;
+        }
+        activate_new_game_field();
+        return;
+      }
+      return;
+    }
+    if (m_title_page == TitlePage::skip_confirmation) {
+      if (row_at(0, 9)) {
+        m_skip_confirmation_proceed = false;
+        handle_title_escape();
+      } else if (row_at(1, 9)) {
+        m_skip_confirmation_proceed = true;
+        create_pending_profile();
+      }
+      return;
+    }
+    if (m_title_page == TitlePage::load) {
+      if (m_profile_catalog.entries.empty()) return;
+      const std::size_t first = m_load_index < 5U ? 0U : m_load_index - 4U;
+      const auto count = std::min<std::size_t>(
+          5U, m_profile_catalog.entries.size() - first);
+      for (std::size_t row = 0; row < count; ++row) {
+        if (!row_at(row)) continue;
+        m_load_index = first + row;
+        activate_catalog_entry(m_load_index);
+        return;
+      }
+      return;
+    }
+    if (m_title_page == TitlePage::settings_information && row_at(4, 3)) {
+      handle_title_escape();
+    }
   }
 
   [[nodiscard]] auto menu_command_for(const KeyEvent& key) const noexcept
@@ -1142,61 +1513,6 @@ class LandscapeApp final : public App {
   }
 
   auto handle_menu_key(const KeyEvent& key) -> void {
-    if (m_session.screen() == SessionScreen::station &&
-        m_origin_system_contract && m_intersystem_contract &&
-        key.action == KeyAction::Press &&
-        (key.key == Key::Left || key.key == Key::Right)) {
-      if (m_origin_system_contract->phase !=
-          OriginSystemContractPhase::offered) {
-        return;
-      }
-      const auto command =
-          m_intersystem_contract->rule_profile ==
-                  IntersystemRuleProfile::assisted
-              ? IntersystemContractCommand::select_pilot_profile
-              : IntersystemContractCommand::select_assisted_profile;
-      if (!advance_intersystem_contract(*m_intersystem_contract,
-                                        m_intersystem_contract->universe_tick,
-                                        command)) {
-        m_error = "rule profile selection was rejected";
-      }
-      return;
-    }
-    if (m_session.screen() == SessionScreen::station && m_signal_run &&
-        m_signal_run->career && key.action == KeyAction::Press &&
-        (key.key == Key::Left || key.key == Key::Right) &&
-        (m_signal_run->onboarding.first_objective ==
-             FirstObjectiveStatus::offered ||
-         m_signal_run->onboarding.first_objective ==
-             FirstObjectiveStatus::active)) {
-      const auto command =
-          m_signal_run->career->rule_profile == IntersystemRuleProfile::assisted
-              ? IntersystemContractCommand::select_pilot_profile
-              : IntersystemContractCommand::select_assisted_profile;
-      if (!advance_intersystem_contract(*m_signal_run->career,
-                                        m_signal_run->career->universe_tick,
-                                        command)) {
-        m_error = "rule profile selection was rejected";
-      }
-      return;
-    }
-    if (m_session.screen() == SessionScreen::station &&
-        m_intersystem_contract && key.action == KeyAction::Press &&
-        (key.key == Key::Left || key.key == Key::Right)) {
-      const auto board = mission_board_snapshot(*m_intersystem_contract);
-      if (!board || !board->rule_profile_selection_enabled) return;
-      const auto command =
-          m_intersystem_contract->rule_profile ==
-                  IntersystemRuleProfile::assisted
-              ? IntersystemContractCommand::select_pilot_profile
-              : IntersystemContractCommand::select_assisted_profile;
-      if (!advance_intersystem_contract(*m_intersystem_contract,
-                                        m_intersystem_contract->universe_tick,
-                                        command)) {
-        m_error = "rule profile selection was rejected";
-      }
-      return;
-    }
     if (const auto command = menu_command_for(key)) {
       apply_session_command(*command);
     }
@@ -1294,14 +1610,15 @@ class LandscapeApp final : public App {
       draw_size_requirement(screen);
       return;
     }
-    m_menu_layout = compute_menu_layout(screen.cols(), screen.rows());
-    if (!m_menu_layout.supported()) {
+    m_title_menu_layout =
+        compute_title_menu_layout(screen.cols(), screen.rows());
+    if (!m_title_menu_layout.supported()) {
       draw_size_requirement(screen);
       return;
     }
 
-    if (m_title_available && !m_menu_layout.art.empty()) {
-      m_surface.set_geometry(m_menu_layout.art);
+    if (m_title_available && !m_title_menu_layout.art.empty()) {
+      m_surface.set_geometry(m_title_menu_layout.art);
       m_surface.draw(screen);
       render_pixel_regions(m_surface);
     } else {
@@ -1312,12 +1629,161 @@ class LandscapeApp final : public App {
       screen.write_text(
           std::max(0, (screen.cols() - static_cast<int>(fallback.size())) /
                           2),
-          std::max(1, m_menu_layout.art.y + m_menu_layout.art.h / 2),
+          std::max(1, m_title_menu_layout.art.y +
+                          m_title_menu_layout.art.h / 2),
           fallback, {126, 214, 210}, {7, 15, 24});
     }
-    draw_menu(screen,
-              std::format("FIRST CONTRACT // v{}", kApplicationVersion),
-              "CONTINUE");
+
+    constexpr Rgb text{205, 222, 224};
+    constexpr Rgb muted{109, 143, 151};
+    constexpr Rgb accent{126, 214, 210};
+    constexpr Rgb warning{238, 184, 104};
+    constexpr Rgb panel_bg{11, 28, 40};
+    constexpr Rgb selected_bg{20, 61, 70};
+    const auto& layout = m_title_menu_layout;
+    m_menu_frame.set_style(BorderStyle::Rounded);
+    m_menu_frame.set_geometry(layout.panel);
+    screen.fill_rect(layout.panel.x + 1, layout.panel.y + 1,
+                     layout.panel.w - 2, layout.panel.h - 2, text, panel_bg);
+    const auto centered_on = [&](Rect row, std::string_view value, Rgb fg,
+                                 Rgb bg) {
+      const auto visible = value.substr(
+          0, static_cast<std::size_t>(std::max(0, row.w)));
+      const int x = row.x +
+                    std::max(0, (row.w - static_cast<int>(visible.size())) / 2);
+      screen.write_text(x, row.y, visible, fg, bg);
+    };
+    const auto centered = [&](Rect row, std::string_view value, Rgb fg) {
+      centered_on(row, value, fg, panel_bg);
+    };
+    const auto action = [&](Rect row, bool selected, std::string_view label,
+                            bool enabled = true) {
+      const Rgb bg = selected ? selected_bg : panel_bg;
+      screen.fill_rect(row.x, row.y, row.w, row.h, text, bg);
+      const auto display =
+          selected ? std::format("> {} <", label) : std::string{label};
+      centered_on(row, display, enabled ? text : muted, bg);
+    };
+
+    if (m_title_page == TitlePage::root) {
+      centered(layout.heading,
+               std::format("APSIS DRIFT // v{}", kApplicationVersion), accent);
+      const std::array<std::string_view, 5> labels{
+          "NEW", "CONTINUE", "LOAD", "SETTINGS", "EXIT"};
+      for (std::size_t index = 0; index < labels.size(); ++index) {
+        const auto title_action = static_cast<TitleAction>(index);
+        bool enabled = true;
+        if (title_action == TitleAction::new_game) {
+          enabled = m_profile_catalog.writable && !m_profile_catalog.overflow &&
+                    m_profile_catalog.entries.size() < kMaximumLocalProfiles;
+        } else if (title_action == TitleAction::continue_game) {
+          enabled = m_profile_catalog.continue_index.has_value();
+        } else if (title_action == TitleAction::load) {
+          enabled = !m_profile_catalog.entries.empty();
+        }
+        action(layout.actions[index], m_title_action == title_action,
+               labels[index], enabled);
+      }
+      std::string detail = m_profile_catalog.diagnostic;
+      if (m_title_action == TitleAction::continue_game &&
+          m_profile_catalog.continue_index) {
+        const auto& entry = m_profile_catalog.entries[
+            *m_profile_catalog.continue_index];
+        detail = entry.metadata
+                     ? std::format("CAREER {:04x} // SEED {}",
+                                   entry.metadata->id.value,
+                                   entry.metadata->universe_seed.value)
+                     : "CONTINUE UNAVAILABLE";
+      } else if (m_title_action == TitleAction::settings) {
+        detail = "SETTINGS FOUNDATION PENDING";
+      }
+      if (!m_error.empty()) detail = m_error;
+      centered(layout.detail, detail, m_error.empty() ? muted : warning);
+      centered(layout.hint, "ARROWS/TAB  ENTER  MOUSE", muted);
+    } else if (m_title_page == TitlePage::new_game) {
+      centered(layout.heading, "NEW UNIVERSE", accent);
+      const std::array<std::string, 6> labels{
+          std::format("SEED: {}", m_new_seed_text),
+          "REROLL SEED",
+          std::format("PENALTY MODE: {} PILOTING",
+                      m_new_penalty_mode == IntersystemRuleProfile::assisted
+                          ? "ASSISTED"
+                          : "ADVANCED"),
+          std::format("GUIDED ONBOARDING: {}",
+                      m_new_onboarding == NewGameOnboardingChoice::guided
+                          ? "ON"
+                          : "SKIP"),
+          "CREATE CAREER",
+          "CANCEL",
+      };
+      for (std::size_t index = 0; index < labels.size(); ++index) {
+        const Rect row{layout.panel.x + 2,
+                       layout.panel.y + 3 + static_cast<int>(index) * 2,
+                       layout.panel.w - 4, 1};
+        action(row, static_cast<std::size_t>(m_new_game_field) == index,
+               labels[index], index != 4U ||
+                                  parse_new_game_seed(m_new_seed_text).has_value());
+      }
+      centered(layout.hint,
+               m_error.empty() ? "DIGITS/BACKSPACE  LEFT/RIGHT  ENTER  ESC"
+                               : m_error,
+               m_error.empty() ? muted : warning);
+    } else if (m_title_page == TitlePage::skip_confirmation) {
+      centered(layout.heading, "SKIP GUIDED ONBOARDING?", warning);
+      centered({layout.panel.x + 2, layout.panel.y + 4,
+                layout.panel.w - 4, 1},
+               "Tutorial contracts and results cannot be restored later.",
+               text);
+      centered({layout.panel.x + 2, layout.panel.y + 6,
+                layout.panel.w - 4, 1},
+               "No missions, rewards, discoveries, or visits are invented.",
+               muted);
+      action({layout.panel.x + 2, layout.panel.y + 9,
+              layout.panel.w - 4, 1},
+             !m_skip_confirmation_proceed, "CANCEL");
+      action({layout.panel.x + 2, layout.panel.y + 11,
+              layout.panel.w - 4, 1},
+             m_skip_confirmation_proceed, "SKIP AND CREATE");
+      centered(layout.hint, "CANCEL IS DEFAULT  ARROWS  ENTER  ESC", muted);
+    } else if (m_title_page == TitlePage::load) {
+      centered(layout.heading, "LOAD LOCAL PROFILE", accent);
+      const std::size_t first = m_load_index < 5U ? 0U : m_load_index - 4U;
+      const auto count = std::min<std::size_t>(
+          5U, m_profile_catalog.entries.size() - first);
+      for (std::size_t row_index = 0; row_index < count; ++row_index) {
+        const std::size_t index = first + row_index;
+        const auto& entry = m_profile_catalog.entries[index];
+        const std::string label = entry.metadata
+                                      ? std::format("CAREER {:04x} // SEED {}",
+                                                    entry.metadata->id.value,
+                                                    entry.metadata->universe_seed.value)
+                                      : std::format("{} // {}",
+                                                    entry.path.filename().string(),
+                                                    entry.diagnostic);
+        action({layout.panel.x + 2,
+                layout.panel.y + 3 + static_cast<int>(row_index) * 2,
+                layout.panel.w - 4, 1},
+               index == m_load_index, label, entry.activatable());
+      }
+      centered(layout.detail,
+               m_error.empty() ? "INVALID ROWS REMAIN VISIBLE" : m_error,
+               m_error.empty() ? muted : warning);
+      centered(layout.hint, "ARROWS/TAB  ENTER LOAD  ESC BACK", muted);
+    } else {
+      centered(layout.heading, "SETTINGS", accent);
+      centered({layout.panel.x + 2, layout.panel.y + 5,
+                layout.panel.w - 4, 1},
+               "Settings storage and controls are not implemented yet.", text);
+      centered({layout.panel.x + 2, layout.panel.y + 7,
+                layout.panel.w - 4, 1},
+               "Career penalty mode is locked and never a display setting.",
+               muted);
+      action({layout.panel.x + 2, layout.panel.y + 11,
+              layout.panel.w - 4, 1},
+             true, "BACK");
+      centered(layout.hint, "ENTER OR ESC BACK", muted);
+    }
+    m_menu_frame.draw(screen);
   }
 
   auto draw_station_screen(Screen& screen) -> void {
@@ -1374,14 +1840,11 @@ class LandscapeApp final : public App {
       centered(9, "1/4/16X CHANGES AUTHORITATIVE TICKS ONLY", accent);
       centered(11, "GUIDANCE: ETA // RELATIVE SPEED // BRAKING", muted);
       if (m_intersystem_contract) {
-        const bool selection_enabled =
-            m_origin_system_contract->phase ==
-            OriginSystemContractPhase::offered;
         centered(13,
-                 std::format("RULE PROFILE: {} [{}]",
+                 std::format("PENALTY MODE: {} PILOTING [{}]",
                              intersystem_rule_profile_name(
                                  m_intersystem_contract->rule_profile),
-                             selection_enabled ? "LEFT/RIGHT" : "LOCKED"),
+                             "LOCKED"),
                  accent);
       }
       return;
@@ -1417,7 +1880,7 @@ class LandscapeApp final : public App {
                std::format("RETURN REQUIRED: {}", board->return_destination),
                muted);
       centered(12,
-               std::format("RULE PROFILE: {} // {} [{}]",
+               std::format("PENALTY MODE: {} PILOTING // {} [{}]",
                            board->rule_profile,
                            board->rule_profile_description,
                            board->rule_profile_selection_enabled
@@ -1882,7 +2345,7 @@ class LandscapeApp final : public App {
           *intersystem_jump_snapshot(*m_intersystem_contract);
       if (jump.alignment) {
         message = std::format(
-            " PILOT ALIGN {:+.1f} deg | VEL {:+.1f}% | {} | {} | J cancel ",
+            " ADV ALIGN {:+.1f} deg | VEL {:+.1f}% | {} | {} | J cancel ",
             static_cast<double>(
                 jump.alignment->heading_error_millidegrees) /
                 1'000.0,
@@ -3279,6 +3742,7 @@ class LandscapeApp final : public App {
   std::optional<TerrainTileCache> m_signal_run_cache;
   std::optional<SignalRunState> m_signal_run;
   std::optional<SaveDocument> m_save_profile;
+  std::optional<LoadedProfile> m_loaded_profile;
   std::optional<IntersystemContractState> m_intersystem_contract;
   std::optional<OriginSystemContractState> m_origin_system_contract;
   UniverseNavigationSelectionState m_universe_navigation_selection;
@@ -3305,6 +3769,20 @@ class LandscapeApp final : public App {
   std::string m_input_tier{"INPUT PROBING"};
   Rect m_active_mouse_region{};
   MenuLayout m_menu_layout{};
+  TitleMenuLayout m_title_menu_layout{};
+  ProfileCatalogSnapshot m_profile_catalog{};
+  std::optional<std::filesystem::path> m_profile_directory;
+  TitlePage m_title_page{TitlePage::root};
+  TitleAction m_title_action{TitleAction::new_game};
+  NewGameField m_new_game_field{NewGameField::seed};
+  std::string m_new_seed_text;
+  bool m_new_seed_replace_on_type{};
+  IntersystemRuleProfile m_new_penalty_mode{
+      IntersystemRuleProfile::assisted};
+  NewGameOnboardingChoice m_new_onboarding{
+      NewGameOnboardingChoice::guided};
+  bool m_skip_confirmation_proceed{};
+  std::size_t m_load_index{};
   bool m_interactive_controls{};
   bool m_title_rendered{};
   bool m_title_available{};
@@ -4605,10 +5083,10 @@ auto main(int argc, char** argv) -> int {
         }
         save_profile = std::move(*loaded);
         run_seed = presentation_seed(save_profile->recipe.universe_seed);
-      } else {
-        const Seed universe_seed{new_game_seed.value_or(seed)};
+      } else if (new_game_seed) {
+        const Seed universe_seed{*new_game_seed};
         save_profile = make_new_game_document(universe_seed);
-        if (new_game_seed) run_seed = presentation_seed(universe_seed);
+        run_seed = presentation_seed(universe_seed);
       }
     }
     LandscapeApp app{render_configuration, run_seed, selected_workload,

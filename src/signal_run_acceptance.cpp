@@ -388,15 +388,11 @@ struct TerrainSafetyProbe {
     return std::unexpected{
         SignalRunAcceptanceError::initialization_failure};
   }
-  auto fresh = make_new_game_document(Seed{seed});
-  if (rule_profile == IntersystemRuleProfile::pilot &&
-      (!fresh.state.intersystem_contract ||
-       !advance_intersystem_contract(
-           *fresh.state.intersystem_contract,
-           fresh.state.intersystem_contract->universe_tick,
-           IntersystemContractCommand::select_pilot_profile))) {
-    return std::unexpected{SignalRunAcceptanceError::initialization_failure};
-  }
+  auto fresh = make_new_game_document(NewGameOptions{
+      .universe_seed = Seed{seed},
+      .penalty_mode = rule_profile,
+      .onboarding = NewGameOnboardingChoice::guided,
+  });
   auto run = hydrate_signal_run(fresh, *cache);
   auto* checkpoints = canonical_report != nullptr
                           ? &canonical_report->save_checkpoints

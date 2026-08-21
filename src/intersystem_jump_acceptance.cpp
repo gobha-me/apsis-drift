@@ -22,8 +22,11 @@ struct PilotArrival {
 [[nodiscard]] auto run_pilot_arrival(
     IntersystemJumpAlignmentState alignment, bool persist_at_commit)
     -> std::expected<PilotArrival, IntersystemJumpAcceptanceError> {
-  auto document = make_new_game_document(Seed{kIntersystemJumpAcceptanceSeed},
-                                         NewGameOnboardingChoice::skip);
+  auto document = make_new_game_document(NewGameOptions{
+      .universe_seed = Seed{kIntersystemJumpAcceptanceSeed},
+      .penalty_mode = IntersystemRuleProfile::pilot,
+      .onboarding = NewGameOnboardingChoice::skip,
+  });
   if (!document.state.intersystem_contract) {
     return std::unexpected{
         IntersystemJumpAcceptanceError::transition_failure};
@@ -32,9 +35,6 @@ struct PilotArrival {
   const auto target =
       generate_local_system(contract.identities.target_system_seed);
   if (!advance_intersystem_contract(
-          contract, contract.universe_tick,
-          IntersystemContractCommand::select_pilot_profile) ||
-      !advance_intersystem_contract(
           contract, contract.universe_tick,
           IntersystemContractCommand::accept_mission) ||
       !advance_intersystem_contract(
