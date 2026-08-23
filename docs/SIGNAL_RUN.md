@@ -29,8 +29,22 @@ current analytic waypoint. Docking changes the objective to `returned`, and an
 explicit station turn-in changes it to `turned_in` and advances Guided
 onboarding atomically to contract two.
 
-Redocking before Planetfall leaves the accepted objective active. The flight
-check may therefore be completed, ignored, or repeated without falsely
+Redocking before Planetfall leaves the accepted objective active. Enter at or
+inside the inclusive 5 km boundary redocks when relative speed is at most
+25 m/s. If the craft is inside that boundary but moving faster, Enter refuses
+the transition and tells the player to brake or depart; it never silently
+starts Planetfall. Enter starts home Planetfall only after an active contract
+has moved outside the docking envelope. Every outcome remains visible as
+station or cockpit feedback, so an immediate post-launch Enter cannot resemble
+a process exit.
+
+The Origin Station instrument always reports actual camera-relative bearing,
+elevation, range, closing speed, and AHEAD/BEHIND location. When the projected
+station is outside the framebuffer or behind the camera, a stable cyan edge
+cue points toward it. The action line states exactly one current Enter result:
+`ENTER DOCK`, `BRAKE/GO`, `ENTER FALL`, or `APPROACH`.
+
+The flight check may be completed, ignored, or repeated without falsely
 advancing mission state. Flying away costs time but never moves or rerolls the
 bound target.
 
@@ -112,3 +126,23 @@ Run both retained render profiles with:
 `--snapshot PATH` retains the canonical final pre-departure planetary frame
 for visual inspection. Rendering cadence, render profile, prompt history, and
 framebuffer checksums never enter authoritative simulation.
+
+## v0.4.37 departure acceptance
+
+The driver-backed departure trace uses the shipped application input path. It
+accepts and launches contract one, presses Enter immediately to prove an
+explicit redock while the process remains alive, relaunches, thrusts beyond
+5 km, and presses Enter again to prove Planetfall begins. The report retains
+the interaction events, application framebuffer checksum, authoritative flight
+checksums, and encoder byte evidence. CTest compares repeated runs across both
+Kitty and ANSI and the local and remote render profiles.
+
+```bash
+./build/apsis-drift --guided-departure-acceptance \
+  --driver kitty --profile local --report departure-kitty.json
+./build/apsis-drift --guided-departure-acceptance \
+  --driver ansi --profile remote --report departure-ansi.json
+```
+
+An explicit `--driver kitty|ansi` and `--report PATH` are required. The mode
+does not accept save, seed, viewport, workload, or keyboard overrides.

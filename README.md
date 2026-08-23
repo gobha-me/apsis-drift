@@ -132,10 +132,12 @@ Interactive controls:
 - R/F: change flight clearance
 - Space: toggle autopilot
 - Signal navigation mode: Tab/Shift-Tab selects the next/previous target
-- Signal Run: accept the local briefing, launch into a repeatable physical
-  flight check, press Enter outside the docking envelope for home Planetfall,
-  collect the bound target, ascend, rendezvous with the moving station, dock,
-  and explicitly turn in
+- Signal Run: accept the local briefing and launch into a repeatable physical
+  flight check. Enter redocks inside the inclusive 5 km / 25 m/s boundary,
+  refuses a too-fast in-envelope transition, and starts home Planetfall only
+  outside the docking envelope. Follow the actual station bearing, elevation,
+  range, closing, edge cue, and action label; collect the bound target, ascend,
+  rendezvous, dock, and explicitly turn in
 - Origin-system contract: accept contract two after the Signal Run, depart the
   station and press Enter to begin the bound non-FTL transfer; use `[`/`]` for
   1x/4x/16x, follow ETA/relative-speed/braking cues, and press Enter only at
@@ -320,6 +322,14 @@ activation, uses OS entropy for rerollable universe seeds, and locks Assisted
 or Advanced Piloting for the career. Guided remains the default, while Skip
 requires a separate cancel-first confirmation. See
 [docs/MENU_AND_PROFILE_CONTRACT.md](docs/MENU_AND_PROFILE_CONTRACT.md).
+
+The v0.4.37 Guided departure clarification makes the first post-launch Enter
+unambiguous: safe in-envelope input explicitly redocks, excessive relative speed
+is refused, and home Planetfall begins only outside 5 km. The cockpit exposes
+actual camera-relative station bearing and elevation plus a stable off-screen
+edge cue. A driver-backed acceptance trace proves the application keeps running
+through both redock and Planetfall under Kitty and ANSI. See
+[docs/SIGNAL_RUN.md](docs/SIGNAL_RUN.md).
 
 The v0.4.14 rule-profile contract added an authoritative, save-backed Assisted
 or Advanced penalty mode. New Game now locks that mode for the career;
@@ -619,6 +629,9 @@ The deterministic Assisted-jump matrix is available through
 Run the complete first-contract matrix with
 `--intersystem-contract-acceptance --report PATH`; add
 `--snapshot PATH` for the bounded final Origin Station frame.
+Prove the Guided contract-one departure interaction through the shipped input
+and encoder paths with `--guided-departure-acceptance --driver kitty|ansi`,
+plus `--profile local|remote --report PATH`.
 Generate the renderer-neutral universe-route, direct-cruise, and projected-save
 evidence with
 `--universe-navigation-acceptance --report PATH`. Contract-three presentation

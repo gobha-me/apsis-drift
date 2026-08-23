@@ -59,7 +59,10 @@ struct OriginStationFlightGuidance {
   double closing_speed_metres_per_second{};
   double relative_speed_metres_per_second{};
   double stopping_distance_metres{};
+  double bearing_radians{};
+  double elevation_radians{};
   OriginStationFlightCue cue{OriginStationFlightCue::hold};
+  bool in_front{};
   bool within_rendezvous{};
   bool arrived{};
 

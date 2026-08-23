@@ -92,12 +92,32 @@ struct FrameSample {
   double work_ms{};
 };
 
+struct GuidedDepartureAcceptanceReport {
+  std::string presentation;
+  std::string render_profile;
+  SimulationTick launch_tick{};
+  std::uint64_t station_flight_checksum{};
+  SimulationTick redock_tick{};
+  bool redock_process_running{};
+  double departure_distance_metres{};
+  SimulationTick planetfall_tick{};
+  std::uint64_t planetfall_flight_checksum{};
+  bool planetfall_process_running{};
+  std::uint64_t framebuffer_checksum{};
+  std::uint64_t encoded_bytes{};
+  std::size_t frames{};
+};
+
 using apsis_drift::detail::DriverChoice;
 using apsis_drift::detail::KeyboardChoice;
 
 [[nodiscard]] auto elapsed_ms(Clock::time_point from,
                               Clock::time_point to) noexcept -> double {
   return std::chrono::duration<double, std::milli>(to - from).count();
+}
+
+[[nodiscard]] auto signed_degrees(double radians) noexcept -> double {
+  return radians * 180.0 / std::numbers::pi;
 }
 
 [[nodiscard]] auto make_headless_driver(DriverChoice choice)
@@ -568,6 +588,10 @@ class LandscapeApp final : public App {
       }
     }
 
+    if (m_guided_departure_acceptance) {
+      advance_guided_departure_acceptance_script();
+    }
+
     if (m_run_started == Clock::time_point{}) m_run_started = frame_started;
     if (m_capture_seconds > 0.0 &&
         std::chrono::duration<double>(Clock::now() - m_run_started).count() >=
@@ -618,6 +642,73 @@ class LandscapeApp final : public App {
     m_display_tier = presentation;
     m_display_path = std::format(
         "{} (headless, /dev/null input workaround for #256)", presentation);
+  }
+
+  [[nodiscard]] auto guided_departure_acceptance(
+      DriverChoice driver_choice)
+      -> std::expected<GuidedDepartureAcceptanceReport, std::string> {
+    if (!m_signal_run || !m_signal_run_cache ||
+        m_session.screen() != SessionScreen::station) {
+      return std::unexpected{
+          "guided departure fixture did not start at Origin Station"};
+    }
+    const int null_input = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+    if (null_input < 0) {
+      return std::unexpected{
+          std::format("cannot open /dev/null: {}", std::strerror(errno))};
+    }
+    const auto injected = terminal().set_io({null_input, -1});
+    if (!injected) {
+      ::close(null_input);
+      return std::unexpected{injected.error().message};
+    }
+    m_guided_departure_acceptance = true;
+    m_guided_departure_step = 0;
+    m_guided_departure_failure.clear();
+    m_synthetic_headless = true;
+    set_clock(&m_headless_clock);
+    set_frame_ms(33);
+    auto selected = make_headless_driver(driver_choice);
+    const std::string presentation{headless_presentation_name(*selected)};
+    try {
+      test_run_frames(64, 100, 40, nullptr, std::move(selected));
+    } catch (...) {
+      ::close(null_input);
+      set_clock(nullptr);
+      m_synthetic_headless = false;
+      m_guided_departure_acceptance = false;
+      throw;
+    }
+    ::close(null_input);
+    set_clock(nullptr);
+    m_synthetic_headless = false;
+    m_guided_departure_acceptance = false;
+    if (!m_guided_departure_failure.empty()) {
+      return std::unexpected{m_guided_departure_failure};
+    }
+    if (m_guided_departure_step != 8U || !m_signal_run ||
+        !m_signal_run->flight ||
+        m_session.screen() != SessionScreen::flight) {
+      return std::unexpected{
+          "guided departure script ended before home Planetfall"};
+    }
+    const auto summary = m_sink.summary(pixel_checksum(m_surface.pixels()));
+    return GuidedDepartureAcceptanceReport{
+        .presentation = presentation,
+        .render_profile = std::string{profile_name(m_render_configuration)},
+        .launch_tick = m_guided_launch_tick,
+        .station_flight_checksum = m_guided_station_checksum,
+        .redock_tick = m_guided_redock_tick,
+        .redock_process_running = m_guided_redock_running,
+        .departure_distance_metres = m_guided_departure_distance,
+        .planetfall_tick = m_signal_run->flight->tick,
+        .planetfall_flight_checksum =
+            planetary_flight_state_checksum(*m_signal_run->flight),
+        .planetfall_process_running = m_guided_planetfall_running,
+        .framebuffer_checksum = summary.checksum,
+        .encoded_bytes = summary.total_bytes,
+        .frames = summary.frames,
+    };
   }
 
   [[nodiscard]] auto force_capabilities(DriverChoice driver_choice,
@@ -807,6 +898,118 @@ class LandscapeApp final : public App {
   }
 
  private:
+  auto advance_guided_departure_acceptance_script() -> void {
+    const auto fail = [this](std::string message) {
+      m_guided_departure_failure = std::move(message);
+      quit();
+    };
+    const auto press_enter = [this] { post(KeyEvent{Key::Enter}); };
+    switch (m_guided_departure_step) {
+      case 0:
+        if (m_session.screen() != SessionScreen::station || !m_signal_run ||
+            m_signal_run->onboarding.first_objective !=
+                FirstObjectiveStatus::offered) {
+          fail("departure trace did not begin at the offered contract");
+          return;
+        }
+        ++m_guided_departure_step;
+        return;
+      case 1:
+        if (m_session.screen() != SessionScreen::station || !m_signal_run ||
+            m_signal_run->onboarding.first_objective !=
+                FirstObjectiveStatus::offered) {
+          fail("guided fixture did not preserve the offered contract");
+          return;
+        }
+        press_enter();
+        ++m_guided_departure_step;
+        return;
+      case 2:
+        if (m_session.screen() != SessionScreen::station || !m_signal_run ||
+            m_signal_run->onboarding.first_objective !=
+                FirstObjectiveStatus::active) {
+          fail("contract-one acceptance did not remain at the station");
+          return;
+        }
+        press_enter();
+        ++m_guided_departure_step;
+        return;
+      case 3:
+        if (m_session.screen() != SessionScreen::flight || !m_signal_run ||
+            !m_signal_run->station_flight || !m_signal_run->career) {
+          fail("contract-one launch did not enter station flight");
+          return;
+        }
+        m_guided_launch_tick = m_signal_run->career->universe_tick;
+        m_guided_station_checksum = origin_station_flight_state_checksum(
+            *m_signal_run->station_flight);
+        press_enter();
+        ++m_guided_departure_step;
+        return;
+      case 4:
+        if (m_session.screen() != SessionScreen::station || !m_signal_run ||
+            m_signal_run->onboarding.location !=
+                OriginLocation::docked_at_origin ||
+            m_notice !=
+                "REDOCKED AT ORIGIN STATION // CONTRACT ONE REMAINS ACTIVE") {
+          fail("immediate Enter was not reported as an explicit redock");
+          return;
+        }
+        m_guided_redock_tick = m_signal_run->career
+                                   ? m_signal_run->career->universe_tick
+                                   : 0U;
+        m_guided_redock_running = running();
+        press_enter();
+        ++m_guided_departure_step;
+        return;
+      case 5:
+        if (m_session.screen() != SessionScreen::flight || !m_signal_run ||
+            !m_signal_run->station_flight) {
+          fail("contract one did not relaunch after the explicit redock");
+          return;
+        }
+        post(KeyEvent{Key::Char, U'w', false, false, false,
+                      KeyAction::Press});
+        ++m_guided_departure_step;
+        return;
+      case 6: {
+        if (m_session.screen() != SessionScreen::flight || !m_signal_run ||
+            !m_signal_run->station_flight || !m_signal_run->career) {
+          fail("departure thrust left contract-one station flight");
+          return;
+        }
+        const auto guidance = resolve_origin_station_flight_guidance(
+            m_signal_run->recipe.universe_seed,
+            m_signal_run->career->universe_tick, m_signal_run->origin_system,
+            *m_signal_run->station_flight);
+        if (!guidance) {
+          fail("departure trace lost Origin Station guidance");
+          return;
+        }
+        if (guidance->within_rendezvous) return;
+        m_guided_departure_distance = guidance->distance_metres;
+        post(KeyEvent{Key::Char, U'w', false, false, false,
+                      KeyAction::Release});
+        press_enter();
+        ++m_guided_departure_step;
+        return;
+      }
+      case 7:
+        if (m_session.screen() != SessionScreen::flight || !m_signal_run ||
+            !m_signal_run->flight || m_signal_run->station_flight ||
+            m_notice !=
+                "HOME PLANETFALL INITIATED // SIGNAL TARGET LOCKED") {
+          fail("outside-envelope Enter did not confirm home Planetfall");
+          return;
+        }
+        m_guided_planetfall_running = running();
+        ++m_guided_departure_step;
+        quit();
+        return;
+      default: return;
+    }
+  }
+
   [[nodiscard]] auto activate_profile(const SaveDocument& profile)
       -> std::expected<void, std::string> {
     if (const auto valid = validate_save_document(profile); !valid) {
@@ -1433,6 +1636,9 @@ class LandscapeApp final : public App {
           FirstObjectiveStatus::offered) {
         if (!accept_signal_run(*m_signal_run)) {
           m_error = "first objective acceptance was rejected";
+        } else {
+          m_error.clear();
+          m_notice.clear();
         }
         return;
       }
@@ -1445,6 +1651,8 @@ class LandscapeApp final : public App {
         (void)m_session.start_flight();
         m_simulation_clock.reset();
         m_active_mouse_region = {};
+        m_error.clear();
+        m_notice.clear();
         return;
       }
       if (m_signal_run->onboarding.first_objective ==
@@ -1940,7 +2148,7 @@ class LandscapeApp final : public App {
       constexpr std::string_view launch_help{
           "FLIGHT CHECK: A/D attitude | Q/E translate | R/F vertical"};
       constexpr std::string_view planetfall_help{
-          "W thrust | release to coast | S brake | ENTER targets home"};
+          "W leave beyond 5 km | ENTER starts home Planetfall | S brake"};
       screen.write_text(
           std::max(0, (screen.cols() -
                        static_cast<int>(launch_help.size())) /
@@ -1952,6 +2160,11 @@ class LandscapeApp final : public App {
                                         2),
                         std::max(5, m_menu_layout.art.y + 10), planetfall_help,
                         muted, background);
+    }
+    if (!m_notice.empty()) {
+      screen.write_text(
+          std::max(0, (screen.cols() - static_cast<int>(m_notice.size())) / 2),
+          std::max(6, m_menu_layout.art.y + 12), m_notice, accent, background);
     }
   }
 
@@ -2111,12 +2324,20 @@ class LandscapeApp final : public App {
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 4, "ORIGIN STN", text,
                         chrome_bg);
-      screen.write_text(layout.right_instruments.x + 2,
-                        layout.right_instruments.y + 6, "BRG CENTER", text,
-                        chrome_bg);
-      screen.write_text(layout.right_instruments.x + 2,
-                        layout.right_instruments.y + 8, "ELEV 000 ", text,
-                        chrome_bg);
+      screen.write_text(
+          layout.right_instruments.x + 2, layout.right_instruments.y + 6,
+          guidance
+              ? std::format("BRG {:+4.0f}",
+                            signed_degrees(guidance->bearing_radians))
+              : "BRG ----",
+          text, chrome_bg);
+      screen.write_text(
+          layout.right_instruments.x + 2, layout.right_instruments.y + 8,
+          guidance
+              ? std::format("ELV {:+4.0f}",
+                            signed_degrees(guidance->elevation_radians))
+              : "ELV ----",
+          text, chrome_bg);
       screen.write_text(
           layout.right_instruments.x + 2, layout.right_instruments.y + 10,
           guidance ? std::format("DST {:>5.0f}", guidance->distance_metres)
@@ -2135,12 +2356,26 @@ class LandscapeApp final : public App {
           chrome_bg);
       screen.write_text(layout.right_instruments.x + 2,
                         layout.right_instruments.y + 14,
-                        guidance && guidance->arrived ? "ETA ARRVD" : "ETA --:--",
+                        guidance && guidance->in_front ? "LOC AHEAD"
+                                                       : "LOC BEHND",
                         text, chrome_bg);
+      std::string action{"GUIDE ERR"};
+      if (guidance) {
+        if (guidance->arrived) {
+          action = "ENTER DOCK";
+        } else if (guidance->within_rendezvous) {
+          action = "BRAKE/GO ";
+        } else if (m_signal_run &&
+                   m_signal_run->onboarding.first_objective ==
+                       FirstObjectiveStatus::active) {
+          action = "ENTER FALL";
+        } else {
+          action = "APPROACH ";
+        }
+      }
       screen.write_text(layout.right_instruments.x + 2,
-                        layout.right_instruments.y + 16,
-                        guidance && guidance->arrived ? "ENTER DOCK" : "APPROACH ",
-                        accent, chrome_bg);
+                        layout.right_instruments.y + 16, action, accent,
+                        chrome_bg);
     } else if (m_system_render) {
       const auto guidance = m_system_flight
                                 ? resolve_system_flight_guidance(
@@ -2244,6 +2479,8 @@ class LandscapeApp final : public App {
     std::string message;
     if (!m_error.empty()) {
       message = " ERROR: " + m_error + " | ESC menu ";
+    } else if (!m_notice.empty()) {
+      message = " COMMS: " + m_notice + " | ESC menu ";
     } else if (instruments.alert_state == CockpitAlert::invalid_telemetry) {
       message = " WARNING: TELEM ERR | flight instruments unavailable | "
                 "ESC menu ";
@@ -2262,22 +2499,33 @@ class LandscapeApp final : public App {
                       ? " STATION RENDEZVOUS COMPLETE | ENTER DOCK "
                       : " STATION RENDEZVOUS | SPACE autopilot | S brake | "
                         "ENTER when stopped inside 5 km ";
-      } else if (!observed.attitude_observed) {
-        message = " FLIGHT CHECK 1/7 | A/D attitude | controls remain free ";
-      } else if (!observed.translation_observed) {
-        message = " FLIGHT CHECK 2/7 | Q/E translate | R/F vertical ";
-      } else if (!observed.thrust_observed) {
-        message = " FLIGHT CHECK 3/7 | W thrust away from station ";
-      } else if (!observed.coast_observed) {
-        message = " FLIGHT CHECK 4/7 | release W to coast ";
-      } else if (!observed.braking_observed) {
-        message = " FLIGHT CHECK 5/7 | S braking | station remains available ";
       } else {
-        message =
-            guidance && guidance->arrived
-                ? " FLIGHT CHECK REPEATABLE | W leave dock envelope | "
-                  "ENTER redock "
-                : " FLIGHT CHECK 6/7 | HOME TARGET LOCKED | ENTER PLANETFALL ";
+        const std::string_view check =
+            !observed.attitude_observed
+                ? "CHECK A/D attitude"
+            : !observed.translation_observed
+                ? "CHECK Q/E + R/F translate"
+            : !observed.thrust_observed
+                ? "CHECK W thrust away"
+            : !observed.coast_observed
+                ? "CHECK release W to coast"
+            : !observed.braking_observed ? "CHECK S braking"
+                                         : "FLIGHT CHECK OPTIONAL/COMPLETE";
+        if (!guidance) {
+          message = std::format(
+              " CONTRACT 1 | STATION GUIDANCE UNAVAILABLE | {} ", check);
+        } else if (guidance->arrived) {
+          message = std::format(
+              " CONTRACT 1 | W LEAVE >5 km; ENTER HERE REDOCKS | {} ", check);
+        } else if (guidance->within_rendezvous) {
+          message = std::format(
+              " CONTRACT 1 | INSIDE 5 km TOO FAST: S BRAKE OR W LEAVE | {} ",
+              check);
+        } else {
+          message = std::format(
+              " CONTRACT 1 | OUTSIDE 5 km: ENTER STARTS HOME PLANETFALL | {} ",
+              check);
+        }
       }
     } else if (thermal) {
       message = std::format(
@@ -2951,34 +3199,58 @@ class LandscapeApp final : public App {
     }
     if (m_signal_run && m_signal_run->station_flight) {
       if (key.key == Key::Enter && key.action == KeyAction::Press) {
-        const auto guidance =
-            m_signal_run->career
-                ? resolve_origin_station_flight_guidance(
-                      m_signal_run->recipe.universe_seed,
-                      m_signal_run->career->universe_tick,
-                      m_signal_run->origin_system,
-                      *m_signal_run->station_flight)
-                : std::expected<OriginStationFlightGuidance,
-                                OriginStationFlightError>{
-                      std::unexpected{OriginStationFlightError::invalid_state}};
-        if (guidance && guidance->arrived) {
-          if (!return_signal_run_to_origin(*m_signal_run)) {
-            m_error = "Origin Station docking was rejected";
-            return;
+        const auto interaction = interact_signal_run_station(
+            *m_signal_run, *m_signal_run_cache);
+        if (!interaction) {
+          switch (interaction.error()) {
+            case SignalRunStationInteractionError::reduce_speed_or_depart:
+              m_error =
+                  m_signal_run->onboarding.first_objective ==
+                          FirstObjectiveStatus::completed
+                      ? "inside 5 km: brake below 25 m/s before docking"
+                      : "inside 5 km: brake below 25 m/s to dock or leave for Planetfall";
+              break;
+            case SignalRunStationInteractionError::approach_station:
+              m_error = "approach within 5 km and below 25 m/s before docking";
+              break;
+            case SignalRunStationInteractionError::guidance_unavailable:
+              m_error = "Origin Station guidance is unavailable";
+              break;
+            case SignalRunStationInteractionError::invalid_state:
+            case SignalRunStationInteractionError::transition_rejected:
+              m_error = "contract-one station action was rejected";
+              break;
           }
-          (void)m_session.dock_at_station();
-          m_simulation_clock.reset();
-          m_active_mouse_region = {};
-        } else if (!begin_signal_run_planetfall(*m_signal_run,
-                                                *m_signal_run_cache)) {
-          m_error = "leave the docking envelope before home Planetfall";
-        } else {
-          m_input_mapper.suspend({}, m_signal_run->flight->tick);
-          m_error.clear();
+          m_notice.clear();
+          return;
+        }
+        m_error.clear();
+        switch (*interaction) {
+          case SignalRunStationInteraction::redocked:
+            m_notice =
+                "REDOCKED AT ORIGIN STATION // CONTRACT ONE REMAINS ACTIVE";
+            (void)m_session.dock_at_station();
+            m_simulation_clock.reset();
+            m_active_mouse_region = {};
+            break;
+          case SignalRunStationInteraction::planetfall_started:
+            m_notice = "HOME PLANETFALL INITIATED // SIGNAL TARGET LOCKED";
+            m_input_mapper.suspend({}, m_signal_run->flight->tick);
+            break;
+          case SignalRunStationInteraction::objective_returned:
+            m_notice =
+                "ORIGIN STATION DOCKING COMPLETE // TURN IN CONTRACT";
+            (void)m_session.dock_at_station();
+            m_simulation_clock.reset();
+            m_active_mouse_region = {};
+            break;
         }
         return;
       }
-      if (key.action != KeyAction::Release) m_error.clear();
+      if (key.action != KeyAction::Release) {
+        m_error.clear();
+        m_notice.clear();
+      }
       m_input_mapper.enqueue(key, m_signal_run->station_flight->tick, true);
       return;
     }
@@ -3764,6 +4036,7 @@ class LandscapeApp final : public App {
   bool m_synthetic_headless{false};
   bool m_requirements_failed{false};
   std::string m_error;
+  std::string m_notice;
   std::string m_display_tier{"probing"};
   std::string m_display_path{"not started"};
   std::string m_input_tier{"INPUT PROBING"};
@@ -3788,9 +4061,18 @@ class LandscapeApp final : public App {
   bool m_title_available{};
   bool m_flight_deck_acceptance{};
   bool m_signal_navigation_acceptance{};
+  bool m_guided_departure_acceptance{};
   bool m_acceptance_final_frame_rendered{};
   int m_acceptance_final_frames{};
   std::size_t m_acceptance_next_command{};
+  std::size_t m_guided_departure_step{};
+  std::string m_guided_departure_failure;
+  SimulationTick m_guided_launch_tick{};
+  std::uint64_t m_guided_station_checksum{};
+  SimulationTick m_guided_redock_tick{};
+  bool m_guided_redock_running{};
+  double m_guided_departure_distance{};
+  bool m_guided_planetfall_running{};
 };
 
 auto print_summary(const BenchmarkSummary& summary,
@@ -3928,6 +4210,41 @@ inline constexpr std::uint32_t kSystemNavigationAcceptanceSeed{42};
                    presentation));
 }
 
+[[nodiscard]] auto guided_departure_acceptance_json(
+    const GuidedDepartureAcceptanceReport& report) -> std::string {
+  return std::format(
+      "{{\n"
+      "  \"schema_version\": 1,\n"
+      "  \"scenario\": \"v0.4.37-guided-contract-one-departure\",\n"
+      "  \"evidence_scope\": \"application_framebuffer_and_encoder\",\n"
+      "  \"presentation\": \"{}\",\n"
+      "  \"render_profile\": \"{}\",\n"
+      "  \"events\": [\n"
+      "    {{\"input\": \"enter\", \"outcome\": \"redocked\", "
+      "\"screen\": \"station\", \"tick\": {}, "
+      "\"process_running\": {}}},\n"
+      "    {{\"input\": \"w\", \"outcome\": \"left_docking_envelope\", "
+      "\"screen\": \"flight\", \"distance_metres\": {:.6f}}},\n"
+      "    {{\"input\": \"enter\", \"outcome\": "
+      "\"planetfall_started\", \"screen\": \"flight\", "
+      "\"tick\": {}, \"process_running\": {}}}\n"
+      "  ],\n"
+      "  \"launch_tick\": {},\n"
+      "  \"station_flight_checksum\": \"{}\",\n"
+      "  \"planetfall_flight_checksum\": \"{}\",\n"
+      "  \"framebuffer_checksum\": \"{}\",\n"
+      "  \"frames\": {},\n"
+      "  \"encoded_bytes\": \"{}\"\n"
+      "}}\n",
+      report.presentation, report.render_profile, report.redock_tick,
+      report.redock_process_running ? "true" : "false",
+      report.departure_distance_metres, report.planetfall_tick,
+      report.planetfall_process_running ? "true" : "false",
+      report.launch_tick, report.station_flight_checksum,
+      report.planetfall_flight_checksum, report.framebuffer_checksum,
+      report.frames, report.encoded_bytes);
+}
+
 template <typename T>
 [[nodiscard]] auto parse_positive(std::string_view text, T& value) -> bool {
   const auto [end, error] =
@@ -3971,6 +4288,9 @@ auto usage() -> void {
       "                   [--driver kitty|ansi] [--profile NAME]\n\n"
       "       apsis-drift --signal-run-acceptance --report PATH\n"
       "                   [--profile NAME]\n\n"
+      "       apsis-drift --guided-departure-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME] "
+      "[--snapshot PATH]\n\n"
       "       apsis-drift --system-navigation-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --intersystem-jump-acceptance --report PATH\n"
@@ -4019,6 +4339,7 @@ auto main(int argc, char** argv) -> int {
   bool planetfall_acceptance{};
   bool signal_navigation_acceptance{};
   bool signal_run_acceptance{};
+  bool guided_departure_acceptance{};
   bool system_navigation_acceptance{};
   bool intersystem_jump_acceptance{};
   bool system_flight_acceptance{};
@@ -4102,6 +4423,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--signal-run-acceptance") {
       signal_run_acceptance = true;
+      continue;
+    }
+    if (argument == "--guided-departure-acceptance") {
+      guided_departure_acceptance = true;
       continue;
     }
     if (argument == "--system-navigation-acceptance") {
@@ -4273,6 +4598,36 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (guided_departure_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       system_navigation_acceptance || intersystem_jump_acceptance ||
+       system_flight_acceptance || intersystem_planetfall_acceptance ||
+       intersystem_return_acceptance || intersystem_contract_acceptance ||
+       origin_system_contract_acceptance || universe_navigation_acceptance ||
+       profile_options || seed_specified || viewport_specified ||
+       workload_specified || keyboard_specified)) {
+    std::fprintf(stderr,
+                 "Guided departure acceptance is mutually exclusive with "
+                 "other run, viewport, save, seed, workload, and keyboard "
+                 "options\n");
+    return 2;
+  }
+  if (guided_departure_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "Guided departure acceptance requires --driver kitty or "
+                 "--driver ansi\n");
+    return 2;
+  }
+  if (guided_departure_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Guided departure acceptance requires --report PATH\n");
+    return 2;
+  }
   if (universe_navigation_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -4592,6 +4947,64 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (guided_departure_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, std::nullopt);
+      const auto profile = make_new_game_document(Seed{42});
+      LandscapeApp app{
+          configuration, presentation_seed(profile.recipe.universe_seed),
+          BenchmarkWorkload::landscape, 0.0, true, false, false, &profile};
+      if (auto forced =
+              app.force_capabilities(driver_choice, KeyboardChoice::enhanced);
+          !forced) {
+        std::fprintf(stderr, "cannot force capabilities: %s\n",
+                     forced.error().message.c_str());
+        return 2;
+      }
+      const auto acceptance = app.guided_departure_acceptance(driver_choice);
+      if (!acceptance) {
+        std::fprintf(stderr, "Guided departure acceptance failed: %s\n",
+                     acceptance.error().c_str());
+        return 1;
+      }
+      const std::string_view requested =
+          driver_choice == DriverChoice::kitty ? "kitty" : "ansi";
+      if (acceptance->presentation != requested ||
+          !acceptance->redock_process_running ||
+          !acceptance->planetfall_process_running) {
+        std::fprintf(stderr,
+                     "Guided departure acceptance did not exercise the "
+                     "requested live application path\n");
+        return 1;
+      }
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << guided_departure_acceptance_json(*acceptance);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() && !app.write_snapshot(snapshot_path)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      std::printf(
+          "guided-departure: presentation=%s redock=%llu departure=%.3f "
+          "planetfall=%llu checksum=%llu bytes=%llu\n",
+          acceptance->presentation.c_str(),
+          static_cast<unsigned long long>(acceptance->redock_tick),
+          acceptance->departure_distance_metres,
+          static_cast<unsigned long long>(acceptance->planetfall_tick),
+          static_cast<unsigned long long>(acceptance->framebuffer_checksum),
+          static_cast<unsigned long long>(acceptance->encoded_bytes));
+      return 0;
+    }
     if (universe_navigation_acceptance) {
       const auto acceptance = run_universe_navigation_acceptance();
       if (!acceptance) {

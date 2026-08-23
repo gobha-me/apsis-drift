@@ -143,6 +143,25 @@ auto apply_command(OriginStationFlightState& state,
   const double closing = dot(relative_velocity, *direction);
   const double stopping =
       closing > 0.0 ? closing * closing / (2.0 * acceleration_limit) : 0.0;
+  const auto forward = normalized(vec(state.forward));
+  const auto supplied_up = normalized(vec(state.up));
+  const auto right = forward && supplied_up
+                         ? normalized(cross(*forward, *supplied_up))
+                         : std::nullopt;
+  const auto camera_up = right && forward
+                             ? normalized(cross(*right, *forward))
+                             : std::nullopt;
+  if (!forward || !right || !camera_up) {
+    return std::unexpected{OriginStationFlightError::invalid_state};
+  }
+  const double forward_component = dot(*direction, *forward);
+  const double bearing = std::atan2(dot(*direction, *right),
+                                    forward_component);
+  const double elevation =
+      std::asin(std::clamp(dot(*direction, *camera_up), -1.0, 1.0));
+  if (!std::isfinite(bearing) || !std::isfinite(elevation)) {
+    return std::unexpected{OriginStationFlightError::invalid_state};
+  }
   const bool within_rendezvous = distance <= kOriginStationArrivalRadiusMetres;
   const bool arrived =
       within_rendezvous && speed <= kOriginStationDockingSpeedMetresPerSecond;
@@ -160,7 +179,17 @@ auto apply_command(OriginStationFlightState& state,
     cue = OriginStationFlightCue::closing;
   }
   return OriginStationFlightGuidance{
-      distance, closing, speed, stopping, cue, within_rendezvous, arrived};
+      .distance_metres = distance,
+      .closing_speed_metres_per_second = closing,
+      .relative_speed_metres_per_second = speed,
+      .stopping_distance_metres = stopping,
+      .bearing_radians = bearing,
+      .elevation_radians = elevation,
+      .cue = cue,
+      .in_front = forward_component > 0.0,
+      .within_rendezvous = within_rendezvous,
+      .arrived = arrived,
+  };
 }
 
 auto hash_word(std::uint64_t& hash, std::uint64_t value) noexcept -> void {
