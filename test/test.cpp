@@ -2060,9 +2060,12 @@ auto intersystem_return_contract() -> void {
             launch_pose->position.x == launch_waypoint->position.x +
                                            kOriginStationLaunchStandoffMetres &&
             launch_pose->velocity == launch_waypoint->velocity &&
-            launch_guidance->arrived,
+            launch_guidance->arrived && !launch_guidance->in_front &&
+            close_enough(std::abs(launch_guidance->bearing_radians),
+                         std::numbers::pi) &&
+            close_enough(launch_guidance->elevation_radians, 0.0),
         "launch must create a finite deterministic station-relative pose with "
-        "matched velocity");
+        "matched velocity and camera-relative station direction");
   if (!launched) return;
 
   auto moving_contract = launch_contract;
@@ -3446,10 +3449,26 @@ auto local_system_rendering_contract() -> void {
           "the home planet and station marker must render their tick-resolved "
           "orbital relationship");
 
+    auto behind_view = epoch_view;
+    behind_view.forward = {
+        behind_view.position.x - station_epoch->position.x,
+        behind_view.position.y - station_epoch->position.y,
+        behind_view.position.z - station_epoch->position.z,
+    };
+    std::vector<Pixel> behind_frame(first.size(), {3, 6, 13, 255});
+    const auto behind_before = pixel_checksum(behind_frame);
+    const auto behind_overlay = renderer.render_origin_station(
+        behind_view, *station_epoch, behind_frame);
+    check(behind_overlay && pixel_checksum(behind_frame) != behind_before,
+          "a station behind the camera must leave a deterministic edge cue");
+
     std::vector<Pixel> station_short(first.size() - 1U, {9, 8, 7, 6});
     auto non_finite_station = *station_epoch;
     non_finite_station.position.x = std::numeric_limits<double>::quiet_NaN();
     std::vector<Pixel> station_untouched(first.size(), {9, 8, 7, 6});
+    auto invalid_station_view = epoch_view;
+    invalid_station_view.forward.x =
+        std::numeric_limits<double>::quiet_NaN();
     check(
         renderer.render_origin_station(epoch_view, *station_epoch,
                                        station_short) ==
@@ -3460,6 +3479,10 @@ auto local_system_rendering_contract() -> void {
             renderer.render_origin_station(epoch_view, non_finite_station,
                                            station_untouched) ==
                 std::unexpected{LocalSystemRenderError::ephemeris_failure} &&
+            renderer.render_origin_station(invalid_station_view,
+                                           *station_epoch,
+                                           station_untouched) ==
+                std::unexpected{LocalSystemRenderError::invalid_view} &&
             std::ranges::all_of(
                 station_untouched,
                 [](Pixel value) { return value == Pixel{9, 8, 7, 6}; }),
@@ -4780,6 +4803,115 @@ auto signal_run_contract() -> void {
             project_signal_run_save(without_presentation_history),
         "contextual guidance observations must not enter saves or "
         "authoritative state");
+
+  auto immediate_redock = *career;
+  immediate_redock.station_flight->relative_position = {
+      kOriginStationArrivalRadiusMetres, 0.0, 0.0};
+  immediate_redock.station_flight->relative_velocity = {};
+  const auto immediate_result = interact_signal_run_station(
+      immediate_redock, *career_cache);
+  SessionController interaction_session{false, true};
+  (void)interaction_session.dispatch(MenuCommand::activate);
+  (void)interaction_session.start_flight();
+  if (immediate_result == SignalRunStationInteraction::redocked) {
+    (void)interaction_session.dock_at_station();
+  }
+  check(immediate_result == SignalRunStationInteraction::redocked &&
+            !immediate_redock.station_flight &&
+            immediate_redock.onboarding.location ==
+                OriginLocation::docked_at_origin &&
+            immediate_redock.onboarding.first_objective ==
+                FirstObjectiveStatus::active &&
+            interaction_session.screen() == SessionScreen::station,
+        "Enter at the initial safe boundary must explicitly redock without "
+        "requesting process exit");
+
+  auto speed_boundary = *career;
+  speed_boundary.station_flight->relative_position = {
+      kOriginStationArrivalRadiusMetres, 0.0, 0.0};
+  speed_boundary.station_flight->relative_velocity = {
+      kOriginStationDockingSpeedMetresPerSecond, 0.0, 0.0};
+  check(interact_signal_run_station(speed_boundary, *career_cache) ==
+                SignalRunStationInteraction::redocked &&
+            !speed_boundary.station_flight,
+        "the inclusive 25 m/s boundary must remain dockable");
+
+  auto too_fast = *career;
+  too_fast.station_flight->relative_position = {
+      kOriginStationArrivalRadiusMetres, 0.0, 0.0};
+  too_fast.station_flight->relative_velocity = {
+      std::nextafter(kOriginStationDockingSpeedMetresPerSecond,
+                     std::numeric_limits<double>::infinity()),
+      0.0, 0.0};
+  const auto too_fast_before = project_signal_run_save(too_fast);
+  const auto too_fast_flight_before = *too_fast.station_flight;
+  check(interact_signal_run_station(too_fast, *career_cache) ==
+                std::unexpected{
+                    SignalRunStationInteractionError::reduce_speed_or_depart} &&
+            project_signal_run_save(too_fast) == too_fast_before &&
+            too_fast.station_flight == too_fast_flight_before &&
+            !too_fast.flight,
+        "excess speed inside 5 km must reject transactionally instead of "
+        "starting Planetfall");
+
+  auto outside = *career;
+  outside.station_flight->relative_position = {
+      std::nextafter(kOriginStationArrivalRadiusMetres,
+                     std::numeric_limits<double>::infinity()),
+      0.0, 0.0};
+  outside.station_flight->relative_velocity = {};
+  check(interact_signal_run_station(outside, *career_cache) ==
+                SignalRunStationInteraction::planetfall_started &&
+            outside.flight && !outside.station_flight,
+        "the first representable position outside 5 km must start home "
+        "Planetfall");
+
+  auto returning_outside = *career;
+  returning_outside.onboarding.first_objective =
+      FirstObjectiveStatus::completed;
+  returning_outside.station_flight->relative_position = {
+      std::nextafter(kOriginStationArrivalRadiusMetres,
+                     std::numeric_limits<double>::infinity()),
+      0.0, 0.0};
+  returning_outside.station_flight->relative_velocity = {};
+  const auto returning_before = project_signal_run_save(returning_outside);
+  const auto returning_flight_before = *returning_outside.station_flight;
+  check(interact_signal_run_station(returning_outside, *career_cache) ==
+                std::unexpected{
+                    SignalRunStationInteractionError::approach_station} &&
+            project_signal_run_save(returning_outside) == returning_before &&
+            returning_outside.station_flight == returning_flight_before,
+        "an incomplete return rendezvous must report approach guidance and "
+        "cannot re-enter Planetfall");
+
+  auto returned_home = *career;
+  returned_home.onboarding.first_objective = FirstObjectiveStatus::completed;
+  returned_home.station_flight->relative_position = {
+      kOriginStationArrivalRadiusMetres, 0.0, 0.0};
+  returned_home.station_flight->relative_velocity = {};
+  check(interact_signal_run_station(returned_home, *career_cache) ==
+                SignalRunStationInteraction::objective_returned &&
+            !returned_home.station_flight &&
+            returned_home.onboarding.location ==
+                OriginLocation::docked_at_origin &&
+            returned_home.onboarding.first_objective ==
+                FirstObjectiveStatus::returned,
+        "a completed objective must dock only at the safe inclusive return "
+        "boundary");
+
+  auto non_finite_station = *career;
+  non_finite_station.station_flight->relative_position.x =
+      std::numeric_limits<double>::quiet_NaN();
+  const auto non_finite_bits = std::bit_cast<std::uint64_t>(
+      non_finite_station.station_flight->relative_position.x);
+  check(interact_signal_run_station(non_finite_station, *career_cache) ==
+                std::unexpected{
+                    SignalRunStationInteractionError::guidance_unavailable} &&
+            non_finite_station.station_flight &&
+            std::bit_cast<std::uint64_t>(
+                non_finite_station.station_flight->relative_position.x) ==
+                non_finite_bits,
+        "non-finite station interaction state must reject before mutation");
 }
 
 auto world_delta_journal_contract() -> void {

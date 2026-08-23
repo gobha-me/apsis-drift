@@ -86,6 +86,20 @@ enum class SignalRunError : std::uint8_t {
   journal_failure,
 };
 
+enum class SignalRunStationInteraction : std::uint8_t {
+  redocked,
+  planetfall_started,
+  objective_returned,
+};
+
+enum class SignalRunStationInteractionError : std::uint8_t {
+  invalid_state,
+  guidance_unavailable,
+  reduce_speed_or_depart,
+  approach_station,
+  transition_rejected,
+};
+
 [[nodiscard]] auto signal_run_error_name(SignalRunError error) noexcept
     -> std::string_view;
 
@@ -103,6 +117,13 @@ enum class SignalRunError : std::uint8_t {
 [[nodiscard]] auto begin_signal_run_planetfall(SignalRunState& state,
                                                TerrainTileCache& cache)
     -> std::expected<void, SignalRunError>;
+
+// Resolves the context-sensitive Enter action during contract-one station
+// flight. Rejections leave authoritative state unchanged.
+[[nodiscard]] auto interact_signal_run_station(
+    SignalRunState& state, TerrainTileCache& cache)
+    -> std::expected<SignalRunStationInteraction,
+                     SignalRunStationInteractionError>;
 
 [[nodiscard]] auto advance_signal_run_station_flight(
     SignalRunState& state, std::span<const FlightCommand> commands)

@@ -290,6 +290,67 @@ auto draw_selection_marker(const ProjectedBody& body,
   }
 }
 
+auto draw_station_edge_cue(const CameraBasis& basis, Vector3 camera,
+                           Vector3 station,
+                           const LocalSystemRenderSettings& settings,
+                           std::span<termforge::Pixel> destination) noexcept
+    -> void {
+  const auto relative = subtract(station, camera);
+  const double distance = length(relative);
+  if (!finite(relative) || !finite(distance)) return;
+
+  double horizontal{};
+  double vertical{};
+  if (distance <= 1.0e-12) {
+    vertical = -1.0;
+  } else {
+    const auto direction = multiply(relative, 1.0 / distance);
+    horizontal = dot(direction, basis.right);
+    vertical = -dot(direction, basis.up);
+    const double depth = dot(direction, basis.forward);
+    if (depth <= 0.0) vertical += -depth;
+    if (std::hypot(horizontal, vertical) <= 1.0e-12) vertical = -1.0;
+  }
+
+  constexpr double margin{4.0};
+  const double half_width =
+      std::max(1.0, static_cast<double>(settings.width - 1) * 0.5 - margin);
+  const double half_height =
+      std::max(1.0, static_cast<double>(settings.height - 1) * 0.5 - margin);
+  const double scale = std::min(
+      std::abs(horizontal) > 1.0e-12
+          ? half_width / std::abs(horizontal)
+          : std::numeric_limits<double>::infinity(),
+      std::abs(vertical) > 1.0e-12
+          ? half_height / std::abs(vertical)
+          : std::numeric_limits<double>::infinity());
+  if (!finite(scale)) return;
+  const int center_x = std::clamp(
+      static_cast<int>(std::lround(
+          static_cast<double>(settings.width - 1) * 0.5 + horizontal * scale)),
+      0, settings.width - 1);
+  const int center_y = std::clamp(
+      static_cast<int>(std::lround(
+          static_cast<double>(settings.height - 1) * 0.5 + vertical * scale)),
+      0, settings.height - 1);
+  const auto set = [&](int x, int y) {
+    if (x < 0 || x >= settings.width || y < 0 || y >= settings.height) return;
+    destination[static_cast<std::size_t>(y) *
+                    static_cast<std::size_t>(settings.width) +
+                static_cast<std::size_t>(x)] = {126, 214, 210, 255};
+  };
+  set(center_x, center_y);
+  set(center_x - 1, center_y);
+  set(center_x + 1, center_y);
+  set(center_x, center_y - 1);
+  set(center_x, center_y + 1);
+  if (std::abs(horizontal) >= std::abs(vertical)) {
+    set(center_x + (horizontal < 0.0 ? 2 : -2), center_y);
+  } else {
+    set(center_x, center_y + (vertical < 0.0 ? 2 : -2));
+  }
+}
+
 }  // namespace
 
 auto resolve_system_navigation(const LocalSystemDescriptor& system,
@@ -504,8 +565,11 @@ auto LocalSystemRenderer::render_origin_station(
   const auto projected = project_body(
       m_settings, *basis, vector(view.position), vector(station.position),
       1'000.0, BodyKind::planet, 0, station.host_planet, Rgb8{126, 214, 210});
-  if (!projected)
+  if (!projected) {
+    draw_station_edge_cue(*basis, vector(view.position),
+                          vector(station.position), m_settings, destination);
     return {};
+  }
   const int center_x = static_cast<int>(std::lround(projected->screen_x));
   const int center_y = static_cast<int>(std::lround(projected->screen_y));
   const auto set = [&](int x, int y) {

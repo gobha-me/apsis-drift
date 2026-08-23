@@ -380,7 +380,8 @@ auto begin_signal_run_planetfall(SignalRunState& state, TerrainTileCache& cache)
   const auto home = resolve_planet_ephemeris(
       state.origin_system, state.recipe.home_planet,
       {.tick = state.career->universe_tick, .sub_tick_fraction = 0.0});
-  if (!station_guidance || station_guidance->arrived || !pose || !home) {
+  if (!station_guidance || station_guidance->within_rendezvous || !pose ||
+      !home) {
     return std::unexpected{SignalRunError::invalid_transition};
   }
   const double dx = home->position.x - pose->position.x;
@@ -426,6 +427,58 @@ auto begin_signal_run_planetfall(SignalRunState& state, TerrainTileCache& cache)
   next.collection = {};
   state = std::move(next);
   return {};
+}
+
+auto interact_signal_run_station(SignalRunState& state,
+                                 TerrainTileCache& cache)
+    -> std::expected<SignalRunStationInteraction,
+                     SignalRunStationInteractionError> {
+  if (!state.career || !state.station_flight || state.flight ||
+      state.onboarding.location != OriginLocation::in_flight) {
+    return std::unexpected{SignalRunStationInteractionError::invalid_state};
+  }
+  const auto guidance = resolve_origin_station_flight_guidance(
+      state.recipe.universe_seed, state.career->universe_tick,
+      state.origin_system, *state.station_flight);
+  if (!guidance) {
+    return std::unexpected{
+        SignalRunStationInteractionError::guidance_unavailable};
+  }
+
+  if (state.onboarding.first_objective == FirstObjectiveStatus::active) {
+    if (guidance->arrived) {
+      if (!return_signal_run_to_origin(state)) {
+        return std::unexpected{
+            SignalRunStationInteractionError::transition_rejected};
+      }
+      return SignalRunStationInteraction::redocked;
+    }
+    if (guidance->within_rendezvous) {
+      return std::unexpected{
+          SignalRunStationInteractionError::reduce_speed_or_depart};
+    }
+    if (!begin_signal_run_planetfall(state, cache)) {
+      return std::unexpected{
+          SignalRunStationInteractionError::transition_rejected};
+    }
+    return SignalRunStationInteraction::planetfall_started;
+  }
+
+  if (state.onboarding.first_objective == FirstObjectiveStatus::completed) {
+    if (!guidance->arrived) {
+      return std::unexpected{
+          guidance->within_rendezvous
+              ? SignalRunStationInteractionError::reduce_speed_or_depart
+              : SignalRunStationInteractionError::approach_station};
+    }
+    if (!return_signal_run_to_origin(state)) {
+      return std::unexpected{
+          SignalRunStationInteractionError::transition_rejected};
+    }
+    return SignalRunStationInteraction::objective_returned;
+  }
+
+  return std::unexpected{SignalRunStationInteractionError::invalid_state};
 }
 
 auto advance_signal_run_station_flight(SignalRunState& state,
