@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "apsis_drift/intersystem_contract.hpp"
+#include "apsis_drift/save_schema.hpp"
 #include "termforge/core/types.hpp"
 
 namespace apsis_drift {
@@ -50,6 +51,7 @@ struct IntersystemContractAcceptanceReport {
 
 struct IntersystemContractAcceptanceResult {
   IntersystemContractAcceptanceReport report;
+  SaveDocument returned_save;
   std::vector<termforge::Pixel> final_frame;
 };
 
@@ -66,6 +68,12 @@ enum class IntersystemContractAcceptanceError : std::uint8_t {
 };
 
 [[nodiscard]] auto run_intersystem_contract_acceptance(int width, int height)
+    -> std::expected<IntersystemContractAcceptanceResult,
+                     IntersystemContractAcceptanceError>;
+
+[[nodiscard]] auto run_intersystem_contract_acceptance(
+    const SaveDocument& starting_document, int width, int height,
+    bool verify_pilot_recovery)
     -> std::expected<IntersystemContractAcceptanceResult,
                      IntersystemContractAcceptanceError>;
 

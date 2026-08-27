@@ -59,3 +59,13 @@ origin-system contract is the physical contract-two round trip documented in
 is the implemented bounded flow in
 [FIRST_JUMP_ONBOARDING.md](FIRST_JUMP_ONBOARDING.md). This boundary is
 deliberately not a generic tutorial, mission, knowledge, or campaign engine.
+
+## Integrated acceptance
+
+The [station-to-universe acceptance](ONBOARDING_ACCEPTANCE.md) carries the
+same format-16 document through all three physical contracts for three bounded
+Assisted seeds, compares each final career with its identical-seed Skip
+baseline, and proves the completed career remains stable during idle open
+exploration. It reuses the shipped Kitty/ANSI departure input trace and keeps
+application state, framebuffer, encoder, and external terminal/proxy evidence
+separate.

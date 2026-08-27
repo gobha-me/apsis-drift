@@ -331,6 +331,13 @@ edge cue. A driver-backed acceptance trace proves the application keeps running
 through both redock and Planetfall under Kitty and ANSI. See
 [docs/SIGNAL_RUN.md](docs/SIGNAL_RUN.md).
 
+The v0.4.38 onboarding acceptance carries one format-16 Guided career through
+all three physical contracts for seeds 1, 42, and 0xC0FFEE, then proves the
+open-exploration handoff and identical-world/no-history Skip baseline. The
+Kitty/ANSI report keeps authoritative checksums, application framebuffer,
+encoded bytes, and external terminal throughput distinct. See
+[docs/ONBOARDING_ACCEPTANCE.md](docs/ONBOARDING_ACCEPTANCE.md).
+
 The v0.4.14 rule-profile contract added an authoritative, save-backed Assisted
 or Advanced penalty mode. New Game now locks that mode for the career;
 runtime Manual/Autopilot remains a separate cockpit control. Assisted remains
@@ -632,6 +639,9 @@ Run the complete first-contract matrix with
 Prove the Guided contract-one departure interaction through the shipped input
 and encoder paths with `--guided-departure-acceptance --driver kitty|ansi`,
 plus `--profile local|remote --report PATH`.
+Run the composed station-to-universe career with
+`--onboarding-acceptance --driver kitty|ansi --profile local|remote
+--report PATH`.
 Generate the renderer-neutral universe-route, direct-cruise, and projected-save
 evidence with
 `--universe-navigation-acceptance --report PATH`. Contract-three presentation

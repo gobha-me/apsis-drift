@@ -163,7 +163,9 @@ monotonic, non-future ticks.
 
 Historical format-1-through-15 acceptance reports remain project evidence, not
 player-save compatibility fixtures. Their former migration code and golden save
-documents are not supported by the format-16 loader.
+documents are not supported by the format-16 loader. Publication tests submit
+every historical format number from 1 through 15 to the file loader and verify
+that each rejection leaves the source bytes unchanged.
 
 ## Local catalog boundary
 

@@ -671,7 +671,9 @@ auto run_signal_run_acceptance(
                              kSignalRunDefaultSeed,
                              kSignalRunDenseSeed};
   std::optional<CompletedScenario> canonical;
+  std::vector<SignalRunCompletedScenario> completed_scenarios;
   report.scenarios.reserve(seeds.size() + 1U);
+  completed_scenarios.reserve(seeds.size() + 1U);
   for (const auto seed : seeds) {
     const bool is_canonical = seed == kSignalRunAcceptanceSeed;
     auto completed = run_complete_scenario(
@@ -679,6 +681,9 @@ auto run_signal_run_acceptance(
         is_canonical ? &report : nullptr, IntersystemRuleProfile::assisted);
     if (!completed) return std::unexpected{completed.error()};
     report.scenarios.push_back(completed->measurement);
+    completed_scenarios.push_back(
+        {.measurement = completed->measurement,
+         .returned_save = completed->returned_save});
     if (is_canonical) canonical = std::move(*completed);
   }
   if (!canonical) {
@@ -689,6 +694,9 @@ auto run_signal_run_acceptance(
                             nullptr, IntersystemRuleProfile::pilot);
   if (!pilot) return std::unexpected{pilot.error()};
   report.scenarios.push_back(pilot->measurement);
+  completed_scenarios.push_back(
+      {.measurement = pilot->measurement,
+       .returned_save = std::move(pilot->returned_save)});
   const auto canonical_system_seed = derive_seed(
       canonical->returned_save.recipe.universe_seed, SeedDomain::system,
       canonical->returned_save.recipe.origin_system_ordinal);
@@ -707,6 +715,7 @@ auto run_signal_run_acceptance(
       .report = report,
       .returned_save = std::move(canonical->returned_save),
       .final_frame = std::move(canonical->final_frame),
+      .completed_scenarios = std::move(completed_scenarios),
   };
 }
 
