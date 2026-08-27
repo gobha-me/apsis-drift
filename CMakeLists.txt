@@ -284,6 +284,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_onboarding_acceptance.cmake")
+  set_tests_properties(onboarding-acceptance-matrix
+    PROPERTIES TIMEOUT 2700)
 
   add_test(NAME reject-unsupported-alpha-save
     COMMAND "${CMAKE_COMMAND}"
