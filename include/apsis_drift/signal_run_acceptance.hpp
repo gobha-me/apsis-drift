@@ -96,10 +96,16 @@ struct SignalRunAcceptanceReport {
   std::vector<SignalRunScenarioMeasurement> scenarios;
 };
 
+struct SignalRunCompletedScenario {
+  SignalRunScenarioMeasurement measurement;
+  SaveDocument returned_save;
+};
+
 struct SignalRunAcceptanceResult {
   SignalRunAcceptanceReport report;
   SaveDocument returned_save;
   std::vector<termforge::Pixel> final_frame;
+  std::vector<SignalRunCompletedScenario> completed_scenarios;
 };
 
 enum class SignalRunAcceptanceError : std::uint8_t {

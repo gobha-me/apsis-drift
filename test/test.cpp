@@ -34,6 +34,7 @@
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/mission_board.hpp"
 #include "apsis_drift/onboarding.hpp"
+#include "apsis_drift/onboarding_acceptance.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
@@ -3920,6 +3921,25 @@ auto career_onboarding_contract() -> void {
             validate_save_document(invalid_document).error().path ==
                 "$.state.onboarding.state",
         "completed onboarding must reject an unfinished authored contract");
+
+  const auto invalid_acceptance = run_onboarding_acceptance(
+      {.viewport = {0, 480}}, "unused-onboarding-checkpoint.json");
+  check(!invalid_acceptance &&
+            invalid_acceptance.error() ==
+                OnboardingAcceptanceError::invalid_configuration,
+        "the integrated onboarding runner must reject invalid dimensions before work");
+  const auto wrong_contract_two =
+      run_origin_system_contract_acceptance(guided_document, 1, 1);
+  check(!wrong_contract_two &&
+            wrong_contract_two.error() ==
+                OriginSystemContractAcceptanceError::initialization_failure,
+        "contract two acceptance must reject a contract-one starting document");
+  const auto wrong_contract_three =
+      run_intersystem_contract_acceptance(guided_document, 1, 1, false);
+  check(!wrong_contract_three &&
+            wrong_contract_three.error() ==
+                IntersystemContractAcceptanceError::initialization_failure,
+        "contract three acceptance must reject a contract-one starting document");
 }
 
 auto save_schema_contract() -> void {

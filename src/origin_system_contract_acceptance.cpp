@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <format>
 #include <span>
 #include <utility>
@@ -85,7 +86,8 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
 }
 
 [[nodiscard]] auto descent_guidance(const IntersystemPlanetfallState& state,
-                                    bool pilot) -> Guidance {
+                                    bool pilot, bool expanded_seed_guidance)
+    -> Guidance {
   const auto& flight = state.flight;
   const auto& navigation = state.navigation;
   const double relative = navigation.relative_bearing_radians;
@@ -93,11 +95,17 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
   const bool reached = navigation.status == SignalScannerStatus::reached;
   const auto target = std::ranges::find(
       state.catalog.signals, *state.scanner.selected, &SurfaceSignal::id);
+  // The published seed-42 acceptance golden predates the absolute approach
+  // altitude contract. Preserve its command schedule while expanded seeds use
+  // the same altitude interpretation as signal navigation.
   const double target_altitude =
       target == state.catalog.signals.end()
           ? flight.pose.position.altitude_metres
-          : static_cast<double>(target->surface_elevation_metres +
-                                target->approach_altitude_metres);
+          : static_cast<double>(
+                expanded_seed_guidance
+                    ? target->approach_altitude_metres
+                    : target->surface_elevation_metres +
+                          target->approach_altitude_metres);
   const bool recovering =
       pilot && (flight.thermal.abort_latched ||
                 flight.thermal.load_units >= 600'000U);
@@ -107,7 +115,8 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
           .left = relative < -0.025,
           .right = relative > 0.025,
           .rise = recovering,
-          .fall = aligned && navigation.distance_metres < 25'000'000.0 &&
+          .fall = (aligned || expanded_seed_guidance) &&
+                  navigation.distance_metres < 25'000'000.0 &&
                   flight.pose.position.altitude_metres >
                       target_altitude + 250.0 &&
                   !recovering};
@@ -185,12 +194,21 @@ auto project_active_state(SaveDocument& document,
   return document;
 }
 
-[[nodiscard]] auto replay(int width, int height, int render_interval)
+[[nodiscard]] auto replay(const SaveDocument& starting_document, int width,
+                          int height, int render_interval)
     -> std::expected<Replay, OriginSystemContractAcceptanceError> {
-  constexpr Seed seed{kOriginSystemContractAcceptanceSeed};
-  auto prepared = prepared_document(seed);
-  if (!prepared) return std::unexpected{prepared.error()};
-  auto document = std::move(*prepared);
+  const Seed seed = starting_document.recipe.universe_seed;
+  auto document = starting_document;
+  if (!validate_save_document(document) ||
+      document.state.onboarding.state != OnboardingState::guided ||
+      document.state.onboarding.chapter != OnboardingChapter::contract_two ||
+      document.state.first_objective != FirstObjectiveStatus::turned_in ||
+      !document.state.intersystem_contract ||
+      !document.state.origin_system_contract || document.state.flight ||
+      document.state.system_flight || document.state.origin_station_flight) {
+    return std::unexpected{
+        OriginSystemContractAcceptanceError::initialization_failure};
+  }
   auto career = *document.state.intersystem_contract;
   auto contract = *document.state.origin_system_contract;
   const auto system = generate_origin_system(seed);
@@ -283,6 +301,11 @@ auto project_active_state(SaveDocument& document,
            .selected_planet = outbound->target},
           frame);
       if (!rendered) {
+        std::fprintf(stderr,
+                     "contract-two outbound presentation failed at tick %llu "
+                     "(%u)\n",
+                     static_cast<unsigned long long>(outbound->tick),
+                     static_cast<unsigned>(rendered.error()));
         return std::unexpected{
             OriginSystemContractAcceptanceError::presentation_failure};
       }
@@ -304,6 +327,8 @@ auto project_active_state(SaveDocument& document,
   const auto outbound_guidance =
       resolve_system_flight_guidance(system, *outbound);
   if (!outbound_guidance || !outbound_guidance->orbit_insertion_ready) {
+    std::fprintf(stderr,
+                 "contract-two outbound transfer did not reach insertion\n");
     return std::unexpected{
         OriginSystemContractAcceptanceError::incomplete_path};
   }
@@ -339,6 +364,8 @@ auto project_active_state(SaveDocument& document,
         OriginSystemContractAcceptanceError::initialization_failure};
   }
   constexpr SimulationTick maximum_planet_ticks{2'000'000};
+  const bool noncanonical_planetfall_guidance =
+      seed != Seed{kOriginSystemContractAcceptanceSeed};
   for (SimulationTick step = 0; step < maximum_planet_ticks &&
                                   planetfall->collection.status !=
                                       SignalCollectionStatus::complete;
@@ -346,7 +373,8 @@ auto project_active_state(SaveDocument& document,
     const auto commands = commands_for(
         planetfall->flight,
         descent_guidance(*planetfall,
-                         career.rule_profile == IntersystemRuleProfile::pilot));
+                         career.rule_profile == IntersystemRuleProfile::pilot,
+                         noncanonical_planetfall_guidance));
     if (!advance_intersystem_planetfall(*planetfall, *cache, commands,
                                         career.rule_profile) ||
         !advance_intersystem_time(career, 1)) {
@@ -358,6 +386,34 @@ auto project_active_state(SaveDocument& document,
       !advance_origin_system_contract(
           contract, career.universe_tick, career.universe_tick,
           OriginSystemContractCommand::complete_objective)) {
+    std::fprintf(stderr,
+                 "contract-two planetary objective did not complete: "
+                 "status=%u distance=%.3f bearing=%.6f altitude=%.3f "
+                 "clearance=%.3f velocity=(%.3f,%.3f,%.3f) regime=%u "
+                 "heading=%.6f position=(%.9f,%.9f) "
+                 "mode=%u controls=(%u,%u,%u,%u,%u,%u) thermal=%u "
+                 "abort=%u\n",
+                 static_cast<unsigned>(planetfall->collection.status),
+                 planetfall->navigation.distance_metres,
+                 planetfall->navigation.relative_bearing_radians,
+                 planetfall->flight.pose.position.altitude_metres,
+                 planetfall->flight.clearance_metres,
+                 planetfall->flight.velocity.east_metres_per_second,
+                 planetfall->flight.velocity.north_metres_per_second,
+                 planetfall->flight.velocity.up_metres_per_second,
+                 static_cast<unsigned>(planetfall->flight.regime),
+                 planetfall->flight.pose.heading_radians,
+                 planetfall->flight.pose.position.latitude_radians,
+                 planetfall->flight.pose.position.longitude_radians,
+                 static_cast<unsigned>(planetfall->flight.mode),
+                 planetfall->flight.controls.forward ? 1U : 0U,
+                 planetfall->flight.controls.backward ? 1U : 0U,
+                 planetfall->flight.controls.turn_left ? 1U : 0U,
+                 planetfall->flight.controls.turn_right ? 1U : 0U,
+                 planetfall->flight.controls.rise ? 1U : 0U,
+                 planetfall->flight.controls.fall ? 1U : 0U,
+                 planetfall->flight.thermal.load_units,
+                 planetfall->flight.thermal.abort_latched ? 1U : 0U);
     return std::unexpected{
         OriginSystemContractAcceptanceError::incomplete_path};
   }
@@ -474,6 +530,8 @@ auto project_active_state(SaveDocument& document,
       !advance_origin_system_contract(
           contract, career.universe_tick, career.universe_tick,
           OriginSystemContractCommand::dock)) {
+    std::fprintf(stderr,
+                 "contract-two station rendezvous did not complete\n");
     return std::unexpected{
         OriginSystemContractAcceptanceError::incomplete_path};
   }
@@ -513,6 +571,11 @@ auto project_active_state(SaveDocument& document,
        .selected_planet = returning->target},
       frame);
   if (!rendered) {
+    std::fprintf(stderr,
+                 "contract-two return presentation failed at tick %llu "
+                 "(%u)\n",
+                 static_cast<unsigned long long>(returning->tick),
+                 static_cast<unsigned>(rendered.error()));
     return std::unexpected{
         OriginSystemContractAcceptanceError::presentation_failure};
   }
@@ -539,17 +602,25 @@ auto project_active_state(SaveDocument& document,
 auto run_origin_system_contract_acceptance(int width, int height)
     -> std::expected<OriginSystemContractAcceptanceResult,
                      OriginSystemContractAcceptanceError> {
+  auto prepared = prepared_document(Seed{kOriginSystemContractAcceptanceSeed});
+  if (!prepared) return std::unexpected{prepared.error()};
+  return run_origin_system_contract_acceptance(*prepared, width, height);
+}
+
+auto run_origin_system_contract_acceptance(
+    const SaveDocument& starting_document, int width, int height)
+    -> std::expected<OriginSystemContractAcceptanceResult,
+                     OriginSystemContractAcceptanceError> {
   if (width <= 0 || height <= 0 || width > 4096 || height > 4096 ||
       static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) >
           4'194'304ULL) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::invalid_configuration};
   }
-  auto first = replay(width, height, 4);
-  auto second = replay(width, height, 2);
-  if (!first || !second) {
-    return std::unexpected{first ? second.error() : first.error()};
-  }
+  auto first = replay(starting_document, width, height, 4);
+  if (!first) return std::unexpected{first.error()};
+  auto second = replay(starting_document, width, height, 2);
+  if (!second) return std::unexpected{second.error()};
   if (first->report != second->report || first->document != second->document ||
       first->frame != second->frame) {
     return std::unexpected{

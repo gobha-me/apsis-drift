@@ -85,13 +85,11 @@ struct Replay {
   }
 }
 
-[[nodiscard]] auto guided_contract_three_document()
+[[nodiscard]] auto guided_contract_three_document(Seed seed)
     -> std::expected<SaveDocument, IntersystemContractAcceptanceError> {
   auto document = make_new_game_document(
-      Seed{kIntersystemContractAcceptanceSeed},
-      NewGameOnboardingChoice::guided);
-  auto contract_two =
-      initial_origin_system_contract(Seed{kIntersystemContractAcceptanceSeed});
+      seed, NewGameOnboardingChoice::guided);
+  auto contract_two = initial_origin_system_contract(seed);
   if (!document.state.intersystem_contract || !contract_two) {
     return std::unexpected{
         IntersystemContractAcceptanceError::initialization_failure};
@@ -191,50 +189,115 @@ struct Replay {
   std::vector<termforge::Pixel> initial(static_cast<std::size_t>(width) *
                                         static_cast<std::size_t>(height));
   std::vector<termforge::Pixel> moved(initial.size());
-  const SystemPositionMetres camera_position{0.0, -92'000'000'000.0,
-                                              26'000'000'000.0};
-  const auto view = [&](SimulationTick tick) {
-    return LocalSystemView{.time = {tick, 0.0},
-                           .position = camera_position,
-                           .velocity = {},
-                           .forward = {-camera_position.x, -camera_position.y,
-                                       -camera_position.z},
-                           .up = {0.0, 0.0, 1.0},
-                           .selected_planet = flight.target};
+  const SystemPositionMetres fixed_camera{0.0, -92'000'000'000.0,
+                                           26'000'000'000.0};
+  const SystemPositionMetres camera_offset{0.0, -92'000'000'000.0,
+                                            26'000'000'000.0};
+  const auto view = [&](SimulationTick tick)
+      -> std::expected<LocalSystemView, LocalSystemError> {
+    const auto target = resolve_planet_ephemeris(
+        system, flight.target, {.tick = tick, .sub_tick_fraction = 0.0});
+    if (!target) return std::unexpected{target.error()};
+    return LocalSystemView{
+        .time = {tick, 0.0},
+        .position = {target->position.x + camera_offset.x,
+                     target->position.y + camera_offset.y,
+                     target->position.z + camera_offset.z},
+        .velocity = target->velocity,
+        .forward = {-camera_offset.x, -camera_offset.y, -camera_offset.z},
+        .up = {0.0, 0.0, 1.0},
+        .selected_planet = flight.target};
   };
   const auto start = Clock::now();
-  const auto first = renderer.render(system, view(flight.tick), initial);
-  const auto second =
-      renderer.render(system, view(flight.tick + 10U * kSimulationHz), moved);
+  auto first = renderer.render(
+      system,
+      {.time = {flight.tick, 0.0},
+       .position = fixed_camera,
+       .velocity = {},
+       .forward = {-fixed_camera.x, -fixed_camera.y, -fixed_camera.z},
+       .up = {0.0, 0.0, 1.0},
+       .selected_planet = flight.target},
+      initial);
+  auto second = renderer.render(
+      system,
+      {.time = {flight.tick + 10U * kSimulationHz, 0.0},
+       .position = fixed_camera,
+       .velocity = {},
+       .forward = {-fixed_camera.x, -fixed_camera.y, -fixed_camera.z},
+       .up = {0.0, 0.0, 1.0},
+       .selected_planet = flight.target},
+      moved);
+  const auto complete = [](const auto& rendered) {
+    return rendered && rendered->selected_visible &&
+           rendered->visible_planets > 0U && rendered->star_pixels > 0U;
+  };
+  if (!complete(first) || !complete(second) ||
+      pixel_checksum(initial) == pixel_checksum(moved)) {
+    const auto target_planet = find_local_system_planet(system, flight.target);
+    if (!target_planet || (*target_planet)->orbit.period_ticks == 0U) {
+      std::fprintf(stderr,
+                   "contract-three target presentation orbit failed\n");
+      return std::unexpected{
+          IntersystemContractAcceptanceError::presentation_failure};
+    }
+    const SimulationTick probe_offset =
+        std::max<SimulationTick>(1U,
+                                (*target_planet)->orbit.period_ticks / 512U);
+    if (flight.tick >
+        std::numeric_limits<SimulationTick>::max() - probe_offset) {
+      std::fprintf(stderr,
+                   "contract-three target presentation tick overflowed\n");
+      return std::unexpected{
+          IntersystemContractAcceptanceError::presentation_failure};
+    }
+    const auto initial_view = view(flight.tick);
+    if (!initial_view) {
+      std::fprintf(stderr,
+                   "contract-three target presentation ephemeris failed\n");
+      return std::unexpected{
+          IntersystemContractAcceptanceError::presentation_failure};
+    }
+    auto moved_view = *initial_view;
+    moved_view.time = {flight.tick + probe_offset, 0.0};
+    first = renderer.render(system, *initial_view, initial);
+    second = renderer.render(system, moved_view, moved);
+  }
   render_ms += milliseconds(start, Clock::now());
-  if (!first || !second || !first->selected_visible ||
-      !second->selected_visible || first->visible_planets == 0U ||
-      second->visible_planets == 0U || first->star_pixels == 0U ||
-      second->star_pixels == 0U) {
+  if (!complete(first) || !complete(second)) {
+    std::fprintf(stderr,
+                 "contract-three target presentation was incomplete\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
   const auto initial_checksum = pixel_checksum(initial);
   const auto moved_checksum = pixel_checksum(moved);
   if (initial_checksum == moved_checksum) {
+    std::fprintf(stderr,
+                 "contract-three target presentation did not move\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
   return std::pair{initial_checksum, moved_checksum};
 }
 
-[[nodiscard]] auto replay(int width, int height,
+[[nodiscard]] auto replay(const SaveDocument& starting_document, int width,
+                          int height,
                           std::optional<std::string_view> resume_stage)
     -> std::expected<Replay, IntersystemContractAcceptanceError> {
   const auto replay_start = Clock::now();
   double render_ms{};
-  auto initial_document = guided_contract_three_document();
-  if (!initial_document) {
-    return std::unexpected{initial_document.error()};
-  }
-  auto document = std::move(*initial_document);
-  if (!document.state.intersystem_contract ||
-      !validate_save_document(document)) {
+  auto document = starting_document;
+  if (!validate_save_document(document) ||
+      document.state.onboarding.state != OnboardingState::guided ||
+      document.state.onboarding.chapter != OnboardingChapter::contract_three ||
+      document.state.first_objective != FirstObjectiveStatus::turned_in ||
+      !document.state.intersystem_contract ||
+      !document.state.origin_system_contract ||
+      document.state.origin_system_contract->phase !=
+          OriginSystemContractPhase::turned_in ||
+      document.state.location != OriginLocation::docked_at_origin ||
+      document.state.flight || document.state.system_flight ||
+      document.state.origin_station_flight) {
     return std::unexpected{
         IntersystemContractAcceptanceError::initialization_failure};
   }
@@ -266,7 +329,7 @@ struct Replay {
   }
   document.state.origin_station_flight = *launched;
   const auto route = generate_first_universe_route(
-      Seed{kIntersystemContractAcceptanceSeed});
+      document.recipe.universe_seed);
   const auto outbound_view = resolve_onboarding_navigation_view(
       route, document.state.onboarding, route.origin);
   UniverseNavigationSelectionState outbound_selection;
@@ -712,6 +775,8 @@ struct Replay {
   const auto origin_pose = resolve_origin_station_flight_pose(
       *document.state.intersystem_contract, origin_system, *origin_return);
   if (!origin_pose) {
+    std::fprintf(stderr,
+                 "contract-three origin presentation pose failed\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
@@ -738,6 +803,8 @@ struct Replay {
                 std::unexpected{LocalSystemRenderError::ephemeris_failure}};
   render_ms += milliseconds(render_start, Clock::now());
   if (!rendered || !marked) {
+    std::fprintf(stderr,
+                 "contract-three origin presentation render failed\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
@@ -796,6 +863,17 @@ struct Replay {
 auto run_intersystem_contract_acceptance(int width, int height)
     -> std::expected<IntersystemContractAcceptanceResult,
                      IntersystemContractAcceptanceError> {
+  auto prepared = guided_contract_three_document(
+      Seed{kIntersystemContractAcceptanceSeed});
+  if (!prepared) return std::unexpected{prepared.error()};
+  return run_intersystem_contract_acceptance(*prepared, width, height, true);
+}
+
+auto run_intersystem_contract_acceptance(
+    const SaveDocument& starting_document, int width, int height,
+    bool verify_pilot_recovery)
+    -> std::expected<IntersystemContractAcceptanceResult,
+                     IntersystemContractAcceptanceError> {
   if (width <= 0 || height <= 0 || width > 4096 || height > 4096 ||
       static_cast<std::size_t>(width) >
           std::numeric_limits<std::size_t>::max() /
@@ -805,7 +883,7 @@ auto run_intersystem_contract_acceptance(int width, int height)
     return std::unexpected{
         IntersystemContractAcceptanceError::invalid_configuration};
   }
-  auto baseline = replay(width, height, std::nullopt);
+  auto baseline = replay(starting_document, width, height, std::nullopt);
   if (!baseline || !baseline->final_document.state.intersystem_contract) {
     return std::unexpected{
         baseline ? IntersystemContractAcceptanceError::incomplete_path
@@ -815,7 +893,8 @@ auto run_intersystem_contract_acceptance(int width, int height)
     return std::unexpected{IntersystemContractAcceptanceError::incomplete_path};
   }
   for (std::size_t index = 0; index < kResumeStages.size(); ++index) {
-    auto resumed = replay(width, height, kResumeStages[index]);
+    auto resumed = replay(starting_document, width, height,
+                          kResumeStages[index]);
     if (!resumed || resumed->final_document != baseline->final_document ||
         resumed->final_checksum != baseline->final_checksum ||
         resumed->final_frame != baseline->final_frame) {
@@ -825,14 +904,22 @@ auto run_intersystem_contract_acceptance(int width, int height)
     baseline->checkpoints[index].resumed_final_checksum =
         resumed->final_checksum;
   }
-  const auto recovery = run_intersystem_planetfall_acceptance(width, height);
   const auto& contract = *baseline->final_document.state.intersystem_contract;
   const auto onboarding_access =
       resolve_onboarding_access(baseline->final_document.state.onboarding);
-  if (!recovery || !onboarding_access ||
-      recovery->report.planet != contract.identities.target_planet ||
-      recovery->report.target != contract.identities.target_objective ||
-      recovery->report.abort_orbit_checksum == 0U) {
+  std::uint64_t recovery_checksum{};
+  if (verify_pilot_recovery) {
+    const auto recovery = run_intersystem_planetfall_acceptance(width, height);
+    if (!recovery ||
+        recovery->report.planet != contract.identities.target_planet ||
+        recovery->report.target != contract.identities.target_objective ||
+        recovery->report.abort_orbit_checksum == 0U) {
+      return std::unexpected{
+          IntersystemContractAcceptanceError::recovery_failure};
+    }
+    recovery_checksum = recovery->report.abort_orbit_checksum;
+  }
+  if (!onboarding_access) {
     return std::unexpected{
         IntersystemContractAcceptanceError::recovery_failure};
   }
@@ -853,8 +940,7 @@ auto run_intersystem_contract_acceptance(int width, int height)
                  .checkpoints = std::move(baseline->checkpoints),
                  .final_tick = contract.universe_tick,
                  .final_authoritative_checksum = baseline->final_checksum,
-                 .wrong_side_recovery_checksum =
-                     recovery->report.abort_orbit_checksum,
+                 .wrong_side_recovery_checksum = recovery_checksum,
                  .target_system_planet_count =
                      baseline->target_system_planet_count,
                  .target_system_initial_framebuffer_checksum =
@@ -870,6 +956,7 @@ auto run_intersystem_contract_acceptance(int width, int height)
                  .framebuffer_checksum = baseline->framebuffer_checksum,
                  .simulation_ms = baseline->simulation_ms,
                  .application_render_ms = baseline->application_render_ms},
+      .returned_save = std::move(baseline->final_document),
       .final_frame = std::move(baseline->final_frame)};
 }
 

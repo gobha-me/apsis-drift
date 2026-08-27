@@ -45,6 +45,7 @@
 #include "apsis_drift/local_system.hpp"
 #include "apsis_drift/menu.hpp"
 #include "apsis_drift/mission_board.hpp"
+#include "apsis_drift/onboarding_acceptance.hpp"
 #include "apsis_drift/orbital.hpp"
 #include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/origin_system_contract.hpp"
@@ -4291,6 +4292,9 @@ auto usage() -> void {
       "       apsis-drift --guided-departure-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME] "
       "[--snapshot PATH]\n\n"
+      "       apsis-drift --onboarding-acceptance --report PATH\n"
+      "                   --driver kitty|ansi [--profile NAME] "
+      "[--snapshot PATH]\n\n"
       "       apsis-drift --system-navigation-acceptance --report PATH\n"
       "                   --driver kitty|ansi [--profile NAME]\n\n"
       "       apsis-drift --intersystem-jump-acceptance --report PATH\n"
@@ -4340,6 +4344,7 @@ auto main(int argc, char** argv) -> int {
   bool signal_navigation_acceptance{};
   bool signal_run_acceptance{};
   bool guided_departure_acceptance{};
+  bool onboarding_acceptance{};
   bool system_navigation_acceptance{};
   bool intersystem_jump_acceptance{};
   bool system_flight_acceptance{};
@@ -4427,6 +4432,10 @@ auto main(int argc, char** argv) -> int {
     }
     if (argument == "--guided-departure-acceptance") {
       guided_departure_acceptance = true;
+      continue;
+    }
+    if (argument == "--onboarding-acceptance") {
+      onboarding_acceptance = true;
       continue;
     }
     if (argument == "--system-navigation-acceptance") {
@@ -4598,6 +4607,35 @@ auto main(int argc, char** argv) -> int {
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||
                                new_game_seed.has_value();
+  if (onboarding_acceptance &&
+      (benchmark_frames || sweep_frames || capture_seconds > 0 ||
+       flight_deck_acceptance || planetfall_acceptance ||
+       signal_navigation_acceptance || signal_run_acceptance ||
+       guided_departure_acceptance || system_navigation_acceptance ||
+       intersystem_jump_acceptance || system_flight_acceptance ||
+       intersystem_planetfall_acceptance || intersystem_return_acceptance ||
+       intersystem_contract_acceptance || origin_system_contract_acceptance ||
+       universe_navigation_acceptance || profile_options || seed_specified ||
+       viewport_specified || workload_specified || keyboard_specified)) {
+    std::fprintf(stderr,
+                 "Onboarding acceptance is mutually exclusive with other "
+                 "run, viewport, save, seed, workload, and keyboard options\n");
+    return 2;
+  }
+  if (onboarding_acceptance &&
+      (!driver_specified ||
+       (driver_choice != DriverChoice::kitty &&
+        driver_choice != DriverChoice::ansi))) {
+    std::fprintf(stderr,
+                 "Onboarding acceptance requires --driver kitty or "
+                 "--driver ansi\n");
+    return 2;
+  }
+  if (onboarding_acceptance && report_path.empty()) {
+    std::fprintf(stderr,
+                 "Onboarding acceptance requires --report PATH\n");
+    return 2;
+  }
   if (guided_departure_acceptance &&
       (benchmark_frames || sweep_frames || capture_seconds > 0 ||
        flight_deck_acceptance || planetfall_acceptance ||
@@ -4947,6 +4985,77 @@ auto main(int argc, char** argv) -> int {
   }
 
   try {
+    if (onboarding_acceptance) {
+      const RenderConfiguration configuration =
+          resolve_render_configuration(selected_profile, std::nullopt);
+      const auto profile = make_new_game_document(Seed{42});
+      LandscapeApp app{
+          configuration, presentation_seed(profile.recipe.universe_seed),
+          BenchmarkWorkload::landscape, 0.0, true, false, false, &profile};
+      if (auto forced =
+              app.force_capabilities(driver_choice, KeyboardChoice::enhanced);
+          !forced) {
+        std::fprintf(stderr, "cannot force capabilities: %s\n",
+                     forced.error().message.c_str());
+        return 2;
+      }
+      const auto departure = app.guided_departure_acceptance(driver_choice);
+      if (!departure) {
+        std::fprintf(stderr,
+                     "Onboarding departure acceptance failed: %s\n",
+                     departure.error().c_str());
+        return 1;
+      }
+      const auto checkpoint = std::filesystem::temp_directory_path() /
+                              std::format("apsis-drift-onboarding-{}-{}.json",
+                                          ::getpid(),
+                                          driver_choice == DriverChoice::kitty
+                                              ? "kitty"
+                                              : "ansi");
+      auto acceptance = run_onboarding_acceptance(configuration, checkpoint);
+      if (!acceptance) {
+        std::fprintf(stderr, "Onboarding acceptance failed (%u)\n",
+                     static_cast<unsigned>(acceptance.error()));
+        return 1;
+      }
+      acceptance->report.presentation = departure->presentation;
+      acceptance->report.presentation_framebuffer_checksum =
+          departure->framebuffer_checksum;
+      acceptance->report.encoded_bytes = departure->encoded_bytes;
+      acceptance->report.encoded_frames = departure->frames;
+      std::ofstream report{report_path};
+      if (!report) {
+        std::fprintf(stderr, "cannot open report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      report << onboarding_acceptance_json(acceptance->report);
+      if (!report.good()) {
+        std::fprintf(stderr, "cannot write report '%s'\n",
+                     report_path.string().c_str());
+        return 1;
+      }
+      if (!snapshot_path.empty() &&
+          !::write_snapshot(snapshot_path, configuration.viewport,
+                            acceptance->final_frame)) {
+        std::fprintf(stderr, "cannot write snapshot '%s'\n",
+                     snapshot_path.string().c_str());
+        return 1;
+      }
+      const auto& canonical = *std::ranges::find(
+          acceptance->report.seeds, Seed{42},
+          &OnboardingAcceptanceSeedMeasurement::seed);
+      std::printf(
+          "onboarding: presentation=%s seeds=%zu final=%llu "
+          "framebuffer=%llu bytes=%llu\n",
+          acceptance->report.presentation.c_str(),
+          acceptance->report.seeds.size(),
+          static_cast<unsigned long long>(canonical.guided_final_checksum),
+          static_cast<unsigned long long>(
+              acceptance->report.presentation_framebuffer_checksum),
+          static_cast<unsigned long long>(acceptance->report.encoded_bytes));
+      return 0;
+    }
     if (guided_departure_acceptance) {
       const RenderConfiguration configuration =
           resolve_render_configuration(selected_profile, std::nullopt);

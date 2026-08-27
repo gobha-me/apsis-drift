@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.37 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.38 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -104,6 +104,7 @@ add_library(apsis_drift_lib STATIC
   src/menu.cpp
   src/mission_board.cpp
   src/onboarding.cpp
+  src/onboarding_acceptance.cpp
   src/orbital.cpp
   src/origin_station.cpp
   src/origin_return.cpp
@@ -278,6 +279,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
             "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_guided_departure_acceptance.cmake")
 
+  add_test(NAME onboarding-acceptance-matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
+            "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_onboarding_acceptance.cmake")
+
   add_test(NAME reject-unsupported-alpha-save
     COMMAND "${CMAKE_COMMAND}"
             "-DAPSIS_DRIFT_BIN=$<TARGET_FILE:apsis-drift>"
@@ -448,6 +455,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME reject-guided-departure-missing-driver
     COMMAND apsis-drift --guided-departure-acceptance
             --report guided-departure-invalid.json)
+  add_test(NAME reject-onboarding-missing-report
+    COMMAND apsis-drift --onboarding-acceptance --driver ansi)
+  add_test(NAME reject-onboarding-missing-driver
+    COMMAND apsis-drift --onboarding-acceptance
+            --report onboarding-invalid.json)
   add_test(NAME reject-system-navigation-missing-report
     COMMAND apsis-drift --system-navigation-acceptance --driver ansi)
   add_test(NAME reject-system-navigation-missing-driver
@@ -504,6 +516,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     reject-signal-run-mode-conflict
     reject-guided-departure-missing-report
     reject-guided-departure-missing-driver
+    reject-onboarding-missing-report
+    reject-onboarding-missing-driver
     reject-system-navigation-missing-report
     reject-system-navigation-missing-driver
     reject-system-navigation-mode-conflict

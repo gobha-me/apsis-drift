@@ -66,6 +66,11 @@ enum class OriginSystemContractAcceptanceError : std::uint8_t {
     -> std::expected<OriginSystemContractAcceptanceResult,
                      OriginSystemContractAcceptanceError>;
 
+[[nodiscard]] auto run_origin_system_contract_acceptance(
+    const SaveDocument& starting_document, int width, int height)
+    -> std::expected<OriginSystemContractAcceptanceResult,
+                     OriginSystemContractAcceptanceError>;
+
 [[nodiscard]] auto origin_system_contract_acceptance_json(
     const OriginSystemContractAcceptanceReport& report) -> std::string;
 
