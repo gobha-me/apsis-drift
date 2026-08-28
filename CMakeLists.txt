@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.38 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.39 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -86,6 +86,7 @@ if (NOT TARGET nlohmann_json::nlohmann_json)
 endif ()
 
 add_library(apsis_drift_lib STATIC
+  src/audio.cpp
   src/benchmark.cpp
   src/celestial.cpp
   src/cockpit.cpp

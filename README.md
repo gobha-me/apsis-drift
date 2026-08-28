@@ -6,6 +6,12 @@
 A deterministic, procedurally generated spaceflight experiment rendered inside
 a terminal.
 
+Audio policy is also application-owned. The current
+[audio contract](docs/AUDIO.md) provides deterministic tick-addressed cues,
+bounded non-blocking delivery, and a no-device backend; device output,
+procedural flight synthesis, and generated assets remain later First Light
+work.
+
 | Direct Kitty, `local` 640x480 | Truecolor ANSI, `remote` 320x240 |
 | --- | --- |
 | ![Flight Deck acceptance run using Kitty graphics](docs/media/flight-deck-kitty.png) | ![Flight Deck acceptance run using truecolor ANSI half blocks](docs/media/flight-deck-ansi.png) |
