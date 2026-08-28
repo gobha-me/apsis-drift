@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+#include "apsis_drift/audio.hpp"
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/celestial.hpp"
 #include "apsis_drift/cockpit.hpp"
@@ -8270,6 +8271,231 @@ auto sweep_report_contract() -> void {
         "the sweep table must contain a header and profile rows");
 }
 
+class CountingAudioSource final : public AudioRenderSource {
+ public:
+  [[nodiscard]] auto render(std::span<float>) noexcept
+      -> std::optional<AudioBufferError> override {
+    ++calls;
+    return std::nullopt;
+  }
+
+  int calls{};
+};
+
+struct AudioReplayResult {
+  std::uint64_t flight_checksum{};
+  std::vector<AudioEvent> events;
+  AudioDiagnostics diagnostics;
+};
+
+[[nodiscard]] auto replay_audio_event_trace(bool enabled,
+                                            bool delayed_consumption)
+    -> AudioReplayResult {
+  const auto terrain = Terrain::generate(kFlightDeckAcceptanceTerrainSize,
+                                         kFlightDeckAcceptanceSeed);
+  if (!terrain) return {};
+  auto initialized = initial_flight_state(*terrain);
+  if (!initialized) return {};
+
+  AudioRuntime audio{enabled ? AudioRuntimeMode::no_device
+                             : AudioRuntimeMode::disabled};
+  auto state = *initialized;
+  const auto schedule = flight_deck_acceptance_commands();
+  std::size_t next_command{};
+  std::vector<AudioEvent> events;
+  for (SimulationTick tick = 0; tick < kFlightDeckAcceptanceTicks; ++tick) {
+    const auto first = next_command;
+    while (next_command < schedule.size() &&
+           schedule[next_command].tick == tick) {
+      ++next_command;
+    }
+    const auto commands = schedule.subspan(first, next_command - first);
+    if (!advance_flight(*terrain, state, commands, kSimulationStep)) return {};
+    for (const auto& command : commands) {
+      const auto emitted = audio.emit(
+          command.tick,
+          AudioCueId{static_cast<std::uint32_t>(command.kind) + 1U});
+      if (enabled && emitted.status != AudioEmitStatus::queued) return {};
+      if (!enabled && emitted.status != AudioEmitStatus::disabled) return {};
+    }
+    if (!delayed_consumption) {
+      while (auto event = audio.try_take_event()) events.push_back(*event);
+    }
+  }
+  while (auto event = audio.try_take_event()) events.push_back(*event);
+  return {
+      .flight_checksum = flight_state_checksum(state),
+      .events = std::move(events),
+      .diagnostics = audio.diagnostics(),
+  };
+}
+
+auto audio_contract() -> void {
+  static_assert(kAudioSampleRate % kSimulationHz == 0);
+  check(kAudioFormat == AudioFormat{} && kAudioFramesPerSimulationTick == 400,
+        "audio must use the fixed 48 kHz stereo float contract");
+  check(audio_sample_frame({42, 17}) == 16'800,
+        "authoritative ticks must map exactly to sample frames");
+  const auto overflowing_tick =
+      std::numeric_limits<std::uint64_t>::max() /
+          kAudioFramesPerSimulationTick +
+      1U;
+  check(!audio_sample_frame({overflowing_tick, 0}),
+        "overflowing audio timestamps must be rejected");
+
+  CountingAudioSource source;
+  NoDeviceAudioBackend backend;
+  auto invalid_format = kAudioFormat;
+  invalid_format.channels = 1;
+  check(!backend.start(invalid_format, source) &&
+            backend.state() == AudioBackendState::failed &&
+            source.calls == 0,
+        "the no-device backend must reject invalid formats without rendering");
+  check(backend.start(kAudioFormat, source) &&
+            backend.state() == AudioBackendState::no_device &&
+            source.calls == 0,
+        "the no-device backend must start without device or callback work");
+  backend.stop();
+  check(backend.state() == AudioBackendState::stopped,
+        "the no-device backend must stop idempotently");
+
+  AudioRuntime invalid_events;
+  check(invalid_events.emit(0, {}).status ==
+            AudioEmitStatus::rejected_invalid_cue &&
+            invalid_events.emit(10, {1}).identity ==
+                AudioEventIdentity{10, 0} &&
+            invalid_events.emit(10, {2}).identity ==
+                AudioEventIdentity{10, 1} &&
+            invalid_events.emit(9, {3}).status ==
+                AudioEmitStatus::rejected_tick_regression &&
+            invalid_events.emit(overflowing_tick, {4}).status ==
+                AudioEmitStatus::rejected_timestamp_overflow,
+        "invalid audio cues, tick regression, and timestamp overflow must fail closed");
+  const auto invalid_diagnostics = invalid_events.diagnostics();
+  check(invalid_diagnostics.events_rejected == 3 &&
+            invalid_diagnostics.queue_depth == 2,
+        "rejected audio events must not mutate the bounded queue");
+
+  AudioRuntime saturated;
+  for (std::size_t index = 0; index < kAudioEventQueueCapacity; ++index) {
+    const auto emitted = saturated.emit(7, {1});
+    check(emitted.status == AudioEmitStatus::queued && emitted.identity &&
+              emitted.identity->sequence == index,
+          "audio events inside capacity must receive ordered identities");
+  }
+  const auto dropped = saturated.emit(7, {1});
+  check(dropped.status == AudioEmitStatus::dropped_queue_full &&
+            dropped.identity &&
+            dropped.identity->sequence == kAudioEventQueueCapacity,
+        "a full audio queue must drop the newest assigned event");
+  for (std::size_t index = 0; index < kAudioEventQueueCapacity; ++index) {
+    const auto event = saturated.try_take_event();
+    check(event &&
+              event->identity == AudioEventIdentity{
+                                     7, static_cast<std::uint16_t>(index)},
+          "audio queue overflow must preserve existing FIFO order");
+  }
+  check(!saturated.try_take_event(),
+        "draining the audio queue must expose an empty boundary");
+  const auto saturated_diagnostics = saturated.diagnostics();
+  check(saturated_diagnostics.events_queued == kAudioEventQueueCapacity &&
+            saturated_diagnostics.events_dropped == 1 &&
+            saturated_diagnostics.maximum_queue_depth ==
+                kAudioEventQueueCapacity,
+        "audio diagnostics must report bounded overflow truthfully");
+
+  AudioRuntime sequence_limit;
+  for (std::uint32_t index = 0;
+       index <= std::numeric_limits<std::uint16_t>::max(); ++index) {
+    const auto emitted = sequence_limit.emit(1, {1});
+    check(emitted.identity && emitted.identity->sequence == index,
+          "within-tick audio sequence assignment must remain deterministic");
+  }
+  check(sequence_limit.emit(1, {1}).status ==
+            AudioEmitStatus::rejected_sequence_exhausted,
+        "within-tick audio sequence exhaustion must be rejected");
+  sequence_limit.reset(AudioResetReason::load);
+  const auto after_load = sequence_limit.emit(0, {1});
+  check(after_load.identity == AudioEventIdentity{0, 0} &&
+            sequence_limit.diagnostics().events_discarded_on_reset ==
+                kAudioEventQueueCapacity,
+        "load reset must discard stale events and begin a new identity epoch");
+  sequence_limit.reset(AudioResetReason::return_to_title);
+  const auto after_title = sequence_limit.emit(0, {1});
+  const auto title_diagnostics = sequence_limit.diagnostics();
+  check(after_title.identity == AudioEventIdentity{0, 0} &&
+            title_diagnostics.last_reset_reason ==
+                AudioResetReason::return_to_title &&
+            title_diagnostics.events_discarded_on_reset ==
+                kAudioEventQueueCapacity + 1U,
+        "title reset must discard stale events and begin a new identity epoch");
+
+  AudioRuntime buffers;
+  (void)buffers.emit(2, {1});
+  check(buffers.render({}) == AudioBufferError::invalid_dimensions &&
+            buffers.diagnostics().queue_depth == 1,
+        "an empty audio callback must be rejected without consumption");
+  std::array<float, 3> odd_buffer{1.0F, 2.0F, 3.0F};
+  check(buffers.render(odd_buffer) == AudioBufferError::invalid_dimensions &&
+            odd_buffer == std::array<float, 3>{1.0F, 2.0F, 3.0F} &&
+            buffers.diagnostics().queue_depth == 1,
+        "an odd audio buffer must be rejected without mutation or consumption");
+  std::vector<float> oversized(
+      (kMaximumAudioFramesPerCallback + 1U) * kAudioChannelCount, 4.0F);
+  check(buffers.render(oversized) == AudioBufferError::invalid_dimensions &&
+            std::ranges::all_of(oversized,
+                                [](float value) { return value == 4.0F; }),
+        "an oversized audio callback must be rejected without mutation");
+  std::array<float, 4> valid_buffer{
+      std::numeric_limits<float>::quiet_NaN(), 1.0F, -1.0F, 2.0F};
+  check(!buffers.render(valid_buffer) &&
+            std::ranges::all_of(valid_buffer,
+                                [](float value) { return value == 0.0F; }) &&
+            buffers.diagnostics().queue_depth == 0,
+        "a valid audio callback must produce finite silence and consume events");
+
+  AudioRuntime no_device;
+  (void)no_device.emit(3, {1});
+  no_device.service();
+  check(no_device.diagnostics().events_dequeued == 1 &&
+            no_device.diagnostics().queue_depth == 0,
+        "no-device service must discard events without waveform work");
+  (void)no_device.emit(4, {1});
+  no_device.backend_lost();
+  const auto recovered = no_device.diagnostics();
+  check(recovered.backend_state == AudioBackendState::no_device &&
+            recovered.backend_loss_count == 1 &&
+            recovered.last_reset_reason == AudioResetReason::backend_loss &&
+            recovered.queue_depth == 0,
+        "backend loss must clear stale events and fall back to no-device");
+  no_device.shutdown();
+  std::array<float, 2> stopped_buffer{5.0F, 6.0F};
+  check(no_device.emit(5, {1}).status == AudioEmitStatus::stopped &&
+            no_device.render(stopped_buffer) == AudioBufferError::stopped &&
+            stopped_buffer == std::array<float, 2>{5.0F, 6.0F},
+        "shutdown must reject later playback without touching caller buffers");
+
+  AudioRuntime disabled{AudioRuntimeMode::disabled};
+  check(disabled.emit(0, {1}).status == AudioEmitStatus::disabled &&
+            disabled.diagnostics().identities_assigned == 0 &&
+            disabled.diagnostics().queue_depth == 0,
+        "disabled audio must perform no identity or queue work");
+
+  const auto enabled_immediate = replay_audio_event_trace(true, false);
+  const auto enabled_delayed = replay_audio_event_trace(true, true);
+  const auto disabled_replay = replay_audio_event_trace(false, true);
+  check(enabled_immediate.flight_checksum != 0 &&
+            enabled_immediate.flight_checksum ==
+                enabled_delayed.flight_checksum &&
+            enabled_immediate.flight_checksum ==
+                disabled_replay.flight_checksum,
+        "enabled, delayed, and disabled audio must preserve simulation checksums");
+  check(!enabled_immediate.events.empty() &&
+            enabled_immediate.events == enabled_delayed.events &&
+            disabled_replay.events.empty(),
+        "command replay must produce a stable audio trace independent of consumption delay");
+}
+
 auto fixed_step_clock_contract() -> void {
   FixedStepClock clock;
   const auto half = kSimulationStep / 2.0;
@@ -10430,6 +10656,7 @@ auto main() -> int {
   thermal_reentry_contract();
   sweep_selection_contract();
   sweep_report_contract();
+  audio_contract();
   fixed_step_clock_contract();
   deterministic_fixed_step_flight();
   deterministic_command_replay();

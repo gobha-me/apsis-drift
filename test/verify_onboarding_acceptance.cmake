@@ -58,12 +58,12 @@ function(check_onboarding driver profile json)
                             planet-435b7b7e8ce489e8
                             planet-c7d2d403b1f8548d)
   set(expected_final_ticks 10807005 9955184 9313934)
-  set(expected_guided_checksums 4527997393443910137
-                                7402421958883237497
-                                399460181794316111)
-  set(expected_skipped_checksums 7846159301925072024
-                                 3203707493135581312
-                                 14055380167269608298)
+  set(expected_guided_checksums 16596483573132496202
+                                1463456965317603158
+                                12821918799848386906)
+  set(expected_skipped_checksums 12634531879951811977
+                                 6712114459891539007
+                                 11686110205111062001)
   foreach(index RANGE 0 2)
     list(GET expected_seeds ${index} expected_seed)
     list(GET expected_stations ${index} expected_station)

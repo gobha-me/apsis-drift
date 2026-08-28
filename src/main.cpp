@@ -31,6 +31,7 @@
 #include "termforge/drivers/kitty_driver.hpp"
 #include "termforge/widgets/frame.hpp"
 #include "termforge/widgets/pixel_surface.hpp"
+#include "apsis_drift/audio.hpp"
 #include "apsis_drift/benchmark.hpp"
 #include "apsis_drift/cockpit.hpp"
 #include "apsis_drift/flight_deck_acceptance.hpp"
@@ -524,6 +525,7 @@ class LandscapeApp final : public App {
     if (m_session.screen() == SessionScreen::flight) {
       advance_simulation(dt);
     }
+    m_audio.service();
   }
 
   auto on_render(Screen& screen) -> void override {
@@ -1135,6 +1137,7 @@ class LandscapeApp final : public App {
     m_session = SessionController(false, docked);
     (void)m_session.dispatch(MenuCommand::activate);
     m_simulation_clock.reset();
+    m_audio.reset(AudioResetReason::load);
     m_input_mapper.suspend({}, current_flight_tick());
     m_active_mouse_region = {};
     m_error.clear();
@@ -4023,6 +4026,7 @@ class LandscapeApp final : public App {
   std::vector<SaveWorldDelta> m_intersystem_world_deltas;
   std::vector<SaveWorldDelta> m_origin_system_world_deltas;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
+  AudioRuntime m_audio;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
   apsis_drift::detail::FlightInputMapper m_input_mapper;
