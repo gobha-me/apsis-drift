@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.39 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.40 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -12,6 +12,7 @@ configure_file(
 )
 
 option(APSIS_DRIFT_TESTS "Build the Apsis Drift tests" ON)
+option(APSIS_DRIFT_RTAUDIO "Build the RtAudio output backend" ON)
 set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
@@ -85,8 +86,35 @@ if (NOT TARGET nlohmann_json::nlohmann_json)
   FetchContent_MakeAvailable(nlohmann_json)
 endif ()
 
+if (APSIS_DRIFT_RTAUDIO)
+  set(RTAUDIO_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+  set(RTAUDIO_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_API_JACK OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_API_PULSE OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_API_OSS OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_API_DS OFF CACHE BOOL "" FORCE)
+  set(RTAUDIO_API_ASIO OFF CACHE BOOL "" FORCE)
+  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(RTAUDIO_API_ALSA ON CACHE BOOL "" FORCE)
+  elseif (APPLE)
+    set(RTAUDIO_API_CORE ON CACHE BOOL "" FORCE)
+  elseif (WIN32)
+    set(RTAUDIO_API_WASAPI ON CACHE BOOL "" FORCE)
+  endif ()
+  FetchContent_Declare(rtaudio
+    GIT_REPOSITORY https://github.com/thestk/rtaudio.git
+    GIT_TAG b4f04903312e0e0efffbe77655172e0f060dc085
+    GIT_SHALLOW FALSE
+    EXCLUDE_FROM_ALL
+  )
+  FetchContent_MakeAvailable(rtaudio)
+endif ()
+
 add_library(apsis_drift_lib STATIC
   src/audio.cpp
+  src/audio_callback.cpp
   src/benchmark.cpp
   src/celestial.cpp
   src/cockpit.cpp
@@ -150,6 +178,12 @@ target_link_libraries(apsis_drift_lib
   PUBLIC termforge::lib
   PRIVATE nlohmann_json::nlohmann_json
 )
+if (APSIS_DRIFT_RTAUDIO)
+  target_sources(apsis_drift_lib PRIVATE src/rtaudio_backend.cpp)
+  target_compile_definitions(apsis_drift_lib
+    PRIVATE APSIS_DRIFT_HAS_RTAUDIO=1)
+  target_link_libraries(apsis_drift_lib PRIVATE rtaudio)
+endif ()
 
 add_executable(apsis-drift
   src/main.cpp
@@ -161,6 +195,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
   target_include_directories(apsis-drift-tests
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_definitions(apsis-drift-tests PRIVATE
+    APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
   add_test(NAME version-report COMMAND apsis-drift --version)
   set_tests_properties(version-report PROPERTIES

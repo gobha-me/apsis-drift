@@ -43,6 +43,28 @@ The render-source seam currently produces validated silence. Empty, odd-sized,
 or over-4096-frame callback buffers are rejected without modifying the buffer
 or consuming queued events.
 
+## RtAudio device output
+
+`APSIS_DRIFT_RTAUDIO=ON` builds the application-owned RtAudio 6.0.1 output
+backend. Ordinary interactive play attempts an explicitly selected ephemeral
+device ID or the platform default. Device IDs and callback timing are
+presentation-only and are not persisted in a save. External preferences and a
+stable player-facing device selection policy remain owned by issue #30.
+Linux builds use ALSA, macOS builds use CoreAudio, and Windows builds use
+WASAPI; optional APIs discovered incidentally on the build host are not added.
+
+Automated benchmark, capture, and acceptance modes always select the no-device
+backend. They therefore measure the same application rendering, encoding, and
+terminal submission boundaries whether or not RtAudio was compiled.
+
+Discovery, missing-device, invalid-selection, open, start, callback, and
+disconnect failures synchronously stop the stream, clear the playback epoch,
+and fall back to no-device operation. The realtime callback reports failures
+through atomics only. The main thread emits one diagnostic per backend-state or
+failure-count transition; it does not repeat a message for every callback.
+Output underflow is counted as a presentation diagnostic but is not by itself
+a device-loss signal.
+
 An output backend must make `stop()` synchronous with its callback before the
 runtime clears playback state. The render callback performs no allocation,
 filesystem access, logging, application traversal, or mutex acquisition; it
