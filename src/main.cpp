@@ -528,6 +528,8 @@ class LandscapeApp final : public App {
   auto on_tick(std::chrono::duration<double> dt) -> void override {
     if (m_session.screen() == SessionScreen::flight) {
       advance_simulation(dt);
+    } else {
+      stop_active_flight_audio();
     }
     m_audio.service();
     report_audio_state();
@@ -1143,6 +1145,8 @@ class LandscapeApp final : public App {
     (void)m_session.dispatch(MenuCommand::activate);
     m_simulation_clock.reset();
     m_audio.reset(AudioResetReason::load);
+    m_audio_flight_active = false;
+    m_audio_low_clearance = false;
     m_input_mapper.suspend({}, current_flight_tick());
     m_active_mouse_region = {};
     m_error.clear();
@@ -3316,6 +3320,52 @@ class LandscapeApp final : public App {
     m_input_mapper.enqueue(key, m_flight.tick);
   }
 
+  auto emit_active_flight_audio() noexcept -> void {
+    std::expected<FlightAudioTelemetry, FlightAudioError> telemetry =
+        std::unexpected{FlightAudioError::invalid_state};
+    if (m_signal_run && m_signal_run->flight && m_signal_run->planet) {
+      telemetry =
+          resolve_flight_audio(*m_signal_run->planet, *m_signal_run->flight);
+    } else if (m_signal_run && m_signal_run->station_flight) {
+      telemetry = resolve_flight_audio(*m_signal_run->station_flight);
+    } else if (m_signal_scenario) {
+      telemetry = resolve_flight_audio(m_planet, m_signal_scenario->flight);
+    } else if (m_system_flight) {
+      telemetry = resolve_flight_audio(*m_system_flight);
+    } else if (m_origin_station_flight) {
+      telemetry = resolve_flight_audio(*m_origin_station_flight);
+    } else if (m_intersystem_planetfall &&
+               m_intersystem_planetfall->planet) {
+      telemetry = resolve_flight_audio(
+          *m_intersystem_planetfall->planet,
+          m_intersystem_planetfall->flight);
+    } else if (m_planetary_flight) {
+      telemetry = resolve_flight_audio(m_planet, *m_planetary_flight);
+    } else if (!m_signal_run && !m_intersystem_contract &&
+               !m_origin_system_contract) {
+      telemetry = resolve_flight_audio(m_flight);
+    }
+    if (!telemetry) {
+      stop_active_flight_audio();
+      return;
+    }
+    (void)m_audio.emit_flight_parameters(telemetry->tick,
+                                         telemetry->parameters);
+    m_audio_flight_active = true;
+    if (telemetry->low_clearance && !m_audio_low_clearance) {
+      (void)m_audio.emit(telemetry->tick, kLowClearanceAudioCue);
+    }
+    m_audio_low_clearance = telemetry->low_clearance;
+  }
+
+  auto stop_active_flight_audio() noexcept -> void {
+    if (m_audio_flight_active) {
+      (void)m_audio.emit(current_flight_tick(), kStopFlightAudioCue);
+    }
+    m_audio_flight_active = false;
+    m_audio_low_clearance = false;
+  }
+
   auto advance_simulation(std::chrono::duration<double> elapsed) -> void {
     const auto advance = m_simulation_clock.advance(elapsed);
     if (!advance) {
@@ -3388,6 +3438,7 @@ class LandscapeApp final : public App {
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"contract-two universe clock failed"};
         }
+        emit_active_flight_audio();
         continue;
       }
       if (m_intersystem_contract) {
@@ -3519,6 +3570,7 @@ class LandscapeApp final : public App {
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"universe clock failed"};
         }
+        emit_active_flight_audio();
         continue;
       }
       if (m_signal_run && m_signal_run->station_flight) {
@@ -3527,6 +3579,7 @@ class LandscapeApp final : public App {
         if (!advance_signal_run_station_flight(*m_signal_run, commands)) {
           throw std::runtime_error{"Signal Run station flight failed"};
         }
+        emit_active_flight_audio();
         continue;
       }
       if (m_signal_run && m_signal_run->flight) {
@@ -3553,6 +3606,7 @@ class LandscapeApp final : public App {
               flight.velocity.north_metres_per_second,
               flight.velocity.up_metres_per_second)};
         }
+        emit_active_flight_audio();
         continue;
       }
       if (m_signal_scenario) {
@@ -3564,6 +3618,7 @@ class LandscapeApp final : public App {
         if (!reached) {
           throw std::runtime_error{"signal collection acceptance failed"};
         }
+        emit_active_flight_audio();
         continue;
       }
       if (m_flight_deck_acceptance &&
@@ -3589,6 +3644,7 @@ class LandscapeApp final : public App {
       if (!advance_flight(m_terrain, m_flight, commands, kSimulationStep)) {
         throw std::runtime_error{"simulation rejected flight state"};
       }
+      emit_active_flight_audio();
     }
   }
 
@@ -4090,6 +4146,8 @@ class LandscapeApp final : public App {
   bool m_audio_reported{false};
   AudioBackendState m_reported_audio_state{AudioBackendState::disabled};
   std::uint64_t m_reported_audio_failure_count{};
+  bool m_audio_flight_active{};
+  bool m_audio_low_clearance{};
   std::string m_error;
   std::string m_notice;
   std::string m_display_tier{"probing"};
@@ -4331,6 +4389,7 @@ auto usage() -> void {
       "                   [--keyboard enhanced|press-only]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "                   [--driver automatic|kitty|ansi|fallback]\n"
+      "       apsis-drift --audio-benchmark [TICKS] [--report PATH]\n"
       "       apsis-drift --sweep [FRAMES] --report PATH\n"
       "                   [--sweep-viewports LIST] [--sweep-fps LIST]\n"
       "                   [--workload landscape|orbital|planetary|system]\n"
@@ -4391,6 +4450,7 @@ auto main(int argc, char** argv) -> int {
   }
 
   std::optional<int> benchmark_frames;
+  std::optional<std::uint64_t> audio_benchmark_ticks;
   std::optional<int> sweep_frames;
   int capture_seconds = 0;
   bool flight_deck_acceptance{};
@@ -4441,6 +4501,22 @@ auto main(int argc, char** argv) -> int {
         int value{};
         if (parse_positive(std::string_view{argv[i + 1]}, value)) {
           benchmark_frames = value;
+          ++i;
+        }
+      }
+      continue;
+    }
+    if (argument == "--audio-benchmark") {
+      audio_benchmark_ticks = 1'200;
+      if (i + 1 < argc) {
+        const std::string_view next{argv[i + 1]};
+        if (!next.empty() && next.front() != '-') {
+          std::uint64_t value{};
+          if (!parse_positive(next, value)) {
+            std::fprintf(stderr, "audio benchmark ticks must be positive\n");
+            return 2;
+          }
+          audio_benchmark_ticks = value;
           ++i;
         }
       }
@@ -4657,6 +4733,62 @@ auto main(int argc, char** argv) -> int {
     std::fprintf(stderr, "unknown or incomplete option '%.*s'\n",
                  static_cast<int>(argument.size()), argument.data());
     return 2;
+  }
+
+  if (audio_benchmark_ticks) {
+    const bool incompatible =
+        benchmark_frames || sweep_frames || capture_seconds > 0 ||
+        flight_deck_acceptance || planetfall_acceptance ||
+        signal_navigation_acceptance || signal_run_acceptance ||
+        guided_departure_acceptance || onboarding_acceptance ||
+        system_navigation_acceptance || intersystem_jump_acceptance ||
+        system_flight_acceptance || intersystem_planetfall_acceptance ||
+        intersystem_return_acceptance || intersystem_contract_acceptance ||
+        origin_system_contract_acceptance || universe_navigation_acceptance ||
+        profile_specified || viewport_specified || driver_specified ||
+        keyboard_specified || seed_specified || sweep_viewports_specified ||
+        sweep_fps_specified || workload_specified || !snapshot_path.empty() ||
+        !load_path.empty() || !save_path.empty() || new_game_seed;
+    if (incompatible) {
+      std::fprintf(stderr,
+                   "audio benchmark is mutually exclusive with other run, "
+                   "presentation, save, and acceptance options\n");
+      return 2;
+    }
+    try {
+      const auto benchmark = benchmark_flight_audio(*audio_benchmark_ticks);
+      if (benchmark.sample_frames == 0 || benchmark.checksum == 0) {
+        std::fprintf(stderr, "audio benchmark failed\n");
+        return 1;
+      }
+      std::printf(
+          "audio: ticks=%llu frames=%llu duration=%.3fs elapsed=%.6fs "
+          "realtime=%.2fx queue-max=%zu dropped=%llu checksum=%llu\n",
+          static_cast<unsigned long long>(benchmark.ticks),
+          static_cast<unsigned long long>(benchmark.sample_frames),
+          benchmark.audio_seconds, benchmark.elapsed_seconds,
+          benchmark.realtime_factor, benchmark.maximum_queue_depth,
+          static_cast<unsigned long long>(benchmark.events_dropped),
+          static_cast<unsigned long long>(benchmark.checksum));
+      if (!report_path.empty()) {
+        std::ofstream report{report_path};
+        if (!report) {
+          std::fprintf(stderr, "cannot open report '%s'\n",
+                       report_path.string().c_str());
+          return 1;
+        }
+        report << audio_benchmark_json(benchmark);
+        if (!report.good()) {
+          std::fprintf(stderr, "cannot write report '%s'\n",
+                       report_path.string().c_str());
+          return 1;
+        }
+      }
+      return 0;
+    } catch (const std::exception& error) {
+      std::fprintf(stderr, "audio benchmark failed: %s\n", error.what());
+      return 1;
+    }
   }
 
   const bool profile_options = !load_path.empty() || !save_path.empty() ||

@@ -17,7 +17,8 @@ namespace apsis_drift {
 inline constexpr int kMinimumCockpitCols{80};
 inline constexpr int kMinimumCockpitRows{24};
 inline constexpr std::size_t kInstrumentLineWidth{9};
-inline constexpr float kLowClearanceWarning{24.0F};
+inline constexpr float kLowClearanceWarning{
+    static_cast<float>(kLowClearanceWarningMetres)};
 
 enum class CockpitAlert { none, low_clearance, invalid_telemetry };
 

@@ -39,9 +39,26 @@ within-tick sequence so stale events cannot replay in a new session. Backend
 loss falls back to no-device operation. Queue depths, high-water marks, drops,
 resets, and backend state are available only through `AudioDiagnostics`.
 
-The render-source seam currently produces validated silence. Empty, odd-sized,
-or over-4096-frame callback buffers are rejected without modifying the buffer
-or consuming queued events.
+The queue also carries one bounded flight-parameter update per authoritative
+tick. A repeated update for the same tick is coalesced without assigning a new
+identity or consuming queue capacity. Parameter events are ordered before any
+warning cue emitted for that tick. Invalid or non-finite parameters fail closed.
+
+The application derives engine demand and normalized speed from the active
+legacy, planetary, system, or station-flight state. Planetary flight also
+derives bounded atmospheric density from the generated planet and altitude.
+The existing 24 metre cockpit low-clearance boundary emits one cue when flight
+crosses from safe to low clearance; remaining below the boundary does not
+repeat it. These observations and the edge latch are presentation-only.
+Leaving flight emits one stop cue so continuous voices ramp to silence without
+adding a second parameter update to the final authoritative tick.
+
+The callback-owned mixer uses fixed-point phase, envelope, and noise state to
+produce a phase-continuous engine voice, atmosphere/wind, and a bounded
+low-clearance alert. Parameter targets slew instead of stepping, output is
+finite centered stereo clamped to the fixed float format, and every playback
+epoch resets the mixer. Empty, odd-sized, or over-4096-frame callback buffers
+are rejected without modifying the buffer or consuming queued events.
 
 ## RtAudio device output
 
@@ -64,6 +81,16 @@ through atomics only. The main thread emits one diagnostic per backend-state or
 failure-count transition; it does not repeat a message for every callback.
 Output underflow is counted as a presentation diagnostic but is not by itself
 a device-loss signal.
+
+## Audio synthesis benchmark
+
+`apsis-drift --audio-benchmark [TICKS] [--report PATH]` replays a fixed
+procedural flight-parameter trace directly through the offline mixer. It
+reports rendered sample frames, represented audio duration, measured wall
+time, real-time factor, queue high-water/drop counts, and the waveform
+checksum. This is synthesis CPU evidence only: it does not include renderer,
+terminal encoding, proxy, decoder, compositor, device, or speaker throughput,
+and it does not claim a portable hardware percentage.
 
 An output backend must make `stop()` synchronous with its callback before the
 runtime clears playback state. The render callback performs no allocation,

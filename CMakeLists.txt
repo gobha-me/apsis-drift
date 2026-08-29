@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.40 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.41 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -218,6 +218,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift --benchmark 1 --profile remote --workload system)
   add_test(NAME benchmark-system-local
     COMMAND apsis-drift --benchmark 1 --profile local --workload system)
+  add_test(NAME benchmark-procedural-flight-audio
+    COMMAND apsis-drift --audio-benchmark 12)
 
   add_test(NAME system-navigation-acceptance-matrix
     COMMAND "${CMAKE_COMMAND}"
