@@ -64,6 +64,7 @@
 #include "apsis_drift/universe_navigation_acceptance.hpp"
 #include "apsis_drift/version.hpp"
 #include "apsis_drift/world_delta_journal.hpp"
+#include "audio_callback.hpp"
 #include "capability_floor.hpp"
 #include "flight_input.hpp"
 #include "save_file_internal.hpp"
@@ -8282,6 +8283,100 @@ class CountingAudioSource final : public AudioRenderSource {
   int calls{};
 };
 
+class ToneAudioSource final : public AudioRenderSource {
+ public:
+  [[nodiscard]] auto render(std::span<float> samples) noexcept
+      -> std::optional<AudioBufferError> override {
+    for (auto& sample : samples) {
+      sample = static_cast<float>(m_next++) / 16.0F;
+    }
+    ++calls;
+    return std::nullopt;
+  }
+
+  std::uint32_t m_next{};
+  int calls{};
+};
+
+class RejectingAudioSource final : public AudioRenderSource {
+ public:
+  [[nodiscard]] auto render(std::span<float>) noexcept
+      -> std::optional<AudioBufferError> override {
+    ++calls;
+    return AudioBufferError::invalid_dimensions;
+  }
+
+  int calls{};
+};
+
+struct FakeAudioBackendControl {
+  bool stopped{};
+};
+
+class FakeAudioBackend final : public AudioBackend {
+ public:
+  FakeAudioBackend(FakeAudioBackendControl& control,
+                   bool start_success,
+                   AudioBackendFailure start_failure =
+                       AudioBackendFailure::none)
+      : m_control(control),
+        m_start_success(start_success),
+        m_start_failure(start_failure) {}
+
+  [[nodiscard]] auto name() const noexcept -> std::string_view override {
+    return "fake-device";
+  }
+
+  [[nodiscard]] auto state() const noexcept
+      -> AudioBackendState override {
+    return m_state;
+  }
+
+  [[nodiscard]] auto diagnostics() const noexcept
+      -> AudioBackendDiagnostics override {
+    return {
+        .name = name(),
+        .state = state(),
+        .failure = m_failure,
+        .output_device_id = m_start_success
+                                ? std::optional<std::uint32_t>{17}
+                                : std::nullopt,
+        .callback_count = 3,
+        .output_underflow_count = 1,
+    };
+  }
+
+  [[nodiscard]] auto start(AudioFormat format,
+                           AudioRenderSource&) noexcept -> bool override {
+    m_control.stopped = false;
+    if (format != kAudioFormat || !m_start_success) {
+      m_failure = m_start_failure;
+      m_state = AudioBackendState::failed;
+      return false;
+    }
+    m_failure = AudioBackendFailure::none;
+    m_state = AudioBackendState::running;
+    return true;
+  }
+
+  auto stop() noexcept -> void override {
+    m_control.stopped = true;
+    m_state = AudioBackendState::stopped;
+  }
+
+  auto fail(AudioBackendFailure failure) noexcept -> void {
+    m_failure = failure;
+    m_state = AudioBackendState::failed;
+  }
+
+ private:
+  FakeAudioBackendControl& m_control;
+  bool m_start_success{};
+  AudioBackendFailure m_start_failure{AudioBackendFailure::none};
+  AudioBackendState m_state{AudioBackendState::stopped};
+  AudioBackendFailure m_failure{AudioBackendFailure::none};
+};
+
 struct AudioReplayResult {
   std::uint64_t flight_checksum{};
   std::vector<AudioEvent> events;
@@ -8358,6 +8453,142 @@ auto audio_contract() -> void {
   backend.stop();
   check(backend.state() == AudioBackendState::stopped,
         "the no-device backend must stop idempotently");
+  check(backend.diagnostics().name == "no-device" &&
+            backend.diagnostics().failure == AudioBackendFailure::none,
+        "the no-device backend must expose truthful diagnostics");
+
+#if APSIS_DRIFT_TEST_RTAUDIO_ENABLED
+  check(rtaudio_backend_compiled(),
+        "the enabled build must compile the RtAudio backend");
+#else
+  check(!rtaudio_backend_compiled() &&
+            !make_device_audio_backend(),
+        "the disabled build must not compile or construct RtAudio");
+#endif
+
+  check(audio_backend_state_name(AudioBackendState::no_device) ==
+                "no-device" &&
+            audio_backend_failure_name(
+                AudioBackendFailure::invalid_selected_device) ==
+                "invalid-selected-device",
+        "audio diagnostic states and failures must have stable names");
+
+  detail::AudioCallbackBridge callback;
+  AudioRuntime callback_silence;
+  std::array<float, 8> silence;
+  silence.fill(7.0F);
+  callback.activate(callback_silence);
+  check(callback.render(silence.data(), 4, false) ==
+                detail::AudioCallbackAction::continue_stream &&
+            std::ranges::all_of(silence,
+                                [](float value) { return value == 0.0F; }),
+        "the injected callback must receive exact mixer silence");
+
+  ToneAudioSource tone;
+  std::array<float, 8> generated{};
+  callback.activate(tone);
+  check(callback.render(generated.data(), 4, true) ==
+                detail::AudioCallbackAction::continue_stream &&
+            generated == std::array<float, 8>{0.0F, 0.0625F, 0.125F,
+                                               0.1875F, 0.25F, 0.3125F,
+                                               0.375F, 0.4375F} &&
+            tone.calls == 1 && callback.output_underflow_count() == 1,
+        "the injected callback must preserve exact generated frames and count underruns");
+  callback.deactivate();
+  generated.fill(9.0F);
+  check(callback.render(generated.data(), 4, false) ==
+                detail::AudioCallbackAction::abort_stream &&
+            tone.calls == 1 &&
+            std::ranges::all_of(generated,
+                                [](float value) { return value == 9.0F; }),
+        "callback teardown must reject later work without touching output");
+
+  RejectingAudioSource rejecting;
+  callback.activate(rejecting);
+  std::array<float, 4> rejected_output{1.0F, 2.0F, 3.0F, 4.0F};
+  check(callback.render(rejected_output.data(), 2, false) ==
+                detail::AudioCallbackAction::abort_stream &&
+            rejecting.calls == 1 &&
+            std::ranges::all_of(rejected_output,
+                                [](float value) { return value == 0.0F; }) &&
+            callback.failure() == AudioBackendFailure::callback_failed,
+        "a callback render failure must zero valid output and abort");
+  callback.activate(tone);
+  check(callback.render(nullptr, 2, false) ==
+                detail::AudioCallbackAction::abort_stream &&
+            callback.render(generated.data(), 0, false) ==
+                detail::AudioCallbackAction::abort_stream &&
+            callback.render(generated.data(),
+                            kMaximumAudioFramesPerCallback + 1U, false) ==
+                detail::AudioCallbackAction::abort_stream,
+        "invalid callback buffers must fail closed before mixer access");
+
+  constexpr std::array startup_failures{
+      AudioBackendFailure::discovery_failed,
+      AudioBackendFailure::no_output_device,
+      AudioBackendFailure::invalid_selected_device,
+      AudioBackendFailure::open_failed,
+      AudioBackendFailure::start_failed,
+  };
+  for (const auto failure : startup_failures) {
+    FakeAudioBackendControl failed_control;
+    AudioRuntime failed_device{
+        AudioRuntimeMode::automatic,
+        std::make_unique<FakeAudioBackend>(failed_control, false, failure)};
+    const auto failed_device_diagnostics = failed_device.diagnostics();
+    check(failed_control.stopped &&
+              failed_device_diagnostics.mode == AudioRuntimeMode::automatic &&
+              failed_device_diagnostics.backend_name == "no-device" &&
+              failed_device_diagnostics.backend_state ==
+                  AudioBackendState::no_device &&
+              failed_device_diagnostics.last_backend_failure == failure &&
+              failed_device_diagnostics.backend_failure_count == 1 &&
+              failed_device_diagnostics.callback_count == 3 &&
+              failed_device_diagnostics.output_underflow_count == 1,
+          "device startup failure must stop synchronously and retain fallback diagnostics");
+  }
+
+  constexpr std::array runtime_failures{
+      AudioBackendFailure::callback_failed,
+      AudioBackendFailure::device_lost,
+  };
+  for (const auto failure : runtime_failures) {
+    FakeAudioBackendControl loss_control;
+    auto loss_backend =
+        std::make_unique<FakeAudioBackend>(loss_control, true);
+    auto* loss_backend_view = loss_backend.get();
+    AudioRuntime runtime_loss{AudioRuntimeMode::automatic,
+                              std::move(loss_backend)};
+    check(runtime_loss.diagnostics().backend_state ==
+                  AudioBackendState::running &&
+              runtime_loss.diagnostics().output_device_id == 17,
+          "an automatic runtime must expose its selected running device");
+    (void)runtime_loss.emit(3, {1});
+    loss_backend_view->fail(failure);
+    runtime_loss.service();
+    const auto loss_diagnostics = runtime_loss.diagnostics();
+    check(loss_control.stopped &&
+              loss_diagnostics.backend_state ==
+                  AudioBackendState::no_device &&
+              loss_diagnostics.last_backend_failure == failure &&
+              loss_diagnostics.backend_failure_count == 1 &&
+              loss_diagnostics.backend_loss_count == 1 &&
+              loss_diagnostics.last_reset_reason ==
+                  AudioResetReason::backend_loss &&
+              loss_diagnostics.queue_depth == 0,
+          "runtime callback or device loss must stop, clear, and fall back without blocking simulation");
+  }
+
+  FakeAudioBackendControl shutdown_control;
+  AudioRuntime shutdown_device{
+      AudioRuntimeMode::automatic,
+      std::make_unique<FakeAudioBackend>(shutdown_control, true)};
+  shutdown_device.shutdown();
+  check(shutdown_control.stopped &&
+            shutdown_device.diagnostics().last_reset_reason ==
+                AudioResetReason::shutdown &&
+            shutdown_device.emit(0, {1}).status == AudioEmitStatus::stopped,
+        "automatic audio shutdown must synchronously stop its callback backend");
 
   AudioRuntime invalid_events;
   check(invalid_events.emit(0, {}).status ==

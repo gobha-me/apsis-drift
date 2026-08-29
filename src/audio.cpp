@@ -3,7 +3,39 @@
 #include <algorithm>
 #include <limits>
 
+#if defined(APSIS_DRIFT_HAS_RTAUDIO)
+#include "rtaudio_backend.hpp"
+#endif
+
 namespace apsis_drift {
+
+auto audio_backend_state_name(AudioBackendState state) noexcept
+    -> std::string_view {
+  switch (state) {
+    case AudioBackendState::disabled: return "disabled";
+    case AudioBackendState::no_device: return "no-device";
+    case AudioBackendState::running: return "running";
+    case AudioBackendState::failed: return "failed";
+    case AudioBackendState::stopped: return "stopped";
+  }
+  return "unknown";
+}
+
+auto audio_backend_failure_name(AudioBackendFailure failure) noexcept
+    -> std::string_view {
+  switch (failure) {
+    case AudioBackendFailure::none: return "none";
+    case AudioBackendFailure::discovery_failed: return "discovery-failed";
+    case AudioBackendFailure::no_output_device: return "no-output-device";
+    case AudioBackendFailure::invalid_selected_device:
+      return "invalid-selected-device";
+    case AudioBackendFailure::open_failed: return "open-failed";
+    case AudioBackendFailure::start_failed: return "start-failed";
+    case AudioBackendFailure::callback_failed: return "callback-failed";
+    case AudioBackendFailure::device_lost: return "device-lost";
+  }
+  return "unknown";
+}
 
 auto audio_sample_frame(AudioEventIdentity identity) noexcept
     -> std::optional<std::uint64_t> {
@@ -53,6 +85,14 @@ auto NoDeviceAudioBackend::state() const noexcept -> AudioBackendState {
   return m_state;
 }
 
+auto NoDeviceAudioBackend::diagnostics() const noexcept
+    -> AudioBackendDiagnostics {
+  return {
+      .name = name(),
+      .state = state(),
+  };
+}
+
 auto NoDeviceAudioBackend::start(AudioFormat format,
                                  AudioRenderSource&) noexcept -> bool {
   if (format != kAudioFormat) {
@@ -67,12 +107,35 @@ auto NoDeviceAudioBackend::stop() noexcept -> void {
   m_state = AudioBackendState::stopped;
 }
 
+auto rtaudio_backend_compiled() noexcept -> bool {
+#if defined(APSIS_DRIFT_HAS_RTAUDIO)
+  return true;
+#else
+  return false;
+#endif
+}
+
+auto make_device_audio_backend(AudioOutputSelection selection)
+    -> std::unique_ptr<AudioBackend> {
+#if defined(APSIS_DRIFT_HAS_RTAUDIO)
+  return detail::make_rtaudio_backend(selection);
+#else
+  (void)selection;
+  return nullptr;
+#endif
+}
+
 AudioRuntime::AudioRuntime(AudioRuntimeMode mode,
-                           std::unique_ptr<AudioBackend> backend)
+                           std::unique_ptr<AudioBackend> backend,
+                           AudioOutputSelection selection)
     : m_mode(mode) {
-  if (mode == AudioRuntimeMode::no_device) {
-    start_backend(backend ? std::move(backend)
-                          : std::make_unique<NoDeviceAudioBackend>());
+  if (mode == AudioRuntimeMode::disabled) return;
+  if (backend) {
+    start_backend(std::move(backend));
+  } else if (mode == AudioRuntimeMode::automatic) {
+    start_backend(make_device_audio_backend(selection));
+  } else {
+    start_backend(std::make_unique<NoDeviceAudioBackend>());
   }
 }
 
@@ -84,7 +147,17 @@ auto AudioRuntime::start_backend(
     m_backend = std::move(backend);
     return;
   }
-  if (backend) backend->stop();
+  if (backend) {
+    const auto failed = backend->diagnostics();
+    m_last_backend_failure =
+        failed.failure == AudioBackendFailure::none
+            ? AudioBackendFailure::discovery_failed
+            : failed.failure;
+    m_retired_callback_count += failed.callback_count;
+    m_retired_output_underflow_count += failed.output_underflow_count;
+    m_backend_failure_count.fetch_add(1, std::memory_order_relaxed);
+    backend->stop();
+  }
   auto fallback = std::make_unique<NoDeviceAudioBackend>();
   (void)fallback->start(kAudioFormat, *this);
   m_backend = std::move(fallback);
@@ -157,10 +230,12 @@ auto AudioRuntime::try_take_event() noexcept -> std::optional<AudioEvent> {
 }
 
 auto AudioRuntime::service() noexcept -> void {
-  if (m_stopped || m_mode == AudioRuntimeMode::disabled || !m_backend ||
-      m_backend->state() != AudioBackendState::no_device) {
+  if (m_stopped || m_mode == AudioRuntimeMode::disabled || !m_backend) return;
+  if (m_backend->state() == AudioBackendState::failed) {
+    backend_lost();
     return;
   }
+  if (m_backend->state() != AudioBackendState::no_device) return;
   while (try_take_event()) {
   }
 }
@@ -176,17 +251,27 @@ auto AudioRuntime::reset(AudioResetReason reason) noexcept -> void {
   m_last_reset_reason.store(reason, std::memory_order_relaxed);
   if (reason != AudioResetReason::backend_loss &&
       reason != AudioResetReason::shutdown &&
-      m_mode == AudioRuntimeMode::no_device && m_backend) {
-    (void)m_backend->start(kAudioFormat, *this);
+      m_mode != AudioRuntimeMode::disabled && m_backend) {
+    auto backend = std::move(m_backend);
+    start_backend(std::move(backend));
   }
 }
 
 auto AudioRuntime::backend_lost() -> void {
   if (m_stopped) return;
+  if (m_backend) {
+    const auto failed = m_backend->diagnostics();
+    m_last_backend_failure =
+        failed.failure == AudioBackendFailure::none
+            ? AudioBackendFailure::device_lost
+            : failed.failure;
+    m_retired_callback_count += failed.callback_count;
+    m_retired_output_underflow_count += failed.output_underflow_count;
+    m_backend_failure_count.fetch_add(1, std::memory_order_relaxed);
+  }
   m_backend_loss_count.fetch_add(1, std::memory_order_relaxed);
   reset(AudioResetReason::backend_loss);
   start_backend(std::make_unique<NoDeviceAudioBackend>());
-  m_mode = AudioRuntimeMode::no_device;
 }
 
 auto AudioRuntime::shutdown() noexcept -> void {
@@ -211,10 +296,14 @@ auto AudioRuntime::render(std::span<float> interleaved_samples) noexcept
 }
 
 auto AudioRuntime::diagnostics() const noexcept -> AudioDiagnostics {
+  const auto backend = m_backend ? m_backend->diagnostics()
+                                 : AudioBackendDiagnostics{};
   return {
       .mode = m_mode,
-      .backend_state = m_backend ? m_backend->state()
-                                 : AudioBackendState::disabled,
+      .backend_state = backend.state,
+      .backend_name = backend.name,
+      .output_device_id = backend.output_device_id,
+      .last_backend_failure = m_last_backend_failure,
       .last_emit_status =
           m_last_emit_status.load(std::memory_order_relaxed),
       .last_reset_reason =
@@ -228,8 +317,15 @@ auto AudioRuntime::diagnostics() const noexcept -> AudioDiagnostics {
       .events_discarded_on_reset =
           m_events_discarded_on_reset.load(std::memory_order_relaxed),
       .reset_count = m_reset_count.load(std::memory_order_relaxed),
+      .backend_failure_count =
+          m_backend_failure_count.load(std::memory_order_relaxed),
       .backend_loss_count =
           m_backend_loss_count.load(std::memory_order_relaxed),
+      .callback_count =
+          m_retired_callback_count + backend.callback_count,
+      .output_underflow_count =
+          m_retired_output_underflow_count +
+          backend.output_underflow_count,
       .queue_depth = m_queue.depth(),
       .maximum_queue_depth =
           m_maximum_queue_depth.load(std::memory_order_relaxed),

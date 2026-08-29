@@ -364,7 +364,9 @@ class LandscapeApp final : public App {
                         bool interactive_controls = false,
                         bool flight_deck_acceptance = false,
                         bool signal_navigation_acceptance = false,
-                        const SaveDocument* profile = nullptr)
+                        const SaveDocument* profile = nullptr,
+                        AudioRuntimeMode audio_mode =
+                            AudioRuntimeMode::no_device)
       : m_render_configuration(render_configuration),
         m_universe_seed(profile ? profile->recipe.universe_seed : Seed{seed}),
         m_terrain(required_terrain(1024, seed)),
@@ -401,6 +403,7 @@ class LandscapeApp final : public App {
             workload == BenchmarkWorkload::planetary
                 ? required_planetary_surface(m_planet)
                 : PlanetarySurfaceFixture{}),
+        m_audio(audio_mode),
         m_session(!interactive_controls,
                   profile != nullptr &&
                       (profile->state.origin_system_contract
@@ -461,6 +464,7 @@ class LandscapeApp final : public App {
         tier, caps.kitty_graphics, caps.truecolor, input.key_press,
         input.key_repeat, input.key_release, caps.sync_updates);
     m_input_tier = m_interactive_controls ? "KEY + MOUSE" : "HELD INPUT";
+    report_audio_state();
     if (m_capture_seconds > 0.0 && !capabilities().kitty_graphics) {
       m_error = "capture mode requires negotiated Kitty graphics";
       quit();
@@ -526,6 +530,7 @@ class LandscapeApp final : public App {
       advance_simulation(dt);
     }
     m_audio.service();
+    report_audio_state();
   }
 
   auto on_render(Screen& screen) -> void override {
@@ -3989,6 +3994,48 @@ class LandscapeApp final : public App {
     }
   }
 
+  auto report_audio_state() -> void {
+    const auto diagnostics = m_audio.diagnostics();
+    if (diagnostics.mode != AudioRuntimeMode::automatic ||
+        (m_audio_reported &&
+         diagnostics.backend_state == m_reported_audio_state &&
+         diagnostics.backend_failure_count ==
+             m_reported_audio_failure_count)) {
+      return;
+    }
+    if (diagnostics.output_device_id) {
+      std::fprintf(
+          stderr,
+          "audio: backend=%.*s state=%.*s device=%u failure=%.*s\n",
+          static_cast<int>(diagnostics.backend_name.size()),
+          diagnostics.backend_name.data(),
+          static_cast<int>(
+              audio_backend_state_name(diagnostics.backend_state).size()),
+          audio_backend_state_name(diagnostics.backend_state).data(),
+          *diagnostics.output_device_id,
+          static_cast<int>(audio_backend_failure_name(
+                               diagnostics.last_backend_failure)
+                               .size()),
+          audio_backend_failure_name(diagnostics.last_backend_failure).data());
+    } else {
+      std::fprintf(
+          stderr,
+          "audio: backend=%.*s state=%.*s device=none failure=%.*s\n",
+          static_cast<int>(diagnostics.backend_name.size()),
+          diagnostics.backend_name.data(),
+          static_cast<int>(
+              audio_backend_state_name(diagnostics.backend_state).size()),
+          audio_backend_state_name(diagnostics.backend_state).data(),
+          static_cast<int>(audio_backend_failure_name(
+                               diagnostics.last_backend_failure)
+                               .size()),
+          audio_backend_failure_name(diagnostics.last_backend_failure).data());
+    }
+    m_audio_reported = true;
+    m_reported_audio_state = diagnostics.backend_state;
+    m_reported_audio_failure_count = diagnostics.backend_failure_count;
+  }
+
   RenderConfiguration m_render_configuration;
   Seed m_universe_seed;
   Terrain m_terrain;
@@ -4040,6 +4087,9 @@ class LandscapeApp final : public App {
   bool m_output_bound{false};
   bool m_synthetic_headless{false};
   bool m_requirements_failed{false};
+  bool m_audio_reported{false};
+  AudioBackendState m_reported_audio_state{AudioBackendState::disabled};
+  std::uint64_t m_reported_audio_failure_count{};
   std::string m_error;
   std::string m_notice;
   std::string m_display_tier{"probing"};
@@ -5619,7 +5669,9 @@ auto main(int argc, char** argv) -> int {
                      static_cast<double>(capture_seconds),
                      interactive_controls, flight_deck_acceptance,
                      signal_navigation_acceptance,
-                     save_profile ? &*save_profile : nullptr};
+                     save_profile ? &*save_profile : nullptr,
+                     interactive_controls ? AudioRuntimeMode::automatic
+                                          : AudioRuntimeMode::no_device};
     if (auto forced =
             app.force_capabilities(driver_choice, keyboard_choice);
         !forced) {

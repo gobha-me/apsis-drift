@@ -8,9 +8,9 @@ a terminal.
 
 Audio policy is also application-owned. The current
 [audio contract](docs/AUDIO.md) provides deterministic tick-addressed cues,
-bounded non-blocking delivery, and a no-device backend; device output,
-procedural flight synthesis, and generated assets remain later First Light
-work.
+bounded non-blocking delivery, optional RtAudio device output, and a no-device
+fallback. Procedural flight synthesis and generated assets remain later First
+Light work.
 
 | Direct Kitty, `local` 640x480 | Truecolor ANSI, `remote` 320x240 |
 | --- | --- |
@@ -35,6 +35,8 @@ Requirements:
 - CMake 3.28 or newer
 - A C++23 compiler (GCC 13+ or Clang 19+ recommended)
 - Git when TermForge must be fetched
+- RtAudio platform headers when device output is enabled (`libasound2-dev` on
+  Linux)
 
 Apsis Drift first looks for a TermForge v0.42.0-or-newer package, then for a
 compatible sibling checkout at `../termforge`. Older siblings are ignored. If
@@ -47,6 +49,17 @@ and terminal-driven animation registration and payload-free playback control.
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
+```
+
+RtAudio 6.0.1 is pinned and enabled by default. Ordinary interactive play
+attempts the selected or default output device and falls back to no-device
+operation if discovery, open, start, callback, or runtime delivery fails.
+Benchmarks, captures, and acceptance tools never probe an audio device. To
+build without downloading, compiling, or linking RtAudio:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DAPSIS_DRIFT_RTAUDIO=OFF
 ```
 
 To use a checkout in a different location:
@@ -749,5 +762,7 @@ the active session.
 
 ## License
 
-Code is available under the [BSD 3-Clause License](LICENSE.md). Generated or
-third-party media assets may carry their own provenance and license metadata.
+Code is available under the [BSD 3-Clause License](LICENSE.md). The optional
+RtAudio license notice is recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Generated or third-party
+media assets may carry their own provenance and license metadata.

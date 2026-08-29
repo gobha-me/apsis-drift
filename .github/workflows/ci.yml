@@ -21,11 +21,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: GCC 13
+          - name: GCC 13 / RtAudio
             cxx: g++
-          - name: Clang 20
+            rtaudio: "ON"
+          - name: GCC 13 / no RtAudio
+            cxx: g++
+            rtaudio: "OFF"
+          - name: Clang 20 / RtAudio
             cxx: clang++
             clang: "20"
+            rtaudio: "ON"
+          - name: Clang 20 / no RtAudio
+            cxx: clang++
+            clang: "20"
+            rtaudio: "OFF"
 
     steps:
       - uses: actions/checkout@v7
@@ -40,10 +49,16 @@ jobs:
           sudo /tmp/llvm.sh "$CLANG_VERSION"
           sudo ln -sf "/usr/bin/clang++-$CLANG_VERSION" /usr/local/bin/clang++
 
+      - name: Install RtAudio system headers
+        if: matrix.rtaudio == 'ON'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Configure
         env:
           CXX: ${{ matrix.cxx }}
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: >-
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DAPSIS_DRIFT_RTAUDIO=${{ matrix.rtaudio }}
 
       - name: Build
         run: cmake --build build --parallel

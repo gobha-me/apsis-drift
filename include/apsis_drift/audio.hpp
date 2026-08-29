@@ -119,12 +119,43 @@ enum class AudioBackendState : std::uint8_t {
   stopped,
 };
 
+enum class AudioBackendFailure : std::uint8_t {
+  none,
+  discovery_failed,
+  no_output_device,
+  invalid_selected_device,
+  open_failed,
+  start_failed,
+  callback_failed,
+  device_lost,
+};
+
+struct AudioOutputSelection {
+  std::optional<std::uint32_t> device_id;
+};
+
+struct AudioBackendDiagnostics {
+  std::string_view name{"disabled"};
+  AudioBackendState state{AudioBackendState::disabled};
+  AudioBackendFailure failure{AudioBackendFailure::none};
+  std::optional<std::uint32_t> output_device_id;
+  std::uint64_t callback_count{};
+  std::uint64_t output_underflow_count{};
+};
+
+[[nodiscard]] auto audio_backend_state_name(AudioBackendState state) noexcept
+    -> std::string_view;
+[[nodiscard]] auto audio_backend_failure_name(
+    AudioBackendFailure failure) noexcept -> std::string_view;
+
 class AudioBackend {
  public:
   virtual ~AudioBackend() = default;
   [[nodiscard]] virtual auto name() const noexcept -> std::string_view = 0;
   [[nodiscard]] virtual auto state() const noexcept
       -> AudioBackendState = 0;
+  [[nodiscard]] virtual auto diagnostics() const noexcept
+      -> AudioBackendDiagnostics = 0;
   [[nodiscard]] virtual auto start(AudioFormat format,
                                    AudioRenderSource& source) noexcept
       -> bool = 0;
@@ -136,6 +167,8 @@ class NoDeviceAudioBackend final : public AudioBackend {
   [[nodiscard]] auto name() const noexcept -> std::string_view override;
   [[nodiscard]] auto state() const noexcept
       -> AudioBackendState override;
+  [[nodiscard]] auto diagnostics() const noexcept
+      -> AudioBackendDiagnostics override;
   [[nodiscard]] auto start(AudioFormat format,
                            AudioRenderSource& source) noexcept
       -> bool override;
@@ -145,7 +178,15 @@ class NoDeviceAudioBackend final : public AudioBackend {
   AudioBackendState m_state{AudioBackendState::stopped};
 };
 
-enum class AudioRuntimeMode : std::uint8_t { disabled, no_device };
+[[nodiscard]] auto rtaudio_backend_compiled() noexcept -> bool;
+[[nodiscard]] auto make_device_audio_backend(
+    AudioOutputSelection selection = {}) -> std::unique_ptr<AudioBackend>;
+
+enum class AudioRuntimeMode : std::uint8_t {
+  disabled,
+  automatic,
+  no_device,
+};
 enum class AudioResetReason : std::uint8_t {
   none,
   load,
@@ -157,6 +198,9 @@ enum class AudioResetReason : std::uint8_t {
 struct AudioDiagnostics {
   AudioRuntimeMode mode{AudioRuntimeMode::disabled};
   AudioBackendState backend_state{AudioBackendState::disabled};
+  std::string_view backend_name{"disabled"};
+  std::optional<std::uint32_t> output_device_id;
+  AudioBackendFailure last_backend_failure{AudioBackendFailure::none};
   AudioEmitStatus last_emit_status{AudioEmitStatus::disabled};
   AudioResetReason last_reset_reason{AudioResetReason::none};
   std::uint64_t identities_assigned{};
@@ -166,7 +210,10 @@ struct AudioDiagnostics {
   std::uint64_t events_rejected{};
   std::uint64_t events_discarded_on_reset{};
   std::uint64_t reset_count{};
+  std::uint64_t backend_failure_count{};
   std::uint64_t backend_loss_count{};
+  std::uint64_t callback_count{};
+  std::uint64_t output_underflow_count{};
   std::size_t queue_depth{};
   std::size_t maximum_queue_depth{};
 };
@@ -175,7 +222,8 @@ class AudioRuntime final : public AudioRenderSource {
  public:
   explicit AudioRuntime(
       AudioRuntimeMode mode = AudioRuntimeMode::no_device,
-      std::unique_ptr<AudioBackend> backend = nullptr);
+      std::unique_ptr<AudioBackend> backend = nullptr,
+      AudioOutputSelection selection = {});
   ~AudioRuntime() override;
 
   AudioRuntime(const AudioRuntime&) = delete;
@@ -218,8 +266,12 @@ class AudioRuntime final : public AudioRenderSource {
   std::atomic<std::uint64_t> m_events_rejected{};
   std::atomic<std::uint64_t> m_events_discarded_on_reset{};
   std::atomic<std::uint64_t> m_reset_count{};
+  std::atomic<std::uint64_t> m_backend_failure_count{};
   std::atomic<std::uint64_t> m_backend_loss_count{};
   std::atomic<std::size_t> m_maximum_queue_depth{};
+  AudioBackendFailure m_last_backend_failure{AudioBackendFailure::none};
+  std::uint64_t m_retired_callback_count{};
+  std::uint64_t m_retired_output_underflow_count{};
 };
 
 }  // namespace apsis_drift
