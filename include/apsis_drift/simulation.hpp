@@ -17,6 +17,7 @@ inline constexpr int kMaxCatchUpSteps{15};
 inline constexpr SimulationSeconds kSimulationStep{1.0 / kSimulationHz};
 inline constexpr SimulationSeconds kMaxCatchUp{
     kSimulationStep * kMaxCatchUpSteps};
+inline constexpr double kLowClearanceWarningMetres{24.0};
 
 enum class SimulationTimeError : std::uint8_t {
   negative_elapsed,

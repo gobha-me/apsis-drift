@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -15,6 +16,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 #include "apsis_drift/audio.hpp"
@@ -8727,6 +8729,237 @@ auto audio_contract() -> void {
         "command replay must produce a stable audio trace independent of consumption delay");
 }
 
+auto flight_audio_synthesis_contract() -> void {
+  const auto terrain = Terrain::generate(128, 42);
+  check(terrain.has_value(), "flight-audio terrain must generate");
+  if (!terrain) return;
+  const auto initialized = initial_flight_state(*terrain);
+  check(initialized.has_value(), "flight-audio state must initialize");
+  if (!initialized) return;
+
+  auto legacy = *initialized;
+  legacy.mode = FlightMode::manual;
+  legacy.controls.forward = true;
+  legacy.velocity = {30.0F, 40.0F, 0.0F};
+  legacy.clearance = static_cast<float>(kLowClearanceWarningMetres);
+  const auto legacy_audio = resolve_flight_audio(legacy);
+  check(legacy_audio && legacy_audio->parameters.active &&
+            legacy_audio->parameters.engine_demand == 1.0F &&
+            legacy_audio->parameters.speed > 0.0F &&
+            legacy_audio->parameters.speed <= 1.0F &&
+            legacy_audio->parameters.atmosphere == 1.0F &&
+            legacy_audio->low_clearance,
+        "legacy flight telemetry must map to bounded engine, speed, atmosphere, and warning parameters");
+  legacy.velocity.x = std::numeric_limits<float>::quiet_NaN();
+  check(resolve_flight_audio(legacy) ==
+            std::unexpected{FlightAudioError::invalid_state},
+        "non-finite legacy flight telemetry must fail closed");
+
+  const auto generated = generate_planet_descriptor(Seed{42});
+  const auto planet = planet_with_atmosphere(
+      generated, AtmosphereClass::temperate, 800);
+  const PlanetaryFlightEnvironment environment{};
+  const auto planetary = initial_planetary_flight_state(
+      planet, {0.0, 0.0, kLowClearanceWarningMetres}, environment, 0.0,
+      FlightMode::manual);
+  check(planetary.has_value(),
+        "planetary flight-audio fixture must initialize");
+  if (planetary) {
+    auto moving = *planetary;
+    moving.controls.forward = true;
+    moving.velocity.east_metres_per_second = 60.0;
+    const auto telemetry = resolve_flight_audio(planet, moving);
+    check(telemetry && telemetry->parameters.engine_demand == 1.0F &&
+              telemetry->parameters.speed > 0.0F &&
+              telemetry->parameters.atmosphere > 0.0F &&
+              telemetry->parameters.atmosphere <= 1.0F &&
+              telemetry->low_clearance,
+          "planetary telemetry must derive bounded atmosphere and low-clearance state");
+    const PlanetDescriptor mismatched{
+        planet.seed, PlanetId{planet.id.value + 1U}, planet.display_name,
+        planet.radius, planet.surface_gravity, planet.atmosphere_class,
+        planet.atmosphere_pressure, planet.terrain_character,
+        planet.water_coverage, planet.palette};
+    check(resolve_flight_audio(mismatched, moving) ==
+              std::unexpected{FlightAudioError::invalid_planet},
+          "planetary telemetry must reject a mismatched planet identity");
+  }
+
+  SystemFlightState system;
+  system.mode = FlightMode::manual;
+  system.controls.rise = true;
+  system.velocity = {kSystemFlightMaximumRelativeSpeed, 0.0, 0.0};
+  const auto system_audio = resolve_flight_audio(system);
+  OriginStationFlightState station;
+  station.mode = FlightMode::manual;
+  station.controls.turn_left = true;
+  station.relative_velocity = {kHomeSignalStationFlightMaximumSpeed, 0.0,
+                               0.0};
+  const auto station_audio = resolve_flight_audio(station);
+  check(system_audio && system_audio->parameters.engine_demand == 0.68F &&
+            system_audio->parameters.speed == 1.0F &&
+            system_audio->parameters.atmosphere == 0.0F && station_audio &&
+            station_audio->parameters.engine_demand == 0.35F &&
+            station_audio->parameters.speed == 1.0F &&
+            station_audio->parameters.atmosphere == 0.0F,
+        "system and station telemetry must remain bounded vacuum voices");
+
+  AudioRuntime coalesced;
+  const FlightAudioParameters first{
+      .active = true,
+      .engine_demand = 0.25F,
+      .speed = 0.5F,
+      .atmosphere = 0.75F,
+  };
+  check(coalesced.emit_flight_parameters(7, first).status ==
+                AudioEmitStatus::queued &&
+            coalesced.emit_flight_parameters(7, first).status ==
+                AudioEmitStatus::coalesced_same_tick &&
+            coalesced.emit(7, kLowClearanceAudioCue).status ==
+                AudioEmitStatus::queued,
+        "continuous telemetry must coalesce while same-tick warning cues retain queue ordering");
+  const auto parameter_event = coalesced.try_take_event();
+  const auto warning_event = coalesced.try_take_event();
+  const auto coalesced_diagnostics = coalesced.diagnostics();
+  check(parameter_event &&
+            parameter_event->kind == AudioEventKind::flight_parameters &&
+            parameter_event->identity == AudioEventIdentity{7, 0} &&
+            parameter_event->parameters == first && warning_event &&
+            warning_event->kind == AudioEventKind::cue &&
+            warning_event->cue == kLowClearanceAudioCue &&
+            warning_event->identity == AudioEventIdentity{7, 1} &&
+            coalesced_diagnostics.parameter_updates_queued == 1 &&
+            coalesced_diagnostics.parameter_updates_coalesced == 1 &&
+            coalesced_diagnostics.maximum_queue_depth == 2,
+        "parameter and cue diagnostics must expose the deterministic coalesced trace");
+  const FlightAudioParameters invalid{
+      .active = true,
+      .engine_demand = std::numeric_limits<float>::infinity(),
+  };
+  check(coalesced.emit_flight_parameters(8, invalid).status ==
+            AudioEmitStatus::rejected_invalid_parameters,
+        "non-finite synthesis parameters must be rejected before queueing");
+
+  const auto render_trace = [](std::size_t chunk_frames) {
+    AudioRuntime audio;
+    std::uint64_t checksum{1'469'598'103'934'665'603ULL};
+    float previous{};
+    float maximum_delta{};
+    bool heard{};
+    std::vector<float> buffer(chunk_frames * kAudioChannelCount);
+    for (SimulationTick tick = 0; tick < 8; ++tick) {
+      const float amount = static_cast<float>(tick) / 7.0F;
+      if (tick == 7) {
+        (void)audio.emit(tick, kStopFlightAudioCue);
+      } else {
+        (void)audio.emit_flight_parameters(
+            tick, {.active = true,
+                   .engine_demand = amount,
+                   .speed = 1.0F - amount * 0.5F,
+                   .atmosphere = amount});
+      }
+      if (tick == 4) (void)audio.emit(tick, kLowClearanceAudioCue);
+      std::size_t rendered{};
+      while (rendered < kAudioFramesPerSimulationTick) {
+        const auto frames = std::min<std::size_t>(
+            chunk_frames, kAudioFramesPerSimulationTick - rendered);
+        const std::span samples{buffer.data(),
+                                frames * kAudioChannelCount};
+        if (audio.render(samples)) {
+          return std::tuple{std::uint64_t{}, 0.0F, false};
+        }
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+          const float left = samples[frame * 2U];
+          const float right = samples[frame * 2U + 1U];
+          if (!std::isfinite(left) || left < -1.0F || left > 1.0F ||
+              left != right) {
+            return std::tuple{std::uint64_t{}, 0.0F, false};
+          }
+          maximum_delta = std::max(maximum_delta, std::abs(left - previous));
+          previous = left;
+          heard = heard || left != 0.0F;
+          const auto word = std::bit_cast<std::uint32_t>(left);
+          for (unsigned byte = 0; byte < 4; ++byte) {
+            checksum ^= (word >> (byte * 8U)) & 0xFFU;
+            checksum *= 1'099'511'628'211ULL;
+          }
+        }
+        rendered += frames;
+      }
+    }
+    return std::tuple{checksum, maximum_delta, heard};
+  };
+  const auto whole_tick = render_trace(kAudioFramesPerSimulationTick);
+  const auto split_tick = render_trace(137);
+  check(std::get<0>(whole_tick) != 0 &&
+            std::get<0>(whole_tick) == std::get<0>(split_tick) &&
+            std::get<1>(whole_tick) < 0.1F && std::get<2>(whole_tick),
+        "offline synthesis must be bounded, click-free, audible, and independent of callback partitioning");
+
+  AudioRuntime disabled{AudioRuntimeMode::disabled};
+  std::array<float, 8> disabled_output;
+  disabled_output.fill(9.0F);
+  check(disabled.emit_flight_parameters(0, first).status ==
+                AudioEmitStatus::disabled &&
+            !disabled.render(disabled_output) &&
+            std::ranges::all_of(disabled_output,
+                                [](float value) { return value == 0.0F; }) &&
+            disabled.diagnostics().identities_assigned == 0 &&
+            disabled.diagnostics().waveform_frames_generated == 0,
+        "disabled audio must perform no identity, queue, or waveform work");
+
+  const auto disabled_cadence_replay = [&](SimulationSeconds cadence) {
+    auto state = *initialized;
+    FixedStepClock clock;
+    AudioRuntime silent{AudioRuntimeMode::disabled};
+    while (state.tick < 120) {
+      const auto advanced = clock.advance(cadence);
+      if (!advanced) return std::pair{std::uint64_t{}, AudioDiagnostics{}};
+      for (int step = 0; step < advanced->steps && state.tick < 120; ++step) {
+        if (!advance_flight(*terrain, state, {}, kSimulationStep)) {
+          return std::pair{std::uint64_t{}, AudioDiagnostics{}};
+        }
+        const auto telemetry = resolve_flight_audio(state);
+        if (!telemetry ||
+            silent.emit_flight_parameters(telemetry->tick,
+                                          telemetry->parameters)
+                    .status != AudioEmitStatus::disabled) {
+          return std::pair{std::uint64_t{}, AudioDiagnostics{}};
+        }
+      }
+    }
+    return std::pair{flight_state_checksum(state), silent.diagnostics()};
+  };
+  const auto cadence_30 =
+      disabled_cadence_replay(SimulationSeconds{1.0 / 30.0});
+  const auto cadence_60 =
+      disabled_cadence_replay(SimulationSeconds{1.0 / 60.0});
+  check(cadence_30.first != 0 && cadence_30.first == cadence_60.first &&
+            cadence_30.second.identities_assigned == 0 &&
+            cadence_60.second.identities_assigned == 0 &&
+            cadence_30.second.queue_depth == 0 &&
+            cadence_60.second.queue_depth == 0 &&
+            cadence_30.second.maximum_queue_depth == 0 &&
+            cadence_60.second.maximum_queue_depth == 0 &&
+            cadence_30.second.waveform_frames_generated == 0 &&
+            cadence_60.second.waveform_frames_generated == 0,
+        "disabled telemetry replay must preserve simulation and zero-work diagnostics across render cadences");
+
+  const auto benchmark = benchmark_flight_audio(240);
+  const auto repeated = benchmark_flight_audio(240);
+  const auto json = audio_benchmark_json(benchmark);
+  check(benchmark.sample_frames == 96'000 &&
+            benchmark.audio_seconds == 2.0 &&
+            benchmark.checksum == 3'041'416'869'822'421'007ULL &&
+            benchmark.checksum == repeated.checksum &&
+            benchmark.maximum_queue_depth <= 2 &&
+            benchmark.events_dropped == 0 &&
+            json.contains("\"workload\": \"procedural-flight-audio\"") &&
+            json.contains("\"realtime_factor\"") &&
+            !json.contains("percent"),
+        "the standalone audio benchmark must report deterministic waveform and measured cost without a hardware percentage");
+}
+
 auto fixed_step_clock_contract() -> void {
   FixedStepClock clock;
   const auto half = kSimulationStep / 2.0;
@@ -10888,6 +11121,7 @@ auto main() -> int {
   sweep_selection_contract();
   sweep_report_contract();
   audio_contract();
+  flight_audio_synthesis_contract();
   fixed_step_clock_contract();
   deterministic_fixed_step_flight();
   deterministic_command_replay();
