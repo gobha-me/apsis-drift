@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.41 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.42 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -190,6 +190,21 @@ add_executable(apsis-drift
 )
 target_link_libraries(apsis-drift PRIVATE apsis-drift::lib)
 
+add_library(apsis_drift_asset_manifest STATIC
+  src/asset_manifest.cpp
+)
+target_include_directories(apsis_drift_asset_manifest
+  PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(apsis_drift_asset_manifest PUBLIC cxx_std_23)
+target_link_libraries(apsis_drift_asset_manifest
+  PRIVATE nlohmann_json::nlohmann_json)
+
+add_executable(apsis-drift-asset-validator
+  src/asset_manifest_main.cpp
+)
+target_link_libraries(apsis-drift-asset-validator
+  PRIVATE apsis_drift_asset_manifest)
+
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-tests test/test.cpp)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
@@ -198,6 +213,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_definitions(apsis-drift-tests PRIVATE
     APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
   add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
+  add_executable(apsis-drift-asset-manifest-tests
+    test/asset_manifest_test.cpp)
+  target_link_libraries(apsis-drift-asset-manifest-tests
+    PRIVATE apsis_drift_asset_manifest nlohmann_json::nlohmann_json)
+  add_test(NAME asset-manifest-contract
+    COMMAND apsis-drift-asset-manifest-tests)
+  add_test(NAME asset-provenance-manifest
+    COMMAND apsis-drift-asset-validator
+            --root "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
   add_test(NAME version-report COMMAND apsis-drift --version)
   set_tests_properties(version-report PROPERTIES
     PASS_REGULAR_EXPRESSION "apsis-drift ${PROJECT_VERSION}")

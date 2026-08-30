@@ -9,8 +9,8 @@ a terminal.
 Audio policy is also application-owned. The current
 [audio contract](docs/AUDIO.md) provides deterministic tick-addressed cues,
 bounded non-blocking delivery, optional RtAudio device output, and a no-device
-fallback. Procedural flight synthesis and generated assets remain later First
-Light work.
+fallback, plus procedural flight synthesis. Future encoded media uses the
+validated [asset provenance contract](docs/ASSET_PROVENANCE.md).
 
 | Direct Kitty, `local` 640x480 | Truecolor ANSI, `remote` 320x240 |
 | --- | --- |
