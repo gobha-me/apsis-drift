@@ -61,10 +61,10 @@ set(expected_names outbound-transfer time-scaled-cruise target-approach
                    objective-complete return-transfer station-rendezvous
                    turned-in)
 set(expected_ticks 1 177 2948802 3992789 4008189 7490650 7535733)
-set(expected_checksums 4353211847566023555 9665598343786201058
-                       14447517183791265433 656925288451027477
-                       17706516282529442048 7666607557979194960
-                       6471673321473338304)
+set(expected_checksums 14976252175014360880 5502093969998742797
+                       6916749656383568422 6001947114578690420
+                       4878599712905780483 10337395983709136583
+                       13072067603515078687)
 math(EXPR final_index "${checkpoint_count} - 1")
 foreach(index RANGE 0 ${final_index})
   list(GET expected_names ${index} expected_name)

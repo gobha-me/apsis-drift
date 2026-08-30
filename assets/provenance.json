@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "assets": [
+    {
+      "id": "visual/title-alphabet",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "src/title.cpp"
+      ],
+      "purpose": "Scalable APSIS DRIFT startup title treatment",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-08-15",
+        "construction": "Authored directly as C++ bit rows and color constants using an original 5x7 glyph grid and palette",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "visual/flight-deck-kitty",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/flight-deck-kitty.png"
+      ],
+      "purpose": "Representative Kitty capture of the v0.2 Flight Deck acceptance run",
+      "edits": [
+        "Lossless crop to decorated window bounds",
+        "Metadata removal"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "documentation"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift",
+        "scenario": "v0.2-flight-deck",
+        "application_version": "v0.2",
+        "date": "2026-08-15",
+        "deterministic_inputs": {
+          "values": {
+            "seed": 12648430,
+            "fixed_commands": 18,
+            "final_simulation_tick": 240,
+            "driver": "kitty",
+            "profile": "local",
+            "viewport": "640x480"
+          }
+        },
+        "tooling": [
+          "TermForge via Kitty 0.48.2",
+          "KDE Spectacle 6.7.4",
+          "ImageMagick 7.1.2-29"
+        ]
+      }
+    },
+    {
+      "id": "visual/flight-deck-ansi",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/flight-deck-ansi.png"
+      ],
+      "purpose": "Representative ANSI capture of the v0.2 Flight Deck acceptance run",
+      "edits": [
+        "Lossless crop to decorated window bounds",
+        "Metadata removal"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "documentation"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift",
+        "scenario": "v0.2-flight-deck",
+        "application_version": "v0.2",
+        "date": "2026-08-15",
+        "deterministic_inputs": {
+          "values": {
+            "seed": 12648430,
+            "fixed_commands": 18,
+            "final_simulation_tick": 240,
+            "driver": "ansi",
+            "profile": "remote",
+            "viewport": "320x240"
+          }
+        },
+        "tooling": [
+          "TermForge via Kitty 0.48.2",
+          "KDE Spectacle 6.7.4",
+          "ImageMagick 7.1.2-29"
+        ]
+      }
+    },
+    {
+      "id": "visual/origin-home-kitty",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/origin-home-kitty.png"
+      ],
+      "purpose": "Kitty-scale renderer evidence for the orbiting-home acceptance path",
+      "edits": [
+        "Deterministic PPM-to-PNG encoding",
+        "Metadata removal"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "documentation"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift",
+        "scenario": "v0.4.12-intersystem-return",
+        "application_version": "v0.4.12",
+        "date": "2026-08-19",
+        "deterministic_inputs": {
+          "values": {
+            "universe_seed": 42,
+            "origin_arrival_tick": 1260,
+            "station": "station-ce51e866ec4e032d",
+            "profile": "local",
+            "viewport": "640x480",
+            "framebuffer_checksum": "11003545979043014705"
+          }
+        },
+        "tooling": [
+          "Apsis Drift binary PPM capture",
+          "ImageMagick 6.9.12-98"
+        ]
+      }
+    },
+    {
+      "id": "visual/origin-home-ansi",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/origin-home-ansi.png"
+      ],
+      "purpose": "ANSI-scale renderer evidence for the orbiting-home acceptance path",
+      "edits": [
+        "Deterministic PPM-to-PNG encoding",
+        "Metadata removal"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "documentation"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift",
+        "scenario": "v0.4.12-intersystem-return",
+        "application_version": "v0.4.12",
+        "date": "2026-08-19",
+        "deterministic_inputs": {
+          "values": {
+            "universe_seed": 42,
+            "origin_arrival_tick": 1260,
+            "station": "station-ce51e866ec4e032d",
+            "profile": "remote",
+            "viewport": "320x240",
+            "framebuffer_checksum": "7194522011593911474"
+          }
+        },
+        "tooling": [
+          "Apsis Drift binary PPM capture",
+          "ImageMagick 6.9.12-98"
+        ]
+      }
+    }
+  ]
+}

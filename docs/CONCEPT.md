@@ -237,10 +237,11 @@ includes:
 - Radio fragments, navigational signals, and encounter stingers
 
 Selected generation outputs should be baked into the project rather than made
-a runtime dependency. Retain a small provenance manifest alongside them with
-the prompt, model, seed when available, generation date, source file, edits,
-and applicable usage/license information. This makes chosen assets reproducible
-or replaceable without coupling gameplay to an external service.
+a runtime dependency. The versioned
+[asset provenance contract](ASSET_PROVENANCE.md) records source-kind-specific
+origin, edits, and license evidence for generated, third-party, code-authored,
+captured, and derived media. This makes chosen assets reproducible or
+replaceable without coupling gameplay to an external service.
 
 Runtime playback is a separate concern. RtAudio or another small callback-based
 backend can support a procedural mixer and baked assets later. Development in

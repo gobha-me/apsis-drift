@@ -1,5 +1,69 @@
 # Asset provenance
 
+`assets/provenance.json` is the versioned, machine-validated provenance record
+for media committed to Apsis Drift. The prose below remains useful narrative,
+but it does not replace a manifest entry. The current manifest represents the
+code-native title and every existing acceptance capture without moving or
+rewriting those files.
+
+Validate it from a configured build with:
+
+```sh
+./build/apsis-drift-asset-validator --root . assets/provenance.json
+```
+
+The validator is publication tooling, not a runtime asset system. It resolves
+manifest paths against the explicit repository root, rejects symlink traversal
+and paths outside that root, and performs no network access.
+
+## Version 1 contract
+
+The root contains `schema_version: 1` and an `assets` array. Documents are
+bounded to 1 MiB, 1,024 records, 32 levels of nesting, 256 entries per JSON
+nested collection, and 16 KiB per string. Unknown fields, duplicate JSON keys,
+unknown enumerators, and unsupported schema versions fail closed.
+
+Every asset has:
+
+- a globally unique ID of the form
+  `<media-type>/<lower-kebab-name>`, where the media type is `visual`, `font`,
+  `music`, `voice`, or `sfx`;
+- one matching `source_kind`: `generated`, `third-party`, `code-authored`,
+  `capture`, or `derived`;
+- one or more normalized repository-relative `files`, a `purpose`, and an
+  explicit `edits` array;
+- license evidence naming an SPDX expression or `LicenseRef`, its local or
+  HTTPS terms, permitted `source`/`documentation`/`runtime` uses,
+  redistribution and derivative status, and attribution.
+
+New encoded assets use
+`assets/<media-type>/<lower-kebab-name>.<extension>`. Existing source-native
+and documentation capture paths remain where their owning systems expect them.
+A file belongs to exactly one manifest record. Files under `assets`, `docs`, or
+source locations must respectively permit runtime, documentation, or source
+use. Committed files must permit redistribution; a derived record is rejected
+unless every named parent permits derivatives. Parent IDs must exist and the
+complete relationship graph must be acyclic.
+
+Each source kind adds only its relevant evidence:
+
+- `generated` records provider, tool, model and version, prompt, generation
+  date, source output, and either a seed value or why no seed was available;
+- `third-party` records an author or publisher, retrieval date, upstream
+  license, and either a canonical HTTPS URL or pinned package name/version;
+- `code-authored` records author, date, construction method, and an explicit
+  list of derived input asset IDs, which may be empty;
+- `capture` records application, scenario, application version, date, tooling,
+  and either structured deterministic inputs or why they do not apply;
+- `derived` records parent asset IDs, transformation, tooling, and date.
+
+Generated or upstream source files that are not selected for distribution do
+not enter this manifest merely because they were considered. When a selected
+asset is edited, keep the original generation/upstream record if its file is
+committed, give the result its own `derived` record, and name the original ID
+in `parents`. If only the selected result is committed, its source-kind record
+must retain the external source output and complete edit history.
+
 ## Code-native title alphabet and palette
 
 - Location: `src/title.cpp`
@@ -12,9 +76,9 @@
 - Scaling: integer-only from the fixed 5x7 glyph grid
 - License: BSD 3-Clause, under the repository [license](../LICENSE.md)
 
-The title remains source code rather than a media file. Future generated or
-third-party visual, music, or audio assets must add their own origin, tooling,
-and license entries before publication.
+The title remains source code rather than an encoded media file. Its
+`visual/title-alphabet` manifest record makes that intentional boundary
+machine-checkable.
 
 ## Flight Deck acceptance captures
 
