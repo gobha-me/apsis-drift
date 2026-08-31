@@ -147,6 +147,8 @@ standard libraries, compiler versions, or floating-point modes.
   lifecycle integration, preferences, final score bank, and authored adaptive
   traces as separately scoped work.
 
-Manual audition: **INITIAL FIXTURE FAILED; REPLACEMENT PENDING — repository
-owner**. Evidence file:
-`build-issue230-gcc/issue230-audition.wav`.
+Manual audition: **PASS — repository owner, 2026-08-31**. The initial machinery
+fixture failed for long pauses and harsh noise; the replacement tonal fixture
+was accepted. Evidence file: `build-issue230-gcc/issue230-audition.wav`,
+SHA-256
+`330f9393e68b2e45e3170fdf7e718d7424116c6ac28d5ed1f762e1293f3ea2de`.
