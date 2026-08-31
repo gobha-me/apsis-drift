@@ -54,11 +54,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-## MechSounds research subset
-
-The four samples in `assets/music/issue230-mechsounds.sf2` were selected from
-MechSounds by John Oestmann, archive dated 2026-03-01. The author releases all
-sounds in that archive under CC0 1.0. Exact source, selection, transformation,
-hash, and license evidence are recorded in `assets/provenance.json` and the
-MIDI spike decision report.

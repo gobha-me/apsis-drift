@@ -278,7 +278,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     add_test(NAME midi-score-spike-offline
       COMMAND apsis-drift-midi-spike
         --midi "${CMAKE_CURRENT_SOURCE_DIR}/assets/music/issue230-layer-demo.mid"
-        --soundfont "${CMAKE_CURRENT_SOURCE_DIR}/assets/music/issue230-mechsounds.sf2"
+        --soundfont "${CMAKE_CURRENT_SOURCE_DIR}/assets/music/issue230-tonal-prototype.sf2"
         --output "${CMAKE_CURRENT_BINARY_DIR}/issue230-audition.wav"
         --report "${CMAKE_CURRENT_BINARY_DIR}/issue230-report.json"
         --blocks 2000)

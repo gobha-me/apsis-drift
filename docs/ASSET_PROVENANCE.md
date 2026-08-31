@@ -46,8 +46,8 @@ unless every named parent permits derivatives. Parent IDs must exist and the
 complete relationship graph must be acyclic.
 
 The issue #230 MIDI research fixtures live under `assets/music`. The code-
-authored SMF and curated CC0 MechSounds subset are not a production score pack;
-their exact hashes, selection recipe, decoded/package budgets, and license
+authored SMF and tonal prototype bank are not a production score pack; their
+exact hashes, construction recipe, decoded/package budgets, and license
 assessment are recorded in
 [the dated MIDI decision report](MIDI_SCORE_SPIKE_2026-08-31.md).
 

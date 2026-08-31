@@ -970,6 +970,7 @@ auto MusicEngine::render(std::span<float> interleaved_samples) noexcept
         m_impl->playing = false;
         break;
       }
+      m_impl->begin_due_ramps();
       m_impl->reset_to(m_impl->loop_start_frame);
       ++m_impl->loop_count;
     }

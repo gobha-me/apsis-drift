@@ -95,7 +95,8 @@ struct RenderEvidence {
 auto main() -> int {
   const std::filesystem::path asset_root{APSIS_DRIFT_MIDI_ASSET_DIR};
   const auto midi = read_file(asset_root / "issue230-layer-demo.mid");
-  const auto soundfont = read_file(asset_root / "issue230-mechsounds.sf2");
+  const auto soundfont =
+      read_file(asset_root / "issue230-tonal-prototype.sf2");
   check(!midi.empty() && midi.size() <= kMaximumMidiBytes,
         "the MIDI fixture must exist inside its byte budget");
   check(!soundfont.empty() && soundfont.size() <= kMaximumSoundFontBytes,
@@ -106,7 +107,7 @@ auto main() -> int {
   if (!parsed) return 1;
   check(parsed->format == 1 && parsed->ppq == 480 &&
             parsed->tracks.size() == kMusicLayerCount &&
-            parsed->event_count == 68 && parsed->tempos.size() == 2 &&
+            parsed->event_count == 132 && parsed->tempos.size() == 2 &&
             parsed->time_signatures.size() == 1 &&
             parsed->markers.size() == 4,
         "the fixture must retain tracks, events, tempo, meter, and markers");
@@ -164,8 +165,8 @@ auto main() -> int {
   auto unsupported_message = midi;
   const auto note_on = std::ranges::search(
       unsupported_message,
-      std::array{std::byte{0}, std::byte{0x90}, std::byte{0x30},
-                 std::byte{0x54}});
+      std::array{std::byte{0}, std::byte{0x90}, std::byte{0x32},
+                 std::byte{0x44}});
   check(!note_on.empty(), "the fixture must contain the first note-on event");
   if (!note_on.empty()) {
     note_on[1] = std::byte{0xA0};
@@ -298,6 +299,31 @@ auto main() -> int {
                 MidiError::command_queue_full,
             "queue overflow must reject the newest command");
     }
+
+    auto loop_boundary_result = MusicEngine::create(*parsed, soundfont);
+    check(loop_boundary_result.has_value(),
+          "a third engine must initialize for loop-boundary transitions");
+    if (loop_boundary_result) {
+      auto loop_engine = std::move(*loop_boundary_result);
+      check(!loop_engine.set_looping(true) && !loop_engine.play(),
+            "loop-boundary evidence must start playback");
+      for (unsigned count = 0; count < 2'000; ++count) {
+        check(!loop_engine.render(block),
+              "playback before the loop boundary must render");
+      }
+      check(!loop_engine.set_layer_target(MusicLayer::tension, 0.5F,
+                                          TransitionBoundary::next_measure),
+            "the final-measure transition must queue");
+      for (unsigned count = 0; count < 400; ++count) {
+        check(!loop_engine.render(block),
+              "playback across the loop boundary must render");
+      }
+      check(loop_engine.diagnostics().loop_count == 1U &&
+                std::abs(loop_engine.diagnostics().layer_gains[3] - 0.5F) <
+                    0.001F,
+            "a transition at loop-end must begin on the next loop");
+    }
+
     check(!engine.stop(), "stop must queue without touching callback state");
     block.fill(9.0F);
     check(!engine.render(block) &&

@@ -182,7 +182,10 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
   auto engine = std::move(*engine_result);
-  if (engine.set_looping(true) || engine.play()) return 1;
+  if (engine.set_looping(true) || engine.set_music_volume(0.5F) ||
+      engine.play()) {
+    return 1;
+  }
   MidiSpikeRenderSource render_source{engine};
 
   constexpr std::size_t kBlockFrames{kAudioFramesPerSimulationTick};
@@ -278,14 +281,19 @@ auto main(int argc, char** argv) -> int {
   (void)getrusage(RUSAGE_SELF, &usage);
   const auto diagnostics = engine.diagnostics();
   const bool transitions_complete =
-      diagnostics.commands_applied == 7U &&
+      diagnostics.commands_applied == 8U &&
       diagnostics.command_queue_depth == 0U &&
       std::abs(diagnostics.layer_gains[0] - 1.0F) < 0.001F &&
       std::abs(diagnostics.layer_gains[1]) < 0.001F &&
       std::abs(diagnostics.layer_gains[2] - 0.65F) < 0.001F &&
       std::abs(diagnostics.layer_gains[3]) < 0.001F;
   if (!transitions_complete) {
-    std::cerr << "semantic layer transitions did not complete\n";
+    std::cerr << "semantic layer transitions did not complete: commands="
+              << diagnostics.commands_applied << " gains="
+              << diagnostics.layer_gains[0] << ','
+              << diagnostics.layer_gains[1] << ','
+              << diagnostics.layer_gains[2] << ','
+              << diagnostics.layer_gains[3] << '\n';
     return 1;
   }
 
