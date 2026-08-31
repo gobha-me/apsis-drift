@@ -11,6 +11,9 @@ Audio policy is also application-owned. The current
 bounded non-blocking delivery, optional RtAudio device output, and a no-device
 fallback, plus procedural flight synthesis. Future encoded media uses the
 validated [asset provenance contract](docs/ASSET_PROVENANCE.md).
+The default-off [deterministic MIDI research spike](docs/MIDI_SCORE_SPIKE_2026-08-31.md)
+records the measured production direction without enabling score playback in
+the game.
 
 | Direct Kitty, `local` 640x480 | Truecolor ANSI, `remote` 320x240 |
 | --- | --- |
@@ -60,6 +63,16 @@ build without downloading, compiling, or linking RtAudio:
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DAPSIS_DRIFT_RTAUDIO=OFF
+```
+
+The isolated MIDI research target is excluded from ordinary builds. Enable it
+only to reproduce the bounded parser, embedded-synth, and offline evidence:
+
+```bash
+cmake -S . -B build-midi -DCMAKE_BUILD_TYPE=Release \
+  -DAPSIS_DRIFT_RTAUDIO=OFF -DAPSIS_DRIFT_MIDI_SPIKE=ON
+cmake --build build-midi --parallel 2
+ctest --test-dir build-midi --output-on-failure -R midi-score-spike
 ```
 
 To use a checkout in a different location:

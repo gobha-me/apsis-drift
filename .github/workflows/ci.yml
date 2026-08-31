@@ -59,6 +59,7 @@ jobs:
         run: >-
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           -DAPSIS_DRIFT_RTAUDIO=${{ matrix.rtaudio }}
+          -DAPSIS_DRIFT_MIDI_SPIKE=ON
 
       - name: Build
         run: cmake --build build --parallel

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.42 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.43 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -13,6 +13,8 @@ configure_file(
 
 option(APSIS_DRIFT_TESTS "Build the Apsis Drift tests" ON)
 option(APSIS_DRIFT_RTAUDIO "Build the RtAudio output backend" ON)
+option(APSIS_DRIFT_MIDI_SPIKE
+       "Build the isolated deterministic MIDI score research spike" OFF)
 set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
@@ -112,6 +114,16 @@ if (APSIS_DRIFT_RTAUDIO)
   FetchContent_MakeAvailable(rtaudio)
 endif ()
 
+if (APSIS_DRIFT_MIDI_SPIKE)
+  FetchContent_Declare(tinysoundfont
+    GIT_REPOSITORY https://github.com/schellingb/TinySoundFont.git
+    GIT_TAG 853a0a171759f1ddba0de1442133a75912bbeffa
+    GIT_SHALLOW FALSE
+    EXCLUDE_FROM_ALL
+  )
+  FetchContent_MakeAvailable(tinysoundfont)
+endif ()
+
 add_library(apsis_drift_lib STATIC
   src/audio.cpp
   src/audio_callback.cpp
@@ -205,6 +217,33 @@ add_executable(apsis-drift-asset-validator
 target_link_libraries(apsis-drift-asset-validator
   PRIVATE apsis_drift_asset_manifest)
 
+if (APSIS_DRIFT_MIDI_SPIKE)
+  add_library(apsis_drift_midi_spike STATIC
+    src/midi_spike.cpp
+  )
+  target_include_directories(apsis_drift_midi_spike
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/include"
+      "${tinysoundfont_SOURCE_DIR}"
+  )
+  target_compile_features(apsis_drift_midi_spike PUBLIC cxx_std_23)
+  target_link_libraries(apsis_drift_midi_spike
+    PRIVATE apsis-drift::lib)
+  target_compile_options(apsis_drift_midi_spike PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+
+  add_executable(apsis-drift-midi-spike
+    src/midi_spike_main.cpp
+  )
+  target_include_directories(apsis-drift-midi-spike
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  target_link_libraries(apsis-drift-midi-spike
+    PRIVATE apsis_drift_midi_spike apsis-drift::lib)
+  target_compile_options(apsis-drift-midi-spike PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+endif ()
+
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-tests test/test.cpp)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
@@ -223,6 +262,27 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift-asset-validator
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
+  if (APSIS_DRIFT_MIDI_SPIKE)
+    add_executable(apsis-drift-midi-spike-tests
+      test/midi_spike_test.cpp)
+    target_include_directories(apsis-drift-midi-spike-tests
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_definitions(apsis-drift-midi-spike-tests PRIVATE
+      "APSIS_DRIFT_MIDI_ASSET_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets/music\"")
+    target_link_libraries(apsis-drift-midi-spike-tests
+      PRIVATE apsis_drift_midi_spike apsis-drift::lib)
+    target_compile_options(apsis-drift-midi-spike-tests PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+    add_test(NAME midi-score-spike-contract
+      COMMAND apsis-drift-midi-spike-tests)
+    add_test(NAME midi-score-spike-offline
+      COMMAND apsis-drift-midi-spike
+        --midi "${CMAKE_CURRENT_SOURCE_DIR}/assets/music/issue230-layer-demo.mid"
+        --soundfont "${CMAKE_CURRENT_SOURCE_DIR}/assets/music/issue230-mechsounds.sf2"
+        --output "${CMAKE_CURRENT_BINARY_DIR}/issue230-audition.wav"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/issue230-report.json"
+        --blocks 2000)
+  endif ()
   add_test(NAME version-report COMMAND apsis-drift --version)
   set_tests_properties(version-report PROPERTIES
     PASS_REGULAR_EXPRESSION "apsis-drift ${PROJECT_VERSION}")
