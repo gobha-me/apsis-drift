@@ -97,3 +97,24 @@ runtime clears playback state. The render callback performs no allocation,
 filesystem access, logging, application traversal, or mutex acquisition; it
 only validates/fills the caller's fixed buffer and drains the lock-free event
 queue.
+
+## Deterministic MIDI research boundary
+
+`APSIS_DRIFT_MIDI_SPIKE=ON` builds an isolated offline research target; it is
+off by default and does not add music playback to the game. The spike validates
+a Standard MIDI File completely in bounded memory, projects tracks and musical
+time into an immutable schedule, preallocates an embedded SoundFont synth, and
+then transfers only fixed semantic layer commands to callback-owned state.
+
+The contract permits at most 64 KiB of MIDI, 16 tracks, 16,384 events, 960 PPQ,
+64 voices, a 4 MiB packaged SoundFont, and 16 MiB decoded sample data. Tracks
+are named `ambient`, `pulse`, `percussion`, and `tension`; MIDI channels remain
+internal routing details. The callback performs no parsing, filesystem work,
+allocation, logging, or blocking synchronization. Beat, measure, phrase, and
+loop decisions derive from integer MIDI ticks plus tempo and meter maps rather
+than callback wall time.
+
+The dated [decision report](MIDI_SCORE_SPIKE_2026-08-31.md) owns the measured
+MIDI-versus-module comparison and the boundary between repeatable event
+scheduling and floating-point PCM. Production score integration remains a
+separate follow-up and the First Light asset inventory remains owned by #29.

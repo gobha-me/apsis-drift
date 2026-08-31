@@ -45,6 +45,12 @@ use. Committed files must permit redistribution; a derived record is rejected
 unless every named parent permits derivatives. Parent IDs must exist and the
 complete relationship graph must be acyclic.
 
+The issue #230 MIDI research fixtures live under `assets/music`. The code-
+authored SMF and tonal prototype bank are not a production score pack; their
+exact hashes, construction recipe, decoded/package budgets, and license
+assessment are recorded in
+[the dated MIDI decision report](MIDI_SCORE_SPIKE_2026-08-31.md).
+
 Each source kind adds only its relevant evidence:
 
 - `generated` records provider, tool, model and version, prompt, generation
