@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -85,6 +86,12 @@ enum class FlightAudioError : std::uint8_t {
 
 inline constexpr AudioCueId kLowClearanceAudioCue{0xAD00'0001U};
 inline constexpr AudioCueId kStopFlightAudioCue{0xAD00'0002U};
+inline constexpr AudioCueId kUiNavigateAudioCue{0xAD00'0101U};
+inline constexpr AudioCueId kUiConfirmAudioCue{0xAD00'0102U};
+inline constexpr AudioCueId kUiRejectAudioCue{0xAD00'0103U};
+inline constexpr AudioCueId kCommsNoticeAudioCue{0xAD00'0104U};
+inline constexpr AudioCueId kSignalLockAudioCue{0xAD00'0105U};
+inline constexpr AudioCueId kSignalCompleteAudioCue{0xAD00'0106U};
 
 [[nodiscard]] auto resolve_flight_audio(const FlightState& state) noexcept
     -> std::expected<FlightAudioTelemetry, FlightAudioError>;
@@ -251,6 +258,64 @@ enum class AudioResetReason : std::uint8_t {
   shutdown,
 };
 
+enum class MusicState : std::uint8_t {
+  silent,
+  docked,
+  flight,
+  scanning,
+  warning,
+  complete,
+};
+
+enum class AudioPackError : std::uint8_t {
+  missing,
+  unsafe_path,
+  sidecar_too_large,
+  invalid_sidecar,
+  invalid_midi,
+  invalid_soundfont,
+  invalid_sfx,
+  packaged_budget_exceeded,
+  decoded_budget_exceeded,
+};
+
+[[nodiscard]] auto audio_pack_error_name(AudioPackError error) noexcept
+    -> std::string_view;
+
+class FirstLightAudioPack {
+ public:
+  FirstLightAudioPack(FirstLightAudioPack&&) noexcept;
+  auto operator=(FirstLightAudioPack&&) noexcept -> FirstLightAudioPack&;
+  ~FirstLightAudioPack();
+
+  FirstLightAudioPack(const FirstLightAudioPack&) = delete;
+  auto operator=(const FirstLightAudioPack&) -> FirstLightAudioPack& = delete;
+
+  [[nodiscard]] auto packaged_bytes() const noexcept -> std::size_t;
+  [[nodiscard]] auto decoded_bytes() const noexcept -> std::size_t;
+
+ private:
+  friend class AudioRuntime;
+  friend auto load_first_light_audio_pack(const std::filesystem::path&)
+      -> std::expected<FirstLightAudioPack, AudioPackError>;
+  struct Impl;
+  explicit FirstLightAudioPack(std::unique_ptr<Impl> impl) noexcept;
+  auto cue(AudioCueId cue) noexcept -> void;
+  auto set_music_state(MusicState state) noexcept -> void;
+  auto pause_music() noexcept -> void;
+  auto resume_music() noexcept -> void;
+  auto reset() noexcept -> void;
+  auto render(std::span<float> interleaved_samples) noexcept -> bool;
+  [[nodiscard]] auto active_sfx_voices() const noexcept -> std::size_t;
+  [[nodiscard]] auto dropped_sfx_voices() const noexcept -> std::uint64_t;
+
+  std::unique_ptr<Impl> m_impl;
+};
+
+[[nodiscard]] auto load_first_light_audio_pack(
+    const std::filesystem::path& asset_root)
+    -> std::expected<FirstLightAudioPack, AudioPackError>;
+
 struct AudioDiagnostics {
   AudioRuntimeMode mode{AudioRuntimeMode::disabled};
   AudioBackendState backend_state{AudioBackendState::disabled};
@@ -275,6 +340,12 @@ struct AudioDiagnostics {
   std::size_t queue_depth{};
   std::size_t maximum_queue_depth{};
   std::uint64_t waveform_frames_generated{};
+  bool asset_pack_loaded{};
+  MusicState music_state{MusicState::silent};
+  std::size_t active_sfx_voices{};
+  std::uint64_t dropped_sfx_voices{};
+  std::size_t asset_packaged_bytes{};
+  std::size_t asset_decoded_bytes{};
 };
 
 class AudioRuntime final : public AudioRenderSource {
@@ -282,7 +353,8 @@ class AudioRuntime final : public AudioRenderSource {
   explicit AudioRuntime(
       AudioRuntimeMode mode = AudioRuntimeMode::no_device,
       std::unique_ptr<AudioBackend> backend = nullptr,
-      AudioOutputSelection selection = {});
+      AudioOutputSelection selection = {},
+      std::unique_ptr<FirstLightAudioPack> asset_pack = nullptr);
   ~AudioRuntime() override;
 
   AudioRuntime(const AudioRuntime&) = delete;
@@ -299,6 +371,9 @@ class AudioRuntime final : public AudioRenderSource {
   auto reset(AudioResetReason reason) noexcept -> void;
   auto backend_lost() -> void;
   auto shutdown() noexcept -> void;
+  auto set_music_state(MusicState state) noexcept -> void;
+  auto pause_music() noexcept -> void;
+  auto resume_music() noexcept -> void;
 
   [[nodiscard]] auto render(
       std::span<float> interleaved_samples) noexcept
@@ -318,6 +393,7 @@ class AudioRuntime final : public AudioRenderSource {
 
   AudioRuntimeMode m_mode{AudioRuntimeMode::disabled};
   std::unique_ptr<AudioBackend> m_backend;
+  std::unique_ptr<FirstLightAudioPack> m_asset_pack;
   AudioEventQueue m_queue;
   std::optional<SimulationTick> m_last_tick;
   std::optional<SimulationTick> m_last_parameter_tick;
@@ -355,6 +431,23 @@ class AudioRuntime final : public AudioRenderSource {
   std::uint32_t m_warning_frames_remaining{};
   std::int32_t m_warning_level{};
   std::atomic<std::uint64_t> m_waveform_frames_generated{};
+  std::atomic<MusicState> m_music_state{MusicState::silent};
+};
+
+class MusicDirector {
+ public:
+  explicit MusicDirector(AudioRuntime& runtime) noexcept : m_runtime{runtime} {}
+
+  auto update(MusicState state) noexcept -> void;
+  auto pause() noexcept -> void;
+  auto resume() noexcept -> void;
+  auto reset() noexcept -> void;
+  [[nodiscard]] auto state() const noexcept -> MusicState { return m_state; }
+
+ private:
+  AudioRuntime& m_runtime;
+  MusicState m_state{MusicState::silent};
+  bool m_paused{};
 };
 
 struct AudioSynthesisBenchmark {

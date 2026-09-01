@@ -9,11 +9,11 @@ a terminal.
 Audio policy is also application-owned. The current
 [audio contract](docs/AUDIO.md) provides deterministic tick-addressed cues,
 bounded non-blocking delivery, optional RtAudio device output, and a no-device
-fallback, plus procedural flight synthesis. Future encoded media uses the
-validated [asset provenance contract](docs/ASSET_PROVENANCE.md).
-The default-off [deterministic MIDI research spike](docs/MIDI_SCORE_SPIKE_2026-08-31.md)
-records the measured production direction without enabling score playback in
-the game.
+fallback, plus procedural flight synthesis and the adaptive First Light score
+pack. Encoded media uses the validated
+[asset provenance contract](docs/ASSET_PROVENANCE.md). The completed
+[deterministic MIDI research spike](docs/MIDI_SCORE_SPIKE_2026-08-31.md)
+records why the production path uses bounded SMF scheduling and TinySoundFont.
 
 | Direct Kitty, `local` 640x480 | Truecolor ANSI, `remote` 320x240 |
 | --- | --- |
@@ -40,6 +40,8 @@ Requirements:
 - Git when TermForge must be fetched
 - RtAudio platform headers when device output is enabled (`libasound2-dev` on
   Linux)
+- FFmpeg when the optional offline MIDI/audition targets and their automated
+  loudness/true-peak checks are enabled
 
 Apsis Drift first looks for a TermForge v0.42.0-or-newer package, then for a
 compatible sibling checkout at `../termforge`. Older siblings are ignored. If
@@ -65,14 +67,16 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DAPSIS_DRIFT_RTAUDIO=OFF
 ```
 
-The isolated MIDI research target is excluded from ordinary builds. Enable it
-only to reproduce the bounded parser, embedded-synth, and offline evidence:
+The bounded MIDI parser and embedded synth are part of ordinary production
+builds. The offline research and First Light audition executables remain
+excluded unless `APSIS_DRIFT_MIDI_SPIKE` is enabled:
 
 ```bash
 cmake -S . -B build-midi -DCMAKE_BUILD_TYPE=Release \
   -DAPSIS_DRIFT_RTAUDIO=OFF -DAPSIS_DRIFT_MIDI_SPIKE=ON
 cmake --build build-midi --parallel 2
-ctest --test-dir build-midi --output-on-failure -R midi-score-spike
+ctest --test-dir build-midi --output-on-failure \
+  -R 'midi-score-spike|first-light-audio'
 ```
 
 To use a checkout in a different location:
@@ -88,6 +92,11 @@ cmake -S . -B build \
 ./build/apsis-drift
 ./build/apsis-drift --version
 ```
+
+Interactive runs load the First Light pack from `assets` by default. Use
+`--audio-assets PATH` to select an explicit asset root. A missing or invalid
+pack fails closed with one diagnostic and leaves the existing procedural audio
+path available; benchmark, capture, and acceptance modes never load the pack.
 
 Choose an explicit save profile for an interactive run:
 

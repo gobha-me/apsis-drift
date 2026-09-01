@@ -253,6 +253,230 @@
         "construction": "Authored as a bounded format-1 Standard MIDI File by tools/issue230_asset_builder.cpp with four named tracks, integer musical time, tempo and time-signature metadata, phrase markers, and loop markers",
         "derived_inputs": []
       }
+    },
+    {
+      "id": "music/first-light-bank",
+      "media_type": "music",
+      "source_kind": "generated",
+      "files": [
+        "assets/music/first-light-bank.sf2"
+      ],
+      "purpose": "Production First Light adaptive score bank with a generated seamless ambient bed and three code-authored supporting instruments",
+      "edits": [
+        "Downmixed the 30-second stereo source to mono and resampled it from 44.1 kHz to 48 kHz",
+        "Applied -6.1 dB linear gain",
+        "Removed the first two seconds and crossfaded the final two seconds into the original first two seconds to form an exact 28-second loop",
+        "Encoded the loop as 16-bit PCM in a SoundFont preset and added code-authored pulse, percussion, and tension presets with tools/issue230_asset_builder.cpp"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": [
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with Stable Audio 2.5 through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using Stability AI",
+        "tool": "Venice API audio generation",
+        "model": "stable-audio-25",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "Instrumental retro-futurist deep-space exploration ambience, calm orbital drift, warm analog pad, sparse crystalline pulses, no vocals, no speech, no cinematic boom, seamless textural continuity",
+        "generation_date": "2026-09-01",
+        "source_output": "Original WAV SHA-256 45eb78c75581072e06c44507f2b748556ffe7744336ddbfb8d41304bbbdbf6fa; retained outside the repository generation workspace",
+        "seed": {
+          "unavailable": "the provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "music/first-light-score",
+      "media_type": "music",
+      "source_kind": "code-authored",
+      "files": [
+        "assets/music/first-light-score.mid",
+        "assets/music/first-light-score.json"
+      ],
+      "purpose": "Production four-layer adaptive score schedule and strict semantic sidecar",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-01",
+        "construction": "Authored by tools/issue230_asset_builder.cpp as a bounded format-1 SMF with four semantic tracks, a 28-second musical loop, phrase markers, and stable transition boundaries; the JSON sidecar fixes the asset IDs, files, layer gains, markers, and allowed transitions",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "sfx/ui-navigate",
+      "media_type": "sfx",
+      "source_kind": "generated",
+      "files": [
+        "assets/sfx/ui-navigate.wav"
+      ],
+      "purpose": "Restrained menu and focus navigation feedback",
+      "edits": [
+        "Decoded the generated MP3, downmixed to mono, resampled to 48 kHz, trimmed or padded to one second, normalized to -20 LUFS-I with a -1 dBTP ceiling, and applied a 60 ms tail fade"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": ["runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with ElevenLabs Sound Effects through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using ElevenLabs",
+        "tool": "Venice API sound-effect generation",
+        "model": "elevenlabs-sound-effects-v2",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "A very short restrained retro spacecraft cursor navigation tick, clean electronic UI sound, no voice, no music, no reverb tail",
+        "generation_date": "2026-09-01",
+        "source_output": "Original MP3 SHA-256 1b40b1193e96043189cbc009957e7cd28468d6855c2b3f25c8f6b28b8abb1542; retained outside the repository generation workspace",
+        "seed": {"unavailable": "the provider did not expose a seed"}
+      }
+    },
+    {
+      "id": "sfx/ui-confirm",
+      "media_type": "sfx",
+      "source_kind": "generated",
+      "files": ["assets/sfx/ui-confirm.wav"],
+      "purpose": "Positive menu and action confirmation feedback",
+      "edits": ["Decoded the generated MP3, downmixed to mono, resampled to 48 kHz, trimmed or padded to one second, normalized to -20 LUFS-I with a -1 dBTP ceiling, and applied a 60 ms tail fade"],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": ["runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with ElevenLabs Sound Effects through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using ElevenLabs",
+        "tool": "Venice API sound-effect generation",
+        "model": "elevenlabs-sound-effects-v2",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "A short positive retro spacecraft confirmation chirp, two clean electronic tones, subtle and warm, no voice, no music",
+        "generation_date": "2026-09-01",
+        "source_output": "Original MP3 SHA-256 9172378654ea16025e69734156b13a099b694c45df183a7cfe3e76949d9edccc; retained outside the repository generation workspace",
+        "seed": {"unavailable": "the provider did not expose a seed"}
+      }
+    },
+    {
+      "id": "sfx/ui-reject",
+      "media_type": "sfx",
+      "source_kind": "generated",
+      "files": ["assets/sfx/ui-reject.wav"],
+      "purpose": "Soft invalid-action and warning feedback",
+      "edits": ["Decoded the generated MP3, downmixed to mono, resampled to 48 kHz, trimmed or padded to one second, normalized to -20 LUFS-I with a -1 dBTP ceiling, and applied a 60 ms tail fade"],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": ["runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with ElevenLabs Sound Effects through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using ElevenLabs",
+        "tool": "Venice API sound-effect generation",
+        "model": "elevenlabs-sound-effects-v2",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "A short low soft double buzz for an invalid spacecraft UI action, restrained and non-alarming, no voice, no music",
+        "generation_date": "2026-09-01",
+        "source_output": "Original MP3 SHA-256 4097116d1fc1d5ac438666a64289159d6261656f01ee6396482b9f13f4aeff66; retained outside the repository generation workspace",
+        "seed": {"unavailable": "the provider did not expose a seed"}
+      }
+    },
+    {
+      "id": "sfx/comms-notice",
+      "media_type": "sfx",
+      "source_kind": "generated",
+      "files": ["assets/sfx/comms-notice.wav"],
+      "purpose": "Incoming mission and communications notice",
+      "edits": ["Decoded the generated MP3, downmixed to mono, resampled to 48 kHz, trimmed or padded to one second, normalized to -20 LUFS-I with a -1 dBTP ceiling, and applied a 60 ms tail fade"],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": ["runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with ElevenLabs Sound Effects through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using ElevenLabs",
+        "tool": "Venice API sound-effect generation",
+        "model": "elevenlabs-sound-effects-v2",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "A short retro spacecraft radio data arrival burst, filtered electronic comms notification, no speech, no Morse code, no music",
+        "generation_date": "2026-09-01",
+        "source_output": "Original MP3 SHA-256 ec08ec41fb153b472c01bf7eec21f5c2fbf8c57e785b281f85df37af40b5c79c; retained outside the repository generation workspace",
+        "seed": {"unavailable": "the provider did not expose a seed"}
+      }
+    },
+    {
+      "id": "sfx/signal-lock",
+      "media_type": "sfx",
+      "source_kind": "generated",
+      "files": ["assets/sfx/signal-lock.wav"],
+      "purpose": "Signal scanner acquisition and lock feedback",
+      "edits": ["Decoded the generated MP3, downmixed to mono, resampled to 48 kHz, trimmed or padded to one second, normalized to -20 LUFS-I with a -1 dBTP ceiling, and applied a 60 ms tail fade"],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": ["runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with ElevenLabs Sound Effects through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using ElevenLabs",
+        "tool": "Venice API sound-effect generation",
+        "model": "elevenlabs-sound-effects-v2",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "A short rising retro spacecraft scanner lock tone, precise electronic acquisition sweep ending in a clean ping, no voice, no music",
+        "generation_date": "2026-09-01",
+        "source_output": "Original MP3 SHA-256 0cb82424d8a426ae56372d2c61ef7f3464f0febdf2c3b1e599f4a5249b575f3d; retained outside the repository generation workspace",
+        "seed": {"unavailable": "the provider did not expose a seed"}
+      }
+    },
+    {
+      "id": "sfx/signal-complete",
+      "media_type": "sfx",
+      "source_kind": "generated",
+      "files": ["assets/sfx/signal-complete.wav"],
+      "purpose": "Signal collection completion feedback",
+      "edits": ["Decoded the generated MP3, downmixed to mono, resampled to 48 kHz, trimmed or padded to one second, normalized to -20 LUFS-I with a -1 dBTP ceiling, and applied a 60 ms tail fade"],
+      "license": {
+        "expression": "LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+        "permitted_uses": ["runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; generated with ElevenLabs Sound Effects through Venice.ai"
+      },
+      "generated": {
+        "provider": "Venice.ai using ElevenLabs",
+        "tool": "Venice API sound-effect generation",
+        "model": "elevenlabs-sound-effects-v2",
+        "model_version": "Venice model catalog 2026-09-01",
+        "prompt": "A short crystalline retro spacecraft signal collection completion stinger, satisfying three-note electronic resolve, no voice, no orchestral music",
+        "generation_date": "2026-09-01",
+        "source_output": "Original MP3 SHA-256 f071e2f404be9da5733f1f0df37682e0362f040618e486a8512e7550d89bb0bd; retained outside the repository generation workspace",
+        "seed": {"unavailable": "the provider did not expose a seed"}
+      }
     }
   ]
 }

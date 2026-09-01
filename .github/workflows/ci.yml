@@ -49,9 +49,12 @@ jobs:
           sudo /tmp/llvm.sh "$CLANG_VERSION"
           sudo ln -sf "/usr/bin/clang++-$CLANG_VERSION" /usr/local/bin/clang++
 
+      - name: Install media test tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install RtAudio system headers
         if: matrix.rtaudio == 'ON'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get install -y libasound2-dev
 
       - name: Configure
         env:

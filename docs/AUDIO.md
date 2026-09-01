@@ -98,13 +98,14 @@ filesystem access, logging, application traversal, or mutex acquisition; it
 only validates/fills the caller's fixed buffer and drains the lock-free event
 queue.
 
-## Deterministic MIDI research boundary
+## Deterministic MIDI score boundary
 
-`APSIS_DRIFT_MIDI_SPIKE=ON` builds an isolated offline research target; it is
-off by default and does not add music playback to the game. The spike validates
-a Standard MIDI File completely in bounded memory, projects tracks and musical
-time into an immutable schedule, preallocates an embedded SoundFont synth, and
-then transfers only fixed semantic layer commands to callback-owned state.
+The production runtime validates a Standard MIDI File completely in bounded
+memory, projects tracks and musical time into an immutable schedule,
+preallocates an embedded SoundFont synth, and then transfers only fixed
+semantic layer commands to callback-owned state. `APSIS_DRIFT_MIDI_SPIKE=ON`
+adds the isolated offline research and First Light audition executables; it no
+longer controls whether the production parser and synth are compiled.
 
 The contract permits at most 64 KiB of MIDI, 16 tracks, 16,384 events, 960 PPQ,
 64 voices, a 4 MiB packaged SoundFont, and 16 MiB decoded sample data. Tracks
@@ -116,5 +117,40 @@ than callback wall time.
 
 The dated [decision report](MIDI_SCORE_SPIKE_2026-08-31.md) owns the measured
 MIDI-versus-module comparison and the boundary between repeatable event
-scheduling and floating-point PCM. Production score integration remains a
-separate follow-up and the First Light asset inventory remains owned by #29.
+scheduling and floating-point PCM.
+
+## First Light production pack
+
+Interactive runs load `assets/music/first-light-score.json` from the `assets`
+root, or from the explicit `--audio-assets PATH`. The version-1 sidecar accepts
+only the fixed score/bank IDs and files, four ordered semantic layer mappings,
+finite gains from zero through one, the required loop and phrase markers, and
+the four supported transition boundaries. Unknown or duplicate fields,
+excessive nesting, unsafe path components, symlinks, missing files, malformed
+media, and exceeded budgets reject the whole pack before playback. Failure
+emits one diagnostic and preserves procedural audio without partially loading
+the pack.
+
+The SMF is limited to 64 KiB. The packaged SoundFont is limited to 4 MiB and
+its decoded sample chunk to 16 MiB. Each effect must be mono 48 kHz PCM16 WAV,
+at most two seconds; the six effects together are limited to 1 MiB packaged,
+eight seconds of PCM, and 4 MiB of conservative stereo-float residency. The
+committed pack uses 3,316,791 packaged audio bytes and 5,042,288 decoded bytes.
+All parsing, filesystem access, validation, and allocation occurs before the
+audio callback.
+
+The callback owns an eight-voice fixed effect pool and drops the newest effect
+when it is full. Stable cues cover UI navigation, confirmation, rejection,
+communications notice, signal lock, and signal completion. The semantic music
+states map Signal Run presentation edges as follows: docked keeps the ambient
+bed, flight adds pulse, scanning adds percussion on the next beat, warnings add
+tension immediately, and completion resolves on the next phrase. Pause/resume
+retains musical position; every playback epoch resets score and transient
+voices without entering simulation or save state.
+
+The 60-second production-path evidence render measures -23.25 LUFS-I and
+-12.01 dBTP for music alone. The six final effects each measure -20 LUFS-I
+within 0.05 LU and remain below -3.6 dBTP. The score loop and embedded ambient
+sample are both exactly 28 seconds; the rendered loop boundary changes by one
+PCM unit. Use `apsis-drift-audio-pack-audition` from a spike-enabled build to
+produce the repository-owner listening artifact.

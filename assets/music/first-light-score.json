@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "score": {
+    "asset_id": "music/first-light-score",
+    "file": "music/first-light-score.mid"
+  },
+  "bank": {
+    "asset_id": "music/first-light-bank",
+    "file": "music/first-light-bank.sf2"
+  },
+  "master_gain": 1.0,
+  "layers": [
+    {"id": "ambient", "track": "ambient", "default_gain": 1.0},
+    {"id": "pulse", "track": "pulse", "default_gain": 0.35},
+    {"id": "percussion", "track": "percussion", "default_gain": 0.30},
+    {"id": "tension", "track": "tension", "default_gain": 0.35}
+  ],
+  "markers": {
+    "loop_start": "loop-start",
+    "loop_end": "loop-end",
+    "phrase_prefix": "phrase-"
+  },
+  "allowed_transitions": [
+    "immediate",
+    "next_beat",
+    "next_measure",
+    "next_phrase"
+  ]
+}

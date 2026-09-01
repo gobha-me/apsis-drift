@@ -315,8 +315,9 @@ auto make_device_audio_backend(AudioOutputSelection selection)
 
 AudioRuntime::AudioRuntime(AudioRuntimeMode mode,
                            std::unique_ptr<AudioBackend> backend,
-                           AudioOutputSelection selection)
-    : m_mode(mode) {
+                           AudioOutputSelection selection,
+                           std::unique_ptr<FirstLightAudioPack> asset_pack)
+    : m_mode(mode), m_asset_pack{std::move(asset_pack)} {
   if (mode == AudioRuntimeMode::disabled) return;
   if (backend) {
     start_backend(std::move(backend));
@@ -490,6 +491,8 @@ auto AudioRuntime::reset(AudioResetReason reason) noexcept -> void {
   m_last_parameter_tick.reset();
   m_next_sequence = 0;
   reset_synth();
+  if (m_asset_pack) m_asset_pack->reset();
+  m_music_state.store(MusicState::silent, std::memory_order_relaxed);
   m_reset_count.fetch_add(1, std::memory_order_relaxed);
   m_last_reset_reason.store(reason, std::memory_order_relaxed);
   if (reason != AudioResetReason::backend_loss &&
@@ -538,10 +541,16 @@ auto AudioRuntime::render(std::span<float> interleaved_samples) noexcept
   }
   while (auto event = try_take_event()) apply_event(*event);
   const auto frames = interleaved_samples.size() / kAudioChannelCount;
+  if (!m_asset_pack || !m_asset_pack->render(interleaved_samples)) {
+    std::ranges::fill(interleaved_samples, 0.0F);
+  }
   for (std::size_t frame = 0; frame < frames; ++frame) {
     const float sample = render_sample();
-    interleaved_samples[frame * kAudioChannelCount] = sample;
-    interleaved_samples[frame * kAudioChannelCount + 1U] = sample;
+    for (std::size_t channel = 0; channel < kAudioChannelCount; ++channel) {
+      auto& output =
+          interleaved_samples[frame * kAudioChannelCount + channel];
+      output = std::clamp(output + sample, -1.0F, 1.0F);
+    }
   }
   m_waveform_frames_generated.fetch_add(frames, std::memory_order_relaxed);
   return std::nullopt;
@@ -565,7 +574,22 @@ auto AudioRuntime::apply_event(const AudioEvent& event) noexcept -> void {
     m_speed_target = 0;
     m_atmosphere_target = 0;
     m_warning_frames_remaining = 0;
+  } else if (m_asset_pack) {
+    m_asset_pack->cue(event.cue);
   }
+}
+
+auto AudioRuntime::set_music_state(MusicState state) noexcept -> void {
+  m_music_state.store(state, std::memory_order_relaxed);
+  if (m_asset_pack) m_asset_pack->set_music_state(state);
+}
+
+auto AudioRuntime::pause_music() noexcept -> void {
+  if (m_asset_pack) m_asset_pack->pause_music();
+}
+
+auto AudioRuntime::resume_music() noexcept -> void {
+  if (m_asset_pack) m_asset_pack->resume_music();
 }
 
 auto AudioRuntime::render_sample() noexcept -> float {
@@ -665,6 +689,16 @@ auto AudioRuntime::diagnostics() const noexcept -> AudioDiagnostics {
           m_maximum_queue_depth.load(std::memory_order_relaxed),
       .waveform_frames_generated =
           m_waveform_frames_generated.load(std::memory_order_relaxed),
+      .asset_pack_loaded = m_asset_pack != nullptr,
+      .music_state = m_music_state.load(std::memory_order_relaxed),
+      .active_sfx_voices =
+          m_asset_pack ? m_asset_pack->active_sfx_voices() : 0U,
+      .dropped_sfx_voices =
+          m_asset_pack ? m_asset_pack->dropped_sfx_voices() : 0U,
+      .asset_packaged_bytes =
+          m_asset_pack ? m_asset_pack->packaged_bytes() : 0U,
+      .asset_decoded_bytes =
+          m_asset_pack ? m_asset_pack->decoded_bytes() : 0U,
   };
 }
 
@@ -675,6 +709,30 @@ auto AudioRuntime::update_maximum_depth(std::size_t depth) noexcept -> void {
              observed, depth, std::memory_order_relaxed,
              std::memory_order_relaxed)) {
   }
+}
+
+auto MusicDirector::update(MusicState state) noexcept -> void {
+  if (state == m_state) return;
+  m_state = state;
+  m_runtime.set_music_state(state);
+}
+
+auto MusicDirector::pause() noexcept -> void {
+  if (m_paused) return;
+  m_paused = true;
+  m_runtime.pause_music();
+}
+
+auto MusicDirector::resume() noexcept -> void {
+  if (!m_paused) return;
+  m_paused = false;
+  m_runtime.resume_music();
+}
+
+auto MusicDirector::reset() noexcept -> void {
+  m_paused = false;
+  m_state = MusicState::silent;
+  m_runtime.set_music_state(MusicState::silent);
 }
 
 auto benchmark_flight_audio(std::uint64_t ticks) -> AudioSynthesisBenchmark {
