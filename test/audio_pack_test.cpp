@@ -127,6 +127,46 @@ auto production_pack_contract() -> void {
             std::ranges::all_of(invalid,
                                 [](float sample) { return sample == 0.25F; }),
         "invalid callback dimensions must not mutate caller memory");
+
+  auto coexistence_pack = load_first_light_audio_pack(root);
+  auto coexistence_baseline_pack = load_first_light_audio_pack(root);
+  check(coexistence_pack.has_value(),
+        "the coexistence fixture must load the production pack");
+  check(coexistence_baseline_pack.has_value(),
+        "the coexistence baseline must load the production pack");
+  if (!coexistence_pack || !coexistence_baseline_pack)
+    return;
+  AudioRuntime coexistence{
+      AudioRuntimeMode::no_device,
+      nullptr,
+      {},
+      std::make_unique<FirstLightAudioPack>(std::move(*coexistence_pack))};
+  AudioRuntime coexistence_baseline{AudioRuntimeMode::no_device,
+                                    nullptr,
+                                    {},
+                                    std::make_unique<FirstLightAudioPack>(
+                                        std::move(*coexistence_baseline_pack))};
+  check(
+      coexistence
+              .emit_flight_parameters(SimulationTick{1}, {.active = true,
+                                                          .engine_demand = 1.0F,
+                                                          .speed = 1.0F,
+                                                          .atmosphere = 1.0F})
+              .status == AudioEmitStatus::queued,
+      "flight telemetry must remain accepted with the production pack");
+  std::vector<float> coexistence_samples(4096U * kAudioChannelCount);
+  std::vector<float> coexistence_baseline_samples(4096U * kAudioChannelCount);
+  check(!coexistence.render(coexistence_samples) &&
+            !coexistence_baseline.render(coexistence_baseline_samples) &&
+            coexistence_samples == coexistence_baseline_samples,
+        "the production pack must suppress the legacy continuous flight synth");
+  check(coexistence.emit(SimulationTick{2}, kLowClearanceAudioCue).status ==
+            AudioEmitStatus::queued,
+        "the safety warning must remain available with the production pack");
+  check(!coexistence.render(coexistence_samples) &&
+            !coexistence_baseline.render(coexistence_baseline_samples) &&
+            coexistence_samples != coexistence_baseline_samples,
+        "the production pack must preserve the procedural safety warning");
 }
 
 auto failure_contract() -> void {

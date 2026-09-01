@@ -598,27 +598,27 @@ auto AudioRuntime::render_sample() noexcept -> float {
   approach(m_atmosphere_level, m_atmosphere_target,
            kParameterSlewPerFrame);
 
-  const auto pitch = static_cast<std::uint32_t>(
-      (m_engine_level * 2 + m_speed_level) / 3);
-  const auto engine_hz = 42U + static_cast<std::uint32_t>(
-                                   138ULL * pitch / kSynthUnit);
-  m_engine_phase += static_cast<std::uint32_t>(
-      (static_cast<std::uint64_t>(engine_hz) << 32U) / kAudioSampleRate);
-  const auto engine_amplitude =
-      m_engine_level / 6 + m_speed_level / 12;
-  std::int32_t sample =
-      triangle(m_engine_phase) * engine_amplitude / kSynthUnit;
+  std::int32_t sample{};
+  if (!m_asset_pack) {
+    const auto pitch =
+        static_cast<std::uint32_t>((m_engine_level * 2 + m_speed_level) / 3);
+    const auto engine_hz =
+        42U + static_cast<std::uint32_t>(138ULL * pitch / kSynthUnit);
+    m_engine_phase += static_cast<std::uint32_t>(
+        (static_cast<std::uint64_t>(engine_hz) << 32U) / kAudioSampleRate);
+    const auto engine_amplitude = m_engine_level / 6 + m_speed_level / 12;
+    sample = triangle(m_engine_phase) * engine_amplitude / kSynthUnit;
 
-  m_noise_state ^= m_noise_state << 13U;
-  m_noise_state ^= m_noise_state >> 17U;
-  m_noise_state ^= m_noise_state << 5U;
-  const auto noise =
-      static_cast<std::int32_t>(m_noise_state >> 16U) - 32'768;
-  m_wind_filter += (noise - m_wind_filter) / 16;
-  const auto wind_amplitude = static_cast<std::int32_t>(
-      static_cast<std::int64_t>(m_atmosphere_level) * m_speed_level /
-      kSynthUnit / 7);
-  sample += m_wind_filter * wind_amplitude / kSynthUnit;
+    m_noise_state ^= m_noise_state << 13U;
+    m_noise_state ^= m_noise_state >> 17U;
+    m_noise_state ^= m_noise_state << 5U;
+    const auto noise = static_cast<std::int32_t>(m_noise_state >> 16U) - 32'768;
+    m_wind_filter += (noise - m_wind_filter) / 16;
+    const auto wind_amplitude = static_cast<std::int32_t>(
+        static_cast<std::int64_t>(m_atmosphere_level) * m_speed_level /
+        kSynthUnit / 7);
+    sample += m_wind_filter * wind_amplitude / kSynthUnit;
+  }
 
   const auto warning_target =
       m_warning_frames_remaining > 0 ? kSynthUnit / 5 : 0;

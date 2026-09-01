@@ -97,6 +97,9 @@ Interactive runs load the First Light pack from `assets` by default. Use
 `--audio-assets PATH` to select an explicit asset root. A missing or invalid
 pack fails closed with one diagnostic and leaves the existing procedural audio
 path available; benchmark, capture, and acceptance modes never load the pack.
+When the validated pack is present it owns the continuous sound bed, so the
+legacy procedural engine and wind voices are not mixed under the score. The
+procedural low-clearance warning remains active.
 
 Choose an explicit save profile for an interactive run:
 
