@@ -51,6 +51,34 @@ exact hashes, construction recipe, decoded/package budgets, and license
 assessment are recorded in
 [the dated MIDI decision report](MIDI_SCORE_SPIKE_2026-08-31.md).
 
+The production First Light inventory consists of one four-layer SMF and its
+strict sidecar, one SoundFont bank, and six mono PCM16 effects. The manifest
+retains each external source hash, model, prompt, date, transformation, and
+license assessment. The original provider responses are generation inputs and
+are intentionally not distributed; the selected normalized results carry the
+complete evidence required by the version-1 `generated` record.
+
+The bank's generated ambient input was downmixed and resampled to 48 kHz,
+linearly attenuated, and made into a 28-second loop by removing the first two
+seconds and crossfading the final two seconds into that original head. The
+SoundFont builder adds three code-authored supporting presets without bundling
+SF2cute itself. `tools/regenerate_first_light_assets.sh` pins SF2cute at
+`3c5fc83b6ba3d1feb377f9c86021fd77499eb7c0` and reproduces the committed bank
+and SMF from the original 30-second provider WAV.
+
+The exact production hashes are:
+
+- bank: `832d00811dc8793b933e3e3ab0c50fca664fd325fb91060178a8768a720fc32a`;
+- SMF: `b2fbd7806e874e2a11d43e245a1ae1823fb51d16ee8a69c090a6de80a7545f4e`;
+- sidecar: `df6c85dfa033b8518a1af739061598e2de523b91400e4cf2eccf0b082e622c44`.
+
+The generated-output license assessment and its official upstream terms are
+recorded in
+[the First Light LicenseRef](licenses/FIRST_LIGHT_GENERATED_OUTPUT.md). The
+source prompts avoid named songs, recordings, performers, characters, brands,
+and other third-party works. This is evidence for the selected files, not a
+provider warranty of uniqueness or non-infringement.
+
 Each source kind adds only its relevant evidence:
 
 - `generated` records provider, tool, model and version, prompt, generation

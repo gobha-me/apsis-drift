@@ -13,6 +13,11 @@ is off by default. Production work remains a separately reviewed issue, and
 the First Light inventory, normalization, packaged-byte total, and authored
 music remain owned by #29.
 
+Production status (2026-09-01): #29 adopted this boundary for the First Light
+pack. The parser and TinySoundFont renderer are now part of the ordinary game
+library; `APSIS_DRIFT_MIDI_SPIKE` controls only offline evidence and audition
+executables. The measurements below remain the source-faithful spike record.
+
 The required listening owner is the repository owner. The final audition
 verdict must be recorded here before #230 is merged.
 
@@ -94,8 +99,8 @@ its code-authored construction and license.
 
 The spike implementation and tests are about 1,900 lines of C++ plus a 325-line
 one-shot asset recipe/builder. On this glibc host the standalone spike adds no
-dynamic dependency beyond the ordinary C/C++ runtime libraries; TinySoundFont
-is compiled into the default-off target.
+dynamic dependency beyond the ordinary C/C++ runtime libraries. TinySoundFont
+is compiled into the production game library and the optional evidence tools.
 
 ## Measurements
 
@@ -143,9 +148,9 @@ standard libraries, compiler versions, or floating-point modes.
   renders through the #25 `AudioRenderSource` seam; physical output and
   device-loss playback could not be exercised locally and remain CI/runtime
   integration evidence for the production follow-up.
-- Production adoption must add the sidecar validator, `MusicDirector`, runtime
-  lifecycle integration, preferences, final score bank, and authored adaptive
-  traces as separately scoped work.
+- Production adoption in #29 added the sidecar validator, `MusicDirector`,
+  runtime lifecycle integration, final score bank, and authored Signal Run
+  traces. Persistent player audio preferences remain separately scoped to #30.
 
 Manual audition: **PASS — repository owner, 2026-08-31**. The initial machinery
 fixture failed for long pauses and harsh noise; the replacement tonal fixture

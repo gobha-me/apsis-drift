@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(apsis-drift VERSION 0.4.43 LANGUAGES CXX)
+project(apsis-drift VERSION 0.4.44 LANGUAGES CXX)
 
 include(CTest)
 include(FetchContent)
@@ -114,19 +114,18 @@ if (APSIS_DRIFT_RTAUDIO)
   FetchContent_MakeAvailable(rtaudio)
 endif ()
 
-if (APSIS_DRIFT_MIDI_SPIKE)
-  FetchContent_Declare(tinysoundfont
-    GIT_REPOSITORY https://github.com/schellingb/TinySoundFont.git
-    GIT_TAG 853a0a171759f1ddba0de1442133a75912bbeffa
-    GIT_SHALLOW FALSE
-    EXCLUDE_FROM_ALL
-  )
-  FetchContent_MakeAvailable(tinysoundfont)
-endif ()
+FetchContent_Declare(tinysoundfont
+  GIT_REPOSITORY https://github.com/schellingb/TinySoundFont.git
+  GIT_TAG 853a0a171759f1ddba0de1442133a75912bbeffa
+  GIT_SHALLOW FALSE
+  EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(tinysoundfont)
 
 add_library(apsis_drift_lib STATIC
   src/audio.cpp
   src/audio_callback.cpp
+  src/audio_pack.cpp
   src/benchmark.cpp
   src/celestial.cpp
   src/cockpit.cpp
@@ -143,6 +142,7 @@ add_library(apsis_drift_lib STATIC
   src/landscape.cpp
   src/local_system.cpp
   src/menu.cpp
+  src/midi_spike.cpp
   src/mission_board.cpp
   src/onboarding.cpp
   src/onboarding_acceptance.cpp
@@ -183,7 +183,9 @@ target_include_directories(apsis_drift_lib
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_BINARY_DIR}/generated"
-  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${tinysoundfont_SOURCE_DIR}"
 )
 target_compile_features(apsis_drift_lib PUBLIC cxx_std_23)
 target_link_libraries(apsis_drift_lib
@@ -218,29 +220,22 @@ target_link_libraries(apsis-drift-asset-validator
   PRIVATE apsis_drift_asset_manifest)
 
 if (APSIS_DRIFT_MIDI_SPIKE)
-  add_library(apsis_drift_midi_spike STATIC
-    src/midi_spike.cpp
-  )
-  target_include_directories(apsis_drift_midi_spike
-    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    PRIVATE
-      "${CMAKE_CURRENT_SOURCE_DIR}/include"
-      "${tinysoundfont_SOURCE_DIR}"
-  )
-  target_compile_features(apsis_drift_midi_spike PUBLIC cxx_std_23)
-  target_link_libraries(apsis_drift_midi_spike
-    PRIVATE apsis-drift::lib)
-  target_compile_options(apsis_drift_midi_spike PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-
   add_executable(apsis-drift-midi-spike
     src/midi_spike_main.cpp
   )
-  target_include_directories(apsis-drift-midi-spike
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  target_include_directories(apsis-drift-midi-spike PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_link_libraries(apsis-drift-midi-spike
-    PRIVATE apsis_drift_midi_spike apsis-drift::lib)
+    PRIVATE apsis-drift::lib)
   target_compile_options(apsis-drift-midi-spike PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_executable(apsis-drift-audio-pack-audition
+    src/audio_pack_audition_main.cpp
+  )
+  target_link_libraries(apsis-drift-audio-pack-audition PRIVATE
+    apsis-drift::lib)
+  target_compile_options(apsis-drift-audio-pack-audition PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 endif ()
 
@@ -262,19 +257,30 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift-asset-validator
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
+  add_executable(apsis-drift-midi-spike-tests
+    test/midi_spike_test.cpp)
+  target_include_directories(apsis-drift-midi-spike-tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_definitions(apsis-drift-midi-spike-tests PRIVATE
+    "APSIS_DRIFT_MIDI_ASSET_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets/music\"")
+  target_link_libraries(apsis-drift-midi-spike-tests
+    PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-midi-spike-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME midi-score-spike-contract
+    COMMAND apsis-drift-midi-spike-tests)
+  add_executable(apsis-drift-audio-pack-tests
+    test/audio_pack_test.cpp)
+  target_compile_definitions(apsis-drift-audio-pack-tests PRIVATE
+    "APSIS_DRIFT_AUDIO_ASSET_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"")
+  target_link_libraries(apsis-drift-audio-pack-tests
+    PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-audio-pack-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME first-light-audio-pack-contract
+    COMMAND apsis-drift-audio-pack-tests)
   if (APSIS_DRIFT_MIDI_SPIKE)
-    add_executable(apsis-drift-midi-spike-tests
-      test/midi_spike_test.cpp)
-    target_include_directories(apsis-drift-midi-spike-tests
-      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-    target_compile_definitions(apsis-drift-midi-spike-tests PRIVATE
-      "APSIS_DRIFT_MIDI_ASSET_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets/music\"")
-    target_link_libraries(apsis-drift-midi-spike-tests
-      PRIVATE apsis_drift_midi_spike apsis-drift::lib)
-    target_compile_options(apsis-drift-midi-spike-tests PRIVATE
-      $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-    add_test(NAME midi-score-spike-contract
-      COMMAND apsis-drift-midi-spike-tests)
     add_test(NAME midi-score-spike-offline
       COMMAND apsis-drift-midi-spike
         --midi "${CMAKE_CURRENT_SOURCE_DIR}/assets/music/issue230-layer-demo.mid"
@@ -282,6 +288,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
         --output "${CMAKE_CURRENT_BINARY_DIR}/issue230-audition.wav"
         --report "${CMAKE_CURRENT_BINARY_DIR}/issue230-report.json"
         --blocks 2000)
+    find_program(APSIS_DRIFT_FFMPEG_EXECUTABLE ffmpeg REQUIRED)
+    add_test(NAME first-light-audio-level-contract
+      COMMAND "${CMAKE_COMMAND}"
+        "-DAUDITION_BIN=$<TARGET_FILE:apsis-drift-audio-pack-audition>"
+        "-DFFMPEG_BIN=${APSIS_DRIFT_FFMPEG_EXECUTABLE}"
+        "-DASSET_DIR=${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "-DREPORT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/test/verify_first_light_audio.cmake")
   endif ()
   add_test(NAME version-report COMMAND apsis-drift --version)
   set_tests_properties(version-report PROPERTIES

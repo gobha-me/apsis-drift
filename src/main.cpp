@@ -366,7 +366,8 @@ class LandscapeApp final : public App {
                         bool signal_navigation_acceptance = false,
                         const SaveDocument* profile = nullptr,
                         AudioRuntimeMode audio_mode =
-                            AudioRuntimeMode::no_device)
+                            AudioRuntimeMode::no_device,
+                        std::unique_ptr<FirstLightAudioPack> audio_pack = nullptr)
       : m_render_configuration(render_configuration),
         m_universe_seed(profile ? profile->recipe.universe_seed : Seed{seed}),
         m_terrain(required_terrain(1024, seed)),
@@ -403,7 +404,8 @@ class LandscapeApp final : public App {
             workload == BenchmarkWorkload::planetary
                 ? required_planetary_surface(m_planet)
                 : PlanetarySurfaceFixture{}),
-        m_audio(audio_mode),
+        m_audio(audio_mode, nullptr, {}, std::move(audio_pack)),
+        m_music(m_audio),
         m_session(!interactive_controls,
                   profile != nullptr &&
                       (profile->state.origin_system_contract
@@ -531,6 +533,7 @@ class LandscapeApp final : public App {
     } else {
       stop_active_flight_audio();
     }
+    update_presentation_audio();
     m_audio.service();
     report_audio_state();
   }
@@ -1145,6 +1148,7 @@ class LandscapeApp final : public App {
     (void)m_session.dispatch(MenuCommand::activate);
     m_simulation_clock.reset();
     m_audio.reset(AudioResetReason::load);
+    m_music.reset();
     m_audio_flight_active = false;
     m_audio_low_clearance = false;
     m_input_mapper.suspend({}, current_flight_tick());
@@ -1735,7 +1739,18 @@ class LandscapeApp final : public App {
 
   auto handle_menu_key(const KeyEvent& key) -> void {
     if (const auto command = menu_command_for(key)) {
+      const auto before = m_session.selected();
+      const auto old_error = m_error;
       apply_session_command(*command);
+      const auto tick = current_flight_tick();
+      if ((*command == MenuCommand::previous || *command == MenuCommand::next) &&
+          m_session.selected() != before) {
+        (void)m_audio.emit(tick, kUiNavigateAudioCue);
+      } else if (*command == MenuCommand::activate) {
+        (void)m_audio.emit(tick, !m_error.empty() && m_error != old_error
+                                    ? kUiRejectAudioCue
+                                    : kUiConfirmAudioCue);
+      }
     }
   }
 
@@ -1746,8 +1761,17 @@ class LandscapeApp final : public App {
     }
     const auto selected = menu_item_at(m_menu_layout, mouse.x, mouse.y);
     if (!selected) return;
+    const auto before = m_session.selected();
+    const auto old_error = m_error;
     m_session.select(*selected);
+    if (m_session.selected() != before) {
+      (void)m_audio.emit(current_flight_tick(), kUiNavigateAudioCue);
+    }
     apply_session_command(MenuCommand::activate);
+    (void)m_audio.emit(current_flight_tick(),
+                       !m_error.empty() && m_error != old_error
+                           ? kUiRejectAudioCue
+                           : kUiConfirmAudioCue);
   }
 
   auto draw_size_requirement(Screen& screen) -> void {
@@ -4092,6 +4116,61 @@ class LandscapeApp final : public App {
     m_reported_audio_failure_count = diagnostics.backend_failure_count;
   }
 
+  auto update_presentation_audio() -> void {
+    if (!m_notice.empty() && m_notice != m_audio_notice) {
+      (void)m_audio.emit(current_flight_tick(), kCommsNoticeAudioCue);
+    }
+    m_audio_notice = m_notice;
+
+    if (m_signal_run) {
+      const auto status = m_signal_run->collection.status;
+      if (m_audio_collection_status && *m_audio_collection_status != status) {
+        if (status == SignalCollectionStatus::in_range) {
+          (void)m_audio.emit(current_flight_tick(), kSignalLockAudioCue);
+        } else if (status == SignalCollectionStatus::complete) {
+          (void)m_audio.emit(current_flight_tick(), kSignalCompleteAudioCue);
+        }
+      }
+      m_audio_collection_status = status;
+    } else {
+      m_audio_collection_status.reset();
+    }
+
+    if (m_session.screen() == SessionScreen::paused) {
+      m_music.pause();
+      return;
+    }
+    m_music.resume();
+    MusicState state{MusicState::silent};
+    if (m_signal_run && m_session.screen() == SessionScreen::station) {
+      state = MusicState::docked;
+    } else if (m_signal_run && m_session.screen() == SessionScreen::flight) {
+      const bool warning =
+          !m_error.empty() || m_audio_low_clearance ||
+          m_signal_run->collection.status == SignalCollectionStatus::aborted ||
+          m_signal_run->signal_navigation.motion.cue ==
+              TargetMotionCue::opening;
+      if (warning) {
+        state = MusicState::warning;
+      } else if (m_signal_run->collection.status ==
+                     SignalCollectionStatus::complete ||
+                 m_signal_run->onboarding.first_objective ==
+                     FirstObjectiveStatus::completed ||
+                 m_signal_run->onboarding.first_objective ==
+                     FirstObjectiveStatus::returned) {
+        state = MusicState::complete;
+      } else if (m_signal_run->collection.status ==
+                     SignalCollectionStatus::in_range ||
+                 m_signal_run->collection.status ==
+                     SignalCollectionStatus::scanning) {
+        state = MusicState::scanning;
+      } else {
+        state = MusicState::flight;
+      }
+    }
+    m_music.update(state);
+  }
+
   RenderConfiguration m_render_configuration;
   Seed m_universe_seed;
   Terrain m_terrain;
@@ -4130,6 +4209,7 @@ class LandscapeApp final : public App {
   std::vector<SaveWorldDelta> m_origin_system_world_deltas;
   std::vector<PlanetaryRenderStats> m_planetary_samples;
   AudioRuntime m_audio;
+  MusicDirector m_music;
   SessionController m_session;
   FixedStepClock m_simulation_clock;
   apsis_drift::detail::FlightInputMapper m_input_mapper;
@@ -4148,6 +4228,8 @@ class LandscapeApp final : public App {
   std::uint64_t m_reported_audio_failure_count{};
   bool m_audio_flight_active{};
   bool m_audio_low_clearance{};
+  std::optional<SignalCollectionStatus> m_audio_collection_status;
+  std::string m_audio_notice;
   std::string m_error;
   std::string m_notice;
   std::string m_display_tier{"probing"};
@@ -4387,6 +4469,7 @@ auto usage() -> void {
       "                   [--load PATH | --new-game-seed N] [--save PATH]\n"
       "       apsis-drift [--driver automatic|kitty|ansi|fallback]\n"
       "                   [--keyboard enhanced|press-only]\n"
+      "                   [--audio-assets PATH]\n"
       "       apsis-drift --benchmark [FRAMES] [--seed N] [--report PATH]\n"
       "                   [--driver automatic|kitty|ansi|fallback]\n"
       "       apsis-drift --audio-benchmark [TICKS] [--report PATH]\n"
@@ -4479,6 +4562,7 @@ auto main(int argc, char** argv) -> int {
   std::filesystem::path snapshot_path;
   std::filesystem::path load_path;
   std::filesystem::path save_path;
+  std::filesystem::path audio_assets_path{"assets"};
   std::optional<std::uint64_t> new_game_seed;
   bool profile_specified{};
   bool viewport_specified{};
@@ -4488,6 +4572,7 @@ auto main(int argc, char** argv) -> int {
   bool sweep_viewports_specified{};
   bool sweep_fps_specified{};
   bool workload_specified{};
+  bool audio_assets_specified{};
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view argument{argv[i]};
@@ -4730,6 +4815,15 @@ auto main(int argc, char** argv) -> int {
       snapshot_path = argv[++i];
       continue;
     }
+    if (argument == "--audio-assets" && i + 1 < argc) {
+      audio_assets_path = argv[++i];
+      if (audio_assets_path.empty()) {
+        std::fprintf(stderr, "audio asset path must not be empty\n");
+        return 2;
+      }
+      audio_assets_specified = true;
+      continue;
+    }
     std::fprintf(stderr, "unknown or incomplete option '%.*s'\n",
                  static_cast<int>(argument.size()), argument.data());
     return 2;
@@ -4748,7 +4842,8 @@ auto main(int argc, char** argv) -> int {
         profile_specified || viewport_specified || driver_specified ||
         keyboard_specified || seed_specified || sweep_viewports_specified ||
         sweep_fps_specified || workload_specified || !snapshot_path.empty() ||
-        !load_path.empty() || !save_path.empty() || new_game_seed;
+        !load_path.empty() || !save_path.empty() || new_game_seed ||
+        audio_assets_specified;
     if (incompatible) {
       std::fprintf(stderr,
                    "audio benchmark is mutually exclusive with other run, "
@@ -5780,6 +5875,11 @@ auto main(int argc, char** argv) -> int {
     const bool interactive_controls =
         !benchmark_frames && capture_seconds == 0 &&
         !flight_deck_acceptance && !signal_navigation_acceptance;
+    if (audio_assets_specified && !interactive_controls) {
+      std::fprintf(stderr,
+                   "--audio-assets is available only for interactive runs\n");
+      return 2;
+    }
     std::optional<SaveDocument> save_profile;
     if (interactive_controls) {
       if (!load_path.empty()) {
@@ -5797,13 +5897,27 @@ auto main(int argc, char** argv) -> int {
         run_seed = presentation_seed(universe_seed);
       }
     }
+    std::unique_ptr<FirstLightAudioPack> audio_pack;
+    if (interactive_controls) {
+      auto loaded_pack = load_first_light_audio_pack(audio_assets_path);
+      if (loaded_pack) {
+        audio_pack = std::make_unique<FirstLightAudioPack>(
+            std::move(*loaded_pack));
+      } else {
+        const auto error = audio_pack_error_name(loaded_pack.error());
+        std::fprintf(stderr,
+                     "audio: optional First Light pack unavailable (%.*s)\n",
+                     static_cast<int>(error.size()), error.data());
+      }
+    }
     LandscapeApp app{render_configuration, run_seed, selected_workload,
                      static_cast<double>(capture_seconds),
                      interactive_controls, flight_deck_acceptance,
                      signal_navigation_acceptance,
                      save_profile ? &*save_profile : nullptr,
                      interactive_controls ? AudioRuntimeMode::automatic
-                                          : AudioRuntimeMode::no_device};
+                                          : AudioRuntimeMode::no_device,
+                     std::move(audio_pack)};
     if (auto forced =
             app.force_capabilities(driver_choice, keyboard_choice);
         !forced) {

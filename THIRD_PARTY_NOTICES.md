@@ -31,8 +31,9 @@ SOFTWARE.
 
 ## TinySoundFont
 
-TinySoundFont is used only by the default-off deterministic MIDI research
-target and is pinned at commit `853a0a171759f1ddba0de1442133a75912bbeffa`.
+TinySoundFont renders the production First Light score and the default-off
+offline MIDI evidence targets. It is pinned at commit
+`853a0a171759f1ddba0de1442133a75912bbeffa`.
 
 Copyright (C) 2017-2023 Bernhard Schelling
 (based on SFZero, Copyright (C) 2012 Steve Folta)

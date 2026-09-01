@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -18,6 +19,74 @@ namespace {
 
 inline constexpr std::uint32_t kSampleRate{48'000};
 inline constexpr std::size_t kWavePeriod{480};
+inline constexpr std::size_t kMaximumAmbientSamples{1'500'000};
+
+auto read_little_u16(std::istream &input) -> std::uint16_t {
+  std::array<unsigned char, 2> bytes{};
+  input.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
+  if (!input)
+    throw std::runtime_error{"truncated WAV input"};
+  return static_cast<std::uint16_t>(bytes[0]) |
+         static_cast<std::uint16_t>(bytes[1] << 8U);
+}
+
+auto read_little_u32(std::istream &input) -> std::uint32_t {
+  std::array<unsigned char, 4> bytes{};
+  input.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
+  if (!input)
+    throw std::runtime_error{"truncated WAV input"};
+  return static_cast<std::uint32_t>(bytes[0]) |
+         (static_cast<std::uint32_t>(bytes[1]) << 8U) |
+         (static_cast<std::uint32_t>(bytes[2]) << 16U) |
+         (static_cast<std::uint32_t>(bytes[3]) << 24U);
+}
+
+auto read_pcm16_mono_wav(const char *path) -> std::vector<std::int16_t> {
+  std::ifstream input{path, std::ios::binary};
+  std::array<char, 4> id{};
+  input.read(id.data(), id.size());
+  if (!input || std::string_view{id.data(), id.size()} != "RIFF")
+    throw std::runtime_error{"ambient source is not RIFF WAV"};
+  (void)read_little_u32(input);
+  input.read(id.data(), id.size());
+  if (!input || std::string_view{id.data(), id.size()} != "WAVE")
+    throw std::runtime_error{"ambient source is not WAVE"};
+
+  bool format_found{};
+  std::vector<std::int16_t> samples;
+  while (input.read(id.data(), id.size())) {
+    const auto chunk_size = read_little_u32(input);
+    if (chunk_size > kMaximumAmbientSamples * sizeof(std::int16_t))
+      throw std::runtime_error{"ambient WAV chunk exceeds budget"};
+    const std::string_view chunk{id.data(), id.size()};
+    if (chunk == "fmt ") {
+      if (chunk_size < 16U || read_little_u16(input) != 1U ||
+          read_little_u16(input) != 1U || read_little_u32(input) != kSampleRate) {
+        throw std::runtime_error{"ambient WAV must be 48 kHz mono PCM"};
+      }
+      (void)read_little_u32(input);
+      (void)read_little_u16(input);
+      if (read_little_u16(input) != 16U)
+        throw std::runtime_error{"ambient WAV must be PCM16"};
+      input.ignore(static_cast<std::streamsize>(chunk_size - 16U));
+      format_found = true;
+    } else if (chunk == "data") {
+      if (!format_found || chunk_size == 0U || (chunk_size & 1U) != 0U)
+        throw std::runtime_error{"invalid ambient WAV data"};
+      samples.resize(chunk_size / sizeof(std::int16_t));
+      input.read(reinterpret_cast<char *>(samples.data()), chunk_size);
+      if (!input)
+        throw std::runtime_error{"truncated ambient WAV samples"};
+    } else {
+      input.ignore(static_cast<std::streamsize>(chunk_size));
+    }
+    if ((chunk_size & 1U) != 0U)
+      input.ignore(1);
+  }
+  if (samples.empty() || samples.size() > kMaximumAmbientSamples)
+    throw std::runtime_error{"ambient WAV sample count exceeds budget"};
+  return samples;
+}
 
 auto make_periodic_wave(std::span<const double> harmonics, double amplitude)
     -> std::vector<std::int16_t> {
@@ -142,11 +211,21 @@ auto finish_track(std::vector<std::uint8_t> &track) -> void {
   append_meta(track, 0, 0x2FU, {});
 }
 
-auto make_ambient_track() -> std::vector<std::uint8_t> {
+auto make_ambient_track(bool production) -> std::vector<std::uint8_t> {
   auto track = begin_track("ambient", 0, 0, true);
   constexpr std::uint32_t kQuarter{480U};
   constexpr std::uint32_t kMeasure{4U * kQuarter};
   constexpr std::array<std::uint8_t, 4> kProgression{50, 46, 53, 48};
+  if (production) {
+    append_variable(track, 0);
+    track.insert(track.end(), {0x90U, 50U, 127U});
+    append_text_meta(track, 7U * kMeasure, 0x06U, "phrase-b");
+    append_variable(track, 7U * kMeasure);
+    track.insert(track.end(), {0x80U, 50U, 0U});
+    append_text_meta(track, 0, 0x06U, "loop-end");
+    finish_track(track);
+    return track;
+  }
   for (unsigned measure = 0; measure < 8; ++measure) {
     append_note(track, 0, 0, kProgression[measure % kProgression.size()],
                 kMeasure, 68);
@@ -161,7 +240,7 @@ auto make_ambient_track() -> std::vector<std::uint8_t> {
   return track;
 }
 
-auto make_pulse_track() -> std::vector<std::uint8_t> {
+auto make_pulse_track(bool production) -> std::vector<std::uint8_t> {
   auto track = begin_track("pulse", 1, 1, false);
   constexpr std::uint32_t kQuarter{480U};
   constexpr std::array<std::array<std::uint8_t, 4>, 4> kArpeggios{{
@@ -170,7 +249,8 @@ auto make_pulse_track() -> std::vector<std::uint8_t> {
       {65, 69, 72, 69},
       {60, 64, 67, 64},
   }};
-  for (unsigned measure = 0; measure < 8; ++measure) {
+  const unsigned measures = production ? 14U : 8U;
+  for (unsigned measure = 0; measure < measures; ++measure) {
     for (const auto note : kArpeggios[measure % kArpeggios.size()]) {
       append_note(track, 0, 1, note, kQuarter, 62);
     }
@@ -179,10 +259,11 @@ auto make_pulse_track() -> std::vector<std::uint8_t> {
   return track;
 }
 
-auto make_percussion_track() -> std::vector<std::uint8_t> {
+auto make_percussion_track(bool production) -> std::vector<std::uint8_t> {
   auto track = begin_track("percussion", 9, 2, false);
   constexpr std::uint32_t kQuarter{480U};
-  for (unsigned measure = 0; measure < 8; ++measure) {
+  const unsigned measures = production ? 14U : 8U;
+  for (unsigned measure = 0; measure < measures; ++measure) {
     append_note(track, measure == 0U ? 0U : kQuarter, 9, 36, kQuarter, 64);
     append_note(track, kQuarter, 9, 36, kQuarter, 52);
   }
@@ -190,12 +271,13 @@ auto make_percussion_track() -> std::vector<std::uint8_t> {
   return track;
 }
 
-auto make_tension_track() -> std::vector<std::uint8_t> {
+auto make_tension_track(bool production) -> std::vector<std::uint8_t> {
   auto track = begin_track("tension", 2, 3, false);
   constexpr std::uint32_t kQuarter{480U};
   constexpr std::uint32_t kMeasure{4U * kQuarter};
   constexpr std::array<std::uint8_t, 4> kCounterline{57, 53, 60, 55};
-  for (unsigned measure = 0; measure < 8; ++measure) {
+  const unsigned measures = production ? 14U : 8U;
+  for (unsigned measure = 0; measure < measures; ++measure) {
     append_note(track, 0, 2, kCounterline[measure % kCounterline.size()],
                 kMeasure, 54);
   }
@@ -203,12 +285,12 @@ auto make_tension_track() -> std::vector<std::uint8_t> {
   return track;
 }
 
-auto write_midi(const char *path) -> void {
+auto write_midi(const char *path, bool production) -> void {
   const std::vector<std::vector<std::uint8_t>> tracks{
-      make_ambient_track(),
-      make_pulse_track(),
-      make_percussion_track(),
-      make_tension_track(),
+      make_ambient_track(production),
+      make_pulse_track(production),
+      make_percussion_track(production),
+      make_tension_track(production),
   };
   std::vector<std::uint8_t> bytes;
   bytes.insert(bytes.end(), {'M', 'T', 'h', 'd'});
@@ -267,14 +349,18 @@ auto add_preset(sf2cute::SoundFont &soundfont, const std::string &name,
 } // namespace
 
 auto main(int argc, char **argv) -> int {
-  if (argc != 3) {
-    std::cerr << "usage: issue230_asset_builder OUTPUT.sf2 OUTPUT.mid\n";
+  if (argc != 3 && argc != 4) {
+    std::cerr << "usage: issue230_asset_builder OUTPUT.sf2 OUTPUT.mid "
+                 "[AMBIENT_PCM16_MONO.wav]\n";
     return 2;
   }
   try {
     sf2cute::SoundFont soundfont;
     soundfont.set_sound_engine("TinySoundFont");
-    soundfont.set_bank_name("Apsis Drift issue 230 tonal prototype");
+    const bool production = argc == 4;
+    soundfont.set_bank_name(production
+                                ? "Apsis Drift First Light production bank"
+                                : "Apsis Drift issue 230 tonal prototype");
     constexpr std::array<double, 5> kAmbientHarmonics{1.0, 0.32, 0.13, 0.0,
                                                       0.04};
     constexpr std::array<double, 5> kPulseHarmonics{1.0, 0.18, 0.08, 0.03,
@@ -282,7 +368,9 @@ auto main(int argc, char **argv) -> int {
     constexpr std::array<double, 5> kTensionHarmonics{1.0, 0.0, 0.16, 0.0,
                                                       0.04};
     add_preset(soundfont, "ambient",
-               make_periodic_wave(kAmbientHarmonics, 0.42), 0, 43,
+               production ? read_pcm16_mono_wav(argv[3])
+                          : make_periodic_wave(kAmbientHarmonics, 0.42),
+               0, production ? 50 : 43,
                {.attack_timecents = -4'372,
                 .decay_timecents = -1'200,
                 .sustain_centibels = 0,
@@ -316,7 +404,7 @@ auto main(int argc, char **argv) -> int {
     soundfont.Write(output);
     if (!output)
       throw std::runtime_error{"cannot write SoundFont output"};
-    write_midi(argv[2]);
+    write_midi(argv[2], production);
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;
