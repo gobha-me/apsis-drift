@@ -63,8 +63,8 @@ namespace {
   return true;
 }
 
-[[nodiscard]] auto post_onboarding_idle_is_stable(
-    const SaveDocument& completed) -> bool {
+[[nodiscard]] auto post_onboarding_idle_is_stable(const SaveDocument& completed)
+    -> bool {
   if (!completed.state.intersystem_contract) return false;
   auto idle = completed;
   const auto onboarding = idle.state.onboarding;
@@ -100,15 +100,13 @@ namespace {
          document.state.origin_system_world_deltas.size();
 }
 
-}  // namespace
+} // namespace
 
-auto run_onboarding_acceptance(
-    RenderConfiguration configuration,
-    const std::filesystem::path& checkpoint_path)
+auto run_onboarding_acceptance(RenderConfiguration configuration,
+                               const std::filesystem::path& checkpoint_path)
     -> std::expected<OnboardingAcceptanceResult, OnboardingAcceptanceError> {
   if (!validate_viewport(configuration.viewport) || checkpoint_path.empty()) {
-    return std::unexpected{
-        OnboardingAcceptanceError::invalid_configuration};
+    return std::unexpected{OnboardingAcceptanceError::invalid_configuration};
   }
   auto signal = run_signal_run_acceptance(configuration, checkpoint_path);
   if (!signal) {
@@ -124,8 +122,7 @@ auto run_onboarding_acceptance(
   std::vector<termforge::Pixel> canonical_frame;
 
   for (const auto& scenario : signal->completed_scenarios) {
-    if (scenario.measurement.rule_profile !=
-        IntersystemRuleProfile::assisted) {
+    if (scenario.measurement.rule_profile != IntersystemRuleProfile::assisted) {
       continue;
     }
     const auto seed = scenario.returned_save.recipe.universe_seed;
@@ -136,16 +133,14 @@ auto run_onboarding_acceptance(
       std::fprintf(stderr, "onboarding seed %llu contract two failed (%u)\n",
                    static_cast<unsigned long long>(seed.value),
                    static_cast<unsigned>(origin.error()));
-      return std::unexpected{
-          OnboardingAcceptanceError::origin_system_failure};
+      return std::unexpected{OnboardingAcceptanceError::origin_system_failure};
     }
     const bool canonical = seed == Seed{kSignalRunAcceptanceSeed};
     auto intersystem = run_intersystem_contract_acceptance(
         origin->returned_save, configuration.viewport.width,
         configuration.viewport.height, canonical);
     if (!intersystem) {
-      std::fprintf(stderr,
-                   "onboarding seed %llu contract three failed (%u)\n",
+      std::fprintf(stderr, "onboarding seed %llu contract three failed (%u)\n",
                    static_cast<unsigned long long>(seed.value),
                    static_cast<unsigned>(intersystem.error()));
       return std::unexpected{OnboardingAcceptanceError::intersystem_failure};
@@ -164,8 +159,7 @@ auto run_onboarding_acceptance(
         resolve_onboarding_access(skipped.state.onboarding);
     const auto expected_origin_contract = initial_origin_system_contract(seed);
     if (!guided_checksum || !skipped_checksum) {
-      return std::unexpected{
-          OnboardingAcceptanceError::persistence_failure};
+      return std::unexpected{OnboardingAcceptanceError::persistence_failure};
     }
     const bool identities_match =
         completed.recipe == skipped.recipe &&
@@ -209,15 +203,13 @@ auto run_onboarding_acceptance(
         .skipped_history_empty = true,
         .post_onboarding_idle_stable = true,
     });
-    report.contract_three_simulation_ms +=
-        intersystem->report.simulation_ms;
+    report.contract_three_simulation_ms += intersystem->report.simulation_ms;
     report.contract_three_application_render_ms +=
         intersystem->report.application_render_ms;
     if (canonical) {
       report.pilot_recovery_checksum =
           intersystem->report.wrong_side_recovery_checksum;
-      report.pilot_recovery_verified =
-          report.pilot_recovery_checksum != 0U;
+      report.pilot_recovery_verified = report.pilot_recovery_checksum != 0U;
       canonical_final = completed;
       canonical_frame = std::move(intersystem->final_frame);
     }
@@ -293,10 +285,10 @@ auto onboarding_acceptance_json(const OnboardingAcceptanceReport& report)
       report.free_flight_redock_verified ? "true" : "false",
       report.pause_resume_verified ? "true" : "false",
       report.pilot_recovery_verified ? "true" : "false",
-      report.pilot_recovery_checksum,
-      report.presentation_framebuffer_checksum, report.encoded_bytes,
-      report.encoded_frames, seeds, report.contract_three_simulation_ms,
+      report.pilot_recovery_checksum, report.presentation_framebuffer_checksum,
+      report.encoded_bytes, report.encoded_frames, seeds,
+      report.contract_three_simulation_ms,
       report.contract_three_application_render_ms);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

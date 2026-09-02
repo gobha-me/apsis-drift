@@ -44,8 +44,7 @@ struct Replay {
                                      TerrainTileCache& cache)
     -> std::expected<CanonicalSurface, PlanetfallAcceptanceError> {
   const auto fixed = planet_fixed_from_geodetic(
-      planet,
-      {kStartLatitudeRadians, kStartLongitudeRadians, 0.0});
+      planet, {kStartLatitudeRadians, kStartLongitudeRadians, 0.0});
   if (!fixed) {
     return std::unexpected{PlanetfallAcceptanceError::terrain_failure};
   }
@@ -61,8 +60,7 @@ struct Replay {
 [[nodiscard]] auto surface_environment(const PlanetDescriptor& planet,
                                        const PlanetaryFlightState& state,
                                        TerrainTileCache& cache)
-    -> std::expected<PlanetaryFlightEnvironment,
-                     PlanetfallAcceptanceError> {
+    -> std::expected<PlanetaryFlightEnvironment, PlanetfallAcceptanceError> {
   const auto fixed = planet_fixed_from_geodetic(
       planet, {state.pose.position.latitude_radians,
                state.pose.position.longitude_radians, 0.0});
@@ -74,8 +72,7 @@ struct Replay {
   if (!sample) {
     return std::unexpected{PlanetfallAcceptanceError::terrain_failure};
   }
-  return PlanetaryFlightEnvironment{
-      std::max(0.0, sample->elevation_metres)};
+  return PlanetaryFlightEnvironment{std::max(0.0, sample->elevation_metres)};
 }
 
 [[nodiscard]] auto replay_descent()
@@ -122,9 +119,8 @@ struct Replay {
     const auto environment =
         surface_environment(planet, replay.final_state, *cache);
     if (!environment) return std::unexpected{environment.error()};
-    if (!advance_planetary_flight(planet, *environment,
-                                  replay.final_state, commands,
-                                  kSimulationStep)) {
+    if (!advance_planetary_flight(planet, *environment, replay.final_state,
+                                  commands, kSimulationStep)) {
       return std::unexpected{PlanetfallAcceptanceError::flight_failure};
     }
 
@@ -133,8 +129,7 @@ struct Replay {
       replay.checkpoints[1] = replay.final_state;
       atmospheric_recorded = true;
     }
-    const auto mix =
-        planetary_presentation_mix(planet, replay.final_state);
+    const auto mix = planetary_presentation_mix(planet, replay.final_state);
     if (!mix) {
       return std::unexpected{PlanetfallAcceptanceError::presentation_failure};
     }
@@ -157,16 +152,14 @@ struct Replay {
 [[nodiscard]] auto percentile95(std::vector<double> values) -> double {
   std::ranges::sort(values);
   if (values.empty()) return 0.0;
-  const auto index = std::min(
-      values.size() - 1,
-      static_cast<std::size_t>(
-          std::ceil(static_cast<double>(values.size()) * 0.95)) -
-          1);
+  const auto index = std::min(values.size() - 1,
+                              static_cast<std::size_t>(std::ceil(
+                                  static_cast<double>(values.size()) * 0.95)) -
+                                  1);
   return values[index];
 }
 
-[[nodiscard]] auto cube_face_name(CubeFace face) noexcept
-    -> std::string_view {
+[[nodiscard]] auto cube_face_name(CubeFace face) noexcept -> std::string_view {
   switch (face) {
     case CubeFace::positive_x: return "+x";
     case CubeFace::negative_x: return "-x";
@@ -178,14 +171,12 @@ struct Replay {
   return "unknown";
 }
 
-}  // namespace
+} // namespace
 
 auto run_planetfall_acceptance(RenderConfiguration configuration)
-    -> std::expected<PlanetfallAcceptanceResult,
-                     PlanetfallAcceptanceError> {
+    -> std::expected<PlanetfallAcceptanceResult, PlanetfallAcceptanceError> {
   if (!validate_viewport(configuration.viewport)) {
-    return std::unexpected{
-        PlanetfallAcceptanceError::invalid_configuration};
+    return std::unexpected{PlanetfallAcceptanceError::invalid_configuration};
   }
   const auto replay = replay_descent();
   if (!replay) return std::unexpected{replay.error()};
@@ -220,11 +211,10 @@ auto run_planetfall_acceptance(RenderConfiguration configuration)
     PlanetaryRenderStats last_stats;
     for (std::size_t frame_index = 0;
          frame_index < kPlanetfallAcceptanceFramesPerStage; ++frame_index) {
-      const auto rendered = renderer.render(
-          replay->planet, state, {.pitch_radians = pitch}, frame);
+      const auto rendered = renderer.render(replay->planet, state,
+                                            {.pitch_radians = pitch}, frame);
       if (!rendered) {
-        return std::unexpected{
-            PlanetfallAcceptanceError::presentation_failure};
+        return std::unexpected{PlanetfallAcceptanceError::presentation_failure};
       }
       last_stats = *rendered;
       orbital_total += rendered->orbital_render_ms;
@@ -284,17 +274,15 @@ auto planetfall_acceptance_json(const PlanetfallAcceptanceReport& report)
         "    }}{}\n",
         planetary_presentation_mode_name(stage.presentation_mode),
         flight_regime_name(stage.flight_regime), stage.tick,
-        stage.position.latitude_radians,
-        stage.position.longitude_radians,
+        stage.position.latitude_radians, stage.position.longitude_radians,
         stage.position.altitude_metres, stage.clearance_metres,
         stage.flight_checksum, stage.framebuffer_checksum,
         cube_face_name(stage.surface_anchor.tile.face),
         stage.surface_anchor.tile.lod, stage.surface_anchor.tile.x,
         stage.surface_anchor.tile.y, stage.orbital_tiles_touched,
         stage.local_tiles_touched, stage.orbital_render_avg_ms,
-        stage.local_render_avg_ms, stage.composite_avg_ms,
-        stage.total_avg_ms, stage.total_p95_ms,
-        index + 1 == report.stages.size() ? "" : ",");
+        stage.local_render_avg_ms, stage.composite_avg_ms, stage.total_avg_ms,
+        stage.total_p95_ms, index + 1 == report.stages.size() ? "" : ",");
   }
 
   return std::format(
@@ -339,4 +327,4 @@ auto planetfall_acceptance_json(const PlanetfallAcceptanceReport& report)
       kPlanetfallAcceptanceFramesPerStage, stages);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

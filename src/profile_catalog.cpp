@@ -39,8 +39,7 @@ using Json = nlohmann::ordered_json;
 
 [[nodiscard]] auto system_detail(std::string_view action, int error)
     -> std::string {
-  return std::format("{}: {}", action,
-                     std::system_category().message(error));
+  return std::format("{}: {}", action, std::system_category().message(error));
 }
 
 class FileDescriptor {
@@ -70,8 +69,7 @@ class FileDescriptor {
   int m_value{-1};
 };
 
-[[nodiscard]] auto parse_canonical_u64(const Json& value,
-                                       bool positive = false)
+[[nodiscard]] auto parse_canonical_u64(const Json& value, bool positive = false)
     -> std::optional<std::uint64_t> {
   if (!value.is_string()) return std::nullopt;
   const auto& text = value.get_ref<const std::string&>();
@@ -98,8 +96,7 @@ class FileDescriptor {
   }
   const auto digits = filename.substr(prefix.size(), 16U);
   if (!std::ranges::all_of(digits, [](char value) {
-        return (value >= '0' && value <= '9') ||
-               (value >= 'a' && value <= 'f');
+        return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
       })) {
     return std::nullopt;
   }
@@ -123,12 +120,12 @@ class FileDescriptor {
       ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW)};
   if (!descriptor.valid()) {
     const int error = errno;
-    return std::unexpected{failure(
-        error == ENOENT ? ProfileCatalogErrorCode::stale_entry
-                        : ProfileCatalogErrorCode::storage_unavailable,
-        path, system_detail("cannot open profile", error))};
+    return std::unexpected{
+        failure(error == ENOENT ? ProfileCatalogErrorCode::stale_entry
+                                : ProfileCatalogErrorCode::storage_unavailable,
+                path, system_detail("cannot open profile", error))};
   }
-  struct stat status {};
+  struct stat status{};
   if (::fstat(descriptor.get(), &status) < 0 || !S_ISREG(status.st_mode)) {
     return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile,
                                    path, "profile is not a regular file")};
@@ -149,13 +146,14 @@ class FileDescriptor {
     if (count == 0) break;
     if (errno == EINTR) continue;
     const int error = errno;
-    return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
-                                   path,
-                                   system_detail("cannot read profile", error))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::storage_unavailable, path,
+                system_detail("cannot read profile", error))};
   }
   if (contents.size() > kMaximumSaveDocumentBytes) {
     return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile,
-                                   path, "profile exceeds the save byte bound")};
+                                   path,
+                                   "profile exceeds the save byte bound")};
   }
   return contents;
 }
@@ -293,8 +291,8 @@ class FileDescriptor {
   try {
     root = Json::parse(contents);
   } catch (const nlohmann::json::exception& error) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile, {},
-                                   error.what())};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::invalid_profile, {}, error.what())};
   }
   const auto profile_it = root.find("profile");
   if (profile_it == root.end() || !profile_it->is_object() ||
@@ -344,12 +342,13 @@ class FileDescriptor {
       expected->onboarding_state != *onboarding ||
       expected->onboarding_chapter != *chapter ||
       expected->location != *location || expected->tick != *tick) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile, {},
-                                   "profile summary does not match save state")};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::invalid_profile, {},
+                "profile summary does not match save state")};
   }
   auto result = *expected;
-  if (const auto app = root.find("application_version"); app != root.end() &&
-      app->is_string()) {
+  if (const auto app = root.find("application_version");
+      app != root.end() && app->is_string()) {
     result.application_version = app->get<std::string>();
   }
   return result;
@@ -367,8 +366,8 @@ class FileDescriptor {
   try {
     root = Json::parse(*encoded);
   } catch (const nlohmann::json::exception& error) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile, {},
-                                   error.what())};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::invalid_profile, {}, error.what())};
   }
   root["profile"] = Json{
       {"id", std::to_string(metadata.id.value)},
@@ -392,50 +391,47 @@ class FileDescriptor {
 
 [[nodiscard]] auto ensure_directory(const std::filesystem::path& directory)
     -> std::expected<void, ProfileCatalogError> {
-  if (directory.empty() || directory.string().size() > kMaximumProfilePathBytes ||
+  if (directory.empty() ||
+      directory.string().size() > kMaximumProfilePathBytes ||
       !directory.is_absolute() || directory == directory.root_path()) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_path,
-                                   directory,
-                                   "profile directory must be a bounded absolute path")};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::invalid_path, directory,
+                "profile directory must be a bounded absolute path")};
   }
   FileDescriptor current{
       ::open(directory.root_path().c_str(),
              O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)};
   if (!current.valid()) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
-                                   directory,
-                                   system_detail("cannot open profile root",
-                                                 errno))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::storage_unavailable, directory,
+                system_detail("cannot open profile root", errno))};
   }
   for (const auto& component : directory.relative_path()) {
     if (component.empty() || component == "." || component == "..") {
-      return std::unexpected{failure(ProfileCatalogErrorCode::invalid_path,
-                                     directory,
-                                     "profile directory contains an unsafe component")};
+      return std::unexpected{
+          failure(ProfileCatalogErrorCode::invalid_path, directory,
+                  "profile directory contains an unsafe component")};
     }
     if (::mkdirat(current.get(), component.c_str(), S_IRWXU) < 0 &&
         errno != EEXIST) {
-      return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
-                                     directory,
-                                     system_detail("cannot create profile directory",
-                                                   errno))};
+      return std::unexpected{
+          failure(ProfileCatalogErrorCode::storage_unavailable, directory,
+                  system_detail("cannot create profile directory", errno))};
     }
-    FileDescriptor next{::openat(
-        current.get(), component.c_str(),
-        O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)};
+    FileDescriptor next{
+        ::openat(current.get(), component.c_str(),
+                 O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)};
     if (!next.valid()) {
-      return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
-                                     directory,
-                                     system_detail("cannot open profile directory",
-                                                   errno))};
+      return std::unexpected{
+          failure(ProfileCatalogErrorCode::storage_unavailable, directory,
+                  system_detail("cannot open profile directory", errno))};
     }
     current = std::move(next);
   }
   if (::fchmod(current.get(), S_IRWXU) < 0) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
-                                   directory,
-                                   system_detail("cannot secure profile directory",
-                                                 errno))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::storage_unavailable, directory,
+                system_detail("cannot secure profile directory", errno))};
   }
   return {};
 }
@@ -449,16 +445,15 @@ class FileDescriptor {
     temporary = path.parent_path() /
                 std::format(".{}.tmp.{}.{}", path.filename().string(),
                             static_cast<long long>(::getpid()), attempt);
-    output = FileDescriptor{::open(temporary.c_str(),
-                                   O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC |
-                                       O_NOFOLLOW,
-                                   S_IRUSR | S_IWUSR)};
+    output = FileDescriptor{::open(
+        temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+        S_IRUSR | S_IWUSR)};
     if (!output.valid() && errno != EEXIST) break;
   }
   if (!output.valid()) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::write_failure, path,
-                                   system_detail("cannot create temporary profile",
-                                                 errno))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::write_failure, path,
+                system_detail("cannot create temporary profile", errno))};
   }
   std::size_t offset{};
   while (offset < bytes.size()) {
@@ -471,26 +466,27 @@ class FileDescriptor {
     if (count < 0 && errno == EINTR) continue;
     std::error_code ignored;
     std::filesystem::remove(temporary, ignored);
-    return std::unexpected{failure(ProfileCatalogErrorCode::write_failure, path,
-                                   system_detail("cannot write profile", errno))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::write_failure, path,
+                system_detail("cannot write profile", errno))};
   }
   if (::fsync(output.get()) < 0) {
     const int error = errno;
     output.reset();
     std::error_code ignored;
     std::filesystem::remove(temporary, ignored);
-    return std::unexpected{failure(ProfileCatalogErrorCode::write_failure, path,
-                                   system_detail("cannot synchronize profile",
-                                                 error))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::write_failure, path,
+                system_detail("cannot synchronize profile", error))};
   }
   output.reset();
   if (::link(temporary.c_str(), path.c_str()) < 0) {
     const int error = errno;
     std::error_code ignored;
     std::filesystem::remove(temporary, ignored);
-    return std::unexpected{failure(ProfileCatalogErrorCode::write_failure, path,
-                                   system_detail("cannot commit new profile",
-                                                 error))};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::write_failure, path,
+                system_detail("cannot commit new profile", error))};
   }
   std::error_code ignored;
   std::filesystem::remove(temporary, ignored);
@@ -503,7 +499,7 @@ class FileDescriptor {
   return {};
 }
 
-}  // namespace
+} // namespace
 
 auto profile_location_name(ProfileLocation location) noexcept
     -> std::string_view {
@@ -517,8 +513,7 @@ auto profile_location_name(ProfileLocation location) noexcept
     case ProfileLocation::target_system_flight: return "target_system_flight";
     case ProfileLocation::target_planet_flight: return "target_planet_flight";
     case ProfileLocation::return_jump_spooling: return "return_jump_spooling";
-    case ProfileLocation::return_jump_committed:
-      return "return_jump_committed";
+    case ProfileLocation::return_jump_committed: return "return_jump_committed";
     case ProfileLocation::origin_system_return: return "origin_system_return";
   }
   return "invalid";
@@ -541,15 +536,16 @@ auto resolve_profile_directory(std::optional<std::string> xdg_data_home,
       if (const char* value = std::getenv("HOME")) home = value;
     }
     if (!home || home->empty() || !std::filesystem::path{*home}.is_absolute()) {
-      return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
-                                     {},
-                                     "HOME does not identify an absolute data directory")};
+      return std::unexpected{
+          failure(ProfileCatalogErrorCode::storage_unavailable, {},
+                  "HOME does not identify an absolute data directory")};
     }
     base = std::filesystem::path{*home} / ".local" / "share";
   }
   auto result = base / "apsis-drift" / "profiles";
   if (result.string().size() > kMaximumProfilePathBytes) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_path, result,
+    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_path,
+                                   result,
                                    "profile directory exceeds the path bound")};
   }
   return result;
@@ -656,8 +652,10 @@ auto scan_profile_catalog(const std::filesystem::path& directory)
       break;
     }
   }
-  if (result.entries.empty()) result.diagnostic = "no local profiles yet";
-  else if (!result.continue_index) result.diagnostic = "no usable local profile";
+  if (result.entries.empty())
+    result.diagnostic = "no local profiles yet";
+  else if (!result.continue_index)
+    result.diagnostic = "no usable local profile";
   return result;
 }
 
@@ -727,8 +725,8 @@ auto create_catalog_profile(const std::filesystem::path& directory,
     }
   }
   ProfileId id{1};
-  while (ids.contains(id.value) && id.value !=
-                                      std::numeric_limits<std::uint64_t>::max()) {
+  while (ids.contains(id.value) &&
+         id.value != std::numeric_limits<std::uint64_t>::max()) {
     ++id.value;
   }
   if (id.value == 0 || ids.contains(id.value)) {
@@ -743,9 +741,9 @@ auto create_catalog_profile(const std::filesystem::path& directory,
   }
   const auto metadata = metadata_for(id, maximum_sequence + 1U, document);
   if (!metadata) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile,
-                                   directory,
-                                   "new career cannot produce profile metadata")};
+    return std::unexpected{
+        failure(ProfileCatalogErrorCode::invalid_profile, directory,
+                "new career cannot produce profile metadata")};
   }
   const auto encoded = encode_profile(*metadata, document);
   if (!encoded) return std::unexpected{encoded.error()};
@@ -762,4 +760,4 @@ auto profile_catalog_error_message(const ProfileCatalogError& error)
   return std::format("{}: {}", error.path.string(), error.detail);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

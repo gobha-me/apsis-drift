@@ -15,12 +15,12 @@
 
 #include "apsis_drift/celestial.hpp"
 #include "apsis_drift/coordinates.hpp"
-#include "apsis_drift/local_system.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
+#include "apsis_drift/local_system.hpp"
 #include "apsis_drift/planet.hpp"
 #include "apsis_drift/seed.hpp"
-#include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/system_flight.hpp"
+#include "apsis_drift/terrain_tiles.hpp"
 #include "apsis_drift/version.hpp"
 #include "apsis_drift/world_delta_journal.hpp"
 
@@ -34,8 +34,8 @@ using Json = nlohmann::ordered_json;
   return SaveSchemaError{code, std::move(path), std::move(detail)};
 }
 
-[[nodiscard]] auto valid_application_version(
-    std::string_view value) noexcept -> bool {
+[[nodiscard]] auto valid_application_version(std::string_view value) noexcept
+    -> bool {
   return !value.empty() &&
          value.size() <= kMaximumSaveApplicationVersionBytes &&
          std::ranges::none_of(value, [](unsigned char byte) {
@@ -99,18 +99,15 @@ template <typename Id>
     case SaveWorldDeltaKind::discovered:
     case SaveWorldDeltaKind::collected:
     case SaveWorldDeltaKind::completed:
-    case SaveWorldDeltaKind::removed:
-      return true;
+    case SaveWorldDeltaKind::removed: return true;
   }
   return false;
 }
 
 [[nodiscard]] auto location_name(OriginLocation value) -> std::string_view {
   switch (value) {
-    case OriginLocation::docked_at_origin:
-      return "docked_at_origin";
-    case OriginLocation::in_flight:
-      return "in_flight";
+    case OriginLocation::docked_at_origin: return "docked_at_origin";
+    case OriginLocation::in_flight: return "in_flight";
   }
   return "unknown";
 }
@@ -129,22 +126,17 @@ template <typename Id>
 
 [[nodiscard]] auto mode_name(FlightMode value) -> std::string_view {
   switch (value) {
-    case FlightMode::manual:
-      return "manual";
-    case FlightMode::autopilot:
-      return "autopilot";
+    case FlightMode::manual: return "manual";
+    case FlightMode::autopilot: return "autopilot";
   }
   return "unknown";
 }
 
 [[nodiscard]] auto regime_name(FlightRegime value) -> std::string_view {
   switch (value) {
-    case FlightRegime::orbital:
-      return "orbital";
-    case FlightRegime::atmospheric:
-      return "atmospheric";
-    case FlightRegime::terrain_flight:
-      return "terrain_flight";
+    case FlightRegime::orbital: return "orbital";
+    case FlightRegime::atmospheric: return "atmospheric";
+    case FlightRegime::terrain_flight: return "terrain_flight";
   }
   return "unknown";
 }
@@ -152,14 +144,10 @@ template <typename Id>
 [[nodiscard]] auto delta_kind_name(SaveWorldDeltaKind value)
     -> std::string_view {
   switch (value) {
-    case SaveWorldDeltaKind::discovered:
-      return "discovered";
-    case SaveWorldDeltaKind::collected:
-      return "collected";
-    case SaveWorldDeltaKind::completed:
-      return "completed";
-    case SaveWorldDeltaKind::removed:
-      return "removed";
+    case SaveWorldDeltaKind::discovered: return "discovered";
+    case SaveWorldDeltaKind::collected: return "collected";
+    case SaveWorldDeltaKind::completed: return "completed";
+    case SaveWorldDeltaKind::removed: return "removed";
   }
   return "unknown";
 }
@@ -220,8 +208,7 @@ template <typename Id>
 [[nodiscard]] auto travel_phase_name(IntersystemTravelPhase value)
     -> std::string_view {
   switch (value) {
-    case IntersystemTravelPhase::docked_at_origin:
-      return "docked_at_origin";
+    case IntersystemTravelPhase::docked_at_origin: return "docked_at_origin";
     case IntersystemTravelPhase::origin_system_flight:
       return "origin_system_flight";
     case IntersystemTravelPhase::outbound_jump_spooling:
@@ -254,8 +241,7 @@ template <typename Id>
     case OriginSystemContractPhase::target_planet: return "target_planet";
     case OriginSystemContractPhase::objective_complete:
       return "objective_complete";
-    case OriginSystemContractPhase::return_transfer:
-      return "return_transfer";
+    case OriginSystemContractPhase::return_transfer: return "return_transfer";
     case OriginSystemContractPhase::station_rendezvous:
       return "station_rendezvous";
     case OriginSystemContractPhase::returned: return "returned";
@@ -400,8 +386,8 @@ template <typename Id>
   }
   if ((*value)->is_number_unsigned()) {
     const auto number = (*value)->get<std::uint64_t>();
-    if (number > static_cast<std::uint64_t>(
-                     std::numeric_limits<std::int32_t>::max())) {
+    if (number >
+        static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())) {
       return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
                                      std::format("{}.{}", path, name),
                                      "integer exceeds int32 range")};
@@ -583,20 +569,19 @@ template <typename Id>
   } else if (*state_name == "completed") {
     state = OnboardingState::completed;
   } else {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_value, "$.state.onboarding.state",
-        "unknown onboarding state")};
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                   "$.state.onboarding.state",
+                                   "unknown onboarding state")};
   }
 
-  auto chapter_json = require_field(
-      object, "chapter", "$.state.onboarding");
+  auto chapter_json = require_field(object, "chapter", "$.state.onboarding");
   if (!chapter_json) return std::unexpected{chapter_json.error()};
   std::optional<OnboardingChapter> chapter;
   if (!(**chapter_json).is_null()) {
     if (!(**chapter_json).is_string()) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_type, "$.state.onboarding.chapter",
-          "expected a string or null")};
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
+                                     "$.state.onboarding.chapter",
+                                     "expected a string or null")};
     }
     const auto& name = (**chapter_json).get_ref<const std::string&>();
     if (name == "contract_one") {
@@ -606,23 +591,22 @@ template <typename Id>
     } else if (name == "contract_three") {
       chapter = OnboardingChapter::contract_three;
     } else {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_value, "$.state.onboarding.chapter",
-          "unknown onboarding chapter")};
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                     "$.state.onboarding.chapter",
+                                     "unknown onboarding chapter")};
     }
   }
 
   OnboardingProgress progress{.state = state, .chapter = chapter};
   if (!validate_onboarding_progress(progress)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
-        "onboarding state and active chapter are inconsistent")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
+                "onboarding state and active chapter are inconsistent")};
   }
   return progress;
 }
 
-[[nodiscard]] auto read_mission_phase(const Json& parent,
-                                      std::string_view name,
+[[nodiscard]] auto read_mission_phase(const Json& parent, std::string_view name,
                                       std::string path)
     -> std::expected<IntersystemMissionPhase, SaveSchemaError> {
   auto value = read_string(parent, name, path);
@@ -640,8 +624,7 @@ template <typename Id>
                                  "unknown intersystem mission phase")};
 }
 
-[[nodiscard]] auto read_rule_profile(const Json& parent,
-                                     std::string_view name,
+[[nodiscard]] auto read_rule_profile(const Json& parent, std::string_view name,
                                      std::string path)
     -> std::expected<IntersystemRuleProfile, SaveSchemaError> {
   auto value = read_string(parent, name, path);
@@ -654,8 +637,7 @@ template <typename Id>
 }
 
 [[nodiscard]] auto read_arrival_quality(const Json& parent,
-                                        std::string_view name,
-                                        std::string path)
+                                        std::string_view name, std::string path)
     -> std::expected<IntersystemArrivalQuality, SaveSchemaError> {
   auto value = read_string(parent, name, path);
   if (!value) return std::unexpected{value.error()};
@@ -667,8 +649,7 @@ template <typename Id>
                                  "unknown intersystem arrival quality")};
 }
 
-[[nodiscard]] auto read_travel_phase(const Json& parent,
-                                     std::string_view name,
+[[nodiscard]] auto read_travel_phase(const Json& parent, std::string_view name,
                                      std::string path)
     -> std::expected<IntersystemTravelPhase, SaveSchemaError> {
   auto value = read_string(parent, name, path);
@@ -705,8 +686,9 @@ template <typename Id>
                                  "unknown intersystem travel phase")};
 }
 
-[[nodiscard]] auto read_origin_system_contract_phase(
-    const Json& parent, std::string_view name, std::string path)
+[[nodiscard]] auto read_origin_system_contract_phase(const Json& parent,
+                                                     std::string_view name,
+                                                     std::string path)
     -> std::expected<OriginSystemContractPhase, SaveSchemaError> {
   auto value = read_string(parent, name, path);
   if (!value) return std::unexpected{value.error()};
@@ -732,15 +714,14 @@ template <typename Id>
   }
   if (*value == "returned") return OriginSystemContractPhase::returned;
   if (*value == "turned_in") return OriginSystemContractPhase::turned_in;
-  return std::unexpected{failure(
-      SaveSchemaErrorCode::invalid_value, std::format("{}.{}", path, name),
-      "unknown origin-system contract phase")};
+  return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
+                                 std::format("{}.{}", path, name),
+                                 "unknown origin-system contract phase")};
 }
 
 template <typename Id>
 [[nodiscard]] auto read_optional_id(const Json& parent, std::string_view name,
-                                    std::string path,
-                                    std::string_view prefix)
+                                    std::string path, std::string_view prefix)
     -> std::expected<std::optional<Id>, SaveSchemaError> {
   auto field = require_field(parent, name, path);
   if (!field) return std::unexpected{field.error()};
@@ -756,8 +737,7 @@ template <typename Id>
   return std::optional<Id>{*parsed};
 }
 
-[[nodiscard]] auto read_optional_tick(const Json& parent,
-                                      std::string_view name,
+[[nodiscard]] auto read_optional_tick(const Json& parent, std::string_view name,
                                       std::string path)
     -> std::expected<std::optional<SimulationTick>, SaveSchemaError> {
   auto field = require_field(parent, name, path);
@@ -768,8 +748,8 @@ template <typename Id>
                                    std::format("{}.{}", path, name),
                                    "expected a tick string or null")};
   }
-  auto parsed = parse_u64((*field)->get<std::string>(),
-                          std::format("{}.{}", path, name));
+  auto parsed =
+      parse_u64((*field)->get<std::string>(), std::format("{}.{}", path, name));
   if (!parsed) return std::unexpected{parsed.error()};
   return std::optional<SimulationTick>{*parsed};
 }
@@ -794,14 +774,12 @@ template <typename Id>
   if (state.jump_alignment) {
     const auto& alignment = *state.jump_alignment;
     jump_alignment = Json{
-        {"heading_error_millidegrees",
-         alignment.heading_error_millidegrees},
-        {"velocity_error_basis_points",
-         alignment.velocity_error_basis_points},
+        {"heading_error_millidegrees", alignment.heading_error_millidegrees},
+        {"velocity_error_basis_points", alignment.velocity_error_basis_points},
         {"controls", Json{{"forward", alignment.controls.forward},
-                           {"backward", alignment.controls.backward},
-                           {"turn_left", alignment.controls.turn_left},
-                           {"turn_right", alignment.controls.turn_right}}},
+                          {"backward", alignment.controls.backward},
+                          {"turn_left", alignment.controls.turn_left},
+                          {"turn_right", alignment.controls.turn_right}}},
     };
   }
   Json arrival_solution = nullptr;
@@ -822,14 +800,12 @@ template <typename Id>
       };
     }
     arrival_solution = Json{
-        {"destination_system_id",
-         encoded_id("system-", arrival.destination)},
+        {"destination_system_id", encoded_id("system-", arrival.destination)},
         {"reference_planet_id", std::move(reference_planet)},
         {"arrival_tick", decimal(arrival.arrival_tick)},
-        {"position_metres",
-         Json{{"x", decimal(arrival.position.x)},
-              {"y", decimal(arrival.position.y)},
-              {"z", decimal(arrival.position.z)}}},
+        {"position_metres", Json{{"x", decimal(arrival.position.x)},
+                                 {"y", decimal(arrival.position.y)},
+                                 {"z", decimal(arrival.position.z)}}},
         {"velocity_metres_per_second",
          Json{{"x", decimal(arrival.velocity.x)},
               {"y", decimal(arrival.velocity.y)},
@@ -839,15 +815,14 @@ template <typename Id>
   }
   return Json{
       {"identities",
-       Json{{"origin_system_id", encoded_id("system-", ids.origin_system)},
-            {"origin_station_id",
-             encoded_id("station-", ids.origin_station)},
-            {"target_system_id", encoded_id("system-", ids.target_system)},
-            {"target_star_id", encoded_id("star-", ids.target_star)},
-            {"target_planet_id", encoded_id("planet-", ids.target_planet)},
-            {"target_objective_id",
-             encoded_id("signal-", ids.target_objective)},
-            {"mission_id", encoded_id("mission-", ids.mission)}}},
+       Json{
+           {"origin_system_id", encoded_id("system-", ids.origin_system)},
+           {"origin_station_id", encoded_id("station-", ids.origin_station)},
+           {"target_system_id", encoded_id("system-", ids.target_system)},
+           {"target_star_id", encoded_id("star-", ids.target_star)},
+           {"target_planet_id", encoded_id("planet-", ids.target_planet)},
+           {"target_objective_id", encoded_id("signal-", ids.target_objective)},
+           {"mission_id", encoded_id("mission-", ids.mission)}}},
       {"universe_tick", decimal(state.universe_tick)},
       {"mission_phase", mission_phase_name(state.mission_phase)},
       {"travel_phase", travel_phase_name(state.travel_phase)},
@@ -897,23 +872,21 @@ template <typename Id>
 
   std::optional<IntersystemJumpAlignmentState> jump_alignment;
   {
-    auto alignment_field = require_field(json, "jump_alignment",
-                                         std::string{path});
+    auto alignment_field =
+        require_field(json, "jump_alignment", std::string{path});
     if (!alignment_field) return std::unexpected{alignment_field.error()};
     if (!(**alignment_field).is_null()) {
       if (!(**alignment_field).is_object()) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_type,
-            "$.state.intersystem_contract.jump_alignment",
-            "expected an object or null")};
+        return std::unexpected{
+            failure(SaveSchemaErrorCode::invalid_type,
+                    "$.state.intersystem_contract.jump_alignment",
+                    "expected an object or null")};
       }
       constexpr std::string_view alignment_path{
           "$.state.intersystem_contract.jump_alignment"};
-      auto heading = read_i32(**alignment_field,
-                              "heading_error_millidegrees",
+      auto heading = read_i32(**alignment_field, "heading_error_millidegrees",
                               std::string{alignment_path});
-      auto velocity = read_i32(**alignment_field,
-                               "velocity_error_basis_points",
+      auto velocity = read_i32(**alignment_field, "velocity_error_basis_points",
                                std::string{alignment_path});
       auto controls = read_object(**alignment_field, "controls",
                                   std::string{alignment_path});
@@ -945,29 +918,28 @@ template <typename Id>
 
   std::optional<IntersystemArrivalSolution> arrival_solution;
   {
-    auto arrival_field = require_field(json, "arrival_solution",
-                                       std::string{path});
+    auto arrival_field =
+        require_field(json, "arrival_solution", std::string{path});
     if (!arrival_field) return std::unexpected{arrival_field.error()};
     if (!(**arrival_field).is_null()) {
       if (!(**arrival_field).is_object()) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_type,
-            "$.state.intersystem_contract.arrival_solution",
-            "expected an object or null")};
+        return std::unexpected{
+            failure(SaveSchemaErrorCode::invalid_type,
+                    "$.state.intersystem_contract.arrival_solution",
+                    "expected an object or null")};
       }
       const auto& arrival = **arrival_field;
       constexpr std::string_view arrival_path{
           "$.state.intersystem_contract.arrival_solution"};
-      auto arrival_destination = read_id<SystemId>(
-          arrival, "destination_system_id", std::string{arrival_path},
-          "system-");
+      auto arrival_destination =
+          read_id<SystemId>(arrival, "destination_system_id",
+                            std::string{arrival_path}, "system-");
       auto reference_planet = read_optional_id<PlanetId>(
-          arrival, "reference_planet_id", std::string{arrival_path},
-          "planet-");
+          arrival, "reference_planet_id", std::string{arrival_path}, "planet-");
       auto arrival_tick =
           read_u64(arrival, "arrival_tick", std::string{arrival_path});
-      auto position = read_object(arrival, "position_metres",
-                                  std::string{arrival_path});
+      auto position =
+          read_object(arrival, "position_metres", std::string{arrival_path});
       auto velocity = read_object(arrival, "velocity_metres_per_second",
                                   std::string{arrival_path});
       if (!arrival_destination) {
@@ -1002,8 +974,8 @@ template <typename Id>
       if (!vz) return std::unexpected{vz.error()};
       std::optional<IntersystemArrivalAssessment> assessment;
       {
-        auto assessment_field = require_field(
-            arrival, "assessment", std::string{arrival_path});
+        auto assessment_field =
+            require_field(arrival, "assessment", std::string{arrival_path});
         if (!assessment_field) {
           return std::unexpected{assessment_field.error()};
         }
@@ -1016,12 +988,12 @@ template <typename Id>
           }
           constexpr std::string_view assessment_path{
               "$.state.intersystem_contract.arrival_solution.assessment"};
-          auto heading = read_i32(**assessment_field,
-                                  "heading_error_millidegrees",
-                                  std::string{assessment_path});
-          auto velocity_error = read_i32(**assessment_field,
-                                         "velocity_error_basis_points",
-                                         std::string{assessment_path});
+          auto heading =
+              read_i32(**assessment_field, "heading_error_millidegrees",
+                       std::string{assessment_path});
+          auto velocity_error =
+              read_i32(**assessment_field, "velocity_error_basis_points",
+                       std::string{assessment_path});
           auto quality = read_arrival_quality(**assessment_field, "quality",
                                               std::string{assessment_path});
           if (!heading) return std::unexpected{heading.error()};
@@ -1048,27 +1020,27 @@ template <typename Id>
   }
 
   const auto expected = generate_first_intersystem_identities(universe_seed);
-  auto origin_system = read_id<SystemId>(**identities, "origin_system_id",
-                                         "$.state.intersystem_contract.identities",
-                                         "system-");
+  auto origin_system =
+      read_id<SystemId>(**identities, "origin_system_id",
+                        "$.state.intersystem_contract.identities", "system-");
   auto origin_station = read_id<OriginStationId>(
       **identities, "origin_station_id",
       "$.state.intersystem_contract.identities", "station-");
-  auto target_system = read_id<SystemId>(**identities, "target_system_id",
-                                         "$.state.intersystem_contract.identities",
-                                         "system-");
-  auto target_star = read_id<StarId>(**identities, "target_star_id",
-                                     "$.state.intersystem_contract.identities",
-                                     "star-");
-  auto target_planet = read_id<PlanetId>(
-      **identities, "target_planet_id",
-      "$.state.intersystem_contract.identities", "planet-");
+  auto target_system =
+      read_id<SystemId>(**identities, "target_system_id",
+                        "$.state.intersystem_contract.identities", "system-");
+  auto target_star =
+      read_id<StarId>(**identities, "target_star_id",
+                      "$.state.intersystem_contract.identities", "star-");
+  auto target_planet =
+      read_id<PlanetId>(**identities, "target_planet_id",
+                        "$.state.intersystem_contract.identities", "planet-");
   auto target_objective = read_id<SurfaceSignalId>(
       **identities, "target_objective_id",
       "$.state.intersystem_contract.identities", "signal-");
-  auto mission = read_id<MissionId>(**identities, "mission_id",
-                                    "$.state.intersystem_contract.identities",
-                                    "mission-");
+  auto mission =
+      read_id<MissionId>(**identities, "mission_id",
+                         "$.state.intersystem_contract.identities", "mission-");
   if (!origin_system) return std::unexpected{origin_system.error()};
   if (!origin_station) return std::unexpected{origin_station.error()};
   if (!target_system) return std::unexpected{target_system.error()};
@@ -1083,10 +1055,10 @@ template <typename Id>
       *target_planet != expected.target_planet ||
       *target_objective != expected.target_objective ||
       *mission != expected.mission) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::identity_mismatch,
-        "$.state.intersystem_contract.identities",
-        "stored first-contract identities do not match deterministic regeneration")};
+    return std::unexpected{failure(SaveSchemaErrorCode::identity_mismatch,
+                                   "$.state.intersystem_contract.identities",
+                                   "stored first-contract identities do not "
+                                   "match deterministic regeneration")};
   }
   IntersystemContractState state{
       .identities = expected,
@@ -1102,15 +1074,14 @@ template <typename Id>
       .arrival_solution = std::move(arrival_solution),
   };
   if (arrival_required(state.travel_phase) && !state.arrival_solution) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state,
-        "$.state.intersystem_contract.arrival_solution",
-        "current travel phase requires an immutable arrival solution")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state,
+                "$.state.intersystem_contract.arrival_solution",
+                "current travel phase requires an immutable arrival solution")};
   }
   if (!validate_intersystem_contract_state(state)) {
     return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state,
-        "$.state.intersystem_contract",
+        SaveSchemaErrorCode::invalid_state, "$.state.intersystem_contract",
         "intersystem contract violates its authoritative state machine")};
   }
   return state;
@@ -1126,8 +1097,7 @@ template <typename Id>
       {"station_id", encoded_id("station-", binding.station)},
       {"home_planet_id", encoded_id("planet-", binding.home_planet)},
       {"target_planet_id", encoded_id("planet-", binding.target_planet)},
-      {"target_objective_id",
-       encoded_id("signal-", binding.target_objective)},
+      {"target_objective_id", encoded_id("signal-", binding.target_objective)},
       {"target_ordinal", binding.target_ordinal},
       {"phase", origin_system_contract_phase_name(state.phase)},
   };
@@ -1146,17 +1116,17 @@ template <typename Id>
       read_id<MissionId>(json, "contract_id", std::string{path}, "mission-");
   auto system =
       read_id<SystemId>(json, "system_id", std::string{path}, "system-");
-  auto station = read_id<OriginStationId>(
-      json, "station_id", std::string{path}, "station-");
-  auto home = read_id<PlanetId>(json, "home_planet_id", std::string{path},
-                                "planet-");
-  auto target = read_id<PlanetId>(json, "target_planet_id", std::string{path},
-                                  "planet-");
-  auto objective = read_id<SurfaceSignalId>(
-      json, "target_objective_id", std::string{path}, "signal-");
+  auto station = read_id<OriginStationId>(json, "station_id", std::string{path},
+                                          "station-");
+  auto home =
+      read_id<PlanetId>(json, "home_planet_id", std::string{path}, "planet-");
+  auto target =
+      read_id<PlanetId>(json, "target_planet_id", std::string{path}, "planet-");
+  auto objective = read_id<SurfaceSignalId>(json, "target_objective_id",
+                                            std::string{path}, "signal-");
   auto ordinal = read_u32(json, "target_ordinal", std::string{path});
-  auto phase = read_origin_system_contract_phase(json, "phase",
-                                                 std::string{path});
+  auto phase =
+      read_origin_system_contract_phase(json, "phase", std::string{path});
   if (!seed) return std::unexpected{seed.error()};
   if (!contract) return std::unexpected{contract.error()};
   if (!system) return std::unexpected{system.error()};
@@ -1167,15 +1137,14 @@ template <typename Id>
   if (!ordinal) return std::unexpected{ordinal.error()};
   if (!phase) return std::unexpected{phase.error()};
   OriginSystemContractState state{
-      .binding =
-          {.mission_seed = Seed{*seed},
-           .contract = *contract,
-           .system = *system,
-           .station = *station,
-           .home_planet = *home,
-           .target_planet = *target,
-           .target_objective = *objective,
-           .target_ordinal = *ordinal},
+      .binding = {.mission_seed = Seed{*seed},
+                  .contract = *contract,
+                  .system = *system,
+                  .station = *station,
+                  .home_planet = *home,
+                  .target_planet = *target,
+                  .target_objective = *objective,
+                  .target_ordinal = *ordinal},
       .phase = *phase,
   };
   if (!validate_origin_system_contract(universe_seed, state)) {
@@ -1220,9 +1189,8 @@ template <typename Id>
                         {"fall", state.controls.fall}}},
       {"regime", regime_name(state.regime)},
       {"last_transition", std::move(transition)},
-      {"thermal",
-       Json{{"load_units", state.thermal.load_units},
-            {"abort_latched", state.thermal.abort_latched}}},
+      {"thermal", Json{{"load_units", state.thermal.load_units},
+                       {"abort_latched", state.thermal.abort_latched}}},
   };
 }
 
@@ -1340,20 +1308,18 @@ template <typename Id>
       {"tick", decimal(state.tick)},
       {"system_id", encoded_id("system-", state.system)},
       {"target_planet_id", encoded_id("planet-", state.target)},
-      {"position_metres",
-       Json{{"x", decimal(state.position.x)},
-            {"y", decimal(state.position.y)},
-            {"z", decimal(state.position.z)}}},
-      {"velocity_metres_per_second",
-       Json{{"x", decimal(state.velocity.x)},
-            {"y", decimal(state.velocity.y)},
-            {"z", decimal(state.velocity.z)}}},
+      {"position_metres", Json{{"x", decimal(state.position.x)},
+                               {"y", decimal(state.position.y)},
+                               {"z", decimal(state.position.z)}}},
+      {"velocity_metres_per_second", Json{{"x", decimal(state.velocity.x)},
+                                          {"y", decimal(state.velocity.y)},
+                                          {"z", decimal(state.velocity.z)}}},
       {"forward", Json{{"x", decimal(state.forward.x)},
-                        {"y", decimal(state.forward.y)},
-                        {"z", decimal(state.forward.z)}}},
+                       {"y", decimal(state.forward.y)},
+                       {"z", decimal(state.forward.z)}}},
       {"up", Json{{"x", decimal(state.up.x)},
-                   {"y", decimal(state.up.y)},
-                   {"z", decimal(state.up.z)}}},
+                  {"y", decimal(state.up.y)},
+                  {"z", decimal(state.up.z)}}},
       {"mode", mode_name(state.mode)},
       {"controls", Json{{"forward", state.controls.forward},
                         {"backward", state.controls.backward},
@@ -1375,13 +1341,13 @@ template <typename Id>
                                    std::string{path}, "expected an object")};
   }
   auto tick = read_u64(json, "tick", std::string{path});
-  auto system = read_id<SystemId>(json, "system_id", std::string{path},
-                                  "system-");
-  auto target = read_id<PlanetId>(json, "target_planet_id",
-                                  std::string{path}, "planet-");
+  auto system =
+      read_id<SystemId>(json, "system_id", std::string{path}, "system-");
+  auto target =
+      read_id<PlanetId>(json, "target_planet_id", std::string{path}, "planet-");
   auto position = read_object(json, "position_metres", std::string{path});
-  auto velocity = read_object(json, "velocity_metres_per_second",
-                              std::string{path});
+  auto velocity =
+      read_object(json, "velocity_metres_per_second", std::string{path});
   auto forward = read_object(json, "forward", std::string{path});
   auto up = read_object(json, "up", std::string{path});
   auto mode = read_mode(json, "mode", std::string{path});
@@ -1408,9 +1374,10 @@ template <typename Id>
     if (!z) return std::unexpected{z.error()};
     return std::array<double, 3>{*x, *y, *z};
   };
-  auto decoded_position = vector(**position, "$.state.system_flight.position_metres");
-  auto decoded_velocity = vector(
-      **velocity, "$.state.system_flight.velocity_metres_per_second");
+  auto decoded_position =
+      vector(**position, "$.state.system_flight.position_metres");
+  auto decoded_velocity =
+      vector(**velocity, "$.state.system_flight.velocity_metres_per_second");
   auto decoded_forward = vector(**forward, "$.state.system_flight.forward");
   auto decoded_up = vector(**up, "$.state.system_flight.up");
   if (!decoded_position) return std::unexpected{decoded_position.error()};
@@ -1418,8 +1385,8 @@ template <typename Id>
   if (!decoded_forward) return std::unexpected{decoded_forward.error()};
   if (!decoded_up) return std::unexpected{decoded_up.error()};
 
-  auto control = [&](std::string_view name)
-      -> std::expected<bool, SaveSchemaError> {
+  auto control =
+      [&](std::string_view name) -> std::expected<bool, SaveSchemaError> {
     return read_bool(**controls, name, "$.state.system_flight.controls");
   };
   auto control_forward = control("forward");
@@ -1439,9 +1406,12 @@ template <typename Id>
   if (!rise) return std::unexpected{rise.error()};
   if (!fall) return std::unexpected{fall.error()};
   SystemTimeScale time_scale{};
-  if (*scale == 1U) time_scale = SystemTimeScale::one;
-  else if (*scale == 4U) time_scale = SystemTimeScale::four;
-  else if (*scale == 16U) time_scale = SystemTimeScale::sixteen;
+  if (*scale == 1U)
+    time_scale = SystemTimeScale::one;
+  else if (*scale == 4U)
+    time_scale = SystemTimeScale::four;
+  else if (*scale == 16U)
+    time_scale = SystemTimeScale::sixteen;
   else {
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
                                    "$.state.system_flight.time_scale",
@@ -1480,20 +1450,20 @@ template <typename Id>
             {"y", decimal(state.relative_velocity.y)},
             {"z", decimal(state.relative_velocity.z)}}},
       {"forward", Json{{"x", decimal(state.forward.x)},
-                        {"y", decimal(state.forward.y)},
-                        {"z", decimal(state.forward.z)}}},
+                       {"y", decimal(state.forward.y)},
+                       {"z", decimal(state.forward.z)}}},
       {"up", Json{{"x", decimal(state.up.x)},
-                   {"y", decimal(state.up.y)},
-                   {"z", decimal(state.up.z)}}},
+                  {"y", decimal(state.up.y)},
+                  {"z", decimal(state.up.z)}}},
       {"mode", mode_name(state.mode)},
       {"controls", Json{{"forward", state.controls.forward},
-                         {"backward", state.controls.backward},
-                         {"turn_left", state.controls.turn_left},
-                         {"turn_right", state.controls.turn_right},
-                         {"strafe_left", state.controls.strafe_left},
-                         {"strafe_right", state.controls.strafe_right},
-                         {"rise", state.controls.rise},
-                         {"fall", state.controls.fall}}},
+                        {"backward", state.controls.backward},
+                        {"turn_left", state.controls.turn_left},
+                        {"turn_right", state.controls.turn_right},
+                        {"strafe_left", state.controls.strafe_left},
+                        {"strafe_right", state.controls.strafe_right},
+                        {"rise", state.controls.rise},
+                        {"fall", state.controls.fall}}},
   };
 }
 
@@ -1540,9 +1510,8 @@ template <typename Id>
       vector(**position,
              "$.state.origin_station_flight.station_relative_position_metres");
   auto decoded_velocity =
-      vector(**velocity,
-             "$.state.origin_station_flight.station_relative_"
-             "velocity_metres_per_second");
+      vector(**velocity, "$.state.origin_station_flight.station_relative_"
+                         "velocity_metres_per_second");
   auto decoded_forward =
       vector(**forward, "$.state.origin_station_flight.forward");
   auto decoded_up = vector(**up, "$.state.origin_station_flight.up");
@@ -1593,9 +1562,9 @@ template <typename Id>
   const auto& state = document.state;
   if (state.first_objective == FirstObjectiveStatus::offered) {
     if (!state.discoveries.empty()) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.discoveries[0]",
-          "an offered objective cannot contain discovered signals")};
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::invalid_state, "$.state.discoveries[0]",
+                  "an offered objective cannot contain discovered signals")};
     }
     if (!state.world_deltas.empty()) {
       return std::unexpected{failure(
@@ -1606,10 +1575,10 @@ template <typename Id>
   }
 
   if (state.first_objective_target.value == 0) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state,
-        "$.state.first_objective.target_signal_id",
-        "an accepted objective requires a generated signal target")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state,
+                "$.state.first_objective.target_signal_id",
+                "an accepted objective requires a generated signal target")};
   }
 
   const auto system_seed =
@@ -1623,15 +1592,15 @@ template <typename Id>
           : generate_planet_descriptor(planet_seed);
   auto cache = TerrainTileCache::create();
   if (!cache) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state",
-        "cannot regenerate the deterministic Signal Run catalog")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state",
+                "cannot regenerate the deterministic Signal Run catalog")};
   }
   auto catalog = generate_surface_signals(planet, *cache);
   if (!catalog) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state",
-        "cannot regenerate the deterministic Signal Run catalog")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state",
+                "cannot regenerate the deterministic Signal Run catalog")};
   }
   const auto signal_in_catalog = [&](SurfaceSignalId id) {
     for (const auto& signal : catalog->signals) {
@@ -1651,10 +1620,10 @@ template <typename Id>
   for (std::size_t index = 0; index < state.discoveries.size(); ++index) {
     const auto& discovery = state.discoveries[index];
     if (!signal_in_catalog(discovery.signal)) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::identity_mismatch,
-          std::format("$.state.discoveries[{}].signal_id", index),
-          "discovery does not match the deterministic signal catalog")};
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::identity_mismatch,
+                  std::format("$.state.discoveries[{}].signal_id", index),
+                  "discovery does not match the deterministic signal catalog")};
     }
     if (state.flight && discovery.tick > state.flight->tick) {
       return std::unexpected{failure(
@@ -1691,32 +1660,30 @@ template <typename Id>
   }
 
   if (!discovery_ticks.contains(state.first_objective_target.value)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
-        "the objective target must have a matching discovery")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state.discoveries",
+                "the objective target must have a matching discovery")};
   }
   const auto journal = WorldDeltaJournal::create(state.world_deltas);
   if (!journal) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
-        "world deltas cannot form a valid Signal Run journal")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
+                "world deltas cannot form a valid Signal Run journal")};
   }
   const auto target_key =
       surface_signal_object_key(state.first_objective_target);
   const auto* target_delta = journal->state(target_key);
   if (state.first_objective == FirstObjectiveStatus::active) {
-    if (target_delta &&
-        target_delta->kind != SaveWorldDeltaKind::discovered) {
+    if (target_delta && target_delta->kind != SaveWorldDeltaKind::discovered) {
       return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state,
-          "$.state.first_objective.status",
+          SaveSchemaErrorCode::invalid_state, "$.state.first_objective.status",
           "an active objective cannot contain a terminal target delta")};
     }
   } else if (target_delta == nullptr ||
              target_delta->kind != SaveWorldDeltaKind::collected) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
-        "a completed objective requires a collected target delta")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state.world_deltas",
+                "a completed objective requires a collected target delta")};
   }
   return {};
 }
@@ -1798,20 +1765,20 @@ template <typename Id>
 }
 
 [[nodiscard]] auto validate_guided_origin_system_contract(
-    const SaveDocument& document)
-    -> std::expected<void, SaveSchemaError> {
+    const SaveDocument& document) -> std::expected<void, SaveSchemaError> {
   const auto& state = document.state;
   if (!state.intersystem_contract || !state.origin_system_contract ||
       state.first_objective != FirstObjectiveStatus::turned_in) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.origin_system_contract",
-        "contract two requires its binding, the career clock, and completed contract one")};
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.state.origin_system_contract",
+                                   "contract two requires its binding, the "
+                                   "career clock, and completed contract one")};
   }
   const auto& career = *state.intersystem_contract;
   const auto& contract = *state.origin_system_contract;
-  const bool guided_two = state.onboarding.state == OnboardingState::guided &&
-                          state.onboarding.chapter ==
-                              OnboardingChapter::contract_two;
+  const bool guided_two =
+      state.onboarding.state == OnboardingState::guided &&
+      state.onboarding.chapter == OnboardingChapter::contract_two;
   const bool later =
       (state.onboarding.state == OnboardingState::guided &&
        state.onboarding.chapter == OnboardingChapter::contract_three) ||
@@ -1822,12 +1789,12 @@ template <typename Id>
         career.travel_phase != IntersystemTravelPhase::docked_at_origin)) ||
       !validate_origin_system_contract(document.recipe.universe_seed,
                                        contract)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.origin_system_contract",
-        "contract two does not match its deterministic binding or career clock")};
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.state.origin_system_contract",
+                                   "contract two does not match its "
+                                   "deterministic binding or career clock")};
   }
-  const bool turned_in =
-      contract.phase == OriginSystemContractPhase::turned_in;
+  const bool turned_in = contract.phase == OriginSystemContractPhase::turned_in;
   if ((!guided_two && !later) || (turned_in != later)) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::invalid_state, "$.state.onboarding.chapter",
@@ -1873,9 +1840,8 @@ template <typename Id>
   }
   if (guided_two && station_phase &&
       (!has_station || !validate_origin_station_flight_state(
-                           document.recipe.universe_seed,
-                           career.universe_tick, system,
-                           *state.origin_station_flight))) {
+                           document.recipe.universe_seed, career.universe_tick,
+                           system, *state.origin_station_flight))) {
     return std::unexpected{failure(
         SaveSchemaErrorCode::invalid_state, "$.state.origin_station_flight",
         "contract-two station flight does not match the career clock")};
@@ -1896,20 +1862,21 @@ template <typename Id>
   if (guided_two && planet_phase) {
     const auto body =
         find_local_system_planet(system, contract.binding.target_planet);
-    if (!has_planetary || !body ||
-        state.flight->tick != career.universe_tick ||
+    if (!has_planetary || !body || state.flight->tick != career.universe_tick ||
         state.flight->planet != contract.binding.target_planet ||
         !validate_planetary_flight_state((*body)->descriptor, *state.flight) ||
         (career.rule_profile == IntersystemRuleProfile::assisted &&
          state.flight->thermal.abort_latched)) {
-      return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state, "$.state.flight",
-          "contract-two planetary flight does not match its target and profile")};
+      return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                     "$.state.flight",
+                                     "contract-two planetary flight does not "
+                                     "match its target and profile")};
     }
   }
 
   const bool accepted = contract.phase != OriginSystemContractPhase::offered;
-  const std::size_t expected_discoveries = turned_in ? 2U : (accepted ? 1U : 0U);
+  const std::size_t expected_discoveries =
+      turned_in ? 2U : (accepted ? 1U : 0U);
   const bool valid_target_discovery =
       accepted && !state.origin_system_discoveries.empty() &&
       state.origin_system_discoveries.back().signal ==
@@ -1923,10 +1890,10 @@ template <typename Id>
   if (state.origin_system_discoveries.size() != expected_discoveries ||
       (accepted && !valid_target_discovery) ||
       (turned_in && !valid_home_discovery)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state,
-        "$.state.origin_system_discoveries",
-        "contract-two discovery history must contain only its bound objective")};
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.state.origin_system_discoveries",
+                                   "contract-two discovery history must "
+                                   "contain only its bound objective")};
   }
   const bool completed =
       contract.phase == OriginSystemContractPhase::objective_complete ||
@@ -1950,15 +1917,15 @@ template <typename Id>
       state.origin_system_world_deltas.front().tick <= career.universe_tick;
   if (state.origin_system_world_deltas.size() != expected_deltas ||
       (completed && !valid_delta) || (turned_in && !valid_home_delta)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state,
-        "$.state.origin_system_world_deltas",
-        "contract-two objective phase and collected delta disagree")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state,
+                "$.state.origin_system_world_deltas",
+                "contract-two objective phase and collected delta disagree")};
   }
   return {};
 }
 
-}  // namespace
+} // namespace
 
 auto current_save_generator_versions() noexcept -> SaveGeneratorVersions {
   return SaveGeneratorVersions{
@@ -2008,17 +1975,18 @@ auto make_save_recipe(Seed universe_seed, std::uint64_t active_planet_ordinal)
 auto validate_save_document(const SaveDocument& document)
     -> std::expected<void, SaveSchemaError> {
   if (!validate_onboarding_progress(document.state.onboarding)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
-        "onboarding state and active chapter are inconsistent")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
+                "onboarding state and active chapter are inconsistent")};
   }
   if (document.state.onboarding.state == OnboardingState::completed &&
       (!document.state.intersystem_contract ||
        document.state.intersystem_contract->mission_phase !=
            IntersystemMissionPhase::turned_in)) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state, "$.state.onboarding.state",
-        "completed onboarding requires the authored intersystem contract to be turned in")};
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.state.onboarding.state",
+                                   "completed onboarding requires the authored "
+                                   "intersystem contract to be turned in")};
   }
   if (document.recipe.generator_versions != current_save_generator_versions()) {
     return std::unexpected{
@@ -2113,10 +2081,10 @@ auto validate_save_document(const SaveDocument& document)
         }
       } else if (!document.state.origin_system_discoveries.empty() ||
                  !document.state.origin_system_world_deltas.empty()) {
-        return std::unexpected{failure(
-            SaveSchemaErrorCode::invalid_state,
-            "$.state.origin_system_contract",
-            "contract-two history requires its deterministic binding")};
+        return std::unexpected{
+            failure(SaveSchemaErrorCode::invalid_state,
+                    "$.state.origin_system_contract",
+                    "contract-two history requires its deterministic binding")};
       }
       const auto& contract = *document.state.intersystem_contract;
       if (contract.identities.universe_seed != document.recipe.universe_seed) {
@@ -2299,8 +2267,7 @@ auto validate_save_document(const SaveDocument& document)
         !document.state.origin_system_discoveries.empty() ||
         !document.state.origin_system_world_deltas.empty()) {
       return std::unexpected{failure(
-          SaveSchemaErrorCode::invalid_state,
-          "$.state.origin_system_contract",
+          SaveSchemaErrorCode::invalid_state, "$.state.origin_system_contract",
           "legacy Signal Run saves cannot contain contract-two state")};
     }
     if (document.state.system_flight || document.state.origin_station_flight) {
@@ -2336,8 +2303,8 @@ auto validate_save_document(const SaveDocument& document)
             "$.state.flight.thermal.abort_latched",
             "legacy flight cannot contain a Pilot thermal-abort latch")};
       }
-      if (auto flight = validate_flight(document.recipe,
-                                        document.state.flight.value());
+      if (auto flight =
+              validate_flight(document.recipe, document.state.flight.value());
           !flight) {
         return flight;
       }
@@ -2377,21 +2344,19 @@ auto validate_save_document(const SaveDocument& document)
   if (document.state.origin_system_discoveries.size() >
       kMaximumSaveDiscoveries) {
     return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_state,
-        "$.state.origin_system_discoveries",
+        SaveSchemaErrorCode::invalid_state, "$.state.origin_system_discoveries",
         "origin-system discovery count exceeds the save-format bound")};
   }
   std::unordered_set<std::uint64_t> origin_discoveries;
   for (std::size_t index = 0;
        index < document.state.origin_system_discoveries.size(); ++index) {
     if (!origin_discoveries
-             .insert(document.state.origin_system_discoveries[index]
-                         .signal.value)
+             .insert(
+                 document.state.origin_system_discoveries[index].signal.value)
              .second) {
       return std::unexpected{failure(
           SaveSchemaErrorCode::invalid_state,
-          std::format("$.state.origin_system_discoveries[{}].signal_id",
-                      index),
+          std::format("$.state.origin_system_discoveries[{}].signal_id", index),
           "an origin-system discovery signal may appear only once")};
     }
   }
@@ -2449,10 +2414,9 @@ auto encode_save_document_json(const SaveDocument& document)
   }
   Json origin_system_deltas = Json::array();
   for (const auto& delta : document.state.origin_system_world_deltas) {
-    origin_system_deltas.push_back(
-        Json{{"object_key", delta.object_key},
-             {"kind", delta_kind_name(delta.kind)},
-             {"tick", decimal(delta.tick)}});
+    origin_system_deltas.push_back(Json{{"object_key", delta.object_key},
+                                        {"kind", delta_kind_name(delta.kind)},
+                                        {"tick", decimal(delta.tick)}});
   }
   Json origin_system_contract = nullptr;
   if (document.state.origin_system_contract) {
@@ -2543,13 +2507,11 @@ auto encode_save_document_json(const SaveDocument& document)
                   {"local_sun", versions.local_sun},
                   {"local_system", versions.local_system},
                   {"analytic_ephemeris", versions.analytic_ephemeris},
-                  {"intersystem_contract",
-                   versions.intersystem_contract},
+                  {"intersystem_contract", versions.intersystem_contract},
                   {"intersystem_jump", versions.intersystem_jump},
                   {"system_flight", versions.system_flight},
                   {"origin_station_flight", versions.origin_station_flight},
-                  {"origin_system_contract",
-                   versions.origin_system_contract}}},
+                  {"origin_system_contract", versions.origin_system_contract}}},
             {"origin_station_id",
              encoded_id("station-", document.recipe.origin_station)},
             {"home_planet_id",
@@ -2584,9 +2546,8 @@ auto encode_save_document_json(const SaveDocument& document)
 auto decode_save_document_json(std::string_view json_text)
     -> std::expected<SaveDocument, SaveSchemaError> {
   if (json_text.size() > kMaximumSaveDocumentBytes) {
-    return std::unexpected{
-        failure(SaveSchemaErrorCode::document_too_large, "$",
-                "save exceeds the save-format byte bound")};
+    return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
+                                   "save exceeds the save-format byte bound")};
   }
   bool duplicate_key{};
   std::vector<std::unordered_set<std::string>> object_keys;
@@ -2654,9 +2615,9 @@ auto decode_save_document_json(std::string_view json_text)
         detail += std::format(" (written by Apsis Drift {})", value);
       }
     }
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
-        std::move(detail))};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::unsupported_format_version,
+                "$.format_version", std::move(detail))};
   }
   auto application_version = read_string(root, "application_version", "$");
   if (!application_version) {
@@ -2692,26 +2653,16 @@ auto decode_save_document_json(std::string_view json_text)
   auto station_orbit = read_object(**recipe_json, "station_orbit", "$.recipe");
   auto planet = read_id<PlanetId>(**recipe_json, "active_planet_id", "$.recipe",
                                   "planet-");
-  if (!universe_seed)
-    return std::unexpected{universe_seed.error()};
-  if (!system_ordinal)
-    return std::unexpected{system_ordinal.error()};
-  if (!home_ordinal)
-    return std::unexpected{home_ordinal.error()};
-  if (!planet_ordinal)
-    return std::unexpected{planet_ordinal.error()};
-  if (!versions_json)
-    return std::unexpected{versions_json.error()};
-  if (!station)
-    return std::unexpected{station.error()};
-  if (!home)
-    return std::unexpected{home.error()};
-  if (!station_host)
-    return std::unexpected{station_host.error()};
-  if (!station_orbit)
-    return std::unexpected{station_orbit.error()};
-  if (!planet)
-    return std::unexpected{planet.error()};
+  if (!universe_seed) return std::unexpected{universe_seed.error()};
+  if (!system_ordinal) return std::unexpected{system_ordinal.error()};
+  if (!home_ordinal) return std::unexpected{home_ordinal.error()};
+  if (!planet_ordinal) return std::unexpected{planet_ordinal.error()};
+  if (!versions_json) return std::unexpected{versions_json.error()};
+  if (!station) return std::unexpected{station.error()};
+  if (!home) return std::unexpected{home.error()};
+  if (!station_host) return std::unexpected{station_host.error()};
+  if (!station_orbit) return std::unexpected{station_orbit.error()};
+  if (!planet) return std::unexpected{planet.error()};
 
   auto seed_version = read_u32(**versions_json, "seed_derivation",
                                "$.recipe.generator_versions");
@@ -2727,10 +2678,10 @@ auto decode_save_document_json(std::string_view json_text)
       **versions_json, "home_signal_contract", "$.recipe.generator_versions");
   auto signal_version = read_u32(**versions_json, "surface_signals",
                                  "$.recipe.generator_versions");
-  auto sun_version = read_u32(**versions_json, "local_sun",
-                              "$.recipe.generator_versions");
-  auto system_version = read_u32(**versions_json, "local_system",
-                                 "$.recipe.generator_versions");
+  auto sun_version =
+      read_u32(**versions_json, "local_sun", "$.recipe.generator_versions");
+  auto system_version =
+      read_u32(**versions_json, "local_system", "$.recipe.generator_versions");
   auto ephemeris_version = read_u32(**versions_json, "analytic_ephemeris",
                                     "$.recipe.generator_versions");
   auto contract_version = read_u32(**versions_json, "intersystem_contract",
@@ -2800,17 +2751,13 @@ auto decode_save_document_json(std::string_view json_text)
       **station_orbit, "inclination_microdegrees", "$.recipe.station_orbit");
   auto station_node = read_u32(**station_orbit, "ascending_node_turns",
                                "$.recipe.station_orbit");
-  if (!station_radius)
-    return std::unexpected{station_radius.error()};
-  if (!station_period)
-    return std::unexpected{station_period.error()};
-  if (!station_phase)
-    return std::unexpected{station_phase.error()};
+  if (!station_radius) return std::unexpected{station_radius.error()};
+  if (!station_period) return std::unexpected{station_period.error()};
+  if (!station_phase) return std::unexpected{station_phase.error()};
   if (!station_inclination) {
     return std::unexpected{station_inclination.error()};
   }
-  if (!station_node)
-    return std::unexpected{station_node.error()};
+  if (!station_node) return std::unexpected{station_node.error()};
 
   auto career_kind = read_string(**state_json, "career_kind", "$.state");
   if (!career_kind) return std::unexpected{career_kind.error()};
@@ -2820,8 +2767,7 @@ auto decode_save_document_json(std::string_view json_text)
                                    "$.state.career_kind",
                                    "unknown save career kind")};
   }
-  auto onboarding_json =
-      read_object(**state_json, "onboarding", "$.state");
+  auto onboarding_json = read_object(**state_json, "onboarding", "$.state");
   if (!onboarding_json) return std::unexpected{onboarding_json.error()};
   auto onboarding = decode_onboarding(**onboarding_json);
   if (!onboarding) return std::unexpected{onboarding.error()};
@@ -2890,8 +2836,8 @@ auto decode_save_document_json(std::string_view json_text)
   }
   std::optional<OriginSystemContractState> origin_system_contract;
   if (!(**origin_system_contract_json).is_null()) {
-    auto decoded = decode_origin_system_contract(
-        **origin_system_contract_json, Seed{*universe_seed});
+    auto decoded = decode_origin_system_contract(**origin_system_contract_json,
+                                                 Seed{*universe_seed});
     if (!decoded) return std::unexpected{decoded.error()};
     origin_system_contract = std::move(*decoded);
   }
@@ -2960,13 +2906,12 @@ auto decode_save_document_json(std::string_view json_text)
   std::vector<SaveDiscovery> origin_system_discoveries;
   if ((**origin_system_discoveries_json).size() > kMaximumSaveDiscoveries) {
     return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_value,
-        "$.state.origin_system_discoveries",
+        SaveSchemaErrorCode::invalid_value, "$.state.origin_system_discoveries",
         "origin-system discovery count exceeds the save bound")};
   }
   origin_system_discoveries.reserve((**origin_system_discoveries_json).size());
-  for (std::size_t index = 0;
-       index < (**origin_system_discoveries_json).size(); ++index) {
+  for (std::size_t index = 0; index < (**origin_system_discoveries_json).size();
+       ++index) {
     const auto& entry = (**origin_system_discoveries_json)[index];
     const auto path =
         std::format("$.state.origin_system_discoveries[{}]", index);
@@ -2974,8 +2919,7 @@ auto decode_save_document_json(std::string_view json_text)
       return std::unexpected{failure(SaveSchemaErrorCode::invalid_type, path,
                                      "expected an object")};
     }
-    auto signal = read_id<SurfaceSignalId>(entry, "signal_id", path,
-                                           "signal-");
+    auto signal = read_id<SurfaceSignalId>(entry, "signal_id", path, "signal-");
     auto tick = read_u64(entry, "tick", path);
     if (!signal) return std::unexpected{signal.error()};
     if (!tick) return std::unexpected{tick.error()};
@@ -2983,10 +2927,10 @@ auto decode_save_document_json(std::string_view json_text)
   }
   std::vector<SaveWorldDelta> origin_system_deltas;
   if ((**origin_system_deltas_json).size() > kMaximumSaveWorldDeltas) {
-    return std::unexpected{failure(
-        SaveSchemaErrorCode::invalid_value,
-        "$.state.origin_system_world_deltas",
-        "origin-system world-delta count exceeds the save bound")};
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_value,
+                "$.state.origin_system_world_deltas",
+                "origin-system world-delta count exceeds the save bound")};
   }
   origin_system_deltas.reserve((**origin_system_deltas_json).size());
   for (std::size_t index = 0; index < (**origin_system_deltas_json).size();
@@ -3004,8 +2948,7 @@ auto decode_save_document_json(std::string_view json_text)
     if (!object_key) return std::unexpected{object_key.error()};
     if (!kind) return std::unexpected{kind.error()};
     if (!tick) return std::unexpected{tick.error()};
-    origin_system_deltas.push_back(
-        {std::move(*object_key), *kind, *tick});
+    origin_system_deltas.push_back({std::move(*object_key), *kind, *tick});
   }
   SaveDocument document{
       .recipe =
@@ -3042,10 +2985,8 @@ auto decode_save_document_json(std::string_view json_text)
               .discoveries = std::move(discoveries),
               .world_deltas = std::move(deltas),
               .origin_system_contract = std::move(origin_system_contract),
-              .origin_system_discoveries =
-                  std::move(origin_system_discoveries),
-              .origin_system_world_deltas =
-                  std::move(origin_system_deltas),
+              .origin_system_discoveries = std::move(origin_system_discoveries),
+              .origin_system_world_deltas = std::move(origin_system_deltas),
               .intersystem_contract = std::move(contract),
           },
   };
@@ -3055,4 +2996,4 @@ auto decode_save_document_json(std::string_view json_text)
   return document;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

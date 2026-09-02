@@ -42,6 +42,7 @@ Requirements:
   Linux)
 - FFmpeg when the optional offline MIDI/audition targets and their automated
   loudness/true-peak checks are enabled
+- clang-format 20 for the repository formatting check
 
 Apsis Drift first looks for a TermForge v0.42.0-or-newer package, then for a
 compatible sibling checkout at `../termforge`. Older siblings are ignored. If
@@ -85,6 +86,19 @@ To use a checkout in a different location:
 cmake -S . -B build \
   -DAPSIS_DRIFT_TERMFORGE_SOURCE_DIR=/path/to/termforge
 ```
+
+## Format
+
+The repository uses an LLVM-derived style pinned to clang-format 20. The helper
+checks tracked and new C/C++ files and rejects other formatter major versions:
+
+```bash
+tools/format.sh --check
+tools/format.sh --fix
+```
+
+Set `CLANG_FORMAT` when the versioned executable has a different local name.
+The same check is mandatory in CI.
 
 ## Run
 

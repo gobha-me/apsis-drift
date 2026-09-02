@@ -88,8 +88,8 @@ struct OriginStationDescriptor {
 [[nodiscard]] auto generate_origin_home_planet(Seed home_system_seed)
     -> PlanetDescriptor;
 
-[[nodiscard]] auto
-is_tutorial_safe_home_planet(const PlanetDescriptor& planet) noexcept -> bool;
+[[nodiscard]] auto is_tutorial_safe_home_planet(
+    const PlanetDescriptor& planet) noexcept -> bool;
 
 // The station is a child of the origin system's settlement domain. It is not
 // the universe root, system barycenter, or parent of unrelated content.
@@ -151,4 +151,4 @@ enum class OriginOnboardingError : std::uint8_t {
     OriginOnboardingState& state, OriginOnboardingCommand command) noexcept
     -> std::expected<void, OriginOnboardingError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

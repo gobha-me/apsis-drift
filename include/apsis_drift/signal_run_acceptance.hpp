@@ -127,4 +127,4 @@ enum class SignalRunAcceptanceError : std::uint8_t {
 [[nodiscard]] auto signal_run_acceptance_json(
     const SignalRunAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

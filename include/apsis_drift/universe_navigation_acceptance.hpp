@@ -38,4 +38,4 @@ struct UniverseNavigationAcceptanceReport {
 [[nodiscard]] auto universe_navigation_acceptance_json(
     const UniverseNavigationAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

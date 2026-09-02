@@ -36,8 +36,7 @@ struct Vec3 {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 [[nodiscard]] auto cross(Vec3 a, Vec3 b) noexcept -> Vec3 {
-  return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
-          a.x * b.y - a.y * b.x};
+  return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
 [[nodiscard]] auto length(Vec3 value) noexcept -> double {
   return std::hypot(value.x, value.y, value.z);
@@ -84,10 +83,8 @@ struct Vec3 {
 [[nodiscard]] auto direction_to_station(
     const OriginStationFlightState& state) noexcept -> std::optional<Vec3> {
   const Vec3 offset = multiply(vec(state.relative_position), -1.0);
-  if (const auto direction = normalized(offset))
-    return direction;
-  if (!finite(offset) || length(offset) > 1.0e-12)
-    return std::nullopt;
+  if (const auto direction = normalized(offset)) return direction;
+  if (!finite(offset) || length(offset) > 1.0e-12) return std::nullopt;
   if (const auto braking =
           normalized(multiply(vec(state.relative_velocity), -1.0))) {
     return braking;
@@ -102,21 +99,49 @@ auto apply_command(OriginStationFlightState& state,
     if (value) state.mode = FlightMode::manual;
   };
   switch (kind) {
-    case FlightCommandKind::press_forward: manual(state.controls.forward, true); break;
-    case FlightCommandKind::release_forward: state.controls.forward = false; break;
-    case FlightCommandKind::press_backward: manual(state.controls.backward, true); break;
-    case FlightCommandKind::release_backward: state.controls.backward = false; break;
-    case FlightCommandKind::press_turn_left: manual(state.controls.turn_left, true); break;
-    case FlightCommandKind::release_turn_left: state.controls.turn_left = false; break;
-    case FlightCommandKind::press_turn_right: manual(state.controls.turn_right, true); break;
-    case FlightCommandKind::release_turn_right: state.controls.turn_right = false; break;
-    case FlightCommandKind::press_strafe_left: manual(state.controls.strafe_left, true); break;
-    case FlightCommandKind::release_strafe_left: state.controls.strafe_left = false; break;
-    case FlightCommandKind::press_strafe_right: manual(state.controls.strafe_right, true); break;
-    case FlightCommandKind::release_strafe_right: state.controls.strafe_right = false; break;
-    case FlightCommandKind::press_rise: manual(state.controls.rise, true); break;
+    case FlightCommandKind::press_forward:
+      manual(state.controls.forward, true);
+      break;
+    case FlightCommandKind::release_forward:
+      state.controls.forward = false;
+      break;
+    case FlightCommandKind::press_backward:
+      manual(state.controls.backward, true);
+      break;
+    case FlightCommandKind::release_backward:
+      state.controls.backward = false;
+      break;
+    case FlightCommandKind::press_turn_left:
+      manual(state.controls.turn_left, true);
+      break;
+    case FlightCommandKind::release_turn_left:
+      state.controls.turn_left = false;
+      break;
+    case FlightCommandKind::press_turn_right:
+      manual(state.controls.turn_right, true);
+      break;
+    case FlightCommandKind::release_turn_right:
+      state.controls.turn_right = false;
+      break;
+    case FlightCommandKind::press_strafe_left:
+      manual(state.controls.strafe_left, true);
+      break;
+    case FlightCommandKind::release_strafe_left:
+      state.controls.strafe_left = false;
+      break;
+    case FlightCommandKind::press_strafe_right:
+      manual(state.controls.strafe_right, true);
+      break;
+    case FlightCommandKind::release_strafe_right:
+      state.controls.strafe_right = false;
+      break;
+    case FlightCommandKind::press_rise:
+      manual(state.controls.rise, true);
+      break;
     case FlightCommandKind::release_rise: state.controls.rise = false; break;
-    case FlightCommandKind::press_fall: manual(state.controls.fall, true); break;
+    case FlightCommandKind::press_fall:
+      manual(state.controls.fall, true);
+      break;
     case FlightCommandKind::release_fall: state.controls.fall = false; break;
     case FlightCommandKind::toggle_autopilot:
       state.mode = state.mode == FlightMode::autopilot ? FlightMode::manual
@@ -124,8 +149,7 @@ auto apply_command(OriginStationFlightState& state,
       state.controls = {};
       break;
     case FlightCommandKind::decrease_time_scale:
-    case FlightCommandKind::increase_time_scale:
-      break;
+    case FlightCommandKind::increase_time_scale: break;
   }
 }
 
@@ -148,15 +172,13 @@ auto apply_command(OriginStationFlightState& state,
   const auto right = forward && supplied_up
                          ? normalized(cross(*forward, *supplied_up))
                          : std::nullopt;
-  const auto camera_up = right && forward
-                             ? normalized(cross(*right, *forward))
-                             : std::nullopt;
+  const auto camera_up =
+      right && forward ? normalized(cross(*right, *forward)) : std::nullopt;
   if (!forward || !right || !camera_up) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
   const double forward_component = dot(*direction, *forward);
-  const double bearing = std::atan2(dot(*direction, *right),
-                                    forward_component);
+  const double bearing = std::atan2(dot(*direction, *right), forward_component);
   const double elevation =
       std::asin(std::clamp(dot(*direction, *camera_up), -1.0, 1.0));
   if (!std::isfinite(bearing) || !std::isfinite(elevation)) {
@@ -197,7 +219,7 @@ auto hash_word(std::uint64_t& hash, std::uint64_t value) noexcept -> void {
   hash *= 1099511628211ULL;
 }
 
-}  // namespace
+} // namespace
 
 auto resolve_origin_station_waypoint(
     const FirstIntersystemIdentities& identities,
@@ -299,8 +321,8 @@ auto initialize_origin_station_approach(
   Vec3 up = vec(departure.up);
   if (const auto normalized_up = normalized(up);
       !normalized_up || std::abs(dot(*forward, *normalized_up)) > 0.95) {
-    up = std::abs(forward->z) < 0.95 ? Vec3{0.0, 0.0, 1.0}
-                                      : Vec3{0.0, 1.0, 0.0};
+    up =
+        std::abs(forward->z) < 0.95 ? Vec3{0.0, 0.0, 1.0} : Vec3{0.0, 1.0, 0.0};
   }
   OriginStationFlightState result{
       .tick = departure.tick,
@@ -328,15 +350,15 @@ auto initialize_origin_return(const IntersystemContractState& contract,
   if (!validate_intersystem_contract_state(contract) ||
       contract.travel_phase != IntersystemTravelPhase::origin_system_return ||
       !contract.arrival_solution ||
-      contract.arrival_solution->destination != contract.identities.origin_system ||
+      contract.arrival_solution->destination !=
+          contract.identities.origin_system ||
       contract.arrival_solution->reference_planet) {
     return std::unexpected{OriginStationFlightError::invalid_contract};
   }
   const auto waypoint = resolve_origin_station_waypoint(
       contract.identities, origin_system,
       {.tick = contract.universe_tick, .sub_tick_fraction = 0.0});
-  if (!waypoint)
-    return std::unexpected{waypoint.error()};
+  if (!waypoint) return std::unexpected{waypoint.error()};
   const Vec3 relative_position = subtract(
       vec(contract.arrival_solution->position), vec(waypoint->position));
   const Vec3 relative_velocity = subtract(
@@ -654,4 +676,4 @@ auto origin_station_flight_state_checksum(
   return hash;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

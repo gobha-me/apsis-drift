@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <cerrno>
+#include <charconv>
 
 #include <sys/random.h>
 
@@ -18,14 +18,14 @@ inline constexpr int kPanelHeight{8};
 inline constexpr int kTitlePanelHeight{16};
 inline constexpr int kTitlePanelWidth{64};
 
-}  // namespace
+} // namespace
 
 SessionController::SessionController(bool start_in_flight,
                                      bool docked_profile) noexcept
-    : m_screen(start_in_flight ? SessionScreen::flight
-                               : SessionScreen::title),
+    : m_screen(start_in_flight ? SessionScreen::flight : SessionScreen::title),
       m_title_destination(docked_profile ? SessionScreen::station
-                                         : SessionScreen::flight) {}
+                                         : SessionScreen::flight) {
+}
 
 auto SessionController::start_flight() noexcept -> SessionTransition {
   const auto before = m_screen;
@@ -63,8 +63,8 @@ auto SessionController::dispatch(MenuCommand command) noexcept
 
   if (!menu_visible()) return {before, m_screen};
   if (command == MenuCommand::previous || command == MenuCommand::next) {
-    m_selected = m_selected == MenuItem::primary ? MenuItem::exit
-                                                 : MenuItem::primary;
+    m_selected =
+        m_selected == MenuItem::primary ? MenuItem::exit : MenuItem::primary;
   } else if (command == MenuCommand::activate) {
     if (m_selected == MenuItem::exit) {
       m_screen = SessionScreen::exit_requested;
@@ -114,8 +114,7 @@ auto system_random_seed() noexcept
   auto* bytes = reinterpret_cast<unsigned char*>(&value);
   std::size_t offset{};
   while (offset < sizeof(value)) {
-    const auto count =
-        ::getrandom(bytes + offset, sizeof(value) - offset, 0);
+    const auto count = ::getrandom(bytes + offset, sizeof(value) - offset, 0);
     if (count > 0) {
       offset += static_cast<std::size_t>(count);
       continue;
@@ -149,8 +148,7 @@ auto parse_new_game_seed(std::string_view text) noexcept
   return value;
 }
 
-auto compute_title_menu_layout(int cols, int rows) noexcept
-    -> TitleMenuLayout {
+auto compute_title_menu_layout(int cols, int rows) noexcept -> TitleMenuLayout {
   TitleMenuLayout layout;
   if (cols <= 0 || rows <= 0 || cols > kMaximumTerminalAxis ||
       rows > kMaximumTerminalAxis || cols < kMinimumMenuCols ||
@@ -185,4 +183,4 @@ auto title_action_at(const TitleMenuLayout& layout, int x, int y) noexcept
   return std::nullopt;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -1,0 +1,48 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# The repository pins clang-format 20.x in tools/format.sh. Latest selects the
+# newest C++ grammar understood by that formatter without pretending it is the
+# project's language-standard setting (CMake owns that).
+Standard: Latest
+
+ColumnLimit: 80
+IndentWidth: 2
+ContinuationIndentWidth: 4
+TabWidth: 8
+UseTab: Never
+AccessModifierOffset: -1
+IndentCaseLabels: true
+NamespaceIndentation: None
+
+BreakBeforeBraces: Attach
+BreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 500
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: BinPack
+Cpp11BracedListStyle: true
+SpacesInContainerLiterals: true
+
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+QualifierAlignment: Leave
+
+# Preserve intentional system/project include groups while sorting within each
+# group.
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+SortUsingDeclarations: LexicographicNumeric
+
+FixNamespaceComments: true
+ReflowComments: true
+SeparateDefinitionBlocks: Leave
+InsertNewlineAtEOF: true

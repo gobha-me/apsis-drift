@@ -90,13 +90,12 @@ struct RenderEvidence {
   return evidence;
 }
 
-}  // namespace
+} // namespace
 
 auto main() -> int {
   const std::filesystem::path asset_root{APSIS_DRIFT_MIDI_ASSET_DIR};
   const auto midi = read_file(asset_root / "issue230-layer-demo.mid");
-  const auto soundfont =
-      read_file(asset_root / "issue230-tonal-prototype.sf2");
+  const auto soundfont = read_file(asset_root / "issue230-tonal-prototype.sf2");
   check(!midi.empty() && midi.size() <= kMaximumMidiBytes,
         "the MIDI fixture must exist inside its byte budget");
   check(!soundfont.empty() && soundfont.size() <= kMaximumSoundFontBytes,
@@ -108,8 +107,7 @@ auto main() -> int {
   check(parsed->format == 1 && parsed->ppq == 480 &&
             parsed->tracks.size() == kMusicLayerCount &&
             parsed->event_count == 132 && parsed->tempos.size() == 2 &&
-            parsed->time_signatures.size() == 1 &&
-            parsed->markers.size() == 4,
+            parsed->time_signatures.size() == 1 && parsed->markers.size() == 4,
         "the fixture must retain tracks, events, tempo, meter, and markers");
   check(parsed->tracks[0].name == "ambient" &&
             parsed->tracks[1].name == "pulse" &&
@@ -164,9 +162,8 @@ auto main() -> int {
         "tracks without an explicit end marker must fail closed");
   auto unsupported_message = midi;
   const auto note_on = std::ranges::search(
-      unsupported_message,
-      std::array{std::byte{0}, std::byte{0x90}, std::byte{0x32},
-                 std::byte{0x44}});
+      unsupported_message, std::array{std::byte{0}, std::byte{0x90},
+                                      std::byte{0x32}, std::byte{0x44}});
   check(!note_on.empty(), "the fixture must contain the first note-on event");
   if (!note_on.empty()) {
     note_on[1] = std::byte{0xA0};
@@ -217,8 +214,8 @@ auto main() -> int {
         "inconsistent RIFF dimensions must fail before synthesis");
   auto oversized_decoded_soundfont = soundfont;
   const auto sample_chunk = std::ranges::search(
-      oversized_decoded_soundfont,
-      std::array{std::byte{'s'}, std::byte{'m'}, std::byte{'p'}, std::byte{'l'}});
+      oversized_decoded_soundfont, std::array{std::byte{'s'}, std::byte{'m'},
+                                              std::byte{'p'}, std::byte{'l'}});
   check(!sample_chunk.empty(), "the fixture must contain an smpl chunk");
   if (!sample_chunk.empty()) {
     const auto offset = static_cast<std::size_t>(
@@ -226,9 +223,8 @@ auto main() -> int {
     constexpr std::uint32_t kOversizedDecoded =
         static_cast<std::uint32_t>(kMaximumDecodedSoundFontBytes + 2U);
     for (unsigned byte = 0; byte < 4; ++byte) {
-      oversized_decoded_soundfont[offset + 4U + byte] =
-          std::byte{static_cast<unsigned char>(kOversizedDecoded >>
-                                               (byte * 8U))};
+      oversized_decoded_soundfont[offset + 4U + byte] = std::byte{
+          static_cast<unsigned char>(kOversizedDecoded >> (byte * 8U))};
     }
     check(MusicEngine::create(*parsed, oversized_decoded_soundfont).error() ==
               MidiError::soundfont_too_large,
@@ -240,7 +236,8 @@ auto main() -> int {
   const auto split_tick = render_trace(*parsed, soundfont, 137);
   check(whole_tick.finite && whole_tick.audible && whole_tick.peak <= 1.0F &&
             whole_tick.maximum_delta < 0.1F,
-        "offline MIDI synthesis must be finite, bounded, audible, and click-free");
+        "offline MIDI synthesis must be finite, bounded, audible, and "
+        "click-free");
   check(whole_tick.checksum == whole_tick_repeat.checksum &&
             whole_tick.peak == whole_tick_repeat.peak &&
             whole_tick.maximum_delta == whole_tick_repeat.maximum_delta,
@@ -249,7 +246,8 @@ auto main() -> int {
             std::abs(whole_tick.peak - split_tick.peak) < 0.001F &&
             split_tick.finite && split_tick.audible &&
             split_tick.maximum_delta < 0.1F,
-        "callback partitioning must preserve scheduling and bounded PCM properties");
+        "callback partitioning must preserve scheduling and bounded PCM "
+        "properties");
 
   auto created = MusicEngine::create(*parsed, soundfont);
   check(created.has_value(), "the curated bank must initialize the synth");
@@ -289,9 +287,9 @@ auto main() -> int {
     if (queue_engine_result) {
       auto queue_engine = std::move(*queue_engine_result);
       for (std::size_t index = 0; index < kMusicCommandCapacity; ++index) {
-        check(!queue_engine.set_layer_target(
-                  MusicLayer::ambient, index % 2U == 0U ? 0.0F : 1.0F,
-                  TransitionBoundary::immediate),
+        check(!queue_engine.set_layer_target(MusicLayer::ambient,
+                                             index % 2U == 0U ? 0.0F : 1.0F,
+                                             TransitionBoundary::immediate),
               "commands inside the fixed queue budget must be accepted");
       }
       check(queue_engine.set_layer_target(MusicLayer::ambient, 0.5F,
@@ -327,7 +325,8 @@ auto main() -> int {
     check(!engine.stop(), "stop must queue without touching callback state");
     block.fill(9.0F);
     check(!engine.render(block) &&
-              std::ranges::all_of(block, [](float value) { return value == 0.0F; }),
+              std::ranges::all_of(block,
+                                  [](float value) { return value == 0.0F; }),
           "stop must clear voices and render silence without stale notes");
   }
 

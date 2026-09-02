@@ -125,8 +125,8 @@ struct Replay {
     return std::unexpected{
         IntersystemPlanetfallAcceptanceError::initialization_failure};
   }
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
     if (!advance_intersystem_jump_tick(contract, system)) {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::initialization_failure};
@@ -138,15 +138,15 @@ struct Replay {
   }
   const PlanetaryFlightEnvironment environment{};
   const auto initial = [&](double altitude, FlightMode mode) {
-    return initial_planetary_flight_state(
-        dense, {0.125, -0.25, altitude}, environment, 0.0, mode);
+    return initial_planetary_flight_state(dense, {0.125, -0.25, altitude},
+                                          environment, 0.0, mode);
   };
   const auto advance = [&](PlanetaryFlightState& state,
                            std::span<const FlightCommand> commands,
                            bool pilot) {
-    return advance_planetary_flight(
-        dense, environment, state, commands, kSimulationStep,
-        {.enforce_thermal_abort = pilot});
+    return advance_planetary_flight(dense, environment, state, commands,
+                                    kSimulationStep,
+                                    {.enforce_thermal_abort = pilot});
   };
 
   auto nominal = initial(40'000.0, FlightMode::manual);
@@ -198,8 +198,8 @@ struct Replay {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::simulation_failure};
     }
-    manual_correction_peak = std::max(
-        manual_correction_peak, manual_correction->thermal.load_units);
+    manual_correction_peak =
+        std::max(manual_correction_peak, manual_correction->thermal.load_units);
     if (manual_correction->thermal.abort_latched) {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::incomplete_path};
@@ -242,14 +242,12 @@ struct Replay {
   document.state.intersystem_contract = contract;
   document.state.flight = *forced;
   const auto encoded = encode_save_document_json(document);
-  const auto decoded = encoded
-                           ? decode_save_document_json(*encoded)
-                           : std::expected<SaveDocument, SaveSchemaError>{
-                                 std::unexpected{SaveSchemaError{}}};
+  const auto decoded = encoded ? decode_save_document_json(*encoded)
+                               : std::expected<SaveDocument, SaveSchemaError>{
+                                     std::unexpected{SaveSchemaError{}}};
   if (!decoded || !decoded->state.flight ||
       decoded->state.flight->thermal != forced->thermal) {
-    return std::unexpected{
-        IntersystemPlanetfallAcceptanceError::save_failure};
+    return std::unexpected{IntersystemPlanetfallAcceptanceError::save_failure};
   }
   auto resumed = *decoded->state.flight;
   SimulationTick recovery_tick{};
@@ -325,8 +323,8 @@ struct Replay {
   }
   const auto system =
       generate_local_system(contract.identities.target_system_seed);
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
     if (!advance_intersystem_jump_tick(contract, system)) {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::initialization_failure};
@@ -385,8 +383,8 @@ struct Replay {
       commands = storage;
       pressed = true;
     }
-    if (!advance_intersystem_planetfall(
-            state, cache, commands, IntersystemRuleProfile::assisted)) {
+    if (!advance_intersystem_planetfall(state, cache, commands,
+                                        IntersystemRuleProfile::assisted)) {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::simulation_failure};
     }
@@ -543,8 +541,8 @@ struct Replay {
       commands = storage;
       climbing = true;
     }
-    if (!advance_intersystem_planetfall(
-            *abort_state, *cache, commands, IntersystemRuleProfile::assisted)) {
+    if (!advance_intersystem_planetfall(*abort_state, *cache, commands,
+                                        IntersystemRuleProfile::assisted)) {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::simulation_failure};
     }
@@ -565,8 +563,8 @@ struct Replay {
        tick < collection_limit &&
        completed->collection.status != SignalCollectionStatus::complete;
        ++tick) {
-    if (!advance_intersystem_planetfall(
-            *completed, *cache, {}, IntersystemRuleProfile::assisted)) {
+    if (!advance_intersystem_planetfall(*completed, *cache, {},
+                                        IntersystemRuleProfile::assisted)) {
       return std::unexpected{
           IntersystemPlanetfallAcceptanceError::simulation_failure};
     }
@@ -598,7 +596,7 @@ struct Replay {
   };
 }
 
-}  // namespace
+} // namespace
 
 auto run_intersystem_planetfall_acceptance(int width, int height)
     -> std::expected<IntersystemPlanetfallAcceptanceResult,
@@ -621,8 +619,7 @@ auto run_intersystem_planetfall_acceptance(int width, int height)
                           second->completed.journal.entries()) ||
       first->abort_orbit_tick != second->abort_orbit_tick ||
       first->abort_orbit_checksum != second->abort_orbit_checksum ||
-      first->thermal != second->thermal ||
-      first->frame != second->frame) {
+      first->thermal != second->thermal || first->frame != second->frame) {
     return std::unexpected{
         IntersystemPlanetfallAcceptanceError::cadence_mismatch};
   }
@@ -682,21 +679,18 @@ auto intersystem_planetfall_acceptance_json(
       "\"resumed_recovery_checksum\": \"{}\"}},\n"
       "  \"framebuffer_checksum\": \"{}\"\n"
       "}}\n",
-      kIntersystemPlanetfallAcceptanceScenario,
-      report.planet.value, surface_signal_id_string(report.target), entries,
-      report.abort_orbit_tick, report.abort_orbit_checksum,
-      report.completion_tick, report.completed_flight_checksum,
-      report.world_delta_count, report.thermal.universe_seed.value,
-      report.thermal.planet.value,
+      kIntersystemPlanetfallAcceptanceScenario, report.planet.value,
+      surface_signal_id_string(report.target), entries, report.abort_orbit_tick,
+      report.abort_orbit_checksum, report.completion_tick,
+      report.completed_flight_checksum, report.world_delta_count,
+      report.thermal.universe_seed.value, report.thermal.planet.value,
       report.thermal.nominal_peak_load_units,
       report.thermal.shallow_peak_load_units,
       report.thermal.manual_correction_peak_load_units,
-      report.thermal.assisted_peak_load_units,
-      report.thermal.forced_abort_tick,
+      report.thermal.assisted_peak_load_units, report.thermal.forced_abort_tick,
       report.thermal.recovery_orbit_tick,
       report.thermal.deliberate_reentry_tick,
-      report.thermal.resumed_recovery_checksum,
-      report.framebuffer_checksum);
+      report.thermal.resumed_recovery_checksum, report.framebuffer_checksum);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

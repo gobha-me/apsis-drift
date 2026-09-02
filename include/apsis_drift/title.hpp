@@ -26,4 +26,4 @@ struct TitleRenderResult {
     ViewportSize size, std::span<termforge::Pixel> destination) noexcept
     -> std::expected<TitleRenderResult, TitleRenderError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

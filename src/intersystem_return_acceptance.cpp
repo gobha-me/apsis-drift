@@ -19,10 +19,9 @@ namespace {
 [[nodiscard]] auto checkpoint(SaveDocument& document)
     -> std::expected<void, IntersystemReturnAcceptanceError> {
   const auto encoded = encode_save_document_json(document);
-  const auto decoded =
-      encoded ? decode_save_document_json(*encoded)
-              : std::expected<SaveDocument, SaveSchemaError>{
-                    std::unexpected{SaveSchemaError{}}};
+  const auto decoded = encoded ? decode_save_document_json(*encoded)
+                               : std::expected<SaveDocument, SaveSchemaError>{
+                                     std::unexpected{SaveSchemaError{}}};
   if (!decoded) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::persistence_failure};
@@ -45,8 +44,8 @@ namespace {
   }
   const auto target =
       generate_local_system(contract.identities.target_system_seed);
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
     if (!advance_intersystem_jump_tick(contract, target)) {
       return std::unexpected{
           IntersystemReturnAcceptanceError::transition_failure};
@@ -60,7 +59,7 @@ namespace {
   return {};
 }
 
-}  // namespace
+} // namespace
 
 auto run_intersystem_return_acceptance(int width, int height)
     -> std::expected<IntersystemReturnAcceptanceResult,
@@ -108,16 +107,14 @@ auto run_intersystem_return_acceptance(int width, int height)
   orbital->tick = contract.universe_tick;
   orbital->regime = FlightRegime::orbital;
   auto system_flight = depart_planetary_orbit(target_system, *orbital);
-  if (!system_flight ||
-      !advance_intersystem_contract(
-          contract, contract.universe_tick,
-          IntersystemContractCommand::leave_target_planet)) {
+  if (!system_flight || !advance_intersystem_contract(
+                            contract, contract.universe_tick,
+                            IntersystemContractCommand::leave_target_planet)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::transition_failure};
   }
   const auto departure_tick = contract.universe_tick;
-  const auto departure_checksum =
-      system_flight_state_checksum(*system_flight);
+  const auto departure_checksum = system_flight_state_checksum(*system_flight);
   document.state.flight.reset();
   document.state.system_flight = *system_flight;
   document.state.discoveries = {
@@ -131,8 +128,8 @@ auto run_intersystem_return_acceptance(int width, int height)
   }
 
   auto resumed_contract = *document.state.intersystem_contract;
-  const auto persist = [&]()
-      -> std::expected<void, IntersystemReturnAcceptanceError> {
+  const auto persist =
+      [&]() -> std::expected<void, IntersystemReturnAcceptanceError> {
     document.state.intersystem_contract = resumed_contract;
     const auto saved = checkpoint(document);
     if (saved && document.state.intersystem_contract) {
@@ -160,8 +157,8 @@ auto run_intersystem_return_acceptance(int width, int height)
   }
   document.state.system_flight->tick = resumed_contract.universe_tick;
   document.state.system_flight->controls = {};
-  if (frozen_tick >= document.state.system_flight->tick ||
-      !persist() || !begin_intersystem_jump(resumed_contract)) {
+  if (frozen_tick >= document.state.system_flight->tick || !persist() ||
+      !begin_intersystem_jump(resumed_contract)) {
     return std::unexpected{
         IntersystemReturnAcceptanceError::persistence_failure};
   }
@@ -208,9 +205,8 @@ auto run_intersystem_return_acceptance(int width, int height)
 
   std::vector<termforge::Pixel> frame(static_cast<std::size_t>(width) *
                                       static_cast<std::size_t>(height));
-  LocalSystemRenderer renderer{{.width = width,
-                                .height = height,
-                                .field_of_view_degrees = 60.0}};
+  LocalSystemRenderer renderer{
+      {.width = width, .height = height, .field_of_view_degrees = 60.0}};
   const auto selected = origin_system.planets.front().descriptor.id;
   const auto origin_pose = resolve_origin_station_flight_pose(
       resumed_contract, origin_system, *document.state.origin_station_flight);
@@ -281,8 +277,7 @@ auto run_intersystem_return_acceptance(int width, int height)
   const auto final_guidance = resolve_origin_station_flight_guidance(
       resumed_contract, origin_system, *document.state.origin_station_flight);
   if (!final_guidance || !final_guidance->arrived || !resumed_midway) {
-    return std::unexpected{
-        IntersystemReturnAcceptanceError::incomplete_path};
+    return std::unexpected{IntersystemReturnAcceptanceError::incomplete_path};
   }
   const auto docked_return_checksum = origin_station_flight_state_checksum(
       *document.state.origin_station_flight);
@@ -294,20 +289,19 @@ auto run_intersystem_return_acceptance(int width, int height)
   const auto docking_tick = resumed_contract.universe_tick;
   document.state.origin_station_flight.reset();
   if (!persist() ||
-      !advance_intersystem_contract(
-          resumed_contract, resumed_contract.universe_tick,
-          IntersystemContractCommand::turn_in) ||
-      advance_intersystem_contract(
-          resumed_contract, resumed_contract.universe_tick,
-          IntersystemContractCommand::turn_in) ||
+      !advance_intersystem_contract(resumed_contract,
+                                    resumed_contract.universe_tick,
+                                    IntersystemContractCommand::turn_in) ||
+      advance_intersystem_contract(resumed_contract,
+                                   resumed_contract.universe_tick,
+                                   IntersystemContractCommand::turn_in) ||
       !persist() ||
       resumed_contract.mission_phase != IntersystemMissionPhase::turned_in ||
       document.state.discoveries.size() != 1U ||
       document.state.discoveries.front().signal !=
           resumed_contract.identities.target_objective ||
       document.state.world_deltas.size() != 1U) {
-    return std::unexpected{
-        IntersystemReturnAcceptanceError::incomplete_path};
+    return std::unexpected{IntersystemReturnAcceptanceError::incomplete_path};
   }
   return IntersystemReturnAcceptanceResult{
       .report = {.station = resumed_contract.identities.origin_station,
@@ -329,32 +323,31 @@ auto run_intersystem_return_acceptance(int width, int height)
 
 auto intersystem_return_acceptance_json(
     const IntersystemReturnAcceptanceReport& report) -> std::string {
-  return std::format(
-      "{{\n"
-      "  \"schema_version\": 2,\n"
-      "  \"scenario\": \"{}\",\n"
-      "  \"evidence_scope\": \"application_framebuffer\",\n"
-      "  \"origin_station_id\": \"{}\",\n"
-      "  \"departure_tick\": \"{}\",\n"
-      "  \"return_commit_tick\": \"{}\",\n"
-      "  \"origin_arrival_tick\": \"{}\",\n"
-      "  \"docking_tick\": \"{}\",\n"
-      "  \"departure_checksum\": \"{}\",\n"
-      "  \"origin_arrival_checksum\": \"{}\",\n"
-      "  \"docked_return_checksum\": \"{}\",\n"
-      "  \"discovery_count\": {},\n"
-      "  \"world_delta_count\": {},\n"
-      "  \"viewport\": {{\"width\": {}, \"height\": {}}},\n"
-      "  \"framebuffer_checksum\": \"{}\"\n"
-      "}}\n",
-      kIntersystemReturnAcceptanceScenario,
-      origin_station_id_string(report.station), report.departure_tick,
-      report.return_commit_tick, report.origin_arrival_tick,
-      report.docking_tick, report.departure_checksum,
-      report.origin_arrival_checksum, report.docked_return_checksum,
-      report.discovery_count, report.world_delta_count, report.width,
-      report.height,
-      report.framebuffer_checksum);
+  return std::format("{{\n"
+                     "  \"schema_version\": 2,\n"
+                     "  \"scenario\": \"{}\",\n"
+                     "  \"evidence_scope\": \"application_framebuffer\",\n"
+                     "  \"origin_station_id\": \"{}\",\n"
+                     "  \"departure_tick\": \"{}\",\n"
+                     "  \"return_commit_tick\": \"{}\",\n"
+                     "  \"origin_arrival_tick\": \"{}\",\n"
+                     "  \"docking_tick\": \"{}\",\n"
+                     "  \"departure_checksum\": \"{}\",\n"
+                     "  \"origin_arrival_checksum\": \"{}\",\n"
+                     "  \"docked_return_checksum\": \"{}\",\n"
+                     "  \"discovery_count\": {},\n"
+                     "  \"world_delta_count\": {},\n"
+                     "  \"viewport\": {{\"width\": {}, \"height\": {}}},\n"
+                     "  \"framebuffer_checksum\": \"{}\"\n"
+                     "}}\n",
+                     kIntersystemReturnAcceptanceScenario,
+                     origin_station_id_string(report.station),
+                     report.departure_tick, report.return_commit_tick,
+                     report.origin_arrival_tick, report.docking_tick,
+                     report.departure_checksum, report.origin_arrival_checksum,
+                     report.docked_return_checksum, report.discovery_count,
+                     report.world_delta_count, report.width, report.height,
+                     report.framebuffer_checksum);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

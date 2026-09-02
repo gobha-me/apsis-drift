@@ -24,8 +24,7 @@ class AudioCallbackBridge {
       -> AudioCallbackAction;
   [[nodiscard]] auto failure() const noexcept -> AudioBackendFailure;
   [[nodiscard]] auto callback_count() const noexcept -> std::uint64_t;
-  [[nodiscard]] auto output_underflow_count() const noexcept
-      -> std::uint64_t;
+  [[nodiscard]] auto output_underflow_count() const noexcept -> std::uint64_t;
 
  private:
   AudioRenderSource* m_source{};
@@ -35,4 +34,4 @@ class AudioCallbackBridge {
   std::atomic<std::uint64_t> m_output_underflow_count{};
 };
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

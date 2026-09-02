@@ -30,8 +30,7 @@ std::atomic<std::uint64_t> temporary_sequence{};
 
 [[nodiscard]] auto system_detail(std::string_view action, int error)
     -> std::string {
-  return std::format("{}: {}", action,
-                     std::system_category().message(error));
+  return std::format("{}: {}", action, std::system_category().message(error));
 }
 
 [[nodiscard]] auto parent_directory(const std::filesystem::path& path)
@@ -42,8 +41,8 @@ std::atomic<std::uint64_t> temporary_sequence{};
 
 [[nodiscard]] auto valid_destination(const std::filesystem::path& path)
     -> bool {
-  return !path.empty() && !path.filename().empty() &&
-         path.filename() != "." && path.filename() != "..";
+  return !path.empty() && !path.filename().empty() && path.filename() != "." &&
+         path.filename() != "..";
 }
 
 class FileDescriptor {
@@ -124,14 +123,13 @@ struct CreatedTemporary {
   constexpr std::uint64_t maximum_attempts{128};
   for (std::uint64_t attempt = 0; attempt < maximum_attempts; ++attempt) {
     const auto sequence = temporary_sequence.fetch_add(1);
-    const auto filename = std::format(".{}.tmp.{}.{}",
-                                      destination.filename().string(),
-                                      static_cast<long long>(::getpid()),
-                                      sequence);
+    const auto filename =
+        std::format(".{}.tmp.{}.{}", destination.filename().string(),
+                    static_cast<long long>(::getpid()), sequence);
     auto temporary_path = directory / filename;
-    const int descriptor = ::open(temporary_path.c_str(),
-                                  O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
-                                  S_IRUSR | S_IWUSR);
+    const int descriptor =
+        ::open(temporary_path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+               S_IRUSR | S_IWUSR);
     if (descriptor >= 0) {
       return CreatedTemporary{TemporarySave{std::move(temporary_path)},
                               FileDescriptor{descriptor}};
@@ -140,8 +138,9 @@ struct CreatedTemporary {
     if (error == EEXIST) continue;
     return std::unexpected{file_failure(
         SaveFileErrorCode::temporary_file_failed, destination,
-        system_detail("cannot create a temporary save in the destination directory",
-                      error))};
+        system_detail(
+            "cannot create a temporary save in the destination directory",
+            error))};
   }
   return std::unexpected{file_failure(
       SaveFileErrorCode::temporary_file_failed, destination,
@@ -194,19 +193,21 @@ struct CreatedTemporary {
     const int error = errno;
     return std::unexpected{file_failure(
         SaveFileErrorCode::directory_sync_failed, destination,
-        system_detail("save was replaced but the destination directory cannot be opened for synchronization",
+        system_detail("save was replaced but the destination directory cannot "
+                      "be opened for synchronization",
                       error))};
   }
   if (::fsync(descriptor.get()) < 0) {
     const int error = errno;
-    return std::unexpected{file_failure(
-        SaveFileErrorCode::directory_sync_failed, destination,
-        system_detail("save was replaced but the destination directory cannot be synchronized",
-                      error))};
+    return std::unexpected{
+        file_failure(SaveFileErrorCode::directory_sync_failed, destination,
+                     system_detail("save was replaced but the destination "
+                                   "directory cannot be synchronized",
+                                   error))};
   }
-  return close_checked(descriptor, destination,
-                       SaveFileErrorCode::directory_sync_failed,
-                       "save was replaced but the destination directory cannot be closed");
+  return close_checked(
+      descriptor, destination, SaveFileErrorCode::directory_sync_failed,
+      "save was replaced but the destination directory cannot be closed");
 }
 
 [[nodiscard]] auto write_atomically(
@@ -241,17 +242,17 @@ struct CreatedTemporary {
         SaveFileErrorCode::sync_failed, path,
         system_detail("cannot synchronize the temporary save", error))};
   }
-  if (auto closed = close_checked(descriptor, path,
-                                  SaveFileErrorCode::sync_failed,
-                                  "cannot close the temporary save");
+  if (auto closed =
+          close_checked(descriptor, path, SaveFileErrorCode::sync_failed,
+                        "cannot close the temporary save");
       !closed) {
     return closed;
   }
 
   if (interruption == detail::AtomicSaveTestInterruption::before_replace) {
-    return std::unexpected{file_failure(
-        SaveFileErrorCode::replace_failed, path,
-        "simulated interruption before atomic replacement")};
+    return std::unexpected{
+        file_failure(SaveFileErrorCode::replace_failed, path,
+                     "simulated interruption before atomic replacement")};
   }
   if (::rename(temporary.path().c_str(), path.c_str()) < 0) {
     const int error = errno;
@@ -265,7 +266,7 @@ struct CreatedTemporary {
   return synchronize_directory(parent_directory(path), path);
 }
 
-}  // namespace
+} // namespace
 
 auto make_new_game_document(Seed universe_seed,
                             NewGameOnboardingChoice onboarding)
@@ -280,9 +281,8 @@ auto make_new_game_document(Seed universe_seed,
 auto make_new_game_document(const NewGameOptions& options) -> SaveDocument {
   auto document = make_legacy_signal_run_document(options.universe_seed);
   document.state.onboarding = initial_onboarding_progress(options.onboarding);
-  document.state.intersystem_contract =
-      initial_intersystem_contract_state(options.universe_seed,
-                                         options.penalty_mode);
+  document.state.intersystem_contract = initial_intersystem_contract_state(
+      options.universe_seed, options.penalty_mode);
   return document;
 }
 
@@ -309,9 +309,8 @@ auto make_legacy_signal_run_document(Seed universe_seed) -> SaveDocument {
 auto load_save_file(const std::filesystem::path& path)
     -> std::expected<SaveDocument, SaveFileError> {
   if (!valid_destination(path)) {
-    return std::unexpected{file_failure(
-        SaveFileErrorCode::invalid_path, path,
-        "load path must name a save file")};
+    return std::unexpected{file_failure(SaveFileErrorCode::invalid_path, path,
+                                        "load path must name a save file")};
   }
 
   FileDescriptor descriptor{::open(path.c_str(), O_RDONLY | O_CLOEXEC)};
@@ -320,9 +319,10 @@ auto load_save_file(const std::filesystem::path& path)
     return std::unexpected{file_failure(
         error == ENOENT ? SaveFileErrorCode::not_found
                         : SaveFileErrorCode::open_failed,
-        path, system_detail(error == ENOENT ? "save file does not exist"
-                                            : "cannot open the save file",
-                            error))};
+        path,
+        system_detail(error == ENOENT ? "save file does not exist"
+                                      : "cannot open the save file",
+                      error))};
   }
 
   std::string contents;
@@ -340,29 +340,29 @@ auto load_save_file(const std::filesystem::path& path)
     if (count == 0) break;
     if (errno == EINTR) continue;
     const int error = errno;
-    return std::unexpected{file_failure(
-        SaveFileErrorCode::read_failed, path,
-        system_detail("cannot read the save file", error))};
+    return std::unexpected{
+        file_failure(SaveFileErrorCode::read_failed, path,
+                     system_detail("cannot read the save file", error))};
   }
-  if (auto closed = close_checked(descriptor, path,
-                                  SaveFileErrorCode::read_failed,
-                                  "cannot close the save file");
+  if (auto closed =
+          close_checked(descriptor, path, SaveFileErrorCode::read_failed,
+                        "cannot close the save file");
       !closed) {
     return std::unexpected{closed.error()};
   }
   if (contents.size() > kMaximumSaveDocumentBytes) {
-    return std::unexpected{file_failure(
-        SaveFileErrorCode::document_too_large, path,
-        std::format("save exceeds the {}-byte format limit",
-                    kMaximumSaveDocumentBytes))};
+    return std::unexpected{
+        file_failure(SaveFileErrorCode::document_too_large, path,
+                     std::format("save exceeds the {}-byte format limit",
+                                 kMaximumSaveDocumentBytes))};
   }
 
   auto decoded = decode_save_document_json(contents);
   if (!decoded) {
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed, unsupported, or incompatible",
-        decoded.error()}};
+    return std::unexpected{
+        SaveFileError{SaveFileErrorCode::invalid_document, path,
+                      "save file is malformed, unsupported, or incompatible",
+                      decoded.error()}};
   }
   return *decoded;
 }
@@ -375,7 +375,8 @@ auto write_save_file_atomically(const std::filesystem::path& path,
 }
 
 auto save_file_error_message(const SaveFileError& error) -> std::string {
-  std::string message = std::format("{}: {}", error.path.string(), error.detail);
+  std::string message =
+      std::format("{}: {}", error.path.string(), error.detail);
   if (error.schema_error) {
     message += std::format(" ({}: {})", error.schema_error->path,
                            error.schema_error->detail);
@@ -392,6 +393,6 @@ auto write_save_file_atomically_for_test(
   return write_atomically(path, document, interruption);
 }
 
-}  // namespace detail
+} // namespace detail
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -18,8 +18,8 @@ struct Diagnostic {
   std::string path;
   std::string detail;
 
-  friend auto operator==(const Diagnostic&, const Diagnostic&) -> bool =
-      default;
+  friend auto operator==(const Diagnostic&, const Diagnostic&)
+      -> bool = default;
 };
 
 using Diagnostics = std::vector<Diagnostic>;
@@ -32,4 +32,4 @@ using Diagnostics = std::vector<Diagnostic>;
     const std::filesystem::path& manifest_path,
     const std::filesystem::path& repository_root) -> Diagnostics;
 
-}  // namespace apsis_drift::asset_provenance
+} // namespace apsis_drift::asset_provenance

@@ -22,8 +22,8 @@ struct OnboardingProgress {
   OnboardingState state{OnboardingState::guided};
   std::optional<OnboardingChapter> chapter{OnboardingChapter::contract_one};
 
-  friend auto operator==(const OnboardingProgress&,
-                         const OnboardingProgress&) -> bool = default;
+  friend auto operator==(const OnboardingProgress&, const OnboardingProgress&)
+      -> bool = default;
 };
 
 enum class NewGameOnboardingChoice : std::uint8_t {
@@ -63,8 +63,8 @@ struct OnboardingAccess {
     const OnboardingProgress& progress) noexcept
     -> std::expected<OnboardingAccess, OnboardingError>;
 
-[[nodiscard]] auto advance_onboarding(
-    OnboardingProgress& progress, OnboardingCommand command) noexcept
+[[nodiscard]] auto advance_onboarding(OnboardingProgress& progress,
+                                      OnboardingCommand command) noexcept
     -> std::expected<void, OnboardingError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -71,4 +71,4 @@ struct SignalNavigationAcceptanceReport {
 [[nodiscard]] auto signal_navigation_acceptance_json(
     const SignalNavigationAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

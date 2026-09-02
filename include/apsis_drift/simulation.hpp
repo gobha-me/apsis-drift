@@ -15,8 +15,8 @@ using SimulationTick = std::uint64_t;
 inline constexpr int kSimulationHz{120};
 inline constexpr int kMaxCatchUpSteps{15};
 inline constexpr SimulationSeconds kSimulationStep{1.0 / kSimulationHz};
-inline constexpr SimulationSeconds kMaxCatchUp{
-    kSimulationStep * kMaxCatchUpSteps};
+inline constexpr SimulationSeconds kMaxCatchUp{kSimulationStep *
+                                               kMaxCatchUpSteps};
 inline constexpr double kLowClearanceWarningMetres{24.0};
 
 enum class SimulationTimeError : std::uint8_t {
@@ -126,9 +126,9 @@ enum class FlightError : std::uint8_t {
 // Applies all commands in their recorded order, advances exactly one fixed
 // step, and commits the result atomically. Every command must target the
 // state's current tick, and step must equal kSimulationStep.
-[[nodiscard]] auto advance_flight(
-    const Terrain& terrain, FlightState& state,
-    std::span<const FlightCommand> commands, SimulationSeconds step) noexcept
+[[nodiscard]] auto advance_flight(const Terrain& terrain, FlightState& state,
+                                  std::span<const FlightCommand> commands,
+                                  SimulationSeconds step) noexcept
     -> std::expected<void, FlightError>;
 
 // Camera state is presentation-only and is derived from authoritative flight
@@ -139,4 +139,4 @@ enum class FlightError : std::uint8_t {
 [[nodiscard]] auto flight_state_checksum(const FlightState& state) noexcept
     -> std::uint64_t;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

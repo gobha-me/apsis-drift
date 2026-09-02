@@ -54,8 +54,8 @@ struct Replay {
 
 auto command_if_changed(std::vector<FlightCommand>& commands,
                         SimulationTick tick, bool current, bool desired,
-                        FlightCommandKind press,
-                        FlightCommandKind release) -> void {
+                        FlightCommandKind press, FlightCommandKind release)
+    -> void {
   if (current == desired) return;
   commands.push_back({tick, desired ? press : release});
 }
@@ -76,11 +76,11 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
   command_if_changed(commands, flight.tick, flight.controls.turn_right,
                      guidance.right, FlightCommandKind::press_turn_right,
                      FlightCommandKind::release_turn_right);
-  command_if_changed(commands, flight.tick, flight.controls.rise,
-                     guidance.rise, FlightCommandKind::press_rise,
+  command_if_changed(commands, flight.tick, flight.controls.rise, guidance.rise,
+                     FlightCommandKind::press_rise,
                      FlightCommandKind::release_rise);
-  command_if_changed(commands, flight.tick, flight.controls.fall,
-                     guidance.fall, FlightCommandKind::press_fall,
+  command_if_changed(commands, flight.tick, flight.controls.fall, guidance.fall,
+                     FlightCommandKind::press_fall,
                      FlightCommandKind::release_fall);
   return commands;
 }
@@ -101,25 +101,23 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
   const double target_altitude =
       target == state.catalog.signals.end()
           ? flight.pose.position.altitude_metres
-          : static_cast<double>(
-                expanded_seed_guidance
-                    ? target->approach_altitude_metres
-                    : target->surface_elevation_metres +
-                          target->approach_altitude_metres);
-  const bool recovering =
-      pilot && (flight.thermal.abort_latched ||
-                flight.thermal.load_units >= 600'000U);
+          : static_cast<double>(expanded_seed_guidance
+                                    ? target->approach_altitude_metres
+                                    : target->surface_elevation_metres +
+                                          target->approach_altitude_metres);
+  const bool recovering = pilot && (flight.thermal.abort_latched ||
+                                    flight.thermal.load_units >= 600'000U);
   return {.forward = aligned && !reached &&
                      navigation.distance_metres > 700.0 && !recovering,
           .backward = recovering,
           .left = relative < -0.025,
           .right = relative > 0.025,
           .rise = recovering,
-          .fall = (aligned || expanded_seed_guidance) &&
-                  navigation.distance_metres < 25'000'000.0 &&
-                  flight.pose.position.altitude_metres >
-                      target_altitude + 250.0 &&
-                  !recovering};
+          .fall =
+              (aligned || expanded_seed_guidance) &&
+              navigation.distance_metres < 25'000'000.0 &&
+              flight.pose.position.altitude_metres > target_altitude + 250.0 &&
+              !recovering};
 }
 
 [[nodiscard]] auto ascent_guidance(const PlanetaryFlightState& flight)
@@ -130,14 +128,12 @@ auto command_if_changed(std::vector<FlightCommand>& commands,
           .rise = true};
 }
 
-auto project_active_state(SaveDocument& document,
-                          const IntersystemContractState& career,
-                          const OriginSystemContractState& contract,
-                          OriginLocation location,
-                          const std::optional<PlanetaryFlightState>& flight,
-                          const std::optional<SystemFlightState>& system_flight,
-                          const std::optional<OriginStationFlightState>& station)
-    -> void {
+auto project_active_state(
+    SaveDocument& document, const IntersystemContractState& career,
+    const OriginSystemContractState& contract, OriginLocation location,
+    const std::optional<PlanetaryFlightState>& flight,
+    const std::optional<SystemFlightState>& system_flight,
+    const std::optional<OriginStationFlightState>& station) -> void {
   document.state.intersystem_contract = career;
   document.state.origin_system_contract = contract;
   document.state.location = location;
@@ -151,21 +147,19 @@ auto project_active_state(SaveDocument& document,
     std::vector<OriginSystemContractCheckpoint>& checkpoints)
     -> std::expected<void, OriginSystemContractAcceptanceError> {
   const auto encoded = encode_save_document_json(document);
-  const auto decoded =
-      encoded ? decode_save_document_json(*encoded)
-              : std::expected<SaveDocument, SaveSchemaError>{
-                    std::unexpected{SaveSchemaError{}}};
+  const auto decoded = encoded ? decode_save_document_json(*encoded)
+                               : std::expected<SaveDocument, SaveSchemaError>{
+                                     std::unexpected{SaveSchemaError{}}};
   if (!encoded || !decoded || *decoded != document) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::persistence_failure};
   }
   document = std::move(*decoded);
-  const SimulationTick tick = document.state.intersystem_contract
-                                  ? document.state.intersystem_contract
-                                        ->universe_tick
-                                  : 0;
-  checkpoints.push_back(
-      {std::string{name}, tick, checksum_bytes(*encoded)});
+  const SimulationTick tick =
+      document.state.intersystem_contract
+          ? document.state.intersystem_contract->universe_tick
+          : 0;
+  checkpoints.push_back({std::string{name}, tick, checksum_bytes(*encoded)});
   return {};
 }
 
@@ -177,12 +171,10 @@ auto project_active_state(SaveDocument& document,
     return std::unexpected{
         OriginSystemContractAcceptanceError::initialization_failure};
   }
-  document.state.onboarding = {
-      .state = OnboardingState::guided,
-      .chapter = OnboardingChapter::contract_two};
+  document.state.onboarding = {.state = OnboardingState::guided,
+                               .chapter = OnboardingChapter::contract_two};
   document.state.first_objective = FirstObjectiveStatus::turned_in;
-  document.state.discoveries = {
-      {document.state.first_objective_target, 0}};
+  document.state.discoveries = {{document.state.first_objective_target, 0}};
   document.state.world_deltas = {
       {surface_signal_object_key(document.state.first_objective_target),
        SaveWorldDeltaKind::collected, 0}};
@@ -217,28 +209,28 @@ auto project_active_state(SaveDocument& document,
   std::vector<termforge::Pixel> frame(static_cast<std::size_t>(width) *
                                       static_cast<std::size_t>(height));
 
-  if (!advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::accept)) {
+  if (!advance_origin_system_contract(contract, career.universe_tick,
+                                      career.universe_tick,
+                                      OriginSystemContractCommand::accept)) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::transition_failure};
   }
   document.state.origin_system_discoveries = {
       {contract.binding.target_objective, career.universe_tick}};
-  if (!advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::launch)) {
+  if (!advance_origin_system_contract(contract, career.universe_tick,
+                                      career.universe_tick,
+                                      OriginSystemContractCommand::launch)) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::transition_failure};
   }
-  auto station = initialize_origin_station_launch(seed, career.universe_tick,
-                                                  system);
+  auto station =
+      initialize_origin_station_launch(seed, career.universe_tick, system);
   if (!station) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::initialization_failure};
   }
-  const std::array launch_commands{FlightCommand{
-      station->tick, FlightCommandKind::press_forward}};
+  const std::array launch_commands{
+      FlightCommand{station->tick, FlightCommandKind::press_forward}};
   if (!advance_origin_station_flight(seed, career.universe_tick, system,
                                      *station, launch_commands) ||
       !advance_intersystem_time(career, 1)) {
@@ -247,10 +239,9 @@ auto project_active_state(SaveDocument& document,
   }
   auto outbound = initialize_origin_system_outbound_transfer(
       seed, career.universe_tick, system, contract, *station);
-  if (!outbound ||
-      !advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::begin_outbound_transfer)) {
+  if (!outbound || !advance_origin_system_contract(
+                       contract, career.universe_tick, career.universe_tick,
+                       OriginSystemContractCommand::begin_outbound_transfer)) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::transition_failure};
   }
@@ -291,15 +282,15 @@ auto project_active_state(SaveDocument& document,
     }
     if (step < 120U &&
         step % static_cast<SimulationTick>(render_interval) == 0U) {
-      const auto rendered = renderer.render(
-          system,
-          {.time = {outbound->tick, 0.0},
-           .position = outbound->position,
-           .velocity = outbound->velocity,
-           .forward = outbound->forward,
-           .up = outbound->up,
-           .selected_planet = outbound->target},
-          frame);
+      const auto rendered =
+          renderer.render(system,
+                          {.time = {outbound->tick, 0.0},
+                           .position = outbound->position,
+                           .velocity = outbound->velocity,
+                           .forward = outbound->forward,
+                           .up = outbound->up,
+                           .selected_planet = outbound->target},
+                          frame);
       if (!rendered) {
         std::fprintf(stderr,
                      "contract-two outbound presentation failed at tick %llu "
@@ -342,23 +333,20 @@ auto project_active_state(SaveDocument& document,
   contract = *document.state.origin_system_contract;
   outbound = *document.state.system_flight;
   const auto orbital = insert_system_flight_orbit(system, *outbound);
-  if (!orbital ||
-      !advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::enter_target_planet)) {
+  if (!orbital || !advance_origin_system_contract(
+                      contract, career.universe_tick, career.universe_tick,
+                      OriginSystemContractCommand::enter_target_planet)) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::transition_failure};
   }
   auto cache = TerrainTileCache::create();
-  auto planetfall = cache ? initialize_intersystem_planetfall(
-                               system.planets[contract.binding.target_ordinal]
-                                   .descriptor,
-                               contract.binding.target_objective, *orbital, {},
-                               *cache)
-                         : std::expected<IntersystemPlanetfallState,
-                                         IntersystemPlanetfallError>{
-                               std::unexpected{
-                                   IntersystemPlanetfallError::terrain_failure}};
+  auto planetfall =
+      cache ? initialize_intersystem_planetfall(
+                  system.planets[contract.binding.target_ordinal].descriptor,
+                  contract.binding.target_objective, *orbital, {}, *cache)
+            : std::expected<IntersystemPlanetfallState,
+                            IntersystemPlanetfallError>{
+                  std::unexpected{IntersystemPlanetfallError::terrain_failure}};
   if (!planetfall) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::initialization_failure};
@@ -366,9 +354,9 @@ auto project_active_state(SaveDocument& document,
   constexpr SimulationTick maximum_planet_ticks{2'000'000};
   const bool noncanonical_planetfall_guidance =
       seed != Seed{kOriginSystemContractAcceptanceSeed};
-  for (SimulationTick step = 0; step < maximum_planet_ticks &&
-                                  planetfall->collection.status !=
-                                      SignalCollectionStatus::complete;
+  for (SimulationTick step = 0;
+       step < maximum_planet_ticks &&
+       planetfall->collection.status != SignalCollectionStatus::complete;
        ++step) {
     const auto commands = commands_for(
         planetfall->flight,
@@ -418,7 +406,8 @@ auto project_active_state(SaveDocument& document,
         OriginSystemContractAcceptanceError::incomplete_path};
   }
   document.state.origin_system_world_deltas.assign(
-      planetfall->journal.entries().begin(), planetfall->journal.entries().end());
+      planetfall->journal.entries().begin(),
+      planetfall->journal.entries().end());
   project_active_state(document, career, contract, OriginLocation::in_flight,
                        planetfall->flight, std::nullopt, std::nullopt);
   if (!checkpoint(document, "objective-complete", checkpoints)) {
@@ -441,16 +430,15 @@ auto project_active_state(SaveDocument& document,
     }
   }
   auto departure = depart_planetary_orbit(system, planetfall->flight);
-  auto returning = departure ? initialize_origin_system_return_transfer(
-                                   seed, system, contract, *departure)
-                             : std::expected<SystemFlightState,
-                                             OriginSystemContractError>{
-                                   std::unexpected{
-                                       OriginSystemContractError::invalid_flight}};
-  if (!returning ||
-      !advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::leave_target_planet)) {
+  auto returning =
+      departure
+          ? initialize_origin_system_return_transfer(seed, system, contract,
+                                                     *departure)
+          : std::expected<SystemFlightState, OriginSystemContractError>{
+                std::unexpected{OriginSystemContractError::invalid_flight}};
+  if (!returning || !advance_origin_system_contract(
+                        contract, career.universe_tick, career.universe_tick,
+                        OriginSystemContractCommand::leave_target_planet)) {
     return std::unexpected{
         OriginSystemContractAcceptanceError::transition_failure};
   }
@@ -474,8 +462,7 @@ auto project_active_state(SaveDocument& document,
         OriginSystemContractAcceptanceError::simulation_failure};
   }
   constexpr SimulationTick maximum_return_transfer_steps{400'000};
-  for (SimulationTick step = 0; step < maximum_return_transfer_steps;
-       ++step) {
+  for (SimulationTick step = 0; step < maximum_return_transfer_steps; ++step) {
     const auto guidance = resolve_system_flight_guidance(system, *returning);
     if (!guidance) {
       return std::unexpected{
@@ -527,19 +514,18 @@ auto project_active_state(SaveDocument& document,
   const auto station_guidance = resolve_origin_station_flight_guidance(
       seed, career.universe_tick, system, *rendezvous);
   if (!station_guidance || !station_guidance->arrived ||
-      !advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::dock)) {
-    std::fprintf(stderr,
-                 "contract-two station rendezvous did not complete\n");
+      !advance_origin_system_contract(contract, career.universe_tick,
+                                      career.universe_tick,
+                                      OriginSystemContractCommand::dock)) {
+    std::fprintf(stderr, "contract-two station rendezvous did not complete\n");
     return std::unexpected{
         OriginSystemContractAcceptanceError::incomplete_path};
   }
   const std::uint64_t final_station_checksum =
       origin_station_flight_state_checksum(*rendezvous);
-  if (!advance_origin_system_contract(
-          contract, career.universe_tick, career.universe_tick,
-          OriginSystemContractCommand::turn_in) ||
+  if (!advance_origin_system_contract(contract, career.universe_tick,
+                                      career.universe_tick,
+                                      OriginSystemContractCommand::turn_in) ||
       !advance_onboarding(document.state.onboarding,
                           OnboardingCommand::complete_contract_two)) {
     return std::unexpected{
@@ -561,15 +547,14 @@ auto project_active_state(SaveDocument& document,
         OriginSystemContractAcceptanceError::persistence_failure};
   }
 
-  const auto rendered = renderer.render(
-      system,
-      {.time = {returning->tick, 0.0},
-       .position = returning->position,
-       .velocity = returning->velocity,
-       .forward = returning->forward,
-       .up = returning->up,
-       .selected_planet = returning->target},
-      frame);
+  const auto rendered = renderer.render(system,
+                                        {.time = {returning->tick, 0.0},
+                                         .position = returning->position,
+                                         .velocity = returning->velocity,
+                                         .forward = returning->forward,
+                                         .up = returning->up,
+                                         .selected_planet = returning->target},
+                                        frame);
   if (!rendered) {
     std::fprintf(stderr,
                  "contract-two return presentation failed at tick %llu "
@@ -580,24 +565,23 @@ auto project_active_state(SaveDocument& document,
         OriginSystemContractAcceptanceError::presentation_failure};
   }
   return Replay{
-      .report =
-          {.binding = contract.binding,
-           .outbound_tick = outbound_tick,
-           .target_insertion_tick = orbital->tick,
-           .objective_tick = objective_tick,
-           .return_tick = return_tick,
-           .rendezvous_tick = rendezvous_tick,
-           .final_tick = career.universe_tick,
-           .outbound_checksum = system_flight_state_checksum(*outbound),
-           .return_checksum = system_flight_state_checksum(*returning),
-           .final_station_checksum = final_station_checksum,
-           .framebuffer_checksum = checksum_pixels(frame),
-           .checkpoints = std::move(checkpoints)},
+      .report = {.binding = contract.binding,
+                 .outbound_tick = outbound_tick,
+                 .target_insertion_tick = orbital->tick,
+                 .objective_tick = objective_tick,
+                 .return_tick = return_tick,
+                 .rendezvous_tick = rendezvous_tick,
+                 .final_tick = career.universe_tick,
+                 .outbound_checksum = system_flight_state_checksum(*outbound),
+                 .return_checksum = system_flight_state_checksum(*returning),
+                 .final_station_checksum = final_station_checksum,
+                 .framebuffer_checksum = checksum_pixels(frame),
+                 .checkpoints = std::move(checkpoints)},
       .document = std::move(document),
       .frame = std::move(frame)};
 }
 
-}  // namespace
+} // namespace
 
 auto run_origin_system_contract_acceptance(int width, int height)
     -> std::expected<OriginSystemContractAcceptanceResult,
@@ -626,9 +610,8 @@ auto run_origin_system_contract_acceptance(
     return std::unexpected{
         OriginSystemContractAcceptanceError::cadence_mismatch};
   }
-  return OriginSystemContractAcceptanceResult{first->report,
-                                               std::move(first->document),
-                                               std::move(first->frame)};
+  return OriginSystemContractAcceptanceResult{
+      first->report, std::move(first->document), std::move(first->frame)};
 }
 
 auto origin_system_contract_acceptance_json(
@@ -636,11 +619,11 @@ auto origin_system_contract_acceptance_json(
   std::string checkpoints;
   for (std::size_t index = 0; index < report.checkpoints.size(); ++index) {
     const auto& checkpoint = report.checkpoints[index];
-    checkpoints += std::format(
-        "    {{\"name\": \"{}\", \"tick\": \"{}\", "
-        "\"save_checksum\": \"{}\"}}{}\n",
-        checkpoint.name, checkpoint.tick, checkpoint.save_checksum,
-        index + 1U == report.checkpoints.size() ? "" : ",");
+    checkpoints +=
+        std::format("    {{\"name\": \"{}\", \"tick\": \"{}\", "
+                    "\"save_checksum\": \"{}\"}}{}\n",
+                    checkpoint.name, checkpoint.tick, checkpoint.save_checksum,
+                    index + 1U == report.checkpoints.size() ? "" : ",");
   }
   return std::format(
       "{{\n"
@@ -668,8 +651,8 @@ auto origin_system_contract_acceptance_json(
       kOriginSystemContractAcceptanceScenario,
       kOriginSystemContractAcceptanceSeed,
       system_id_string(report.binding.system),
-      mission_id_string(report.binding.contract), report.binding.home_planet.value,
-      report.binding.target_planet.value,
+      mission_id_string(report.binding.contract),
+      report.binding.home_planet.value, report.binding.target_planet.value,
       surface_signal_id_string(report.binding.target_objective),
       report.outbound_tick, report.target_insertion_tick, report.objective_tick,
       report.return_tick, report.rendezvous_tick, report.final_tick,
@@ -677,4 +660,4 @@ auto origin_system_contract_acceptance_json(
       report.final_station_checksum, report.framebuffer_checksum, checkpoints);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

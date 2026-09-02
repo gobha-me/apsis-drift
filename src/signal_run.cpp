@@ -26,21 +26,20 @@ namespace {
 [[nodiscard]] auto signal_for(const SurfaceSignalCatalog& catalog,
                               SurfaceSignalId id) noexcept
     -> const SurfaceSignal* {
-  const auto found = std::ranges::find(catalog.signals, id,
-                                       &SurfaceSignal::id);
+  const auto found = std::ranges::find(catalog.signals, id, &SurfaceSignal::id);
   return found == catalog.signals.end() ? nullptr : &*found;
 }
 
-[[nodiscard]] auto surface_environment(
-    const PlanetDescriptor& planet, const PlanetaryFlightState& flight,
-    TerrainTileCache& cache)
+[[nodiscard]] auto surface_environment(const PlanetDescriptor& planet,
+                                       const PlanetaryFlightState& flight,
+                                       TerrainTileCache& cache)
     -> std::expected<PlanetaryFlightEnvironment, SignalRunError> {
   const auto fixed = planet_fixed_from_geodetic(
       planet, {flight.pose.position.latitude_radians,
                flight.pose.position.longitude_radians, 0.0});
   if (!fixed) return std::unexpected{SignalRunError::terrain_failure};
-  const auto sample = sample_planet_surface(
-      planet, *fixed, kSurfaceSignalPlacementLod, cache);
+  const auto sample =
+      sample_planet_surface(planet, *fixed, kSurfaceSignalPlacementLod, cache);
   if (!sample) return std::unexpected{SignalRunError::terrain_failure};
   return PlanetaryFlightEnvironment{sample->elevation_metres};
 }
@@ -54,8 +53,8 @@ namespace {
   if (target == nullptr) {
     return std::unexpected{SignalRunError::invalid_target};
   }
-  const auto target_fixed = planet_fixed_from_terrain_address(
-      *state.planet, target->anchor, 0.0);
+  const auto target_fixed =
+      planet_fixed_from_terrain_address(*state.planet, target->anchor, 0.0);
   const auto target_position =
       target_fixed ? geodetic_from_planet_fixed(*state.planet, *target_fixed)
                    : std::expected<GeodeticPosition, CoordinateError>{
@@ -68,19 +67,16 @@ namespace {
       static_cast<double>(state.recipe.origin_station.value >> 11U) *
       (2.0 * std::numbers::pi_v<double> / 9'007'199'254'740'992.0);
   GeodeticPosition orbital = *target_position;
-  orbital.altitude_metres = bands->orbit_enter_altitude_metres +
-                            kOriginRendezvousAboveOrbitMetres;
+  orbital.altitude_metres =
+      bands->orbit_enter_altitude_metres + kOriginRendezvousAboveOrbitMetres;
   const auto frame = make_local_tangent_frame(*state.planet, orbital);
-  const auto fixed = frame ? planet_fixed_from_local(
-                                 *frame,
-                                 {std::cos(angle) *
-                                      kOriginRendezvousOffsetMetres,
-                                  std::sin(angle) *
-                                      kOriginRendezvousOffsetMetres,
-                                  0.0})
-                           : std::expected<PlanetFixedPositionMetres,
-                                           CoordinateError>{std::unexpected{
-                                 CoordinateError::non_finite_input}};
+  const auto fixed =
+      frame
+          ? planet_fixed_from_local(
+                *frame, {std::cos(angle) * kOriginRendezvousOffsetMetres,
+                         std::sin(angle) * kOriginRendezvousOffsetMetres, 0.0})
+          : std::expected<PlanetFixedPositionMetres, CoordinateError>{
+                std::unexpected{CoordinateError::non_finite_input}};
   const auto position =
       fixed ? geodetic_from_planet_fixed(*state.planet, *fixed)
             : std::expected<GeodeticPosition, CoordinateError>{
@@ -88,8 +84,7 @@ namespace {
   if (!position) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
-  return OriginRendezvous{*position,
-                          kOriginRendezvousArrivalRadiusMetres};
+  return OriginRendezvous{*position, kOriginRendezvousArrivalRadiusMetres};
 }
 
 [[nodiscard]] auto local_navigation(const PlanetDescriptor& planet,
@@ -99,11 +94,10 @@ namespace {
     -> std::expected<OriginNavigationSolution, SignalRunError> {
   const auto frame = make_local_tangent_frame(planet, flight.pose.position);
   const auto fixed = planet_fixed_from_geodetic(planet, target);
-  const auto local = frame && fixed
-                         ? local_from_planet_fixed(*frame, *fixed)
-                         : std::expected<LocalPositionMetres, CoordinateError>{
-                               std::unexpected{
-                                   CoordinateError::non_finite_input}};
+  const auto local =
+      frame && fixed ? local_from_planet_fixed(*frame, *fixed)
+                     : std::expected<LocalPositionMetres, CoordinateError>{
+                           std::unexpected{CoordinateError::non_finite_input}};
   if (!local) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
@@ -114,8 +108,8 @@ namespace {
   if (!std::isfinite(distance) || !std::isfinite(relative)) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
-  const auto motion = resolve_target_relative_motion(
-      planet, flight, *local, arrival_radius);
+  const auto motion =
+      resolve_target_relative_motion(planet, flight, *local, arrival_radius);
   if (!motion) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
@@ -142,8 +136,8 @@ namespace {
            !state.flight && !state.station_flight &&
            state.discoveries.empty() && state.journal.entries().empty();
   }
-  if (!has_target || signal_for(state.catalog, *state.scanner.selected) ==
-                         nullptr) {
+  if (!has_target ||
+      signal_for(state.catalog, *state.scanner.selected) == nullptr) {
     return false;
   }
   const bool target_discovered = std::ranges::any_of(
@@ -170,7 +164,7 @@ namespace {
   return true;
 }
 
-}  // namespace
+} // namespace
 
 auto signal_run_error_name(SignalRunError error) noexcept -> std::string_view {
   switch (error) {
@@ -251,24 +245,22 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
     return std::unexpected{SignalRunError::inconsistent_state};
   }
   if (state.flight) {
-    auto navigation = resolve_signal_navigation(
-        *state.planet, state.catalog, *state.flight, state.scanner);
+    auto navigation = resolve_signal_navigation(*state.planet, state.catalog,
+                                                *state.flight, state.scanner);
     if (!navigation) {
       return std::unexpected{SignalRunError::navigation_failure};
     }
     state.signal_navigation = *navigation;
-    if (state.onboarding.first_objective ==
-        FirstObjectiveStatus::completed) {
+    if (state.onboarding.first_objective == FirstObjectiveStatus::completed) {
       state.collection = SignalCollectionState{
           .status = SignalCollectionStatus::complete,
           .target = state.scanner.selected,
-          .consecutive_in_range_ticks =
-              kSignalCollectionTotalInRangeTicks,
+          .consecutive_in_range_ticks = kSignalCollectionTotalInRangeTicks,
           .last_tick = state.flight->tick,
-          .completion_tick = state.journal
-                                 .state(surface_signal_object_key(
-                                     *state.scanner.selected))
-                                 ->tick,
+          .completion_tick =
+              state.journal
+                  .state(surface_signal_object_key(*state.scanner.selected))
+                  ->tick,
       };
       if (state.rendezvous) {
         auto origin = local_navigation(*state.planet, *state.flight,
@@ -286,8 +278,7 @@ auto accept_signal_run(SignalRunState& state)
     -> std::expected<void, SignalRunError> {
   auto next = state;
   if (!advance_origin_onboarding(
-          next.onboarding,
-          OriginOnboardingCommand::accept_first_objective)) {
+          next.onboarding, OriginOnboardingCommand::accept_first_objective)) {
     return std::unexpected{SignalRunError::invalid_transition};
   }
   if (signal_for(next.catalog, next.onboarding.first_target) == nullptr) {
@@ -332,27 +323,24 @@ auto launch_signal_run(SignalRunState& state, TerrainTileCache& cache)
     return std::unexpected{SignalRunError::invalid_transition};
   }
   const auto fixed = planet_fixed_from_geodetic(
-      *state.planet,
-      {state.rendezvous->position.latitude_radians,
-       state.rendezvous->position.longitude_radians, 0.0});
-  const auto sample = fixed ? sample_planet_surface(
-                                  *state.planet, *fixed,
-                                  kSurfaceSignalPlacementLod, cache)
-                            : std::expected<TerrainSurfaceSample,
-                                            TerrainTileError>{
-                                  std::unexpected{
-                                      TerrainTileError::coordinate_failure}};
+      *state.planet, {state.rendezvous->position.latitude_radians,
+                      state.rendezvous->position.longitude_radians, 0.0});
+  const auto sample =
+      fixed ? sample_planet_surface(*state.planet, *fixed,
+                                    kSurfaceSignalPlacementLod, cache)
+            : std::expected<TerrainSurfaceSample, TerrainTileError>{
+                  std::unexpected{TerrainTileError::coordinate_failure}};
   if (!sample) return std::unexpected{SignalRunError::terrain_failure};
   auto flight = initial_planetary_flight_state(
-      *state.planet, state.rendezvous->position,
-      {sample->elevation_metres}, 0.0, FlightMode::manual);
+      *state.planet, state.rendezvous->position, {sample->elevation_metres},
+      0.0, FlightMode::manual);
   if (!flight) return std::unexpected{SignalRunError::flight_failure};
   auto onboarding = state.onboarding;
   if (!advance_origin_onboarding(onboarding, OriginOnboardingCommand::launch)) {
     return std::unexpected{SignalRunError::invalid_transition};
   }
-  auto navigation = resolve_signal_navigation(
-      *state.planet, state.catalog, *flight, state.scanner);
+  auto navigation = resolve_signal_navigation(*state.planet, state.catalog,
+                                              *flight, state.scanner);
   if (!navigation) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
@@ -429,8 +417,7 @@ auto begin_signal_run_planetfall(SignalRunState& state, TerrainTileCache& cache)
   return {};
 }
 
-auto interact_signal_run_station(SignalRunState& state,
-                                 TerrainTileCache& cache)
+auto interact_signal_run_station(SignalRunState& state, TerrainTileCache& cache)
     -> std::expected<SignalRunStationInteraction,
                      SignalRunStationInteractionError> {
   if (!state.career || !state.station_flight || state.flight ||
@@ -599,8 +586,8 @@ auto advance_signal_run(SignalRunState& state, TerrainTileCache& cache,
       (next.career && !advance_intersystem_time(*next.career, 1))) {
     return std::unexpected{SignalRunError::flight_failure};
   }
-  auto navigation = resolve_signal_navigation(
-      *next.planet, next.catalog, *next.flight, next.scanner);
+  auto navigation = resolve_signal_navigation(*next.planet, next.catalog,
+                                              *next.flight, next.scanner);
   if (!navigation) {
     return std::unexpected{SignalRunError::navigation_failure};
   }
@@ -729,4 +716,4 @@ auto project_signal_run_save(const SignalRunState& state)
   return document;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

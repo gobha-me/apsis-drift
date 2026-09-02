@@ -32,9 +32,9 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr std::array<std::string_view, 9> kResumeStages{
-    "docked",           "origin-flight",    "outbound-spool",
-    "canceled-spool",   "outbound-transit", "target-system",
-    "planet-side",      "origin-return",    "returned-docked"};
+    "docked",         "origin-flight",    "outbound-spool",
+    "canceled-spool", "outbound-transit", "target-system",
+    "planet-side",    "origin-return",    "returned-docked"};
 
 struct Replay {
   SaveDocument final_document;
@@ -76,8 +76,8 @@ struct Replay {
   }
   try {
     const auto root = nlohmann::ordered_json::parse(*encoded);
-    const nlohmann::ordered_json authoritative{
-        {"recipe", root.at("recipe")}, {"state", root.at("state")}};
+    const nlohmann::ordered_json authoritative{{"recipe", root.at("recipe")},
+                                               {"state", root.at("state")}};
     return hash_bytes(authoritative.dump());
   } catch (const nlohmann::json::exception&) {
     return std::unexpected{
@@ -87,17 +87,15 @@ struct Replay {
 
 [[nodiscard]] auto guided_contract_three_document(Seed seed)
     -> std::expected<SaveDocument, IntersystemContractAcceptanceError> {
-  auto document = make_new_game_document(
-      seed, NewGameOnboardingChoice::guided);
+  auto document = make_new_game_document(seed, NewGameOnboardingChoice::guided);
   auto contract_two = initial_origin_system_contract(seed);
   if (!document.state.intersystem_contract || !contract_two) {
     return std::unexpected{
         IntersystemContractAcceptanceError::initialization_failure};
   }
   contract_two->phase = OriginSystemContractPhase::turned_in;
-  document.state.onboarding = {
-      .state = OnboardingState::guided,
-      .chapter = OnboardingChapter::contract_three};
+  document.state.onboarding = {.state = OnboardingState::guided,
+                               .chapter = OnboardingChapter::contract_three};
   document.state.first_objective = FirstObjectiveStatus::turned_in;
   document.state.origin_system_contract = *contract_two;
   document.state.origin_system_discoveries = {
@@ -137,8 +135,7 @@ struct Replay {
       {.name = std::string{name},
        .tick = document.state.intersystem_contract->universe_tick,
        .authoritative_checksum = *checksum});
-  if (resume_stage != name)
-    return {};
+  if (resume_stage != name) return {};
   const auto decoded = decode_save_document_json(*encoded);
   if (!decoded || *decoded != document) {
     return std::unexpected{
@@ -190,9 +187,9 @@ struct Replay {
                                         static_cast<std::size_t>(height));
   std::vector<termforge::Pixel> moved(initial.size());
   const SystemPositionMetres fixed_camera{0.0, -92'000'000'000.0,
-                                           26'000'000'000.0};
+                                          26'000'000'000.0};
   const SystemPositionMetres camera_offset{0.0, -92'000'000'000.0,
-                                            26'000'000'000.0};
+                                           26'000'000'000.0};
   const auto view = [&](SimulationTick tick)
       -> std::expected<LocalSystemView, LocalSystemError> {
     const auto target = resolve_planet_ephemeris(
@@ -235,14 +232,12 @@ struct Replay {
       pixel_checksum(initial) == pixel_checksum(moved)) {
     const auto target_planet = find_local_system_planet(system, flight.target);
     if (!target_planet || (*target_planet)->orbit.period_ticks == 0U) {
-      std::fprintf(stderr,
-                   "contract-three target presentation orbit failed\n");
+      std::fprintf(stderr, "contract-three target presentation orbit failed\n");
       return std::unexpected{
           IntersystemContractAcceptanceError::presentation_failure};
     }
-    const SimulationTick probe_offset =
-        std::max<SimulationTick>(1U,
-                                (*target_planet)->orbit.period_ticks / 512U);
+    const SimulationTick probe_offset = std::max<SimulationTick>(
+        1U, (*target_planet)->orbit.period_ticks / 512U);
     if (flight.tick >
         std::numeric_limits<SimulationTick>::max() - probe_offset) {
       std::fprintf(stderr,
@@ -264,16 +259,14 @@ struct Replay {
   }
   render_ms += milliseconds(start, Clock::now());
   if (!complete(first) || !complete(second)) {
-    std::fprintf(stderr,
-                 "contract-three target presentation was incomplete\n");
+    std::fprintf(stderr, "contract-three target presentation was incomplete\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
   const auto initial_checksum = pixel_checksum(initial);
   const auto moved_checksum = pixel_checksum(moved);
   if (initial_checksum == moved_checksum) {
-    std::fprintf(stderr,
-                 "contract-three target presentation did not move\n");
+    std::fprintf(stderr, "contract-three target presentation did not move\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
@@ -328,8 +321,8 @@ struct Replay {
         IntersystemContractAcceptanceError::initialization_failure};
   }
   document.state.origin_station_flight = *launched;
-  const auto route = generate_first_universe_route(
-      document.recipe.universe_seed);
+  const auto route =
+      generate_first_universe_route(document.recipe.universe_seed);
   const auto outbound_view = resolve_onboarding_navigation_view(
       route, document.state.onboarding, route.origin);
   UniverseNavigationSelectionState outbound_selection;
@@ -433,10 +426,9 @@ struct Replay {
   }
   document.state.origin_station_flight = *launched;
   const auto frozen_flight = *document.state.origin_station_flight;
-  if (!begin_intersystem_jump(
-          *document.state.intersystem_contract,
-          *document.state.origin_station_flight,
-          *outbound_selection.pending_destination)) {
+  if (!begin_intersystem_jump(*document.state.intersystem_contract,
+                              *document.state.origin_station_flight,
+                              *outbound_selection.pending_destination)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
@@ -471,15 +463,14 @@ struct Replay {
       resolve_origin_station_flight_guidance(
           *document.state.intersystem_contract, origin_system,
           *document.state.origin_station_flight) != canceled_guidance ||
-      !begin_intersystem_jump(
-          *document.state.intersystem_contract,
-          *document.state.origin_station_flight,
-          *outbound_selection.pending_destination)) {
+      !begin_intersystem_jump(*document.state.intersystem_contract,
+                              *document.state.origin_station_flight,
+                              *outbound_selection.pending_destination)) {
     return std::unexpected{IntersystemContractAcceptanceError::resume_mismatch};
   }
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
     if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
-                                    target_system)) {
+                                       target_system)) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
@@ -497,7 +488,7 @@ struct Replay {
   }
   for (SimulationTick tick = 0; tick < kJumpTransitTicks; ++tick) {
     if (!advance_intersystem_jump_tick(*document.state.intersystem_contract,
-                                    target_system)) {
+                                       target_system)) {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
@@ -526,8 +517,7 @@ struct Replay {
   system_flight = *document.state.system_flight;
   const auto system_frames = render_system_frames(target_system, *system_flight,
                                                   width, height, render_ms);
-  if (!system_frames)
-    return std::unexpected{system_frames.error()};
+  if (!system_frames) return std::unexpected{system_frames.error()};
 
   const std::array speed_commands{
       FlightCommand{system_flight->tick,
@@ -550,8 +540,7 @@ struct Replay {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
-    if (guidance->orbit_insertion_ready)
-      break;
+    if (guidance->orbit_insertion_ready) break;
     before_tick = system_flight->tick;
     if (!advance_system_flight(target_system, *system_flight, {}) ||
         !advance_intersystem_time(*document.state.intersystem_contract,
@@ -610,10 +599,9 @@ struct Replay {
   for (SimulationTick tick = 0; tick < collection_limit && !objective_completed;
        ++tick) {
     const auto previous = planetfall->flight.tick;
-    const auto advanced =
-        advance_intersystem_planetfall(
-            *planetfall, *terrain_cache, {},
-            document.state.intersystem_contract->rule_profile);
+    const auto advanced = advance_intersystem_planetfall(
+        *planetfall, *terrain_cache, {},
+        document.state.intersystem_contract->rule_profile);
     if (!advanced ||
         !advance_intersystem_time(*document.state.intersystem_contract,
                                   planetfall->flight.tick - previous)) {
@@ -665,8 +653,7 @@ struct Replay {
   bool ascent_commanded{};
   SimulationTick ascent_ticks{};
   for (; ascent_ticks < ascent_limit; ++ascent_ticks) {
-    if (planetfall->flight.regime == FlightRegime::orbital)
-      break;
+    if (planetfall->flight.regime == FlightRegime::orbital) break;
     std::array<FlightCommand, 1> command_storage{};
     std::span<const FlightCommand> commands;
     if (!ascent_commanded) {
@@ -676,9 +663,9 @@ struct Replay {
       ascent_commanded = true;
     }
     const auto previous = planetfall->flight.tick;
-    if (!advance_intersystem_planetfall(*planetfall, *terrain_cache, commands,
-                                        document.state.intersystem_contract
-                                            ->rule_profile) ||
+    if (!advance_intersystem_planetfall(
+            *planetfall, *terrain_cache, commands,
+            document.state.intersystem_contract->rule_profile) ||
         !advance_intersystem_time(*document.state.intersystem_contract,
                                   planetfall->flight.tick - previous)) {
       return std::unexpected{
@@ -707,9 +694,8 @@ struct Replay {
           *return_view, return_selection,
           UniverseNavigationSelectionCommand::select) ||
       return_selection.pending_destination != route.origin ||
-      !begin_intersystem_jump(
-          *document.state.intersystem_contract,
-          *return_selection.pending_destination)) {
+      !begin_intersystem_jump(*document.state.intersystem_contract,
+                              *return_selection.pending_destination)) {
     return std::unexpected{
         IntersystemContractAcceptanceError::transition_failure};
   }
@@ -721,8 +707,7 @@ struct Replay {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
-    if (advanced->committed)
-      document.state.system_flight.reset();
+    if (advanced->committed) document.state.system_flight.reset();
   }
   auto origin_return = initialize_origin_return(
       *document.state.intersystem_contract, origin_system);
@@ -742,8 +727,7 @@ struct Replay {
       return std::unexpected{
           IntersystemContractAcceptanceError::simulation_failure};
     }
-    if (guidance->arrived)
-      break;
+    if (guidance->arrived) break;
     if (!origin_checkpointed && approach_ticks == approach_limit / 3U) {
       document.state.origin_station_flight = *origin_return;
       if (!record_checkpoint(document, "origin-return", resume_stage,
@@ -775,8 +759,7 @@ struct Replay {
   const auto origin_pose = resolve_origin_station_flight_pose(
       *document.state.intersystem_contract, origin_system, *origin_return);
   if (!origin_pose) {
-    std::fprintf(stderr,
-                 "contract-three origin presentation pose failed\n");
+    std::fprintf(stderr, "contract-three origin presentation pose failed\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
@@ -803,8 +786,7 @@ struct Replay {
                 std::unexpected{LocalSystemRenderError::ephemeris_failure}};
   render_ms += milliseconds(render_start, Clock::now());
   if (!rendered || !marked) {
-    std::fprintf(stderr,
-                 "contract-three origin presentation render failed\n");
+    std::fprintf(stderr, "contract-three origin presentation render failed\n");
     return std::unexpected{
         IntersystemContractAcceptanceError::presentation_failure};
   }
@@ -858,20 +840,20 @@ struct Replay {
   };
 }
 
-}  // namespace
+} // namespace
 
 auto run_intersystem_contract_acceptance(int width, int height)
     -> std::expected<IntersystemContractAcceptanceResult,
                      IntersystemContractAcceptanceError> {
-  auto prepared = guided_contract_three_document(
-      Seed{kIntersystemContractAcceptanceSeed});
+  auto prepared =
+      guided_contract_three_document(Seed{kIntersystemContractAcceptanceSeed});
   if (!prepared) return std::unexpected{prepared.error()};
   return run_intersystem_contract_acceptance(*prepared, width, height, true);
 }
 
-auto run_intersystem_contract_acceptance(
-    const SaveDocument& starting_document, int width, int height,
-    bool verify_pilot_recovery)
+auto run_intersystem_contract_acceptance(const SaveDocument& starting_document,
+                                         int width, int height,
+                                         bool verify_pilot_recovery)
     -> std::expected<IntersystemContractAcceptanceResult,
                      IntersystemContractAcceptanceError> {
   if (width <= 0 || height <= 0 || width > 4096 || height > 4096 ||
@@ -893,8 +875,8 @@ auto run_intersystem_contract_acceptance(
     return std::unexpected{IntersystemContractAcceptanceError::incomplete_path};
   }
   for (std::size_t index = 0; index < kResumeStages.size(); ++index) {
-    auto resumed = replay(starting_document, width, height,
-                          kResumeStages[index]);
+    auto resumed =
+        replay(starting_document, width, height, kResumeStages[index]);
     if (!resumed || resumed->final_document != baseline->final_document ||
         resumed->final_checksum != baseline->final_checksum ||
         resumed->final_frame != baseline->final_frame) {
@@ -929,12 +911,9 @@ auto run_intersystem_contract_acceptance(
                  .target_planet = contract.identities.target_planet,
                  .target_objective = contract.identities.target_objective,
                  .origin_station = contract.identities.origin_station,
-                 .outbound_selected_system =
-                     baseline->outbound_selected_system,
-                 .return_selected_system =
-                     baseline->return_selected_system,
-                 .universe_navigation_rows =
-                     baseline->universe_navigation_rows,
+                 .outbound_selected_system = baseline->outbound_selected_system,
+                 .return_selected_system = baseline->return_selected_system,
+                 .universe_navigation_rows = baseline->universe_navigation_rows,
                  .open_exploration_available =
                      onboarding_access->open_exploration_available,
                  .checkpoints = std::move(baseline->checkpoints),
@@ -1014,8 +993,8 @@ auto intersystem_contract_acceptance_json(
       system_id_string(report.return_selected_system),
       report.universe_navigation_rows, checkpoints, report.final_tick,
       report.open_exploration_available ? "true" : "false",
-      report.final_authoritative_checksum,
-      report.wrong_side_recovery_checksum, report.target_system_planet_count,
+      report.final_authoritative_checksum, report.wrong_side_recovery_checksum,
+      report.target_system_planet_count,
       report.target_system_initial_framebuffer_checksum,
       report.target_system_moved_framebuffer_checksum, report.discovery_count,
       report.world_delta_count, report.width, report.height,
@@ -1023,4 +1002,4 @@ auto intersystem_contract_acceptance_json(
       report.application_render_ms);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

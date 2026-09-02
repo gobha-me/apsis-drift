@@ -120,8 +120,8 @@ enum class SignalRunStationInteractionError : std::uint8_t {
 
 // Resolves the context-sensitive Enter action during contract-one station
 // flight. Rejections leave authoritative state unchanged.
-[[nodiscard]] auto interact_signal_run_station(
-    SignalRunState& state, TerrainTileCache& cache)
+[[nodiscard]] auto interact_signal_run_station(SignalRunState& state,
+                                               TerrainTileCache& cache)
     -> std::expected<SignalRunStationInteraction,
                      SignalRunStationInteractionError>;
 
@@ -138,9 +138,9 @@ enum class SignalRunStationInteractionError : std::uint8_t {
 
 // Advances exactly one fixed simulation tick. Rejected updates leave the
 // authoritative state unchanged.
-[[nodiscard]] auto advance_signal_run(
-    SignalRunState& state, TerrainTileCache& cache,
-    std::span<const FlightCommand> commands)
+[[nodiscard]] auto advance_signal_run(SignalRunState& state,
+                                      TerrainTileCache& cache,
+                                      std::span<const FlightCommand> commands)
     -> std::expected<void, SignalRunError>;
 
 [[nodiscard]] auto return_signal_run_to_origin(SignalRunState& state)
@@ -152,4 +152,4 @@ enum class SignalRunStationInteractionError : std::uint8_t {
 [[nodiscard]] auto project_signal_run_save(const SignalRunState& state)
     -> std::expected<SaveDocument, SignalRunError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift
