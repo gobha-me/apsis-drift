@@ -18,6 +18,8 @@ orbit-to-surface objective.
 - Test invalid dimensions, non-finite state, and buffer boundaries before
   visual smoke checks.
 - Build and test with both GCC and Clang for publication changes.
+- Format repository C and C++ files with clang-format 20 through
+  `tools/format.sh`; do not run an unpinned formatter.
 - Keep generated visual, music, and audio assets accompanied by provenance and
   license metadata.
 - Do not extract a generic engine before at least two working game systems show
