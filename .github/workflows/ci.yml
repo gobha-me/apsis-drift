@@ -15,22 +15,28 @@ concurrency:
 
 jobs:
   quality:
-    name: formatting
+    name: formatting and static analysis
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install clang-format
+      - name: Install Clang tooling and lint dependencies
         env:
           CLANG_VERSION: "20"
         run: |
           wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh "$CLANG_VERSION"
-          sudo apt-get install -y "clang-format-$CLANG_VERSION"
+          sudo apt-get install -y \
+            "clang-format-$CLANG_VERSION" \
+            "clang-tidy-$CLANG_VERSION" \
+            ffmpeg libasound2-dev
 
       - name: Check formatting
         run: tools/format.sh --check
+
+      - name: Run static analysis
+        run: tools/lint.sh
 
   build:
     name: ${{ matrix.name }}
