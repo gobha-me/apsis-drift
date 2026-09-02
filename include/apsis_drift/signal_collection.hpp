@@ -11,7 +11,8 @@ namespace apsis_drift {
 
 inline constexpr SimulationTick kSignalCollectionAcquireTicks{kSimulationHz /
                                                               2};
-inline constexpr SimulationTick kSignalCollectionScanTicks{kSimulationHz * 3};
+inline constexpr SimulationTick kSignalCollectionScanTicks{kSimulationHz *
+                                                           SimulationTick{3}};
 inline constexpr SimulationTick kSignalCollectionTotalInRangeTicks{
     kSignalCollectionAcquireTicks + kSignalCollectionScanTicks};
 

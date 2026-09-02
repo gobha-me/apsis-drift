@@ -785,11 +785,6 @@ auto intersystem_state_contract() -> void {
         advance_intersystem_contract(state, state.universe_tick, command);
     check(result.has_value(), "a legal intersystem transition must succeed");
   };
-  const auto advance_time = [&](SimulationTick ticks) {
-    const auto result = advance_intersystem_time(state, ticks);
-    check(result.has_value(), "a valid universe-time advance must succeed");
-  };
-
   rejected(IntersystemContractCommand::launch,
            IntersystemContractError::invalid_transition);
   rejected(IntersystemContractCommand::select_pilot_profile,
@@ -1243,7 +1238,7 @@ auto intersystem_jump_contract() -> void {
   check(committed_snapshot && committed_snapshot->committed &&
             !committed_snapshot->cancelable && !cancel_intersystem_jump(state),
         "a committed jump must be visible and irreversible");
-  std::vector<Pixel> jump_frame(96U * 64U);
+  std::vector<Pixel> jump_frame(std::size_t{96U} * 64U);
   check(committed_snapshot &&
             render_intersystem_jump(*committed_snapshot, 96, 64, jump_frame) &&
             !render_intersystem_jump(*committed_snapshot, 0, 64, jump_frame) &&
@@ -1408,8 +1403,8 @@ auto intersystem_jump_contract() -> void {
             !guidance->correction.empty(),
         "Pilot spool must expose the authoritative error and projected grade");
   const auto pilot_snapshot = intersystem_jump_snapshot(pilot);
-  std::vector<Pixel> assisted_spool_frame(96U * 64U);
-  std::vector<Pixel> pilot_spool_frame(96U * 64U);
+  std::vector<Pixel> assisted_spool_frame(std::size_t{96U} * 64U);
+  std::vector<Pixel> pilot_spool_frame(std::size_t{96U} * 64U);
   check(
       initial_snapshot && pilot_snapshot && pilot_snapshot->alignment &&
           render_intersystem_jump(*initial_snapshot, 96, 64,
@@ -1707,7 +1702,7 @@ auto intersystem_jump_acceptance_contract() -> void {
           result->report.pilot_offset_distance_metres <
               result->report.pilot_opposed_distance_metres &&
           result->report.framebuffer_checksum != 0 &&
-          result->transit_frame.size() == 96U * 64U,
+          result->transit_frame.size() == std::size_t{96U} * 64U,
       "canonical headless jump acceptance must commit, resume, render, and "
       "arrive");
   if (!result) return;
@@ -2001,7 +1996,7 @@ auto intersystem_return_contract() -> void {
           result->report.discovery_count == 1U &&
           result->report.world_delta_count == 1U &&
           result->report.framebuffer_checksum != 0 &&
-          result->final_frame.size() == 96U * 64U,
+          result->final_frame.size() == std::size_t{96U} * 64U,
       "canonical return acceptance must depart, cancel/resume, jump, "
       "rendezvous, dock, and turn in");
   if (result) {
@@ -2355,7 +2350,7 @@ auto intersystem_contract_acceptance_contract() -> void {
             result->report.discovery_count == 1U &&
             result->report.world_delta_count == 1U &&
             result->report.framebuffer_checksum != 0U &&
-            result->final_frame.size() == 96U * 64U,
+            result->final_frame.size() == std::size_t{96U} * 64U,
         "contract-loop acceptance must complete and resume the full "
         "deterministic mission");
   if (!result) return;
@@ -2686,7 +2681,7 @@ auto intersystem_planetfall_acceptance_contract() -> void {
             result->report.thermal.deliberate_reentry_tick == 13'108U &&
             result->report.thermal.resumed_recovery_checksum ==
                 12'793'732'928'174'323'102ULL &&
-            result->final_frame.size() == 96U * 64U,
+            result->final_frame.size() == std::size_t{96U} * 64U,
         "canonical Planetfall acceptance must enter anywhere, measure thermal "
         "envelopes, recover, reenter, save, and render");
   if (result) {
@@ -3270,7 +3265,7 @@ auto local_system_rendering_contract() -> void {
       .handoff_complete_radius_pixels = 48.0,
   };
   LocalSystemRenderer renderer{settings};
-  std::vector<Pixel> first(160U * 120U);
+  std::vector<Pixel> first(std::size_t{160U} * 120U);
   std::vector<Pixel> repeated(first.size());
   const auto first_result = renderer.render(system, view, first);
   const auto repeated_result = renderer.render(system, view, repeated);
@@ -4460,7 +4455,7 @@ auto save_file_contract() -> void {
   if (!malformed) {
     const auto message = save_file_error_message(malformed.error());
     check(message.find(malformed_path.string()) != std::string::npos &&
-              message.find("$") != std::string::npos,
+              message.find('$') != std::string::npos,
           "save diagnostics must include the path and schema location");
   }
 
@@ -6340,7 +6335,7 @@ auto terrain_tile_seam_contract() -> void {
         planet, {planet.id, static_cast<CubeFace>(face), 0, 0, 0});
     check(generated.has_value(),
           "every cube face terrain fixture must generate");
-    if (generated) faces.push_back(std::move(*generated));
+    if (generated) faces.push_back(*generated);
   }
   if (faces.size() == 6) {
     const auto edge_coordinate = [last](std::size_t edge, std::size_t sample) {
@@ -9708,7 +9703,7 @@ auto render_failure_matrix() -> void {
   check(!invalid.render(*terrain, camera, empty),
         "invalid renderer dimensions must be rejected");
 
-  std::vector<Pixel> frame(160U * 120U, {5, 6, 7, 8});
+  std::vector<Pixel> frame(std::size_t{160U} * 120U, {5, 6, 7, 8});
   camera.yaw = std::numeric_limits<float>::quiet_NaN();
   check(!renderer.render(*terrain, camera, frame),
         "a non-finite camera must be rejected");
@@ -9867,7 +9862,7 @@ auto world_sun_render_contract() -> void {
   camera.yaw = 0.0F;
   camera.pitch = 0.0F;
   camera.height = 300.0F;
-  std::vector<Pixel> frame(160U * 120U);
+  std::vector<Pixel> frame(std::size_t{160U} * 120U);
   VoxelRenderer visible{settings};
   check(visible.render(*terrain, camera, frame) &&
             count_pixels(frame, sun_color) > 0,
@@ -9923,8 +9918,8 @@ auto deterministic_render() -> void {
   Camera camera;
   camera.height =
       std::max<float>(terrain->height_at(180, 240), kWaterLevel) + 48.0F;
-  std::vector<Pixel> first(160U * 120U);
-  std::vector<Pixel> second(160U * 120U);
+  std::vector<Pixel> first(std::size_t{160U} * 120U);
+  std::vector<Pixel> second(std::size_t{160U} * 120U);
   check(renderer.render(*terrain, camera, first),
         "a correctly sized framebuffer must render");
   check(renderer.render(*terrain, camera, second),
@@ -10092,7 +10087,7 @@ auto orbital_sun_occlusion_contract() -> void {
   camera.up = {0.0, 0.0, 1.0};
   const OrbitalRenderer renderer{
       {.width = 320, .height = 240, .field_of_view_degrees = 60.0}};
-  std::vector<Pixel> visible_frame(320U * 240U);
+  std::vector<Pixel> visible_frame(std::size_t{320U} * 240U);
   std::vector<Pixel> occluded_frame(visible_frame.size());
   std::vector<Pixel> reemerged_frame(visible_frame.size());
   constexpr SimulationTick limb_offset{5'200};
@@ -10140,7 +10135,7 @@ auto orbital_render_failure_matrix() -> void {
           short_frame, [](Pixel value) { return value == Pixel{1, 2, 3, 4}; }),
       "a rejected orbital framebuffer must remain untouched");
 
-  std::vector<Pixel> frame(160U * 120U, {5, 6, 7, 8});
+  std::vector<Pixel> frame(std::size_t{160U} * 120U, {5, 6, 7, 8});
   const auto check_untouched = [&frame](const auto& result,
                                         OrbitalRenderError error,
                                         const char* message) {
@@ -10248,7 +10243,7 @@ auto orbital_visibility_contract() -> void {
   const OrbitalRenderSettings settings{
       .width = 200, .height = 150, .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
-  std::vector<Pixel> frame(200U * 150U);
+  std::vector<Pixel> frame(std::size_t{200U} * 150U);
 
   auto camera = orbital_camera_for(planet);
   const auto visible =
@@ -10292,7 +10287,7 @@ auto deterministic_orbital_render() -> void {
       .width = 160, .height = 120, .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   const auto camera = orbital_camera_for(planet);
-  std::vector<Pixel> first(160U * 120U);
+  std::vector<Pixel> first(std::size_t{160U} * 120U);
   std::vector<Pixel> second(first.size());
   const auto first_result =
       renderer.render(planet, camera, kOrbitalTestLight, first);
@@ -10337,7 +10332,9 @@ auto deterministic_orbital_render() -> void {
   bool pairs_match = true;
   for (int y = 0; y < strided_height && pairs_match; ++y) {
     for (int x = 0; x + 1 < strided_width; x += 2) {
-      const auto index = static_cast<std::size_t>(y * strided_width + x);
+      const auto index = static_cast<std::size_t>(y) *
+                             static_cast<std::size_t>(strided_width) +
+                         static_cast<std::size_t>(x);
       if (strided_frame[index] != strided_frame[index + 1]) {
         pairs_match = false;
         break;
@@ -10676,7 +10673,9 @@ auto planetary_presentation_contract() -> void {
   const auto average_row = [](std::span<const Pixel> pixels, int row) {
     std::array<double, 3> average{};
     for (int x = 0; x < width; ++x) {
-      const auto value = pixels[static_cast<std::size_t>(row * width + x)];
+      const auto value = pixels[static_cast<std::size_t>(row) *
+                                    static_cast<std::size_t>(width) +
+                                static_cast<std::size_t>(x)];
       average[0] += value.r;
       average[1] += value.g;
       average[2] += value.b;
@@ -10911,7 +10910,7 @@ auto planetfall_acceptance_contract() -> void {
             "and finite diagnostics");
     }
   }
-  check(result->final_frame.size() == 96U * 64U &&
+  check(result->final_frame.size() == std::size_t{96U} * 64U &&
             pixel_checksum(result->final_frame) ==
                 expected_frame_checksums.back(),
         "Planetfall must retain the final local-terrain frame for capture");

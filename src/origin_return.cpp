@@ -601,7 +601,7 @@ static auto advance_origin_station_flight_with_limits(
           universe_seed, authoritative_tick + 1, origin_system, next)) {
     return std::unexpected{OriginStationFlightError::invalid_state};
   }
-  state = std::move(next);
+  state = next;
   return {};
 }
 
@@ -647,7 +647,7 @@ auto attempt_origin_docking(IntersystemContractState& contract,
           IntersystemContractCommand::dock_at_origin)) {
     return std::unexpected{OriginStationFlightError::invalid_contract};
   }
-  contract = std::move(next);
+  contract = next;
   return {};
 }
 

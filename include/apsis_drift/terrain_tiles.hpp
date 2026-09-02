@@ -89,7 +89,7 @@ class TerrainTile {
 
   TerrainTile(TerrainTileKey key,
               std::array<TerrainSample, kTerrainTileSampleCount> samples)
-      : m_key{key}, m_samples{std::move(samples)} {}
+      : m_key{key}, m_samples{samples} {}
 
   TerrainTileKey m_key;
   std::array<TerrainSample, kTerrainTileSampleCount> m_samples;

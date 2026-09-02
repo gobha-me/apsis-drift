@@ -725,7 +725,8 @@ auto benchmark_flight_audio(std::uint64_t ticks) -> AudioSynthesisBenchmark {
     return result;
   }
   AudioRuntime audio;
-  std::vector<float> buffer(kAudioFramesPerSimulationTick * kAudioChannelCount);
+  std::vector<float> buffer(std::size_t{kAudioFramesPerSimulationTick} *
+                            kAudioChannelCount);
   std::uint64_t checksum{1'469'598'103'934'665'603ULL};
   const auto started = std::chrono::steady_clock::now();
   for (std::uint64_t tick = 0; tick < ticks; ++tick) {

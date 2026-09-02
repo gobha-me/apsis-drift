@@ -224,7 +224,7 @@ struct Vector3 {
       .arrival_tick = arrival_tick,
       .position = {},
       .velocity = {},
-      .assessment = std::move(assessment),
+      .assessment = assessment,
   };
   if (returning) {
     const auto station =
@@ -351,7 +351,7 @@ auto validate_intersystem_arrival_solution(
     return std::unexpected{IntersystemJumpError::invalid_arrival};
   }
   const auto expected = resolve_canonical_arrival(
-      contract, destination, solution.arrival_tick, std::move(assessment));
+      contract, destination, solution.arrival_tick, assessment);
   if (!expected || *expected != solution) {
     return std::unexpected{IntersystemJumpError::invalid_arrival};
   }
@@ -421,7 +421,7 @@ auto begin_intersystem_jump(IntersystemContractState& contract) noexcept
   if (!advance_intersystem_contract(next, next.universe_tick, command)) {
     return std::unexpected{IntersystemJumpError::transition_failure};
   }
-  contract = std::move(next);
+  contract = next;
   return {};
 }
 
@@ -465,7 +465,7 @@ auto begin_intersystem_jump(
   if (!validate_intersystem_contract_state(next)) {
     return std::unexpected{IntersystemJumpError::transition_failure};
   }
-  contract = std::move(next);
+  contract = next;
   return {};
 }
 
@@ -486,7 +486,7 @@ auto cancel_intersystem_jump(IntersystemContractState& contract) noexcept
                                     IntersystemContractCommand::cancel_jump)) {
     return std::unexpected{IntersystemJumpError::transition_failure};
   }
-  contract = std::move(next);
+  contract = next;
   return {};
 }
 
@@ -576,7 +576,7 @@ auto advance_intersystem_jump_tick(IntersystemContractState& contract,
                                           : next.identities.origin_system;
     next.phase_started_tick = next.universe_tick;
     next.jump_alignment.reset();
-    next.arrival_solution = std::move(*solution);
+    next.arrival_solution = *solution;
     if (!validate_intersystem_contract_state(next) ||
         !validate_intersystem_arrival_solution(next, destination,
                                                *next.arrival_solution)) {
@@ -609,7 +609,7 @@ auto advance_intersystem_jump_tick(IntersystemContractState& contract,
       result.arrived = true;
     }
   }
-  contract = std::move(next);
+  contract = next;
   return result;
 }
 

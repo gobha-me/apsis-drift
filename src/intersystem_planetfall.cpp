@@ -116,7 +116,7 @@ auto initialize_intersystem_planetfall(
   }
   IntersystemPlanetfallState result{
       .planet = std::make_shared<const PlanetDescriptor>(planet),
-      .catalog = std::move(*catalog),
+      .catalog = *catalog,
       .flight = flight,
       .scanner = scanner,
       .navigation = *navigation,

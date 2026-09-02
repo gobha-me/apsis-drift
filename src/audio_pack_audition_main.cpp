@@ -117,8 +117,11 @@ auto main(int argc, char** argv) -> int {
   std::ofstream output{argv[2], std::ios::binary};
   if (!write_wav_header(output)) return 1;
 
-  std::array<float, kAudioFramesPerSimulationTick * kAudioChannelCount> block{};
-  std::array<std::int16_t, kAudioFramesPerSimulationTick * kAudioChannelCount>
+  std::array<float,
+             std::size_t{kAudioFramesPerSimulationTick} * kAudioChannelCount>
+      block{};
+  std::array<std::int16_t,
+             std::size_t{kAudioFramesPerSimulationTick} * kAudioChannelCount>
       encoded{};
   std::uint64_t checksum{1'469'598'103'934'665'603ULL};
   float peak{};

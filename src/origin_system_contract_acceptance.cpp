@@ -154,7 +154,7 @@ auto project_active_state(
     return std::unexpected{
         OriginSystemContractAcceptanceError::persistence_failure};
   }
-  document = std::move(*decoded);
+  document = *decoded;
   const SimulationTick tick =
       document.state.intersystem_contract
           ? document.state.intersystem_contract->universe_tick

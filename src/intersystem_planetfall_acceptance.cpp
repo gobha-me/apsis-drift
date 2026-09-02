@@ -61,7 +61,7 @@ struct Replay {
     return std::unexpected{
         IntersystemPlanetfallAcceptanceError::initialization_failure};
   }
-  return Fixture{identities, (*body)->descriptor, std::move(*catalog)};
+  return Fixture{identities, (*body)->descriptor, *catalog};
 }
 
 [[nodiscard]] auto environment_at(const PlanetDescriptor& planet,
@@ -558,7 +558,8 @@ struct Replay {
 
   auto completed = initial_planetfall(*fixture, *target, *cache);
   if (!completed) return std::unexpected{completed.error()};
-  constexpr SimulationTick collection_limit{2 * kSimulationHz * 10};
+  constexpr SimulationTick collection_limit{SimulationTick{2} * kSimulationHz *
+                                            10};
   for (SimulationTick tick = 0;
        tick < collection_limit &&
        completed->collection.status != SignalCollectionStatus::complete;

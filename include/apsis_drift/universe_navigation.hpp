@@ -18,8 +18,10 @@ namespace apsis_drift {
 // catalog or mutable discovery store.
 inline constexpr std::uint32_t kUniverseNavigationVersion{1};
 inline constexpr std::int64_t kMetresPerLightSecond{299'792'458};
-inline constexpr std::uint64_t kMinimumFirstRouteLightSeconds{48U * 3'600U};
-inline constexpr std::uint64_t kMaximumFirstRouteLightSeconds{96U * 3'600U};
+inline constexpr std::uint64_t kMinimumFirstRouteLightSeconds{
+    std::uint64_t{48U} * 3'600U};
+inline constexpr std::uint64_t kMaximumFirstRouteLightSeconds{
+    std::uint64_t{96U} * 3'600U};
 inline constexpr std::int64_t kLocalSystemBoundaryMetres{100'000'000'000LL};
 inline constexpr std::uint64_t kDirectCruiseMaximumSpeedMetresPerSecond{
     1'000'000U};

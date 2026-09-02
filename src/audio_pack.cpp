@@ -23,11 +23,15 @@ using midi_spike::MusicEngine;
 using midi_spike::MusicLayer;
 using midi_spike::TransitionBoundary;
 
-inline constexpr std::size_t kMaximumSidecarBytes{16U * 1024U};
-inline constexpr std::size_t kMaximumSfxPackagedBytes{1U * 1024U * 1024U};
-inline constexpr std::size_t kMaximumSfxDecodedBytes{4U * 1024U * 1024U};
-inline constexpr std::size_t kMaximumSfxFrames{kAudioSampleRate * 2U};
-inline constexpr std::size_t kMaximumSfxAggregateFrames{kAudioSampleRate * 8U};
+inline constexpr std::size_t kMaximumSidecarBytes{std::size_t{16U} * 1024U};
+inline constexpr std::size_t kMaximumSfxPackagedBytes{std::size_t{1U} * 1024U *
+                                                      1024U};
+inline constexpr std::size_t kMaximumSfxDecodedBytes{std::size_t{4U} * 1024U *
+                                                     1024U};
+inline constexpr std::size_t kMaximumSfxFrames{std::size_t{kAudioSampleRate} *
+                                               2U};
+inline constexpr std::size_t kMaximumSfxAggregateFrames{
+    std::size_t{kAudioSampleRate} * 8U};
 inline constexpr std::size_t kSfxVoiceCount{8};
 
 struct SfxDefinition {

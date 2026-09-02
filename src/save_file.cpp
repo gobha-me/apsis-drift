@@ -327,7 +327,7 @@ auto load_save_file(const std::filesystem::path& path)
 
   std::string contents;
   contents.reserve(kMaximumSaveDocumentBytes);
-  std::array<char, 16U * 1024U> buffer{};
+  std::array<char, std::size_t{16U} * 1024U> buffer{};
   while (contents.size() <= kMaximumSaveDocumentBytes) {
     const std::size_t remaining =
         kMaximumSaveDocumentBytes + 1U - contents.size();

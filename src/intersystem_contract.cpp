@@ -396,7 +396,7 @@ auto advance_intersystem_time(IntersystemContractState& state,
   if (!validate_intersystem_contract_state(next)) {
     return std::unexpected{IntersystemContractError::invalid_state};
   }
-  state = std::move(next);
+  state = next;
   return {};
 }
 

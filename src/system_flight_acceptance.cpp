@@ -142,8 +142,7 @@ struct Replay {
   if (!orbital) {
     return std::unexpected{SystemFlightAcceptanceError::insertion_failure};
   }
-  return Replay{std::move(contract), std::move(flight), *orbital, host_steps,
-                std::move(frame)};
+  return Replay{contract, flight, *orbital, host_steps, std::move(frame)};
 }
 
 } // namespace
@@ -156,7 +155,7 @@ auto run_system_flight_acceptance(int width, int height)
           4'194'304ULL) {
     return std::unexpected{SystemFlightAcceptanceError::invalid_configuration};
   }
-  const auto at_30 = replay(width, height, 4);
+  auto at_30 = replay(width, height, 4);
   const auto at_60 = replay(width, height, 2);
   if (!at_30 || !at_60) {
     return std::unexpected{at_30 ? at_60.error() : at_30.error()};

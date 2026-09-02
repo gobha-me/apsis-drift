@@ -75,7 +75,7 @@ namespace {
   const auto origin_discoveries = idle.state.origin_system_discoveries;
   const auto origin_deltas = idle.state.origin_system_world_deltas;
   if (!advance_intersystem_time(*idle.state.intersystem_contract,
-                                10U * kSimulationHz) ||
+                                SimulationTick{10U} * kSimulationHz) ||
       !validate_save_document(idle)) {
     return false;
   }

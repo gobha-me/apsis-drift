@@ -134,7 +134,7 @@ class FileDescriptor {
   contents.reserve(std::min<std::size_t>(
       kMaximumSaveDocumentBytes,
       status.st_size > 0 ? static_cast<std::size_t>(status.st_size) : 0U));
-  std::array<char, 16U * 1024U> buffer{};
+  std::array<char, std::size_t{16U} * 1024U> buffer{};
   while (contents.size() <= kMaximumSaveDocumentBytes) {
     const auto remaining = kMaximumSaveDocumentBytes + 1U - contents.size();
     const auto count = ::read(descriptor.get(), buffer.data(),

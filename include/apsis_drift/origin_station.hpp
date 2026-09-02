@@ -31,10 +31,10 @@ inline constexpr std::uint16_t kOriginHomeMinimumWaterBasisPoints{1'000};
 inline constexpr std::uint16_t kOriginHomeMaximumWaterBasisPoints{4'500};
 inline constexpr std::uint32_t kOriginStationMinimumAltitudeKilometres{400};
 inline constexpr std::uint32_t kOriginStationMaximumAltitudeKilometres{600};
-inline constexpr SimulationTick kOriginStationMinimumPeriodTicks{90U * 60U *
-                                                                 kSimulationHz};
-inline constexpr SimulationTick kOriginStationMaximumPeriodTicks{120U * 60U *
-                                                                 kSimulationHz};
+inline constexpr SimulationTick kOriginStationMinimumPeriodTicks{
+    SimulationTick{90U} * 60U * kSimulationHz};
+inline constexpr SimulationTick kOriginStationMaximumPeriodTicks{
+    SimulationTick{120U} * 60U * kSimulationHz};
 inline constexpr std::int32_t kOriginStationMaximumInclinationMicrodegrees{
     5'000'000};
 
