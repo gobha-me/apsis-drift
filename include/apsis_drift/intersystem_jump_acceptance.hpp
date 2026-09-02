@@ -12,8 +12,8 @@
 namespace apsis_drift {
 
 inline constexpr std::uint64_t kIntersystemJumpAcceptanceSeed{42};
-inline constexpr std::size_t kMaximumIntersystemJumpAcceptancePixels{4096U *
-                                                                     4096U};
+inline constexpr std::size_t kMaximumIntersystemJumpAcceptancePixels{
+    std::size_t{4096U} * 4096U};
 
 enum class IntersystemJumpAcceptanceError : std::uint8_t {
   invalid_configuration,

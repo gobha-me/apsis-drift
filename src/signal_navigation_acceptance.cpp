@@ -93,7 +93,7 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
   }
 
   SignalNavigationAcceptanceState state{
-      .catalog = std::move(*catalog),
+      .catalog = *catalog,
       .flight = *flight,
       .scanner = {},
       .navigation = {},

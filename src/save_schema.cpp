@@ -1070,8 +1070,8 @@ template <typename Id>
       .current_planet = *current_planet,
       .committed_jump_destination = *destination,
       .phase_started_tick = *phase_tick,
-      .jump_alignment = std::move(jump_alignment),
-      .arrival_solution = std::move(arrival_solution),
+      .jump_alignment = jump_alignment,
+      .arrival_solution = arrival_solution,
   };
   if (arrival_required(state.travel_phase) && !state.arrival_solution) {
     return std::unexpected{
@@ -2832,33 +2832,33 @@ auto decode_save_document_json(std::string_view json_text)
     auto decoded =
         decode_intersystem_contract(**contract_json, Seed{*universe_seed});
     if (!decoded) return std::unexpected{decoded.error()};
-    contract = std::move(*decoded);
+    contract = *decoded;
   }
   std::optional<OriginSystemContractState> origin_system_contract;
   if (!(**origin_system_contract_json).is_null()) {
     auto decoded = decode_origin_system_contract(**origin_system_contract_json,
                                                  Seed{*universe_seed});
     if (!decoded) return std::unexpected{decoded.error()};
-    origin_system_contract = std::move(*decoded);
+    origin_system_contract = *decoded;
   }
 
   std::optional<PlanetaryFlightState> flight;
   if (!(**flight_json).is_null()) {
     auto decoded = decode_flight(**flight_json);
     if (!decoded) return std::unexpected{decoded.error()};
-    flight = std::move(*decoded);
+    flight = *decoded;
   }
   std::optional<SystemFlightState> system_flight;
   if (!(**system_flight_json).is_null()) {
     auto decoded = decode_system_flight(**system_flight_json);
     if (!decoded) return std::unexpected{decoded.error()};
-    system_flight = std::move(*decoded);
+    system_flight = *decoded;
   }
   std::optional<OriginStationFlightState> origin_station_flight;
   if (!(**origin_station_flight_json).is_null()) {
     auto decoded = decode_origin_station_flight(**origin_station_flight_json);
     if (!decoded) return std::unexpected{decoded.error()};
-    origin_station_flight = std::move(*decoded);
+    origin_station_flight = *decoded;
   }
   std::vector<SaveDiscovery> discoveries;
   if ((**discoveries_json).size() > kMaximumSaveDiscoveries) {
@@ -2979,15 +2979,15 @@ auto decode_save_document_json(std::string_view json_text)
               .first_objective = objective,
               .first_objective_contract = first_contract,
               .first_objective_target = target,
-              .flight = std::move(flight),
-              .system_flight = std::move(system_flight),
-              .origin_station_flight = std::move(origin_station_flight),
+              .flight = flight,
+              .system_flight = system_flight,
+              .origin_station_flight = origin_station_flight,
               .discoveries = std::move(discoveries),
               .world_deltas = std::move(deltas),
-              .origin_system_contract = std::move(origin_system_contract),
+              .origin_system_contract = origin_system_contract,
               .origin_system_discoveries = std::move(origin_system_discoveries),
               .origin_system_world_deltas = std::move(origin_system_deltas),
-              .intersystem_contract = std::move(contract),
+              .intersystem_contract = contract,
           },
   };
   if (auto valid = validate_save_document(document); !valid) {

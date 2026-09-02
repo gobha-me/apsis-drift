@@ -149,7 +149,7 @@ auto advance_origin_system_contract(OriginSystemContractState& state,
   if (!accepted) {
     return std::unexpected{OriginSystemContractError::invalid_transition};
   }
-  state = std::move(next);
+  state = next;
   return {};
 }
 

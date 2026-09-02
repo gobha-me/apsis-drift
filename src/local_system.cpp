@@ -15,7 +15,8 @@ namespace {
 inline constexpr std::uint64_t kOrbitBandKilometres{12'000'000};
 inline constexpr std::uint64_t kOrbitBaseKilometres{4'000'000};
 inline constexpr std::uint64_t kOrbitJitterKilometres{4'000'000};
-inline constexpr SimulationTick kTicksPerHour{3'600 * kSimulationHz};
+inline constexpr SimulationTick kTicksPerHour{SimulationTick{3'600} *
+                                              kSimulationHz};
 inline constexpr SimulationTick kOrbitBasePeriodTicks{6 * kTicksPerHour};
 inline constexpr SimulationTick kOrbitPeriodBandTicks{8 * kTicksPerHour};
 inline constexpr SimulationTick kOrbitPeriodJitterTicks{2 * kTicksPerHour};

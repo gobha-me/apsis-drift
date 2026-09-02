@@ -141,7 +141,7 @@ struct Replay {
     return std::unexpected{
         IntersystemContractAcceptanceError::persistence_failure};
   }
-  document = std::move(*decoded);
+  document = *decoded;
   return {};
 }
 
@@ -217,7 +217,7 @@ struct Replay {
       initial);
   auto second = renderer.render(
       system,
-      {.time = {flight.tick + 10U * kSimulationHz, 0.0},
+      {.time = {flight.tick + SimulationTick{10U} * kSimulationHz, 0.0},
        .position = fixed_camera,
        .velocity = {},
        .forward = {-fixed_camera.x, -fixed_camera.y, -fixed_camera.z},
@@ -347,8 +347,8 @@ struct Replay {
         !advance_intersystem_time(next_contract, 1U)) {
       return false;
     }
-    document.state.intersystem_contract = std::move(next_contract);
-    document.state.origin_station_flight = std::move(next_flight);
+    document.state.intersystem_contract = next_contract;
+    document.state.origin_station_flight = next_flight;
     return true;
   };
   {
@@ -387,7 +387,7 @@ struct Replay {
           IntersystemContractAcceptanceError::simulation_failure};
     }
   }
-  constexpr SimulationTick redock_limit{30U * kSimulationHz};
+  constexpr SimulationTick redock_limit{SimulationTick{30U} * kSimulationHz};
   SimulationTick redock_ticks{};
   for (; redock_ticks < redock_limit; ++redock_ticks) {
     const auto guidance = resolve_origin_station_flight_guidance(
@@ -594,7 +594,8 @@ struct Replay {
     return std::unexpected{
         IntersystemContractAcceptanceError::initialization_failure};
   }
-  constexpr SimulationTick collection_limit{20U * kSimulationHz};
+  constexpr SimulationTick collection_limit{SimulationTick{20U} *
+                                            kSimulationHz};
   bool objective_completed{};
   for (SimulationTick tick = 0; tick < collection_limit && !objective_completed;
        ++tick) {
@@ -717,7 +718,7 @@ struct Replay {
   }
   document.state.origin_station_flight = *origin_return;
 
-  constexpr SimulationTick approach_limit{90U * kSimulationHz};
+  constexpr SimulationTick approach_limit{SimulationTick{90U} * kSimulationHz};
   bool origin_checkpointed{};
   SimulationTick approach_ticks{};
   for (; approach_ticks < approach_limit; ++approach_ticks) {

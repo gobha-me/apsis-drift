@@ -23,8 +23,10 @@ inline constexpr std::uint64_t kSystemStarOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionTargetPlanetOrdinal{0};
 inline constexpr std::uint64_t kFirstMissionObjectiveOrdinal{0};
-inline constexpr SimulationTick kJumpSpoolTicks{3 * kSimulationHz};
-inline constexpr SimulationTick kJumpTransitTicks{2 * kSimulationHz};
+inline constexpr SimulationTick kJumpSpoolTicks{SimulationTick{3} *
+                                                kSimulationHz};
+inline constexpr SimulationTick kJumpTransitTicks{SimulationTick{2} *
+                                                  kSimulationHz};
 
 struct SystemId {
   std::uint64_t value{};

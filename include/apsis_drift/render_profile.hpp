@@ -10,7 +10,8 @@ namespace apsis_drift {
 inline constexpr int kDefaultViewportWidth{640};
 inline constexpr int kDefaultViewportHeight{480};
 inline constexpr int kMaxViewportAxis{4096};
-inline constexpr std::size_t kMaxViewportPixels{4U * 1024U * 1024U};
+inline constexpr std::size_t kMaxViewportPixels{std::size_t{4U} * 1024U *
+                                                1024U};
 
 struct ViewportSize {
   int width{};

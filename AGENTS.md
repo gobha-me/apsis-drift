@@ -20,6 +20,8 @@ orbit-to-surface objective.
 - Build and test with both GCC and Clang for publication changes.
 - Format repository C and C++ files with clang-format 20 through
   `tools/format.sh`; do not run an unpinned formatter.
+- Run clang-tidy 20 through `tools/lint.sh`. Suppressions must name exact checks
+  and include an inline justification accepted by `tools/check_nolint.sh`.
 - Keep generated visual, music, and audio assets accompanied by provenance and
   license metadata.
 - Do not extract a generic engine before at least two working game systems show

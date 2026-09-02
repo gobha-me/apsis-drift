@@ -348,7 +348,7 @@ auto generate_terrain_tile(const PlanetDescriptor& planet, TerrainTileKey key)
           TerrainSample{elevation, sample_color(planet, parameters, elevation)};
     }
   }
-  return TerrainTile{key, std::move(samples)};
+  return TerrainTile{key, samples};
 }
 
 auto TerrainTile::sample_at(std::size_t x, std::size_t y) const noexcept
@@ -398,7 +398,7 @@ auto TerrainTileCache::get(const PlanetDescriptor& planet, TerrainTileKey key)
     if (found->planet != planet) {
       return std::unexpected{TerrainTileError::invalid_planet};
     }
-    const auto tile = found->tile;
+    auto tile = found->tile;
     m_entries.splice(m_entries.begin(), m_entries, found);
     return tile;
   }
@@ -406,7 +406,7 @@ auto TerrainTileCache::get(const PlanetDescriptor& planet, TerrainTileKey key)
   auto generated = generate_terrain_tile(planet, key);
   if (!generated) return std::unexpected{generated.error()};
   std::shared_ptr<const TerrainTile> tile =
-      std::make_shared<TerrainTile>(std::move(*generated));
+      std::make_shared<TerrainTile>(*generated);
   m_entries.push_front({planet, key, tile});
   if (m_entries.size() > m_capacity) m_entries.pop_back();
   return tile;

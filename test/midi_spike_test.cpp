@@ -260,7 +260,8 @@ auto main() -> int {
           "non-finite music volume must fail closed");
     check(!engine.play(), "the initialized engine must queue play");
     check(!engine.pause(), "pause must queue without blocking the caller");
-    std::array<float, kAudioFramesPerSimulationTick * kAudioChannelCount>
+    std::array<float,
+               std::size_t{kAudioFramesPerSimulationTick} * kAudioChannelCount>
         block{};
     block.fill(9.0F);
     check(!engine.render(block) &&

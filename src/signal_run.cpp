@@ -212,7 +212,7 @@ auto hydrate_signal_run(const SaveDocument& document, TerrainTileCache& cache)
       .origin_system_contract = document.state.origin_system_contract,
       .origin_system = generate_origin_system(document.recipe.universe_seed),
       .planet = std::move(planet),
-      .catalog = std::move(*catalog),
+      .catalog = *catalog,
       .rendezvous = std::nullopt,
       .flight = document.state.flight,
       .station_flight = document.state.origin_station_flight,
@@ -314,7 +314,7 @@ auto launch_signal_run(SignalRunState& state, TerrainTileCache& cache)
       return std::unexpected{SignalRunError::flight_failure};
     }
     next.onboarding = onboarding;
-    next.station_flight = std::move(*station_flight);
+    next.station_flight = *station_flight;
     next.flight.reset();
     state = std::move(next);
     return {};
@@ -409,7 +409,7 @@ auto begin_signal_run_planetfall(SignalRunState& state, TerrainTileCache& cache)
   }
   auto next = state;
   next.guidance.targeting_observed = true;
-  next.flight = std::move(*flight);
+  next.flight = *flight;
   next.station_flight.reset();
   next.signal_navigation = *navigation;
   next.collection = {};
@@ -541,7 +541,7 @@ auto depart_signal_run_home_planet(SignalRunState& state)
   }
   auto next = state;
   next.flight.reset();
-  next.station_flight = std::move(*station_flight);
+  next.station_flight = *station_flight;
   next.origin_navigation.reset();
   state = std::move(next);
   return {};
@@ -681,7 +681,7 @@ auto turn_in_signal_run(SignalRunState& state)
     if (!contract) {
       return std::unexpected{SignalRunError::invalid_transition};
     }
-    next.origin_system_contract = std::move(*contract);
+    next.origin_system_contract = *contract;
   }
   state = std::move(next);
   return {};

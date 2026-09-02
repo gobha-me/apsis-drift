@@ -26,7 +26,7 @@ namespace {
     return std::unexpected{
         IntersystemReturnAcceptanceError::persistence_failure};
   }
-  document = std::move(*decoded);
+  document = *decoded;
   return {};
 }
 
@@ -248,7 +248,7 @@ auto run_intersystem_return_acceptance(int width, int height)
   }
   const auto framebuffer_checksum = pixel_checksum(frame);
 
-  constexpr SimulationTick approach_limit{90 * kSimulationHz};
+  constexpr SimulationTick approach_limit{SimulationTick{90} * kSimulationHz};
   bool resumed_midway{};
   for (SimulationTick tick = 0; tick < approach_limit; ++tick) {
     const auto guidance = resolve_origin_station_flight_guidance(
@@ -265,7 +265,7 @@ auto run_intersystem_return_acceptance(int width, int height)
       return std::unexpected{
           IntersystemReturnAcceptanceError::simulation_failure};
     }
-    document.state.origin_station_flight = std::move(next_return);
+    document.state.origin_station_flight = next_return;
     if (!resumed_midway && tick == approach_limit / 3) {
       if (!persist()) {
         return std::unexpected{

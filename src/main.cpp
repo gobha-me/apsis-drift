@@ -1107,15 +1107,15 @@ class LandscapeApp final : public App {
     m_universe_seed = universe_seed;
     m_origin_system = std::move(origin_system);
     m_local_system = std::move(local_system);
-    m_system_flight = std::move(system_flight);
-    m_origin_station_flight = std::move(station_flight);
+    m_system_flight = system_flight;
+    m_origin_station_flight = station_flight;
     m_intersystem_planetfall_cache = std::move(planetfall_cache);
     m_intersystem_planetfall = std::move(planetfall);
     m_signal_run_cache = std::move(signal_cache);
     m_signal_run = std::move(signal_run);
     m_save_profile = profile;
-    m_intersystem_contract = std::move(career);
-    m_origin_system_contract = std::move(origin_contract);
+    m_intersystem_contract = career;
+    m_origin_system_contract = origin_contract;
     m_intersystem_world_deltas = std::move(intersystem_deltas);
     m_origin_system_world_deltas = std::move(origin_deltas);
     m_system_renderer.emplace(LocalSystemRenderSettings{
@@ -1524,7 +1524,7 @@ class LandscapeApp final : public App {
             m_save_profile->state.origin_system_discoveries = {
                 {next.binding.target_objective, tick}};
           }
-          m_origin_system_contract = std::move(next);
+          m_origin_system_contract = next;
           return;
         }
         if (contract_command == OriginSystemContractCommand::launch) {
@@ -1534,8 +1534,8 @@ class LandscapeApp final : public App {
             m_error = "contract-two launch initialization was rejected";
             return;
           }
-          m_origin_system_contract = std::move(next);
-          m_origin_station_flight = std::move(*launched);
+          m_origin_system_contract = next;
+          m_origin_station_flight = *launched;
           (void)m_session.start_flight();
           m_simulation_clock.reset();
           m_active_mouse_region = {};
@@ -1598,7 +1598,7 @@ class LandscapeApp final : public App {
             m_error = "contract-three progression update was rejected";
             return;
           }
-          m_intersystem_contract = std::move(next_contract);
+          m_intersystem_contract = next_contract;
           m_save_profile->state.intersystem_contract = *m_intersystem_contract;
           m_save_profile->state.onboarding = next_onboarding;
           m_universe_navigation_selection = {};
@@ -1610,14 +1610,14 @@ class LandscapeApp final : public App {
             m_error = "Origin Station launch initialization was rejected";
             return;
           }
-          m_intersystem_contract = std::move(next_contract);
-          m_origin_station_flight = std::move(*launched);
+          m_intersystem_contract = next_contract;
+          m_origin_station_flight = *launched;
           (void)m_session.start_flight();
           m_simulation_clock.reset();
           m_active_mouse_region = {};
           m_input_mapper.suspend({}, m_origin_station_flight->tick);
         } else {
-          m_intersystem_contract = std::move(next_contract);
+          m_intersystem_contract = next_contract;
           if (board_command == IntersystemContractCommand::turn_in &&
               m_save_profile) {
             m_save_profile->state.intersystem_contract =
@@ -2791,7 +2791,7 @@ class LandscapeApp final : public App {
               m_error = "contract-two Planetfall initialization was rejected";
               return;
             }
-            contract = std::move(next);
+            contract = next;
             m_intersystem_planetfall_cache.emplace(std::move(*cache));
             m_intersystem_planetfall.emplace(std::move(*planetfall));
             m_system_flight.reset();
@@ -2812,8 +2812,8 @@ class LandscapeApp final : public App {
                   "rendezvous";
               return;
             }
-            contract = std::move(next);
-            m_origin_station_flight = std::move(*rendezvous);
+            contract = next;
+            m_origin_station_flight = *rendezvous;
             m_system_flight.reset();
             m_error.clear();
             m_input_mapper.suspend({}, m_origin_station_flight->tick);
@@ -2848,8 +2848,8 @@ class LandscapeApp final : public App {
           m_origin_system_world_deltas.assign(
               m_intersystem_planetfall->journal.entries().begin(),
               m_intersystem_planetfall->journal.entries().end());
-          contract = std::move(next);
-          m_system_flight = std::move(*returning);
+          contract = next;
+          m_system_flight = *returning;
           m_intersystem_planetfall.reset();
           m_intersystem_planetfall_cache.reset();
           m_input_mapper.suspend({}, m_system_flight->tick);
@@ -2874,8 +2874,8 @@ class LandscapeApp final : public App {
               m_error = "leave the station before beginning system transfer";
               return;
             }
-            contract = std::move(next);
-            m_system_flight = std::move(*outbound);
+            contract = next;
+            m_system_flight = *outbound;
             m_origin_station_flight.reset();
             m_input_mapper.suspend({}, m_system_flight->tick);
             m_error.clear();
@@ -2893,7 +2893,7 @@ class LandscapeApp final : public App {
               m_error = "reach the moving station rendezvous before docking";
               return;
             }
-            contract = std::move(next);
+            contract = next;
             m_origin_station_flight.reset();
             (void)m_session.dock_at_station();
             m_simulation_clock.reset();
@@ -2988,7 +2988,7 @@ class LandscapeApp final : public App {
             m_error = "target Planetfall initialization was rejected";
             return;
           }
-          m_intersystem_contract = std::move(next_contract);
+          m_intersystem_contract = next_contract;
           m_intersystem_planetfall_cache.emplace(std::move(*cache));
           m_intersystem_planetfall.emplace(std::move(*planetfall));
           m_system_flight.reset();
@@ -3046,8 +3046,8 @@ class LandscapeApp final : public App {
           m_intersystem_world_deltas.assign(
               m_intersystem_planetfall->journal.entries().begin(),
               m_intersystem_planetfall->journal.entries().end());
-          m_intersystem_contract = std::move(next_contract);
-          m_system_flight = std::move(*departed);
+          m_intersystem_contract = next_contract;
+          m_system_flight = *departed;
           m_intersystem_planetfall.reset();
           m_intersystem_planetfall_cache.reset();
           m_input_mapper.suspend({}, m_system_flight->tick);
@@ -3071,7 +3071,7 @@ class LandscapeApp final : public App {
               m_error = "outbound jump cancellation was rejected";
               return;
             }
-            m_intersystem_contract = std::move(next_contract);
+            m_intersystem_contract = next_contract;
             m_origin_station_flight->tick =
                 m_intersystem_contract->universe_tick;
             m_origin_station_flight->controls = {};
@@ -3096,7 +3096,7 @@ class LandscapeApp final : public App {
             m_error = "outbound jump command refused in the current state";
             return;
           }
-          m_intersystem_contract = std::move(next_contract);
+          m_intersystem_contract = next_contract;
           m_origin_station_flight->controls = {};
           m_error.clear();
           m_universe_navigation_open = false;
@@ -3114,7 +3114,7 @@ class LandscapeApp final : public App {
             m_error = "reach the Origin Station rendezvous before docking";
             return;
           }
-          m_intersystem_contract = std::move(next_contract);
+          m_intersystem_contract = next_contract;
           m_origin_station_flight.reset();
           (void)m_session.dock_at_station();
           m_simulation_clock.reset();
@@ -3296,8 +3296,8 @@ class LandscapeApp final : public App {
             throw std::runtime_error{
                 "contract-two system-flight simulation failed"};
           }
-          m_system_flight = std::move(next_flight);
-          m_intersystem_contract = std::move(next_career);
+          m_system_flight = next_flight;
+          m_intersystem_contract = next_career;
         } else if (m_intersystem_planetfall) {
           if (!m_intersystem_planetfall_cache) {
             throw std::runtime_error{
@@ -3329,8 +3329,8 @@ class LandscapeApp final : public App {
                 next_planetfall.journal.entries().end());
           }
           m_intersystem_planetfall = std::move(next_planetfall);
-          m_intersystem_contract = std::move(next_career);
-          m_origin_system_contract = std::move(next_contract);
+          m_intersystem_contract = next_career;
+          m_origin_system_contract = next_contract;
         } else if (m_origin_station_flight) {
           auto next_station = *m_origin_station_flight;
           auto next_career = *m_intersystem_contract;
@@ -3342,8 +3342,8 @@ class LandscapeApp final : public App {
             throw std::runtime_error{
                 "contract-two station-flight simulation failed"};
           }
-          m_origin_station_flight = std::move(next_station);
-          m_intersystem_contract = std::move(next_career);
+          m_origin_station_flight = next_station;
+          m_intersystem_contract = next_career;
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"contract-two universe clock failed"};
         }
@@ -3388,7 +3388,7 @@ class LandscapeApp final : public App {
               throw std::runtime_error{
                   "cannot initialize target-system flight"};
             }
-            m_system_flight = std::move(*flight);
+            m_system_flight = *flight;
             m_input_mapper.suspend({}, m_system_flight->tick);
           } else if (advanced->arrived && !outbound) {
             auto returning = initialize_origin_return(*m_intersystem_contract,
@@ -3397,7 +3397,7 @@ class LandscapeApp final : public App {
               throw std::runtime_error{
                   "cannot initialize Origin Station return flight"};
             }
-            m_origin_station_flight = std::move(*returning);
+            m_origin_station_flight = *returning;
           }
           if (advanced->committed && !outbound) {
             m_system_flight.reset();
@@ -3420,8 +3420,8 @@ class LandscapeApp final : public App {
                                         next_flight.tick - previous_tick)) {
             throw std::runtime_error{"system-flight clock failed"};
           }
-          m_system_flight = std::move(next_flight);
-          m_intersystem_contract = std::move(next_contract);
+          m_system_flight = next_flight;
+          m_intersystem_contract = next_contract;
         } else if (m_intersystem_planetfall) {
           if (!m_intersystem_planetfall_cache) {
             throw std::runtime_error{
@@ -3464,7 +3464,7 @@ class LandscapeApp final : public App {
             }
           }
           m_intersystem_planetfall = std::move(next_planetfall);
-          m_intersystem_contract = std::move(next_contract);
+          m_intersystem_contract = next_contract;
         } else if (m_origin_station_flight) {
           auto next_station_flight = *m_origin_station_flight;
           auto next_contract = *m_intersystem_contract;
@@ -3475,8 +3475,8 @@ class LandscapeApp final : public App {
               !advance_intersystem_time(next_contract, 1)) {
             throw std::runtime_error{"Origin Station flight failed"};
           }
-          m_origin_station_flight = std::move(next_station_flight);
-          m_intersystem_contract = std::move(next_contract);
+          m_origin_station_flight = next_station_flight;
+          m_intersystem_contract = next_contract;
         } else if (!advance_intersystem_time(*m_intersystem_contract, 1)) {
           throw std::runtime_error{"universe clock failed"};
         }

@@ -452,7 +452,7 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
       break;
     }
   }
-  state = std::move(next);
+  state = next;
   return {};
 }
 

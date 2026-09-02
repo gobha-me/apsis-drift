@@ -62,9 +62,9 @@ auto production_pack_contract() -> void {
   auto loaded = load_first_light_audio_pack(root);
   check(loaded.has_value(), "the committed First Light pack must load");
   if (!loaded) return;
-  check(loaded->packaged_bytes() <= 5U * 1024U * 1024U,
+  check(loaded->packaged_bytes() <= std::size_t{5U} * 1024U * 1024U,
         "the combined committed payload must remain bounded");
-  check(loaded->decoded_bytes() <= 20U * 1024U * 1024U,
+  check(loaded->decoded_bytes() <= std::size_t{20U} * 1024U * 1024U,
         "the combined decoded payload must remain bounded");
 
   auto pack = std::make_unique<FirstLightAudioPack>(std::move(*loaded));
@@ -87,7 +87,7 @@ auto production_pack_contract() -> void {
           "each stable production cue must enter the audio queue");
   }
 
-  std::vector<float> samples(4096U * kAudioChannelCount);
+  std::vector<float> samples(std::size_t{4096U} * kAudioChannelCount);
   check(!runtime.render(samples), "the production pack must render");
   check(std::ranges::all_of(samples,
                             [](float sample) {
@@ -151,8 +151,10 @@ auto production_pack_contract() -> void {
                                                           .atmosphere = 1.0F})
               .status == AudioEmitStatus::queued,
       "flight telemetry must remain accepted with the production pack");
-  std::vector<float> coexistence_samples(4096U * kAudioChannelCount);
-  std::vector<float> coexistence_baseline_samples(4096U * kAudioChannelCount);
+  std::vector<float> coexistence_samples(std::size_t{4096U} *
+                                         kAudioChannelCount);
+  std::vector<float> coexistence_baseline_samples(std::size_t{4096U} *
+                                                  kAudioChannelCount);
   check(!coexistence.render(coexistence_samples) &&
             !coexistence_baseline.render(coexistence_baseline_samples) &&
             coexistence_samples == coexistence_baseline_samples,
