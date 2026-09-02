@@ -127,8 +127,7 @@ class SplitMix64 {
   if (plan.origin == plan.destination ||
       plan.arrival_tick < plan.departure_tick ||
       plan.speed_metres_per_second == 0 ||
-      plan.speed_metres_per_second >
-          kDirectCruiseMaximumSpeedMetresPerSecond ||
+      plan.speed_metres_per_second > kDirectCruiseMaximumSpeedMetresPerSecond ||
       plan.cruise_distance_metres == 0) {
     return false;
   }
@@ -160,9 +159,8 @@ class SplitMix64 {
   };
   const auto axis_matches = [&](std::int64_t position_delta,
                                 std::int64_t velocity) {
-    return velocity >=
-               -static_cast<std::int64_t>(
-                   kDirectCruiseMaximumSpeedMetresPerSecond) &&
+    return velocity >= -static_cast<std::int64_t>(
+                           kDirectCruiseMaximumSpeedMetresPerSecond) &&
            velocity <= static_cast<std::int64_t>(
                            kDirectCruiseMaximumSpeedMetresPerSecond) &&
            velocity != 0 &&
@@ -187,7 +185,7 @@ class SplitMix64 {
          plan.arrival_tick - plan.departure_tick == expected_duration;
 }
 
-}  // namespace
+} // namespace
 
 auto universe_axis_direction_name(UniverseAxisDirection direction) noexcept
     -> std::string_view {
@@ -233,21 +231,20 @@ auto navigation_disabled_reason_name(NavigationDisabledReason reason) noexcept
 auto generate_first_universe_route(Seed universe_seed) noexcept
     -> FirstUniverseRoute {
   const auto identities = generate_first_intersystem_identities(universe_seed);
-  const auto route_seed = derive_seed(
-      universe_seed, SeedDomain::navigation, kFirstTargetSystemOrdinal);
-  SplitMix64 direction_random{derive_seed(
-      route_seed, SeedDomain::navigation,
-      static_cast<std::uint64_t>(NavigationStream::direction))};
-  SplitMix64 distance_random{derive_seed(
-      route_seed, SeedDomain::navigation,
-      static_cast<std::uint64_t>(NavigationStream::distance))};
-  const auto direction = static_cast<UniverseAxisDirection>(
-      direction_random.bounded(6));
+  const auto route_seed = derive_seed(universe_seed, SeedDomain::navigation,
+                                      kFirstTargetSystemOrdinal);
+  SplitMix64 direction_random{
+      derive_seed(route_seed, SeedDomain::navigation,
+                  static_cast<std::uint64_t>(NavigationStream::direction))};
+  SplitMix64 distance_random{
+      derive_seed(route_seed, SeedDomain::navigation,
+                  static_cast<std::uint64_t>(NavigationStream::distance))};
+  const auto direction =
+      static_cast<UniverseAxisDirection>(direction_random.bounded(6));
   const auto distance_light_seconds =
       kMinimumFirstRouteLightSeconds +
       distance_random.bounded(kMaximumFirstRouteLightSeconds -
-                                  kMinimumFirstRouteLightSeconds +
-                              1U);
+                              kMinimumFirstRouteLightSeconds + 1U);
   const auto distance_metres =
       distance_light_seconds *
       static_cast<std::uint64_t>(kMetresPerLightSecond);
@@ -281,10 +278,11 @@ auto validate_first_universe_route(const FirstUniverseRoute& route) noexcept
   return {};
 }
 
-auto resolve_navigation_destination(
-    const FirstUniverseRoute& route, NavigationKnowledge knowledge,
-    SystemId current_system, bool authorized, bool affordable,
-    bool selection_open) noexcept
+auto resolve_navigation_destination(const FirstUniverseRoute& route,
+                                    NavigationKnowledge knowledge,
+                                    SystemId current_system, bool authorized,
+                                    bool affordable,
+                                    bool selection_open) noexcept
     -> std::expected<NavigationDestinationStatus, UniverseNavigationError> {
   if (!validate_first_universe_route(route)) {
     return std::unexpected{UniverseNavigationError::invalid_route};
@@ -297,9 +295,8 @@ auto resolve_navigation_destination(
   if (!position || !current_position) {
     return std::unexpected{UniverseNavigationError::unknown_system};
   }
-  const bool resolved =
-      knowledge.level == NavigationKnowledgeLevel::resolved ||
-      knowledge.level == NavigationKnowledgeLevel::visited;
+  const bool resolved = knowledge.level == NavigationKnowledgeLevel::resolved ||
+                        knowledge.level == NavigationKnowledgeLevel::visited;
   const bool current = knowledge.system == current_system;
   const bool available = resolved && authorized && affordable && !current;
   NavigationDisabledReason reason{NavigationDisabledReason::none};
@@ -331,9 +328,11 @@ auto resolve_navigation_destination(
   };
 }
 
-auto resolve_onboarding_navigation_view(
-    const FirstUniverseRoute& route, const OnboardingProgress& onboarding,
-    SystemId current_system, bool affordable, bool selection_open) noexcept
+auto resolve_onboarding_navigation_view(const FirstUniverseRoute& route,
+                                        const OnboardingProgress& onboarding,
+                                        SystemId current_system,
+                                        bool affordable,
+                                        bool selection_open) noexcept
     -> std::expected<UniverseNavigationView, UniverseNavigationError> {
   if (!validate_onboarding_progress(onboarding)) {
     return std::unexpected{UniverseNavigationError::invalid_onboarding};
@@ -359,8 +358,7 @@ auto resolve_onboarding_navigation_view(
   view.destinations.reserve(2);
   const auto origin = resolve_navigation_destination(
       route,
-      {.system = route.origin,
-       .level = NavigationKnowledgeLevel::visited},
+      {.system = route.origin, .level = NavigationKnowledgeLevel::visited},
       current_system, access->first_jump_solution_available, affordable,
       selection_open);
   if (!origin) return std::unexpected{origin.error()};
@@ -390,9 +388,9 @@ auto advance_universe_navigation_selection(
     return std::unexpected{UniverseNavigationError::invalid_context};
   }
   if (selection.pending_destination) {
-    const auto selected = std::ranges::find(
-        view.destinations, *selection.pending_destination,
-        &NavigationDestinationStatus::system);
+    const auto selected =
+        std::ranges::find(view.destinations, *selection.pending_destination,
+                          &NavigationDestinationStatus::system);
     if (selected == view.destinations.end()) {
       return std::unexpected{UniverseNavigationError::invalid_context};
     }
@@ -406,8 +404,7 @@ auto advance_universe_navigation_selection(
                                : next.focused_index - 1U;
       break;
     case UniverseNavigationSelectionCommand::next:
-      next.focused_index =
-          (next.focused_index + 1U) % view.destinations.size();
+      next.focused_index = (next.focused_index + 1U) % view.destinations.size();
       break;
     case UniverseNavigationSelectionCommand::select: {
       const auto& destination = view.destinations[next.focused_index];
@@ -417,8 +414,7 @@ auto advance_universe_navigation_selection(
       next.pending_destination = destination.system;
       break;
     }
-    default:
-      return std::unexpected{UniverseNavigationError::invalid_context};
+    default: return std::unexpected{UniverseNavigationError::invalid_context};
   }
   selection = next;
   return {};
@@ -497,9 +493,8 @@ auto resolve_direct_travel(const DirectTravelPlan& plan,
         .tick = tick, .position = plan.arrival_position, .arrived = true};
   }
   const auto elapsed_ticks = tick - plan.departure_tick;
-  if (elapsed_ticks >
-      std::numeric_limits<std::uint64_t>::max() /
-          plan.speed_metres_per_second) {
+  if (elapsed_ticks > std::numeric_limits<std::uint64_t>::max() /
+                          plan.speed_metres_per_second) {
     return std::unexpected{UniverseNavigationError::unsafe_arithmetic};
   }
   const auto travelled =
@@ -518,8 +513,7 @@ auto resolve_direct_travel(const DirectTravelPlan& plan,
   const auto signed_travelled = static_cast<std::int64_t>(travelled);
   return DirectTravelSample{
       .tick = tick,
-      .position = offset(plan.departure_position, direction,
-                         signed_travelled),
+      .position = offset(plan.departure_position, direction, signed_travelled),
       .arrived = false,
   };
 }
@@ -571,4 +565,4 @@ auto direct_travel_save_projection_json(const DirectTravelPlan& plan,
       static_cast<std::uint32_t>(scale));
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

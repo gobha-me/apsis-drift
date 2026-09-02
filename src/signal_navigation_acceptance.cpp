@@ -12,28 +12,26 @@
 namespace apsis_drift {
 namespace {
 
-[[nodiscard]] auto surface_environment(
-    const PlanetDescriptor& planet, const PlanetaryFlightState& state,
-    TerrainTileCache& cache)
+[[nodiscard]] auto surface_environment(const PlanetDescriptor& planet,
+                                       const PlanetaryFlightState& state,
+                                       TerrainTileCache& cache)
     -> std::expected<PlanetaryFlightEnvironment,
                      SignalNavigationAcceptanceError> {
   const auto fixed = planet_fixed_from_geodetic(
       planet, {state.pose.position.latitude_radians,
                state.pose.position.longitude_radians, 0.0});
   if (!fixed) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::terrain_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::terrain_failure};
   }
-  const auto surface = sample_planet_surface(
-      planet, *fixed, kSurfaceSignalPlacementLod, cache);
+  const auto surface =
+      sample_planet_surface(planet, *fixed, kSurfaceSignalPlacementLod, cache);
   if (!surface) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::terrain_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::terrain_failure};
   }
   return PlanetaryFlightEnvironment{surface->elevation_metres};
 }
 
-}  // namespace
+} // namespace
 
 auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
                                           TerrainTileCache& cache)
@@ -41,10 +39,10 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
                      SignalNavigationAcceptanceError> {
   auto catalog = generate_surface_signals(planet, cache);
   if (!catalog) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::terrain_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::terrain_failure};
   }
-  const auto& target = catalog->signals[kSignalNavigationAcceptanceTargetOrdinal];
+  const auto& target =
+      catalog->signals[kSignalNavigationAcceptanceTargetOrdinal];
   const auto target_fixed = planet_fixed_from_terrain_address(
       planet, target.anchor,
       static_cast<double>(target.approach_altitude_metres));
@@ -52,15 +50,14 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
       target_fixed ? geodetic_from_planet_fixed(planet, *target_fixed)
                    : std::expected<GeodeticPosition, CoordinateError>{
                          std::unexpected{CoordinateError::non_finite_input}};
-  const auto frame = target_position
-                         ? make_local_tangent_frame(planet, *target_position)
-                         : std::expected<LocalTangentFrame, CoordinateError>{
-                               std::unexpected{
-                                   CoordinateError::non_finite_input}};
+  const auto frame =
+      target_position ? make_local_tangent_frame(planet, *target_position)
+                      : std::expected<LocalTangentFrame, CoordinateError>{
+                            std::unexpected{CoordinateError::non_finite_input}};
   const auto start_fixed =
       frame ? planet_fixed_from_local(
-                  *frame, {-kSignalNavigationAcceptanceStartOffsetMetres,
-                           0.0, 0.0})
+                  *frame,
+                  {-kSignalNavigationAcceptanceStartOffsetMetres, 0.0, 0.0})
             : std::expected<PlanetFixedPositionMetres, CoordinateError>{
                   std::unexpected{CoordinateError::non_finite_input}};
   const auto start_position =
@@ -68,8 +65,7 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
                   : std::expected<GeodeticPosition, CoordinateError>{
                         std::unexpected{CoordinateError::non_finite_input}};
   if (!start_position) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::terrain_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::terrain_failure};
   }
 
   PlanetaryFlightState probe{
@@ -89,13 +85,11 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
   const auto flight = initial_planetary_flight_state(
       planet, *start_position, *environment, 0.0, FlightMode::manual);
   if (!flight) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::flight_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::flight_failure};
   }
   auto journal = WorldDeltaJournal::create();
   if (!journal) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::journal_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::journal_failure};
   }
 
   SignalNavigationAcceptanceState state{
@@ -110,22 +104,19 @@ auto initial_signal_navigation_acceptance(const PlanetDescriptor& planet,
   };
   if (!advance_signal_selection(state.catalog, state.scanner,
                                 SignalSelectionCommand::next)) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::scanner_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::scanner_failure};
   }
   const auto navigation = resolve_signal_navigation(
       planet, state.catalog, state.flight, state.scanner);
   if (!navigation || navigation->status != SignalScannerStatus::tracking) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::scanner_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::scanner_failure};
   }
   state.navigation = *navigation;
   const auto collection = advance_signal_collection(
       state.catalog, state.navigation, state.flight.tick, state.journal,
       state.collection);
   if (!collection) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::collection_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::collection_failure};
   }
   return state;
 }
@@ -136,8 +127,7 @@ auto advance_signal_navigation_acceptance(
     -> std::expected<bool, SignalNavigationAcceptanceError> {
   if (state.collection.status == SignalCollectionStatus::complete) return true;
   if (state.flight.tick >= kSignalNavigationAcceptanceMaximumTicks) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::incomplete_path};
+    return std::unexpected{SignalNavigationAcceptanceError::incomplete_path};
   }
   const auto environment = surface_environment(planet, state.flight, cache);
   if (!environment) return std::unexpected{environment.error()};
@@ -145,24 +135,21 @@ auto advance_signal_navigation_acceptance(
       state.navigation.status == SignalScannerStatus::reached &&
       state.flight.controls.forward;
   const std::array command{FlightCommand{
-      state.flight.tick,
-      release_for_scan ? FlightCommandKind::release_forward
-                       : FlightCommandKind::press_forward}};
+      state.flight.tick, release_for_scan ? FlightCommandKind::release_forward
+                                          : FlightCommandKind::press_forward}};
   const std::span<const FlightCommand> commands =
       state.flight.tick == 0 || release_for_scan
           ? std::span<const FlightCommand>{command}
           : std::span<const FlightCommand>{};
   if (!advance_planetary_flight(planet, *environment, state.flight, commands,
                                 kSimulationStep)) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::flight_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::flight_failure};
   }
   if (release_for_scan) ++state.command_count;
   const auto navigation = resolve_signal_navigation(
       planet, state.catalog, state.flight, state.scanner);
   if (!navigation) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::scanner_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::scanner_failure};
   }
   state.navigation = *navigation;
   if (state.navigation.status == SignalScannerStatus::reached &&
@@ -173,8 +160,7 @@ auto advance_signal_navigation_acceptance(
       state.catalog, state.navigation, state.flight.tick, state.journal,
       state.collection);
   if (!collection) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::collection_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::collection_failure};
   }
   return state.collection.status == SignalCollectionStatus::complete;
 }
@@ -186,8 +172,7 @@ auto replay_signal_navigation_acceptance()
       generate_planet_descriptor(Seed{kSignalNavigationAcceptanceSeed});
   auto cache = TerrainTileCache::create();
   if (!cache) {
-    return std::unexpected{
-        SignalNavigationAcceptanceError::terrain_failure};
+    return std::unexpected{SignalNavigationAcceptanceError::terrain_failure};
   }
   auto state = initial_signal_navigation_acceptance(planet, *cache);
   if (!state) return std::unexpected{state.error()};
@@ -224,17 +209,14 @@ auto signal_navigation_acceptance_json(
       "  \"viewport_height\": {},\n"
       "  \"presentation\": \"{}\"\n"
       "}}\n",
-      kSignalNavigationAcceptanceScenario,
-      kSignalNavigationAcceptanceSeed, kSimulationHz,
-      kSignalNavigationAcceptanceTargetOrdinal,
+      kSignalNavigationAcceptanceScenario, kSignalNavigationAcceptanceSeed,
+      kSimulationHz, kSignalNavigationAcceptanceTargetOrdinal,
       surface_signal_id_string(report.target_id), report.reached_tick,
       report.completion_tick, report.command_count, report.world_delta_count,
-      report.final_distance_metres,
-      report.flight_checksum,
-      report.framebuffer_checksum,
-      profile_name(report.render_configuration),
+      report.final_distance_metres, report.flight_checksum,
+      report.framebuffer_checksum, profile_name(report.render_configuration),
       report.render_configuration.viewport.width,
       report.render_configuration.viewport.height, report.presentation);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -149,8 +149,8 @@ struct MusicDiagnostics {
 
 class MusicEngine {
  public:
-  [[nodiscard]] static auto create(
-      MidiSchedule schedule, std::span<const std::byte> soundfont)
+  [[nodiscard]] static auto create(MidiSchedule schedule,
+                                   std::span<const std::byte> soundfont)
       -> std::expected<MusicEngine, MidiError>;
 
   MusicEngine(MusicEngine&&) noexcept;
@@ -167,8 +167,8 @@ class MusicEngine {
       -> std::optional<MidiError>;
   [[nodiscard]] auto set_music_volume(float gain) noexcept
       -> std::optional<MidiError>;
-  [[nodiscard]] auto set_layer_target(
-      MusicLayer layer, float gain, TransitionBoundary boundary) noexcept
+  [[nodiscard]] auto set_layer_target(MusicLayer layer, float gain,
+                                      TransitionBoundary boundary) noexcept
       -> std::optional<MidiError>;
   [[nodiscard]] auto render(std::span<float> interleaved_samples) noexcept
       -> std::optional<MidiError>;
@@ -180,4 +180,4 @@ class MusicEngine {
   std::unique_ptr<Impl> m_impl;
 };
 
-}  // namespace apsis_drift::midi_spike
+} // namespace apsis_drift::midi_spike

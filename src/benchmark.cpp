@@ -17,8 +17,8 @@ template <typename Function>
   std::size_t offset{};
   while (offset <= text.size()) {
     const auto separator = text.find(',', offset);
-    const auto end = separator == std::string_view::npos ? text.size()
-                                                          : separator;
+    const auto end =
+        separator == std::string_view::npos ? text.size() : separator;
     const auto token = text.substr(offset, end - offset);
     if (token.empty()) {
       return std::unexpected{"sweep list entries must not be empty"};
@@ -36,8 +36,8 @@ template <typename Function>
   return left.viewport == right.viewport;
 }
 
-auto append_summary_json(std::string& output,
-                         const BenchmarkSummary& summary) -> void {
+auto append_summary_json(std::string& output, const BenchmarkSummary& summary)
+    -> void {
   output += std::format(
       "        \"frames\": {},\n"
       "        \"elapsed_seconds\": {:.6f},\n"
@@ -56,31 +56,30 @@ auto append_summary_json(std::string& output,
       summary.mebibytes_per_second, summary.total_bytes, summary.checksum);
   if (summary.planetary_presentation) {
     const auto& value = *summary.planetary_presentation;
-    output += std::format(
-        ",\n"
-        "        \"planetary_presentation\": {{\n"
-        "          \"mode_frames\": {{\"orbital\": {}, "
-        "\"atmospheric\": {}, \"terrain_blend\": {}, "
-        "\"local_terrain\": {}}},\n"
-        "          \"orbital_render_avg_ms\": {:.6f},\n"
-        "          \"local_render_avg_ms\": {:.6f},\n"
-        "          \"composite_avg_ms\": {:.6f},\n"
-        "          \"total_avg_ms\": {:.6f},\n"
-        "          \"total_p95_ms\": {:.6f},\n"
-        "          \"maximum_tiles_touched\": {}\n"
-        "        }}\n",
-        value.orbital_frames, value.atmospheric_frames,
-        value.terrain_blend_frames, value.local_terrain_frames,
-        value.orbital_render_avg_ms,
-        value.local_render_avg_ms, value.composite_avg_ms,
-        value.total_avg_ms, value.total_p95_ms,
-        value.maximum_tiles_touched);
+    output +=
+        std::format(",\n"
+                    "        \"planetary_presentation\": {{\n"
+                    "          \"mode_frames\": {{\"orbital\": {}, "
+                    "\"atmospheric\": {}, \"terrain_blend\": {}, "
+                    "\"local_terrain\": {}}},\n"
+                    "          \"orbital_render_avg_ms\": {:.6f},\n"
+                    "          \"local_render_avg_ms\": {:.6f},\n"
+                    "          \"composite_avg_ms\": {:.6f},\n"
+                    "          \"total_avg_ms\": {:.6f},\n"
+                    "          \"total_p95_ms\": {:.6f},\n"
+                    "          \"maximum_tiles_touched\": {}\n"
+                    "        }}\n",
+                    value.orbital_frames, value.atmospheric_frames,
+                    value.terrain_blend_frames, value.local_terrain_frames,
+                    value.orbital_render_avg_ms, value.local_render_avg_ms,
+                    value.composite_avg_ms, value.total_avg_ms,
+                    value.total_p95_ms, value.maximum_tiles_touched);
   } else {
     output += '\n';
   }
 }
 
-}  // namespace
+} // namespace
 
 auto workload_name(BenchmarkWorkload workload) noexcept -> std::string_view {
   switch (workload) {
@@ -97,8 +96,7 @@ auto workload_identifier(BenchmarkWorkload workload) noexcept
   switch (workload) {
     case BenchmarkWorkload::landscape: return "voxel-landscape-rgba";
     case BenchmarkWorkload::orbital: return "orbital-planet-rgba";
-    case BenchmarkWorkload::planetary:
-      return "planetary-presentation-rgba";
+    case BenchmarkWorkload::planetary: return "planetary-presentation-rgba";
     case BenchmarkWorkload::system: return "local-system-rgba";
   }
   return "voxel-landscape-rgba";
@@ -119,33 +117,35 @@ auto default_sweep_viewports() -> std::vector<RenderConfiguration> {
           resolve_render_configuration(RenderProfile::local)};
 }
 
-auto default_sweep_fps() -> std::vector<std::uint32_t> { return {30, 60}; }
+auto default_sweep_fps() -> std::vector<std::uint32_t> {
+  return {30, 60};
+}
 
 auto parse_sweep_viewports(std::string_view text)
     -> std::expected<std::vector<RenderConfiguration>, std::string> {
   std::vector<RenderConfiguration> result;
   const auto parsed = for_each_csv_token(
-      text, [&result](std::string_view token)
-                -> std::expected<void, std::string> {
+      text,
+      [&result](std::string_view token) -> std::expected<void, std::string> {
         RenderConfiguration configuration;
         if (const auto profile = parse_render_profile(token)) {
           configuration = resolve_render_configuration(*profile);
         } else {
           const auto viewport = parse_viewport(token);
           if (!viewport) {
-            return std::unexpected{std::format(
-                "invalid sweep viewport '{}': {}", token,
-                viewport_error_message(viewport.error()))};
+            return std::unexpected{
+                std::format("invalid sweep viewport '{}': {}", token,
+                            viewport_error_message(viewport.error()))};
           }
-          configuration = resolve_render_configuration(RenderProfile::local,
-                                                       *viewport);
+          configuration =
+              resolve_render_configuration(RenderProfile::local, *viewport);
         }
         if (std::ranges::any_of(result, [&](const auto& existing) {
               return same_viewport(existing, configuration);
             })) {
-          return std::unexpected{std::format(
-              "duplicate sweep viewport {}x{}", configuration.viewport.width,
-              configuration.viewport.height)};
+          return std::unexpected{std::format("duplicate sweep viewport {}x{}",
+                                             configuration.viewport.width,
+                                             configuration.viewport.height)};
         }
         result.push_back(configuration);
         return {};
@@ -158,8 +158,8 @@ auto parse_sweep_fps(std::string_view text)
     -> std::expected<std::vector<std::uint32_t>, std::string> {
   std::vector<std::uint32_t> result;
   const auto parsed = for_each_csv_token(
-      text, [&result](std::string_view token)
-                -> std::expected<void, std::string> {
+      text,
+      [&result](std::string_view token) -> std::expected<void, std::string> {
         std::uint32_t value{};
         const auto [end, error] =
             std::from_chars(token.data(), token.data() + token.size(), value);
@@ -190,15 +190,14 @@ auto assess_cadence(const BenchmarkSummary& summary,
       result.deadline_budget_ms - summary.render_p95_ms;
   result.frame_work_p95_headroom_ms =
       result.deadline_budget_ms - summary.work_p95_ms;
-  result.required_mebibytes_per_second =
-      summary.bytes_per_frame * static_cast<double>(target_fps) /
-      (1024.0 * 1024.0);
+  result.required_mebibytes_per_second = summary.bytes_per_frame *
+                                         static_cast<double>(target_fps) /
+                                         (1024.0 * 1024.0);
   return result;
 }
 
 auto sweep_table(const std::vector<BenchmarkMeasurement>& measurements,
-                 const std::vector<std::uint32_t>& target_fps)
-    -> std::string {
+                 const std::vector<std::uint32_t>& target_fps) -> std::string {
   std::string output =
       "PROFILE    VIEWPORT    FPS  BUDGET  RENDER AVG/P95  FRAME AVG/P95  "
       "KiB/FRAME  TARGET MiB/s  FRAME P95 HEADROOM\n";
@@ -225,28 +224,26 @@ auto sweep_table(const std::vector<BenchmarkMeasurement>& measurements,
 auto sweep_json(const std::vector<BenchmarkMeasurement>& measurements,
                 const std::vector<std::uint32_t>& target_fps,
                 std::uint32_t seed, std::size_t frames_per_viewport,
-                BenchmarkWorkload workload)
-    -> std::string {
-  std::string output = std::format(
-      "{{\n"
-      "  \"schema_version\": 2,\n"
-      "  \"workload\": \"{}\",\n"
-      "  \"seed\": {},\n"
-      "  \"frames_per_viewport\": {},\n"
-      "  \"measurements\": [\n",
-      workload_identifier(workload), seed, frames_per_viewport);
+                BenchmarkWorkload workload) -> std::string {
+  std::string output =
+      std::format("{{\n"
+                  "  \"schema_version\": 2,\n"
+                  "  \"workload\": \"{}\",\n"
+                  "  \"seed\": {},\n"
+                  "  \"frames_per_viewport\": {},\n"
+                  "  \"measurements\": [\n",
+                  workload_identifier(workload), seed, frames_per_viewport);
 
   for (std::size_t index = 0; index < measurements.size(); ++index) {
     const auto& measurement = measurements[index];
-    output += std::format(
-        "    {{\n"
-        "      \"render_profile\": \"{}\",\n"
-        "      \"viewport_width\": {},\n"
-        "      \"viewport_height\": {},\n"
-        "      \"summary\": {{\n",
-        profile_name(measurement.configuration),
-        measurement.configuration.viewport.width,
-        measurement.configuration.viewport.height);
+    output += std::format("    {{\n"
+                          "      \"render_profile\": \"{}\",\n"
+                          "      \"viewport_width\": {},\n"
+                          "      \"viewport_height\": {},\n"
+                          "      \"summary\": {{\n",
+                          profile_name(measurement.configuration),
+                          measurement.configuration.viewport.width,
+                          measurement.configuration.viewport.height);
     append_summary_json(output, measurement.summary);
     output += "      },\n      \"targets\": [\n";
     for (std::size_t target_index = 0; target_index < target_fps.size();
@@ -259,8 +256,7 @@ auto sweep_json(const std::vector<BenchmarkMeasurement>& measurements,
           "\"frame_work_p95_headroom_ms\": {:.6f}, "
           "\"required_mebibytes_per_second\": {:.6f}}}{}\n",
           cadence.target_fps, cadence.deadline_budget_ms,
-          cadence.renderer_p95_headroom_ms,
-          cadence.frame_work_p95_headroom_ms,
+          cadence.renderer_p95_headroom_ms, cadence.frame_work_p95_headroom_ms,
           cadence.required_mebibytes_per_second,
           target_index + 1 == target_fps.size() ? "" : ",");
     }
@@ -271,4 +267,4 @@ auto sweep_json(const std::vector<BenchmarkMeasurement>& measurements,
   return output;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

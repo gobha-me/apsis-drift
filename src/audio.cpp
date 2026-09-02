@@ -22,8 +22,8 @@ namespace {
 inline constexpr std::int32_t kSynthUnit{32'767};
 inline constexpr std::int32_t kParameterSlewPerFrame{96};
 inline constexpr std::int32_t kWarningSlewPerFrame{128};
-inline constexpr std::uint32_t kWarningDurationFrames{
-    kAudioSampleRate * 2U / 5U};
+inline constexpr std::uint32_t kWarningDurationFrames{kAudioSampleRate * 2U /
+                                                      5U};
 
 [[nodiscard]] auto valid_mode(FlightMode mode) noexcept -> bool {
   return mode == FlightMode::manual || mode == FlightMode::autopilot;
@@ -42,8 +42,8 @@ inline constexpr std::uint32_t kWarningDurationFrames{
   return 0.0F;
 }
 
-[[nodiscard]] auto normalized_speed(double speed,
-                                    double maximum) noexcept -> float {
+[[nodiscard]] auto normalized_speed(double speed, double maximum) noexcept
+    -> float {
   if (!std::isfinite(speed) || !std::isfinite(maximum) || speed < 0.0 ||
       maximum <= 0.0) {
     return std::numeric_limits<float>::quiet_NaN();
@@ -51,8 +51,8 @@ inline constexpr std::uint32_t kWarningDurationFrames{
   return static_cast<float>(std::clamp(speed / maximum, 0.0, 1.0));
 }
 
-[[nodiscard]] auto valid_parameters(
-    FlightAudioParameters parameters) noexcept -> bool {
+[[nodiscard]] auto valid_parameters(FlightAudioParameters parameters) noexcept
+    -> bool {
   const auto bounded = [](float value) {
     return std::isfinite(value) && value >= 0.0F && value <= 1.0F;
   };
@@ -67,8 +67,10 @@ inline constexpr std::uint32_t kWarningDurationFrames{
 
 auto approach(std::int32_t& value, std::int32_t target,
               std::int32_t step) noexcept -> void {
-  if (value < target) value += std::min(step, target - value);
-  else if (value > target) value -= std::min(step, value - target);
+  if (value < target)
+    value += std::min(step, target - value);
+  else if (value > target)
+    value -= std::min(step, value - target);
 }
 
 [[nodiscard]] auto triangle(std::uint32_t phase) noexcept -> std::int32_t {
@@ -86,14 +88,13 @@ auto hash_sample(std::uint64_t& hash, float sample) noexcept -> void {
   }
 }
 
-}  // namespace
+} // namespace
 
 auto resolve_flight_audio(const FlightState& state) noexcept
     -> std::expected<FlightAudioTelemetry, FlightAudioError> {
-  const double speed = std::hypot(
-      static_cast<double>(state.velocity.x),
-      static_cast<double>(state.velocity.y),
-      static_cast<double>(state.velocity.vertical));
+  const double speed = std::hypot(static_cast<double>(state.velocity.x),
+                                  static_cast<double>(state.velocity.y),
+                                  static_cast<double>(state.velocity.vertical));
   if (!valid_mode(state.mode) || !std::isfinite(state.pose.altitude) ||
       !std::isfinite(state.clearance) || state.clearance < 0.0F ||
       !std::isfinite(speed)) {
@@ -101,11 +102,10 @@ auto resolve_flight_audio(const FlightState& state) noexcept
   }
   return FlightAudioTelemetry{
       .tick = state.tick,
-      .parameters =
-          {.active = true,
-           .engine_demand = engine_demand(state.mode, state.controls),
-           .speed = normalized_speed(speed, 80.0),
-           .atmosphere = 1.0F},
+      .parameters = {.active = true,
+                     .engine_demand = engine_demand(state.mode, state.controls),
+                     .speed = normalized_speed(speed, 80.0),
+                     .atmosphere = 1.0F},
       .low_clearance = state.clearance <= kLowClearanceWarningMetres,
   };
 }
@@ -118,10 +118,9 @@ auto resolve_flight_audio(const PlanetDescriptor& planet,
   }
   const auto performance = flight_performance(planet, state.regime);
   const auto bands = flight_regime_bands(planet);
-  const double speed = std::hypot(
-      state.velocity.east_metres_per_second,
-      state.velocity.north_metres_per_second,
-      state.velocity.up_metres_per_second);
+  const double speed = std::hypot(state.velocity.east_metres_per_second,
+                                  state.velocity.north_metres_per_second,
+                                  state.velocity.up_metres_per_second);
   if (!performance || !bands || !valid_mode(state.mode) ||
       !std::isfinite(state.pose.position.altitude_metres) ||
       !std::isfinite(state.clearance_metres) ||
@@ -140,9 +139,8 @@ auto resolve_flight_audio(const PlanetDescriptor& planet,
         static_cast<double>(AtmospherePressureMillibars::max);
     atmosphere = std::clamp(pressure * depth * depth, 0.0, 1.0);
   }
-  const double maximum_speed = std::hypot(
-      performance->maximum_horizontal_speed,
-      performance->maximum_vertical_speed);
+  const double maximum_speed = std::hypot(performance->maximum_horizontal_speed,
+                                          performance->maximum_vertical_speed);
   const FlightAudioParameters parameters{
       .active = true,
       .engine_demand = engine_demand(state.mode, state.controls),
@@ -155,8 +153,7 @@ auto resolve_flight_audio(const PlanetDescriptor& planet,
   return FlightAudioTelemetry{
       .tick = state.tick,
       .parameters = parameters,
-      .low_clearance =
-          state.clearance_metres <= kLowClearanceWarningMetres,
+      .low_clearance = state.clearance_metres <= kLowClearanceWarningMetres,
   };
 }
 
@@ -169,31 +166,29 @@ auto resolve_flight_audio(const SystemFlightState& state) noexcept
   }
   return FlightAudioTelemetry{
       .tick = state.tick,
-      .parameters =
-          {.active = true,
-           .engine_demand = engine_demand(state.mode, state.controls),
-           .speed = normalized_speed(
-               speed, kSystemFlightMaximumRelativeSpeed),
-           .atmosphere = 0.0F},
+      .parameters = {.active = true,
+                     .engine_demand = engine_demand(state.mode, state.controls),
+                     .speed = normalized_speed(
+                         speed, kSystemFlightMaximumRelativeSpeed),
+                     .atmosphere = 0.0F},
   };
 }
 
 auto resolve_flight_audio(const OriginStationFlightState& state) noexcept
     -> std::expected<FlightAudioTelemetry, FlightAudioError> {
-  const double speed = std::hypot(state.relative_velocity.x,
-                                  state.relative_velocity.y,
-                                  state.relative_velocity.z);
+  const double speed =
+      std::hypot(state.relative_velocity.x, state.relative_velocity.y,
+                 state.relative_velocity.z);
   if (!valid_mode(state.mode) || !std::isfinite(speed)) {
     return std::unexpected{FlightAudioError::invalid_state};
   }
   return FlightAudioTelemetry{
       .tick = state.tick,
-      .parameters =
-          {.active = true,
-           .engine_demand = engine_demand(state.mode, state.controls),
-           .speed = normalized_speed(
-               speed, kHomeSignalStationFlightMaximumSpeed),
-           .atmosphere = 0.0F},
+      .parameters = {.active = true,
+                     .engine_demand = engine_demand(state.mode, state.controls),
+                     .speed = normalized_speed(
+                         speed, kHomeSignalStationFlightMaximumSpeed),
+                     .atmosphere = 0.0F},
   };
 }
 
@@ -227,9 +222,8 @@ auto audio_backend_failure_name(AudioBackendFailure failure) noexcept
 
 auto audio_sample_frame(AudioEventIdentity identity) noexcept
     -> std::optional<std::uint64_t> {
-  if (identity.tick >
-      std::numeric_limits<std::uint64_t>::max() /
-          kAudioFramesPerSimulationTick) {
+  if (identity.tick > std::numeric_limits<std::uint64_t>::max() /
+                          kAudioFramesPerSimulationTick) {
     return std::nullopt;
   }
   return identity.tick * kAudioFramesPerSimulationTick;
@@ -255,7 +249,8 @@ auto AudioEventQueue::try_pop() noexcept -> std::optional<AudioEvent> {
 
 auto AudioEventQueue::clear() noexcept -> std::size_t {
   std::size_t cleared{};
-  while (try_pop()) ++cleared;
+  while (try_pop())
+    ++cleared;
   return cleared;
 }
 
@@ -328,20 +323,21 @@ AudioRuntime::AudioRuntime(AudioRuntimeMode mode,
   }
 }
 
-AudioRuntime::~AudioRuntime() { shutdown(); }
+AudioRuntime::~AudioRuntime() {
+  shutdown();
+}
 
-auto AudioRuntime::start_backend(
-    std::unique_ptr<AudioBackend> backend) -> void {
+auto AudioRuntime::start_backend(std::unique_ptr<AudioBackend> backend)
+    -> void {
   if (backend && backend->start(kAudioFormat, *this)) {
     m_backend = std::move(backend);
     return;
   }
   if (backend) {
     const auto failed = backend->diagnostics();
-    m_last_backend_failure =
-        failed.failure == AudioBackendFailure::none
-            ? AudioBackendFailure::discovery_failed
-            : failed.failure;
+    m_last_backend_failure = failed.failure == AudioBackendFailure::none
+                                 ? AudioBackendFailure::discovery_failed
+                                 : failed.failure;
     m_retired_callback_count += failed.callback_count;
     m_retired_output_underflow_count += failed.output_underflow_count;
     m_backend_failure_count.fetch_add(1, std::memory_order_relaxed);
@@ -394,8 +390,7 @@ auto AudioRuntime::emit_flight_parameters(
   }
   if (m_last_parameter_tick && tick == *m_last_parameter_tick &&
       (!m_last_tick || tick == *m_last_tick)) {
-    m_parameter_updates_coalesced.fetch_add(1,
-                                            std::memory_order_relaxed);
+    m_parameter_updates_coalesced.fetch_add(1, std::memory_order_relaxed);
     m_last_emit_status.store(AudioEmitStatus::coalesced_same_tick,
                              std::memory_order_relaxed);
     return {.status = AudioEmitStatus::coalesced_same_tick};
@@ -460,8 +455,7 @@ auto AudioRuntime::emit_event(AudioEvent event) noexcept -> AudioEmitResult {
   }
   m_events_queued.fetch_add(1, std::memory_order_relaxed);
   update_maximum_depth(m_queue.depth());
-  m_last_emit_status.store(AudioEmitStatus::queued,
-                           std::memory_order_relaxed);
+  m_last_emit_status.store(AudioEmitStatus::queued, std::memory_order_relaxed);
   return {.status = AudioEmitStatus::queued, .identity = identity};
 }
 
@@ -485,8 +479,7 @@ auto AudioRuntime::service() noexcept -> void {
 auto AudioRuntime::reset(AudioResetReason reason) noexcept -> void {
   if (m_backend) m_backend->stop();
   const auto cleared = m_queue.clear();
-  m_events_discarded_on_reset.fetch_add(cleared,
-                                        std::memory_order_relaxed);
+  m_events_discarded_on_reset.fetch_add(cleared, std::memory_order_relaxed);
   m_last_tick.reset();
   m_last_parameter_tick.reset();
   m_next_sequence = 0;
@@ -507,10 +500,9 @@ auto AudioRuntime::backend_lost() -> void {
   if (m_stopped) return;
   if (m_backend) {
     const auto failed = m_backend->diagnostics();
-    m_last_backend_failure =
-        failed.failure == AudioBackendFailure::none
-            ? AudioBackendFailure::device_lost
-            : failed.failure;
+    m_last_backend_failure = failed.failure == AudioBackendFailure::none
+                                 ? AudioBackendFailure::device_lost
+                                 : failed.failure;
     m_retired_callback_count += failed.callback_count;
     m_retired_output_underflow_count += failed.output_underflow_count;
     m_backend_failure_count.fetch_add(1, std::memory_order_relaxed);
@@ -539,7 +531,8 @@ auto AudioRuntime::render(std::span<float> interleaved_samples) noexcept
     std::ranges::fill(interleaved_samples, 0.0F);
     return std::nullopt;
   }
-  while (auto event = try_take_event()) apply_event(*event);
+  while (auto event = try_take_event())
+    apply_event(*event);
   const auto frames = interleaved_samples.size() / kAudioChannelCount;
   if (!m_asset_pack || !m_asset_pack->render(interleaved_samples)) {
     std::ranges::fill(interleaved_samples, 0.0F);
@@ -547,8 +540,7 @@ auto AudioRuntime::render(std::span<float> interleaved_samples) noexcept
   for (std::size_t frame = 0; frame < frames; ++frame) {
     const float sample = render_sample();
     for (std::size_t channel = 0; channel < kAudioChannelCount; ++channel) {
-      auto& output =
-          interleaved_samples[frame * kAudioChannelCount + channel];
+      auto& output = interleaved_samples[frame * kAudioChannelCount + channel];
       output = std::clamp(output + sample, -1.0F, 1.0F);
     }
   }
@@ -558,9 +550,8 @@ auto AudioRuntime::render(std::span<float> interleaved_samples) noexcept
 
 auto AudioRuntime::apply_event(const AudioEvent& event) noexcept -> void {
   if (event.kind == AudioEventKind::flight_parameters) {
-    m_engine_target = event.parameters.active
-                          ? to_synth(event.parameters.engine_demand)
-                          : 0;
+    m_engine_target =
+        event.parameters.active ? to_synth(event.parameters.engine_demand) : 0;
     m_speed_target =
         event.parameters.active ? to_synth(event.parameters.speed) : 0;
     m_atmosphere_target =
@@ -595,8 +586,7 @@ auto AudioRuntime::resume_music() noexcept -> void {
 auto AudioRuntime::render_sample() noexcept -> float {
   approach(m_engine_level, m_engine_target, kParameterSlewPerFrame);
   approach(m_speed_level, m_speed_target, kParameterSlewPerFrame);
-  approach(m_atmosphere_level, m_atmosphere_target,
-           kParameterSlewPerFrame);
+  approach(m_atmosphere_level, m_atmosphere_target, kParameterSlewPerFrame);
 
   std::int32_t sample{};
   if (!m_asset_pack) {
@@ -626,8 +616,7 @@ auto AudioRuntime::render_sample() noexcept -> float {
   if (m_warning_frames_remaining > 0) --m_warning_frames_remaining;
   constexpr std::uint32_t warning_hz{720};
   m_warning_phase += static_cast<std::uint32_t>(
-      (static_cast<std::uint64_t>(warning_hz) << 32U) /
-      kAudioSampleRate);
+      (static_cast<std::uint64_t>(warning_hz) << 32U) / kAudioSampleRate);
   sample += triangle(m_warning_phase) * m_warning_level / kSynthUnit;
 
   sample = std::clamp(sample, -kSynthUnit, kSynthUnit);
@@ -650,18 +639,16 @@ auto AudioRuntime::reset_synth() noexcept -> void {
 }
 
 auto AudioRuntime::diagnostics() const noexcept -> AudioDiagnostics {
-  const auto backend = m_backend ? m_backend->diagnostics()
-                                 : AudioBackendDiagnostics{};
+  const auto backend =
+      m_backend ? m_backend->diagnostics() : AudioBackendDiagnostics{};
   return {
       .mode = m_mode,
       .backend_state = backend.state,
       .backend_name = backend.name,
       .output_device_id = backend.output_device_id,
       .last_backend_failure = m_last_backend_failure,
-      .last_emit_status =
-          m_last_emit_status.load(std::memory_order_relaxed),
-      .last_reset_reason =
-          m_last_reset_reason.load(std::memory_order_relaxed),
+      .last_emit_status = m_last_emit_status.load(std::memory_order_relaxed),
+      .last_reset_reason = m_last_reset_reason.load(std::memory_order_relaxed),
       .identities_assigned =
           m_identities_assigned.load(std::memory_order_relaxed),
       .events_queued = m_events_queued.load(std::memory_order_relaxed),
@@ -679,11 +666,9 @@ auto AudioRuntime::diagnostics() const noexcept -> AudioDiagnostics {
           m_backend_failure_count.load(std::memory_order_relaxed),
       .backend_loss_count =
           m_backend_loss_count.load(std::memory_order_relaxed),
-      .callback_count =
-          m_retired_callback_count + backend.callback_count,
+      .callback_count = m_retired_callback_count + backend.callback_count,
       .output_underflow_count =
-          m_retired_output_underflow_count +
-          backend.output_underflow_count,
+          m_retired_output_underflow_count + backend.output_underflow_count,
       .queue_depth = m_queue.depth(),
       .maximum_queue_depth =
           m_maximum_queue_depth.load(std::memory_order_relaxed),
@@ -697,17 +682,15 @@ auto AudioRuntime::diagnostics() const noexcept -> AudioDiagnostics {
           m_asset_pack ? m_asset_pack->dropped_sfx_voices() : 0U,
       .asset_packaged_bytes =
           m_asset_pack ? m_asset_pack->packaged_bytes() : 0U,
-      .asset_decoded_bytes =
-          m_asset_pack ? m_asset_pack->decoded_bytes() : 0U,
+      .asset_decoded_bytes = m_asset_pack ? m_asset_pack->decoded_bytes() : 0U,
   };
 }
 
 auto AudioRuntime::update_maximum_depth(std::size_t depth) noexcept -> void {
   auto observed = m_maximum_queue_depth.load(std::memory_order_relaxed);
-  while (observed < depth &&
-         !m_maximum_queue_depth.compare_exchange_weak(
-             observed, depth, std::memory_order_relaxed,
-             std::memory_order_relaxed)) {
+  while (observed < depth && !m_maximum_queue_depth.compare_exchange_weak(
+                                 observed, depth, std::memory_order_relaxed,
+                                 std::memory_order_relaxed)) {
   }
 }
 
@@ -737,20 +720,17 @@ auto MusicDirector::reset() noexcept -> void {
 
 auto benchmark_flight_audio(std::uint64_t ticks) -> AudioSynthesisBenchmark {
   AudioSynthesisBenchmark result{.ticks = ticks};
-  if (ticks == 0 ||
-      ticks > std::numeric_limits<std::uint64_t>::max() /
-                  kAudioFramesPerSimulationTick) {
+  if (ticks == 0 || ticks > std::numeric_limits<std::uint64_t>::max() /
+                                kAudioFramesPerSimulationTick) {
     return result;
   }
   AudioRuntime audio;
-  std::vector<float> buffer(kAudioFramesPerSimulationTick *
-                            kAudioChannelCount);
+  std::vector<float> buffer(kAudioFramesPerSimulationTick * kAudioChannelCount);
   std::uint64_t checksum{1'469'598'103'934'665'603ULL};
   const auto started = std::chrono::steady_clock::now();
   for (std::uint64_t tick = 0; tick < ticks; ++tick) {
     const auto cycle = static_cast<float>(tick % 240U) / 239.0F;
-    const float ramp = cycle <= 0.5F ? cycle * 2.0F
-                                     : (1.0F - cycle) * 2.0F;
+    const float ramp = cycle <= 0.5F ? cycle * 2.0F : (1.0F - cycle) * 2.0F;
     (void)audio.emit_flight_parameters(
         tick, {.active = true,
                .engine_demand = 0.2F + ramp * 0.8F,
@@ -760,7 +740,8 @@ auto benchmark_flight_audio(std::uint64_t ticks) -> AudioSynthesisBenchmark {
       (void)audio.emit(tick, kLowClearanceAudioCue);
     }
     if (audio.render(buffer)) return result;
-    for (const float sample : buffer) hash_sample(checksum, sample);
+    for (const float sample : buffer)
+      hash_sample(checksum, sample);
   }
   const auto finished = std::chrono::steady_clock::now();
   result.sample_frames = ticks * kAudioFramesPerSimulationTick;
@@ -780,23 +761,22 @@ auto benchmark_flight_audio(std::uint64_t ticks) -> AudioSynthesisBenchmark {
 
 auto audio_benchmark_json(const AudioSynthesisBenchmark& benchmark)
     -> std::string {
-  return std::format(
-      "{{\n"
-      "  \"schema_version\": 1,\n"
-      "  \"workload\": \"procedural-flight-audio\",\n"
-      "  \"ticks\": \"{}\",\n"
-      "  \"sample_frames\": \"{}\",\n"
-      "  \"audio_seconds\": {:.6f},\n"
-      "  \"elapsed_seconds\": {:.6f},\n"
-      "  \"realtime_factor\": {:.6f},\n"
-      "  \"checksum\": \"{}\",\n"
-      "  \"maximum_queue_depth\": {},\n"
-      "  \"events_dropped\": \"{}\"\n"
-      "}}\n",
-      benchmark.ticks, benchmark.sample_frames, benchmark.audio_seconds,
-      benchmark.elapsed_seconds, benchmark.realtime_factor,
-      benchmark.checksum, benchmark.maximum_queue_depth,
-      benchmark.events_dropped);
+  return std::format("{{\n"
+                     "  \"schema_version\": 1,\n"
+                     "  \"workload\": \"procedural-flight-audio\",\n"
+                     "  \"ticks\": \"{}\",\n"
+                     "  \"sample_frames\": \"{}\",\n"
+                     "  \"audio_seconds\": {:.6f},\n"
+                     "  \"elapsed_seconds\": {:.6f},\n"
+                     "  \"realtime_factor\": {:.6f},\n"
+                     "  \"checksum\": \"{}\",\n"
+                     "  \"maximum_queue_depth\": {},\n"
+                     "  \"events_dropped\": \"{}\"\n"
+                     "}}\n",
+                     benchmark.ticks, benchmark.sample_frames,
+                     benchmark.audio_seconds, benchmark.elapsed_seconds,
+                     benchmark.realtime_factor, benchmark.checksum,
+                     benchmark.maximum_queue_depth, benchmark.events_dropped);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

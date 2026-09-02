@@ -55,11 +55,11 @@ struct SaveFileError {
 [[nodiscard]] auto load_save_file(const std::filesystem::path& path)
     -> std::expected<SaveDocument, SaveFileError>;
 
-[[nodiscard]] auto write_save_file_atomically(
-    const std::filesystem::path& path, const SaveDocument& document)
+[[nodiscard]] auto write_save_file_atomically(const std::filesystem::path& path,
+                                              const SaveDocument& document)
     -> std::expected<void, SaveFileError>;
 
 [[nodiscard]] auto save_file_error_message(const SaveFileError& error)
     -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

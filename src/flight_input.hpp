@@ -12,12 +12,11 @@ namespace apsis_drift::detail {
 
 class FlightInputMapper {
  public:
-  auto enqueue(const termforge::KeyEvent& key,
-               SimulationTick current_tick,
+  auto enqueue(const termforge::KeyEvent& key, SimulationTick current_tick,
                bool enable_time_scale = false) -> void;
   auto enqueue(const termforge::MouseEvent& mouse,
-               termforge::Rect active_region,
-               SimulationTick current_tick) -> void;
+               termforge::Rect active_region, SimulationTick current_tick)
+      -> void;
 
   // Release only pointer-owned controls. Keyboard holds remain authoritative.
   auto neutralize_mouse(SimulationTick current_tick) -> void;
@@ -60,4 +59,4 @@ class FlightInputMapper {
   std::array<bool, 3> m_mouse_buttons{};
 };
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

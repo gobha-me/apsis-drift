@@ -40,7 +40,7 @@ namespace {
   return SystemDirection{x / length, y / length, z / length};
 }
 
-}  // namespace
+} // namespace
 
 auto generate_origin_system_contract(Seed universe_seed)
     -> std::expected<OriginSystemContractBinding, OriginSystemContractError> {
@@ -54,8 +54,8 @@ auto generate_origin_system_contract(Seed universe_seed)
   if (target.descriptor.id == station.orbit.host_planet) {
     return std::unexpected{OriginSystemContractError::invalid_binding};
   }
-  const auto mission_seed = derive_seed(
-      system.seed, SeedDomain::mission, kOriginSystemContractMissionOrdinal);
+  const auto mission_seed = derive_seed(system.seed, SeedDomain::mission,
+                                        kOriginSystemContractMissionOrdinal);
   const auto objective_seed =
       derive_seed(target.descriptor.seed, SeedDomain::encounter,
                   kOriginSystemContractObjectiveOrdinal);
@@ -78,8 +78,8 @@ auto initial_origin_system_contract(Seed universe_seed)
   return OriginSystemContractState{.binding = *binding};
 }
 
-auto validate_origin_system_contract(
-    Seed universe_seed, const OriginSystemContractState& state)
+auto validate_origin_system_contract(Seed universe_seed,
+                                     const OriginSystemContractState& state)
     -> std::expected<void, OriginSystemContractError> {
   const auto expected = generate_origin_system_contract(universe_seed);
   if (!expected) return std::unexpected{expected.error()};
@@ -92,9 +92,10 @@ auto validate_origin_system_contract(
   return {};
 }
 
-auto advance_origin_system_contract(
-    OriginSystemContractState& state, SimulationTick authoritative_tick,
-    SimulationTick command_tick, OriginSystemContractCommand command)
+auto advance_origin_system_contract(OriginSystemContractState& state,
+                                    SimulationTick authoritative_tick,
+                                    SimulationTick command_tick,
+                                    OriginSystemContractCommand command)
     -> std::expected<void, OriginSystemContractError> {
   if (command_tick != authoritative_tick) {
     return std::unexpected{OriginSystemContractError::wrong_command_tick};
@@ -160,9 +161,8 @@ auto initialize_origin_system_outbound_transfer(
     -> std::expected<SystemFlightState, OriginSystemContractError> {
   if (!validate_origin_system_contract(universe_seed, contract) ||
       contract.phase != OriginSystemContractPhase::station_departure ||
-      !validate_origin_station_flight_state(universe_seed,
-                                            authoritative_tick, system,
-                                            departure)) {
+      !validate_origin_station_flight_state(universe_seed, authoritative_tick,
+                                            system, departure)) {
     return std::unexpected{OriginSystemContractError::invalid_state};
   }
   const auto guidance = resolve_origin_station_flight_guidance(
@@ -242,12 +242,12 @@ auto initialize_origin_system_station_rendezvous(
   if (!guidance || !guidance->inside_approach_boundary) {
     return std::unexpected{OriginSystemContractError::target_unreachable};
   }
-  auto station = initialize_origin_station_approach(
-      universe_seed, system, home_approach);
+  auto station =
+      initialize_origin_station_approach(universe_seed, system, home_approach);
   if (!station) {
     return std::unexpected{OriginSystemContractError::invalid_flight};
   }
   return *station;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -10,8 +10,8 @@
 
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/onboarding.hpp"
-#include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
+#include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_system_contract.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/surface_signals.hpp"
@@ -154,4 +154,4 @@ struct SaveSchemaError {
 [[nodiscard]] auto decode_save_document_json(std::string_view json_text)
     -> std::expected<SaveDocument, SaveSchemaError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

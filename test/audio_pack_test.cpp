@@ -21,8 +21,7 @@ using namespace apsis_drift;
 int failures{};
 
 auto check(bool condition, std::string_view message) -> void {
-  if (condition)
-    return;
+  if (condition) return;
   std::cerr << "FAIL: " << message << '\n';
   ++failures;
 }
@@ -46,13 +45,13 @@ struct TemporaryAssets {
   }
 };
 
-[[nodiscard]] auto read_text(const std::filesystem::path &path) -> std::string {
+[[nodiscard]] auto read_text(const std::filesystem::path& path) -> std::string {
   std::ifstream input{path};
   return {std::istreambuf_iterator<char>{input},
           std::istreambuf_iterator<char>{}};
 }
 
-auto write_text(const std::filesystem::path &path, std::string_view contents)
+auto write_text(const std::filesystem::path& path, std::string_view contents)
     -> void {
   std::ofstream output{path, std::ios::trunc};
   output << contents;
@@ -62,8 +61,7 @@ auto production_pack_contract() -> void {
   const std::filesystem::path root{APSIS_DRIFT_AUDIO_ASSET_DIR};
   auto loaded = load_first_light_audio_pack(root);
   check(loaded.has_value(), "the committed First Light pack must load");
-  if (!loaded)
-    return;
+  if (!loaded) return;
   check(loaded->packaged_bytes() <= 5U * 1024U * 1024U,
         "the combined committed payload must remain bounded");
   check(loaded->decoded_bytes() <= 20U * 1024U * 1024U,
@@ -134,8 +132,7 @@ auto production_pack_contract() -> void {
         "the coexistence fixture must load the production pack");
   check(coexistence_baseline_pack.has_value(),
         "the coexistence baseline must load the production pack");
-  if (!coexistence_pack || !coexistence_baseline_pack)
-    return;
+  if (!coexistence_pack || !coexistence_baseline_pack) return;
   AudioRuntime coexistence{
       AudioRuntimeMode::no_device,
       nullptr,

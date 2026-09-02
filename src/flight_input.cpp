@@ -100,23 +100,23 @@ inline constexpr std::size_t kLastRightBank{
   return 0;
 }
 
-}  // namespace
+} // namespace
 
 auto FlightInputMapper::insert(FlightCommand command) -> void {
-  const auto position = std::upper_bound(
-      m_pending.begin(), m_pending.end(), command.tick,
-      [](SimulationTick tick, const FlightCommand& queued) {
-        return tick < queued.tick;
-      });
+  const auto position =
+      std::upper_bound(m_pending.begin(), m_pending.end(), command.tick,
+                       [](SimulationTick tick, const FlightCommand& queued) {
+                         return tick < queued.tick;
+                       });
   m_pending.insert(position, command);
 }
 
 auto FlightInputMapper::insert_before_tick(FlightCommand command) -> void {
-  const auto position = std::lower_bound(
-      m_pending.begin(), m_pending.end(), command.tick,
-      [](const FlightCommand& queued, SimulationTick tick) {
-        return queued.tick < tick;
-      });
+  const auto position =
+      std::lower_bound(m_pending.begin(), m_pending.end(), command.tick,
+                       [](const FlightCommand& queued, SimulationTick tick) {
+                         return queued.tick < tick;
+                       });
   m_pending.insert(position, command);
 }
 
@@ -124,8 +124,7 @@ auto FlightInputMapper::enqueue(const KeyEvent& key,
                                 SimulationTick current_tick,
                                 bool enable_time_scale) -> void {
   if (enable_time_scale && key.key == Key::Char &&
-      key.action == KeyAction::Press &&
-      (key.ch == U'[' || key.ch == U']')) {
+      key.action == KeyAction::Press && (key.ch == U'[' || key.ch == U']')) {
     insert({current_tick, key.ch == U'['
                               ? FlightCommandKind::decrease_time_scale
                               : FlightCommandKind::increase_time_scale});
@@ -163,15 +162,14 @@ auto FlightInputMapper::mouse_intent(SimulationTick current_tick)
   if (position != m_mouse_intents.end() && position->tick == current_tick) {
     return *position;
   }
-  return *m_mouse_intents.insert(
-      position, MouseTickIntent{.tick = current_tick,
-                                .initial = m_mouse_controls,
-                                .final = m_mouse_controls});
+  return *m_mouse_intents.insert(position,
+                                 MouseTickIntent{.tick = current_tick,
+                                                 .initial = m_mouse_controls,
+                                                 .final = m_mouse_controls});
 }
 
 auto FlightInputMapper::set_mouse_control(std::size_t control, bool pressed,
-                                          SimulationTick current_tick)
-    -> void {
+                                          SimulationTick current_tick) -> void {
   if (control >= kControlCount || m_mouse_controls[control] == pressed) return;
   auto& intent = mouse_intent(current_tick);
   m_mouse_controls[control] = pressed;
@@ -182,8 +180,8 @@ auto FlightInputMapper::set_mouse_control(std::size_t control, bool pressed,
 
 auto FlightInputMapper::clear_mouse_bank(std::size_t first, std::size_t last,
                                          SimulationTick current_tick) -> void {
-  for (std::size_t control = first;
-       control <= last && control < kControlCount; ++control) {
+  for (std::size_t control = first; control <= last && control < kControlCount;
+       ++control) {
     set_mouse_control(control, false, current_tick);
   }
 }
@@ -202,15 +200,14 @@ auto FlightInputMapper::suspend(const FlightControls& applied_controls,
   m_mouse_buttons = {};
 
   const std::array active{
-      applied_controls.forward,      applied_controls.backward,
-      applied_controls.turn_left,    applied_controls.turn_right,
-      applied_controls.strafe_left,  applied_controls.strafe_right,
-      applied_controls.rise,         applied_controls.fall,
+      applied_controls.forward,     applied_controls.backward,
+      applied_controls.turn_left,   applied_controls.turn_right,
+      applied_controls.strafe_left, applied_controls.strafe_right,
+      applied_controls.rise,        applied_controls.fall,
   };
   for (std::size_t index = 0; index < active.size(); ++index) {
     if (!active[index]) continue;
-    insert({current_tick,
-            command_for(static_cast<Control>(index), false)});
+    insert({current_tick, command_for(static_cast<Control>(index), false)});
   }
 }
 
@@ -235,8 +232,7 @@ auto FlightInputMapper::enqueue(const termforge::MouseEvent& mouse,
 
   const bool was_down = m_mouse_buttons[button];
   m_mouse_buttons[button] = true;
-  if (active_region.empty() ||
-      !active_region.contains(mouse.x, mouse.y)) {
+  if (active_region.empty() || !active_region.contains(mouse.x, mouse.y)) {
     clear_mouse_bank(0, kControlCount - 1, current_tick);
     return;
   }
@@ -251,8 +247,7 @@ auto FlightInputMapper::enqueue(const termforge::MouseEvent& mouse,
     return;
   }
 
-  const int horizontal =
-      axis_zone(mouse.x, active_region.x, active_region.w);
+  const int horizontal = axis_zone(mouse.x, active_region.x, active_region.w);
   const int vertical = axis_zone(mouse.y, active_region.y, active_region.h);
   if (mouse.button == 0) {
     set_mouse_control(control_index(Control::forward), vertical < 0,
@@ -268,19 +263,17 @@ auto FlightInputMapper::enqueue(const termforge::MouseEvent& mouse,
                       current_tick);
     set_mouse_control(control_index(Control::strafe_right), horizontal > 0,
                       current_tick);
-    set_mouse_control(control_index(Control::rise), vertical < 0,
-                      current_tick);
-    set_mouse_control(control_index(Control::fall), vertical > 0,
-                      current_tick);
+    set_mouse_control(control_index(Control::rise), vertical < 0, current_tick);
+    set_mouse_control(control_index(Control::fall), vertical > 0, current_tick);
   }
 }
 
 auto FlightInputMapper::flush_mouse_intent(SimulationTick tick) -> void {
-  const auto position = std::lower_bound(
-      m_mouse_intents.begin(), m_mouse_intents.end(), tick,
-      [](const MouseTickIntent& intent, SimulationTick value) {
-        return intent.tick < value;
-      });
+  const auto position =
+      std::lower_bound(m_mouse_intents.begin(), m_mouse_intents.end(), tick,
+                       [](const MouseTickIntent& intent, SimulationTick value) {
+                         return intent.tick < value;
+                       });
   if (position == m_mouse_intents.end() || position->tick != tick) return;
 
   const MouseTickIntent intent = *position;
@@ -307,19 +300,19 @@ auto FlightInputMapper::flush_mouse_intent(SimulationTick tick) -> void {
 auto FlightInputMapper::take_commands(SimulationTick tick)
     -> std::vector<FlightCommand> {
   flush_mouse_intent(tick);
-  const auto first = std::lower_bound(
-      m_pending.begin(), m_pending.end(), tick,
-      [](const FlightCommand& command, SimulationTick value) {
-        return command.tick < value;
-      });
-  const auto last = std::upper_bound(
-      first, m_pending.end(), tick,
-      [](SimulationTick value, const FlightCommand& command) {
-        return value < command.tick;
-      });
+  const auto first =
+      std::lower_bound(m_pending.begin(), m_pending.end(), tick,
+                       [](const FlightCommand& command, SimulationTick value) {
+                         return command.tick < value;
+                       });
+  const auto last =
+      std::upper_bound(first, m_pending.end(), tick,
+                       [](SimulationTick value, const FlightCommand& command) {
+                         return value < command.tick;
+                       });
   std::vector<FlightCommand> result(first, last);
   m_pending.erase(first, last);
   return result;
 }
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

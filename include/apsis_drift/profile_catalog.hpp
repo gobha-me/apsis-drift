@@ -112,8 +112,8 @@ struct ProfileCatalogError {
     std::optional<std::string> home = std::nullopt)
     -> std::expected<std::filesystem::path, ProfileCatalogError>;
 
-[[nodiscard]] auto scan_profile_catalog(
-    const std::filesystem::path& directory) -> ProfileCatalogSnapshot;
+[[nodiscard]] auto scan_profile_catalog(const std::filesystem::path& directory)
+    -> ProfileCatalogSnapshot;
 
 [[nodiscard]] auto load_catalog_profile(const ProfileCatalogEntry& entry)
     -> std::expected<LoadedProfile, ProfileCatalogError>;
@@ -128,4 +128,4 @@ struct ProfileCatalogError {
 [[nodiscard]] auto profile_location_name(ProfileLocation location) noexcept
     -> std::string_view;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

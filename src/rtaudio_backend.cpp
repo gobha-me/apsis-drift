@@ -28,8 +28,7 @@ class RtAudioBackend final : public AudioBackend {
     return "rtaudio";
   }
 
-  [[nodiscard]] auto state() const noexcept
-      -> AudioBackendState override {
+  [[nodiscard]] auto state() const noexcept -> AudioBackendState override {
     return m_state.load(std::memory_order_acquire);
   }
 
@@ -73,10 +72,9 @@ class RtAudioBackend final : public AudioBackend {
             fail(type == RTAUDIO_DEVICE_DISCONNECT
                      ? AudioBackendFailure::device_lost
                      : AudioBackendFailure::callback_failed);
-            m_callback.fail(
-                type == RTAUDIO_DEVICE_DISCONNECT
-                    ? AudioBackendFailure::device_lost
-                    : AudioBackendFailure::callback_failed);
+            m_callback.fail(type == RTAUDIO_DEVICE_DISCONNECT
+                                ? AudioBackendFailure::device_lost
+                                : AudioBackendFailure::callback_failed);
           });
 
       const auto device_ids = m_audio->getDeviceIds();
@@ -111,9 +109,9 @@ class RtAudioBackend final : public AudioBackend {
       };
       unsigned int frames{512};
       m_callback.activate(source);
-      const auto opened = m_audio->openStream(
-          &output, nullptr, RTAUDIO_FLOAT32, kAudioSampleRate, &frames,
-          &RtAudioBackend::callback, this);
+      const auto opened = m_audio->openStream(&output, nullptr, RTAUDIO_FLOAT32,
+                                              kAudioSampleRate, &frames,
+                                              &RtAudioBackend::callback, this);
       if (opened != RTAUDIO_NO_ERROR || frames == 0 ||
           frames > kMaximumAudioFramesPerCallback) {
         m_callback.deactivate();
@@ -153,9 +151,9 @@ class RtAudioBackend final : public AudioBackend {
                        RtAudioStreamStatus status, void* user_data) noexcept
       -> int {
     auto& backend = *static_cast<RtAudioBackend*>(user_data);
-    const auto action = backend.m_callback.render(
-        static_cast<float*>(output), frames,
-        (status & RTAUDIO_OUTPUT_UNDERFLOW) != 0);
+    const auto action =
+        backend.m_callback.render(static_cast<float*>(output), frames,
+                                  (status & RTAUDIO_OUTPUT_UNDERFLOW) != 0);
     if (action == AudioCallbackAction::abort_stream) {
       backend.fail(backend.m_callback.failure());
       return 2;
@@ -177,11 +175,11 @@ class RtAudioBackend final : public AudioBackend {
   std::optional<std::uint32_t> m_output_device_id;
 };
 
-}  // namespace
+} // namespace
 
 auto make_rtaudio_backend(AudioOutputSelection selection)
     -> std::unique_ptr<AudioBackend> {
   return std::make_unique<RtAudioBackend>(selection);
 }
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

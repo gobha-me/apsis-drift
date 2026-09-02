@@ -83,7 +83,8 @@ struct IntersystemJumpAlignmentState {
   FlightControls controls;
 
   friend auto operator==(const IntersystemJumpAlignmentState&,
-                         const IntersystemJumpAlignmentState&) -> bool = default;
+                         const IntersystemJumpAlignmentState&)
+      -> bool = default;
 };
 
 struct IntersystemArrivalAssessment {
@@ -188,9 +189,9 @@ enum class IntersystemContractError : std::uint8_t {
 };
 
 [[nodiscard]] auto initial_intersystem_contract_state(
-    Seed universe_seed,
-    IntersystemRuleProfile penalty_mode = IntersystemRuleProfile::assisted)
-    noexcept -> IntersystemContractState;
+    Seed universe_seed, IntersystemRuleProfile penalty_mode =
+                            IntersystemRuleProfile::assisted) noexcept
+    -> IntersystemContractState;
 
 [[nodiscard]] auto validate_intersystem_contract_state(
     const IntersystemContractState& state) noexcept
@@ -210,4 +211,4 @@ enum class IntersystemContractError : std::uint8_t {
     IntersystemContractCommand command) noexcept
     -> std::expected<void, IntersystemContractError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

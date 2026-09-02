@@ -20,15 +20,13 @@ auto AudioCallbackBridge::fail(AudioBackendFailure failure) noexcept -> void {
   if (failure == AudioBackendFailure::none) return;
   auto expected = AudioBackendFailure::none;
   (void)m_failure.compare_exchange_strong(
-      expected, failure, std::memory_order_relaxed,
-      std::memory_order_relaxed);
+      expected, failure, std::memory_order_relaxed, std::memory_order_relaxed);
 }
 
 auto AudioCallbackBridge::render(float* output, std::size_t frames,
                                  bool output_underflow) noexcept
     -> AudioCallbackAction {
-  if (m_failure.load(std::memory_order_relaxed) !=
-          AudioBackendFailure::none ||
+  if (m_failure.load(std::memory_order_relaxed) != AudioBackendFailure::none ||
       !m_active.load(std::memory_order_acquire) || m_source == nullptr ||
       output == nullptr || frames == 0 ||
       frames > kMaximumAudioFramesPerCallback) {
@@ -41,8 +39,7 @@ auto AudioCallbackBridge::render(float* output, std::size_t frames,
     m_output_underflow_count.fetch_add(1, std::memory_order_relaxed);
   }
 
-  const auto samples =
-      std::span<float>{output, frames * kAudioChannelCount};
+  const auto samples = std::span<float>{output, frames * kAudioChannelCount};
   if (m_source->render(samples)) {
     std::ranges::fill(samples, 0.0F);
     fail(AudioBackendFailure::callback_failed);
@@ -64,4 +61,4 @@ auto AudioCallbackBridge::output_underflow_count() const noexcept
   return m_output_underflow_count.load(std::memory_order_relaxed);
 }
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

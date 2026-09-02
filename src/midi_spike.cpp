@@ -107,8 +107,8 @@ class Reader {
          (std::to_integer<std::uint32_t>(bytes[offset + 3U]) << 24U);
 }
 
-[[nodiscard]] auto validate_soundfont(
-    std::span<const std::byte> bytes) noexcept -> std::optional<MidiError> {
+[[nodiscard]] auto validate_soundfont(std::span<const std::byte> bytes) noexcept
+    -> std::optional<MidiError> {
   if (bytes.size() < 12U || std::memcmp(bytes.data(), "RIFF", 4) != 0 ||
       std::memcmp(bytes.data() + 8U, "sfbk", 4) != 0) {
     return MidiError::invalid_soundfont;
@@ -148,8 +148,8 @@ class Reader {
           }
           found_samples = true;
         }
-        const auto padded_size = static_cast<std::size_t>(*sample_size) +
-                                 (*sample_size & 1U);
+        const auto padded_size =
+            static_cast<std::size_t>(*sample_size) + (*sample_size & 1U);
         if (padded_size > list_end - (sample_offset + 8U)) {
           return MidiError::invalid_soundfont;
         }
@@ -190,7 +190,8 @@ class Reader {
   while (reader.remaining() != 0U) {
     std::uint32_t delta{};
     if (!reader.read_variable(delta)) return MidiError::invalid_variable_length;
-    if (delta > kMaximumMidiTick - absolute_tick) return MidiError::tick_overflow;
+    if (delta > kMaximumMidiTick - absolute_tick)
+      return MidiError::tick_overflow;
     absolute_tick += delta;
 
     std::uint8_t first{};
@@ -233,10 +234,9 @@ class Reader {
         schedule.markers.push_back({absolute_tick, make_text(payload)});
       } else if (type == 0x51U) {
         if (payload.size() != 3U) return MidiError::invalid_meta_event;
-        const auto tempo =
-            (std::to_integer<std::uint32_t>(payload[0]) << 16U) |
-            (std::to_integer<std::uint32_t>(payload[1]) << 8U) |
-            std::to_integer<std::uint32_t>(payload[2]);
+        const auto tempo = (std::to_integer<std::uint32_t>(payload[0]) << 16U) |
+                           (std::to_integer<std::uint32_t>(payload[1]) << 8U) |
+                           std::to_integer<std::uint32_t>(payload[2]);
         if (tempo == 0U) return MidiError::invalid_meta_event;
         schedule.tempos.push_back({absolute_tick, tempo});
       } else if (type == 0x58U) {
@@ -279,14 +279,13 @@ class Reader {
     if (message == 0xC0U) kind = MidiEventKind::program_change;
     if (message == 0xE0U) kind = MidiEventKind::pitch_bend;
     if (!kind) return MidiError::invalid_event;
-    if (const auto error = append_event(
-            schedule, track,
-            {.tick = absolute_tick,
-             .track = track_index,
-             .kind = *kind,
-             .channel = channel,
-             .data1 = data1,
-             .data2 = data2})) {
+    if (const auto error = append_event(schedule, track,
+                                        {.tick = absolute_tick,
+                                         .track = track_index,
+                                         .kind = *kind,
+                                         .channel = channel,
+                                         .data1 = data1,
+                                         .data2 = data2})) {
       return error;
     }
   }
@@ -336,8 +335,7 @@ auto hash_text(std::uint64_t& hash, std::string_view text) noexcept -> void {
   if (schedule.ppq == 0U || schedule.ppq > kMaximumMidiPpq) {
     return MidiError::invalid_ppq;
   }
-  if (schedule.tracks.empty() ||
-      schedule.tracks.size() > kMaximumMidiTracks) {
+  if (schedule.tracks.empty() || schedule.tracks.size() > kMaximumMidiTracks) {
     return MidiError::invalid_track_count;
   }
   std::size_t event_count{};
@@ -347,37 +345,40 @@ auto hash_text(std::uint64_t& hash, std::string_view text) noexcept -> void {
       return MidiError::too_many_events;
     }
     event_count += track.events.size();
-    if (std::ranges::any_of(track.events, [](const MidiEvent& event) {
-          return event.tick > kMaximumMidiTick || event.channel >= 16U ||
-                 event.data1 >= 128U || event.data2 >= 128U ||
-                 event.kind > MidiEventKind::pitch_bend;
-        }) ||
+    if (std::ranges::any_of(track.events,
+                            [](const MidiEvent& event) {
+                              return event.tick > kMaximumMidiTick ||
+                                     event.channel >= 16U ||
+                                     event.data1 >= 128U ||
+                                     event.data2 >= 128U ||
+                                     event.kind > MidiEventKind::pitch_bend;
+                            }) ||
         !std::ranges::is_sorted(track.events, {}, &MidiEvent::tick)) {
       return MidiError::invalid_event;
     }
   }
   if (event_count != schedule.event_count || schedule.tempos.empty() ||
-      std::ranges::any_of(schedule.tempos, [](const TempoChange& tempo) {
-        return tempo.tick > kMaximumMidiTick ||
-               tempo.microseconds_per_quarter == 0U;
-      }) ||
+      std::ranges::any_of(schedule.tempos,
+                          [](const TempoChange& tempo) {
+                            return tempo.tick > kMaximumMidiTick ||
+                                   tempo.microseconds_per_quarter == 0U;
+                          }) ||
       schedule.time_signatures.empty() ||
-      std::ranges::any_of(
-          schedule.time_signatures, [](const TimeSignature& signature) {
-            return signature.tick > kMaximumMidiTick ||
-                   signature.numerator == 0U ||
-                   signature.denominator_power > 6U;
-          }) ||
+      std::ranges::any_of(schedule.time_signatures,
+                          [](const TimeSignature& signature) {
+                            return signature.tick > kMaximumMidiTick ||
+                                   signature.numerator == 0U ||
+                                   signature.denominator_power > 6U;
+                          }) ||
       !std::ranges::is_sorted(schedule.tempos, {}, &TempoChange::tick) ||
       !std::ranges::is_sorted(schedule.time_signatures, {},
                               &TimeSignature::tick) ||
       !std::ranges::is_sorted(schedule.markers, {}, &Marker::tick) ||
       std::ranges::adjacent_find(schedule.tempos, std::ranges::equal_to{},
                                  &TempoChange::tick) != schedule.tempos.end() ||
-      std::ranges::adjacent_find(schedule.time_signatures,
-                                 std::ranges::equal_to{},
-                                 &TimeSignature::tick) !=
-          schedule.time_signatures.end()) {
+      std::ranges::adjacent_find(
+          schedule.time_signatures, std::ranges::equal_to{},
+          &TimeSignature::tick) != schedule.time_signatures.end()) {
     return MidiError::invalid_meta_event;
   }
   return std::nullopt;
@@ -398,8 +399,8 @@ auto hash_text(std::uint64_t& hash, std::string_view text) noexcept -> void {
     cursor = change.tick;
     tempo = change.microseconds_per_quarter;
   }
-  numerator += static_cast<std::uint64_t>(target_tick - cursor) * tempo *
-               kRateNumerator;
+  numerator +=
+      static_cast<std::uint64_t>(target_tick - cursor) * tempo * kRateNumerator;
   return numerator / denominator;
 }
 
@@ -452,7 +453,7 @@ struct LayerState {
   float pending_gain{};
 };
 
-}  // namespace
+} // namespace
 
 auto midi_error_name(MidiError error) noexcept -> std::string_view {
   switch (error) {
@@ -581,12 +582,10 @@ auto parse_smf(std::span<const std::byte> bytes)
   std::ranges::stable_sort(schedule.time_signatures, by_tick);
   std::ranges::stable_sort(schedule.markers, by_tick);
   if (std::ranges::adjacent_find(schedule.tempos, std::ranges::equal_to{},
-                                 &TempoChange::tick) !=
-          schedule.tempos.end() ||
-      std::ranges::adjacent_find(schedule.time_signatures,
-                                 std::ranges::equal_to{},
-                                 &TimeSignature::tick) !=
-          schedule.time_signatures.end()) {
+                                 &TempoChange::tick) != schedule.tempos.end() ||
+      std::ranges::adjacent_find(
+          schedule.time_signatures, std::ranges::equal_to{},
+          &TimeSignature::tick) != schedule.time_signatures.end()) {
     return std::unexpected{MidiError::invalid_meta_event};
   }
   return schedule;
@@ -599,9 +598,9 @@ struct MusicEngine::Impl {
   std::array<std::vector<ScheduledEvent>, kMusicLayerCount> events;
   std::array<std::size_t, kMusicLayerCount> event_indices{};
   std::array<LayerState, kMusicLayerCount> layers{};
-  std::array<std::array<float, kMaximumAudioFramesPerCallback *
-                                  kAudioChannelCount>,
-             kMusicLayerCount>
+  std::array<
+      std::array<float, kMaximumAudioFramesPerCallback * kAudioChannelCount>,
+      kMusicLayerCount>
       scratch{};
   std::array<MusicCommand, kMusicCommandCapacity> commands{};
   alignas(64) std::atomic<std::uint32_t> command_write{};
@@ -622,7 +621,8 @@ struct MusicEngine::Impl {
   bool looping{true};
 
   ~Impl() {
-    for (auto iterator = synths.rbegin(); iterator != synths.rend(); ++iterator) {
+    for (auto iterator = synths.rbegin(); iterator != synths.rend();
+         ++iterator) {
       if (*iterator != nullptr) tsf_close(*iterator);
     }
   }
@@ -644,7 +644,8 @@ struct MusicEngine::Impl {
 
   [[nodiscard]] auto take_command() noexcept -> std::optional<MusicCommand> {
     const auto read = command_read.load(std::memory_order_relaxed);
-    if (read == command_write.load(std::memory_order_acquire)) return std::nullopt;
+    if (read == command_write.load(std::memory_order_acquire))
+      return std::nullopt;
     const auto command = commands[read % kMusicCommandCapacity];
     command_read.store(read + 1U, std::memory_order_release);
     return command;
@@ -673,8 +674,8 @@ struct MusicEngine::Impl {
           denominator;
       if (measure_ticks == 0U) return current_frame;
       const auto relative = tick - signature.tick;
-      target_tick = signature.tick +
-                    (relative / measure_ticks + 1U) * measure_ticks;
+      target_tick =
+          signature.tick + (relative / measure_ticks + 1U) * measure_ticks;
     }
     return target_tick > maximum_tick ? current_frame
                                       : frame_at_tick(schedule, target_tick);
@@ -683,22 +684,14 @@ struct MusicEngine::Impl {
   auto service_commands() noexcept -> void {
     while (const auto command = take_command()) {
       switch (command->kind) {
-        case MusicCommandKind::play:
-          playing = true;
-          break;
-        case MusicCommandKind::pause:
-          playing = false;
-          break;
+        case MusicCommandKind::play: playing = true; break;
+        case MusicCommandKind::pause: playing = false; break;
         case MusicCommandKind::stop:
           playing = false;
           reset_to(loop_start_frame);
           break;
-        case MusicCommandKind::set_looping:
-          looping = command->enabled;
-          break;
-        case MusicCommandKind::set_volume:
-          master_gain = command->gain;
-          break;
+        case MusicCommandKind::set_looping: looping = command->enabled; break;
+        case MusicCommandKind::set_volume: master_gain = command->gain; break;
         case MusicCommandKind::set_layer: {
           const auto index = static_cast<std::size_t>(command->layer);
           auto& layer = layers[index];
@@ -767,7 +760,8 @@ struct MusicEngine::Impl {
     auto boundary = std::min(requested_end, loop_end_frame);
     for (std::size_t layer = 0; layer < kMusicLayerCount; ++layer) {
       if (event_indices[layer] < events[layer].size()) {
-        boundary = std::min(boundary, events[layer][event_indices[layer]].frame);
+        boundary =
+            std::min(boundary, events[layer][event_indices[layer]].frame);
       }
       if (layers[layer].pending) {
         boundary = std::min(boundary, layers[layer].pending_frame);
@@ -777,7 +771,8 @@ struct MusicEngine::Impl {
   }
 
   auto reset_to(std::uint64_t frame) noexcept -> void {
-    for (auto* synth : synths) tsf_reset(synth);
+    for (auto* synth : synths)
+      tsf_reset(synth);
     current_frame = frame;
     for (std::size_t layer = 0; layer < kMusicLayerCount; ++layer) {
       event_indices[layer] = static_cast<std::size_t>(
@@ -789,7 +784,8 @@ struct MusicEngine::Impl {
 };
 
 MusicEngine::MusicEngine(std::unique_ptr<Impl> impl) noexcept
-    : m_impl{std::move(impl)} {}
+    : m_impl{std::move(impl)} {
+}
 MusicEngine::MusicEngine(MusicEngine&&) noexcept = default;
 auto MusicEngine::operator=(MusicEngine&&) noexcept -> MusicEngine& = default;
 MusicEngine::~MusicEngine() = default;
@@ -855,8 +851,9 @@ auto MusicEngine::create(MidiSchedule schedule,
   }
   std::ranges::sort(impl->phrase_frames);
 
-  impl->synths[0] = tsf_load_memory(impl->soundfont_bytes.data(),
-                                    static_cast<int>(impl->soundfont_bytes.size()));
+  impl->synths[0] =
+      tsf_load_memory(impl->soundfont_bytes.data(),
+                      static_cast<int>(impl->soundfont_bytes.size()));
   if (impl->synths[0] == nullptr) {
     return std::unexpected{MidiError::invalid_soundfont};
   }
@@ -880,8 +877,8 @@ auto MusicEngine::create(MidiSchedule schedule,
     static_assert(kMaximumMusicVoices % kMusicLayerCount == 0U);
     constexpr auto kMaximumVoicesPerLayer =
         kMaximumMusicVoices / kMusicLayerCount;
-    if (tsf_set_max_voices(synth,
-                           static_cast<int>(kMaximumVoicesPerLayer)) == 0) {
+    if (tsf_set_max_voices(synth, static_cast<int>(kMaximumVoicesPerLayer)) ==
+        0) {
       return std::unexpected{MidiError::synth_initialization_failed};
     }
     for (int channel = 0; channel < 16; ++channel) {
@@ -916,9 +913,8 @@ auto MusicEngine::stop() noexcept -> std::optional<MidiError> {
 
 auto MusicEngine::set_looping(bool looping) noexcept
     -> std::optional<MidiError> {
-  if (!m_impl ||
-      !m_impl->submit(
-          {.kind = MusicCommandKind::set_looping, .enabled = looping})) {
+  if (!m_impl || !m_impl->submit({.kind = MusicCommandKind::set_looping,
+                                  .enabled = looping})) {
     return MidiError::command_queue_full;
   }
   return std::nullopt;
@@ -984,9 +980,8 @@ auto MusicEngine::render(std::span<float> interleaved_samples) noexcept
       m_impl->apply_due_events();
       boundary = std::min(requested_end, m_impl->current_frame + 1U);
     }
-    const auto block_frames = static_cast<std::size_t>(
-        std::min<std::uint64_t>(boundary - m_impl->current_frame,
-                                requested_frames - output_frame));
+    const auto block_frames = static_cast<std::size_t>(std::min<std::uint64_t>(
+        boundary - m_impl->current_frame, requested_frames - output_frame));
     if (block_frames == 0U) continue;
 
     for (std::size_t layer = 0; layer < kMusicLayerCount; ++layer) {
@@ -1032,11 +1027,11 @@ auto MusicEngine::diagnostics() const noexcept -> MusicDiagnostics {
       .command_queue_depth = m_impl->command_depth(),
   };
   for (std::size_t layer = 0; layer < kMusicLayerCount; ++layer) {
-    diagnostics.active_voices += static_cast<std::size_t>(
-        tsf_active_voice_count(m_impl->synths[layer]));
+    diagnostics.active_voices +=
+        static_cast<std::size_t>(tsf_active_voice_count(m_impl->synths[layer]));
     diagnostics.layer_gains[layer] = m_impl->layers[layer].gain;
   }
   return diagnostics;
 }
 
-}  // namespace apsis_drift::midi_spike
+} // namespace apsis_drift::midi_spike

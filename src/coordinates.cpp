@@ -100,8 +100,7 @@ struct FaceBasis {
     case CubeFace::positive_y:
     case CubeFace::negative_y:
     case CubeFace::positive_z:
-    case CubeFace::negative_z:
-      return true;
+    case CubeFace::negative_z: return true;
   }
   return false;
 }
@@ -178,7 +177,7 @@ struct TileAxisAddress {
   return {};
 }
 
-}  // namespace
+} // namespace
 
 auto planet_fixed_from_geodetic(const PlanetDescriptor& planet,
                                 GeodeticPosition position) noexcept
@@ -287,9 +286,8 @@ auto local_from_planet_fixed(const LocalTangentFrame& frame,
   const PlanetFixedDirection offset{position.x - frame.origin.x,
                                     position.y - frame.origin.y,
                                     position.z - frame.origin.z};
-  const LocalPositionMetres result{dot(offset, frame.east),
-                                   dot(offset, frame.north),
-                                   dot(offset, frame.up)};
+  const LocalPositionMetres result{
+      dot(offset, frame.east), dot(offset, frame.north), dot(offset, frame.up)};
   if (!finite(result)) {
     return std::unexpected{CoordinateError::non_finite_input};
   }
@@ -351,9 +349,9 @@ auto terrain_address_from_planet_fixed(const PlanetDescriptor& planet,
       {planet.id, face, lod, x.index, y.index}, x.within, y.within};
 }
 
-auto terrain_address_from_planet_direction(
-    const PlanetDescriptor& planet, PlanetFixedDirection direction,
-    std::uint8_t lod) noexcept
+auto terrain_address_from_planet_direction(const PlanetDescriptor& planet,
+                                           PlanetFixedDirection direction,
+                                           std::uint8_t lod) noexcept
     -> std::expected<TerrainTileAddress, CoordinateError> {
   const auto radius = radius_metres(planet);
   if (!radius) return std::unexpected{radius.error()};
@@ -456,4 +454,4 @@ auto select_terrain_lod(const PlanetDescriptor& planet,
   return selected;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

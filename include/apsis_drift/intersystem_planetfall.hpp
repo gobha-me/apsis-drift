@@ -54,8 +54,7 @@ enum class IntersystemPlanetfallError : std::uint8_t {
 // flight, navigation, collection, and the journal commit together.
 [[nodiscard]] auto advance_intersystem_planetfall(
     IntersystemPlanetfallState& state, TerrainTileCache& cache,
-    std::span<const FlightCommand> commands,
-    IntersystemRuleProfile profile)
+    std::span<const FlightCommand> commands, IntersystemRuleProfile profile)
     -> std::expected<IntersystemPlanetfallUpdate, IntersystemPlanetfallError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

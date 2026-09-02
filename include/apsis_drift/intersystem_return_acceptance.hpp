@@ -6,8 +6,8 @@
 #include <string_view>
 #include <vector>
 
-#include "termforge/core/types.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
+#include "termforge/core/types.hpp"
 
 namespace apsis_drift {
 
@@ -53,4 +53,4 @@ enum class IntersystemReturnAcceptanceError : std::uint8_t {
 [[nodiscard]] auto intersystem_return_acceptance_json(
     const IntersystemReturnAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -40,8 +40,8 @@ struct RenderConfiguration {
     -> ViewportSize;
 [[nodiscard]] auto profile_name(RenderProfile profile) noexcept
     -> std::string_view;
-[[nodiscard]] auto profile_name(const RenderConfiguration& configuration)
-    noexcept -> std::string_view;
+[[nodiscard]] auto profile_name(
+    const RenderConfiguration& configuration) noexcept -> std::string_view;
 [[nodiscard]] auto parse_render_profile(std::string_view text) noexcept
     -> std::optional<RenderProfile>;
 
@@ -53,9 +53,10 @@ struct RenderConfiguration {
     -> std::string_view;
 
 [[nodiscard]] auto resolve_render_configuration(
-    RenderProfile profile, std::optional<ViewportSize> override = std::nullopt)
-    noexcept -> RenderConfiguration;
+    RenderProfile profile,
+    std::optional<ViewportSize> override = std::nullopt) noexcept
+    -> RenderConfiguration;
 [[nodiscard]] auto default_render_configuration() noexcept
     -> RenderConfiguration;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

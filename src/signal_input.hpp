@@ -13,4 +13,4 @@ namespace apsis_drift::detail {
     const termforge::KeyEvent& key) noexcept
     -> std::optional<SignalSelectionCommand>;
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

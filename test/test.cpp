@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <cmath>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <initializer_list>
 #include <iterator>
 #include <limits>
@@ -39,14 +39,14 @@
 #include "apsis_drift/onboarding.hpp"
 #include "apsis_drift/onboarding_acceptance.hpp"
 #include "apsis_drift/orbital.hpp"
-#include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_return.hpp"
+#include "apsis_drift/origin_station.hpp"
 #include "apsis_drift/origin_system_contract.hpp"
 #include "apsis_drift/origin_system_contract_acceptance.hpp"
 #include "apsis_drift/planet.hpp"
-#include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/planetary_presentation.hpp"
+#include "apsis_drift/planetfall_acceptance.hpp"
 #include "apsis_drift/profile_catalog.hpp"
 #include "apsis_drift/save_file.hpp"
 #include "apsis_drift/save_schema.hpp"
@@ -127,9 +127,10 @@ auto check(bool condition, const char* message) -> void {
           source.palette};
 }
 
-[[nodiscard]] auto planet_with_atmosphere(
-    const PlanetDescriptor& source, AtmosphereClass atmosphere_class,
-    std::uint16_t pressure_millibars) -> PlanetDescriptor {
+[[nodiscard]] auto planet_with_atmosphere(const PlanetDescriptor& source,
+                                          AtmosphereClass atmosphere_class,
+                                          std::uint16_t pressure_millibars)
+    -> PlanetDescriptor {
   return {source.seed,
           source.id,
           source.display_name,
@@ -157,8 +158,8 @@ auto check(bool condition, const char* message) -> void {
           source.palette};
 }
 
-[[nodiscard]] auto count_pixels(const std::vector<Pixel>& pixels,
-                                Pixel target) -> std::size_t {
+[[nodiscard]] auto count_pixels(const std::vector<Pixel>& pixels, Pixel target)
+    -> std::size_t {
   return static_cast<std::size_t>(
       std::count(pixels.begin(), pixels.end(), target));
 }
@@ -185,9 +186,9 @@ class TemporaryDirectory {
     static std::uint64_t sequence{};
     const auto root = std::filesystem::temp_directory_path();
     do {
-      m_path = root / std::format("apsis-drift-test-{}-{}",
-                                  static_cast<long long>(::getpid()),
-                                  sequence++);
+      m_path =
+          root / std::format("apsis-drift-test-{}-{}",
+                             static_cast<long long>(::getpid()), sequence++);
     } while (!std::filesystem::create_directory(m_path));
   }
   TemporaryDirectory(const TemporaryDirectory&) = delete;
@@ -221,8 +222,10 @@ auto write_test_file(const std::filesystem::path& path,
 
 auto generation_failure_matrix() -> void {
   check(!Terrain::generate(0, 1), "zero-sized terrain must be rejected");
-  check(!Terrain::generate(16, 1), "terrain below the minimum must be rejected");
-  check(!Terrain::generate(300, 1), "non-power-of-two terrain must be rejected");
+  check(!Terrain::generate(16, 1),
+        "terrain below the minimum must be rejected");
+  check(!Terrain::generate(300, 1),
+        "non-power-of-two terrain must be rejected");
   check(!Terrain::generate(8192, 1), "oversized terrain must be rejected");
 }
 
@@ -244,15 +247,14 @@ auto deterministic_generation() -> void {
 
 auto seed_derivation_contract() -> void {
   constexpr std::array domains{
-      SeedDomain::universe, SeedDomain::system,    SeedDomain::planet,
-      SeedDomain::terrain,  SeedDomain::weather,   SeedDomain::settlement,
+      SeedDomain::universe,  SeedDomain::system,  SeedDomain::planet,
+      SeedDomain::terrain,   SeedDomain::weather, SeedDomain::settlement,
       SeedDomain::encounter,
   };
   constexpr Seed parent{0x0123456789ABCDEFULL};
   constexpr std::array<std::uint64_t, domains.size()> golden{
-      4143016152257524795ULL,  5513727441665043320ULL,
-      11205738369765721017ULL, 2772304862850006270ULL,
-      8464315790950683967ULL,  9835027080358202492ULL,
+      4143016152257524795ULL,  5513727441665043320ULL, 11205738369765721017ULL,
+      2772304862850006270ULL,  8464315790950683967ULL, 9835027080358202492ULL,
       15527038008458880189ULL,
   };
 
@@ -264,7 +266,7 @@ auto seed_derivation_contract() -> void {
   check(derive_seed(Seed{std::numeric_limits<std::uint64_t>::max()},
                     SeedDomain::encounter,
                     std::numeric_limits<std::uint64_t>::max())
-            .value == 11366853328773030509ULL,
+                .value == 11366853328773030509ULL,
         "the maximum seed identity must retain its golden vector");
   for (std::size_t index = 0; index < domains.size(); ++index) {
     const auto first = derive_seed(parent, domains[index]);
@@ -397,9 +399,10 @@ auto intersystem_identity_contract() -> void {
 }
 
 auto universe_navigation_contract() -> void {
-  check(kUniverseNavigationVersion == 1 &&
-            static_cast<std::uint64_t>(SeedDomain::navigation) == 12,
-        "universe navigation must retain its version and permanent seed domain");
+  check(
+      kUniverseNavigationVersion == 1 &&
+          static_cast<std::uint64_t>(SeedDomain::navigation) == 12,
+      "universe navigation must retain its version and permanent seed domain");
   check(kMinimumFirstRouteLightSeconds == 172'800U &&
             kMaximumFirstRouteLightSeconds == 345'600U &&
             kLocalSystemBoundaryMetres == 100'000'000'000LL &&
@@ -407,7 +410,8 @@ auto universe_navigation_contract() -> void {
         "the bounded first-route scale must retain its documented constants");
 
   constexpr std::array seeds{
-      Seed{0}, Seed{42},
+      Seed{0},
+      Seed{42},
       Seed{std::numeric_limits<std::uint64_t>::max()},
   };
   struct RouteGolden {
@@ -417,15 +421,12 @@ auto universe_navigation_contract() -> void {
     std::uint64_t distance_metres;
   };
   constexpr std::array route_goldens{
-      RouteGolden{11957133562145355735ULL,
-                  UniverseAxisDirection::negative_x, 228'505U,
-                  68'504'075'615'290ULL},
-      RouteGolden{4490051804352235517ULL,
-                  UniverseAxisDirection::negative_z, 321'457U,
-                  96'370'384'171'306ULL},
-      RouteGolden{12613896438947289695ULL,
-                  UniverseAxisDirection::negative_y, 299'680U,
-                  89'841'803'813'440ULL},
+      RouteGolden{11957133562145355735ULL, UniverseAxisDirection::negative_x,
+                  228'505U, 68'504'075'615'290ULL},
+      RouteGolden{4490051804352235517ULL, UniverseAxisDirection::negative_z,
+                  321'457U, 96'370'384'171'306ULL},
+      RouteGolden{12613896438947289695ULL, UniverseAxisDirection::negative_y,
+                  299'680U, 89'841'803'813'440ULL},
   };
   for (std::size_t index = 0; index < seeds.size(); ++index) {
     const auto seed = seeds[index];
@@ -434,35 +435,34 @@ auto universe_navigation_contract() -> void {
     const auto target_before =
         generate_local_system(identities.target_system_seed);
     const auto route = generate_first_universe_route(seed);
-    check(route == generate_first_universe_route(seed) &&
-              validate_first_universe_route(route).has_value() &&
-              route.origin == identities.origin_system &&
-              route.destination == identities.target_system &&
-              route.origin_position == UniversePositionMetres{} &&
-              route.distance_light_seconds >=
-                  kMinimumFirstRouteLightSeconds &&
-              route.distance_light_seconds <=
-                  kMaximumFirstRouteLightSeconds &&
-              route.distance_metres ==
-                  route.distance_light_seconds *
-                      static_cast<std::uint64_t>(kMetresPerLightSecond) &&
-              route.route_seed.value == route_goldens[index].route_seed &&
-              route.direction == route_goldens[index].direction &&
-              route.distance_light_seconds ==
-                  route_goldens[index].distance_light_seconds &&
-              route.distance_metres == route_goldens[index].distance_metres,
-          "fixed route seeds must retain their golden coordinates and distances");
-    const auto nonzero_axes =
-        (route.destination_position.x != 0 ? 1 : 0) +
-        (route.destination_position.y != 0 ? 1 : 0) +
-        (route.destination_position.z != 0 ? 1 : 0);
+    check(
+        route == generate_first_universe_route(seed) &&
+            validate_first_universe_route(route).has_value() &&
+            route.origin == identities.origin_system &&
+            route.destination == identities.target_system &&
+            route.origin_position == UniversePositionMetres{} &&
+            route.distance_light_seconds >= kMinimumFirstRouteLightSeconds &&
+            route.distance_light_seconds <= kMaximumFirstRouteLightSeconds &&
+            route.distance_metres ==
+                route.distance_light_seconds *
+                    static_cast<std::uint64_t>(kMetresPerLightSecond) &&
+            route.route_seed.value == route_goldens[index].route_seed &&
+            route.direction == route_goldens[index].direction &&
+            route.distance_light_seconds ==
+                route_goldens[index].distance_light_seconds &&
+            route.distance_metres == route_goldens[index].distance_metres,
+        "fixed route seeds must retain their golden coordinates and distances");
+    const auto nonzero_axes = (route.destination_position.x != 0 ? 1 : 0) +
+                              (route.destination_position.y != 0 ? 1 : 0) +
+                              (route.destination_position.z != 0 ? 1 : 0);
     check(nonzero_axes == 1,
           "the bounded first route must use one explicit cardinal axis");
     check(generate_origin_system(seed) == origin_before &&
               generate_local_system(identities.target_system_seed) ==
                   target_before &&
               generate_first_intersystem_identities(seed) == identities,
-          "inspecting universe navigation must not perturb existing generated streams");
+          "inspecting universe navigation must not perturb existing generated "
+          "streams");
   }
 
   const auto route = generate_first_universe_route(Seed{42});
@@ -481,8 +481,7 @@ auto universe_navigation_contract() -> void {
 
   const auto contact = resolve_navigation_destination(
       route,
-      {.system = route.destination,
-       .level = NavigationKnowledgeLevel::contact},
+      {.system = route.destination, .level = NavigationKnowledgeLevel::contact},
       route.origin, true, true, true);
   const auto probable = resolve_navigation_destination(
       route,
@@ -525,8 +524,9 @@ auto universe_navigation_contract() -> void {
             in_transit && in_transit->available && !in_transit->selectable &&
             in_transit->disabled_reason ==
                 NavigationDisabledReason::unavailable_during_travel &&
-            current && current->disabled_reason ==
-                           NavigationDisabledReason::current_system,
+            current &&
+            current->disabled_reason ==
+                NavigationDisabledReason::current_system,
         "navigation disabled reasons must follow one stable precedence");
 
   const OnboardingProgress guided_one{
@@ -537,17 +537,17 @@ auto universe_navigation_contract() -> void {
       .state = OnboardingState::guided,
       .chapter = OnboardingChapter::contract_three,
   };
-  const OnboardingProgress completed{
-      .state = OnboardingState::completed, .chapter = std::nullopt};
-  const auto first_view = resolve_onboarding_navigation_view(
-      route, guided_one, route.origin);
-  const auto third_view = resolve_onboarding_navigation_view(
-      route, guided_three, route.origin);
+  const OnboardingProgress completed{.state = OnboardingState::completed,
+                                     .chapter = std::nullopt};
+  const auto first_view =
+      resolve_onboarding_navigation_view(route, guided_one, route.origin);
+  const auto third_view =
+      resolve_onboarding_navigation_view(route, guided_three, route.origin);
   const auto skip_view = resolve_onboarding_navigation_view(
       route, initial_onboarding_progress(NewGameOnboardingChoice::skip),
       route.origin);
-  const auto return_view = resolve_onboarding_navigation_view(
-      route, completed, route.destination);
+  const auto return_view =
+      resolve_onboarding_navigation_view(route, completed, route.destination);
   check(first_view && first_view->destinations.size() == 1 &&
             !first_view->destinations.front().selectable && third_view &&
             third_view->destinations.size() == 2 &&
@@ -560,16 +560,16 @@ auto universe_navigation_contract() -> void {
             return_view->destinations.back().disabled_reason ==
                 NavigationDisabledReason::current_system,
         "onboarding must reveal only its bounded navigation baseline");
-  check(!resolve_onboarding_navigation_view(
-            route, guided_one, route.destination),
-        "a pre-jump onboarding chapter must reject an unreachable current system");
+  check(
+      !resolve_onboarding_navigation_view(route, guided_one, route.destination),
+      "a pre-jump onboarding chapter must reject an unreachable current "
+      "system");
 
   const auto closed_view = resolve_onboarding_navigation_view(
       route, guided_three, route.origin, true, false);
   const auto no_endurance = resolve_onboarding_navigation_view(
       route, guided_three, route.origin, false, true);
-  check(closed_view &&
-            closed_view->destinations.back().available &&
+  check(closed_view && closed_view->destinations.back().available &&
             !closed_view->destinations.back().selectable && no_endurance &&
             !no_endurance->destinations.back().affordable &&
             no_endurance->destinations.back().disabled_reason ==
@@ -595,7 +595,8 @@ auto universe_navigation_contract() -> void {
                 *third_view, selection,
                 UniverseNavigationSelectionCommand::previous) &&
             selection.focused_index == 0U,
-        "universe navigation must focus disabled rows but select only the one available route");
+        "universe navigation must focus disabled rows but select only the one "
+        "available route");
   if (closed_view) {
     UniverseNavigationSelectionState closed_selection{.focused_index = 1U};
     const auto before = closed_selection;
@@ -613,12 +614,10 @@ auto universe_navigation_contract() -> void {
               return_selection.pending_destination == route.origin,
           "the visited origin must be selectable for the physical return leg");
   }
-  UniverseNavigationSelectionState invalid_selection{
-      .focused_index = 99U};
-  check(third_view &&
-            !advance_universe_navigation_selection(
-                *third_view, invalid_selection,
-                UniverseNavigationSelectionCommand::next),
+  UniverseNavigationSelectionState invalid_selection{.focused_index = 99U};
+  check(third_view && !advance_universe_navigation_selection(
+                          *third_view, invalid_selection,
+                          UniverseNavigationSelectionCommand::next),
         "out-of-range navigation focus must reject before mutation");
 
   const auto direct = make_direct_travel_plan(
@@ -629,9 +628,8 @@ auto universe_navigation_contract() -> void {
       static_cast<double>(kDirectCruiseMaximumSpeedMetresPerSecond));
   check(direct && reverse &&
             direct->cruise_distance_metres ==
-                route.distance_metres -
-                    static_cast<std::uint64_t>(
-                        2 * kLocalSystemBoundaryMetres) &&
+                route.distance_metres - static_cast<std::uint64_t>(
+                                            2 * kLocalSystemBoundaryMetres) &&
             direct->cruise_distance_metres == reverse->cruise_distance_metres &&
             direct->departure_position == reverse->arrival_position &&
             direct->arrival_position == reverse->departure_position,
@@ -648,7 +646,8 @@ auto universe_navigation_contract() -> void {
               departure->position == direct->departure_position && midpoint &&
               !midpoint->arrived && arrival && arrival->arrived &&
               arrival->position == direct->arrival_position,
-          "analytic direct cruise must resolve departure, progress, and exact arrival");
+          "analytic direct cruise must resolve departure, progress, and exact "
+          "arrival");
 
     auto tick = direct->departure_tick;
     while (tick < direct->arrival_tick) {
@@ -672,12 +671,12 @@ auto universe_navigation_contract() -> void {
                   std::string::npos &&
               projection->find(system_id_string(route.destination)) !=
                   std::string::npos,
-          "the proposed direct-cruise save projection must remain canonical and bounded");
+          "the proposed direct-cruise save projection must remain canonical "
+          "and bounded");
   }
 
   auto malformed_route = route;
-  malformed_route.distance_light_seconds =
-      kMinimumFirstRouteLightSeconds - 1U;
+  malformed_route.distance_light_seconds = kMinimumFirstRouteLightSeconds - 1U;
   check(!validate_first_universe_route(malformed_route) &&
             !resolve_navigation_destination(
                 malformed_route,
@@ -685,80 +684,81 @@ auto universe_navigation_contract() -> void {
                  .level = NavigationKnowledgeLevel::resolved},
                 route.origin, true, true, true),
         "malformed generated route data must reject before projection");
-  check(!resolve_navigation_destination(
-            route,
-            {.system = route.destination,
-             .level = static_cast<NavigationKnowledgeLevel>(255)},
-            route.origin, true, true, true) &&
-            !resolve_navigation_destination(
-                route,
-                {.system = SystemId{1},
-                 .level = NavigationKnowledgeLevel::resolved},
-                route.origin, true, true, true) &&
-            !resolve_onboarding_navigation_view(
-                route,
-                {.state = OnboardingState::guided, .chapter = std::nullopt},
-                route.origin),
-        "invalid knowledge, identities, and onboarding combinations must reject");
-  check(!make_direct_travel_plan(
-            route, route.origin, route.destination, 0,
-            std::numeric_limits<double>::quiet_NaN()) &&
+  check(
+      !resolve_navigation_destination(
+          route,
+          {.system = route.destination,
+           .level = static_cast<NavigationKnowledgeLevel>(255)},
+          route.origin, true, true, true) &&
+          !resolve_navigation_destination(
+              route,
+              {.system = SystemId{1},
+               .level = NavigationKnowledgeLevel::resolved},
+              route.origin, true, true, true) &&
+          !resolve_onboarding_navigation_view(
+              route,
+              {.state = OnboardingState::guided, .chapter = std::nullopt},
+              route.origin),
+      "invalid knowledge, identities, and onboarding combinations must reject");
+  check(!make_direct_travel_plan(route, route.origin, route.destination, 0,
+                                 std::numeric_limits<double>::quiet_NaN()) &&
             !make_direct_travel_plan(route, route.origin, route.destination, 0,
                                      0.0) &&
             !make_direct_travel_plan(route, route.origin, route.destination, 0,
                                      1.5) &&
             !make_direct_travel_plan(
                 route, route.origin, route.destination, 0,
-                static_cast<double>(
-                    kDirectCruiseMaximumSpeedMetresPerSecond + 1U)) &&
+                static_cast<double>(kDirectCruiseMaximumSpeedMetresPerSecond +
+                                    1U)) &&
             !make_direct_travel_plan(route, route.origin, route.origin, 0,
                                      1'000'000.0) &&
-            !make_direct_travel_plan(
-                route, route.origin, route.destination,
-                std::numeric_limits<SimulationTick>::max(), 1.0),
+            !make_direct_travel_plan(route, route.origin, route.destination,
+                                     std::numeric_limits<SimulationTick>::max(),
+                                     1.0),
         "invalid speeds, routes, and tick overflow must reject before cruise");
   if (direct) {
     check(!resolve_direct_travel(*direct, direct->departure_tick - 1U) &&
-              !advance_direct_travel(
-                  *direct, direct->departure_tick,
-                  static_cast<DirectCruiseTimeScale>(3)),
+              !advance_direct_travel(*direct, direct->departure_tick,
+                                     static_cast<DirectCruiseTimeScale>(3)),
           "out-of-range cruise ticks and unknown time scales must reject");
     auto corrupt_plan = *direct;
     corrupt_plan.velocity_metres_per_second.x += 1;
     check(!resolve_direct_travel(corrupt_plan, corrupt_plan.departure_tick) &&
-              !advance_direct_travel(
-                  corrupt_plan, corrupt_plan.departure_tick,
-                  DirectCruiseTimeScale::one),
+              !advance_direct_travel(corrupt_plan, corrupt_plan.departure_tick,
+                                     DirectCruiseTimeScale::one),
           "corrupt direct-cruise geometry must reject before advancement");
     corrupt_plan = *direct;
     corrupt_plan.departure_position.x =
         std::numeric_limits<std::int64_t>::min();
     check(!resolve_direct_travel(corrupt_plan, corrupt_plan.departure_tick),
-          "extreme direct-cruise coordinates must reject without unsafe arithmetic");
+          "extreme direct-cruise coordinates must reject without unsafe "
+          "arithmetic");
   }
 }
 
 auto universe_navigation_acceptance_contract() -> void {
   const auto result = run_universe_navigation_acceptance();
-  check(result && result->route.universe_seed == Seed{42} &&
-            result->visible_rows == 2 && result->selectable_rows == 1 &&
-            result->ftl_total_ticks == 600 &&
-            result->direct_plan.arrival_tick >
-                result->direct_plan.departure_tick &&
-            result->maximum_scale_updates > 0 &&
-            result->projected_save_bytes < 1'024U &&
-            result->direct_arrival_checksum != 0,
-        "the universe-navigation acceptance report must prove the bounded route");
+  check(
+      result && result->route.universe_seed == Seed{42} &&
+          result->visible_rows == 2 && result->selectable_rows == 1 &&
+          result->ftl_total_ticks == 600 &&
+          result->direct_plan.arrival_tick >
+              result->direct_plan.departure_tick &&
+          result->maximum_scale_updates > 0 &&
+          result->projected_save_bytes < 1'024U &&
+          result->direct_arrival_checksum != 0,
+      "the universe-navigation acceptance report must prove the bounded route");
   if (!result) return;
   const auto json = universe_navigation_acceptance_json(*result);
-  check(json.find("\"schema_version\": 1") != std::string::npos &&
-            json.find("\"scenario\": \"v0.4.34-universe-navigation-contract\"") !=
-                std::string::npos &&
-            json.find("\"resource_cost_units\": \"0\"") !=
-                std::string::npos &&
-            json.find("separate-live-capture-required-by-contract-three") !=
-                std::string::npos,
-        "the navigation report must distinguish contract, resource, and transport evidence");
+  check(
+      json.find("\"schema_version\": 1") != std::string::npos &&
+          json.find("\"scenario\": \"v0.4.34-universe-navigation-contract\"") !=
+              std::string::npos &&
+          json.find("\"resource_cost_units\": \"0\"") != std::string::npos &&
+          json.find("separate-live-capture-required-by-contract-three") !=
+              std::string::npos,
+      "the navigation report must distinguish contract, resource, and "
+      "transport evidence");
 }
 
 auto intersystem_state_contract() -> void {
@@ -809,11 +809,11 @@ auto intersystem_state_contract() -> void {
   const auto wrong_tick =
       advance_intersystem_contract(state, state.universe_tick + 1,
                                    IntersystemContractCommand::accept_mission);
-  check(
-      !wrong_tick &&
-          wrong_tick.error() == IntersystemContractError::wrong_command_tick &&
-          state == wrong_tick_before,
-      "commands must address the exact authoritative universe tick");
+  check(!wrong_tick &&
+            wrong_tick.error() ==
+                IntersystemContractError::wrong_command_tick &&
+            state == wrong_tick_before,
+        "commands must address the exact authoritative universe tick");
   accepted(IntersystemContractCommand::accept_mission);
   check(state.rule_profile == IntersystemRuleProfile::assisted,
         "an accepted contract must retain its career penalty mode");
@@ -831,8 +831,7 @@ auto intersystem_state_contract() -> void {
     check(advance_intersystem_jump_tick(state, target_system).has_value(),
           "outbound spooling must advance before its boundary");
   }
-  check(state.travel_phase ==
-            IntersystemTravelPhase::outbound_jump_spooling &&
+  check(state.travel_phase == IntersystemTravelPhase::outbound_jump_spooling &&
             !state.arrival_solution,
         "outbound commitment must not publish before the spool boundary");
   accepted(IntersystemContractCommand::cancel_jump);
@@ -852,8 +851,7 @@ auto intersystem_state_contract() -> void {
     check(advance_intersystem_jump_tick(state, target_system).has_value(),
           "outbound transit must advance before arrival");
   }
-  check(state.travel_phase ==
-            IntersystemTravelPhase::outbound_jump_committed,
+  check(state.travel_phase == IntersystemTravelPhase::outbound_jump_committed,
         "outbound arrival must not publish before the transit boundary");
   const auto outbound_arrival =
       advance_intersystem_jump_tick(state, target_system);
@@ -887,8 +885,7 @@ auto intersystem_state_contract() -> void {
   auto approach = initialize_origin_return(state, origin_system);
   check(approach.has_value(),
         "return arrival must initialize the moving-station approach");
-  if (!approach)
-    return;
+  if (!approach) return;
   approach->relative_position = {kOriginStationArrivalRadiusMetres, 0.0, 0.0};
   approach->relative_velocity = {};
   approach->forward = {-1.0, 0.0, 0.0};
@@ -915,11 +912,11 @@ auto intersystem_state_contract() -> void {
   overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
   const auto overflow_before = overflow;
   const auto overflow_result = advance_intersystem_time(overflow, 1);
-  check(
-      !overflow_result &&
-          overflow_result.error() == IntersystemContractError::tick_overflow &&
-          overflow == overflow_before,
-      "universe-time overflow must fail without mutation");
+  check(!overflow_result &&
+            overflow_result.error() ==
+                IntersystemContractError::tick_overflow &&
+            overflow == overflow_before,
+        "universe-time overflow must fail without mutation");
 
   auto malformed = initial_intersystem_contract_state(Seed{42});
   malformed.identities.target_system.value ^= 1U;
@@ -927,11 +924,11 @@ auto intersystem_state_contract() -> void {
   const auto malformed_result =
       advance_intersystem_contract(malformed, malformed.universe_tick,
                                    IntersystemContractCommand::accept_mission);
-  check(
-      !malformed_result &&
-          malformed_result.error() == IntersystemContractError::invalid_state &&
-          malformed == malformed_before,
-      "corrupt generated identities must fail without mutation");
+  check(!malformed_result &&
+            malformed_result.error() ==
+                IntersystemContractError::invalid_state &&
+            malformed == malformed_before,
+        "corrupt generated identities must fail without mutation");
 
   malformed = initial_intersystem_contract_state(Seed{42});
   malformed.travel_phase = static_cast<IntersystemTravelPhase>(255);
@@ -953,129 +950,133 @@ auto intersystem_time_boundary_contract() -> void {
   const auto make_outbound_spool = [] {
     auto state = initial_intersystem_contract_state(Seed{42});
     (void)advance_intersystem_contract(
-        state, state.universe_tick,
-        IntersystemContractCommand::accept_mission);
-    (void)advance_intersystem_contract(
-        state, state.universe_tick, IntersystemContractCommand::launch);
+        state, state.universe_tick, IntersystemContractCommand::accept_mission);
+    (void)advance_intersystem_contract(state, state.universe_tick,
+                                       IntersystemContractCommand::launch);
     (void)begin_intersystem_jump(state);
     return state;
   };
-  const auto reject_advance = [](IntersystemContractState& state,
-                                 SimulationTick ticks,
-                                 IntersystemContractError error,
-                                 const char* message) {
-    const auto before = state;
-    const auto result = advance_intersystem_time(state, ticks);
-    check(!result && result.error() == error && state == before, message);
-  };
+  const auto reject_advance =
+      [](IntersystemContractState& state, SimulationTick ticks,
+         IntersystemContractError error, const char* message) {
+        const auto before = state;
+        const auto result = advance_intersystem_time(state, ticks);
+        check(!result && result.error() == error && state == before, message);
+      };
 
   auto unrestricted = initial_intersystem_contract_state(Seed{42});
-  check(advance_intersystem_time(
-            unrestricted, kJumpSpoolTicks + kJumpTransitTicks + 1) &&
+  check(advance_intersystem_time(unrestricted,
+                                 kJumpSpoolTicks + kJumpTransitTicks + 1) &&
             validate_intersystem_contract_state(unrestricted),
-        "phases without a pending jump boundary must retain batch time advancement");
+        "phases without a pending jump boundary must retain batch time "
+        "advancement");
 
   auto invalid = initial_intersystem_contract_state(Seed{42});
   invalid.identities.target_system.value ^= 1U;
-  reject_advance(invalid, 1, IntersystemContractError::invalid_state,
-                 "raw time advancement must reject invalid input without mutation");
+  reject_advance(
+      invalid, 1, IntersystemContractError::invalid_state,
+      "raw time advancement must reject invalid input without mutation");
 
   const auto target = generate_local_system(
       make_outbound_spool().identities.target_system_seed);
   const auto origin = generate_origin_system(Seed{42});
 
-  const auto check_spool_boundary = [&](const IntersystemContractState& spool,
-                                        const LocalSystemDescriptor& destination,
-                                        const char* prefix) {
-    auto before_boundary = spool;
-    check(advance_intersystem_time(before_boundary, kJumpSpoolTicks - 1) &&
-              validate_intersystem_contract_state(before_boundary),
-          prefix);
+  const auto check_spool_boundary =
+      [&](const IntersystemContractState& spool,
+          const LocalSystemDescriptor& destination, const char* prefix) {
+        auto before_boundary = spool;
+        check(advance_intersystem_time(before_boundary, kJumpSpoolTicks - 1) &&
+                  validate_intersystem_contract_state(before_boundary),
+              prefix);
 
-    auto at_boundary = spool;
-    check(advance_intersystem_time(at_boundary, kJumpSpoolTicks) &&
-              validate_intersystem_contract_state(at_boundary),
-          "raw time advancement must allow an exact spool boundary");
+        auto at_boundary = spool;
+        check(advance_intersystem_time(at_boundary, kJumpSpoolTicks) &&
+                  validate_intersystem_contract_state(at_boundary),
+              "raw time advancement must allow an exact spool boundary");
 
-    auto crossed = spool;
-    reject_advance(crossed, kJumpSpoolTicks + 1,
-                   IntersystemContractError::invalid_time_advance,
-                   "raw time advancement must reject crossing a spool boundary");
-    reject_advance(before_boundary, 2,
-                   IntersystemContractError::invalid_time_advance,
-                   "a partial batch must not cross the remaining spool boundary");
+        auto crossed = spool;
+        reject_advance(
+            crossed, kJumpSpoolTicks + 1,
+            IntersystemContractError::invalid_time_advance,
+            "raw time advancement must reject crossing a spool boundary");
+        reject_advance(
+            before_boundary, 2, IntersystemContractError::invalid_time_advance,
+            "a partial batch must not cross the remaining spool boundary");
 
-    auto large_batch = spool;
-    reject_advance(large_batch,
-                   kJumpSpoolTicks + kJumpTransitTicks + 1,
-                   IntersystemContractError::invalid_time_advance,
-                   "a large batch must stop at the next spool boundary");
+        auto large_batch = spool;
+        reject_advance(large_batch, kJumpSpoolTicks + kJumpTransitTicks + 1,
+                       IntersystemContractError::invalid_time_advance,
+                       "a large batch must stop at the next spool boundary");
 
-    auto overflow = spool;
-    overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
-    overflow.phase_started_tick = overflow.universe_tick;
-    check(validate_intersystem_contract_state(overflow).has_value(),
-          "the jump overflow fixture must remain a valid spool state");
-    reject_advance(overflow, 1, IntersystemContractError::tick_overflow,
-                   "jump time overflow must reject without mutation");
+        auto overflow = spool;
+        overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
+        overflow.phase_started_tick = overflow.universe_tick;
+        check(validate_intersystem_contract_state(overflow).has_value(),
+              "the jump overflow fixture must remain a valid spool state");
+        reject_advance(overflow, 1, IntersystemContractError::tick_overflow,
+                       "jump time overflow must reject without mutation");
 
-    const auto exact_before = at_boundary;
-    check(advance_intersystem_jump_tick(at_boundary, destination) ==
-                  std::unexpected{IntersystemJumpError::transition_failure} &&
-              at_boundary == exact_before,
-          "a late jump commitment must reject transactionally");
+        const auto exact_before = at_boundary;
+        check(
+            advance_intersystem_jump_tick(at_boundary, destination) ==
+                    std::unexpected{IntersystemJumpError::transition_failure} &&
+                at_boundary == exact_before,
+            "a late jump commitment must reject transactionally");
 
-    auto late = spool;
-    late.universe_tick = *late.phase_started_tick + kJumpSpoolTicks + 1;
-    check(!validate_intersystem_contract_state(late),
-          "a spool state beyond its canonical boundary must be invalid");
-  };
+        auto late = spool;
+        late.universe_tick = *late.phase_started_tick + kJumpSpoolTicks + 1;
+        check(!validate_intersystem_contract_state(late),
+              "a spool state beyond its canonical boundary must be invalid");
+      };
 
-  const auto check_transit_boundary = [&reject_advance](
-                                          const IntersystemContractState& transit,
-                                          const LocalSystemDescriptor& destination) {
-    auto before_boundary = transit;
-    check(advance_intersystem_time(before_boundary, kJumpTransitTicks - 1) &&
-              validate_intersystem_contract_state(before_boundary),
-          "raw time advancement must allow the tick before transit arrival");
+  const auto check_transit_boundary =
+      [&reject_advance](const IntersystemContractState& transit,
+                        const LocalSystemDescriptor& destination) {
+        auto before_boundary = transit;
+        check(
+            advance_intersystem_time(before_boundary, kJumpTransitTicks - 1) &&
+                validate_intersystem_contract_state(before_boundary),
+            "raw time advancement must allow the tick before transit arrival");
 
-    auto at_boundary = transit;
-    check(advance_intersystem_time(at_boundary, kJumpTransitTicks) &&
-              validate_intersystem_contract_state(at_boundary) &&
-              at_boundary.arrival_solution &&
-              at_boundary.universe_tick ==
-                  at_boundary.arrival_solution->arrival_tick,
-          "raw time advancement must allow the exact transit boundary");
+        auto at_boundary = transit;
+        check(advance_intersystem_time(at_boundary, kJumpTransitTicks) &&
+                  validate_intersystem_contract_state(at_boundary) &&
+                  at_boundary.arrival_solution &&
+                  at_boundary.universe_tick ==
+                      at_boundary.arrival_solution->arrival_tick,
+              "raw time advancement must allow the exact transit boundary");
 
-    auto crossed = transit;
-    reject_advance(crossed, kJumpTransitTicks + 1,
-                   IntersystemContractError::invalid_time_advance,
-                   "raw time advancement must reject crossing a transit boundary");
-    reject_advance(before_boundary, 2,
-                   IntersystemContractError::invalid_time_advance,
-                   "a partial batch must not cross the remaining transit boundary");
+        auto crossed = transit;
+        reject_advance(
+            crossed, kJumpTransitTicks + 1,
+            IntersystemContractError::invalid_time_advance,
+            "raw time advancement must reject crossing a transit boundary");
+        reject_advance(
+            before_boundary, 2, IntersystemContractError::invalid_time_advance,
+            "a partial batch must not cross the remaining transit boundary");
 
-    auto large_batch = transit;
-    reject_advance(large_batch,
-                   kJumpSpoolTicks + kJumpTransitTicks + 1,
-                   IntersystemContractError::invalid_time_advance,
-                   "a large batch must stop at the next transit boundary");
+        auto large_batch = transit;
+        reject_advance(large_batch, kJumpSpoolTicks + kJumpTransitTicks + 1,
+                       IntersystemContractError::invalid_time_advance,
+                       "a large batch must stop at the next transit boundary");
 
-    const auto exact_before = at_boundary;
-    check(advance_intersystem_jump_tick(at_boundary, destination) ==
-                  std::unexpected{IntersystemJumpError::transition_failure} &&
-              at_boundary == exact_before,
-          "a late jump arrival must reject transactionally");
+        const auto exact_before = at_boundary;
+        check(
+            advance_intersystem_jump_tick(at_boundary, destination) ==
+                    std::unexpected{IntersystemJumpError::transition_failure} &&
+                at_boundary == exact_before,
+            "a late jump arrival must reject transactionally");
 
-    auto late = transit;
-    late.universe_tick = late.arrival_solution->arrival_tick + 1;
-    check(!validate_intersystem_contract_state(late),
-          "a committed transit beyond arrival must be invalid");
-  };
+        auto late = transit;
+        late.universe_tick = late.arrival_solution->arrival_tick + 1;
+        check(!validate_intersystem_contract_state(late),
+              "a committed transit beyond arrival must be invalid");
+      };
 
   auto outbound_spool = make_outbound_spool();
-  check_spool_boundary(outbound_spool, target,
-                       "raw time advancement must allow the tick before outbound commitment");
+  check_spool_boundary(
+      outbound_spool, target,
+      "raw time advancement must allow the tick before outbound commitment");
 
   auto outbound_transit = outbound_spool;
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
@@ -1103,8 +1104,9 @@ auto intersystem_time_boundary_contract() -> void {
   check(return_spool.travel_phase ==
             IntersystemTravelPhase::return_jump_spooling,
         "the return spool fixture must begin canonically");
-  check_spool_boundary(return_spool, origin,
-                       "raw time advancement must allow the tick before return commitment");
+  check_spool_boundary(
+      return_spool, origin,
+      "raw time advancement must allow the tick before return commitment");
 
   auto return_transit = return_spool;
   for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
@@ -1156,16 +1158,15 @@ auto intersystem_jump_contract() -> void {
     }
     if (expected.travel_phase == IntersystemTravelPhase::target_system_flight &&
         expected.arrival_solution) {
-      const auto flight = initial_system_flight_state(
-          target, expected.identities.target_planet,
-          *expected.arrival_solution);
+      const auto flight =
+          initial_system_flight_state(target, expected.identities.target_planet,
+                                      *expected.arrival_solution);
       if (flight) document.state.system_flight = *flight;
     }
     const auto encoded = encode_save_document_json(document);
-    const auto decoded =
-        encoded ? decode_save_document_json(*encoded)
-                : std::expected<SaveDocument, SaveSchemaError>{
-                      std::unexpected{SaveSchemaError{}}};
+    const auto decoded = encoded ? decode_save_document_json(*encoded)
+                                 : std::expected<SaveDocument, SaveSchemaError>{
+                                       std::unexpected{SaveSchemaError{}}};
     return decoded && decoded->state.intersystem_contract == expected &&
            decoded->state.system_flight == document.state.system_flight;
   };
@@ -1176,9 +1177,8 @@ auto intersystem_jump_contract() -> void {
   check(advance_intersystem_contract(
             state, state.universe_tick,
             IntersystemContractCommand::accept_mission) &&
-            advance_intersystem_contract(
-                state, state.universe_tick,
-                IntersystemContractCommand::launch),
+            advance_intersystem_contract(state, state.universe_tick,
+                                         IntersystemContractCommand::launch),
         "an accepted mission must enter origin-system flight");
   const auto ready_before = state;
   check(advance_intersystem_jump_tick(state, target) ==
@@ -1187,8 +1187,7 @@ auto intersystem_jump_contract() -> void {
         "the transit tick driver must refuse ready state without mutation");
   const auto wrong_selection_before = state;
   check(begin_intersystem_jump(state, state.identities.origin_system) ==
-                std::unexpected{
-                    IntersystemJumpError::invalid_destination} &&
+                std::unexpected{IntersystemJumpError::invalid_destination} &&
             state == wrong_selection_before &&
             begin_intersystem_jump(state, state.identities.target_system),
         "outbound spooling must validate the selected destination atomically");
@@ -1242,8 +1241,7 @@ auto intersystem_jump_contract() -> void {
         "the commitment boundary must survive save and restore exactly");
   const auto committed_snapshot = intersystem_jump_snapshot(state);
   check(committed_snapshot && committed_snapshot->committed &&
-            !committed_snapshot->cancelable &&
-            !cancel_intersystem_jump(state),
+            !committed_snapshot->cancelable && !cancel_intersystem_jump(state),
         "a committed jump must be visible and irreversible");
   std::vector<Pixel> jump_frame(96U * 64U);
   check(committed_snapshot &&
@@ -1251,7 +1249,8 @@ auto intersystem_jump_contract() -> void {
             !render_intersystem_jump(*committed_snapshot, 0, 64, jump_frame) &&
             !render_intersystem_jump(*committed_snapshot, 96, 64,
                                      std::span<Pixel>{jump_frame}.first(10)),
-        "jump rendering must be deterministic and reject invalid dimensions or buffers");
+        "jump rendering must be deterministic and reject invalid dimensions or "
+        "buffers");
 
   auto checkpoint =
       make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
@@ -1273,10 +1272,12 @@ auto intersystem_jump_contract() -> void {
   const auto missing_encoded = encode_save_document_json(missing_document);
   check(!validate_intersystem_contract_state(missing_arrival) &&
             !missing_encoded &&
-            missing_encoded.error().code == SaveSchemaErrorCode::invalid_state &&
+            missing_encoded.error().code ==
+                SaveSchemaErrorCode::invalid_state &&
             missing_encoded.error().path ==
                 "$.state.intersystem_contract.arrival_solution",
-        "current committed saves must reject a missing arrival at its exact schema path");
+        "current committed saves must reject a missing arrival at its exact "
+        "schema path");
   auto finite_tamper = state;
   finite_tamper.arrival_solution->position.x += 1.0;
   const auto finite_tamper_before = finite_tamper;
@@ -1292,7 +1293,8 @@ auto intersystem_jump_contract() -> void {
             finite_tamper == finite_tamper_before && !tampered_encoded &&
             tampered_encoded.error().path ==
                 "$.state.intersystem_contract.arrival_solution",
-        "a finite altered arrival pose must fail canonical gameplay and save validation transactionally");
+        "a finite altered arrival pose must fail canonical gameplay and save "
+        "validation transactionally");
 
   auto altered_velocity = state;
   altered_velocity.arrival_solution->velocity.z += 1.0;
@@ -1308,7 +1310,8 @@ auto intersystem_jump_contract() -> void {
             !validate_intersystem_contract_state(altered_tick) &&
             !validate_intersystem_contract_state(altered_reference) &&
             !validate_intersystem_contract_state(altered_destination),
-        "altered arrival velocity, tick, reference, and destination must be rejected");
+        "altered arrival velocity, tick, reference, and destination must be "
+        "rejected");
 
   const auto arrival = *state.arrival_solution;
   auto malformed_arrival = state;
@@ -1320,18 +1323,18 @@ auto intersystem_jump_contract() -> void {
   malformed_arrival.arrival_solution->position.x = 1.0e16;
   check(!validate_intersystem_contract_state(malformed_arrival),
         "overflow-prone committed coordinates must fail before presentation");
-  const auto body = find_local_system_planet(target, state.identities.target_planet);
+  const auto body =
+      find_local_system_planet(target, state.identities.target_planet);
   const auto ephemeris = resolve_planet_ephemeris(
       target, state.identities.target_planet,
       {.tick = arrival.arrival_tick, .sub_tick_fraction = 0.0});
   check(body && ephemeris &&
-            close_enough(
-                std::hypot(arrival.position.x - ephemeris->position.x,
-                           arrival.position.y - ephemeris->position.y,
-                           arrival.position.z - ephemeris->position.z),
-                static_cast<double>((*body)->descriptor.radius.value) *
-                    1'000.0 * kAssistedTargetArrivalStandoffRadii,
-                1.0e-3) &&
+            close_enough(std::hypot(arrival.position.x - ephemeris->position.x,
+                                    arrival.position.y - ephemeris->position.y,
+                                    arrival.position.z - ephemeris->position.z),
+                         static_cast<double>((*body)->descriptor.radius.value) *
+                             1'000.0 * kAssistedTargetArrivalStandoffRadii,
+                         1.0e-3) &&
             arrival.velocity == ephemeris->velocity,
         "Assisted arrival must use a ten-radius matched-velocity corridor");
 
@@ -1360,18 +1363,18 @@ auto intersystem_jump_contract() -> void {
     (void)advance_intersystem_contract(
         replay, replay.universe_tick,
         IntersystemContractCommand::accept_mission);
-    (void)advance_intersystem_contract(
-        replay, replay.universe_tick, IntersystemContractCommand::launch);
+    (void)advance_intersystem_contract(replay, replay.universe_tick,
+                                       IntersystemContractCommand::launch);
     (void)begin_intersystem_jump(replay);
     FixedStepClock clock;
     while (replay.travel_phase !=
            IntersystemTravelPhase::target_system_flight) {
-      const auto frame = clock.advance(SimulationSeconds{
-          1.0 / static_cast<double>(frames_per_second)});
+      const auto frame = clock.advance(
+          SimulationSeconds{1.0 / static_cast<double>(frames_per_second)});
       if (!frame) break;
-      for (int step = 0; step < frame->steps &&
-                         replay.travel_phase !=
-                             IntersystemTravelPhase::target_system_flight;
+      for (int step = 0;
+           step < frame->steps &&
+           replay.travel_phase != IntersystemTravelPhase::target_system_flight;
            ++step) {
         if (!advance_intersystem_jump_tick(replay, target)) return replay;
       }
@@ -1380,19 +1383,17 @@ auto intersystem_jump_contract() -> void {
   };
   const auto at_30 = replay_at_rate(30);
   const auto at_60 = replay_at_rate(60);
-  check(at_30 == at_60 &&
-            intersystem_arrival_checksum(at_30) ==
-                intersystem_arrival_checksum(at_60),
+  check(at_30 == at_60 && intersystem_arrival_checksum(at_30) ==
+                              intersystem_arrival_checksum(at_60),
         "render cadence must not affect authoritative jump arrival");
 
   auto pilot = initial_intersystem_contract_state(
       Seed{42}, IntersystemRuleProfile::pilot);
   check(advance_intersystem_contract(
-                pilot, pilot.universe_tick,
-                IntersystemContractCommand::accept_mission) &&
-            advance_intersystem_contract(
-                pilot, pilot.universe_tick,
-                IntersystemContractCommand::launch) &&
+            pilot, pilot.universe_tick,
+            IntersystemContractCommand::accept_mission) &&
+            advance_intersystem_contract(pilot, pilot.universe_tick,
+                                         IntersystemContractCommand::launch) &&
             begin_intersystem_jump(pilot) && pilot.jump_alignment,
         "Pilot launch must expose deterministic alignment state during spool");
   auto pilot_retry = pilot;
@@ -1402,63 +1403,57 @@ auto intersystem_jump_contract() -> void {
             pilot_retry.jump_alignment == initial_alignment,
         "canceling and retrying must not reroll Pilot alignment");
   const auto guidance = resolve_intersystem_jump_guidance(pilot);
-  check(guidance && guidance->projected_quality ==
-                        IntersystemArrivalQuality::offset &&
+  check(guidance &&
+            guidance->projected_quality == IntersystemArrivalQuality::offset &&
             !guidance->correction.empty(),
         "Pilot spool must expose the authoritative error and projected grade");
   const auto pilot_snapshot = intersystem_jump_snapshot(pilot);
   std::vector<Pixel> assisted_spool_frame(96U * 64U);
   std::vector<Pixel> pilot_spool_frame(96U * 64U);
-  check(initial_snapshot && pilot_snapshot && pilot_snapshot->alignment &&
-            render_intersystem_jump(*initial_snapshot, 96, 64,
-                                    assisted_spool_frame) &&
-            render_intersystem_jump(*pilot_snapshot, 96, 64,
-                                    pilot_spool_frame) &&
-            pixel_checksum(assisted_spool_frame) !=
-                pixel_checksum(pilot_spool_frame),
-        "Pilot spool rendering must add one deterministic alignment reticle");
+  check(
+      initial_snapshot && pilot_snapshot && pilot_snapshot->alignment &&
+          render_intersystem_jump(*initial_snapshot, 96, 64,
+                                  assisted_spool_frame) &&
+          render_intersystem_jump(*pilot_snapshot, 96, 64, pilot_spool_frame) &&
+          pixel_checksum(assisted_spool_frame) !=
+              pixel_checksum(pilot_spool_frame),
+      "Pilot spool rendering must add one deterministic alignment reticle");
   if (pilot_snapshot) {
     auto invalid_reticle = *pilot_snapshot;
     invalid_reticle.alignment->heading_error_millidegrees =
         std::numeric_limits<std::int32_t>::min();
     const auto before = pilot_spool_frame;
-    check(render_intersystem_jump(invalid_reticle, 96, 64,
-                                  pilot_spool_frame) ==
-                  std::unexpected{
-                      IntersystemJumpError::invalid_framebuffer} &&
+    check(render_intersystem_jump(invalid_reticle, 96, 64, pilot_spool_frame) ==
+                  std::unexpected{IntersystemJumpError::invalid_framebuffer} &&
               pilot_spool_frame == before,
           "invalid reticle coordinates must reject before touching pixels");
   }
   const auto pilot_before_invalid = pilot;
   const std::array invalid_commands{
-      FlightCommand{pilot.universe_tick,
-                    FlightCommandKind::press_strafe_left}};
-  const std::array wrong_tick_commands{
-      FlightCommand{pilot.universe_tick + 1,
-                    FlightCommandKind::press_turn_left}};
-  check(advance_intersystem_jump_tick(pilot, target, invalid_commands) ==
-                std::unexpected{IntersystemJumpError::invalid_command} &&
-            pilot == pilot_before_invalid &&
-            advance_intersystem_jump_tick(pilot, target,
-                                          wrong_tick_commands) ==
-                std::unexpected{IntersystemJumpError::wrong_command_tick} &&
-            pilot == pilot_before_invalid,
-        "Pilot alignment must reject unrelated or mistimed controls atomically");
+      FlightCommand{pilot.universe_tick, FlightCommandKind::press_strafe_left}};
+  const std::array wrong_tick_commands{FlightCommand{
+      pilot.universe_tick + 1, FlightCommandKind::press_turn_left}};
+  check(
+      advance_intersystem_jump_tick(pilot, target, invalid_commands) ==
+              std::unexpected{IntersystemJumpError::invalid_command} &&
+          pilot == pilot_before_invalid &&
+          advance_intersystem_jump_tick(pilot, target, wrong_tick_commands) ==
+              std::unexpected{IntersystemJumpError::wrong_command_tick} &&
+          pilot == pilot_before_invalid,
+      "Pilot alignment must reject unrelated or mistimed controls atomically");
   const auto heading_before =
       std::abs(pilot.jump_alignment->heading_error_millidegrees);
   const auto velocity_before =
       std::abs(pilot.jump_alignment->velocity_error_basis_points);
   const std::array correction_commands{
-      FlightCommand{
-          pilot.universe_tick,
-          pilot.jump_alignment->heading_error_millidegrees > 0
-              ? FlightCommandKind::press_turn_left
-              : FlightCommandKind::press_turn_right},
-      FlightCommand{
-          pilot.universe_tick,
-          pilot.jump_alignment->velocity_error_basis_points > 0
-              ? FlightCommandKind::press_backward
-              : FlightCommandKind::press_forward},
+      FlightCommand{pilot.universe_tick,
+                    pilot.jump_alignment->heading_error_millidegrees > 0
+                        ? FlightCommandKind::press_turn_left
+                        : FlightCommandKind::press_turn_right},
+      FlightCommand{pilot.universe_tick,
+                    pilot.jump_alignment->velocity_error_basis_points > 0
+                        ? FlightCommandKind::press_backward
+                        : FlightCommandKind::press_forward},
   };
   check(advance_intersystem_jump_tick(pilot, target, correction_commands) &&
             std::abs(pilot.jump_alignment->heading_error_millidegrees) <
@@ -1479,30 +1474,26 @@ auto intersystem_jump_contract() -> void {
     (void)advance_intersystem_contract(
         candidate, candidate.universe_tick,
         IntersystemContractCommand::accept_mission);
-    (void)advance_intersystem_contract(
-        candidate, candidate.universe_tick,
-        IntersystemContractCommand::launch);
+    (void)advance_intersystem_contract(candidate, candidate.universe_tick,
+                                       IntersystemContractCommand::launch);
     (void)begin_intersystem_jump(candidate);
-    candidate.jump_alignment = IntersystemJumpAlignmentState{
-        .heading_error_millidegrees = heading,
-        .velocity_error_basis_points = velocity,
-        .controls = {}};
+    candidate.jump_alignment =
+        IntersystemJumpAlignmentState{.heading_error_millidegrees = heading,
+                                      .velocity_error_basis_points = velocity,
+                                      .controls = {}};
     for (SimulationTick tick = 0; tick < kJumpSpoolTicks; ++tick) {
       if (!advance_intersystem_jump_tick(candidate, target)) break;
     }
     return candidate;
   };
-  const auto aligned_edge = pilot_commit(
-      kAlignedHeadingErrorMillidegrees,
-      kAlignedVelocityErrorBasisPoints);
-  const auto offset_edge = pilot_commit(
-      kAlignedHeadingErrorMillidegrees + 1,
-      kAlignedVelocityErrorBasisPoints);
-  const auto offset_limit = pilot_commit(
-      kOffsetHeadingErrorMillidegrees,
-      kOffsetVelocityErrorBasisPoints);
-  const auto opposed_edge = pilot_commit(
-      kOffsetHeadingErrorMillidegrees + 1, 0);
+  const auto aligned_edge = pilot_commit(kAlignedHeadingErrorMillidegrees,
+                                         kAlignedVelocityErrorBasisPoints);
+  const auto offset_edge = pilot_commit(kAlignedHeadingErrorMillidegrees + 1,
+                                        kAlignedVelocityErrorBasisPoints);
+  const auto offset_limit = pilot_commit(kOffsetHeadingErrorMillidegrees,
+                                         kOffsetVelocityErrorBasisPoints);
+  const auto opposed_edge =
+      pilot_commit(kOffsetHeadingErrorMillidegrees + 1, 0);
   check(aligned_edge.arrival_solution &&
             aligned_edge.arrival_solution->assessment->quality ==
                 IntersystemArrivalQuality::aligned &&
@@ -1522,18 +1513,18 @@ auto intersystem_jump_contract() -> void {
     (void)advance_intersystem_contract(
         replay, replay.universe_tick,
         IntersystemContractCommand::accept_mission);
-    (void)advance_intersystem_contract(
-        replay, replay.universe_tick, IntersystemContractCommand::launch);
+    (void)advance_intersystem_contract(replay, replay.universe_tick,
+                                       IntersystemContractCommand::launch);
     (void)begin_intersystem_jump(replay);
     FixedStepClock clock;
     while (replay.travel_phase !=
            IntersystemTravelPhase::target_system_flight) {
-      const auto frame = clock.advance(SimulationSeconds{
-          1.0 / static_cast<double>(frames_per_second)});
+      const auto frame = clock.advance(
+          SimulationSeconds{1.0 / static_cast<double>(frames_per_second)});
       if (!frame) break;
-      for (int step = 0; step < frame->steps &&
-                         replay.travel_phase !=
-                             IntersystemTravelPhase::target_system_flight;
+      for (int step = 0;
+           step < frame->steps &&
+           replay.travel_phase != IntersystemTravelPhase::target_system_flight;
            ++step) {
         std::vector<FlightCommand> commands;
         if (replay.universe_tick == 0) {
@@ -1575,8 +1566,9 @@ auto intersystem_jump_contract() -> void {
   auto dishonest_grade = aligned_edge;
   dishonest_grade.arrival_solution->assessment->quality =
       IntersystemArrivalQuality::opposed;
-  check(!validate_intersystem_contract_state(dishonest_grade),
-        "a stored Pilot grade must agree with its fixed-point threshold inputs");
+  check(
+      !validate_intersystem_contract_state(dishonest_grade),
+      "a stored Pilot grade must agree with its fixed-point threshold inputs");
   const auto opposed_ephemeris = resolve_planet_ephemeris(
       target, opposed_edge.identities.target_planet,
       {.tick = opposed_edge.arrival_solution->arrival_tick,
@@ -1591,19 +1583,18 @@ auto intersystem_jump_contract() -> void {
                                      -opposed_ephemeris->position.y,
                                      -opposed_ephemeris->position.z} &&
             opposed_edge.arrival_solution->velocity ==
-                SystemVelocityMetresPerSecond{
-                    -opposed_ephemeris->velocity.x,
-                    -opposed_ephemeris->velocity.y,
-                    -opposed_ephemeris->velocity.z},
-        "the worst valid grade must bind a recoverable opposite-phase handoff in the correct system");
-  const auto opposed_flight = initial_system_flight_state(
-      target, opposed_edge.identities.target_planet,
-      *opposed_edge.arrival_solution);
+                SystemVelocityMetresPerSecond{-opposed_ephemeris->velocity.x,
+                                              -opposed_ephemeris->velocity.y,
+                                              -opposed_ephemeris->velocity.z},
+        "the worst valid grade must bind a recoverable opposite-phase handoff "
+        "in the correct system");
+  const auto opposed_flight =
+      initial_system_flight_state(target, opposed_edge.identities.target_planet,
+                                  *opposed_edge.arrival_solution);
   const auto opposed_guidance =
-      opposed_flight
-          ? resolve_system_flight_guidance(target, *opposed_flight)
-          : std::expected<SystemFlightGuidance, SystemFlightError>{
-                std::unexpected{SystemFlightError::invalid_arrival}};
+      opposed_flight ? resolve_system_flight_guidance(target, *opposed_flight)
+                     : std::expected<SystemFlightGuidance, SystemFlightError>{
+                           std::unexpected{SystemFlightError::invalid_arrival}};
   check(opposed_flight && opposed_guidance &&
             !opposed_guidance->orbit_insertion_ready &&
             opposed_guidance->distance_metres > 8'000'000'000.0,
@@ -1619,8 +1610,8 @@ auto intersystem_jump_contract() -> void {
   (void)advance_intersystem_contract(
       overflow, overflow.universe_tick,
       IntersystemContractCommand::accept_mission);
-  (void)advance_intersystem_contract(
-      overflow, overflow.universe_tick, IntersystemContractCommand::launch);
+  (void)advance_intersystem_contract(overflow, overflow.universe_tick,
+                                     IntersystemContractCommand::launch);
   overflow.universe_tick = std::numeric_limits<SimulationTick>::max();
   check(begin_intersystem_jump(overflow).has_value(),
         "the overflow fixture must enter spooling");
@@ -1693,35 +1684,32 @@ auto intersystem_jump_contract() -> void {
 }
 
 auto intersystem_jump_acceptance_contract() -> void {
-  check(!run_intersystem_jump_acceptance(0, 64) &&
-            !run_intersystem_jump_acceptance(
-                std::numeric_limits<int>::max(), 1),
-        "jump acceptance must reject invalid dimensions before allocation");
+  check(
+      !run_intersystem_jump_acceptance(0, 64) &&
+          !run_intersystem_jump_acceptance(std::numeric_limits<int>::max(), 1),
+      "jump acceptance must reject invalid dimensions before allocation");
   const auto result = run_intersystem_jump_acceptance(96, 64);
-  check(result && result->report.destination ==
-                      generate_first_intersystem_identities(Seed{42})
-                          .target_system &&
-            result->report.committed_tick == kJumpSpoolTicks &&
-            result->report.arrival_tick ==
-                kJumpSpoolTicks + kJumpTransitTicks &&
-            result->report.arrival_checksum ==
-                14671588990613181972ULL &&
-            result->report.assisted_quality ==
-                IntersystemArrivalQuality::aligned &&
-            result->report.pilot_initial_heading_error_millidegrees ==
-                -16'160 &&
-            result->report.pilot_initial_velocity_error_basis_points == -473 &&
-            result->report.pilot_aligned_checksum ==
-                result->report.arrival_checksum &&
-            result->report.pilot_offset_checksum ==
-                4112027265386174051ULL &&
-            result->report.pilot_opposed_checksum ==
-                4541203662738406157ULL &&
-            result->report.pilot_offset_distance_metres <
-                result->report.pilot_opposed_distance_metres &&
-            result->report.framebuffer_checksum != 0 &&
-            result->transit_frame.size() == 96U * 64U,
-        "canonical headless jump acceptance must commit, resume, render, and arrive");
+  check(
+      result &&
+          result->report.destination ==
+              generate_first_intersystem_identities(Seed{42}).target_system &&
+          result->report.committed_tick == kJumpSpoolTicks &&
+          result->report.arrival_tick == kJumpSpoolTicks + kJumpTransitTicks &&
+          result->report.arrival_checksum == 14671588990613181972ULL &&
+          result->report.assisted_quality ==
+              IntersystemArrivalQuality::aligned &&
+          result->report.pilot_initial_heading_error_millidegrees == -16'160 &&
+          result->report.pilot_initial_velocity_error_basis_points == -473 &&
+          result->report.pilot_aligned_checksum ==
+              result->report.arrival_checksum &&
+          result->report.pilot_offset_checksum == 4112027265386174051ULL &&
+          result->report.pilot_opposed_checksum == 4541203662738406157ULL &&
+          result->report.pilot_offset_distance_metres <
+              result->report.pilot_opposed_distance_metres &&
+          result->report.framebuffer_checksum != 0 &&
+          result->transit_frame.size() == 96U * 64U,
+      "canonical headless jump acceptance must commit, resume, render, and "
+      "arrive");
   if (!result) return;
   const auto json = intersystem_jump_acceptance_json(result->report);
   check(json.find("\"scenario\": \"v0.4.15-pilot-ftl-alignment\"") !=
@@ -1734,46 +1722,46 @@ auto intersystem_jump_acceptance_contract() -> void {
 
 auto system_flight_contract() -> void {
   check(!run_system_flight_acceptance(0, 64) &&
-            !run_system_flight_acceptance(
-                std::numeric_limits<int>::max(), 1),
-        "system-flight acceptance must reject invalid dimensions before allocation");
+            !run_system_flight_acceptance(std::numeric_limits<int>::max(), 1),
+        "system-flight acceptance must reject invalid dimensions before "
+        "allocation");
   auto contract = initial_intersystem_contract_state(Seed{42});
   const auto system =
       generate_local_system(contract.identities.target_system_seed);
   (void)advance_intersystem_contract(
       contract, contract.universe_tick,
       IntersystemContractCommand::accept_mission);
-  (void)advance_intersystem_contract(
-      contract, contract.universe_tick, IntersystemContractCommand::launch);
+  (void)advance_intersystem_contract(contract, contract.universe_tick,
+                                     IntersystemContractCommand::launch);
   (void)begin_intersystem_jump(contract);
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
     (void)advance_intersystem_jump_tick(contract, system);
   }
-  const auto initial = contract.arrival_solution
-                           ? initial_system_flight_state(
-                                 system, contract.identities.target_planet,
-                                 *contract.arrival_solution)
-                           : std::expected<SystemFlightState,
-                                           SystemFlightError>{
-                                 std::unexpected{
-                                     SystemFlightError::invalid_arrival}};
+  const auto initial =
+      contract.arrival_solution
+          ? initial_system_flight_state(system,
+                                        contract.identities.target_planet,
+                                        *contract.arrival_solution)
+          : std::expected<SystemFlightState, SystemFlightError>{
+                std::unexpected{SystemFlightError::invalid_arrival}};
   check(kSystemFlightVersion == 1 && initial &&
             initial->tick == contract.universe_tick &&
             validate_system_flight_state(system, *initial).has_value(),
         "the FTL handoff must initialize one valid system-flight state");
   if (!initial) return;
-  const auto initial_guidance = resolve_system_flight_guidance(system, *initial);
+  const auto initial_guidance =
+      resolve_system_flight_guidance(system, *initial);
   const auto initial_instruments = format_flight_instruments(*initial);
-  check(initial_guidance &&
-            !initial_guidance->inside_approach_boundary &&
+  check(initial_guidance && !initial_guidance->inside_approach_boundary &&
             initial_guidance->relative_speed_metres_per_second < 1.0 &&
             initial_guidance->distance_metres > 0.0 &&
             initial_instruments.altitude == "SYS FLT  " &&
             initial_instruments.clearance == "TIME  1x " &&
             initial_instruments.mode == "MODE AUTO" &&
             initial_instruments.alert_state == CockpitAlert::none,
-        "arrival guidance must begin at the matched-velocity ten-radius corridor");
+        "arrival guidance must begin at the matched-velocity ten-radius "
+        "corridor");
 
   auto compressed = *initial;
   const FlightCommand faster{compressed.tick,
@@ -1793,8 +1781,8 @@ auto system_flight_contract() -> void {
             coast.position != coast_position,
         "released manual thrust must preserve inertial momentum");
 
-  const auto body = find_local_system_planet(
-      system, contract.identities.target_planet);
+  const auto body =
+      find_local_system_planet(system, contract.identities.target_planet);
   const auto ephemeris = resolve_planet_ephemeris(
       system, contract.identities.target_planet,
       {.tick = initial->tick, .sub_tick_fraction = 0.0});
@@ -1818,22 +1806,19 @@ auto system_flight_contract() -> void {
     auto state = *initial;
     state.position = {ephemeris->position.x + radius * 6.0 + 1'000.0,
                       ephemeris->position.y, ephemeris->position.z};
-    state.velocity = {ephemeris->velocity.x -
-                          kSystemFlightMaximumRelativeSpeed,
+    state.velocity = {ephemeris->velocity.x - kSystemFlightMaximumRelativeSpeed,
                       ephemeris->velocity.y, ephemeris->velocity.z};
     state.forward = {-1.0, 0.0, 0.0};
     state.mode = FlightMode::manual;
     state.time_scale = scale;
     return state;
   };
-  for (const auto scale :
-       {SystemTimeScale::four, SystemTimeScale::sixteen}) {
+  for (const auto scale : {SystemTimeScale::four, SystemTimeScale::sixteen}) {
     auto reference = crossing_state(SystemTimeScale::one);
     auto compressed_crossing = crossing_state(scale);
     const auto starting_guidance =
         resolve_system_flight_guidance(system, compressed_crossing);
-    check(starting_guidance &&
-              !starting_guidance->inside_approach_boundary &&
+    check(starting_guidance && !starting_guidance->inside_approach_boundary &&
               advance_system_flight(system, reference, {}) &&
               advance_system_flight(system, compressed_crossing, {}) &&
               compressed_crossing == reference &&
@@ -1841,7 +1826,8 @@ auto system_flight_contract() -> void {
               compressed_crossing.time_scale == SystemTimeScale::one &&
               system_flight_state_checksum(compressed_crossing) ==
                   system_flight_state_checksum(reference),
-          "compressed flight must stop at the first substep inside the approach boundary");
+          "compressed flight must stop at the first substep inside the "
+          "approach boundary");
   }
 
   auto exact_boundary = *initial;
@@ -1851,7 +1837,8 @@ auto system_flight_contract() -> void {
   exact_boundary.time_scale = SystemTimeScale::sixteen;
   const auto boundary_guidance =
       resolve_system_flight_guidance(system, exact_boundary);
-  check(boundary_guidance && boundary_guidance->distance_metres == radius * 6.0 &&
+  check(boundary_guidance &&
+            boundary_guidance->distance_metres == radius * 6.0 &&
             boundary_guidance->inside_approach_boundary &&
             advance_system_flight(system, exact_boundary, {}) &&
             exact_boundary.tick == initial->tick + 1 &&
@@ -1865,31 +1852,27 @@ auto system_flight_contract() -> void {
   outside.mode = FlightMode::manual;
   outside.time_scale = SystemTimeScale::sixteen;
   const auto outside_advance = advance_system_flight(system, outside, {});
-  const auto outside_guidance =
-      resolve_system_flight_guidance(system, outside);
-  check(outside_advance &&
-            outside.tick == initial->tick + 16 &&
+  const auto outside_guidance = resolve_system_flight_guidance(system, outside);
+  check(outside_advance && outside.tick == initial->tick + 16 &&
             outside.time_scale == SystemTimeScale::sixteen &&
-            outside_guidance &&
-            !outside_guidance->inside_approach_boundary,
-        "compressed flight remaining outside must execute its full selected scale");
+            outside_guidance && !outside_guidance->inside_approach_boundary,
+        "compressed flight remaining outside must execute its full selected "
+        "scale");
 
   auto opening = *initial;
   opening.position = {ephemeris->position.x + radius * 4.0,
                       ephemeris->position.y, ephemeris->position.z};
-  opening.velocity = {ephemeris->velocity.x + 10'000.0,
-                      ephemeris->velocity.y, ephemeris->velocity.z};
-  const auto opening_guidance =
-      resolve_system_flight_guidance(system, opening);
+  opening.velocity = {ephemeris->velocity.x + 10'000.0, ephemeris->velocity.y,
+                      ephemeris->velocity.z};
+  const auto opening_guidance = resolve_system_flight_guidance(system, opening);
   check(opening_guidance && opening_guidance->cue == SystemFlightCue::opening &&
             !opening_guidance->orbit_insertion_ready,
         "overshoot must remain a recoverable opening state");
 
   auto ready = *initial;
-  ready.position = {ephemeris->position.x + radius * 2.5,
-                    ephemeris->position.y, ephemeris->position.z};
-  ready.velocity = {ephemeris->velocity.x,
-                    ephemeris->velocity.y + 1'000.0,
+  ready.position = {ephemeris->position.x + radius * 2.5, ephemeris->position.y,
+                    ephemeris->position.z};
+  ready.velocity = {ephemeris->velocity.x, ephemeris->velocity.y + 1'000.0,
                     ephemeris->velocity.z};
   ready.forward = {-1.0, 0.0, 0.0};
   const auto ready_guidance = resolve_system_flight_guidance(system, ready);
@@ -1899,7 +1882,8 @@ auto system_flight_contract() -> void {
             orbital->regime == FlightRegime::orbital &&
             orbital->tick == ready.tick &&
             orbital->pose.position.altitude_metres > radius,
-        "orbit insertion must preserve tick, planet, arrival side, and orbital altitude");
+        "orbit insertion must preserve tick, planet, arrival side, and orbital "
+        "altitude");
   const auto departed =
       orbital ? depart_planetary_orbit(system, *orbital)
               : std::expected<SystemFlightState, SystemFlightError>{
@@ -1907,7 +1891,8 @@ auto system_flight_contract() -> void {
   check(departed && departed->tick == ready.tick &&
             departed->system == system.id && departed->target == ready.target &&
             validate_system_flight_state(system, *departed),
-        "orbital departure must reverse the planet-fixed handoff without changing identity or tick");
+        "orbital departure must reverse the planet-fixed handoff without "
+        "changing identity or tick");
   if (orbital) {
     auto atmospheric = *orbital;
     atmospheric.regime = FlightRegime::atmospheric;
@@ -1918,21 +1903,22 @@ auto system_flight_contract() -> void {
     auto relabeled_surface_state = *orbital;
     relabeled_surface_state.pose.position.altitude_metres =
         kMinimumFlightClearanceMetres;
-    relabeled_surface_state.clearance_metres =
-        kMinimumFlightClearanceMetres;
+    relabeled_surface_state.clearance_metres = kMinimumFlightClearanceMetres;
     const auto unchanged = relabeled_surface_state;
-    check(!validate_planetary_flight_state(
-              (*body)->descriptor, relabeled_surface_state) &&
+    check(!validate_planetary_flight_state((*body)->descriptor,
+                                           relabeled_surface_state) &&
               depart_planetary_orbit(system, relabeled_surface_state) ==
                   std::unexpected{SystemFlightError::invalid_state} &&
               relabeled_surface_state == unchanged,
-          "a near-surface state relabeled as orbital must not depart into system flight");
+          "a near-surface state relabeled as orbital must not depart into "
+          "system flight");
   }
   auto below_surface = ready;
   below_surface.position.x = ephemeris->position.x + radius * 0.5;
-  check(insert_system_flight_orbit(system, below_surface) ==
-            std::unexpected{SystemFlightError::orbit_insertion_refused},
-        "orbit insertion must reject a craft position below the target surface");
+  check(
+      insert_system_flight_orbit(system, below_surface) ==
+          std::unexpected{SystemFlightError::orbit_insertion_refused},
+      "orbit insertion must reject a craft position below the target surface");
 
   auto invalid = *initial;
   invalid.position.x = std::numeric_limits<double>::quiet_NaN();
@@ -1967,9 +1953,8 @@ auto system_flight_contract() -> void {
   auto mistimed = *initial;
   const FlightCommand future{mistimed.tick + 1,
                              FlightCommandKind::press_forward};
-  check(advance_system_flight(
-            system, mistimed,
-            std::span<const FlightCommand>{&future, 1}) ==
+  check(advance_system_flight(system, mistimed,
+                              std::span<const FlightCommand>{&future, 1}) ==
             std::unexpected{SystemFlightError::wrong_command_tick},
         "system-flight commands must target the authoritative current tick");
   auto held = *initial;
@@ -1998,33 +1983,36 @@ auto system_flight_contract() -> void {
 auto intersystem_return_contract() -> void {
   check(kOriginStationFlightVersion == 4 &&
             !run_intersystem_return_acceptance(0, 64) &&
-            !run_intersystem_return_acceptance(
-                std::numeric_limits<int>::max(), 1),
+            !run_intersystem_return_acceptance(std::numeric_limits<int>::max(),
+                                               1),
         "return acceptance must reject invalid dimensions before allocation");
   const auto result = run_intersystem_return_acceptance(96, 64);
-  check(result && result->report.station ==
-                      generate_first_intersystem_identities(Seed{42})
-                          .origin_station &&
-            result->report.departure_tick < result->report.return_commit_tick &&
-            result->report.return_commit_tick <
-                result->report.origin_arrival_tick &&
-            result->report.origin_arrival_tick < result->report.docking_tick &&
-            result->report.departure_checksum != 0 &&
-            result->report.origin_arrival_checksum != 0 &&
-            result->report.docked_return_checksum != 0 &&
-            result->report.discovery_count == 1U &&
-            result->report.world_delta_count == 1U &&
-            result->report.framebuffer_checksum != 0 &&
-            result->final_frame.size() == 96U * 64U,
-        "canonical return acceptance must depart, cancel/resume, jump, rendezvous, dock, and turn in");
+  check(
+      result &&
+          result->report.station ==
+              generate_first_intersystem_identities(Seed{42}).origin_station &&
+          result->report.departure_tick < result->report.return_commit_tick &&
+          result->report.return_commit_tick <
+              result->report.origin_arrival_tick &&
+          result->report.origin_arrival_tick < result->report.docking_tick &&
+          result->report.departure_checksum != 0 &&
+          result->report.origin_arrival_checksum != 0 &&
+          result->report.docked_return_checksum != 0 &&
+          result->report.discovery_count == 1U &&
+          result->report.world_delta_count == 1U &&
+          result->report.framebuffer_checksum != 0 &&
+          result->final_frame.size() == 96U * 64U,
+      "canonical return acceptance must depart, cancel/resume, jump, "
+      "rendezvous, dock, and turn in");
   if (result) {
     const auto json = intersystem_return_acceptance_json(result->report);
-    check(json.find("\"scenario\": \"v0.4.12-intersystem-return\"") !=
-                  std::string::npos &&
-              json.find("\"schema_version\": 2") != std::string::npos &&
-              json.find("\"evidence_scope\": \"application_framebuffer\"") !=
-                  std::string::npos,
-          "return acceptance JSON must name its renderer-neutral evidence scope");
+    check(
+        json.find("\"scenario\": \"v0.4.12-intersystem-return\"") !=
+                std::string::npos &&
+            json.find("\"schema_version\": 2") != std::string::npos &&
+            json.find("\"evidence_scope\": \"application_framebuffer\"") !=
+                std::string::npos,
+        "return acceptance JSON must name its renderer-neutral evidence scope");
   }
 
   auto launch_contract = initial_intersystem_contract_state(
@@ -2127,8 +2115,7 @@ auto intersystem_return_contract() -> void {
             std::unexpected{OriginStationFlightError::invalid_state},
         "origin flight must reject overflow-prone station-relative distances");
   auto overflow_contract = launch_contract;
-  overflow_contract.universe_tick =
-      std::numeric_limits<SimulationTick>::max();
+  overflow_contract.universe_tick = std::numeric_limits<SimulationTick>::max();
   auto overflow_flight = *launched;
   overflow_flight.tick = overflow_contract.universe_tick;
   check(advance_origin_station_flight(overflow_contract, launch_origin,
@@ -2137,13 +2124,13 @@ auto intersystem_return_contract() -> void {
         "origin flight tick overflow must reject before integration");
 
   auto redocked_contract = launch_contract;
-  check(
-      attempt_origin_docking(redocked_contract, launch_origin, *launched) &&
-          redocked_contract.travel_phase ==
-              IntersystemTravelPhase::docked_at_origin &&
-          redocked_contract.mission_phase == IntersystemMissionPhase::accepted,
-      "pre-jump docking must return to the accepted station state without "
-      "mission progress");
+  check(attempt_origin_docking(redocked_contract, launch_origin, *launched) &&
+            redocked_contract.travel_phase ==
+                IntersystemTravelPhase::docked_at_origin &&
+            redocked_contract.mission_phase ==
+                IntersystemMissionPhase::accepted,
+        "pre-jump docking must return to the accepted station state without "
+        "mission progress");
   check(advance_intersystem_contract(redocked_contract,
                                      redocked_contract.universe_tick,
                                      IntersystemContractCommand::launch)
@@ -2221,8 +2208,8 @@ auto intersystem_return_contract() -> void {
             command(IntersystemContractCommand::launch) &&
             begin_intersystem_jump(contract),
         "origin return validation fixture must launch the contract");
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
     (void)advance_intersystem_jump_tick(contract, target_system);
   }
   check(command(IntersystemContractCommand::enter_target_planet) &&
@@ -2230,16 +2217,15 @@ auto intersystem_return_contract() -> void {
             command(IntersystemContractCommand::leave_target_planet) &&
             begin_intersystem_jump(contract),
         "origin return validation fixture must complete and depart the target");
-  for (SimulationTick tick = 0;
-       tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
     (void)advance_intersystem_jump_tick(contract, origin_system);
   }
   const auto returning = initialize_origin_return(contract, origin_system);
   check(returning && validate_origin_station_flight_state(
                          contract, origin_system, *returning),
         "origin arrival must initialize a valid station-relative craft state");
-  if (!returning)
-    return;
+  if (!returning) return;
   auto outside = *returning;
   outside.relative_position = {kOriginStationArrivalRadiusMetres + 1.0, 0.0,
                                0.0};
@@ -2349,7 +2335,8 @@ auto intersystem_contract_acceptance_contract() -> void {
   check(!run_intersystem_contract_acceptance(0, 64) &&
             !run_intersystem_contract_acceptance(
                 std::numeric_limits<int>::max(), 1),
-        "contract-loop acceptance must reject invalid dimensions before allocation");
+        "contract-loop acceptance must reject invalid dimensions before "
+        "allocation");
   const auto result = run_intersystem_contract_acceptance(96, 64);
   check(result && result->report.checkpoints.size() == 9U &&
             result->report.final_tick == 36'917U &&
@@ -2358,8 +2345,7 @@ auto intersystem_contract_acceptance_contract() -> void {
             result->report.outbound_selected_system ==
                 result->report.target_system &&
             result->report.return_selected_system ==
-                generate_first_intersystem_identities(Seed{42})
-                    .origin_system &&
+                generate_first_intersystem_identities(Seed{42}).origin_system &&
             result->report.universe_navigation_rows == 2U &&
             result->report.open_exploration_available &&
             result->report.wrong_side_recovery_checksum != 0U &&
@@ -2370,15 +2356,17 @@ auto intersystem_contract_acceptance_contract() -> void {
             result->report.world_delta_count == 1U &&
             result->report.framebuffer_checksum != 0U &&
             result->final_frame.size() == 96U * 64U,
-        "contract-loop acceptance must complete and resume the full deterministic mission");
+        "contract-loop acceptance must complete and resume the full "
+        "deterministic mission");
   if (!result) return;
-  check(std::ranges::all_of(
-            result->report.checkpoints,
-            [&](const auto& checkpoint) {
-              return checkpoint.resumed_final_checksum ==
-                     result->report.final_authoritative_checksum;
-            }),
-        "every representative save/resume stage must reach the uninterrupted final checksum");
+  check(
+      std::ranges::all_of(result->report.checkpoints,
+                          [&](const auto& checkpoint) {
+                            return checkpoint.resumed_final_checksum ==
+                                   result->report.final_authoritative_checksum;
+                          }),
+      "every representative save/resume stage must reach the uninterrupted "
+      "final checksum");
   const auto json = intersystem_contract_acceptance_json(result->report);
   check(json.find("\"scenario\": \"v0.4.35-first-jump-onboarding\"") !=
                 std::string::npos &&
@@ -2393,7 +2381,8 @@ auto intersystem_contract_acceptance_contract() -> void {
                 std::string::npos &&
             json.find("\"terminal_proxy\": \"external-live-capture\"") !=
                 std::string::npos,
-        "contract-loop JSON must separate authoritative, render, and live presentation evidence");
+        "contract-loop JSON must separate authoritative, render, and live "
+        "presentation evidence");
 }
 
 auto origin_system_contract_contract() -> void {
@@ -2413,15 +2402,17 @@ auto origin_system_contract_contract() -> void {
                 derive_seed(system.planets[1].descriptor.seed,
                             SeedDomain::encounter, 0)
                     .value,
-        "contract two must bind the first non-home planet and its first signal independently");
+        "contract two must bind the first non-home planet and its first signal "
+        "independently");
   if (!initial) return;
   auto state = *initial;
   const auto unchanged = state;
-  check(advance_origin_system_contract(
-            state, 10, 9, OriginSystemContractCommand::accept) ==
-            std::unexpected{OriginSystemContractError::wrong_command_tick} &&
-            state == unchanged,
-        "contract-two commands must reject the wrong tick without mutation");
+  check(
+      advance_origin_system_contract(state, 10, 9,
+                                     OriginSystemContractCommand::accept) ==
+              std::unexpected{OriginSystemContractError::wrong_command_tick} &&
+          state == unchanged,
+      "contract-two commands must reject the wrong tick without mutation");
   constexpr std::array commands{
       OriginSystemContractCommand::accept,
       OriginSystemContractCommand::launch,
@@ -2451,26 +2442,25 @@ auto origin_system_contract_contract() -> void {
   for (const auto route_seed : route_seeds) {
     const auto route_system = generate_origin_system(route_seed);
     auto route_contract = initial_origin_system_contract(route_seed);
-    check(route_contract && route_system.planets.size() > 1U,
-          "the tested contract-two seed matrix must generate its bounded route");
+    check(
+        route_contract && route_system.planets.size() > 1U,
+        "the tested contract-two seed matrix must generate its bounded route");
     if (!route_contract || route_system.planets.size() <= 1U) continue;
     const double maximum_separation_metres =
         static_cast<double>(route_system.planets[0].orbit.radius_kilometres +
                             route_system.planets[1].orbit.radius_kilometres) *
         1'000.0;
     const double maximum_cruise_ticks =
-        maximum_separation_metres /
-        kSystemFlightAutopilotMaximumRelativeSpeed *
+        maximum_separation_metres / kSystemFlightAutopilotMaximumRelativeSpeed *
         static_cast<double>(kSimulationHz);
     check(std::isfinite(maximum_cruise_ticks) &&
               maximum_cruise_ticks < 400'000.0 * 16.0,
-          "every tested origin-system target must fit the bounded starter return margin");
-    check(advance_origin_system_contract(
-              *route_contract, 0, 0,
-              OriginSystemContractCommand::accept) &&
+          "every tested origin-system target must fit the bounded starter "
+          "return margin");
+    check(advance_origin_system_contract(*route_contract, 0, 0,
+                                         OriginSystemContractCommand::accept) &&
               advance_origin_system_contract(
-                  *route_contract, 0, 0,
-                  OriginSystemContractCommand::launch),
+                  *route_contract, 0, 0, OriginSystemContractCommand::launch),
           "each tested route must enter station departure deterministically");
     auto route_station =
         initialize_origin_station_launch(route_seed, 0, route_system);
@@ -2481,13 +2471,11 @@ auto origin_system_contract_contract() -> void {
         advance_origin_station_flight(route_seed, 0, route_system,
                                       *route_station, departure_commands);
     const auto route_outbound =
-        departed ? initialize_origin_system_outbound_transfer(
-                       route_seed, 1, route_system, *route_contract,
-                       *route_station)
-                 : std::expected<SystemFlightState,
-                                 OriginSystemContractError>{
-                       std::unexpected{
-                           OriginSystemContractError::invalid_flight}};
+        departed
+            ? initialize_origin_system_outbound_transfer(
+                  route_seed, 1, route_system, *route_contract, *route_station)
+            : std::expected<SystemFlightState, OriginSystemContractError>{
+                  std::unexpected{OriginSystemContractError::invalid_flight}};
     check(route_outbound && route_outbound->tick == 1 &&
               route_outbound->target == route_contract->binding.target_planet,
           "each tested seed must preserve a valid physical starting ephemeris");
@@ -2500,8 +2488,8 @@ auto origin_system_contract_contract() -> void {
       .target = completed.binding.target_planet,
       .position = {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0},
   };
-  check(initialize_origin_system_return_transfer(
-            seed, system, completed, invalid_departure) ==
+  check(initialize_origin_system_return_transfer(seed, system, completed,
+                                                 invalid_departure) ==
             std::unexpected{OriginSystemContractError::invalid_flight},
         "contract two must reject non-finite transfer state before mutation");
 }
@@ -2510,7 +2498,8 @@ auto origin_system_contract_acceptance_contract() -> void {
   check(!run_origin_system_contract_acceptance(0, 64) &&
             !run_origin_system_contract_acceptance(
                 std::numeric_limits<int>::max(), 1),
-        "contract-two acceptance must reject invalid dimensions before allocation");
+        "contract-two acceptance must reject invalid dimensions before "
+        "allocation");
   const auto result = run_origin_system_contract_acceptance(96, 64);
   check(result && result->report.checkpoints.size() == 7U &&
             result->report.binding.home_planet !=
@@ -2533,22 +2522,22 @@ auto origin_system_contract_acceptance_contract() -> void {
             result->returned_save.state.origin_system_contract &&
             result->returned_save.state.origin_system_contract->phase ==
                 OriginSystemContractPhase::turned_in,
-        "contract-two acceptance must complete the physical deterministic round trip");
+        "contract-two acceptance must complete the physical deterministic "
+        "round trip");
 }
 
 auto intersystem_planetfall_contract() -> void {
   const auto identities = generate_first_intersystem_identities(Seed{42});
   const auto system = generate_local_system(identities.target_system_seed);
-  const auto body =
-      find_local_system_planet(system, identities.target_planet);
+  const auto body = find_local_system_planet(system, identities.target_planet);
   auto cache = TerrainTileCache::create();
   check(body && cache,
         "the intersystem Planetfall fixture must resolve its target terrain");
   if (!body || !cache) return;
   const auto catalog = generate_surface_signals((*body)->descriptor, *cache);
-  check(catalog && catalog->signals.front().id ==
-                       identities.target_objective,
-        "the mission objective must be the target planet's stable first signal");
+  check(
+      catalog && catalog->signals.front().id == identities.target_objective,
+      "the mission objective must be the target planet's stable first signal");
   if (!catalog) return;
   const auto target_fixed = planet_fixed_from_terrain_address(
       (*body)->descriptor, catalog->signals.front().anchor,
@@ -2573,8 +2562,8 @@ auto intersystem_planetfall_contract() -> void {
   flight->tick = 600;
   auto planetfall = initialize_intersystem_planetfall(
       (*body)->descriptor, identities.target_objective, *flight, {}, *cache);
-  check(planetfall && planetfall->scanner.selected ==
-                           identities.target_objective &&
+  check(planetfall &&
+            planetfall->scanner.selected == identities.target_objective &&
             planetfall->navigation.status == SignalScannerStatus::reached,
         "Planetfall must bind the mission target without retargeting it");
   if (!planetfall) return;
@@ -2582,8 +2571,8 @@ auto intersystem_planetfall_contract() -> void {
   auto pilot_contract = initial_intersystem_contract_state(
       Seed{42}, IntersystemRuleProfile::pilot);
   const auto pilot_command = [&](IntersystemContractCommand command) {
-    return advance_intersystem_contract(
-        pilot_contract, pilot_contract.universe_tick, command);
+    return advance_intersystem_contract(pilot_contract,
+                                        pilot_contract.universe_tick, command);
   };
   bool pilot_ready =
       pilot_command(IntersystemContractCommand::accept_mission) &&
@@ -2591,13 +2580,12 @@ auto intersystem_planetfall_contract() -> void {
       begin_intersystem_jump(pilot_contract);
   for (SimulationTick tick = 0;
        pilot_ready && tick < kJumpSpoolTicks + kJumpTransitTicks; ++tick) {
-    pilot_ready = advance_intersystem_jump_tick(pilot_contract, system)
-                      .has_value();
+    pilot_ready =
+        advance_intersystem_jump_tick(pilot_contract, system).has_value();
   }
-  pilot_ready =
-      pilot_ready &&
-      pilot_command(IntersystemContractCommand::enter_target_planet)
-          .has_value();
+  pilot_ready = pilot_ready &&
+                pilot_command(IntersystemContractCommand::enter_target_planet)
+                    .has_value();
   check(pilot_ready,
         "the thermal persistence fixture must reach Pilot Planetfall");
   auto thermal_document =
@@ -2608,27 +2596,24 @@ auto intersystem_planetfall_contract() -> void {
   thermal_document.state.flight->thermal = {825'000U, true};
   const auto thermal_json = encode_save_document_json(thermal_document);
   const auto thermal_restored =
-      thermal_json
-          ? decode_save_document_json(*thermal_json)
-          : std::expected<SaveDocument, SaveSchemaError>{
-                std::unexpected{SaveSchemaError{}}};
+      thermal_json ? decode_save_document_json(*thermal_json)
+                   : std::expected<SaveDocument, SaveSchemaError>{
+                         std::unexpected{SaveSchemaError{}}};
   check(thermal_restored && thermal_restored->state.flight &&
             thermal_restored->state.flight->thermal ==
                 PlanetaryThermalState{825'000U, true},
         "save format 16 must preserve an active Pilot thermal abort exactly");
   if (thermal_json) {
     const auto corrupt_thermal = decode_save_document_json(replace_once(
-        *thermal_json, "\"load_units\": 825000",
-        "\"load_units\": 1000001"));
-    check(!corrupt_thermal &&
-              corrupt_thermal.error().code ==
-                  SaveSchemaErrorCode::invalid_state,
+        *thermal_json, "\"load_units\": 825000", "\"load_units\": 1000001"));
+    check(!corrupt_thermal && corrupt_thermal.error().code ==
+                                  SaveSchemaErrorCode::invalid_state,
           "out-of-range persisted thermal load must be rejected");
   }
 
   bool completed{};
-  for (SimulationTick tick = 0;
-       tick < kSignalCollectionTotalInRangeTicks; ++tick) {
+  for (SimulationTick tick = 0; tick < kSignalCollectionTotalInRangeTicks;
+       ++tick) {
     const auto update = advance_intersystem_planetfall(
         *planetfall, *cache, {}, IntersystemRuleProfile::assisted);
     if (!update) {
@@ -2662,17 +2647,17 @@ auto intersystem_planetfall_contract() -> void {
   auto invalid = flight.value();
   invalid.pose.position.latitude_radians =
       std::numeric_limits<double>::quiet_NaN();
-  check(initialize_intersystem_planetfall(
-            (*body)->descriptor, identities.target_objective, invalid, {},
-            *cache) ==
+  check(initialize_intersystem_planetfall((*body)->descriptor,
+                                          identities.target_objective, invalid,
+                                          {}, *cache) ==
             std::unexpected{IntersystemPlanetfallError::invalid_planet},
         "non-finite Planetfall state must reject before mutation");
   const std::array invalid_delta{
       SaveWorldDelta{surface_signal_object_key(identities.target_objective),
                      SaveWorldDeltaKind::discovered, flight->tick}};
-  check(initialize_intersystem_planetfall(
-            (*body)->descriptor, identities.target_objective, *flight,
-            invalid_delta, *cache) ==
+  check(initialize_intersystem_planetfall((*body)->descriptor,
+                                          identities.target_objective, *flight,
+                                          invalid_delta, *cache) ==
             std::unexpected{IntersystemPlanetfallError::journal_failure},
         "Planetfall must reject non-terminal mission deltas");
 }
@@ -2689,8 +2674,7 @@ auto intersystem_planetfall_acceptance_contract() -> void {
             result->report.world_delta_count == 1U &&
             result->report.completion_tick == 1020 &&
             result->report.thermal.universe_seed == Seed{39} &&
-            result->report.thermal.planet ==
-                PlanetId{0x237709a6a1fd198bULL} &&
+            result->report.thermal.planet == PlanetId{0x237709a6a1fd198bULL} &&
             result->report.thermal.nominal_peak_load_units == 374U &&
             result->report.thermal.shallow_peak_load_units == 58'770U &&
             result->report.thermal.manual_correction_peak_load_units ==
@@ -2703,7 +2687,8 @@ auto intersystem_planetfall_acceptance_contract() -> void {
             result->report.thermal.resumed_recovery_checksum ==
                 12'793'732'928'174'323'102ULL &&
             result->final_frame.size() == 96U * 64U,
-        "canonical Planetfall acceptance must enter anywhere, measure thermal envelopes, recover, reenter, save, and render");
+        "canonical Planetfall acceptance must enter anywhere, measure thermal "
+        "envelopes, recover, reenter, save, and render");
   if (result) {
     const auto json = intersystem_planetfall_acceptance_json(result->report);
     check(json.find("\"schema_version\": 3") != std::string::npos &&
@@ -2711,7 +2696,8 @@ auto intersystem_planetfall_acceptance_contract() -> void {
                   std::string::npos &&
               json.find("\"evidence_scope\": \"application_framebuffer\"") !=
                   std::string::npos,
-          "thermal Planetfall JSON must name its renderer-neutral evidence scope");
+          "thermal Planetfall JSON must name its renderer-neutral evidence "
+          "scope");
   }
 }
 
@@ -2721,8 +2707,7 @@ auto mission_board_contract() -> void {
   check(offered && offered->station == "station-ce51e866ec4e032d" &&
             offered->mission == "mission-d8e068532886e95b" &&
             offered->destination_system.find("Ortis // system-") == 0 &&
-            offered->objective ==
-                "SIGNAL SURVEY // signal-9936ac67f2245d20" &&
+            offered->objective == "SIGNAL SURVEY // signal-9936ac67f2245d20" &&
             offered->status == "OFFERED" &&
             offered->rule_profile == "ASSISTED" &&
             offered->rule_profile_description ==
@@ -2734,9 +2719,9 @@ auto mission_board_contract() -> void {
 
   auto advanced = initial_intersystem_contract_state(
       Seed{42}, IntersystemRuleProfile::pilot);
-  const auto accept = advance_intersystem_contract(
-      advanced, advanced.universe_tick,
-      IntersystemContractCommand::accept_mission);
+  const auto accept =
+      advance_intersystem_contract(advanced, advanced.universe_tick,
+                                   IntersystemContractCommand::accept_mission);
   const auto accepted = mission_board_snapshot(advanced);
   check(accept && accepted && accepted->status == "ACCEPTED" &&
             accepted->rule_profile == "ADVANCED" &&
@@ -2756,14 +2741,14 @@ auto mission_board_contract() -> void {
   auto document =
       make_new_game_document(Seed{42}, NewGameOnboardingChoice::skip);
   const auto fresh_json = encode_save_document_json(document);
-  check(fresh_json &&
-            decode_save_document_json(replace_once(
-                *fresh_json, "signal-9936ac67f2245d20",
-                "signal-9936ac67f2245d21")) ==
-                std::unexpected{SaveSchemaError{
-                    SaveSchemaErrorCode::identity_mismatch,
-                    "$.state.intersystem_contract.identities",
-                    "stored first-contract identities do not match deterministic regeneration"}},
+  check(fresh_json && decode_save_document_json(
+                          replace_once(*fresh_json, "signal-9936ac67f2245d20",
+                                       "signal-9936ac67f2245d21")) ==
+                          std::unexpected{SaveSchemaError{
+                              SaveSchemaErrorCode::identity_mismatch,
+                              "$.state.intersystem_contract.identities",
+                              "stored first-contract identities do not match "
+                              "deterministic regeneration"}},
         "a corrupt saved mission objective must fail before state commit");
   auto pilot_document = make_new_game_document(NewGameOptions{
       .universe_seed = Seed{42},
@@ -2783,9 +2768,9 @@ auto mission_board_contract() -> void {
                 IntersystemRuleProfile::pilot,
         "format v15 must preserve the authoritative Pilot selection");
   if (pilot_json) {
-    const auto invalid_profile = decode_save_document_json(replace_once(
-        *pilot_json, "\"rule_profile\": \"pilot\"",
-        "\"rule_profile\": \"simulation\""));
+    const auto invalid_profile = decode_save_document_json(
+        replace_once(*pilot_json, "\"rule_profile\": \"pilot\"",
+                     "\"rule_profile\": \"simulation\""));
     check(!invalid_profile &&
               invalid_profile.error().code ==
                   SaveSchemaErrorCode::invalid_value &&
@@ -2800,9 +2785,8 @@ auto mission_board_contract() -> void {
         checkpoint.mission_phase == IntersystemMissionPhase::turned_in
             ? OnboardingProgress{.state = OnboardingState::completed,
                                  .chapter = std::nullopt}
-            : OnboardingProgress{
-                  .state = OnboardingState::guided,
-                  .chapter = OnboardingChapter::contract_three};
+            : OnboardingProgress{.state = OnboardingState::guided,
+                                 .chapter = OnboardingChapter::contract_three};
     document.state.system_flight.reset();
     document.state.origin_station_flight.reset();
     document.state.flight.reset();
@@ -2812,14 +2796,13 @@ auto mission_board_contract() -> void {
         checkpoint.mission_phase == IntersystemMissionPhase::returned ||
         checkpoint.mission_phase == IntersystemMissionPhase::turned_in) {
       document.state.world_deltas.push_back(
-          {surface_signal_object_key(
-               checkpoint.identities.target_objective),
+          {surface_signal_object_key(checkpoint.identities.target_objective),
            SaveWorldDeltaKind::collected, checkpoint.universe_tick});
     }
     const auto system =
         generate_local_system(checkpoint.identities.target_system_seed);
-    const auto body = find_local_system_planet(
-        system, checkpoint.identities.target_planet);
+    const auto body =
+        find_local_system_planet(system, checkpoint.identities.target_planet);
     if (checkpoint.travel_phase ==
         IntersystemTravelPhase::origin_system_flight) {
       const auto origin =
@@ -2844,8 +2827,7 @@ auto mission_board_contract() -> void {
           {.latitude_radians = 0.0,
            .longitude_radians = 0.0,
            .altitude_metres =
-               static_cast<double>((*body)->descriptor.radius.value) *
-               2'000.0},
+               static_cast<double>((*body)->descriptor.radius.value) * 2'000.0},
           {.surface_elevation_metres = 0.0});
       if (flight) {
         flight->tick = checkpoint.universe_tick;
@@ -2864,9 +2846,8 @@ auto mission_board_contract() -> void {
   };
   round_trip(initial_intersystem_contract_state(Seed{42}),
              "offered intersystem state must survive a v15 round trip");
-  check(advance_intersystem_contract(
-            state, state.universe_tick,
-            IntersystemContractCommand::accept_mission)
+  check(advance_intersystem_contract(state, state.universe_tick,
+                                     IntersystemContractCommand::accept_mission)
             .has_value(),
         "the released-save fixture must accept its locked Assisted profile");
   round_trip(state, "accepted intersystem state must survive a v15 round trip");
@@ -2932,10 +2913,8 @@ auto mission_board_contract() -> void {
 }
 
 auto local_system_contract() -> void {
-  check(kLocalSystemGeneratorVersion == 1 &&
-            kAnalyticEphemerisVersion == 1 &&
-            kMinimumLocalSystemPlanets == 3 &&
-            kMaximumLocalSystemPlanets == 6,
+  check(kLocalSystemGeneratorVersion == 1 && kAnalyticEphemerisVersion == 1 &&
+            kMinimumLocalSystemPlanets == 3 && kMaximumLocalSystemPlanets == 6,
         "local-system version and catalog bounds must remain stable");
 
   for (const auto seed :
@@ -2951,8 +2930,7 @@ auto local_system_contract() -> void {
           "a generated local system must retain its identity and bounds");
     for (std::size_t index = 0; index < first.planets.size(); ++index) {
       const auto& planet = first.planets[index];
-      const auto expected_seed =
-          derive_seed(seed, SeedDomain::planet, index);
+      const auto expected_seed = derive_seed(seed, SeedDomain::planet, index);
       check(planet.descriptor == generate_planet_descriptor(expected_seed) &&
                 planet.orbit.planet == planet.descriptor.id &&
                 planet.orbit.ordinal == index,
@@ -2975,12 +2953,10 @@ auto local_system_contract() -> void {
         "catalog generation must not perturb the existing planet stream");
 
   check(system.planets.size() == 6 &&
-            system.star ==
-                StarDescriptor{
-                    Seed{4'391'435'423'288'202'480ULL},
-                    StarId{4'391'435'423'288'202'480ULL}, "Ortis",
-                    StarSpectralClass::f, 6'426, 1'276'641,
-                    Rgb8{234, 239, 255}},
+            system.star == StarDescriptor{Seed{4'391'435'423'288'202'480ULL},
+                                          StarId{4'391'435'423'288'202'480ULL},
+                                          "Ortis", StarSpectralClass::f, 6'426,
+                                          1'276'641, Rgb8{234, 239, 255}},
         "universe seed 42 must retain its target star and catalog size");
   struct OrbitGolden {
     std::uint64_t planet;
@@ -2992,39 +2968,42 @@ auto local_system_contract() -> void {
     std::uint32_t node;
   };
   constexpr std::array orbit_goldens{
-      OrbitGolden{11'663'323'411'267'002'299ULL,
-                  10'083'446'351'388'880'177ULL, 7'099'452, 2'783'653,
-                  2'721'764'640U, -9'833'115, 3'923'635'174U},
-      OrbitGolden{9'431'008'004'299'412'890ULL,
-                  7'851'130'944'421'290'768ULL, 18'428'603, 6'272'031,
-                  1'567'099'797U, -5'965'106, 939'652'002U},
-      OrbitGolden{7'198'692'597'331'823'481ULL,
-                  14'548'077'165'324'058'995ULL, 30'784'617, 9'894'474,
-                  3'114'248'701U, 3'697'998, 3'328'899'740U},
-      OrbitGolden{4'966'377'190'364'234'072ULL,
-                  12'315'761'758'356'469'586ULL, 41'919'621, 13'232'201,
-                  2'274'257'782U, -9'742'142, 441'980'010U},
+      OrbitGolden{11'663'323'411'267'002'299ULL, 10'083'446'351'388'880'177ULL,
+                  7'099'452, 2'783'653, 2'721'764'640U, -9'833'115,
+                  3'923'635'174U},
+      OrbitGolden{9'431'008'004'299'412'890ULL, 7'851'130'944'421'290'768ULL,
+                  18'428'603, 6'272'031, 1'567'099'797U, -5'965'106,
+                  939'652'002U},
+      OrbitGolden{7'198'692'597'331'823'481ULL, 14'548'077'165'324'058'995ULL,
+                  30'784'617, 9'894'474, 3'114'248'701U, 3'697'998,
+                  3'328'899'740U},
+      OrbitGolden{4'966'377'190'364'234'072ULL, 12'315'761'758'356'469'586ULL,
+                  41'919'621, 13'232'201, 2'274'257'782U, -9'742'142,
+                  441'980'010U},
       OrbitGolden{2'145'840'965'427'808'319ULL, 565'963'905'549'686'197ULL,
                   54'281'536, 16'933'492, 203'468'468U, -9'843'524,
                   2'992'320'609U},
-      OrbitGolden{18'360'269'632'169'770'526ULL,
-                  16'780'392'572'291'648'404ULL, 64'236'026, 20'542'364,
-                  367'035'075U, 7'034'988, 1'949'158'013U},
+      OrbitGolden{18'360'269'632'169'770'526ULL, 16'780'392'572'291'648'404ULL,
+                  64'236'026, 20'542'364, 367'035'075U, 7'034'988,
+                  1'949'158'013U},
   };
   for (std::size_t index = 0; index < orbit_goldens.size(); ++index) {
     const auto& observed = system.planets[index];
     const auto& golden = orbit_goldens[index];
-    const auto expected_orbit =
-        PlanetOrbit{Seed{golden.orbit}, PlanetId{golden.planet},
-                    static_cast<std::uint32_t>(index), golden.radius,
-                    golden.period, golden.phase, golden.inclination,
-                    golden.node};
+    const auto expected_orbit = PlanetOrbit{Seed{golden.orbit},
+                                            PlanetId{golden.planet},
+                                            static_cast<std::uint32_t>(index),
+                                            golden.radius,
+                                            golden.period,
+                                            golden.phase,
+                                            golden.inclination,
+                                            golden.node};
     check(observed.descriptor.id == PlanetId{golden.planet} &&
               observed.orbit == expected_orbit,
           "universe seed 42 must retain its target orbit catalog");
 
-    const auto start = resolve_planet_ephemeris(
-        system, observed.descriptor.id, {0, 0.0});
+    const auto start =
+        resolve_planet_ephemeris(system, observed.descriptor.id, {0, 0.0});
     const auto repeated = resolve_planet_ephemeris(
         system, observed.descriptor.id, {observed.orbit.period_ticks, 0.0});
     const auto extreme = resolve_planet_ephemeris(
@@ -3045,12 +3024,12 @@ auto local_system_contract() -> void {
   const auto epoch = resolve_planet_ephemeris(system, target, {0, 0.0});
   check(epoch.has_value(), "a valid target ephemeris must resolve");
   if (epoch) {
-    check(epoch->position ==
-                  SystemPositionMetres{-6'748'693'202.0, -2'010'489'231.0,
-                                       902'935'114.0} &&
-              epoch->velocity ==
-                  SystemVelocityMetresPerSecond{572'317.287, -1'822'691.659,
-                                                219'165.062} &&
+    check(epoch->position == SystemPositionMetres{-6'748'693'202.0,
+                                                  -2'010'489'231.0,
+                                                  902'935'114.0} &&
+              epoch->velocity == SystemVelocityMetresPerSecond{572'317.287,
+                                                               -1'822'691.659,
+                                                               219'165.062} &&
               close_enough(epoch->phase_radians, 3.981718699366, 1.0e-12),
           "universe seed 42 must retain its target ephemeris epoch");
     const auto period = system.planets.front().orbit.period_ticks;
@@ -3068,14 +3047,13 @@ auto local_system_contract() -> void {
               std::isfinite(half->position.z),
           "analytic ephemerides must remain finite inside their period");
     const auto maximum = resolve_planet_ephemeris(
-        system, target,
-        {std::numeric_limits<SimulationTick>::max(), 0.999999});
+        system, target, {std::numeric_limits<SimulationTick>::max(), 0.999999});
     check(maximum.has_value(),
           "maximum authoritative ticks must resolve without overflow");
   }
 
-  const auto unknown = resolve_planet_ephemeris(
-      system, PlanetId{system.id.value}, {0, 0.0});
+  const auto unknown =
+      resolve_planet_ephemeris(system, PlanetId{system.id.value}, {0, 0.0});
   check(!unknown && unknown.error() == LocalSystemError::unknown_planet,
         "unknown planet references must be rejected");
   for (const auto fraction :
@@ -3109,10 +3087,11 @@ auto local_system_contract() -> void {
       .seed = system.seed,
       .id = system.id,
       .star = system.star,
-      .planets = std::vector<LocalSystemPlanet>{
-          system.planets.begin(),
-          system.planets.begin() +
-              static_cast<std::ptrdiff_t>(kMinimumLocalSystemPlanets - 1)},
+      .planets =
+          std::vector<LocalSystemPlanet>{
+              system.planets.begin(),
+              system.planets.begin() +
+                  static_cast<std::ptrdiff_t>(kMinimumLocalSystemPlanets - 1)},
   };
   check(!validate_local_system(malformed_catalog) &&
             validate_local_system(malformed_catalog).error() ==
@@ -3121,8 +3100,7 @@ auto local_system_contract() -> void {
 
   const auto diagnostic = local_system_diagnostic_json(system);
   check(diagnostic.has_value() &&
-            diagnostic->find("\"generator_version\": 1") !=
-                std::string::npos &&
+            diagnostic->find("\"generator_version\": 1") != std::string::npos &&
             diagnostic->find(system_id_string(system.id)) !=
                 std::string::npos &&
             diagnostic->find("planet-") != std::string::npos,
@@ -3144,12 +3122,10 @@ auto local_system_contract() -> void {
   const auto target = resolve_planet_ephemeris(
       system, system.planets.front().descriptor.id, {tick, 0.0});
   if (!target) return {};
-  constexpr SystemPositionMetres offset{0.0, -1'000'000'000.0,
-                                         120'000'000.0};
+  constexpr SystemPositionMetres offset{0.0, -1'000'000'000.0, 120'000'000.0};
   return {
       .time = {tick, 0.0},
-      .position = {target->position.x + offset.x,
-                   target->position.y + offset.y,
+      .position = {target->position.x + offset.x, target->position.y + offset.y,
                    target->position.z + offset.z},
       .velocity = target->velocity,
       .forward = {-offset.x, -offset.y, -offset.z},
@@ -3162,8 +3138,8 @@ auto local_system_rendering_contract() -> void {
   const auto identities = generate_first_intersystem_identities(Seed{42});
   const auto system = generate_local_system(identities.target_system_seed);
   auto view = system_render_fixture_view(system);
-  const auto target = resolve_planet_ephemeris(
-      system, view.selected_planet, view.time);
+  const auto target =
+      resolve_planet_ephemeris(system, view.selected_planet, view.time);
   check(target.has_value(), "the system-render target fixture must resolve");
   if (!target) return;
 
@@ -3175,9 +3151,9 @@ auto local_system_rendering_contract() -> void {
                 system.planets.front().descriptor.display_name &&
             closing->distance_metres > 1'000'000.0 &&
             closing->closing_speed_metres_per_second > 90.0 &&
-            closing->motion == SystemTargetMotion::closing &&
-            closing->in_front,
-        "system navigation must derive stable target identity, range, and closing state");
+            closing->motion == SystemTargetMotion::closing && closing->in_front,
+        "system navigation must derive stable target identity, range, and "
+        "closing state");
   auto opening_view = view;
   opening_view.velocity.y -= 100.0;
   const auto opening = resolve_system_navigation(system, opening_view);
@@ -3195,19 +3171,17 @@ auto local_system_rendering_contract() -> void {
               readout.cue.size() == kInstrumentLineWidth,
           "system navigation must remain fixed-width and information-complete");
     const auto guided = format_system_navigation(
-        *closing,
-        {.target = closing->target,
-         .target_radius_metres = 1'000.0,
-         .distance_metres = closing->distance_metres,
-         .closing_speed_metres_per_second = 1'200.0,
-         .relative_speed_metres_per_second = 1'200.0,
-         .arrival_estimate_seconds = 65.0,
-         .stopping_distance_metres = 14'400.0,
-         .cue = SystemFlightCue::brake,
-         .inside_approach_boundary = false,
-         .orbit_insertion_ready = false});
-    check(guided.motion == "CLS +1.2k" &&
-              guided.arrival == "ETA 01:05" &&
+        *closing, {.target = closing->target,
+                   .target_radius_metres = 1'000.0,
+                   .distance_metres = closing->distance_metres,
+                   .closing_speed_metres_per_second = 1'200.0,
+                   .relative_speed_metres_per_second = 1'200.0,
+                   .arrival_estimate_seconds = 65.0,
+                   .stopping_distance_metres = 14'400.0,
+                   .cue = SystemFlightCue::brake,
+                   .inside_approach_boundary = false,
+                   .orbit_insertion_ready = false});
+    check(guided.motion == "CLS +1.2k" && guided.arrival == "ETA 01:05" &&
               guided.cue == "BRAKE NOW",
           "system flight guidance must expose closing, ETA, and braking text");
 
@@ -3235,7 +3209,8 @@ auto local_system_rendering_contract() -> void {
               blocked_status.insertion_refusal.contains("RNG 5.0R>3R") &&
               blocked_status.insertion_refusal.contains("REL 8.0k>4k") &&
               blocked_status.insertion_refusal.contains("RAD 500>250m/s"),
-          "blocked system flight must hide Enter and name every unsafe insertion threshold");
+          "blocked system flight must hide Enter and name every unsafe "
+          "insertion threshold");
 
     auto below_surface_guidance = blocked_guidance;
     below_surface_guidance.distance_metres = 900.0;
@@ -3245,7 +3220,8 @@ auto local_system_rendering_contract() -> void {
         format_system_flight_status(status_state, below_surface_guidance);
     check(below_surface_status.insertion_refusal.contains("ALT -100<16m") &&
               !below_surface_status.insertion_ready,
-          "below-surface system flight must name the minimum-clearance threshold");
+          "below-surface system flight must name the minimum-clearance "
+          "threshold");
 
     status_state.mode = FlightMode::manual;
     status_state.time_scale = SystemTimeScale::four;
@@ -3262,7 +3238,8 @@ auto local_system_rendering_contract() -> void {
               ready_status.message.contains("MANUAL") &&
               ready_status.message.contains("4x") &&
               ready_status.insertion_refusal.empty(),
-          "ready system flight must expose the actionable Enter cue and active controls");
+          "ready system flight must expose the actionable Enter cue and active "
+          "controls");
 
     auto invalid_guidance = ready_guidance;
     invalid_guidance.target_radius_metres =
@@ -3300,7 +3277,8 @@ auto local_system_rendering_contract() -> void {
   check(first_result && repeated_result && first_result == repeated_result &&
             first == repeated && first_result->selected_visible &&
             first_result->visible_planets > 0,
-        "a fixed system view must render deterministic bodies and selection cues");
+        "a fixed system view must render deterministic bodies and selection "
+        "cues");
 
   auto later_view = system_render_fixture_view(
       system, system.planets.front().orbit.period_ticks / 4);
@@ -3315,58 +3293,59 @@ auto local_system_rendering_contract() -> void {
   const auto behind_result = renderer.render(system, behind_view, behind);
   check(behind_result && !behind_result->selected_visible &&
             !behind_result->navigation.in_front,
-        "a selected planet behind the camera must remain navigable but not render as visible");
+        "a selected planet behind the camera must remain navigable but not "
+        "render as visible");
 
-  const double target_radius = static_cast<double>(
-                                   system.planets.front().descriptor.radius.value) *
-                               1'000.0;
+  const double target_radius =
+      static_cast<double>(system.planets.front().descriptor.radius.value) *
+      1'000.0;
   auto handoff_view = view;
   handoff_view.position = {target->position.x,
                            target->position.y - target_radius * 4.0,
                            target->position.z};
   handoff_view.forward = {0.0, 1.0, 0.0};
   std::vector<Pixel> handoff(first.size());
-  const auto handoff_result =
-      renderer.render(system, handoff_view, handoff);
-  check(handoff_result &&
-            handoff_result->mode ==
-                LocalSystemPresentationMode::target_handoff &&
-            handoff_result->orbital_mix > 0.0 &&
-            handoff_result->orbital_mix < 1.0 &&
-            handoff_result->selected_visible,
-        "target approach must blend continuously into the existing orbital renderer");
+  const auto handoff_result = renderer.render(system, handoff_view, handoff);
+  check(
+      handoff_result &&
+          handoff_result->mode == LocalSystemPresentationMode::target_handoff &&
+          handoff_result->orbital_mix > 0.0 &&
+          handoff_result->orbital_mix < 1.0 && handoff_result->selected_visible,
+      "target approach must blend continuously into the existing orbital "
+      "renderer");
 
   auto orbital_view = handoff_view;
   orbital_view.position.y = target->position.y - target_radius * 3.0;
   std::vector<Pixel> orbital(first.size());
-  const auto orbital_result =
-      renderer.render(system, orbital_view, orbital);
+  const auto orbital_result = renderer.render(system, orbital_view, orbital);
   check(orbital_result &&
             orbital_result->mode ==
                 LocalSystemPresentationMode::orbital_target &&
             orbital_result->orbital_mix == 1.0 &&
             orbital_result->navigation.target == identities.target_planet,
-        "a close target must complete the orbital handoff without changing identity");
+        "a close target must complete the orbital handoff without changing "
+        "identity");
 
-  LocalSystemRenderer clipped_renderer{
-      {.width = 160, .height = 120, .field_of_view_degrees = 60.0,
-       .near_clip_metres = 2'000'000'000.0,
-       .far_clip_metres = 3'000'000'000.0}};
+  LocalSystemRenderer clipped_renderer{{.width = 160,
+                                        .height = 120,
+                                        .field_of_view_degrees = 60.0,
+                                        .near_clip_metres = 2'000'000'000.0,
+                                        .far_clip_metres = 3'000'000'000.0}};
   std::vector<Pixel> clipped(first.size());
-  const auto clipped_result =
-      clipped_renderer.render(system, view, clipped);
-  check(clipped_result && !clipped_result->selected_visible &&
-            clipped_result->navigation.target == identities.target_planet,
-        "near/far clipping must not discard selected-target navigation identity");
+  const auto clipped_result = clipped_renderer.render(system, view, clipped);
+  check(
+      clipped_result && !clipped_result->selected_visible &&
+          clipped_result->navigation.target == identities.target_planet,
+      "near/far clipping must not discard selected-target navigation identity");
 
   std::vector<Pixel> short_frame(first.size() - 1U, {1, 2, 3, 4});
   const auto short_result = renderer.render(system, view, short_frame);
   check(!short_result &&
             short_result.error() ==
                 LocalSystemRenderError::invalid_framebuffer &&
-            std::ranges::all_of(short_frame, [](Pixel value) {
-              return value == Pixel{1, 2, 3, 4};
-            }),
+            std::ranges::all_of(
+                short_frame,
+                [](Pixel value) { return value == Pixel{1, 2, 3, 4}; }),
         "invalid system framebuffers must fail without mutation");
 
   std::vector<Pixel> untouched(first.size(), {5, 6, 7, 8});
@@ -3375,34 +3354,32 @@ auto local_system_rendering_contract() -> void {
   const auto invalid_result = renderer.render(system, invalid_view, untouched);
   check(!invalid_result &&
             invalid_result.error() == LocalSystemRenderError::invalid_view &&
-            std::ranges::all_of(untouched, [](Pixel value) {
-              return value == Pixel{5, 6, 7, 8};
-            }),
+            std::ranges::all_of(
+                untouched,
+                [](Pixel value) { return value == Pixel{5, 6, 7, 8}; }),
         "non-finite system views must fail before touching the framebuffer");
   invalid_view = view;
   invalid_view.up = invalid_view.forward;
   check(!renderer.render(system, invalid_view, untouched) &&
-            std::ranges::all_of(untouched, [](Pixel value) {
-              return value == Pixel{5, 6, 7, 8};
-            }),
+            std::ranges::all_of(
+                untouched,
+                [](Pixel value) { return value == Pixel{5, 6, 7, 8}; }),
         "invalid system camera bases must fail transactionally");
   invalid_view = view;
   invalid_view.selected_planet = PlanetId{system.id.value};
   const auto unknown = renderer.render(system, invalid_view, untouched);
-  check(!unknown &&
-            unknown.error() == LocalSystemRenderError::unknown_target,
+  check(!unknown && unknown.error() == LocalSystemRenderError::unknown_target,
         "unknown selected planets must be rejected");
 
-  LocalSystemRenderer invalid_settings{
-      {.width = 0, .height = 120}};
+  LocalSystemRenderer invalid_settings{{.width = 0, .height = 120}};
   const auto invalid_settings_result =
       invalid_settings.render(system, view, untouched);
   check(!invalid_settings_result &&
             invalid_settings_result.error() ==
                 LocalSystemRenderError::invalid_settings &&
-            std::ranges::all_of(untouched, [](Pixel value) {
-              return value == Pixel{5, 6, 7, 8};
-            }),
+            std::ranges::all_of(
+                untouched,
+                [](Pixel value) { return value == Pixel{5, 6, 7, 8}; }),
         "invalid system-render settings must fail transactionally");
 
   const auto origin_system = generate_origin_system(Seed{42});
@@ -3472,8 +3449,7 @@ auto local_system_rendering_contract() -> void {
     non_finite_station.position.x = std::numeric_limits<double>::quiet_NaN();
     std::vector<Pixel> station_untouched(first.size(), {9, 8, 7, 6});
     auto invalid_station_view = epoch_view;
-    invalid_station_view.forward.x =
-        std::numeric_limits<double>::quiet_NaN();
+    invalid_station_view.forward.x = std::numeric_limits<double>::quiet_NaN();
     check(
         renderer.render_origin_station(epoch_view, *station_epoch,
                                        station_short) ==
@@ -3484,8 +3460,7 @@ auto local_system_rendering_contract() -> void {
             renderer.render_origin_station(epoch_view, non_finite_station,
                                            station_untouched) ==
                 std::unexpected{LocalSystemRenderError::ephemeris_failure} &&
-            renderer.render_origin_station(invalid_station_view,
-                                           *station_epoch,
+            renderer.render_origin_station(invalid_station_view, *station_epoch,
                                            station_untouched) ==
                 std::unexpected{LocalSystemRenderError::invalid_view} &&
             std::ranges::all_of(
@@ -3509,9 +3484,9 @@ auto local_system_rendering_contract() -> void {
   };
   for (const auto golden : goldens) {
     const auto viewport = profile_viewport(golden.profile);
-    LocalSystemRenderer profile_renderer{
-        {.width = viewport.width, .height = viewport.height,
-         .field_of_view_degrees = 60.0}};
+    LocalSystemRenderer profile_renderer{{.width = viewport.width,
+                                          .height = viewport.height,
+                                          .field_of_view_degrees = 60.0}};
     std::vector<Pixel> frame(static_cast<std::size_t>(viewport.width) *
                              static_cast<std::size_t>(viewport.height));
     const auto rendered = profile_renderer.render(system, view, frame);
@@ -3545,12 +3520,11 @@ auto origin_station_contract() -> void {
           "an origin station must reproduce for the same universe seed");
     if (station.home_system_seed.value != system_goldens[index] ||
         station.station_seed.value != station_goldens[index]) {
-      std::fprintf(stderr,
-                   "origin station golden %zu: system=%llu station=%llu\n",
-                   index,
-                   static_cast<unsigned long long>(
-                       station.home_system_seed.value),
-                   static_cast<unsigned long long>(station.station_seed.value));
+      std::fprintf(
+          stderr, "origin station golden %zu: system=%llu station=%llu\n",
+          index,
+          static_cast<unsigned long long>(station.home_system_seed.value),
+          static_cast<unsigned long long>(station.station_seed.value));
     }
     check(station.home_system_seed.value == system_goldens[index] &&
               station.station_seed.value == station_goldens[index] &&
@@ -3608,8 +3582,7 @@ auto origin_station_contract() -> void {
               station.orbit.period_ticks <= kOriginStationMaximumPeriodTicks,
           "every sampled universe must generate one bounded tutorial home and "
           "station orbit");
-    if (!home)
-      continue;
+    if (!home) continue;
     const auto at_epoch = resolve_origin_station_ephemeris(
         system, station, {.tick = 0, .sub_tick_fraction = 0.0});
     const auto one_period = resolve_origin_station_ephemeris(
@@ -3723,14 +3696,15 @@ auto origin_onboarding_contract() -> void {
 
   check(advance_origin_onboarding(
             state, OriginOnboardingCommand::accept_first_objective)
-            .has_value() &&
+                .has_value() &&
             state.location == OriginLocation::docked_at_origin &&
             state.first_objective == FirstObjectiveStatus::active,
-        "accepting the bounded offer must arm launch without leaving the station");
+        "accepting the bounded offer must arm launch without leaving the "
+        "station");
   unchanged_on_failure(OriginOnboardingCommand::accept_first_objective,
                        OriginOnboardingError::invalid_transition);
   check(advance_origin_onboarding(state, OriginOnboardingCommand::launch)
-            .has_value() &&
+                .has_value() &&
             state.location == OriginLocation::in_flight &&
             state.first_objective == FirstObjectiveStatus::active,
         "launch must enter flight with the first objective active");
@@ -3740,7 +3714,7 @@ auto origin_onboarding_contract() -> void {
                        OriginOnboardingError::invalid_transition);
   check(advance_origin_onboarding(
             state, OriginOnboardingCommand::complete_first_objective)
-            .has_value() &&
+                .has_value() &&
             state.location == OriginLocation::in_flight &&
             state.first_objective == FirstObjectiveStatus::completed,
         "objective completion must remain in flight until return");
@@ -3776,8 +3750,8 @@ auto origin_onboarding_contract() -> void {
       station.id, binding.contract, binding.target,
       static_cast<OriginLocation>(255), FirstObjectiveStatus::active};
   const auto invalid_location_before = malformed;
-  const auto invalid_location = advance_origin_onboarding(
-      malformed, OriginOnboardingCommand::launch);
+  const auto invalid_location =
+      advance_origin_onboarding(malformed, OriginOnboardingCommand::launch);
   check(!invalid_location &&
             invalid_location.error() == OriginOnboardingError::invalid_state &&
             malformed == invalid_location_before,
@@ -3795,14 +3769,12 @@ auto origin_onboarding_contract() -> void {
 }
 
 auto career_onboarding_contract() -> void {
-  auto guided =
-      initial_onboarding_progress(NewGameOnboardingChoice::guided);
+  auto guided = initial_onboarding_progress(NewGameOnboardingChoice::guided);
   const auto skipped =
       initial_onboarding_progress(NewGameOnboardingChoice::skip);
   check(guided == OnboardingProgress{} &&
             guided.chapter == OnboardingChapter::contract_one &&
-            skipped.state == OnboardingState::skipped &&
-            !skipped.chapter,
+            skipped.state == OnboardingState::skipped && !skipped.chapter,
         "Guided must begin at contract one while Skip has no tutorial chapter");
 
   const auto guided_access = resolve_onboarding_access(guided);
@@ -3829,33 +3801,32 @@ auto career_onboarding_contract() -> void {
   };
   unchanged_on_failure(OnboardingCommand::complete_contract_two);
   unchanged_on_failure(OnboardingCommand::complete_contract_three);
-  check(advance_onboarding(guided,
-                           OnboardingCommand::complete_contract_one) &&
+  check(advance_onboarding(guided, OnboardingCommand::complete_contract_one) &&
             guided.chapter == OnboardingChapter::contract_two,
         "contract one completion must advance Guided to contract two");
   unchanged_on_failure(OnboardingCommand::complete_contract_one);
-  check(advance_onboarding(guided,
-                           OnboardingCommand::complete_contract_two) &&
+  check(advance_onboarding(guided, OnboardingCommand::complete_contract_two) &&
             guided.chapter == OnboardingChapter::contract_three,
         "contract two completion must advance Guided to contract three");
   const auto contract_three_access = resolve_onboarding_access(guided);
   check(contract_three_access &&
             contract_three_access->first_jump_solution_available &&
             !contract_three_access->open_exploration_available,
-        "contract three must expose one first-jump solution before open exploration");
-  check(advance_onboarding(guided,
-                           OnboardingCommand::complete_contract_three) &&
-            guided.state == OnboardingState::completed && !guided.chapter,
-        "contract three completion must atomically open exploration");
+        "contract three must expose one first-jump solution before open "
+        "exploration");
+  check(
+      advance_onboarding(guided, OnboardingCommand::complete_contract_three) &&
+          guided.state == OnboardingState::completed && !guided.chapter,
+      "contract three completion must atomically open exploration");
   const auto completed_access = resolve_onboarding_access(guided);
   check(completed_access && completed_access->open_exploration_available,
         "completed onboarding must retain the post-onboarding access baseline");
   const auto completed_before = guided;
-  check(advance_onboarding(guided,
-                           OnboardingCommand::complete_contract_three) ==
-                std::unexpected{OnboardingError::invalid_transition} &&
-            guided == completed_before,
-        "completed onboarding must reject repeated completion without mutation");
+  check(
+      advance_onboarding(guided, OnboardingCommand::complete_contract_three) ==
+              std::unexpected{OnboardingError::invalid_transition} &&
+          guided == completed_before,
+      "completed onboarding must reject repeated completion without mutation");
   auto unknown_command_progress =
       initial_onboarding_progress(NewGameOnboardingChoice::guided);
   const auto unknown_command_before = unknown_command_progress;
@@ -3865,23 +3836,24 @@ auto career_onboarding_contract() -> void {
             unknown_command_progress == unknown_command_before,
         "unknown onboarding commands must fail without mutation");
 
-  const OnboardingProgress invalid_guided{
-      .state = OnboardingState::guided, .chapter = std::nullopt};
-  const OnboardingProgress invalid_skipped{
-      .state = OnboardingState::skipped,
-      .chapter = OnboardingChapter::contract_one};
+  const OnboardingProgress invalid_guided{.state = OnboardingState::guided,
+                                          .chapter = std::nullopt};
+  const OnboardingProgress invalid_skipped{.state = OnboardingState::skipped,
+                                           .chapter =
+                                               OnboardingChapter::contract_one};
   const OnboardingProgress invalid_enum{
       .state = static_cast<OnboardingState>(255), .chapter = std::nullopt};
   const OnboardingProgress invalid_chapter{
       .state = OnboardingState::guided,
       .chapter = static_cast<OnboardingChapter>(255)};
-  check(!validate_onboarding_progress(invalid_guided) &&
-            !validate_onboarding_progress(invalid_skipped) &&
-            !validate_onboarding_progress(invalid_enum) &&
-            !validate_onboarding_progress(invalid_chapter) &&
-            resolve_onboarding_access(invalid_skipped) ==
-                std::unexpected{OnboardingError::invalid_state},
-        "invalid state/chapter combinations and unknown enums must be rejected");
+  check(
+      !validate_onboarding_progress(invalid_guided) &&
+          !validate_onboarding_progress(invalid_skipped) &&
+          !validate_onboarding_progress(invalid_enum) &&
+          !validate_onboarding_progress(invalid_chapter) &&
+          resolve_onboarding_access(invalid_skipped) ==
+              std::unexpected{OnboardingError::invalid_state},
+      "invalid state/chapter combinations and unknown enums must be rejected");
 
   const auto guided_document =
       make_new_game_document(Seed{42}, NewGameOnboardingChoice::guided);
@@ -3899,10 +3871,11 @@ auto career_onboarding_contract() -> void {
             skipped_document.state.first_objective_target.value != 0,
         "Skip must preserve generated truth and add no fabricated history");
   const auto encoded_skip = encode_save_document_json(skipped_document);
-  check(encoded_skip && decode_save_document_json(*encoded_skip) ==
-                            std::expected<SaveDocument, SaveSchemaError>{
-                                skipped_document},
-        "Skip must round-trip with a null chapter and unchanged generated truth");
+  check(
+      encoded_skip &&
+          decode_save_document_json(*encoded_skip) ==
+              std::expected<SaveDocument, SaveSchemaError>{skipped_document},
+      "Skip must round-trip with a null chapter and unchanged generated truth");
 
   const auto invalid_choice = make_new_game_document(
       Seed{42}, static_cast<NewGameOnboardingChoice>(255));
@@ -3912,15 +3885,15 @@ auto career_onboarding_contract() -> void {
         "unknown New Game onboarding choices must produce rejected state");
 
   auto invalid_document = skipped_document;
-  invalid_document.state.onboarding.chapter =
-      OnboardingChapter::contract_one;
-  check(!validate_save_document(invalid_document) &&
-            validate_save_document(invalid_document).error().path ==
-                "$.state.onboarding",
-        "save validation must reject skipped onboarding with tutorial progress");
+  invalid_document.state.onboarding.chapter = OnboardingChapter::contract_one;
+  check(
+      !validate_save_document(invalid_document) &&
+          validate_save_document(invalid_document).error().path ==
+              "$.state.onboarding",
+      "save validation must reject skipped onboarding with tutorial progress");
   invalid_document = guided_document;
-  invalid_document.state.onboarding = {
-      .state = OnboardingState::completed, .chapter = std::nullopt};
+  invalid_document.state.onboarding = {.state = OnboardingState::completed,
+                                       .chapter = std::nullopt};
   check(!validate_save_document(invalid_document) &&
             validate_save_document(invalid_document).error().path ==
                 "$.state.onboarding.state",
@@ -3931,7 +3904,8 @@ auto career_onboarding_contract() -> void {
   check(!invalid_acceptance &&
             invalid_acceptance.error() ==
                 OnboardingAcceptanceError::invalid_configuration,
-        "the integrated onboarding runner must reject invalid dimensions before work");
+        "the integrated onboarding runner must reject invalid dimensions "
+        "before work");
   const auto wrong_contract_two =
       run_origin_system_contract_acceptance(guided_document, 1, 1);
   check(!wrong_contract_two &&
@@ -3940,10 +3914,11 @@ auto career_onboarding_contract() -> void {
         "contract two acceptance must reject a contract-one starting document");
   const auto wrong_contract_three =
       run_intersystem_contract_acceptance(guided_document, 1, 1, false);
-  check(!wrong_contract_three &&
-            wrong_contract_three.error() ==
-                IntersystemContractAcceptanceError::initialization_failure,
-        "contract three acceptance must reject a contract-one starting document");
+  check(
+      !wrong_contract_three &&
+          wrong_contract_three.error() ==
+              IntersystemContractAcceptanceError::initialization_failure,
+      "contract three acceptance must reject a contract-one starting document");
 }
 
 auto save_schema_contract() -> void {
@@ -4040,14 +4015,14 @@ auto save_schema_contract() -> void {
             encode_save_document_json(*ignored) == encoded,
         "unknown optional fields must be ignored and discarded on rewrite");
 
-  const auto expect_semantic_decode_error =
-      [&](std::string text, SaveSchemaErrorCode code, std::string_view path,
-          const char* message) {
-        const auto result = decode_save_document_json(text);
-        check(!result && result.error().code == code &&
-                  result.error().path == path,
-              message);
-      };
+  const auto expect_semantic_decode_error = [&](std::string text,
+                                                SaveSchemaErrorCode code,
+                                                std::string_view path,
+                                                const char* message) {
+    const auto result = decode_save_document_json(text);
+    check(!result && result.error().code == code && result.error().path == path,
+          message);
+  };
   expect_semantic_decode_error(
       replace_once(fixture,
                    std::format("\"target_signal_id\": \"{}\"", target_key),
@@ -4068,23 +4043,22 @@ auto save_schema_contract() -> void {
       "$.state.world_deltas[0].object_key",
       "decode must reject an indexed delta outside the generated catalog");
 
-  const auto expect_decode_error = [&](std::string text,
-                                       SaveSchemaErrorCode code,
-                                       const char* message) {
-    const auto result = decode_save_document_json(text);
-    check(!result && result.error().code == code, message);
-  };
+  const auto expect_decode_error =
+      [&](std::string text, SaveSchemaErrorCode code, const char* message) {
+        const auto result = decode_save_document_json(text);
+        check(!result && result.error().code == code, message);
+      };
   expect_decode_error("{", SaveSchemaErrorCode::malformed_json,
                       "malformed JSON must be rejected");
   expect_decode_error(std::string(kMaximumSaveDocumentBytes + 1U, ' '),
                       SaveSchemaErrorCode::document_too_large,
                       "oversized save input must be rejected before parsing");
-  expect_decode_error(
-      replace_once(fixture, "  \"application\": \"apsis-drift\",\n",
-                   "  \"application\": \"apsis-drift\",\n"
-                   "  \"application\": \"apsis-drift\",\n"),
-      SaveSchemaErrorCode::duplicate_key,
-      "duplicate JSON object keys must be rejected");
+  expect_decode_error(replace_once(fixture,
+                                   "  \"application\": \"apsis-drift\",\n",
+                                   "  \"application\": \"apsis-drift\",\n"
+                                   "  \"application\": \"apsis-drift\",\n"),
+                      SaveSchemaErrorCode::duplicate_key,
+                      "duplicate JSON object keys must be rejected");
   expect_decode_error(
       replace_once(fixture, "\"format_version\": 16", "\"format_version\": 1"),
       SaveSchemaErrorCode::unsupported_alpha_format_version,
@@ -4145,32 +4119,30 @@ auto save_schema_contract() -> void {
                       SaveSchemaErrorCode::missing_field,
                       "format 16 must require writer-version provenance");
   expect_decode_error(
-      replace_once(fixture,
-                   std::format("\"application_version\": \"{}\"",
-                               kApplicationVersion),
-                   "\"application_version\": \"\""),
+      replace_once(
+          fixture,
+          std::format("\"application_version\": \"{}\"", kApplicationVersion),
+          "\"application_version\": \"\""),
       SaveSchemaErrorCode::invalid_value,
       "empty writer-version provenance must be rejected");
   expect_decode_error(
-      replace_once(fixture,
-                   std::format("\"application_version\": \"{}\"",
-                               kApplicationVersion),
-                   std::format("\"application_version\": \"{}\"",
-                               std::string(
-                                   kMaximumSaveApplicationVersionBytes + 1U,
-                                   'v'))),
+      replace_once(
+          fixture,
+          std::format("\"application_version\": \"{}\"", kApplicationVersion),
+          std::format(
+              "\"application_version\": \"{}\"",
+              std::string(kMaximumSaveApplicationVersionBytes + 1U, 'v'))),
       SaveSchemaErrorCode::invalid_value,
       "oversized writer-version provenance must be rejected");
   expect_decode_error(
-      replace_once(fixture,
-                   std::format("\"application_version\": \"{}\"",
-                               kApplicationVersion),
-                   "\"application_version\": \"\\u001b\""),
+      replace_once(
+          fixture,
+          std::format("\"application_version\": \"{}\"", kApplicationVersion),
+          "\"application_version\": \"\\u001b\""),
       SaveSchemaErrorCode::invalid_value,
       "control characters in writer-version provenance must be rejected");
   expect_decode_error(
-      replace_once(fixture, "\"seed_derivation\": 1",
-                   "\"seed_derivation\": 2"),
+      replace_once(fixture, "\"seed_derivation\": 1", "\"seed_derivation\": 2"),
       SaveSchemaErrorCode::incompatible_generator_version,
       "unsupported generator versions must be rejected explicitly");
   expect_decode_error(replace_once(fixture, "\"origin_home_planet\": 1",
@@ -4184,8 +4156,7 @@ auto save_schema_contract() -> void {
       "unsupported local-sun geometry versions must be rejected explicitly");
   if (encoded) {
     expect_decode_error(
-        replace_once(*encoded, "\"local_system\": 1",
-                     "\"local_system\": 2"),
+        replace_once(*encoded, "\"local_system\": 1", "\"local_system\": 2"),
         SaveSchemaErrorCode::incompatible_generator_version,
         "unsupported local-system versions must be rejected explicitly");
     expect_decode_error(
@@ -4228,38 +4199,33 @@ auto save_schema_contract() -> void {
                    "planet-435B7b7e8ce489e8"),
       SaveSchemaErrorCode::invalid_value,
       "stable identifiers must reject uppercase hexadecimal digits");
-  expect_decode_error(
-      replace_once(fixture, "\"universe_seed\": \"42\"",
-                   "\"universe_seed\": \"042\""),
-      SaveSchemaErrorCode::invalid_value,
-      "non-canonical unsigned strings must be rejected");
-  expect_decode_error(
-      replace_once(fixture, "\"latitude_radians\": \"0.25\"",
-                   "\"latitude_radians\": \"nan\""),
-      SaveSchemaErrorCode::invalid_value,
-      "non-finite flight values must be rejected");
+  expect_decode_error(replace_once(fixture, "\"universe_seed\": \"42\"",
+                                   "\"universe_seed\": \"042\""),
+                      SaveSchemaErrorCode::invalid_value,
+                      "non-canonical unsigned strings must be rejected");
+  expect_decode_error(replace_once(fixture, "\"latitude_radians\": \"0.25\"",
+                                   "\"latitude_radians\": \"nan\""),
+                      SaveSchemaErrorCode::invalid_value,
+                      "non-finite flight values must be rejected");
   auto impossible_orbit = replace_once(
-      fixture, "\"altitude_metres\": \"10000\"",
-      "\"altitude_metres\": \"16\"");
-  impossible_orbit = replace_once(
-      std::move(impossible_orbit), "\"clearance_metres\": \"9000\"",
-      "\"clearance_metres\": \"16\"");
-  impossible_orbit = replace_once(
-      std::move(impossible_orbit), "\"regime\": \"atmospheric\"",
-      "\"regime\": \"orbital\"");
+      fixture, "\"altitude_metres\": \"10000\"", "\"altitude_metres\": \"16\"");
+  impossible_orbit = replace_once(std::move(impossible_orbit),
+                                  "\"clearance_metres\": \"9000\"",
+                                  "\"clearance_metres\": \"16\"");
+  impossible_orbit =
+      replace_once(std::move(impossible_orbit), "\"regime\": \"atmospheric\"",
+                   "\"regime\": \"orbital\"");
   expect_decode_error(
       std::move(impossible_orbit), SaveSchemaErrorCode::invalid_state,
       "save loading must reject a near-surface state relabeled as orbital");
-  expect_decode_error(
-      replace_once(fixture, "\"location\": \"in_flight\"",
-                   "\"location\": \"somewhere\""),
-      SaveSchemaErrorCode::invalid_value,
-      "unknown state enums must be rejected");
-  expect_decode_error(
-      replace_once(fixture, "\"kind\": \"discovered\"",
-                   "\"kind\": \"future_kind\""),
-      SaveSchemaErrorCode::invalid_value,
-      "unknown world-delta kinds must be rejected");
+  expect_decode_error(replace_once(fixture, "\"location\": \"in_flight\"",
+                                   "\"location\": \"somewhere\""),
+                      SaveSchemaErrorCode::invalid_value,
+                      "unknown state enums must be rejected");
+  expect_decode_error(replace_once(fixture, "\"kind\": \"discovered\"",
+                                   "\"kind\": \"future_kind\""),
+                      SaveSchemaErrorCode::invalid_value,
+                      "unknown world-delta kinds must be rejected");
   expect_semantic_decode_error(
       replace_once(fixture, "\"state\": \"guided\"",
                    "\"state\": \"future_state\""),
@@ -4275,24 +4241,23 @@ auto save_schema_contract() -> void {
                    "\"chapter\": null"),
       SaveSchemaErrorCode::invalid_state, "$.state.onboarding",
       "Guided onboarding must retain one active authored chapter");
-  auto skipped_with_progress = replace_once(
-      fixture, "\"state\": \"guided\"", "\"state\": \"skipped\"");
+  auto skipped_with_progress =
+      replace_once(fixture, "\"state\": \"guided\"", "\"state\": \"skipped\"");
   expect_semantic_decode_error(
       std::move(skipped_with_progress), SaveSchemaErrorCode::invalid_state,
-      "$.state.onboarding",
-      "Skip must reject a persisted tutorial chapter");
+      "$.state.onboarding", "Skip must reject a persisted tutorial chapter");
   expect_semantic_decode_error(
-      replace_once(fixture, "\"chapter\": \"contract_one\"",
-                   "\"chapter\": 1"),
+      replace_once(fixture, "\"chapter\": \"contract_one\"", "\"chapter\": 1"),
       SaveSchemaErrorCode::invalid_type, "$.state.onboarding.chapter",
       "onboarding chapters must reject the wrong JSON type");
 
   constexpr std::array required_sections{
-      "\"application\"", "\"application_version\"",
-      "\"format_version\"", "\"recipe\"", "\"state\"",
-      "\"generator_versions\"", "\"local_sun\"",
-      "\"onboarding\"", "\"first_objective\"", "\"flight\"", "\"discoveries\"",
-      "\"world_deltas\"",
+      "\"application\"",     "\"application_version\"",
+      "\"format_version\"",  "\"recipe\"",
+      "\"state\"",           "\"generator_versions\"",
+      "\"local_sun\"",       "\"onboarding\"",
+      "\"first_objective\"", "\"flight\"",
+      "\"discoveries\"",     "\"world_deltas\"",
   };
   for (const auto section : required_sections) {
     const auto renamed = replace_once(fixture, section, "\"missing_field\"");
@@ -4345,14 +4310,13 @@ auto save_schema_contract() -> void {
   invalid = expected;
   invalid.state.discoveries.clear();
   invalid_result = encode_save_document_json(invalid);
-  check(!invalid_result &&
-            invalid_result.error().path == "$.state.discoveries",
+  check(!invalid_result && invalid_result.error().path == "$.state.discoveries",
         "an accepted objective must retain its generated target discovery");
   invalid = expected;
   invalid.state.world_deltas.front().kind = SaveWorldDeltaKind::collected;
   invalid_result = encode_save_document_json(invalid);
-  check(!invalid_result && invalid_result.error().path ==
-                               "$.state.first_objective.status",
+  check(!invalid_result &&
+            invalid_result.error().path == "$.state.first_objective.status",
         "an active objective must reject a terminal collected delta");
   invalid = expected;
   invalid.state.first_objective = FirstObjectiveStatus::completed;
@@ -4366,21 +4330,21 @@ auto save_schema_contract() -> void {
   invalid = expected;
   invalid.state.discoveries.front().tick = invalid.state.flight->tick + 1U;
   invalid_result = encode_save_document_json(invalid);
-  check(!invalid_result && invalid_result.error().path ==
-                               "$.state.discoveries[0].tick",
+  check(!invalid_result &&
+            invalid_result.error().path == "$.state.discoveries[0].tick",
         "an in-flight discovery cannot come from a future tick");
   invalid = expected;
   invalid.state.world_deltas.front().tick = invalid.state.flight->tick + 1U;
   invalid_result = encode_save_document_json(invalid);
-  check(!invalid_result && invalid_result.error().path ==
-                               "$.state.world_deltas[0].tick",
+  check(!invalid_result &&
+            invalid_result.error().path == "$.state.world_deltas[0].tick",
         "an in-flight world delta cannot come from a future tick");
   invalid = expected;
   invalid.state.world_deltas.front().tick =
       invalid.state.discoveries.front().tick - 1U;
   invalid_result = encode_save_document_json(invalid);
-  check(!invalid_result && invalid_result.error().path ==
-                               "$.state.world_deltas[0].tick",
+  check(!invalid_result &&
+            invalid_result.error().path == "$.state.world_deltas[0].tick",
         "a signal delta cannot precede discovery of the same signal");
 }
 
@@ -4394,7 +4358,8 @@ auto save_file_contract() -> void {
   check(zero == zero_again && validate_save_document(zero).has_value() &&
             validate_save_document(maximum).has_value() &&
             validate_save_document(skipped).has_value(),
-        "new-game profiles must accept the complete unsigned seed range and reproduce deterministically");
+        "new-game profiles must accept the complete unsigned seed range and "
+        "reproduce deterministically");
   check(zero.state.location == OriginLocation::docked_at_origin &&
             zero.state.first_objective == FirstObjectiveStatus::offered &&
             !zero.state.flight && zero.state.discoveries.empty() &&
@@ -4405,7 +4370,8 @@ auto save_file_contract() -> void {
             !skipped.state.onboarding.chapter &&
             skipped.state.discoveries.empty() &&
             skipped.state.world_deltas.empty(),
-        "a new-game profile must begin docked without mutable generated-world state");
+        "a new-game profile must begin docked without mutable generated-world "
+        "state");
 
   TemporaryDirectory temporary;
   const auto save_path = temporary.path() / "profile.json";
@@ -4423,7 +4389,8 @@ auto save_file_contract() -> void {
   if (loaded) {
     check(write_save_file_atomically(save_as_path, *loaded).has_value() &&
               load_save_file(save_as_path) == loaded,
-          "an explicitly different destination must support save-as without changing state");
+          "an explicitly different destination must support save-as without "
+          "changing state");
   }
 
   const auto representative = make_new_game_document(Seed{42});
@@ -4438,10 +4405,11 @@ auto save_file_contract() -> void {
   const auto interrupted = detail::write_save_file_atomically_for_test(
       save_path, replacement,
       detail::AtomicSaveTestInterruption::before_replace);
-  check(!interrupted &&
-            interrupted.error().code == SaveFileErrorCode::replace_failed &&
-            load_save_file(save_path) == loaded,
-        "an interruption before replacement must leave the prior save loadable");
+  check(
+      !interrupted &&
+          interrupted.error().code == SaveFileErrorCode::replace_failed &&
+          load_save_file(save_path) == loaded,
+      "an interruption before replacement must leave the prior save loadable");
   std::size_t temporary_files{};
   for (const auto& entry :
        std::filesystem::directory_iterator{temporary.path()}) {
@@ -4456,11 +4424,12 @@ auto save_file_contract() -> void {
   invalid_document.recipe.generator_versions.seed_derivation += 1;
   const auto rejected_write =
       write_save_file_atomically(save_path, invalid_document);
-  check(!rejected_write &&
-            rejected_write.error().code == SaveFileErrorCode::invalid_document &&
-            rejected_write.error().schema_error &&
-            load_save_file(save_path) == loaded,
-        "invalid authoritative state must fail before touching the destination");
+  check(
+      !rejected_write &&
+          rejected_write.error().code == SaveFileErrorCode::invalid_document &&
+          rejected_write.error().schema_error &&
+          load_save_file(save_path) == loaded,
+      "invalid authoritative state must fail before touching the destination");
 
   const auto missing_path = temporary.path() / "missing.json";
   const auto missing = load_save_file(missing_path);
@@ -4474,7 +4443,8 @@ auto save_file_contract() -> void {
       temporary.path() / "missing" / "profile.json", replacement);
   check(!unavailable && unavailable.error().code ==
                             SaveFileErrorCode::temporary_file_failed,
-        "a destination in a missing directory must fail without creating directories implicitly");
+        "a destination in a missing directory must fail without creating "
+        "directories implicitly");
 
   const auto malformed_path = temporary.path() / "malformed.json";
   check(write_test_file(malformed_path, "{"),
@@ -4485,7 +4455,8 @@ auto save_file_contract() -> void {
   check(!malformed &&
             malformed.error().code == SaveFileErrorCode::invalid_document &&
             malformed.error().schema_error && live == zero,
-        "a malformed load must expose schema context without mutating live state");
+        "a malformed load must expose schema context without mutating live "
+        "state");
   if (!malformed) {
     const auto message = save_file_error_message(malformed.error());
     check(message.find(malformed_path.string()) != std::string::npos &&
@@ -4508,7 +4479,8 @@ auto save_file_contract() -> void {
                 SaveSchemaErrorCode::unsupported_alpha_format_version &&
             live == zero &&
             read_test_file(unsupported_path) == unsupported_contents,
-        "an unsupported alpha save must not replace live state or modify its source file");
+        "an unsupported alpha save must not replace live state or modify its "
+        "source file");
 
   const auto inconsistent_path = temporary.path() / "inconsistent.json";
   const auto signal_document = make_legacy_signal_run_document(Seed{42});
@@ -4538,16 +4510,18 @@ auto save_file_contract() -> void {
     check(message.find(inconsistent_path.string()) != std::string::npos &&
               message.find("$.state.first_objective.target_signal_id") !=
                   std::string::npos,
-          "semantic load diagnostics must include the file and indexed schema path");
+          "semantic load diagnostics must include the file and indexed schema "
+          "path");
   }
 
   const auto boundary_path = temporary.path() / "boundary.json";
   const bool exact_written = write_test_file(
       boundary_path, std::string(kMaximumSaveDocumentBytes, ' '));
   const auto exact_boundary = load_save_file(boundary_path);
-  check(exact_written && !exact_boundary &&
-            exact_boundary.error().code == SaveFileErrorCode::invalid_document,
-        "an exactly maximum-sized invalid document must reach schema validation");
+  check(
+      exact_written && !exact_boundary &&
+          exact_boundary.error().code == SaveFileErrorCode::invalid_document,
+      "an exactly maximum-sized invalid document must reach schema validation");
   const bool oversized_written = write_test_file(
       boundary_path, std::string(kMaximumSaveDocumentBytes + 1U, ' '));
   const auto oversized = load_save_file(boundary_path);
@@ -4561,27 +4535,30 @@ auto profile_catalog_contract() -> void {
   const auto injected_seed = request_new_game_seed(fake_seed_entropy);
   check(injected_seed && *injected_seed == 0x0123456789abcdefULL &&
             fake_entropy_requests == 1 && !request_new_game_seed(nullptr),
-        "New Game entropy must be injectable, called once per request, and fail closed without a source");
+        "New Game entropy must be injectable, called once per request, and "
+        "fail closed without a source");
   check(parse_new_game_seed("0") == 0U &&
             parse_new_game_seed("18446744073709551615") ==
                 std::numeric_limits<std::uint64_t>::max(),
-        "New Game seed parsing must accept the complete canonical unsigned range");
+        "New Game seed parsing must accept the complete canonical unsigned "
+        "range");
   for (const std::string_view invalid :
        {"", "+1", "-1", "00", "01", "18446744073709551616", "1x"}) {
-    check(!parse_new_game_seed(invalid),
-          "New Game seed parsing must reject non-canonical or overflowing values");
+    check(!parse_new_game_seed(invalid), "New Game seed parsing must reject "
+                                         "non-canonical or overflowing values");
   }
 
   TemporaryDirectory temporary;
-  const auto xdg = resolve_profile_directory(
-      temporary.path().string(), std::string{"/unused"});
+  const auto xdg = resolve_profile_directory(temporary.path().string(),
+                                             std::string{"/unused"});
   check(xdg && *xdg == temporary.path() / "apsis-drift" / "profiles",
         "an absolute XDG data home must own the profile catalog");
-  const auto home = resolve_profile_directory(
-      std::string{"relative-xdg"}, temporary.path().string());
-  check(home && *home == temporary.path() / ".local" / "share" /
-                             "apsis-drift" / "profiles",
-        "a non-absolute XDG data home must fall back to the absolute HOME path");
+  const auto home = resolve_profile_directory(std::string{"relative-xdg"},
+                                              temporary.path().string());
+  check(
+      home && *home == temporary.path() / ".local" / "share" / "apsis-drift" /
+                           "profiles",
+      "a non-absolute XDG data home must fall back to the absolute HOME path");
   check(!resolve_profile_directory(std::string{}, std::string{"relative-home"}),
         "profile directory resolution must reject a relative HOME fallback");
   if (!xdg) return;
@@ -4599,29 +4576,31 @@ auto profile_catalog_contract() -> void {
             assisted->metadata.penalty_mode ==
                 IntersystemRuleProfile::assisted &&
             assisted->metadata.onboarding_state == OnboardingState::guided &&
-            assisted->metadata.location ==
-                ProfileLocation::docked_at_origin &&
+            assisted->metadata.location == ProfileLocation::docked_at_origin &&
             assisted->document == assisted_document,
-        "catalog creation must persist an exact Guided Assisted career and its bounded summary");
+        "catalog creation must persist an exact Guided Assisted career and its "
+        "bounded summary");
   if (!assisted) return;
 
   auto snapshot = scan_profile_catalog(*xdg);
   check(snapshot.writable && !snapshot.overflow &&
-            snapshot.entries.size() == 1U &&
-            snapshot.continue_index == 0U &&
+            snapshot.entries.size() == 1U && snapshot.continue_index == 0U &&
             snapshot.entries.front().activatable(),
         "a newly created catalog must expose its career as Continue");
   const auto loaded = load_catalog_profile(snapshot.entries.front());
   check(loaded && loaded->document == assisted_document &&
             loaded->metadata == assisted->metadata &&
             loaded->source_bytes == assisted->source_bytes,
-        "catalog loading must revalidate and preserve the exact authoritative document");
+        "catalog loading must revalidate and preserve the exact authoritative "
+        "document");
   const auto scanned_assisted = snapshot.entries.front();
   check(write_test_file(assisted->path, assisted->source_bytes + "\n"),
-        "the stale-entry fixture must preserve a valid document with changed bytes");
+        "the stale-entry fixture must preserve a valid document with changed "
+        "bytes");
   const auto stale = load_catalog_profile(scanned_assisted);
   check(!stale && stale.error().code == ProfileCatalogErrorCode::stale_entry,
-        "activation must reject a profile whose source bytes changed after cataloging");
+        "activation must reject a profile whose source bytes changed after "
+        "cataloging");
   check(write_test_file(assisted->path, assisted->source_bytes),
         "the stale-entry fixture must restore the catalog profile exactly");
 
@@ -4639,12 +4618,14 @@ auto profile_catalog_contract() -> void {
             advanced->document.recipe == assisted_document.recipe &&
             advanced->document.state.onboarding !=
                 assisted_document.state.onboarding,
-        "the same universe seed must retain generated identity while New Game choices remain career state");
+        "the same universe seed must retain generated identity while New Game "
+        "choices remain career state");
   snapshot = scan_profile_catalog(*xdg);
-  check(snapshot.entries.size() == 2U && snapshot.continue_index == 0U &&
-            snapshot.entries.front().metadata &&
-            snapshot.entries.front().metadata->id == ProfileId{2},
-        "Continue must select the newest valid save sequence deterministically");
+  check(
+      snapshot.entries.size() == 2U && snapshot.continue_index == 0U &&
+          snapshot.entries.front().metadata &&
+          snapshot.entries.front().metadata->id == ProfileId{2},
+      "Continue must select the newest valid save sequence deterministically");
 
   const auto symlink_path = *xdg / "profile-0000000000000003.json";
   std::error_code link_error;
@@ -4654,8 +4635,7 @@ auto profile_catalog_contract() -> void {
         "catalog scans must ignore canonical-name symbolic links");
 
   auto mismatched = assisted->source_bytes;
-  mismatched = replace_once(mismatched,
-                            "\"penalty_mode\": \"assisted\"",
+  mismatched = replace_once(mismatched, "\"penalty_mode\": \"assisted\"",
                             "\"penalty_mode\": \"pilot\"");
   check(write_test_file(assisted->path, mismatched),
         "the invalid profile-header fixture must be writable");
@@ -4669,12 +4649,13 @@ auto profile_catalog_contract() -> void {
             !invalid->activatable() && snapshot.continue_index == 0U &&
             snapshot.entries[*snapshot.continue_index].metadata->id ==
                 ProfileId{2},
-        "an inconsistent header must remain visible without displacing the newest usable Continue profile");
+        "an inconsistent header must remain visible without displacing the "
+        "newest usable Continue profile");
 
   TemporaryDirectory full;
   for (std::uint64_t id = 1; id <= kMaximumLocalProfiles; ++id) {
-    check(write_test_file(
-              full.path() / std::format("profile-{:016x}.json", id), "{}"),
+    check(write_test_file(full.path() / std::format("profile-{:016x}.json", id),
+                          "{}"),
           "the full-catalog fixture must create each bounded candidate");
   }
   const auto full_snapshot = scan_profile_catalog(full.path());
@@ -4682,13 +4663,15 @@ auto profile_catalog_contract() -> void {
   check(full_snapshot.entries.size() == kMaximumLocalProfiles &&
             !full_snapshot.overflow && !refused &&
             refused.error().code == ProfileCatalogErrorCode::catalog_full,
-        "a 64-entry profile catalog must refuse a 65th career without overwriting data");
-  check(write_test_file(
-            full.path() / "profile-0000000000000041.json", "{}"),
-        "the overflow catalog fixture must create one extra canonical candidate");
+        "a 64-entry profile catalog must refuse a 65th career without "
+        "overwriting data");
+  check(
+      write_test_file(full.path() / "profile-0000000000000041.json", "{}"),
+      "the overflow catalog fixture must create one extra canonical candidate");
   const auto overflow = scan_profile_catalog(full.path());
   check(overflow.overflow && !overflow.writable && overflow.entries.empty(),
-        "more than 64 canonical profile files must fail catalog enumeration closed");
+        "more than 64 canonical profile files must fail catalog enumeration "
+        "closed");
 }
 
 auto signal_run_contract() -> void {
@@ -4700,8 +4683,7 @@ auto signal_run_contract() -> void {
   auto run = hydrate_signal_run(fresh, *cache);
   check(run.has_value() &&
             run->onboarding.location == OriginLocation::docked_at_origin &&
-            run->onboarding.first_objective ==
-                FirstObjectiveStatus::offered &&
+            run->onboarding.first_objective == FirstObjectiveStatus::offered &&
             !run->scanner.selected && !run->flight,
         "a fresh save must hydrate as the bounded docked offer");
   if (!run) return;
@@ -4738,8 +4720,7 @@ auto signal_run_contract() -> void {
             .has_value(),
         "the completed integration fixture must record its collected delta");
   check(advance_origin_onboarding(
-            run->onboarding,
-            OriginOnboardingCommand::complete_first_objective)
+            run->onboarding, OriginOnboardingCommand::complete_first_objective)
             .has_value(),
         "the completed integration fixture must advance the objective");
   run->collection = SignalCollectionState{
@@ -4749,9 +4730,10 @@ auto signal_run_contract() -> void {
       .last_tick = run->flight->tick,
       .completion_tick = run->flight->tick,
   };
-  check(advance_signal_run(*run, *cache, {}).has_value() &&
-            run->origin_navigation && run->origin_navigation->arrived,
-        "a completed craft at the orbital waypoint must resolve return arrival");
+  check(
+      advance_signal_run(*run, *cache, {}).has_value() &&
+          run->origin_navigation && run->origin_navigation->arrived,
+      "a completed craft at the orbital waypoint must resolve return arrival");
 
   const auto checkpoint = project_signal_run_save(*run);
   check(checkpoint.has_value() && checkpoint->state.flight &&
@@ -4759,7 +4741,8 @@ auto signal_run_contract() -> void {
                 FirstObjectiveStatus::completed &&
             checkpoint->state.discoveries.size() == 1 &&
             checkpoint->state.world_deltas.size() == 1,
-        "the in-flight checkpoint must preserve craft, mission, discovery, and delta state");
+        "the in-flight checkpoint must preserve craft, mission, discovery, and "
+        "delta state");
   if (!checkpoint) return;
   auto resumed_cache = TerrainTileCache::create();
   auto resumed = resumed_cache
@@ -4769,11 +4752,11 @@ auto signal_run_contract() -> void {
   check(resumed.has_value() && resumed->flight == run->flight &&
             resumed->collection.status == SignalCollectionStatus::complete &&
             resumed->journal.entries().size() == 1,
-        "checkpoint hydration must restore terminal collection without duplicate deltas");
+        "checkpoint hydration must restore terminal collection without "
+        "duplicate deltas");
   if (!resumed) return;
   check(return_signal_run_to_origin(*resumed).has_value() &&
-            resumed->onboarding.location ==
-                OriginLocation::docked_at_origin &&
+            resumed->onboarding.location == OriginLocation::docked_at_origin &&
             !resumed->flight,
         "an arrived completed craft must return to the origin station");
   const auto returned = project_signal_run_save(*resumed);
@@ -4786,7 +4769,8 @@ auto signal_run_contract() -> void {
   invalid.state.first_objective_target = SurfaceSignalId{1};
   check(hydrate_signal_run(invalid, *cache) ==
             std::unexpected{SignalRunError::invalid_document},
-        "an unknown generated target must fail at the schema boundary before hydration");
+        "an unknown generated target must fail at the schema boundary before "
+        "hydration");
   invalid = *checkpoint;
   invalid.state.discoveries.clear();
   check(hydrate_signal_run(invalid, *cache) ==
@@ -4832,8 +4816,8 @@ auto signal_run_contract() -> void {
   immediate_redock.station_flight->relative_position = {
       kOriginStationArrivalRadiusMetres, 0.0, 0.0};
   immediate_redock.station_flight->relative_velocity = {};
-  const auto immediate_result = interact_signal_run_station(
-      immediate_redock, *career_cache);
+  const auto immediate_result =
+      interact_signal_run_station(immediate_redock, *career_cache);
   SessionController interaction_session{false, true};
   (void)interaction_session.dispatch(MenuCommand::activate);
   (void)interaction_session.start_flight();
@@ -5103,7 +5087,8 @@ auto regenerated_world_delta_contract() -> void {
               state_projection->signals[1].active &&
               !state_projection->signals[2].active &&
               !state_projection->signals[3].active,
-          "discovered objects must remain active while collected, completed, and removed objects are terminal");
+          "discovered objects must remain active while collected, completed, "
+          "and removed objects are terminal");
   }
 
   const std::array unknown_delta{SaveWorldDelta{
@@ -5131,11 +5116,12 @@ auto surface_signal_contract() -> void {
   check(placement == derive_surface_signal_seed(
                          parent, SurfaceSignalStream::placement) &&
             placement != attributes,
-        "surface-signal placement and attributes must use stable independent streams");
+        "surface-signal placement and attributes must use stable independent "
+        "streams");
   check(surface_signal_id_string(SurfaceSignalId{0}) ==
                 "signal-0000000000000000" &&
-            surface_signal_id_string(SurfaceSignalId{
-                std::numeric_limits<std::uint64_t>::max()}) ==
+            surface_signal_id_string(
+                SurfaceSignalId{std::numeric_limits<std::uint64_t>::max()}) ==
                 "signal-ffffffffffffffff",
         "surface signal IDs must retain their fixed-width canonical encoding");
 
@@ -5228,7 +5214,8 @@ auto surface_signal_contract() -> void {
                 planet, *exhausted_cache,
                 {.attempts = 1, .maximum_relief_metres = 0}) ==
                 std::unexpected{SurfaceSignalError::placement_exhausted},
-        "a rejected final candidate must fail transactionally without a partial catalog");
+        "a rejected final candidate must fail transactionally without a "
+        "partial catalog");
 }
 
 auto surface_signal_population() -> void {
@@ -5252,13 +5239,12 @@ auto surface_signal_population() -> void {
       check(signal.ordinal == index && signal.anchor.tile.planet == planet.id &&
                 signal.anchor.tile.face == expected_faces[index] &&
                 signal.anchor.tile.lod == kSurfaceSignalPlacementLod &&
-                signal.anchor.tile.x >= 1'024 &&
-                signal.anchor.tile.x < 3'072 &&
-                signal.anchor.tile.y >= 1'024 &&
-                signal.anchor.tile.y < 3'072 && signal.anchor.u == 0.5 &&
-                signal.anchor.v == 0.5 &&
+                signal.anchor.tile.x >= 1'024 && signal.anchor.tile.x < 3'072 &&
+                signal.anchor.tile.y >= 1'024 && signal.anchor.tile.y < 3'072 &&
+                signal.anchor.u == 0.5 && signal.anchor.v == 0.5 &&
                 signal.placement_attempt < kSurfaceSignalPlacementAttempts,
-            "signals must retain ordered central-face anchors and bounded retries");
+            "signals must retain ordered central-face anchors and bounded "
+            "retries");
       check(signal.strength_basis_points >=
                     kSurfaceSignalMinimumStrengthBasisPoints &&
                 signal.strength_basis_points <=
@@ -5267,7 +5253,8 @@ auto surface_signal_population() -> void {
                     kSurfaceSignalMinimumRewardPoints &&
                 signal.reward.discovery_points <=
                     kSurfaceSignalMaximumRewardPoints,
-            "generated signal attributes must remain inside their versioned ranges");
+            "generated signal attributes must remain inside their versioned "
+            "ranges");
 
       const auto tile = cache->get(planet, signal.anchor.tile);
       check(tile.has_value(), "accepted signal terrain must remain available");
@@ -5283,10 +5270,11 @@ auto surface_signal_population() -> void {
           maximum = std::max(maximum, sample->get().elevation_metres);
         }
       }
-      check(maximum - minimum <= kSurfaceSignalMaximumReliefMetres &&
-                signal.approach_altitude_metres ==
-                    maximum + kSurfaceSignalApproachClearanceMetres,
-            "accepted signals must satisfy relief and approach-clearance rules");
+      check(
+          maximum - minimum <= kSurfaceSignalMaximumReliefMetres &&
+              signal.approach_altitude_metres ==
+                  maximum + kSurfaceSignalApproachClearanceMetres,
+          "accepted signals must satisfy relief and approach-clearance rules");
     }
 
     for (std::size_t left = 0; left < first->signals.size(); ++left) {
@@ -5299,17 +5287,17 @@ auto surface_signal_population() -> void {
         check(left_position.has_value() && right_position.has_value(),
               "signal anchors must map back to planet-fixed positions");
         if (!left_position || !right_position) continue;
-        const auto left_length = std::hypot(
-            left_position->x, left_position->y, left_position->z);
-        const auto right_length = std::hypot(
-            right_position->x, right_position->y, right_position->z);
-        const auto cosine =
-            (left_position->x * right_position->x +
-             left_position->y * right_position->y +
-             left_position->z * right_position->z) /
-            (left_length * right_length);
+        const auto left_length =
+            std::hypot(left_position->x, left_position->y, left_position->z);
+        const auto right_length =
+            std::hypot(right_position->x, right_position->y, right_position->z);
+        const auto cosine = (left_position->x * right_position->x +
+                             left_position->y * right_position->y +
+                             left_position->z * right_position->z) /
+                            (left_length * right_length);
         check(cosine <= std::cos(std::numbers::pi_v<double> / 6.0) + 1.0e-12,
-              "central-face signal anchors must remain at least 30 degrees apart");
+              "central-face signal anchors must remain at least 30 degrees "
+              "apart");
       }
     }
   }
@@ -5349,7 +5337,7 @@ auto signal_scanner_contract() -> void {
   const auto unchanged = invalid_selection;
   check(advance_signal_selection(*catalog, invalid_selection,
                                  SignalSelectionCommand::next) ==
-            std::unexpected{SignalScannerError::invalid_selection} &&
+                std::unexpected{SignalScannerError::invalid_selection} &&
             invalid_selection == unchanged,
         "invalid scanner selection must be rejected transactionally");
   auto malformed = *catalog;
@@ -5358,9 +5346,8 @@ auto signal_scanner_contract() -> void {
                                  SignalSelectionCommand::next) ==
             std::unexpected{SignalScannerError::invalid_catalog},
         "duplicate signal identities must invalidate selection");
-  check(advance_signal_selection(
-            *catalog, selection,
-            static_cast<SignalSelectionCommand>(255)) ==
+  check(advance_signal_selection(*catalog, selection,
+                                 static_cast<SignalSelectionCommand>(255)) ==
             std::unexpected{SignalScannerError::invalid_command},
         "unknown signal selection commands must be rejected");
 
@@ -5388,8 +5375,8 @@ auto signal_scanner_contract() -> void {
       .last_transition = std::nullopt,
       .thermal = {},
   };
-  const auto reached = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto reached =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(reached && reached->status == SignalScannerStatus::reached &&
             reached->distance_metres < 1.0e-6 &&
             reached->selected == target_signal.id,
@@ -5397,27 +5384,27 @@ auto signal_scanner_contract() -> void {
 
   flight.pose.position.altitude_metres =
       target_position->altitude_metres + kSignalScannerReachedRadiusMetres;
-  const auto reached_boundary = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto reached_boundary =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(reached_boundary &&
             reached_boundary->status == SignalScannerStatus::reached,
         "the exact reached-radius boundary must remain reached");
   flight.pose.position.altitude_metres += 1.0;
-  const auto outside_reached = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto outside_reached =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(outside_reached &&
             outside_reached->status == SignalScannerStatus::tracking,
         "one metre beyond the reached radius must resume tracking");
   flight.pose.position.altitude_metres =
       target_position->altitude_metres + kSignalScannerMaximumRangeMetres;
-  const auto range_boundary = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto range_boundary =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(range_boundary &&
             range_boundary->status == SignalScannerStatus::tracking,
         "the exact maximum-range boundary must remain trackable");
   flight.pose.position.altitude_metres += 1.0;
-  const auto outside_range = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto outside_range =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(outside_range &&
             outside_range->status == SignalScannerStatus::out_of_range,
         "one metre beyond maximum range must report out of range");
@@ -5434,8 +5421,8 @@ auto signal_scanner_contract() -> void {
   check(west_position.has_value(), "signal approach start must resolve");
   if (!west_position) return;
   flight.pose = {*west_position, 0.0};
-  const auto tracking = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto tracking =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(tracking && tracking->status == SignalScannerStatus::tracking &&
             tracking->distance_metres > kSignalScannerReachedRadiusMetres &&
             tracking->distance_metres < 5'100.0 &&
@@ -5445,12 +5432,11 @@ auto signal_scanner_contract() -> void {
   auto occluded_position = *target_position;
   occluded_position.longitude_radians += 0.2;
   if (occluded_position.longitude_radians > std::numbers::pi_v<double>) {
-    occluded_position.longitude_radians -=
-        2.0 * std::numbers::pi_v<double>;
+    occluded_position.longitude_radians -= 2.0 * std::numbers::pi_v<double>;
   }
   flight.pose.position = occluded_position;
-  const auto occluded = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto occluded =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(occluded && occluded->status == SignalScannerStatus::occluded &&
             occluded->distance_metres < kSignalScannerMaximumRangeMetres,
         "a nearby target below the reference-sphere horizon must be occluded");
@@ -5462,22 +5448,22 @@ auto signal_scanner_contract() -> void {
     opposite.longitude_radians -= 2.0 * std::numbers::pi_v<double>;
   }
   flight.pose.position = opposite;
-  const auto out_of_range = resolve_signal_navigation(
-      planet, *catalog, flight, target_selection);
+  const auto out_of_range =
+      resolve_signal_navigation(planet, *catalog, flight, target_selection);
   check(out_of_range &&
             out_of_range->status == SignalScannerStatus::out_of_range &&
             out_of_range->distance_metres > kSignalScannerMaximumRangeMetres,
-        "a target beyond scanner range must report out of range before occlusion");
+        "a target beyond scanner range must report out of range before "
+        "occlusion");
 
   flight.pose.position = *target_position;
-  const auto no_signal = resolve_signal_navigation(
-      planet, *catalog, flight, SignalScannerState{});
+  const auto no_signal =
+      resolve_signal_navigation(planet, *catalog, flight, SignalScannerState{});
   check(no_signal && no_signal->status == SignalScannerStatus::no_signal &&
             !no_signal->selected,
         "an empty selection must produce an explicit no-signal solution");
   auto non_finite = flight;
-  non_finite.pose.heading_radians =
-      std::numeric_limits<double>::quiet_NaN();
+  non_finite.pose.heading_radians = std::numeric_limits<double>::quiet_NaN();
   check(resolve_signal_navigation(planet, *catalog, non_finite,
                                   target_selection) ==
             std::unexpected{SignalScannerError::invalid_flight_state},
@@ -5502,15 +5488,17 @@ auto signal_scanner_contract() -> void {
   const auto reached_readout = format_signal_scanner(*reached);
   const std::array readouts{empty_readout, tracking_readout, occluded_readout,
                             range_readout, reached_readout};
-  check(std::ranges::all_of(readouts, [](const auto& readout) {
-          return readout.target.size() == kInstrumentLineWidth &&
-                 readout.bearing.size() == kInstrumentLineWidth &&
-                 readout.distance.size() == kInstrumentLineWidth &&
-                 readout.motion.size() == kInstrumentLineWidth &&
-                 readout.arrival.size() == kInstrumentLineWidth &&
-                 readout.strength.size() == kInstrumentLineWidth &&
-                 readout.cue.size() == kInstrumentLineWidth;
-        }),
+  check(std::ranges::all_of(
+            readouts,
+            [](const auto& readout) {
+              return readout.target.size() == kInstrumentLineWidth &&
+                     readout.bearing.size() == kInstrumentLineWidth &&
+                     readout.distance.size() == kInstrumentLineWidth &&
+                     readout.motion.size() == kInstrumentLineWidth &&
+                     readout.arrival.size() == kInstrumentLineWidth &&
+                     readout.strength.size() == kInstrumentLineWidth &&
+                     readout.cue.size() == kInstrumentLineWidth;
+            }),
         "scanner formatting must preserve fixed-width cockpit lines");
   check(empty_readout.cue == "NO SIGNAL" &&
             tracking_readout.cue == "THRUST >>" &&
@@ -5519,8 +5507,8 @@ auto signal_scanner_contract() -> void {
             reached_readout.cue == "REACHED! ",
         "scanner states must remain understandable without color");
   const auto disclosed = tracking_readout.target + tracking_readout.bearing +
-                         tracking_readout.distance +
-                         tracking_readout.strength + tracking_readout.cue;
+                         tracking_readout.distance + tracking_readout.strength +
+                         tracking_readout.cue;
   check(disclosed.find("survey") == std::string::npos &&
             disclosed.find("recovery") == std::string::npos &&
             disclosed.find("anomaly") == std::string::npos &&
@@ -5573,8 +5561,7 @@ auto signal_scanner_contract() -> void {
   check(format_signal_scanner(right).cue == "TURN RGHT" &&
             format_signal_scanner(left).cue == "TURN LEFT" &&
             format_signal_scanner(metre_boundary).distance == "DST 9999m" &&
-            format_signal_scanner(kilometre_boundary).distance ==
-                "DST   10k" &&
+            format_signal_scanner(kilometre_boundary).distance == "DST   10k" &&
             format_signal_scanner(bearing_boundary).bearing == "BRG 000  " &&
             format_signal_scanner(overflow).distance == "DST #### ",
         "scanner formatting must preserve directional and overflow boundaries");
@@ -5582,8 +5569,7 @@ auto signal_scanner_contract() -> void {
   termforge::KeyEvent tab;
   tab.key = termforge::Key::Tab;
   tab.action = termforge::KeyAction::Press;
-  check(detail::signal_selection_command(tab) ==
-            SignalSelectionCommand::next,
+  check(detail::signal_selection_command(tab) == SignalSelectionCommand::next,
         "Tab press must select the next signal");
   tab.shift = true;
   check(detail::signal_selection_command(tab) ==
@@ -5601,7 +5587,8 @@ auto signal_collection_contract() -> void {
   check(kSignalCollectionAcquireTicks == 60 &&
             kSignalCollectionScanTicks == 360 &&
             kSignalCollectionTotalInRangeTicks == 420,
-        "signal collection timing must remain fixed to the 120 Hz simulation clock");
+        "signal collection timing must remain fixed to the 120 Hz simulation "
+        "clock");
 
   const auto planet = generate_planet_descriptor(Seed{42});
   auto cache = TerrainTileCache::create();
@@ -5613,8 +5600,7 @@ auto signal_collection_contract() -> void {
   const auto& target = catalog->signals[0];
   const auto& other = catalog->signals[1];
   const auto navigation_for = [](const SurfaceSignal& signal,
-                                 SignalScannerStatus status,
-                                 double distance) {
+                                 SignalScannerStatus status, double distance) {
     return SignalNavigationSolution{
         .status = status,
         .selected = signal.id,
@@ -5626,17 +5612,15 @@ auto signal_collection_contract() -> void {
         .strength_basis_points = signal.strength_basis_points,
     };
   };
-  const auto reached = navigation_for(
-      target, SignalScannerStatus::reached,
-      kSignalScannerReachedRadiusMetres);
-  const auto tracking = navigation_for(
-      target, SignalScannerStatus::tracking,
-      kSignalScannerReachedRadiusMetres + 1.0);
+  const auto reached = navigation_for(target, SignalScannerStatus::reached,
+                                      kSignalScannerReachedRadiusMetres);
+  const auto tracking = navigation_for(target, SignalScannerStatus::tracking,
+                                       kSignalScannerReachedRadiusMetres + 1.0);
 
   auto journal = *WorldDeltaJournal::create();
   SignalCollectionState state;
-  const auto initial = advance_signal_collection(
-      *catalog, tracking, 0, journal, state);
+  const auto initial =
+      advance_signal_collection(*catalog, tracking, 0, journal, state);
   check(initial && !initial->delta_emitted &&
             state.status == SignalCollectionStatus::approach &&
             state.target == target.id && state.last_tick == 0,
@@ -5644,10 +5628,10 @@ auto signal_collection_contract() -> void {
 
   bool emitted_before_completion{};
   bool emitted_on_completion{};
-  for (SimulationTick tick = 1;
-       tick <= kSignalCollectionTotalInRangeTicks; ++tick) {
-    const auto update = advance_signal_collection(
-        *catalog, reached, tick, journal, state);
+  for (SimulationTick tick = 1; tick <= kSignalCollectionTotalInRangeTicks;
+       ++tick) {
+    const auto update =
+        advance_signal_collection(*catalog, reached, tick, journal, state);
     check(update.has_value(),
           "valid consecutive in-range ticks must advance collection");
     if (!update) break;
@@ -5676,18 +5660,17 @@ auto signal_collection_contract() -> void {
             collected->kind == SaveWorldDeltaKind::collected &&
             collected->tick == kSignalCollectionTotalInRangeTicks &&
             journal.entries().size() == 1,
-        "the 420th consecutive in-range tick must emit exactly one collection delta");
+        "the 420th consecutive in-range tick must emit exactly one collection "
+        "delta");
   const auto repeated = advance_signal_collection(
       *catalog, reached, kSignalCollectionTotalInRangeTicks + 1U, journal,
       state);
-  check(repeated && !repeated->delta_emitted &&
-            journal.entries().size() == 1,
+  check(repeated && !repeated->delta_emitted && journal.entries().size() == 1,
         "a completed target must remain an idempotent single journal entry");
 
   auto abort_journal = *WorldDeltaJournal::create();
   SignalCollectionState abort_state;
-  for (SimulationTick tick = 0;
-       tick <= kSignalCollectionAcquireTicks; ++tick) {
+  for (SimulationTick tick = 0; tick <= kSignalCollectionAcquireTicks; ++tick) {
     check(advance_signal_collection(*catalog, reached, tick, abort_journal,
                                     abort_state)
               .has_value(),
@@ -5715,8 +5698,8 @@ auto signal_collection_contract() -> void {
                                   retarget_state)
             .has_value(),
         "retarget fixture must begin acquisition");
-  const auto other_reached = navigation_for(
-      other, SignalScannerStatus::reached, 100.0);
+  const auto other_reached =
+      navigation_for(other, SignalScannerStatus::reached, 100.0);
   const auto retargeted = advance_signal_collection(
       *catalog, other_reached, 11, retarget_journal, retarget_state);
   check(retargeted &&
@@ -5741,8 +5724,7 @@ auto signal_collection_contract() -> void {
   unknown_target.selected = SurfaceSignalId{0};
   const auto unknown = advance_signal_collection(
       *catalog, unknown_target, 0, invalid_journal, invalid_state);
-  check(!unknown &&
-            unknown.error() == SignalCollectionError::invalid_catalog &&
+  check(!unknown && unknown.error() == SignalCollectionError::invalid_catalog &&
             invalid_state == state_before_invalid &&
             invalid_journal.entries().empty(),
         "unknown generated targets must fail without partial mutation");
@@ -5767,7 +5749,8 @@ auto signal_collection_contract() -> void {
   const auto before_wrong_tick = invalid_state;
   const auto wrong_tick = advance_signal_collection(
       *catalog, tracking, 2, invalid_journal, invalid_state);
-  check(!wrong_tick && wrong_tick.error() == SignalCollectionError::wrong_tick &&
+  check(!wrong_tick &&
+            wrong_tick.error() == SignalCollectionError::wrong_tick &&
             invalid_state == before_wrong_tick,
         "skipped or duplicate ticks must be rejected transactionally");
   SignalCollectionState overflow_state{
@@ -5788,9 +5771,8 @@ auto signal_collection_contract() -> void {
   std::vector<SaveWorldDelta> full_entries;
   full_entries.reserve(kMaximumSaveWorldDeltas);
   for (std::size_t index = 0; index < kMaximumSaveWorldDeltas; ++index) {
-    full_entries.push_back(
-        {std::format("signal-{:016x}", index + 1U),
-         SaveWorldDeltaKind::discovered, 1});
+    full_entries.push_back({std::format("signal-{:016x}", index + 1U),
+                            SaveWorldDeltaKind::discovered, 1});
   }
   auto full_journal = WorldDeltaJournal::create(full_entries);
   check(full_journal.has_value(),
@@ -5799,21 +5781,20 @@ auto signal_collection_contract() -> void {
     SignalCollectionState full_state{
         .status = SignalCollectionStatus::scanning,
         .target = target.id,
-        .consecutive_in_range_ticks =
-            kSignalCollectionTotalInRangeTicks - 1U,
+        .consecutive_in_range_ticks = kSignalCollectionTotalInRangeTicks - 1U,
         .last_tick = 500,
         .completion_tick = std::nullopt,
     };
     const auto full_state_before = full_state;
     const auto full_entries_before = std::vector<SaveWorldDelta>{
         full_journal->entries().begin(), full_journal->entries().end()};
-    const auto full = advance_signal_collection(
-        *catalog, reached, 501, *full_journal, full_state);
+    const auto full = advance_signal_collection(*catalog, reached, 501,
+                                                *full_journal, full_state);
     check(!full && full.error() == SignalCollectionError::journal_failure &&
               full_state == full_state_before &&
-              std::ranges::equal(full_journal->entries(),
-                                 full_entries_before),
-          "journal capacity failure must not expose a completed scan or partial delta");
+              std::ranges::equal(full_journal->entries(), full_entries_before),
+          "journal capacity failure must not expose a completed scan or "
+          "partial delta");
   }
 
   const auto saved_recipe = make_save_recipe(Seed{42});
@@ -5822,8 +5803,7 @@ auto signal_collection_contract() -> void {
                   saved_recipe.origin_system_ordinal);
   const auto saved_planet = generate_origin_home_planet(saved_system_seed);
   auto saved_cache = TerrainTileCache::create();
-  check(saved_cache.has_value(),
-        "save codec tests require a terrain cache");
+  check(saved_cache.has_value(), "save codec tests require a terrain cache");
   if (!saved_cache) return;
   auto saved_catalog = generate_surface_signals(saved_planet, *saved_cache);
   check(saved_catalog.has_value(),
@@ -5857,10 +5837,9 @@ auto signal_collection_contract() -> void {
           },
   };
   const auto encoded = encode_save_document_json(saved);
-  const auto decoded =
-      encoded ? decode_save_document_json(*encoded)
-              : std::expected<SaveDocument, SaveSchemaError>{
-                    std::unexpected{SaveSchemaError{}}};
+  const auto decoded = encoded ? decode_save_document_json(*encoded)
+                               : std::expected<SaveDocument, SaveSchemaError>{
+                                     std::unexpected{SaveSchemaError{}}};
   check(encoded.has_value() && decoded.has_value(),
         "a collected target must survive the version 1 save codec");
   if (decoded) {
@@ -5870,58 +5849,56 @@ auto signal_collection_contract() -> void {
     check(restored_journal.has_value(),
           "a saved collection journal must restore");
     if (restored_journal) {
-      const auto saved_reached = navigation_for(
-          saved_target, SignalScannerStatus::reached,
-          kSignalScannerReachedRadiusMetres);
-      const auto restored = advance_signal_collection(
-          *saved_catalog, saved_reached, 10'000, *restored_journal,
-          restored_state);
+      const auto saved_reached =
+          navigation_for(saved_target, SignalScannerStatus::reached,
+                         kSignalScannerReachedRadiusMetres);
+      const auto restored =
+          advance_signal_collection(*saved_catalog, saved_reached, 10'000,
+                                    *restored_journal, restored_state);
       check(restored && !restored->delta_emitted &&
                 restored_state.status == SignalCollectionStatus::complete &&
                 restored_state.completion_tick == state.completion_tick &&
                 restored_journal->entries().size() == 1,
-            "reload must recognize terminal state without collecting the unique target twice");
+            "reload must recognize terminal state without collecting the "
+            "unique target twice");
     }
   }
 
   const std::array readouts{
       format_signal_collection(SignalCollectionState{}),
-      format_signal_collection(
-          {.status = SignalCollectionStatus::in_range,
-           .target = target.id,
-           .consecutive_in_range_ticks = 30,
-           .last_tick = std::nullopt,
-           .completion_tick = std::nullopt}),
+      format_signal_collection({.status = SignalCollectionStatus::in_range,
+                                .target = target.id,
+                                .consecutive_in_range_ticks = 30,
+                                .last_tick = std::nullopt,
+                                .completion_tick = std::nullopt}),
       format_signal_collection(
           {.status = SignalCollectionStatus::scanning,
            .target = target.id,
-           .consecutive_in_range_ticks =
-               kSignalCollectionAcquireTicks + 180U,
+           .consecutive_in_range_ticks = kSignalCollectionAcquireTicks + 180U,
            .last_tick = std::nullopt,
            .completion_tick = std::nullopt}),
       format_signal_collection(
           {.status = SignalCollectionStatus::complete,
            .target = target.id,
-           .consecutive_in_range_ticks =
-               kSignalCollectionTotalInRangeTicks,
+           .consecutive_in_range_ticks = kSignalCollectionTotalInRangeTicks,
            .last_tick = kSignalCollectionTotalInRangeTicks,
            .completion_tick = kSignalCollectionTotalInRangeTicks}),
-      format_signal_collection(
-          {.status = SignalCollectionStatus::aborted,
-           .target = target.id,
-           .consecutive_in_range_ticks = 0,
-           .last_tick = std::nullopt,
-           .completion_tick = std::nullopt}),
+      format_signal_collection({.status = SignalCollectionStatus::aborted,
+                                .target = target.id,
+                                .consecutive_in_range_ticks = 0,
+                                .last_tick = std::nullopt,
+                                .completion_tick = std::nullopt}),
   };
-  check(std::ranges::all_of(readouts, [](const auto& readout) {
-          return readout.cue.size() == kInstrumentLineWidth &&
-                 !readout.message.empty();
-        }) &&
-            readouts[1].cue == "LOCK 050%" &&
-            readouts[2].cue == "SCAN 050%" &&
-            readouts[3].cue == "COLLECTED" &&
-            readouts[4].cue == "SCAN LOST",
-        "cockpit collection cues must be fixed-width, textual, and expose progress and outcomes");
+  check(std::ranges::all_of(readouts,
+                            [](const auto& readout) {
+                              return readout.cue.size() ==
+                                         kInstrumentLineWidth &&
+                                     !readout.message.empty();
+                            }) &&
+            readouts[1].cue == "LOCK 050%" && readouts[2].cue == "SCAN 050%" &&
+            readouts[3].cue == "COLLECTED" && readouts[4].cue == "SCAN LOST",
+        "cockpit collection cues must be fixed-width, textual, and expose "
+        "progress and outcomes");
 }
 
 auto signal_navigation_acceptance_contract() -> void {
@@ -5955,7 +5932,8 @@ auto signal_navigation_acceptance_contract() -> void {
             first->command_count == 2 && first->journal.entries().size() == 1 &&
             first->journal.entries().front().kind ==
                 SaveWorldDeltaKind::collected,
-        "the canonical approach must select, reach, and collect the first signal");
+        "the canonical approach must select, reach, and collect the first "
+        "signal");
 
   const auto json = signal_navigation_acceptance_json({
       .target_id = *first->scanner.selected,
@@ -5973,12 +5951,10 @@ auto signal_navigation_acceptance_contract() -> void {
             json.find("\"scenario\": \"v0.4-signal-collection\"") !=
                 std::string::npos &&
             json.find("\"completion_tick\": 1491") != std::string::npos &&
-            json.find("\"final_status\": \"complete\"") !=
-                std::string::npos &&
+            json.find("\"final_status\": \"complete\"") != std::string::npos &&
             json.find("\"world_delta_kind\": \"collected\"") !=
                 std::string::npos &&
-            json.find("\"presentation\": \"ansi\"") !=
-                std::string::npos,
+            json.find("\"presentation\": \"ansi\"") != std::string::npos,
         "signal navigation JSON must retain its versioned exact fields");
 }
 
@@ -6129,8 +6105,7 @@ auto planet_descriptor_population() -> void {
                                   palette_index < palette_counts.size();
     check(categories_valid,
           "the planet sweep must not generate an invalid category");
-    if (!categories_valid)
-      continue;
+    if (!categories_valid) continue;
     ++atmosphere_counts[atmosphere_index];
     ++terrain_counts[terrain_index];
     ++palette_counts[palette_index];
@@ -6208,32 +6183,32 @@ auto terrain_tile_failure_matrix() -> void {
               valid->samples().size() == kTerrainTileSampleCount,
           "a generated terrain tile must retain its identity and sample grid");
     check(valid->sample_at(0, 0).has_value() &&
-              valid->sample_at(kTerrainTileSamplesPerAxis - 1,
-                               kTerrainTileSamplesPerAxis - 1)
+              valid
+                  ->sample_at(kTerrainTileSamplesPerAxis - 1,
+                              kTerrainTileSamplesPerAxis - 1)
                   .has_value(),
           "both inclusive terrain tile sample boundaries must be readable");
-    check(valid->sample_at(kTerrainTileSamplesPerAxis, 0) ==
-                  std::unexpected{
-                      TerrainTileError::invalid_sample_coordinate} &&
-              valid->sample_at(0, kTerrainTileSamplesPerAxis) ==
-                  std::unexpected{
-                      TerrainTileError::invalid_sample_coordinate},
-          "terrain tile sample coordinates beyond either axis must fail");
+    check(
+        valid->sample_at(kTerrainTileSamplesPerAxis, 0) ==
+                std::unexpected{TerrainTileError::invalid_sample_coordinate} &&
+            valid->sample_at(0, kTerrainTileSamplesPerAxis) ==
+                std::unexpected{TerrainTileError::invalid_sample_coordinate},
+        "terrain tile sample coordinates beyond either axis must fail");
   }
 
-  const TerrainTileKey wrong_planet{
-      PlanetId{planet.id.value + 1U}, CubeFace::positive_x, 2, 1, 2};
-  const TerrainTileKey invalid_face{
-      planet.id, static_cast<CubeFace>(255), 2, 1, 2};
+  const TerrainTileKey wrong_planet{PlanetId{planet.id.value + 1U},
+                                    CubeFace::positive_x, 2, 1, 2};
+  const TerrainTileKey invalid_face{planet.id, static_cast<CubeFace>(255), 2, 1,
+                                    2};
   const TerrainTileKey invalid_lod{
       planet.id, CubeFace::positive_x,
       static_cast<std::uint8_t>(kMaxTerrainLod + 1U), 0, 0};
   const TerrainTileKey invalid_x{planet.id, CubeFace::positive_x, 2, 4, 0};
   const TerrainTileKey invalid_y{planet.id, CubeFace::positive_x, 2, 0, 4};
-  const TerrainTileKey overflowing{
-      planet.id, CubeFace::positive_x, kMaxTerrainLod,
-      std::numeric_limits<std::uint32_t>::max(),
-      std::numeric_limits<std::uint32_t>::max()};
+  const TerrainTileKey overflowing{planet.id, CubeFace::positive_x,
+                                   kMaxTerrainLod,
+                                   std::numeric_limits<std::uint32_t>::max(),
+                                   std::numeric_limits<std::uint32_t>::max()};
   check(generate_terrain_tile(planet, wrong_planet) ==
             std::unexpected{TerrainTileError::wrong_planet},
         "a terrain key from another planet must be rejected");
@@ -6274,8 +6249,8 @@ auto deterministic_terrain_tiles() -> void {
   check(stream_seeds[0] != stream_seeds[1],
         "terrain shape and detail streams must remain independent");
   check(stream_seeds ==
-            std::array<std::uint64_t, streams.size()>{
-                12495169707215482604ULL, 745371854408699215ULL},
+            std::array<std::uint64_t, streams.size()>{12495169707215482604ULL,
+                                                      745371854408699215ULL},
         "named terrain streams must retain their golden vectors");
 
   struct GoldenTile {
@@ -6287,10 +6262,8 @@ auto deterministic_terrain_tiles() -> void {
     std::uint64_t checksum;
   };
   constexpr std::array golden_tiles{
-      GoldenTile{0, CubeFace::positive_x, 0, 0, 0,
-                 9797442332981214159ULL},
-      GoldenTile{42, CubeFace::positive_z, 4, 7, 11,
-                 743763593216380847ULL},
+      GoldenTile{0, CubeFace::positive_x, 0, 0, 0, 9797442332981214159ULL},
+      GoldenTile{42, CubeFace::positive_z, 4, 7, 11, 743763593216380847ULL},
       GoldenTile{std::numeric_limits<std::uint64_t>::max(),
                  CubeFace::negative_y, kMaxTerrainLod, 65'535, 0,
                  6857593874197516006ULL},
@@ -6326,13 +6299,15 @@ auto deterministic_terrain_tiles() -> void {
   const TerrainTileKey dry_key{dry.id, CubeFace::positive_x, 0, 0, 0};
   const auto dry_tile = generate_terrain_tile(dry, dry_key);
   const auto wet_tile = generate_terrain_tile(wet, dry_key);
-  check(dry_tile && std::ranges::all_of(dry_tile->samples(), [](auto sample) {
-          return sample.elevation_metres > 0;
-        }),
+  check(dry_tile && std::ranges::all_of(dry_tile->samples(),
+                                        [](auto sample) {
+                                          return sample.elevation_metres > 0;
+                                        }),
         "a zero-water descriptor must not generate submerged samples");
-  check(wet_tile && std::ranges::all_of(wet_tile->samples(), [](auto sample) {
-          return sample.elevation_metres < 0;
-        }),
+  check(wet_tile && std::ranges::all_of(wet_tile->samples(),
+                                        [](auto sample) {
+                                          return sample.elevation_metres < 0;
+                                        }),
         "a full-water descriptor must not generate exposed samples");
 }
 
@@ -6340,12 +6315,12 @@ auto terrain_tile_seam_contract() -> void {
   const auto planet = generate_planet_descriptor(Seed{42});
   constexpr std::size_t last{kTerrainTileSamplesPerAxis - 1};
 
-  const auto left = generate_terrain_tile(
-      planet, {planet.id, CubeFace::positive_x, 2, 1, 2});
-  const auto right = generate_terrain_tile(
-      planet, {planet.id, CubeFace::positive_x, 2, 2, 2});
-  const auto above = generate_terrain_tile(
-      planet, {planet.id, CubeFace::positive_x, 2, 1, 3});
+  const auto left =
+      generate_terrain_tile(planet, {planet.id, CubeFace::positive_x, 2, 1, 2});
+  const auto right =
+      generate_terrain_tile(planet, {planet.id, CubeFace::positive_x, 2, 2, 2});
+  const auto above =
+      generate_terrain_tile(planet, {planet.id, CubeFace::positive_x, 2, 1, 3});
   check(left && right && above,
         "same-face terrain seam fixtures must generate");
   if (left && right && above) {
@@ -6363,12 +6338,12 @@ auto terrain_tile_seam_contract() -> void {
   for (std::uint8_t face = 0; face < 6; ++face) {
     auto generated = generate_terrain_tile(
         planet, {planet.id, static_cast<CubeFace>(face), 0, 0, 0});
-    check(generated.has_value(), "every cube face terrain fixture must generate");
+    check(generated.has_value(),
+          "every cube face terrain fixture must generate");
     if (generated) faces.push_back(std::move(*generated));
   }
   if (faces.size() == 6) {
-    const auto edge_coordinate = [last](std::size_t edge,
-                                        std::size_t sample) {
+    const auto edge_coordinate = [last](std::size_t edge, std::size_t sample) {
       switch (edge) {
         case 0: return std::pair{std::size_t{0}, sample};
         case 1: return std::pair{last, sample};
@@ -6399,15 +6374,15 @@ auto terrain_tile_seam_contract() -> void {
                 const TerrainTileAddress other_address{
                     {planet.id, static_cast<CubeFace>(other_face), 0, 0, 0},
                     static_cast<double>(other_x) / static_cast<double>(last),
-                    static_cast<double>(other_y) /
-                        static_cast<double>(last)};
+                    static_cast<double>(other_y) / static_cast<double>(last)};
                 const auto other_position =
                     planet_fixed_from_terrain_address(planet, other_address);
                 if (source_position && other_position &&
                     close_position(*source_position, *other_position)) {
-                  check(faces[face].sample_at(x, y) ==
-                            faces[other_face].sample_at(other_x, other_y),
-                        "cube-face terrain seams and corners must share samples");
+                  check(
+                      faces[face].sample_at(x, y) ==
+                          faces[other_face].sample_at(other_x, other_y),
+                      "cube-face terrain seams and corners must share samples");
                   matched = true;
                   break;
                 }
@@ -6421,22 +6396,17 @@ auto terrain_tile_seam_contract() -> void {
     }
   }
 
-  const TerrainTileKey parent_key{
-      planet.id, CubeFace::negative_z, 2, 1, 2};
+  const TerrainTileKey parent_key{planet.id, CubeFace::negative_z, 2, 1, 2};
   const auto parent = generate_terrain_tile(planet, parent_key);
   std::array<std::expected<TerrainTile, TerrainTileError>, 4> children{
-      generate_terrain_tile(
-          planet, {planet.id, parent_key.face, 3, 2, 4}),
-      generate_terrain_tile(
-          planet, {planet.id, parent_key.face, 3, 3, 4}),
-      generate_terrain_tile(
-          planet, {planet.id, parent_key.face, 3, 2, 5}),
-      generate_terrain_tile(
-          planet, {planet.id, parent_key.face, 3, 3, 5}),
+      generate_terrain_tile(planet, {planet.id, parent_key.face, 3, 2, 4}),
+      generate_terrain_tile(planet, {planet.id, parent_key.face, 3, 3, 4}),
+      generate_terrain_tile(planet, {planet.id, parent_key.face, 3, 2, 5}),
+      generate_terrain_tile(planet, {planet.id, parent_key.face, 3, 3, 5}),
   };
-  check(parent && std::ranges::all_of(children, [](const auto& child) {
-          return child.has_value();
-        }),
+  check(parent &&
+            std::ranges::all_of(
+                children, [](const auto& child) { return child.has_value(); }),
         "cross-LOD terrain seam fixtures must generate");
   if (parent && std::ranges::all_of(children, [](const auto& child) {
         return child.has_value();
@@ -6463,12 +6433,9 @@ auto terrain_tile_cache_contract() -> void {
         "a terrain cache must retain its validated capacity");
   if (!cache) return;
 
-  const TerrainTileKey first_key{
-      planet.id, CubeFace::positive_x, 2, 0, 0};
-  const TerrainTileKey second_key{
-      planet.id, CubeFace::positive_x, 2, 1, 0};
-  const TerrainTileKey third_key{
-      planet.id, CubeFace::positive_x, 2, 2, 0};
+  const TerrainTileKey first_key{planet.id, CubeFace::positive_x, 2, 0, 0};
+  const TerrainTileKey second_key{planet.id, CubeFace::positive_x, 2, 1, 0};
+  const TerrainTileKey third_key{planet.id, CubeFace::positive_x, 2, 2, 0};
   const auto first = cache->get(planet, first_key);
   const auto second = cache->get(planet, second_key);
   const auto first_hit = cache->get(planet, first_key);
@@ -6490,9 +6457,8 @@ auto terrain_tile_cache_contract() -> void {
         "terrain cache regeneration must remain inside capacity");
 
   const auto before_size = cache->size();
-  const TerrainTileKey invalid{
-      planet.id, CubeFace::positive_x, 2,
-      std::numeric_limits<std::uint32_t>::max(), 0};
+  const TerrainTileKey invalid{planet.id, CubeFace::positive_x, 2,
+                               std::numeric_limits<std::uint32_t>::max(), 0};
   check(cache->get(planet, invalid) ==
             std::unexpected{TerrainTileError::invalid_tile_index},
         "a cache miss with an invalid key must return the generator error");
@@ -6508,36 +6474,33 @@ auto terrain_tile_cache_contract() -> void {
         "a conflicting cached descriptor must leave cache state unchanged");
 
   auto sampling_cache = TerrainTileCache::create(4);
-  auto sampler = sampling_cache
-                     ? TerrainSurfaceSampler::create(planet, 6,
-                                                     *sampling_cache)
-                     : std::expected<TerrainSurfaceSampler, TerrainTileError>{
-                           std::unexpected{
-                               TerrainTileError::invalid_cache_capacity}};
+  auto sampler =
+      sampling_cache
+          ? TerrainSurfaceSampler::create(planet, 6, *sampling_cache)
+          : std::expected<TerrainSurfaceSampler, TerrainTileError>{
+                std::unexpected{TerrainTileError::invalid_cache_capacity}};
   const auto sample_position =
       planet_fixed_from_geodetic(planet, {0.35, -0.65, 0.0});
-  const auto one_shot = sample_position && sampling_cache
-                            ? sample_planet_surface(planet, *sample_position, 6,
-                                                    *sampling_cache)
-                            : std::expected<TerrainSurfaceSample,
-                                            TerrainTileError>{std::unexpected{
-                                  TerrainTileError::coordinate_failure}};
-  const auto prepared = sampler && sample_position
-                            ? sampler->sample(*sample_position)
-                            : std::expected<TerrainSurfaceSample,
-                                            TerrainTileError>{std::unexpected{
-                                  TerrainTileError::coordinate_failure}};
-  const auto by_direction = sampler && sample_position
-                                ? sampler->sample_direction(
-                                      {sample_position->x, sample_position->y,
-                                       sample_position->z})
-                                : std::expected<TerrainSurfaceSample,
-                                                TerrainTileError>{
-                                      std::unexpected{
-                                          TerrainTileError::coordinate_failure}};
+  const auto one_shot =
+      sample_position && sampling_cache
+          ? sample_planet_surface(planet, *sample_position, 6, *sampling_cache)
+          : std::expected<TerrainSurfaceSample, TerrainTileError>{
+                std::unexpected{TerrainTileError::coordinate_failure}};
+  const auto prepared =
+      sampler && sample_position
+          ? sampler->sample(*sample_position)
+          : std::expected<TerrainSurfaceSample, TerrainTileError>{
+                std::unexpected{TerrainTileError::coordinate_failure}};
+  const auto by_direction =
+      sampler && sample_position
+          ? sampler->sample_direction(
+                {sample_position->x, sample_position->y, sample_position->z})
+          : std::expected<TerrainSurfaceSample, TerrainTileError>{
+                std::unexpected{TerrainTileError::coordinate_failure}};
   check(one_shot && prepared && by_direction && *one_shot == *prepared &&
             *prepared == *by_direction && sampler->tiles_touched() == 1,
-        "a prepared surface sampler must preserve samples while pinning each tile once");
+        "a prepared surface sampler must preserve samples while pinning each "
+        "tile once");
   check(sampler &&
             !sampler->sample_direction(
                 {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}) &&
@@ -6554,16 +6517,11 @@ auto coordinate_and_lod_contract() -> void {
   const auto planet = planet_with_radius(generated, 5'499);
   constexpr double radius{5'499'000.0};
 
-  const auto prime =
-      planet_fixed_from_geodetic(planet, {0.0, 0.0, 0.0});
-  const auto east =
-      planet_fixed_from_geodetic(planet, {0.0, half_pi, 1'000.0});
-  const auto north =
-      planet_fixed_from_geodetic(planet, {half_pi, 1.234, 0.0});
-  const auto south =
-      planet_fixed_from_geodetic(planet, {-half_pi, -2.5, 0.0});
-  const auto antimeridian =
-      planet_fixed_from_geodetic(planet, {0.0, pi, 0.0});
+  const auto prime = planet_fixed_from_geodetic(planet, {0.0, 0.0, 0.0});
+  const auto east = planet_fixed_from_geodetic(planet, {0.0, half_pi, 1'000.0});
+  const auto north = planet_fixed_from_geodetic(planet, {half_pi, 1.234, 0.0});
+  const auto south = planet_fixed_from_geodetic(planet, {-half_pi, -2.5, 0.0});
+  const auto antimeridian = planet_fixed_from_geodetic(planet, {0.0, pi, 0.0});
   check(prime && close_position(*prime, {radius, 0.0, 0.0}),
         "the prime meridian must map to planet-fixed positive x");
   check(east && close_position(*east, {0.0, radius + 1'000.0, 0.0}),
@@ -6572,15 +6530,12 @@ auto coordinate_and_lod_contract() -> void {
         "the north pole must map exactly to planet-fixed positive z");
   check(south && close_position(*south, {0.0, 0.0, -radius}),
         "the south pole must map exactly to planet-fixed negative z");
-  check(antimeridian &&
-            close_position(*antimeridian, {-radius, 0.0, 0.0}),
+  check(antimeridian && close_position(*antimeridian, {-radius, 0.0, 0.0}),
         "positive pi must alias the canonical antimeridian");
 
   if (north && south && antimeridian) {
-    const auto north_geodetic =
-        geodetic_from_planet_fixed(planet, *north);
-    const auto south_geodetic =
-        geodetic_from_planet_fixed(planet, *south);
+    const auto north_geodetic = geodetic_from_planet_fixed(planet, *north);
+    const auto south_geodetic = geodetic_from_planet_fixed(planet, *south);
     const auto anti_geodetic =
         geodetic_from_planet_fixed(planet, *antimeridian);
     check(north_geodetic && north_geodetic->longitude_radians == 0.0 &&
@@ -6589,27 +6544,23 @@ auto coordinate_and_lod_contract() -> void {
     check(south_geodetic && south_geodetic->longitude_radians == 0.0 &&
               close_enough(south_geodetic->latitude_radians, -half_pi),
           "the south pole must have canonical zero longitude");
-    check(anti_geodetic &&
-              close_enough(anti_geodetic->longitude_radians, -pi),
+    check(anti_geodetic && close_enough(anti_geodetic->longitude_radians, -pi),
           "the inverse antimeridian must use negative pi");
   }
 
-  for (const auto radius_km :
-       std::array<std::uint32_t, 3>{PlanetRadiusKm::min, 5'499,
-                                    PlanetRadiusKm::max}) {
+  for (const auto radius_km : std::array<std::uint32_t, 3>{
+           PlanetRadiusKm::min, 5'499, PlanetRadiusKm::max}) {
     const auto sized_planet = planet_with_radius(generated, radius_km);
     for (const auto geodetic :
          std::array{GeodeticPosition{0.0, 0.0, 0.0},
                     GeodeticPosition{0.61, -2.4, 12'345.0},
                     GeodeticPosition{-0.93, 2.8, -1'000.0},
                     GeodeticPosition{1.2, 7.0, 250'000.0}}) {
-      const auto fixed =
-          planet_fixed_from_geodetic(sized_planet, geodetic);
+      const auto fixed = planet_fixed_from_geodetic(sized_planet, geodetic);
       check(fixed.has_value(),
             "valid geodetic samples must map to planet-fixed space");
       if (!fixed) continue;
-      const auto round_trip =
-          geodetic_from_planet_fixed(sized_planet, *fixed);
+      const auto round_trip = geodetic_from_planet_fixed(sized_planet, *fixed);
       check(round_trip.has_value(),
             "valid planet-fixed samples must map back to geodetic space");
       if (!round_trip) continue;
@@ -6639,10 +6590,9 @@ auto coordinate_and_lod_contract() -> void {
     check(frame->has_value(),
           "equatorial and polar local tangent frames must be valid");
     if (!*frame) continue;
-    for (const auto local :
-         std::array{LocalPositionMetres{},
-                    LocalPositionMetres{125.5, -48.25, 2.0},
-                    LocalPositionMetres{-20'000.0, 30'000.0, 4'000.0}}) {
+    for (const auto local : std::array{
+             LocalPositionMetres{}, LocalPositionMetres{125.5, -48.25, 2.0},
+             LocalPositionMetres{-20'000.0, 30'000.0, 4'000.0}}) {
       const auto fixed = planet_fixed_from_local(**frame, local);
       check(fixed.has_value(), "valid ENU positions must map to planet space");
       if (!fixed) continue;
@@ -6655,44 +6605,39 @@ auto coordinate_and_lod_contract() -> void {
   }
   if (polar_frame) {
     check(polar_frame->east == PlanetFixedDirection{0.0, 1.0, 0.0} &&
-              polar_frame->north ==
-                  PlanetFixedDirection{-1.0, 0.0, 0.0},
+              polar_frame->north == PlanetFixedDirection{-1.0, 0.0, 0.0},
           "the north-pole tangent frame must use canonical zero longitude");
   }
 
   constexpr std::array face_centers{
-      std::pair{CubeFace::positive_x,
-                PlanetFixedPositionMetres{1.0, 0.0, 0.0}},
+      std::pair{CubeFace::positive_x, PlanetFixedPositionMetres{1.0, 0.0, 0.0}},
       std::pair{CubeFace::negative_x,
                 PlanetFixedPositionMetres{-1.0, 0.0, 0.0}},
-      std::pair{CubeFace::positive_y,
-                PlanetFixedPositionMetres{0.0, 1.0, 0.0}},
+      std::pair{CubeFace::positive_y, PlanetFixedPositionMetres{0.0, 1.0, 0.0}},
       std::pair{CubeFace::negative_y,
                 PlanetFixedPositionMetres{0.0, -1.0, 0.0}},
-      std::pair{CubeFace::positive_z,
-                PlanetFixedPositionMetres{0.0, 0.0, 1.0}},
+      std::pair{CubeFace::positive_z, PlanetFixedPositionMetres{0.0, 0.0, 1.0}},
       std::pair{CubeFace::negative_z,
                 PlanetFixedPositionMetres{0.0, 0.0, -1.0}},
   };
   for (const auto& [face, center] : face_centers) {
     const auto address = terrain_address_from_planet_fixed(planet, center, 0);
-    check(address && address->tile ==
-                         TerrainTileKey{planet.id, face, 0, 0, 0} &&
+    check(address &&
+              address->tile == TerrainTileKey{planet.id, face, 0, 0, 0} &&
               address->u == 0.5 && address->v == 0.5,
           "every cube face center must retain its canonical address");
     if (!address) continue;
-    const auto inverse =
-        planet_fixed_from_terrain_address(planet, *address);
+    const auto inverse = planet_fixed_from_terrain_address(planet, *address);
     check(inverse && close_enough(inverse->x / radius, center.x) &&
               close_enough(inverse->y / radius, center.y) &&
               close_enough(inverse->z / radius, center.z),
           "cube face center inverse mappings must preserve direction");
   }
 
-  const auto seam = terrain_address_from_planet_fixed(
-      planet, {1.0, 1.0, 0.0}, 0);
-  const auto corner = terrain_address_from_planet_fixed(
-      planet, {1.0, 1.0, 1.0}, 0);
+  const auto seam =
+      terrain_address_from_planet_fixed(planet, {1.0, 1.0, 0.0}, 0);
+  const auto corner =
+      terrain_address_from_planet_fixed(planet, {1.0, 1.0, 1.0}, 0);
   check(seam && seam->tile.face == CubeFace::positive_x && seam->u == 1.0 &&
             seam->v == 0.5,
         "an x/y seam tie must choose x and preserve the outer edge");
@@ -6717,19 +6662,15 @@ auto coordinate_and_lod_contract() -> void {
   for (const auto direction : seam_directions) {
     const auto address =
         terrain_address_from_planet_fixed(planet, direction, 0);
-    check(address.has_value(),
-          "every physical cube seam must have an address");
+    check(address.has_value(), "every physical cube seam must have an address");
     if (!address) continue;
-    const auto inverse =
-        planet_fixed_from_terrain_address(planet, *address);
+    const auto inverse = planet_fixed_from_terrain_address(planet, *address);
     const auto source_length =
         std::hypot(direction.x, direction.y, direction.z);
-    check(inverse && close_enough(inverse->x / radius,
-                                  direction.x / source_length) &&
-              close_enough(inverse->y / radius,
-                           direction.y / source_length) &&
-              close_enough(inverse->z / radius,
-                           direction.z / source_length),
+    check(inverse &&
+              close_enough(inverse->x / radius, direction.x / source_length) &&
+              close_enough(inverse->y / radius, direction.y / source_length) &&
+              close_enough(inverse->z / radius, direction.z / source_length),
           "every physical cube seam must preserve direction");
   }
   for (const auto x : {-1.0, 1.0}) {
@@ -6737,24 +6678,22 @@ auto coordinate_and_lod_contract() -> void {
       for (const auto z : {-1.0, 1.0}) {
         const auto address =
             terrain_address_from_planet_fixed(planet, {x, y, z}, 0);
-        check(address &&
-                  address->tile.face ==
-                      (x < 0.0 ? CubeFace::negative_x
-                               : CubeFace::positive_x),
+        check(address && address->tile.face == (x < 0.0 ? CubeFace::negative_x
+                                                        : CubeFace::positive_x),
               "every cube corner must follow the x-axis tie rule");
       }
     }
   }
 
-  const auto internal_boundary = terrain_address_from_planet_fixed(
-      planet, {1.0, -0.5, 0.0}, 2);
-  check(internal_boundary && internal_boundary->tile ==
-                                 TerrainTileKey{planet.id,
-                                                CubeFace::positive_x, 2, 1, 2} &&
+  const auto internal_boundary =
+      terrain_address_from_planet_fixed(planet, {1.0, -0.5, 0.0}, 2);
+  check(internal_boundary &&
+            internal_boundary->tile ==
+                TerrainTileKey{planet.id, CubeFace::positive_x, 2, 1, 2} &&
             internal_boundary->u == 0.0 && internal_boundary->v == 0.0,
         "exact internal boundaries must belong to the higher tile index");
-  const auto outer_boundary = terrain_address_from_planet_fixed(
-      planet, {1.0, 1.0, 0.0}, 2);
+  const auto outer_boundary =
+      terrain_address_from_planet_fixed(planet, {1.0, 1.0, 0.0}, 2);
   check(outer_boundary && outer_boundary->tile.x == 3 &&
             outer_boundary->u == 1.0,
         "outer face boundaries must remain on the final tile at one");
@@ -6776,13 +6715,13 @@ auto coordinate_and_lod_contract() -> void {
                   PlanetFixedPositionMetres{-0.3, -1.0, 0.7},
                   PlanetFixedPositionMetres{0.25, 0.6, 1.0},
                   PlanetFixedPositionMetres{1.0, 1.0, 1.0}}) {
-    const auto address =
-        terrain_address_from_planet_fixed(planet, sample, 12);
+    const auto address = terrain_address_from_planet_fixed(planet, sample, 12);
     const auto direction_address = terrain_address_from_planet_direction(
         planet, {sample.x * 17.0, sample.y * 17.0, sample.z * 17.0}, 12);
     check(address.has_value(), "valid directions must produce tile addresses");
-    check(direction_address && address && *direction_address == *address,
-          "direction addressing must preserve scale-invariant cube coordinates");
+    check(
+        direction_address && address && *direction_address == *address,
+        "direction addressing must preserve scale-invariant cube coordinates");
     if (!address) continue;
     const auto inverse =
         planet_fixed_from_terrain_address(planet, *address, 2'000.0);
@@ -6790,12 +6729,12 @@ auto coordinate_and_lod_contract() -> void {
     if (!inverse) continue;
     const auto sample_length = std::hypot(sample.x, sample.y, sample.z);
     const auto inverse_length = std::hypot(inverse->x, inverse->y, inverse->z);
-    check(close_enough(sample.x / sample_length, inverse->x / inverse_length) &&
-              close_enough(sample.y / sample_length,
-                           inverse->y / inverse_length) &&
-              close_enough(sample.z / sample_length,
-                           inverse->z / inverse_length),
-          "tile address round trips must preserve surface direction");
+    check(
+        close_enough(sample.x / sample_length, inverse->x / inverse_length) &&
+            close_enough(sample.y / sample_length,
+                         inverse->y / inverse_length) &&
+            close_enough(sample.z / sample_length, inverse->z / inverse_length),
+        "tile address round trips must preserve surface direction");
   }
 
   auto previous_span = std::numeric_limits<double>::infinity();
@@ -6847,12 +6786,10 @@ auto coordinate_and_lod_contract() -> void {
         "a malformed local tangent frame must be rejected");
   if (equatorial_frame) {
     auto left_handed = *equatorial_frame;
-    left_handed.up = {-left_handed.up.x, -left_handed.up.y,
-                      -left_handed.up.z};
+    left_handed.up = {-left_handed.up.x, -left_handed.up.y, -left_handed.up.z};
     check(!planet_fixed_from_local(left_handed, {}),
           "a left-handed local tangent frame must be rejected");
-    check(!planet_fixed_from_local(*equatorial_frame,
-                                   {quiet_nan, 0.0, 0.0}),
+    check(!planet_fixed_from_local(*equatorial_frame, {quiet_nan, 0.0, 0.0}),
           "non-finite local positions must be rejected");
   }
   const auto maximum = std::numeric_limits<double>::max();
@@ -6860,16 +6797,17 @@ auto coordinate_and_lod_contract() -> void {
         "overflowing planet-fixed magnitudes must be rejected");
   check(!terrain_address_from_planet_fixed(planet, {}, 0),
         "the planet center must not produce a terrain address");
-  check(!terrain_address_from_planet_fixed(
-            planet, {1.0, 0.0, 0.0}, kMaxTerrainLod + 1),
+  check(!terrain_address_from_planet_fixed(planet, {1.0, 0.0, 0.0},
+                                           kMaxTerrainLod + 1),
         "terrain addresses above the maximum LOD must be rejected");
   check(terrain_address_from_planet_direction(planet, {}, 0) ==
-            std::unexpected{CoordinateError::planet_center} &&
-            !terrain_address_from_planet_direction(
-                planet, {quiet_nan, 0.0, 0.0}, 0) &&
-            !terrain_address_from_planet_direction(
-                planet, {1.0, 0.0, 0.0}, kMaxTerrainLod + 1),
-        "direction terrain addressing must reject zero, non-finite, and invalid-LOD inputs");
+                std::unexpected{CoordinateError::planet_center} &&
+            !terrain_address_from_planet_direction(planet,
+                                                   {quiet_nan, 0.0, 0.0}, 0) &&
+            !terrain_address_from_planet_direction(planet, {1.0, 0.0, 0.0},
+                                                   kMaxTerrainLod + 1),
+        "direction terrain addressing must reject zero, non-finite, and "
+        "invalid-LOD inputs");
 
   const TerrainTileAddress invalid_face{
       {planet.id, static_cast<CubeFace>(255), 0, 0, 0}, 0.5, 0.5};
@@ -6879,7 +6817,8 @@ auto coordinate_and_lod_contract() -> void {
       {planet.id, CubeFace::positive_x, 0, 0, 0}, -0.1, 0.5};
   const TerrainTileAddress wrong_planet{
       {PlanetId{planet.id.value + 1U}, CubeFace::positive_x, 0, 0, 0},
-      0.5, 0.5};
+      0.5,
+      0.5};
   check(planet_fixed_from_terrain_address(planet, invalid_face) ==
             std::unexpected{CoordinateError::invalid_cube_face},
         "unknown cube faces must be rejected");
@@ -6896,10 +6835,10 @@ auto coordinate_and_lod_contract() -> void {
             planet, {{planet.id, CubeFace::positive_x, 0, 0, 0}, 0.5, 0.5},
             -radius) == std::unexpected{CoordinateError::invalid_altitude},
         "terrain addresses at the planet center must be rejected");
-  check(!planet_fixed_from_terrain_address(
-            planet,
-            {{planet.id, CubeFace::positive_x, 0, 0, 0}, quiet_nan, 0.5}),
-        "non-finite within-tile coordinates must be rejected");
+  check(
+      !planet_fixed_from_terrain_address(
+          planet, {{planet.id, CubeFace::positive_x, 0, 0, 0}, quiet_nan, 0.5}),
+      "non-finite within-tile coordinates must be rejected");
   check(!nominal_terrain_tile_span_metres(planet, kMaxTerrainLod + 1),
         "nominal spans above the maximum LOD must be rejected");
   check(select_terrain_lod(planet, -1.0) ==
@@ -6917,8 +6856,7 @@ auto render_profile_contract() -> void {
         "balanced profile must remain 512x320");
   check(profile_viewport(RenderProfile::local) == ViewportSize{640, 480},
         "local profile must remain 640x480");
-  check(profile_viewport(RenderProfile::cinematic) ==
-            ViewportSize{1024, 768},
+  check(profile_viewport(RenderProfile::cinematic) == ViewportSize{1024, 768},
         "cinematic profile must remain 1024x768");
 
   check(parse_render_profile("remote") == RenderProfile::remote,
@@ -6935,10 +6873,9 @@ auto render_profile_contract() -> void {
   const auto defaults = default_render_configuration();
   check(defaults.viewport == ViewportSize{640, 480},
         "default viewport must remain 640x480");
-  check(profile_name(defaults) == "local",
-        "default profile must remain local");
-  const auto overridden = resolve_render_configuration(
-      RenderProfile::remote, ViewportSize{800, 600});
+  check(profile_name(defaults) == "local", "default profile must remain local");
+  const auto overridden = resolve_render_configuration(RenderProfile::remote,
+                                                       ViewportSize{800, 600});
   check(overridden.viewport == ViewportSize{800, 600},
         "explicit viewport must override a named profile");
   check(profile_name(overridden) == "custom",
@@ -6973,8 +6910,7 @@ auto viewport_validation_contract() -> void {
               "a zero width must be rejected");
   check_error("640x-1", ViewportError::non_positive,
               "a negative height must be rejected");
-  check_error("999999999999999999999999x480",
-              ViewportError::numeric_overflow,
+  check_error("999999999999999999999999x480", ViewportError::numeric_overflow,
               "an overflowing dimension must be rejected");
   check_error("4097x1", ViewportError::dimension_too_large,
               "an overlong axis must be rejected");
@@ -7006,12 +6942,10 @@ auto cockpit_layout_contract() -> void {
   check(!compute_cockpit_layout(80, 24, kitty_cell, {-1, 240}).supported(),
         "a negative logical viewport must reject cockpit layout");
   check(!compute_cockpit_layout(65536, 24, kitty_cell, viewport).supported() &&
-            !compute_cockpit_layout(80, 24, {65536, 16}, viewport)
-                 .supported(),
+            !compute_cockpit_layout(80, 24, {65536, 16}, viewport).supported(),
         "out-of-domain terminal and cell dimensions must reject layout");
 
-  const auto compact =
-      compute_cockpit_layout(80, 24, kitty_cell, viewport);
+  const auto compact = compute_cockpit_layout(80, 24, kitty_cell, viewport);
   check(compact.mode == CockpitLayoutMode::compact,
         "the 80x24 target must use compact cockpit layout");
   check(compact.screen == Rect{0, 0, 80, 24},
@@ -7033,12 +6967,10 @@ auto cockpit_layout_contract() -> void {
             wide.viewport_frame == Rect{19, 2, 82, 32},
         "wide layout must preserve a framed 4:3 Kitty viewport");
 
-  const auto ansi =
-      compute_cockpit_layout(80, 24, {1, 2}, viewport);
+  const auto ansi = compute_cockpit_layout(80, 24, {1, 2}, viewport);
   check(ansi.viewport == compact.viewport,
         "ANSI half-block and Kitty cells must share physical aspect layout");
-  const auto square_cells =
-      compute_cockpit_layout(80, 24, {1, 1}, viewport);
+  const auto square_cells = compute_cockpit_layout(80, 24, {1, 1}, viewport);
   check(square_cells.viewport == Rect{29, 2, 22, 17},
         "square logical cells must preserve the viewport aspect");
 
@@ -7056,14 +6988,13 @@ auto cockpit_layout_contract() -> void {
               contained_by(layout.messages, layout.screen) &&
               contained_by(layout.status, layout.screen),
           "every cockpit region must remain inside its owner");
-    check(layout.left_instruments.intersect(layout.viewport_frame).empty() &&
-              layout.viewport_frame
-                  .intersect(layout.right_instruments)
-                  .empty() &&
-              layout.header.intersect(layout.viewport_frame).empty() &&
-              layout.messages.intersect(layout.viewport_frame).empty() &&
-              layout.status.intersect(layout.viewport_frame).empty(),
-          "cockpit chrome regions must not overlap the pixel frame");
+    check(
+        layout.left_instruments.intersect(layout.viewport_frame).empty() &&
+            layout.viewport_frame.intersect(layout.right_instruments).empty() &&
+            layout.header.intersect(layout.viewport_frame).empty() &&
+            layout.messages.intersect(layout.viewport_frame).empty() &&
+            layout.status.intersect(layout.viewport_frame).empty(),
+        "cockpit chrome regions must not overlap the pixel frame");
     check(layout.viewport.x > layout.viewport_frame.x &&
               layout.viewport.y > layout.viewport_frame.y &&
               layout.viewport.x + layout.viewport.w <
@@ -7077,8 +7008,7 @@ auto cockpit_layout_contract() -> void {
       compute_cockpit_layout(100, 30, kitty_cell, viewport);
   check(intermediate.mode == CockpitLayoutMode::compact,
         "an intermediate terminal must retain compact layout");
-  check(intermediate ==
-            compute_cockpit_layout(100, 30, kitty_cell, viewport),
+  check(intermediate == compute_cockpit_layout(100, 30, kitty_cell, viewport),
         "cockpit layout must be deterministic");
 }
 
@@ -7088,8 +7018,7 @@ auto menu_session_contract() -> void {
             title.selected() == MenuItem::primary,
         "interactive sessions must begin at Start Flight");
   const auto ignored_escape = title.dispatch(MenuCommand::escape);
-  check(!ignored_escape.changed() &&
-            title.screen() == SessionScreen::title,
+  check(!ignored_escape.changed() && title.screen() == SessionScreen::title,
         "Escape on the title screen must not exit");
   (void)title.dispatch(MenuCommand::next);
   check(title.selected() == MenuItem::exit,
@@ -7133,11 +7062,12 @@ auto menu_session_contract() -> void {
         "station primary actions must remain application-owned");
   check(docked.start_flight().to == SessionScreen::flight &&
             docked.dock_at_station().to == SessionScreen::station,
-        "launch and return must explicitly transition between station and flight");
+        "launch and return must explicitly transition between station and "
+        "flight");
 
   for (const auto& [cols, rows] :
-       std::array{std::pair{0, 24}, std::pair{-1, 24},
-                  std::pair{32, 15}, std::pair{65536, 24}}) {
+       std::array{std::pair{0, 24}, std::pair{-1, 24}, std::pair{32, 15},
+                  std::pair{65536, 24}}) {
     check(!compute_menu_layout(cols, rows).supported(),
           "invalid menu dimensions must be rejected");
   }
@@ -7162,9 +7092,8 @@ auto menu_session_contract() -> void {
         "menu layout must be deterministic");
 
   for (const auto& [cols, rows] :
-       std::array{std::pair{0, 24}, std::pair{80, 0},
-                  std::pair{31, 24}, std::pair{80, 23},
-                  std::pair{65536, 24}}) {
+       std::array{std::pair{0, 24}, std::pair{80, 0}, std::pair{31, 24},
+                  std::pair{80, 23}, std::pair{65536, 24}}) {
     check(!compute_title_menu_layout(cols, rows).supported(),
           "invalid title-menu dimensions must be rejected");
   }
@@ -7173,10 +7102,13 @@ auto menu_session_contract() -> void {
             contained_by(title_layout.art, title_layout.screen) &&
             contained_by(title_layout.panel, title_layout.screen) &&
             title_layout.art.intersect(title_layout.panel).empty() &&
-            std::ranges::all_of(title_layout.actions, [&](Rect action) {
-              return contained_by(action, title_layout.panel);
-            }),
-        "the minimum title terminal must retain bounded art and five usable actions");
+            std::ranges::all_of(title_layout.actions,
+                                [&](Rect action) {
+                                  return contained_by(action,
+                                                      title_layout.panel);
+                                }),
+        "the minimum title terminal must retain bounded art and five usable "
+        "actions");
   for (std::size_t index = 0; index < title_layout.actions.size(); ++index) {
     const auto row = title_layout.actions[index];
     check(title_action_at(title_layout, row.x + row.w - 1, row.y) ==
@@ -7231,8 +7163,8 @@ auto title_render_contract() -> void {
           "title rendering must produce an opaque framebuffer");
     const auto checksum = pixel_checksum(frame);
     if (checksum != golden.checksum) {
-      std::fprintf(stderr, "title %dx%d checksum: %llu\n",
-                   golden.size.width, golden.size.height,
+      std::fprintf(stderr, "title %dx%d checksum: %llu\n", golden.size.width,
+                   golden.size.height,
                    static_cast<unsigned long long>(checksum));
     }
     check(checksum == golden.checksum,
@@ -7257,8 +7189,7 @@ auto flight_instrument_contract() -> void {
         "clearance must use a fixed-width whole-unit field");
   check(normal.speed == "SPD 013  ",
         "speed must use total craft velocity magnitude");
-  check(normal.mode == "MODE AUTO" &&
-            normal.alert_state == CockpitAlert::none,
+  check(normal.mode == "MODE AUTO" && normal.alert_state == CockpitAlert::none,
         "normal autopilot telemetry must not raise an alert");
 
   const auto check_widths = [](const FlightInstrumentReadout& readout,
@@ -7280,11 +7211,9 @@ auto flight_instrument_contract() -> void {
   state.clearance = kLowClearanceWarning;
   state.velocity = {999.0F, 0.0F, 0.0F};
   const auto boundary = format_flight_instruments(state);
-  check(boundary.heading == "HDG 270  " &&
-            boundary.altitude == "ALT -9999" &&
+  check(boundary.heading == "HDG 270  " && boundary.altitude == "ALT -9999" &&
             boundary.clearance == "CLR 024  " &&
-            boundary.speed == "SPD 999  " &&
-            boundary.mode == "MODE MAN ",
+            boundary.speed == "SPD 999  " && boundary.mode == "MODE MAN ",
         "boundary telemetry must retain fixed-width values");
   check(boundary.alert_state == CockpitAlert::low_clearance &&
             boundary.alert == "! LOW CLR",
@@ -7292,16 +7221,14 @@ auto flight_instrument_contract() -> void {
   check_widths(boundary,
                "every boundary instrument line must have fixed width");
 
-  state.pose.yaw = 359.6F *
-                   (3.14159265358979323846F / 180.0F);
+  state.pose.yaw = 359.6F * (3.14159265358979323846F / 180.0F);
   state.pose.altitude = 100000.0F;
   state.clearance = 24.1F;
   state.velocity = {1000.0F, 0.0F, 0.0F};
   const auto overflow = format_flight_instruments(state);
   check(overflow.heading == "HDG 000  ",
         "rounded heading must wrap from 360 to zero");
-  check(overflow.altitude == "ALT #####" &&
-            overflow.speed == "SPD 1.0k ",
+  check(overflow.altitude == "ALT #####" && overflow.speed == "SPD 1.0k ",
         "kilometre-per-second speed must remain legible in fixed width");
   check(overflow.alert_state == CockpitAlert::none,
         "clearance above the warning threshold must clear the alert");
@@ -7322,26 +7249,21 @@ auto flight_instrument_contract() -> void {
   std::array<FlightState, 9> invalid_states;
   invalid_states.fill(FlightState{});
   invalid_states[0].pose.yaw = std::numeric_limits<float>::quiet_NaN();
-  invalid_states[1].pose.altitude =
-      std::numeric_limits<float>::infinity();
+  invalid_states[1].pose.altitude = std::numeric_limits<float>::infinity();
   invalid_states[2].clearance = -std::numeric_limits<float>::infinity();
-  invalid_states[3].velocity.x =
-      std::numeric_limits<float>::quiet_NaN();
+  invalid_states[3].velocity.x = std::numeric_limits<float>::quiet_NaN();
   invalid_states[4].velocity.y = std::numeric_limits<float>::infinity();
   invalid_states[5].pose.x = std::numeric_limits<float>::infinity();
   invalid_states[6].pose.y = std::numeric_limits<float>::quiet_NaN();
-  invalid_states[7].velocity.vertical =
-      -std::numeric_limits<float>::infinity();
+  invalid_states[7].velocity.vertical = -std::numeric_limits<float>::infinity();
   invalid_states[8].mode = static_cast<FlightMode>(255);
   for (const auto& invalid_state : invalid_states) {
     const auto invalid = format_flight_instruments(invalid_state);
     check(invalid.alert_state == CockpitAlert::invalid_telemetry &&
               invalid.alert == "TELEM ERR",
           "non-finite or invalid telemetry must raise a textual error");
-    check(invalid.heading == "HDG ---  " &&
-              invalid.altitude == "ALT -----" &&
-              invalid.clearance == "CLR ---  " &&
-              invalid.speed == "SPD ---  ",
+    check(invalid.heading == "HDG ---  " && invalid.altitude == "ALT -----" &&
+              invalid.clearance == "CLR ---  " && invalid.speed == "SPD ---  ",
           "invalid telemetry must replace numeric fields with dashes");
     check_widths(invalid,
                  "every invalid instrument line must have fixed width");
@@ -7361,9 +7283,9 @@ auto flight_instrument_contract() -> void {
           FlightCommand{0, FlightCommandKind::press_forward},
           FlightCommand{0, FlightCommandKind::press_turn_right},
       };
-      const std::span tick_commands =
-          replay_state.tick == 0 ? std::span{commands}
-                                 : std::span<const FlightCommand>{};
+      const std::span tick_commands = replay_state.tick == 0
+                                          ? std::span{commands}
+                                          : std::span<const FlightCommand>{};
       if (!advance_flight(*terrain, replay_state, tick_commands,
                           kSimulationStep)) {
         check(false, "instrument command replay must advance");
@@ -7398,11 +7320,9 @@ auto planetary_flight_regime_contract() -> void {
       case AtmosphereClass::temperate: pressure = 800; break;
       case AtmosphereClass::dense: pressure = 2'000; break;
     }
-    const auto planet =
-        planet_with_atmosphere(generated, atmosphere, pressure);
+    const auto planet = planet_with_atmosphere(generated, atmosphere, pressure);
     const auto bands = flight_regime_bands(planet);
-    check(bands &&
-              bands->terrain_enter_clearance_metres == 2'000.0 &&
+    check(bands && bands->terrain_enter_clearance_metres == 2'000.0 &&
               bands->terrain_exit_clearance_metres == 2'500.0 &&
               bands->atmosphere_enter_altitude_metres == ceiling &&
               bands->orbit_enter_altitude_metres > ceiling,
@@ -7416,11 +7336,12 @@ auto planetary_flight_regime_contract() -> void {
                        expected_vertical_speed) < 1.0e-9 &&
               std::abs(performance->vertical_acceleration -
                        expected_vertical_speed / 1.8) < 1.0e-9,
-          "atmospheric performance must normalize every approach band to the pacing target");
+          "atmospheric performance must normalize every approach band to the "
+          "pacing target");
 
     const auto fixture = initial_planetary_flight_state(
-        planet, {0.0, 0.0, bands->orbit_enter_altitude_metres + 1.0},
-        {}, 0.0, FlightMode::manual);
+        planet, {0.0, 0.0, bands->orbit_enter_altitude_metres + 1.0}, {}, 0.0,
+        FlightMode::manual);
     check(fixture.has_value(),
           "every atmosphere class must provide a regime-validation fixture");
     if (!fixture) continue;
@@ -7433,12 +7354,10 @@ auto planetary_flight_regime_contract() -> void {
       state.last_transition.reset();
       return validate_planetary_flight_state(planet, state).has_value();
     };
-    const double atmospheric_clearance =
-        bands->terrain_exit_clearance_metres;
-    const double overlap_altitude =
-        (bands->atmosphere_enter_altitude_metres +
-         bands->orbit_enter_altitude_metres) *
-        0.5;
+    const double atmospheric_clearance = bands->terrain_exit_clearance_metres;
+    const double overlap_altitude = (bands->atmosphere_enter_altitude_metres +
+                                     bands->orbit_enter_altitude_metres) *
+                                    0.5;
     check(!valid_at(FlightRegime::orbital,
                     bands->atmosphere_enter_altitude_metres,
                     atmospheric_clearance) &&
@@ -7447,7 +7366,8 @@ auto planetary_flight_regime_contract() -> void {
                        atmospheric_clearance) &&
               valid_at(FlightRegime::orbital, overlap_altitude,
                        atmospheric_clearance),
-          "orbital validation must honor the exact descent edge and altitude hysteresis overlap");
+          "orbital validation must honor the exact descent edge and altitude "
+          "hysteresis overlap");
     check(valid_at(FlightRegime::atmospheric,
                    bands->atmosphere_enter_altitude_metres,
                    atmospheric_clearance) &&
@@ -7457,21 +7377,24 @@ auto planetary_flight_regime_contract() -> void {
               !valid_at(FlightRegime::atmospheric,
                         bands->orbit_enter_altitude_metres,
                         atmospheric_clearance),
-          "atmospheric validation must honor the exact ascent edge and altitude hysteresis overlap");
+          "atmospheric validation must honor the exact ascent edge and "
+          "altitude hysteresis overlap");
     check(!valid_at(FlightRegime::atmospheric, overlap_altitude,
                     bands->terrain_enter_clearance_metres) &&
               valid_at(FlightRegime::atmospheric, overlap_altitude,
                        bands->terrain_enter_clearance_metres + 1.0) &&
               valid_at(FlightRegime::atmospheric, overlap_altitude,
                        bands->terrain_exit_clearance_metres),
-          "atmospheric validation must honor the exact terrain-entry edge and clearance hysteresis overlap");
+          "atmospheric validation must honor the exact terrain-entry edge and "
+          "clearance hysteresis overlap");
     check(valid_at(FlightRegime::terrain_flight, overlap_altitude,
                    bands->terrain_enter_clearance_metres) &&
               valid_at(FlightRegime::terrain_flight, overlap_altitude,
                        bands->terrain_exit_clearance_metres - 1.0) &&
               !valid_at(FlightRegime::terrain_flight, overlap_altitude,
                         bands->terrain_exit_clearance_metres),
-          "terrain validation must honor the exact exit edge and clearance hysteresis overlap");
+          "terrain validation must honor the exact exit edge and clearance "
+          "hysteresis overlap");
   }
 
   const auto airless =
@@ -7493,8 +7416,7 @@ auto planetary_flight_regime_contract() -> void {
        environment.surface_elevation_metres +
            bands->terrain_enter_clearance_metres},
       environment, 0.5, FlightMode::manual);
-  check(orbital && orbital->regime == FlightRegime::orbital &&
-            atmospheric &&
+  check(orbital && orbital->regime == FlightRegime::orbital && atmospheric &&
             atmospheric->regime == FlightRegime::atmospheric && terrain &&
             terrain->regime == FlightRegime::terrain_flight,
         "initial state must select the exact descending regime boundaries");
@@ -7507,7 +7429,7 @@ auto planetary_flight_regime_contract() -> void {
   };
   for (std::size_t from_index = 0; from_index < regimes.size(); ++from_index) {
     for (std::size_t to_index = 0; to_index < regimes.size(); ++to_index) {
-      auto state = to_index == 0 ? *orbital
+      auto state = to_index == 0   ? *orbital
                    : to_index == 1 ? *atmospheric
                                    : *terrain;
       state.last_transition = FlightRegimeTransition{
@@ -7543,9 +7465,8 @@ auto planetary_flight_regime_contract() -> void {
   auto approach_gap = descending;
   approach_gap.pose.position.altitude_metres =
       bands->atmosphere_enter_altitude_metres + 1.0;
-  approach_gap.clearance_metres =
-      approach_gap.pose.position.altitude_metres -
-      environment.surface_elevation_metres;
+  approach_gap.clearance_metres = approach_gap.pose.position.altitude_metres -
+                                  environment.surface_elevation_metres;
   check(advance_planetary_flight(airless, environment, approach_gap, {},
                                  kSimulationStep) &&
             approach_gap.regime == FlightRegime::atmospheric,
@@ -7572,9 +7493,8 @@ auto planetary_flight_regime_contract() -> void {
   terrain_gap.pose.position.altitude_metres =
       environment.surface_elevation_metres +
       bands->terrain_exit_clearance_metres - 1.0;
-  terrain_gap.clearance_metres =
-      terrain_gap.pose.position.altitude_metres -
-      environment.surface_elevation_metres;
+  terrain_gap.clearance_metres = terrain_gap.pose.position.altitude_metres -
+                                 environment.surface_elevation_metres;
   check(advance_planetary_flight(airless, environment, terrain_gap, {},
                                  kSimulationStep) &&
             terrain_gap.regime == FlightRegime::terrain_flight,
@@ -7582,9 +7502,8 @@ auto planetary_flight_regime_contract() -> void {
   terrain_gap.pose.position.altitude_metres =
       environment.surface_elevation_metres +
       bands->terrain_exit_clearance_metres - 0.1;
-  terrain_gap.clearance_metres =
-      terrain_gap.pose.position.altitude_metres -
-      environment.surface_elevation_metres;
+  terrain_gap.clearance_metres = terrain_gap.pose.position.altitude_metres -
+                                 environment.surface_elevation_metres;
   terrain_gap.velocity.up_metres_per_second = 45.0;
   terrain_gap.controls.rise = true;
   check(advance_planetary_flight(airless, environment, terrain_gap, {},
@@ -7607,9 +7526,8 @@ auto planetary_flight_regime_contract() -> void {
         "invalid regime telemetry must remain renderable");
 
   auto contact = *terrain;
-  contact.pose.position.altitude_metres =
-      environment.surface_elevation_metres +
-      kMinimumFlightClearanceMetres + 0.1;
+  contact.pose.position.altitude_metres = environment.surface_elevation_metres +
+                                          kMinimumFlightClearanceMetres + 0.1;
   contact.clearance_metres = kMinimumFlightClearanceMetres + 0.1;
   contact.velocity.up_metres_per_second = -45.0;
   contact.controls.fall = true;
@@ -7621,30 +7539,28 @@ auto planetary_flight_regime_contract() -> void {
 
   auto rising_terrain = contact;
   rising_terrain.pose.position.altitude_metres =
-      environment.surface_elevation_metres +
-      kMinimumFlightClearanceMetres + 0.25;
+      environment.surface_elevation_metres + kMinimumFlightClearanceMetres +
+      0.25;
   rising_terrain.clearance_metres = kMinimumFlightClearanceMetres + 0.25;
   rising_terrain.velocity.up_metres_per_second = -4.0;
   const PlanetaryFlightEnvironment raised_environment{
       environment.surface_elevation_metres + 1.0};
   check(advance_planetary_flight(airless, raised_environment, rising_terrain,
                                  {}, kSimulationStep) &&
-            rising_terrain.clearance_metres ==
-                kMinimumFlightClearanceMetres &&
+            rising_terrain.clearance_metres == kMinimumFlightClearanceMetres &&
             rising_terrain.pose.position.altitude_metres ==
                 raised_environment.surface_elevation_metres +
                     kMinimumFlightClearanceMetres &&
             rising_terrain.velocity.up_metres_per_second == 0.0,
-        "a newly sampled terrain rise must clamp safely instead of rejecting the flight step");
+        "a newly sampled terrain rise must clamp safely instead of rejecting "
+        "the flight step");
   check(planetary_flight_error_name(
-            PlanetaryFlightError::invalid_environment) ==
-            "invalid_environment",
+            PlanetaryFlightError::invalid_environment) == "invalid_environment",
         "planetary flight errors must expose stable typed names");
 
   auto polar = initial_planetary_flight_state(
-      airless, {std::numbers::pi_v<double> / 2.0, 0.0, 1'000.0},
-      environment, std::numbers::pi_v<double> - 0.01,
-      FlightMode::manual);
+      airless, {std::numbers::pi_v<double> / 2.0, 0.0, 1'000.0}, environment,
+      std::numbers::pi_v<double> - 0.01, FlightMode::manual);
   check(polar.has_value(), "an exact-pole flight state must initialize");
   if (polar) {
     constexpr std::array polar_commands{
@@ -7652,14 +7568,13 @@ auto planetary_flight_regime_contract() -> void {
         FlightCommand{0, FlightCommandKind::press_strafe_right},
         FlightCommand{0, FlightCommandKind::press_turn_right},
     };
-    check(advance_planetary_flight(airless, environment, *polar,
-                                   polar_commands, kSimulationStep) &&
+    check(advance_planetary_flight(airless, environment, *polar, polar_commands,
+                                   kSimulationStep) &&
               std::isfinite(polar->pose.position.latitude_radians) &&
               std::isfinite(polar->pose.position.longitude_radians) &&
               std::isfinite(polar->pose.heading_radians) &&
               std::hypot(polar->velocity.east_metres_per_second,
-                         polar->velocity.north_metres_per_second) <=
-                  120.0,
+                         polar->velocity.north_metres_per_second) <= 120.0,
           "pole motion, heading wrap, and diagonal input must remain bounded");
   }
 }
@@ -7669,8 +7584,7 @@ auto orbital_motion_feedback_contract() -> void {
       generate_planet_descriptor(Seed{74}), AtmosphereClass::airless, 0);
   const PlanetaryFlightEnvironment environment{};
   auto initialized = initial_planetary_flight_state(
-      planet, {0.1, -0.2, 80'000.0}, environment, 0.0,
-      FlightMode::manual);
+      planet, {0.1, -0.2, 80'000.0}, environment, 0.0, FlightMode::manual);
   check(initialized.has_value(),
         "orbital motion feedback fixture must initialize");
   if (!initialized) return;
@@ -7689,8 +7603,7 @@ auto orbital_motion_feedback_contract() -> void {
         "neutral orbital motion must report coast");
   check(advance_planetary_flight(planet, environment, coast, {},
                                  kSimulationStep) &&
-            std::abs(coast.velocity.east_metres_per_second - 100.0) <
-                1.0e-9,
+            std::abs(coast.velocity.east_metres_per_second - 100.0) < 1.0e-9,
         "neutral orbital flight must preserve momentum");
   constexpr std::array brake_command{
       FlightCommand{1, FlightCommandKind::press_backward}};
@@ -7723,8 +7636,8 @@ auto orbital_motion_feedback_contract() -> void {
             std::abs(closing->stopping_distance_metres - 5.0) < 1.0e-9,
         "target motion must distinguish bearing from closing speed and ETA");
   motion_state.velocity.east_metres_per_second = 4'000.0;
-  const auto brake = resolve_target_relative_motion(
-      planet, motion_state, {9'000.0, 0.0, 0.0}, 0.0);
+  const auto brake = resolve_target_relative_motion(planet, motion_state,
+                                                    {9'000.0, 0.0, 0.0}, 0.0);
   check(brake && brake->cue == TargetMotionCue::brake &&
             brake->stopping_distance_metres == 8'000.0,
         "target motion must warn inside a buffered stopping distance");
@@ -7738,8 +7651,8 @@ auto orbital_motion_feedback_contract() -> void {
             arrived->cue == TargetMotionCue::holding,
         "opening and arrived targets must not expose a misleading ETA");
   check(!resolve_target_relative_motion(
-             planet, motion_state,
-             {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 0.0),
+            planet, motion_state,
+            {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 0.0),
         "non-finite target motion must be rejected");
   check(signal_run_error_name(SignalRunError::flight_failure) ==
             "flight_failure",
@@ -7761,12 +7674,11 @@ struct PlanetaryReplayFixture {
       generate_planet_descriptor(Seed{0xA5515U}), AtmosphereClass::airless, 0);
   const PlanetaryFlightEnvironment environment{};
   auto initialized = initial_planetary_flight_state(
-      planet, {0.15, -0.2, 31'000.0}, environment, 0.3,
-      FlightMode::manual);
+      planet, {0.15, -0.2, 31'000.0}, environment, 0.3, FlightMode::manual);
   if (!initialized) return std::nullopt;
 
-  PlanetaryReplayFixture fixture{planet, environment, *initialized,
-                                 *initialized, {}, {}};
+  PlanetaryReplayFixture fixture{planet,       environment, *initialized,
+                                 *initialized, {},          {}};
   fixture.commands = {
       {0, FlightCommandKind::press_forward},
       {0, FlightCommandKind::press_turn_right},
@@ -7782,9 +7694,9 @@ struct PlanetaryReplayFixture {
     }
     const std::span commands{fixture.commands.data() + first,
                              next_command - first};
-    const auto advanced = advance_planetary_flight(
-        fixture.planet, fixture.environment, fixture.expected, commands,
-        kSimulationStep);
+    const auto advanced =
+        advance_planetary_flight(fixture.planet, fixture.environment,
+                                 fixture.expected, commands, kSimulationStep);
     if (!advanced) {
       return std::nullopt;
     }
@@ -7826,8 +7738,8 @@ struct PlanetaryReplayFixture {
       }
       const std::span commands{fixture.commands.data() + first,
                                next_command - first};
-      if (!advance_planetary_flight(fixture.planet, fixture.environment,
-                                    state, commands, kSimulationStep)) {
+      if (!advance_planetary_flight(fixture.planet, fixture.environment, state,
+                                    commands, kSimulationStep)) {
         return std::nullopt;
       }
     }
@@ -7879,12 +7791,13 @@ auto deterministic_planetary_flight_replay() -> void {
             planetary_flight_state_checksum(*at_30) == expected_checksum &&
             planetary_flight_state_checksum(*at_60) == expected_checksum,
         "render cadence must not alter planetary flight state");
-  check(fixture->expected.regime == FlightRegime::orbital &&
-            fixture->expected.pose.position.altitude_metres >= 30'000.0 &&
-            std::isfinite(fixture->expected.pose.position.latitude_radians) &&
-            std::isfinite(fixture->expected.pose.position.longitude_radians) &&
-            std::isfinite(fixture->expected.pose.heading_radians),
-        "the ascent must return to finite orbital state without losing heading");
+  check(
+      fixture->expected.regime == FlightRegime::orbital &&
+          fixture->expected.pose.position.altitude_metres >= 30'000.0 &&
+          std::isfinite(fixture->expected.pose.position.latitude_radians) &&
+          std::isfinite(fixture->expected.pose.position.longitude_radians) &&
+          std::isfinite(fixture->expected.pose.heading_radians),
+      "the ascent must return to finite orbital state without losing heading");
 }
 
 auto planetary_flight_failure_matrix() -> void {
@@ -7892,25 +7805,23 @@ auto planetary_flight_failure_matrix() -> void {
       generate_planet_descriptor(Seed{42}), AtmosphereClass::temperate, 800);
   const PlanetaryFlightEnvironment environment{};
   const auto initialized = initial_planetary_flight_state(
-      planet, {0.0, 0.0, 120'000.0}, environment, 0.0,
-      FlightMode::manual);
+      planet, {0.0, 0.0, 120'000.0}, environment, 0.0, FlightMode::manual);
   check(initialized.has_value(), "the failure fixture must initialize");
   if (!initialized) return;
 
   const auto unchanged = planetary_flight_state_checksum(*initialized);
-  const auto check_rejected = [&](PlanetaryFlightState state,
-                                  PlanetaryFlightEnvironment step_environment,
-                                  std::span<const FlightCommand> commands,
-                                  SimulationSeconds step,
-                                  PlanetaryFlightError error,
-                                  const char* message) {
-    const auto before = planetary_flight_state_checksum(state);
-    const auto result = advance_planetary_flight(
-        planet, step_environment, state, commands, step);
-    check(!result && result.error() == error &&
-              planetary_flight_state_checksum(state) == before,
-          message);
-  };
+  const auto check_rejected =
+      [&](PlanetaryFlightState state,
+          PlanetaryFlightEnvironment step_environment,
+          std::span<const FlightCommand> commands, SimulationSeconds step,
+          PlanetaryFlightError error, const char* message) {
+        const auto before = planetary_flight_state_checksum(state);
+        const auto result = advance_planetary_flight(planet, step_environment,
+                                                     state, commands, step);
+        check(!result && result.error() == error &&
+                  planetary_flight_state_checksum(state) == before,
+              message);
+      };
 
   auto invalid = *initialized;
   invalid.pose.position.latitude_radians =
@@ -7923,10 +7834,10 @@ auto planetary_flight_failure_matrix() -> void {
   check_rejected(unbounded, environment, {}, kSimulationStep,
                  PlanetaryFlightError::invalid_state,
                  "out-of-regime velocity must be rejected transactionally");
-  check_rejected(*initialized,
-                 {std::numeric_limits<double>::infinity()}, {},
-                 kSimulationStep, PlanetaryFlightError::invalid_environment,
-                 "non-finite terrain elevation must be rejected transactionally");
+  check_rejected(
+      *initialized, {std::numeric_limits<double>::infinity()}, {},
+      kSimulationStep, PlanetaryFlightError::invalid_environment,
+      "non-finite terrain elevation must be rejected transactionally");
   const std::array invalid_steps{
       SimulationSeconds::zero(),
       SimulationSeconds{-kSimulationStep.count()},
@@ -7935,11 +7846,9 @@ auto planetary_flight_failure_matrix() -> void {
       kSimulationStep / 2.0,
       kSimulationStep * 2.0,
       SimulationSeconds{0.25},
-      SimulationSeconds{
-          std::nextafter(kSimulationStep.count(), 0.0)},
+      SimulationSeconds{std::nextafter(kSimulationStep.count(), 0.0)},
       SimulationSeconds{std::nextafter(
-          kSimulationStep.count(),
-          std::numeric_limits<double>::infinity())},
+          kSimulationStep.count(), std::numeric_limits<double>::infinity())},
   };
   for (const auto invalid_step : invalid_steps) {
     check_rejected(*initialized, environment, {}, invalid_step,
@@ -7954,16 +7863,19 @@ auto planetary_flight_failure_matrix() -> void {
             planetary_flight_state_checksum(canonical) != unchanged,
         "the canonical planetary step must advance exactly one tick");
 
-  constexpr std::array invalid_command{FlightCommand{
-      0, static_cast<FlightCommandKind>(std::numeric_limits<std::uint8_t>::max())}};
-  check_rejected(*initialized, environment, invalid_command, kSimulationStep,
-                 PlanetaryFlightError::invalid_command,
-                 "an unknown planetary command must be rejected transactionally");
+  constexpr std::array invalid_command{
+      FlightCommand{0, static_cast<FlightCommandKind>(
+                           std::numeric_limits<std::uint8_t>::max())}};
+  check_rejected(
+      *initialized, environment, invalid_command, kSimulationStep,
+      PlanetaryFlightError::invalid_command,
+      "an unknown planetary command must be rejected transactionally");
   constexpr std::array future_command{
       FlightCommand{1, FlightCommandKind::press_forward}};
-  check_rejected(*initialized, environment, future_command, kSimulationStep,
-                 PlanetaryFlightError::wrong_command_tick,
-                 "a mistimed planetary command must be rejected transactionally");
+  check_rejected(
+      *initialized, environment, future_command, kSimulationStep,
+      PlanetaryFlightError::wrong_command_tick,
+      "a mistimed planetary command must be rejected transactionally");
 
   auto overflow = *initialized;
   overflow.tick = std::numeric_limits<SimulationTick>::max();
@@ -7982,9 +7894,8 @@ auto planetary_flight_failure_matrix() -> void {
   check(flight_regime_bands(bad_airless) ==
             std::unexpected{PlanetaryFlightError::invalid_planet},
         "airless planets with pressure must be rejected");
-  check(!initial_planetary_flight_state(
-            planet, {0.0, 0.0, 15.0}, environment, 0.0,
-            FlightMode::manual),
+  check(!initial_planetary_flight_state(planet, {0.0, 0.0, 15.0}, environment,
+                                        0.0, FlightMode::manual),
         "initial state below minimum clearance must be rejected");
 }
 
@@ -7992,20 +7903,18 @@ auto thermal_reentry_contract() -> void {
   const auto dense = planet_with_atmosphere(
       generate_planet_descriptor(Seed{0x7E4A1U}), AtmosphereClass::dense,
       AtmospherePressureMillibars::max);
-  const auto temperate = planet_with_atmosphere(
-      dense, AtmosphereClass::temperate, 800);
+  const auto temperate =
+      planet_with_atmosphere(dense, AtmosphereClass::temperate, 800);
   const PlanetaryFlightEnvironment environment{};
   auto initialized = initial_planetary_flight_state(
-      dense, {0.1, -0.2, 40'000.0}, environment, 0.0,
-      FlightMode::manual);
+      dense, {0.1, -0.2, 40'000.0}, environment, 0.0, FlightMode::manual);
   check(initialized.has_value(),
         "the thermal reentry fixture must initialize in atmosphere");
   if (!initialized) return;
 
   initialized->velocity = {400.0, 0.0, -1'500.0};
   initialized->controls.fall = true;
-  const auto dense_assessment =
-      resolve_thermal_assessment(dense, *initialized);
+  const auto dense_assessment = resolve_thermal_assessment(dense, *initialized);
   auto slower = *initialized;
   slower.velocity = {250.0, 0.0, -150.0};
   const auto slow_assessment = resolve_thermal_assessment(dense, slower);
@@ -8037,26 +7946,25 @@ auto thermal_reentry_contract() -> void {
   auto invalid_assisted_latch = assisted;
   invalid_assisted_latch.thermal.abort_latched = true;
   const auto invalid_assisted_before = invalid_assisted_latch;
-  check(!advance_planetary_flight(dense, environment,
-                                  invalid_assisted_latch, {},
-                                  kSimulationStep) &&
+  check(!advance_planetary_flight(dense, environment, invalid_assisted_latch,
+                                  {}, kSimulationStep) &&
             invalid_assisted_latch == invalid_assisted_before,
         "Assisted must reject a Pilot-only abort latch transactionally");
 
   auto resumed_at_limit = assisted;
   resumed_at_limit.controls.fall = true;
-  check(advance_planetary_flight(
-            dense, environment, resumed_at_limit, {}, kSimulationStep,
-            {.enforce_thermal_abort = true}) &&
+  check(advance_planetary_flight(dense, environment, resumed_at_limit, {},
+                                 kSimulationStep,
+                                 {.enforce_thermal_abort = true}) &&
             resumed_at_limit.thermal.abort_latched,
         "Pilot must honor an exact-limit resumed state before cooling it");
 
   auto pilot = *initialized;
   std::optional<SimulationTick> abort_tick;
   for (int tick = 0; tick < 1'000 && !abort_tick; ++tick) {
-    if (!advance_planetary_flight(
-            dense, environment, pilot, {}, kSimulationStep,
-            {.enforce_thermal_abort = true})) {
+    if (!advance_planetary_flight(dense, environment, pilot, {},
+                                  kSimulationStep,
+                                  {.enforce_thermal_abort = true})) {
       check(false, "Pilot thermal entry must advance");
       return;
     }
@@ -8075,14 +7983,13 @@ auto thermal_reentry_contract() -> void {
 
   bool recovered{};
   for (int tick = 0; tick < 30'000; ++tick) {
-    if (!advance_planetary_flight(
-            dense, environment, pilot, {}, kSimulationStep,
-            {.enforce_thermal_abort = true})) {
+    if (!advance_planetary_flight(dense, environment, pilot, {},
+                                  kSimulationStep,
+                                  {.enforce_thermal_abort = true})) {
       check(false, "the Pilot skip-out must remain controllable");
       return;
     }
-    if (pilot.regime == FlightRegime::orbital &&
-        !pilot.thermal.abort_latched) {
+    if (pilot.regime == FlightRegime::orbital && !pilot.thermal.abort_latched) {
       recovered = true;
       break;
     }
@@ -8090,13 +7997,13 @@ auto thermal_reentry_contract() -> void {
   check(recovered && !pilot.controls.fall &&
             pilot.velocity.up_metres_per_second >= 0.0 &&
             pilot.thermal.load_units < kMaximumThermalLoadUnits,
-        "the forced skip-out must cool, reach orbit, and require deliberate reentry input");
+        "the forced skip-out must cool, reach orbit, and require deliberate "
+        "reentry input");
 
-  const auto airless = planet_with_atmosphere(
-      dense, AtmosphereClass::airless, 0);
+  const auto airless =
+      planet_with_atmosphere(dense, AtmosphereClass::airless, 0);
   auto cooling = initial_planetary_flight_state(
-      airless, {0.1, -0.2, 30'000.0}, environment, 0.0,
-      FlightMode::manual);
+      airless, {0.1, -0.2, 30'000.0}, environment, 0.0, FlightMode::manual);
   check(cooling.has_value(), "the airless cooling fixture must initialize");
   if (cooling) {
     cooling->thermal.load_units = 500'000U;
@@ -8126,8 +8033,7 @@ auto thermal_reentry_contract() -> void {
 
 auto sweep_selection_contract() -> void {
   const auto defaults = default_sweep_viewports();
-  check(defaults.size() == 3,
-        "the default sweep must include three viewports");
+  check(defaults.size() == 3, "the default sweep must include three viewports");
   if (defaults.size() == 3) {
     check(profile_name(defaults[0]) == "remote",
           "the default sweep must begin with remote");
@@ -8138,14 +8044,11 @@ auto sweep_selection_contract() -> void {
   }
   check(default_sweep_fps() == std::vector<std::uint32_t>({30, 60}),
         "the default cadence targets must be 30 and 60 FPS");
-  check(parse_benchmark_workload("landscape") ==
-                BenchmarkWorkload::landscape &&
-            parse_benchmark_workload("orbital") ==
-                BenchmarkWorkload::orbital &&
+  check(parse_benchmark_workload("landscape") == BenchmarkWorkload::landscape &&
+            parse_benchmark_workload("orbital") == BenchmarkWorkload::orbital &&
             parse_benchmark_workload("planetary") ==
                 BenchmarkWorkload::planetary &&
-            parse_benchmark_workload("system") ==
-                BenchmarkWorkload::system &&
+            parse_benchmark_workload("system") == BenchmarkWorkload::system &&
             !parse_benchmark_workload("unknown"),
         "benchmark workloads must parse only their documented names");
   check(workload_identifier(BenchmarkWorkload::landscape) ==
@@ -8180,10 +8083,8 @@ auto sweep_selection_contract() -> void {
   const auto fps = parse_sweep_fps("24,30,60");
   check(fps && *fps == std::vector<std::uint32_t>({24, 30, 60}),
         "positive sweep FPS targets must retain order");
-  check(!parse_sweep_fps(""),
-        "an empty sweep FPS list must be rejected");
-  check(!parse_sweep_fps("0,30"),
-        "a zero sweep FPS target must be rejected");
+  check(!parse_sweep_fps(""), "an empty sweep FPS list must be rejected");
+  check(!parse_sweep_fps("0,30"), "a zero sweep FPS target must be rejected");
   check(!parse_sweep_fps("30,nope"),
         "a malformed sweep FPS target must be rejected");
   check(!parse_sweep_fps("30,30"),
@@ -8237,8 +8138,8 @@ auto sweep_report_contract() -> void {
   check(json.find("\"target_fps\": 30") != std::string::npos &&
             json.find("\"target_fps\": 60") != std::string::npos,
         "sweep JSON must include every cadence target");
-  const auto orbital_json = sweep_json(measurements, targets, 42, 12,
-                                       BenchmarkWorkload::orbital);
+  const auto orbital_json =
+      sweep_json(measurements, targets, 42, 12, BenchmarkWorkload::orbital);
   check(orbital_json.find("\"workload\": \"orbital-planet-rgba\"") !=
             std::string::npos,
         "an orbital sweep report must identify its renderer workload");
@@ -8256,14 +8157,11 @@ auto sweep_report_contract() -> void {
   };
   const std::vector planetary_measurements{BenchmarkMeasurement{
       resolve_render_configuration(RenderProfile::remote), summary}};
-  const auto planetary_json = sweep_json(
-      planetary_measurements, targets, 42, 12,
-      BenchmarkWorkload::planetary);
-  check(planetary_json.find(
-            "\"workload\": \"planetary-presentation-rgba\"") !=
+  const auto planetary_json = sweep_json(planetary_measurements, targets, 42,
+                                         12, BenchmarkWorkload::planetary);
+  check(planetary_json.find("\"workload\": \"planetary-presentation-rgba\"") !=
                 std::string::npos &&
-            planetary_json.find("\"terrain_blend\": 3") !=
-                std::string::npos &&
+            planetary_json.find("\"terrain_blend\": 3") != std::string::npos &&
             planetary_json.find("\"total_p95_ms\": 9.000000") !=
                 std::string::npos,
         "planetary sweep reports must include stage counts and timings");
@@ -8317,20 +8215,17 @@ struct FakeAudioBackendControl {
 
 class FakeAudioBackend final : public AudioBackend {
  public:
-  FakeAudioBackend(FakeAudioBackendControl& control,
-                   bool start_success,
-                   AudioBackendFailure start_failure =
-                       AudioBackendFailure::none)
-      : m_control(control),
-        m_start_success(start_success),
+  FakeAudioBackend(
+      FakeAudioBackendControl& control, bool start_success,
+      AudioBackendFailure start_failure = AudioBackendFailure::none)
+      : m_control(control), m_start_success(start_success),
         m_start_failure(start_failure) {}
 
   [[nodiscard]] auto name() const noexcept -> std::string_view override {
     return "fake-device";
   }
 
-  [[nodiscard]] auto state() const noexcept
-      -> AudioBackendState override {
+  [[nodiscard]] auto state() const noexcept -> AudioBackendState override {
     return m_state;
   }
 
@@ -8340,16 +8235,15 @@ class FakeAudioBackend final : public AudioBackend {
         .name = name(),
         .state = state(),
         .failure = m_failure,
-        .output_device_id = m_start_success
-                                ? std::optional<std::uint32_t>{17}
-                                : std::nullopt,
+        .output_device_id =
+            m_start_success ? std::optional<std::uint32_t>{17} : std::nullopt,
         .callback_count = 3,
         .output_underflow_count = 1,
     };
   }
 
-  [[nodiscard]] auto start(AudioFormat format,
-                           AudioRenderSource&) noexcept -> bool override {
+  [[nodiscard]] auto start(AudioFormat format, AudioRenderSource&) noexcept
+      -> bool override {
     m_control.stopped = false;
     if (format != kAudioFormat || !m_start_success) {
       m_failure = m_start_failure;
@@ -8409,17 +8303,19 @@ struct AudioReplayResult {
     const auto commands = schedule.subspan(first, next_command - first);
     if (!advance_flight(*terrain, state, commands, kSimulationStep)) return {};
     for (const auto& command : commands) {
-      const auto emitted = audio.emit(
-          command.tick,
-          AudioCueId{static_cast<std::uint32_t>(command.kind) + 1U});
+      const auto emitted =
+          audio.emit(command.tick,
+                     AudioCueId{static_cast<std::uint32_t>(command.kind) + 1U});
       if (enabled && emitted.status != AudioEmitStatus::queued) return {};
       if (!enabled && emitted.status != AudioEmitStatus::disabled) return {};
     }
     if (!delayed_consumption) {
-      while (auto event = audio.try_take_event()) events.push_back(*event);
+      while (auto event = audio.try_take_event())
+        events.push_back(*event);
     }
   }
-  while (auto event = audio.try_take_event()) events.push_back(*event);
+  while (auto event = audio.try_take_event())
+    events.push_back(*event);
   return {
       .flight_checksum = flight_state_checksum(state),
       .events = std::move(events),
@@ -8433,10 +8329,9 @@ auto audio_contract() -> void {
         "audio must use the fixed 48 kHz stereo float contract");
   check(audio_sample_frame({42, 17}) == 16'800,
         "authoritative ticks must map exactly to sample frames");
-  const auto overflowing_tick =
-      std::numeric_limits<std::uint64_t>::max() /
-          kAudioFramesPerSimulationTick +
-      1U;
+  const auto overflowing_tick = std::numeric_limits<std::uint64_t>::max() /
+                                    kAudioFramesPerSimulationTick +
+                                1U;
   check(!audio_sample_frame({overflowing_tick, 0}),
         "overflowing audio timestamps must be rejected");
 
@@ -8445,8 +8340,7 @@ auto audio_contract() -> void {
   auto invalid_format = kAudioFormat;
   invalid_format.channels = 1;
   check(!backend.start(invalid_format, source) &&
-            backend.state() == AudioBackendState::failed &&
-            source.calls == 0,
+            backend.state() == AudioBackendState::failed && source.calls == 0,
         "the no-device backend must reject invalid formats without rendering");
   check(backend.start(kAudioFormat, source) &&
             backend.state() == AudioBackendState::no_device &&
@@ -8463,13 +8357,11 @@ auto audio_contract() -> void {
   check(rtaudio_backend_compiled(),
         "the enabled build must compile the RtAudio backend");
 #else
-  check(!rtaudio_backend_compiled() &&
-            !make_device_audio_backend(),
+  check(!rtaudio_backend_compiled() && !make_device_audio_backend(),
         "the disabled build must not compile or construct RtAudio");
 #endif
 
-  check(audio_backend_state_name(AudioBackendState::no_device) ==
-                "no-device" &&
+  check(audio_backend_state_name(AudioBackendState::no_device) == "no-device" &&
             audio_backend_failure_name(
                 AudioBackendFailure::invalid_selected_device) ==
                 "invalid-selected-device",
@@ -8491,11 +8383,12 @@ auto audio_contract() -> void {
   callback.activate(tone);
   check(callback.render(generated.data(), 4, true) ==
                 detail::AudioCallbackAction::continue_stream &&
-            generated == std::array<float, 8>{0.0F, 0.0625F, 0.125F,
-                                               0.1875F, 0.25F, 0.3125F,
-                                               0.375F, 0.4375F} &&
+            generated == std::array<float, 8>{0.0F, 0.0625F, 0.125F, 0.1875F,
+                                              0.25F, 0.3125F, 0.375F,
+                                              0.4375F} &&
             tone.calls == 1 && callback.output_underflow_count() == 1,
-        "the injected callback must preserve exact generated frames and count underruns");
+        "the injected callback must preserve exact generated frames and count "
+        "underruns");
   callback.deactivate();
   generated.fill(9.0F);
   check(callback.render(generated.data(), 4, false) ==
@@ -8521,8 +8414,8 @@ auto audio_contract() -> void {
             callback.render(generated.data(), 0, false) ==
                 detail::AudioCallbackAction::abort_stream &&
             callback.render(generated.data(),
-                            kMaximumAudioFramesPerCallback + 1U, false) ==
-                detail::AudioCallbackAction::abort_stream,
+                            kMaximumAudioFramesPerCallback + 1U,
+                            false) == detail::AudioCallbackAction::abort_stream,
         "invalid callback buffers must fail closed before mixer access");
 
   constexpr std::array startup_failures{
@@ -8547,7 +8440,8 @@ auto audio_contract() -> void {
               failed_device_diagnostics.backend_failure_count == 1 &&
               failed_device_diagnostics.callback_count == 3 &&
               failed_device_diagnostics.output_underflow_count == 1,
-          "device startup failure must stop synchronously and retain fallback diagnostics");
+          "device startup failure must stop synchronously and retain fallback "
+          "diagnostics");
   }
 
   constexpr std::array runtime_failures{
@@ -8556,8 +8450,7 @@ auto audio_contract() -> void {
   };
   for (const auto failure : runtime_failures) {
     FakeAudioBackendControl loss_control;
-    auto loss_backend =
-        std::make_unique<FakeAudioBackend>(loss_control, true);
+    auto loss_backend = std::make_unique<FakeAudioBackend>(loss_control, true);
     auto* loss_backend_view = loss_backend.get();
     AudioRuntime runtime_loss{AudioRuntimeMode::automatic,
                               std::move(loss_backend)};
@@ -8570,15 +8463,15 @@ auto audio_contract() -> void {
     runtime_loss.service();
     const auto loss_diagnostics = runtime_loss.diagnostics();
     check(loss_control.stopped &&
-              loss_diagnostics.backend_state ==
-                  AudioBackendState::no_device &&
+              loss_diagnostics.backend_state == AudioBackendState::no_device &&
               loss_diagnostics.last_backend_failure == failure &&
               loss_diagnostics.backend_failure_count == 1 &&
               loss_diagnostics.backend_loss_count == 1 &&
               loss_diagnostics.last_reset_reason ==
                   AudioResetReason::backend_loss &&
               loss_diagnostics.queue_depth == 0,
-          "runtime callback or device loss must stop, clear, and fall back without blocking simulation");
+          "runtime callback or device loss must stop, clear, and fall back "
+          "without blocking simulation");
   }
 
   FakeAudioBackendControl shutdown_control;
@@ -8586,24 +8479,25 @@ auto audio_contract() -> void {
       AudioRuntimeMode::automatic,
       std::make_unique<FakeAudioBackend>(shutdown_control, true)};
   shutdown_device.shutdown();
-  check(shutdown_control.stopped &&
-            shutdown_device.diagnostics().last_reset_reason ==
-                AudioResetReason::shutdown &&
-            shutdown_device.emit(0, {1}).status == AudioEmitStatus::stopped,
-        "automatic audio shutdown must synchronously stop its callback backend");
+  check(
+      shutdown_control.stopped &&
+          shutdown_device.diagnostics().last_reset_reason ==
+              AudioResetReason::shutdown &&
+          shutdown_device.emit(0, {1}).status == AudioEmitStatus::stopped,
+      "automatic audio shutdown must synchronously stop its callback backend");
 
   AudioRuntime invalid_events;
-  check(invalid_events.emit(0, {}).status ==
-            AudioEmitStatus::rejected_invalid_cue &&
-            invalid_events.emit(10, {1}).identity ==
-                AudioEventIdentity{10, 0} &&
-            invalid_events.emit(10, {2}).identity ==
-                AudioEventIdentity{10, 1} &&
-            invalid_events.emit(9, {3}).status ==
-                AudioEmitStatus::rejected_tick_regression &&
-            invalid_events.emit(overflowing_tick, {4}).status ==
-                AudioEmitStatus::rejected_timestamp_overflow,
-        "invalid audio cues, tick regression, and timestamp overflow must fail closed");
+  check(
+      invalid_events.emit(0, {}).status ==
+              AudioEmitStatus::rejected_invalid_cue &&
+          invalid_events.emit(10, {1}).identity == AudioEventIdentity{10, 0} &&
+          invalid_events.emit(10, {2}).identity == AudioEventIdentity{10, 1} &&
+          invalid_events.emit(9, {3}).status ==
+              AudioEmitStatus::rejected_tick_regression &&
+          invalid_events.emit(overflowing_tick, {4}).status ==
+              AudioEmitStatus::rejected_timestamp_overflow,
+      "invalid audio cues, tick regression, and timestamp overflow must fail "
+      "closed");
   const auto invalid_diagnostics = invalid_events.diagnostics();
   check(invalid_diagnostics.events_rejected == 3 &&
             invalid_diagnostics.queue_depth == 2,
@@ -8623,9 +8517,8 @@ auto audio_contract() -> void {
         "a full audio queue must drop the newest assigned event");
   for (std::size_t index = 0; index < kAudioEventQueueCapacity; ++index) {
     const auto event = saturated.try_take_event();
-    check(event &&
-              event->identity == AudioEventIdentity{
-                                     7, static_cast<std::uint16_t>(index)},
+    check(event && event->identity ==
+                       AudioEventIdentity{7, static_cast<std::uint16_t>(index)},
           "audio queue overflow must preserve existing FIFO order");
   }
   check(!saturated.try_take_event(),
@@ -8679,13 +8572,14 @@ auto audio_contract() -> void {
             std::ranges::all_of(oversized,
                                 [](float value) { return value == 4.0F; }),
         "an oversized audio callback must be rejected without mutation");
-  std::array<float, 4> valid_buffer{
-      std::numeric_limits<float>::quiet_NaN(), 1.0F, -1.0F, 2.0F};
-  check(!buffers.render(valid_buffer) &&
-            std::ranges::all_of(valid_buffer,
-                                [](float value) { return value == 0.0F; }) &&
-            buffers.diagnostics().queue_depth == 0,
-        "a valid audio callback must produce finite silence and consume events");
+  std::array<float, 4> valid_buffer{std::numeric_limits<float>::quiet_NaN(),
+                                    1.0F, -1.0F, 2.0F};
+  check(
+      !buffers.render(valid_buffer) &&
+          std::ranges::all_of(valid_buffer,
+                              [](float value) { return value == 0.0F; }) &&
+          buffers.diagnostics().queue_depth == 0,
+      "a valid audio callback must produce finite silence and consume events");
 
   AudioRuntime no_device;
   (void)no_device.emit(3, {1});
@@ -8722,11 +8616,13 @@ auto audio_contract() -> void {
                 enabled_delayed.flight_checksum &&
             enabled_immediate.flight_checksum ==
                 disabled_replay.flight_checksum,
-        "enabled, delayed, and disabled audio must preserve simulation checksums");
+        "enabled, delayed, and disabled audio must preserve simulation "
+        "checksums");
   check(!enabled_immediate.events.empty() &&
             enabled_immediate.events == enabled_delayed.events &&
             disabled_replay.events.empty(),
-        "command replay must produce a stable audio trace independent of consumption delay");
+        "command replay must produce a stable audio trace independent of "
+        "consumption delay");
 }
 
 auto flight_audio_synthesis_contract() -> void {
@@ -8749,15 +8645,16 @@ auto flight_audio_synthesis_contract() -> void {
             legacy_audio->parameters.speed <= 1.0F &&
             legacy_audio->parameters.atmosphere == 1.0F &&
             legacy_audio->low_clearance,
-        "legacy flight telemetry must map to bounded engine, speed, atmosphere, and warning parameters");
+        "legacy flight telemetry must map to bounded engine, speed, "
+        "atmosphere, and warning parameters");
   legacy.velocity.x = std::numeric_limits<float>::quiet_NaN();
   check(resolve_flight_audio(legacy) ==
             std::unexpected{FlightAudioError::invalid_state},
         "non-finite legacy flight telemetry must fail closed");
 
   const auto generated = generate_planet_descriptor(Seed{42});
-  const auto planet = planet_with_atmosphere(
-      generated, AtmosphereClass::temperate, 800);
+  const auto planet =
+      planet_with_atmosphere(generated, AtmosphereClass::temperate, 800);
   const PlanetaryFlightEnvironment environment{};
   const auto planetary = initial_planetary_flight_state(
       planet, {0.0, 0.0, kLowClearanceWarningMetres}, environment, 0.0,
@@ -8774,12 +8671,18 @@ auto flight_audio_synthesis_contract() -> void {
               telemetry->parameters.atmosphere > 0.0F &&
               telemetry->parameters.atmosphere <= 1.0F &&
               telemetry->low_clearance,
-          "planetary telemetry must derive bounded atmosphere and low-clearance state");
-    const PlanetDescriptor mismatched{
-        planet.seed, PlanetId{planet.id.value + 1U}, planet.display_name,
-        planet.radius, planet.surface_gravity, planet.atmosphere_class,
-        planet.atmosphere_pressure, planet.terrain_character,
-        planet.water_coverage, planet.palette};
+          "planetary telemetry must derive bounded atmosphere and "
+          "low-clearance state");
+    const PlanetDescriptor mismatched{planet.seed,
+                                      PlanetId{planet.id.value + 1U},
+                                      planet.display_name,
+                                      planet.radius,
+                                      planet.surface_gravity,
+                                      planet.atmosphere_class,
+                                      planet.atmosphere_pressure,
+                                      planet.terrain_character,
+                                      planet.water_coverage,
+                                      planet.palette};
     check(resolve_flight_audio(mismatched, moving) ==
               std::unexpected{FlightAudioError::invalid_planet},
           "planetary telemetry must reject a mismatched planet identity");
@@ -8793,8 +8696,7 @@ auto flight_audio_synthesis_contract() -> void {
   OriginStationFlightState station;
   station.mode = FlightMode::manual;
   station.controls.turn_left = true;
-  station.relative_velocity = {kHomeSignalStationFlightMaximumSpeed, 0.0,
-                               0.0};
+  station.relative_velocity = {kHomeSignalStationFlightMaximumSpeed, 0.0, 0.0};
   const auto station_audio = resolve_flight_audio(station);
   check(system_audio && system_audio->parameters.engine_demand == 0.68F &&
             system_audio->parameters.speed == 1.0F &&
@@ -8817,7 +8719,8 @@ auto flight_audio_synthesis_contract() -> void {
                 AudioEmitStatus::coalesced_same_tick &&
             coalesced.emit(7, kLowClearanceAudioCue).status ==
                 AudioEmitStatus::queued,
-        "continuous telemetry must coalesce while same-tick warning cues retain queue ordering");
+        "continuous telemetry must coalesce while same-tick warning cues "
+        "retain queue ordering");
   const auto parameter_event = coalesced.try_take_event();
   const auto warning_event = coalesced.try_take_event();
   const auto coalesced_diagnostics = coalesced.diagnostics();
@@ -8831,7 +8734,8 @@ auto flight_audio_synthesis_contract() -> void {
             coalesced_diagnostics.parameter_updates_queued == 1 &&
             coalesced_diagnostics.parameter_updates_coalesced == 1 &&
             coalesced_diagnostics.maximum_queue_depth == 2,
-        "parameter and cue diagnostics must expose the deterministic coalesced trace");
+        "parameter and cue diagnostics must expose the deterministic coalesced "
+        "trace");
   const FlightAudioParameters invalid{
       .active = true,
       .engine_demand = std::numeric_limits<float>::infinity(),
@@ -8852,19 +8756,17 @@ auto flight_audio_synthesis_contract() -> void {
       if (tick == 7) {
         (void)audio.emit(tick, kStopFlightAudioCue);
       } else {
-        (void)audio.emit_flight_parameters(
-            tick, {.active = true,
-                   .engine_demand = amount,
-                   .speed = 1.0F - amount * 0.5F,
-                   .atmosphere = amount});
+        (void)audio.emit_flight_parameters(tick, {.active = true,
+                                                  .engine_demand = amount,
+                                                  .speed = 1.0F - amount * 0.5F,
+                                                  .atmosphere = amount});
       }
       if (tick == 4) (void)audio.emit(tick, kLowClearanceAudioCue);
       std::size_t rendered{};
       while (rendered < kAudioFramesPerSimulationTick) {
         const auto frames = std::min<std::size_t>(
             chunk_frames, kAudioFramesPerSimulationTick - rendered);
-        const std::span samples{buffer.data(),
-                                frames * kAudioChannelCount};
+        const std::span samples{buffer.data(), frames * kAudioChannelCount};
         if (audio.render(samples)) {
           return std::tuple{std::uint64_t{}, 0.0F, false};
         }
@@ -8894,7 +8796,8 @@ auto flight_audio_synthesis_contract() -> void {
   check(std::get<0>(whole_tick) != 0 &&
             std::get<0>(whole_tick) == std::get<0>(split_tick) &&
             std::get<1>(whole_tick) < 0.1F && std::get<2>(whole_tick),
-        "offline synthesis must be bounded, click-free, audible, and independent of callback partitioning");
+        "offline synthesis must be bounded, click-free, audible, and "
+        "independent of callback partitioning");
 
   AudioRuntime disabled{AudioRuntimeMode::disabled};
   std::array<float, 8> disabled_output;
@@ -8920,10 +8823,9 @@ auto flight_audio_synthesis_contract() -> void {
           return std::pair{std::uint64_t{}, AudioDiagnostics{}};
         }
         const auto telemetry = resolve_flight_audio(state);
-        if (!telemetry ||
-            silent.emit_flight_parameters(telemetry->tick,
-                                          telemetry->parameters)
-                    .status != AudioEmitStatus::disabled) {
+        if (!telemetry || silent.emit_flight_parameters(telemetry->tick,
+                                                        telemetry->parameters)
+                                  .status != AudioEmitStatus::disabled) {
           return std::pair{std::uint64_t{}, AudioDiagnostics{}};
         }
       }
@@ -8943,21 +8845,21 @@ auto flight_audio_synthesis_contract() -> void {
             cadence_60.second.maximum_queue_depth == 0 &&
             cadence_30.second.waveform_frames_generated == 0 &&
             cadence_60.second.waveform_frames_generated == 0,
-        "disabled telemetry replay must preserve simulation and zero-work diagnostics across render cadences");
+        "disabled telemetry replay must preserve simulation and zero-work "
+        "diagnostics across render cadences");
 
   const auto benchmark = benchmark_flight_audio(240);
   const auto repeated = benchmark_flight_audio(240);
   const auto json = audio_benchmark_json(benchmark);
-  check(benchmark.sample_frames == 96'000 &&
-            benchmark.audio_seconds == 2.0 &&
+  check(benchmark.sample_frames == 96'000 && benchmark.audio_seconds == 2.0 &&
             benchmark.checksum == 3'041'416'869'822'421'007ULL &&
             benchmark.checksum == repeated.checksum &&
             benchmark.maximum_queue_depth <= 2 &&
             benchmark.events_dropped == 0 &&
             json.contains("\"workload\": \"procedural-flight-audio\"") &&
-            json.contains("\"realtime_factor\"") &&
-            !json.contains("percent"),
-        "the standalone audio benchmark must report deterministic waveform and measured cost without a hardware percentage");
+            json.contains("\"realtime_factor\"") && !json.contains("percent"),
+        "the standalone audio benchmark must report deterministic waveform and "
+        "measured cost without a hardware percentage");
 }
 
 auto fixed_step_clock_contract() -> void {
@@ -8971,13 +8873,12 @@ auto fixed_step_clock_contract() -> void {
         "the fixed-step remainder must be presentation-only interpolation");
 
   const auto negative = clock.advance(SimulationSeconds{-1.0});
-  check(!negative && negative.error() ==
-                         SimulationTimeError::negative_elapsed,
+  check(!negative && negative.error() == SimulationTimeError::negative_elapsed,
         "negative elapsed time must be rejected");
-  const auto non_finite = clock.advance(SimulationSeconds{
-      std::numeric_limits<double>::infinity()});
-  check(!non_finite && non_finite.error() ==
-                           SimulationTimeError::non_finite_elapsed,
+  const auto non_finite =
+      clock.advance(SimulationSeconds{std::numeric_limits<double>::infinity()});
+  check(!non_finite &&
+            non_finite.error() == SimulationTimeError::non_finite_elapsed,
         "non-finite elapsed time must be rejected");
 
   const auto second = clock.advance(half);
@@ -8989,16 +8890,14 @@ auto fixed_step_clock_contract() -> void {
   const auto stalled = clock.advance(SimulationSeconds{5.0});
   check(stalled && stalled->steps == kMaxCatchUpSteps,
         "a long stall must have bounded catch-up work");
-  check(stalled &&
-            std::abs(stalled->dropped.count() -
-                     (5.0 - kMaxCatchUp.count())) < 0.000001,
+  check(stalled && std::abs(stalled->dropped.count() -
+                            (5.0 - kMaxCatchUp.count())) < 0.000001,
         "a long stall must report discarded elapsed time");
   check(clock.accumulator() == SimulationSeconds::zero(),
         "discarded stall time must not remain as simulation debt");
 }
 
-[[nodiscard]] auto simulated_flight_checksum(int render_fps,
-                                             int seconds,
+[[nodiscard]] auto simulated_flight_checksum(int render_fps, int seconds,
                                              int& steps) -> std::uint64_t {
   const auto terrain = Terrain::generate(256, 0xC0FFEEU);
   if (!terrain) return 0;
@@ -9096,12 +8995,10 @@ auto deterministic_command_replay() -> void {
   check(json.find("\"schema_version\": 1") != std::string::npos &&
             json.find("\"scenario\": \"v0.2-flight-deck\"") !=
                 std::string::npos &&
-            json.find("\"flight_checksum\": \"") !=
-                std::string::npos &&
+            json.find("\"flight_checksum\": \"") != std::string::npos &&
             json.find("\"framebuffer_checksum\": \"123456789\"") !=
                 std::string::npos &&
-            json.find("\"presentation\": \"ansi\"") !=
-                std::string::npos,
+            json.find("\"presentation\": \"ansi\"") != std::string::npos,
         "the Flight Deck report must retain its versioned exact fields");
 }
 
@@ -9122,9 +9019,9 @@ auto command_edge_contract() -> void {
       FlightCommand{0, FlightCommandKind::press_rise},
       FlightCommand{0, FlightCommandKind::press_fall},
   };
-  check(advance_flight(*terrain, opposed, conflict, kSimulationStep)
-            .has_value(),
-        "opposing commands must be accepted");
+  check(
+      advance_flight(*terrain, opposed, conflict, kSimulationStep).has_value(),
+      "opposing commands must be accepted");
   check(opposed.velocity.x == 0.0F && opposed.velocity.y == 0.0F &&
             opposed.velocity.vertical == 0.0F,
         "opposing held controls must produce neutral movement");
@@ -9155,23 +9052,24 @@ auto command_edge_contract() -> void {
   constexpr std::array toggle_last{
       FlightCommand{0, FlightCommandKind::press_forward},
       FlightCommand{0, FlightCommandKind::toggle_autopilot}};
-  check(advance_flight(*terrain, toggle_then_press, toggle_first,
-                       kSimulationStep)
-            .has_value() &&
-            toggle_then_press.mode == FlightMode::manual &&
-            toggle_then_press.controls.forward,
-        "a manual press after a toggle must select manual flight");
-  check(advance_flight(*terrain, press_then_toggle, toggle_last,
-                       kSimulationStep)
-            .has_value() &&
-            press_then_toggle.mode == FlightMode::autopilot &&
-            press_then_toggle.controls == FlightControls{},
-        "a toggle after a manual press must select autopilot and clear input");
+  check(
+      advance_flight(*terrain, toggle_then_press, toggle_first, kSimulationStep)
+              .has_value() &&
+          toggle_then_press.mode == FlightMode::manual &&
+          toggle_then_press.controls.forward,
+      "a manual press after a toggle must select manual flight");
+  check(
+      advance_flight(*terrain, press_then_toggle, toggle_last, kSimulationStep)
+              .has_value() &&
+          press_then_toggle.mode == FlightMode::autopilot &&
+          press_then_toggle.controls == FlightControls{},
+      "a toggle after a manual press must select autopilot and clear input");
 
   const auto unchanged = flight_state_checksum(*initialized);
   auto invalid = *initialized;
-  constexpr std::array invalid_kind{FlightCommand{
-      0, static_cast<FlightCommandKind>(std::numeric_limits<std::uint8_t>::max())}};
+  constexpr std::array invalid_kind{
+      FlightCommand{0, static_cast<FlightCommandKind>(
+                           std::numeric_limits<std::uint8_t>::max())}};
   const auto invalid_result =
       advance_flight(*terrain, invalid, invalid_kind, kSimulationStep);
   check(!invalid_result &&
@@ -9199,11 +9097,9 @@ auto command_edge_contract() -> void {
       kSimulationStep / 2.0,
       kSimulationStep * 2.0,
       SimulationSeconds{0.25},
-      SimulationSeconds{
-          std::nextafter(kSimulationStep.count(), 0.0)},
+      SimulationSeconds{std::nextafter(kSimulationStep.count(), 0.0)},
       SimulationSeconds{std::nextafter(
-          kSimulationStep.count(),
-          std::numeric_limits<double>::infinity())},
+          kSimulationStep.count(), std::numeric_limits<double>::infinity())},
   };
   for (const auto invalid_step : invalid_steps) {
     auto rejected = *initialized;
@@ -9219,8 +9115,7 @@ auto command_edge_contract() -> void {
         "the canonical legacy step must advance exactly one tick");
 
   auto non_finite = *initialized;
-  non_finite.velocity.vertical =
-      std::numeric_limits<float>::infinity();
+  non_finite.velocity.vertical = std::numeric_limits<float>::infinity();
   const auto non_finite_checksum = flight_state_checksum(non_finite);
   const auto non_finite_result =
       advance_flight(*terrain, non_finite, {}, kSimulationStep);
@@ -9235,7 +9130,8 @@ auto command_edge_contract() -> void {
   const auto overflow_checksum = flight_state_checksum(overflow);
   const auto overflow_result =
       advance_flight(*terrain, overflow, {}, kSimulationStep);
-  check(!overflow_result && overflow_result.error() == FlightError::tick_overflow,
+  check(!overflow_result &&
+            overflow_result.error() == FlightError::tick_overflow,
         "the final simulation tick must not wrap");
   check(flight_state_checksum(overflow) == overflow_checksum,
         "tick overflow must not mutate state");
@@ -9266,8 +9162,7 @@ auto command_edge_contract() -> void {
     std::initializer_list<FlightCommandKind> expected) -> bool {
   if (commands.size() != expected.size()) return false;
   return std::equal(commands.begin(), commands.end(), expected.begin(),
-                    [](const FlightCommand& command,
-                       FlightCommandKind kind) {
+                    [](const FlightCommand& command, FlightCommandKind kind) {
                       return command.kind == kind;
                     });
 }
@@ -9326,8 +9221,7 @@ auto flight_input_mapping_contract() -> void {
   if (commands.size() == mappings.size() * 2 + 2) {
     for (std::size_t index = 0; index < mappings.size(); ++index) {
       check(commands[index * 2].kind == mappings[index].press &&
-                commands[index * 2 + 1].kind ==
-                    mappings[index].release,
+                commands[index * 2 + 1].kind == mappings[index].release,
             "each control must map to its command pair");
     }
     check(commands[commands.size() - 2].kind ==
@@ -9340,10 +9234,9 @@ auto flight_input_mapping_contract() -> void {
   mapper.enqueue(key_event(Key::Char, U'[', KeyAction::Press), 8, true);
   mapper.enqueue(key_event(Key::Char, U']', KeyAction::Press), 8, true);
   const auto system_commands = mapper.take_commands(8);
-  check(command_kinds_equal(
-            system_commands,
-            {FlightCommandKind::decrease_time_scale,
-             FlightCommandKind::increase_time_scale}),
+  check(command_kinds_equal(system_commands,
+                            {FlightCommandKind::decrease_time_scale,
+                             FlightCommandKind::increase_time_scale}),
         "time-scale keys must be enabled only for system flight");
 }
 
@@ -9353,31 +9246,27 @@ auto mouse_flight_mapping_contract() -> void {
 
   FlightInputMapper mapper;
   mapper.enqueue(mouse_event(10, 20, 0, true), region, 1);
-  check(command_kinds_equal(
-            mapper.take_commands(1),
-            {FlightCommandKind::press_forward,
-             FlightCommandKind::press_turn_left}),
+  check(command_kinds_equal(mapper.take_commands(1),
+                            {FlightCommandKind::press_forward,
+                             FlightCommandKind::press_turn_left}),
         "a left hold in the upper-left thirds must fly forward and turn left");
 
   mapper.enqueue(mouse_event(100, 100, 0, false), region, 2);
-  check(command_kinds_equal(
-            mapper.take_commands(2),
-            {FlightCommandKind::release_forward,
-             FlightCommandKind::release_turn_left}),
+  check(command_kinds_equal(mapper.take_commands(2),
+                            {FlightCommandKind::release_forward,
+                             FlightCommandKind::release_turn_left}),
         "a left-button release outside the viewport must neutralize flight");
 
   mapper.enqueue(mouse_event(39, 49, 2, true), region, 3);
-  check(command_kinds_equal(
-            mapper.take_commands(3),
-            {FlightCommandKind::press_strafe_right,
-             FlightCommandKind::press_fall}),
+  check(command_kinds_equal(mapper.take_commands(3),
+                            {FlightCommandKind::press_strafe_right,
+                             FlightCommandKind::press_fall}),
         "a right hold in the lower-right thirds must strafe and descend");
 
   mapper.enqueue(mouse_event(25, 35, 2, true), region, 4);
-  check(command_kinds_equal(
-            mapper.take_commands(4),
-            {FlightCommandKind::release_strafe_right,
-             FlightCommandKind::release_fall}),
+  check(command_kinds_equal(mapper.take_commands(4),
+                            {FlightCommandKind::release_strafe_right,
+                             FlightCommandKind::release_fall}),
         "the center thirds must be neutral on both right-hold axes");
 
   mapper.enqueue(mouse_event(25, 35, 1, true), region, 5);
@@ -9405,10 +9294,9 @@ auto mouse_flight_mapping_contract() -> void {
   constexpr int maximum = std::numeric_limits<int>::max();
   constexpr Rect extreme{maximum - 5, maximum - 5, 4, 4};
   invalid.enqueue(mouse_event(maximum - 2, maximum - 2, 2, true), extreme, 2);
-  check(command_kinds_equal(
-            invalid.take_commands(2),
-            {FlightCommandKind::press_strafe_right,
-             FlightCommandKind::press_fall}),
+  check(command_kinds_equal(invalid.take_commands(2),
+                            {FlightCommandKind::press_strafe_right,
+                             FlightCommandKind::press_fall}),
         "extreme valid mouse geometry must map without integer overflow");
 }
 
@@ -9448,19 +9336,17 @@ auto mixed_input_ownership_contract() -> void {
   FlightInputMapper simultaneous;
   simultaneous.enqueue(mouse_event(15, 15, 1, true), region, 9);
   simultaneous.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 9);
-  check(command_kinds_equal(
-            simultaneous.take_commands(9),
-            {FlightCommandKind::toggle_autopilot,
-             FlightCommandKind::press_forward}),
+  check(command_kinds_equal(simultaneous.take_commands(9),
+                            {FlightCommandKind::toggle_autopilot,
+                             FlightCommandKind::press_forward}),
         "same-tick pointer toggles must precede manual keyboard commands");
 
   FlightInputMapper opposing;
   opposing.enqueue(key_event(Key::Char, U'w', KeyAction::Press), 0);
   opposing.enqueue(mouse_event(15, 29, 0, true), region, 0);
   const auto commands = opposing.take_commands(0);
-  check(command_kinds_equal(commands,
-                            {FlightCommandKind::press_forward,
-                             FlightCommandKind::press_backward}),
+  check(command_kinds_equal(commands, {FlightCommandKind::press_forward,
+                                       FlightCommandKind::press_backward}),
         "opposing keyboard and mouse directions must remain explicit");
 
   const auto terrain = Terrain::generate(128, 42);
@@ -9493,11 +9379,10 @@ auto suspended_input_contract() -> void {
   applied.strafe_left = true;
   applied.rise = true;
   mapper.suspend(applied, 4);
-  check(command_kinds_equal(
-            mapper.take_commands(4),
-            {FlightCommandKind::release_forward,
-             FlightCommandKind::release_strafe_left,
-             FlightCommandKind::release_rise}),
+  check(command_kinds_equal(mapper.take_commands(4),
+                            {FlightCommandKind::release_forward,
+                             FlightCommandKind::release_strafe_left,
+                             FlightCommandKind::release_rise}),
         "menu entry must drop unapplied input and release authoritative holds");
   check(mapper.take_commands(4).empty(),
         "suspension releases must be consumed exactly once");
@@ -9532,10 +9417,10 @@ auto suspended_input_contract() -> void {
         "menu time must not remain as simulation debt");
 
   const auto releases = paused_mapper.take_commands(state->tick);
-  check(advance_flight(*terrain, *state, releases, kSimulationStep)
-            .has_value() &&
-            !state->controls.forward,
-        "the first resumed tick must neutralize held flight controls");
+  check(
+      advance_flight(*terrain, *state, releases, kSimulationStep).has_value() &&
+          !state->controls.forward,
+      "the first resumed tick must neutralize held flight controls");
 }
 
 auto mouse_event_coalescing_contract() -> void {
@@ -9570,28 +9455,28 @@ auto mouse_event_coalescing_contract() -> void {
         mapper.enqueue(mouse_event(15, 15, 1, true), region, tick);
         mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
       } else {
-        mapper.enqueue(key_event(termforge::Key::Char, U' ',
-                                 termforge::KeyAction::Press),
-                       tick);
-        mapper.enqueue(key_event(termforge::Key::Char, U'w',
-                                 termforge::KeyAction::Press),
-                       tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Char, U' ', termforge::KeyAction::Press),
+            tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Char, U'w', termforge::KeyAction::Press),
+            tick);
       }
     } else if (tick == 24) {
       if (use_mouse) {
         mapper.enqueue(mouse_event(29, 0, 0, true), region, tick);
       } else {
-        mapper.enqueue(key_event(termforge::Key::Right, 0,
-                                 termforge::KeyAction::Press),
-                       tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Right, 0, termforge::KeyAction::Press),
+            tick);
       }
     } else if (tick == 72) {
       if (use_mouse) {
         mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
       } else {
-        mapper.enqueue(key_event(termforge::Key::Right, 0,
-                                 termforge::KeyAction::Release),
-                       tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Right, 0, termforge::KeyAction::Release),
+            tick);
       }
     } else if (tick == 96) {
       if (use_mouse) {
@@ -9617,17 +9502,16 @@ auto equivalent_mouse_keyboard_trace_contract() -> void {
 
 auto capability_floor_contract() -> void {
   using apsis_drift::detail::DriverChoice;
-  using apsis_drift::detail::KeyboardChoice;
   using apsis_drift::detail::flight_deck_requirements;
   using apsis_drift::detail::forced_capabilities;
+  using apsis_drift::detail::KeyboardChoice;
 
   const auto requirements = flight_deck_requirements();
   check(requirements.truecolor && requirements.key_repeat &&
             requirements.key_release && !requirements.graphics,
         "the Flight Deck floor must accept Kitty or ANSI truecolor with "
         "repeat/release input");
-  check(!forced_capabilities(DriverChoice::automatic,
-                             KeyboardChoice::enhanced),
+  check(!forced_capabilities(DriverChoice::automatic, KeyboardChoice::enhanced),
         "automatic mode must preserve normal capability probing");
 
   const auto kitty =
@@ -9673,8 +9557,8 @@ struct TimedKeyEvent {
                                  termforge::KeyAction::Press)},
       TimedKeyEvent{24, key_event(termforge::Key::Char, U'w',
                                   termforge::KeyAction::Repeat)},
-      TimedKeyEvent{36, key_event(termforge::Key::Right, 0,
-                                  termforge::KeyAction::Press)},
+      TimedKeyEvent{
+          36, key_event(termforge::Key::Right, 0, termforge::KeyAction::Press)},
       TimedKeyEvent{72, key_event(termforge::Key::Char, U'w',
                                   termforge::KeyAction::Release)},
       TimedKeyEvent{96, key_event(termforge::Key::Right, 0,
@@ -9696,7 +9580,8 @@ struct TimedKeyEvent {
     const auto advance = clock.advance(frame_time);
     if (!advance) return 0;
     for (int step = 0; step < advance->steps; ++step) {
-      while (next_event < trace.size() && trace[next_event].tick == state.tick) {
+      while (next_event < trace.size() &&
+             trace[next_event].tick == state.tick) {
         mapper.enqueue(trace[next_event].event, state.tick);
         ++next_event;
       }
@@ -9734,22 +9619,22 @@ auto deterministic_key_trace_contract() -> void {
     for (int step = 0; step < advance->steps; ++step) {
       const auto tick = state.tick;
       if (tick == 0) {
-        mapper.enqueue(key_event(termforge::Key::Char, U' ',
-                                 termforge::KeyAction::Press),
-                       tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Char, U' ', termforge::KeyAction::Press),
+            tick);
         mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
       } else if (tick == 24) {
         mapper.enqueue(mouse_event(29, 0, 0, true), region, tick);
       } else if (tick == 36) {
-        mapper.enqueue(key_event(termforge::Key::Right, 0,
-                                 termforge::KeyAction::Press),
-                       tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Right, 0, termforge::KeyAction::Press),
+            tick);
       } else if (tick == 72) {
         mapper.enqueue(mouse_event(15, 0, 0, true), region, tick);
       } else if (tick == 96) {
-        mapper.enqueue(key_event(termforge::Key::Right, 0,
-                                 termforge::KeyAction::Release),
-                       tick);
+        mapper.enqueue(
+            key_event(termforge::Key::Right, 0, termforge::KeyAction::Release),
+            tick);
       } else if (tick == 120) {
         mapper.enqueue(mouse_event(15, 0, 2, true), region, tick);
       } else if (tick == 144) {
@@ -9833,8 +9718,7 @@ auto render_failure_matrix() -> void {
 
   camera.yaw = 0.0F;
   auto invalid_sun_settings = renderer.settings();
-  invalid_sun_settings.sun_direction.x =
-      std::numeric_limits<float>::infinity();
+  invalid_sun_settings.sun_direction.x = std::numeric_limits<float>::infinity();
   VoxelRenderer invalid_sun{invalid_sun_settings};
   check(!invalid_sun.render(*terrain, camera, frame),
         "a non-finite sun direction must be rejected");
@@ -9888,8 +9772,7 @@ auto camera_projection_contract() -> void {
   check(!zero && zero.error() == ProjectionError::zero_direction,
         "a zero-length direction must be rejected explicitly");
   const auto non_finite = project_world_direction(
-      camera,
-      {1.0F, std::numeric_limits<float>::quiet_NaN(), 0.0F}, settings);
+      camera, {1.0F, std::numeric_limits<float>::quiet_NaN(), 0.0F}, settings);
   check(!non_finite &&
             non_finite.error() == ProjectionError::non_finite_direction,
         "a non-finite direction must be rejected explicitly");
@@ -9929,16 +9812,14 @@ auto camera_projection_contract() -> void {
   const auto pitched_horizon = project_local_horizon(camera, settings);
   const auto pitched_sun =
       project_world_direction(camera, kLocalSunDirection, settings);
-  check(pitched_horizon && level_horizon &&
-            *pitched_horizon > *level_horizon,
+  check(pitched_horizon && level_horizon && *pitched_horizon > *level_horizon,
         "positive pitch must move the local horizon downward");
   check(level_sun && *level_sun && pitched_sun && *pitched_sun &&
             (*pitched_sun)->y < (*level_sun)->y,
         "positive pitch must move a visible world-space sun downward");
 
-  constexpr std::array profiles{
-      RenderProfile::remote, RenderProfile::balanced, RenderProfile::local,
-      RenderProfile::cinematic};
+  constexpr std::array profiles{RenderProfile::remote, RenderProfile::balanced,
+                                RenderProfile::local, RenderProfile::cinematic};
   std::optional<float> horizon_per_width;
   std::optional<float> sun_vertical_per_aspect;
   for (const auto profile : profiles) {
@@ -10040,8 +9921,8 @@ auto deterministic_render() -> void {
                           .fog_start = 180.0F};
   VoxelRenderer renderer{settings};
   Camera camera;
-  camera.height = std::max<float>(terrain->height_at(180, 240), kWaterLevel) +
-                  48.0F;
+  camera.height =
+      std::max<float>(terrain->height_at(180, 240), kWaterLevel) + 48.0F;
   std::vector<Pixel> first(160U * 120U);
   std::vector<Pixel> second(160U * 120U);
   check(renderer.render(*terrain, camera, first),
@@ -10120,10 +10001,9 @@ auto required_viewport_matrix() -> void {
   check(terrain.has_value(), "viewport render terrain must generate");
   if (!terrain) return;
 
-  constexpr std::array sizes{
-      ViewportSize{320, 240}, ViewportSize{512, 320},
-      ViewportSize{640, 360}, ViewportSize{640, 480},
-      ViewportSize{800, 600}, ViewportSize{1024, 768}};
+  constexpr std::array sizes{ViewportSize{320, 240}, ViewportSize{512, 320},
+                             ViewportSize{640, 360}, ViewportSize{640, 480},
+                             ViewportSize{800, 600}, ViewportSize{1024, 768}};
   for (const auto size : sizes) {
     RenderSettings settings;
     settings.width = size.width;
@@ -10133,8 +10013,7 @@ auto required_viewport_matrix() -> void {
     VoxelRenderer renderer{settings};
     Camera camera;
     camera.height =
-        std::max<float>(terrain->height_at(180, 240), kWaterLevel) +
-        48.0F;
+        std::max<float>(terrain->height_at(180, 240), kWaterLevel) + 48.0F;
     std::vector<Pixel> frame(static_cast<std::size_t>(size.width) *
                              static_cast<std::size_t>(size.height));
     check(renderer.render(*terrain, camera, frame),
@@ -10156,8 +10035,7 @@ auto required_viewport_matrix() -> void {
   const double radius = static_cast<double>(planet.radius.value) * 1'000.0;
   OrbitalCamera camera;
   camera.position = {0.0, -radius * distance_scale, radius * 0.20};
-  camera.forward = {-camera.position.x, -camera.position.y,
-                    -camera.position.z};
+  camera.forward = {-camera.position.x, -camera.position.y, -camera.position.z};
   camera.up = {0.0, 0.0, 1.0};
   return camera;
 }
@@ -10180,14 +10058,14 @@ auto celestial_geometry_contract() -> void {
             close_enough(first->planet_to_sun.y, -half->planet_to_sun.y,
                          2.0e-9) &&
             first->planet_to_sun.z == half->planet_to_sun.z,
-        "local-sun geometry must repeat exactly and cross the opposite meridian at half-cycle");
+        "local-sun geometry must repeat exactly and cross the opposite "
+        "meridian at half-cycle");
   if (first) {
     const auto noon = local_solar_elevation(*first, first->planet_to_sun);
     check(noon && close_enough(*noon, 1.0, 1.0e-9),
           "a surface normal facing the sun must resolve local noon");
   }
-  const auto other =
-      resolve_local_sun(generate_planet_descriptor(Seed{43}), 0);
+  const auto other = resolve_local_sun(generate_planet_descriptor(Seed{43}), 0);
   check(first && other && first->planet_to_sun != other->planet_to_sun,
         "independent planet seeds must produce different celestial geometry");
   check(resolve_local_sun(planet_with_radius(planet, 0), 0) ==
@@ -10212,9 +10090,8 @@ auto orbital_sun_occlusion_contract() -> void {
                      -aligned->planet_to_sun.z * radius * 3.5};
   camera.forward = aligned->planet_to_sun;
   camera.up = {0.0, 0.0, 1.0};
-  const OrbitalRenderer renderer{{.width = 320,
-                                  .height = 240,
-                                  .field_of_view_degrees = 60.0}};
+  const OrbitalRenderer renderer{
+      {.width = 320, .height = 240, .field_of_view_degrees = 60.0}};
   std::vector<Pixel> visible_frame(320U * 240U);
   std::vector<Pixel> occluded_frame(visible_frame.size());
   std::vector<Pixel> reemerged_frame(visible_frame.size());
@@ -10223,36 +10100,32 @@ auto orbital_sun_occlusion_contract() -> void {
       resolve_local_sun(planet, kLocalDayTicks - limb_offset);
   const auto reemerged_sun =
       resolve_local_sun(planet, kLocalDayTicks + limb_offset);
-  const auto visible = visible_sun
-                           ? renderer.render(planet, camera,
-                                             visible_sun->planet_to_sun,
-                                             visible_frame)
-                           : std::expected<OrbitalRenderStats,
-                                           OrbitalRenderError>{
-                                 std::unexpected{
-                                     OrbitalRenderError::invalid_light_direction}};
-  const auto occluded = renderer.render(
-      planet, camera, aligned->planet_to_sun, occluded_frame);
-  const auto reemerged = reemerged_sun
-                             ? renderer.render(planet, camera,
-                                               reemerged_sun->planet_to_sun,
-                                               reemerged_frame)
-                             : std::expected<OrbitalRenderStats,
-                                             OrbitalRenderError>{
-                                   std::unexpected{
-                                       OrbitalRenderError::invalid_light_direction}};
+  const auto visible =
+      visible_sun
+          ? renderer.render(planet, camera, visible_sun->planet_to_sun,
+                            visible_frame)
+          : std::expected<OrbitalRenderStats, OrbitalRenderError>{
+                std::unexpected{OrbitalRenderError::invalid_light_direction}};
+  const auto occluded =
+      renderer.render(planet, camera, aligned->planet_to_sun, occluded_frame);
+  const auto reemerged =
+      reemerged_sun
+          ? renderer.render(planet, camera, reemerged_sun->planet_to_sun,
+                            reemerged_frame)
+          : std::expected<OrbitalRenderStats, OrbitalRenderError>{
+                std::unexpected{OrbitalRenderError::invalid_light_direction}};
   check(visible && occluded && reemerged && visible->sun_pixels > 0 &&
             occluded->sun_pixels == 0 && reemerged->sun_pixels > 0 &&
             pixel_checksum(visible_frame) != pixel_checksum(occluded_frame) &&
             pixel_checksum(reemerged_frame) != pixel_checksum(occluded_frame),
-        "the deterministic sun must disappear behind the planet and re-emerge on the opposite limb");
+        "the deterministic sun must disappear behind the planet and re-emerge "
+        "on the opposite limb");
 }
 
 auto orbital_render_failure_matrix() -> void {
   const auto planet = generate_planet_descriptor(Seed{42});
-  const OrbitalRenderSettings settings{.width = 160,
-                                       .height = 120,
-                                       .field_of_view_degrees = 60.0};
+  const OrbitalRenderSettings settings{
+      .width = 160, .height = 120, .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   const auto camera = orbital_camera_for(planet);
 
@@ -10262,42 +10135,39 @@ auto orbital_render_failure_matrix() -> void {
   check(!short_result &&
             short_result.error() == OrbitalRenderError::invalid_framebuffer,
         "an orbital renderer must reject a short framebuffer");
-  check(std::ranges::all_of(short_frame, [](Pixel value) {
-          return value == Pixel{1, 2, 3, 4};
-        }),
-        "a rejected orbital framebuffer must remain untouched");
+  check(
+      std::ranges::all_of(
+          short_frame, [](Pixel value) { return value == Pixel{1, 2, 3, 4}; }),
+      "a rejected orbital framebuffer must remain untouched");
 
   std::vector<Pixel> frame(160U * 120U, {5, 6, 7, 8});
   const auto check_untouched = [&frame](const auto& result,
-                                      OrbitalRenderError error,
-                                      const char* message) {
+                                        OrbitalRenderError error,
+                                        const char* message) {
     check(!result && result.error() == error, message);
-    check(std::ranges::all_of(frame, [](Pixel value) {
-            return value == Pixel{5, 6, 7, 8};
-          }),
+    check(std::ranges::all_of(
+              frame, [](Pixel value) { return value == Pixel{5, 6, 7, 8}; }),
           "invalid orbital input must leave the framebuffer untouched");
   };
 
   const OrbitalRenderer invalid_viewport{{.width = 0, .height = 120}};
-  check_untouched(invalid_viewport.render(planet, camera, kOrbitalTestLight,
-                                          frame),
-                  OrbitalRenderError::invalid_viewport,
-                  "zero orbital width must be rejected");
+  check_untouched(
+      invalid_viewport.render(planet, camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::invalid_viewport,
+      "zero orbital width must be rejected");
 
-  const OrbitalRenderer invalid_fov{{.width = 160,
-                                     .height = 120,
-                                     .field_of_view_degrees = 180.0}};
+  const OrbitalRenderer invalid_fov{
+      {.width = 160, .height = 120, .field_of_view_degrees = 180.0}};
   check_untouched(invalid_fov.render(planet, camera, kOrbitalTestLight, frame),
                   OrbitalRenderError::invalid_field_of_view,
                   "an invalid orbital field of view must be rejected");
 
-  const OrbitalRenderer invalid_stride{{.width = 160,
-                                        .height = 120,
-                                        .horizontal_sample_stride = 0}};
+  const OrbitalRenderer invalid_stride{
+      {.width = 160, .height = 120, .horizontal_sample_stride = 0}};
   check_untouched(
       invalid_stride.render(planet, camera, kOrbitalTestLight, frame),
-                  OrbitalRenderError::invalid_sample_stride,
-                  "an invalid orbital sample stride must be rejected");
+      OrbitalRenderError::invalid_sample_stride,
+      "an invalid orbital sample stride must be rejected");
 
   const OrbitalRenderer invalid_light{{.width = 160, .height = 120}};
   check_untouched(invalid_light.render(planet, camera, {}, frame),
@@ -10309,76 +10179,74 @@ auto orbital_render_failure_matrix() -> void {
   check(tile_cache.has_value(),
         "the orbital coverage failure fixture must create its tile cache");
   if (tile_cache) {
-    check_untouched(renderer.render_tile_backed(
-                        planet, camera, kOrbitalTestLight, 2, *tile_cache,
-                        frame, short_coverage),
-                    OrbitalRenderError::invalid_framebuffer,
-                    "a short orbital coverage buffer must be rejected");
+    check_untouched(
+        renderer.render_tile_backed(planet, camera, kOrbitalTestLight, 2,
+                                    *tile_cache, frame, short_coverage),
+        OrbitalRenderError::invalid_framebuffer,
+        "a short orbital coverage buffer must be rejected");
   }
 
   const auto invalid_radius = planet_with_radius(planet, 0);
-  check_untouched(renderer.render(invalid_radius, camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::invalid_planet,
-                  "an invalid orbital planet radius must be rejected");
+  check_untouched(
+      renderer.render(invalid_radius, camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::invalid_planet,
+      "an invalid orbital planet radius must be rejected");
   const auto invalid_water = planet_with_water(planet, 10'001);
-  check_untouched(renderer.render(invalid_water, camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::invalid_planet,
-                  "invalid orbital water coverage must be rejected");
+  check_untouched(
+      renderer.render(invalid_water, camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::invalid_planet,
+      "invalid orbital water coverage must be rejected");
   const auto invalid_atmosphere =
       planet_with_atmosphere(planet, AtmosphereClass::airless, 1);
-  check_untouched(renderer.render(invalid_atmosphere, camera,
-                                  kOrbitalTestLight, frame),
-                  OrbitalRenderError::invalid_planet,
-                  "inconsistent orbital atmosphere data must be rejected");
+  check_untouched(
+      renderer.render(invalid_atmosphere, camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::invalid_planet,
+      "inconsistent orbital atmosphere data must be rejected");
 
   auto invalid_camera = camera;
   invalid_camera.position.x = std::numeric_limits<double>::quiet_NaN();
-  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::non_finite_camera,
-                  "a non-finite orbital camera must be rejected");
+  check_untouched(
+      renderer.render(planet, invalid_camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::non_finite_camera,
+      "a non-finite orbital camera must be rejected");
 
   invalid_camera = camera;
-  invalid_camera.position = {
-      std::numeric_limits<double>::max(),
-      std::numeric_limits<double>::max(),
-      std::numeric_limits<double>::max()};
-  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::non_finite_camera,
-                  "an overflowing orbital camera must be rejected");
+  invalid_camera.position = {std::numeric_limits<double>::max(),
+                             std::numeric_limits<double>::max(),
+                             std::numeric_limits<double>::max()};
+  check_untouched(
+      renderer.render(planet, invalid_camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::non_finite_camera,
+      "an overflowing orbital camera must be rejected");
 
   invalid_camera = camera;
   invalid_camera.position = {};
-  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::camera_inside_planet,
-                  "a camera inside the planet must be rejected");
+  check_untouched(
+      renderer.render(planet, invalid_camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::camera_inside_planet,
+      "a camera inside the planet must be rejected");
 
   invalid_camera = camera;
   invalid_camera.forward = {};
-  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::invalid_camera_basis,
-                  "a zero orbital forward direction must be rejected");
+  check_untouched(
+      renderer.render(planet, invalid_camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::invalid_camera_basis,
+      "a zero orbital forward direction must be rejected");
 
   invalid_camera = camera;
   invalid_camera.up = invalid_camera.forward;
-  check_untouched(renderer.render(planet, invalid_camera, kOrbitalTestLight,
-                                  frame),
-                  OrbitalRenderError::invalid_camera_basis,
-                  "a collinear orbital camera basis must be rejected");
+  check_untouched(
+      renderer.render(planet, invalid_camera, kOrbitalTestLight, frame),
+      OrbitalRenderError::invalid_camera_basis,
+      "a collinear orbital camera basis must be rejected");
 }
 
 auto orbital_visibility_contract() -> void {
   const auto generated = generate_planet_descriptor(Seed{42});
-  const auto planet = planet_with_atmosphere(
-      generated, AtmosphereClass::temperate, 1'000);
-  const OrbitalRenderSettings settings{.width = 200,
-                                       .height = 150,
-                                       .field_of_view_degrees = 60.0};
+  const auto planet =
+      planet_with_atmosphere(generated, AtmosphereClass::temperate, 1'000);
+  const OrbitalRenderSettings settings{
+      .width = 200, .height = 150, .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   std::vector<Pixel> frame(200U * 150U);
 
@@ -10393,8 +10261,7 @@ auto orbital_visibility_contract() -> void {
           "a fully visible planet must leave space around its disc");
   }
 
-  camera.forward.x += 1.65 *
-                      static_cast<double>(planet.radius.value) * 1'000.0;
+  camera.forward.x += 1.65 * static_cast<double>(planet.radius.value) * 1'000.0;
   const auto clipped =
       renderer.render(planet, camera, kOrbitalTestLight, frame);
   check(clipped && clipped->surface_pixels > 0 && visible &&
@@ -10421,9 +10288,8 @@ auto orbital_visibility_contract() -> void {
 
 auto deterministic_orbital_render() -> void {
   const auto planet = generate_planet_descriptor(Seed{42});
-  const OrbitalRenderSettings settings{.width = 160,
-                                       .height = 120,
-                                       .field_of_view_degrees = 60.0};
+  const OrbitalRenderSettings settings{
+      .width = 160, .height = 120, .field_of_view_degrees = 60.0};
   const OrbitalRenderer renderer{settings};
   const auto camera = orbital_camera_for(planet);
   std::vector<Pixel> first(160U * 120U);
@@ -10436,15 +10302,15 @@ auto deterministic_orbital_render() -> void {
         "repeated orbital renders must report identical coverage");
   check(first == second,
         "a fixed planet and orbital camera must render deterministically");
-  check(std::ranges::all_of(first,
-                            [](Pixel value) { return value.a == 255; }),
+  check(std::ranges::all_of(first, [](Pixel value) { return value.a == 255; }),
         "every orbital pixel must be opaque");
 
   const auto other_planet = generate_planet_descriptor(Seed{43});
   const auto other_camera = orbital_camera_for(other_planet);
-  check(renderer.render(other_planet, other_camera, kOrbitalTestLight, second) &&
-            pixel_checksum(first) != pixel_checksum(second),
-        "a different planet descriptor must change the orbital frame");
+  check(
+      renderer.render(other_planet, other_camera, kOrbitalTestLight, second) &&
+          pixel_checksum(first) != pixel_checksum(second),
+      "a different planet descriptor must change the orbital frame");
 
   auto moved = camera;
   moved.position.x += static_cast<double>(planet.radius.value) * 300.0;
@@ -10466,7 +10332,8 @@ auto deterministic_orbital_render() -> void {
   check(strided_result &&
             std::ranges::all_of(strided_frame,
                                 [](Pixel value) { return value.a == 255; }),
-        "strided orbital sampling must fill odd-width framebuffers without crossing their boundary");
+        "strided orbital sampling must fill odd-width framebuffers without "
+        "crossing their boundary");
   bool pairs_match = true;
   for (int y = 0; y < strided_height && pairs_match; ++y) {
     for (int x = 0; x + 1 < strided_width; x += 2) {
@@ -10477,27 +10344,23 @@ auto deterministic_orbital_render() -> void {
       }
     }
   }
-  check(pairs_match,
-        "each complete horizontal sample span must receive one "
-        "centered orbital color");
+  check(pairs_match, "each complete horizontal sample span must receive one "
+                     "centered orbital color");
 
   auto cache = TerrainTileCache::create();
   std::vector<std::uint8_t> covered(first.size(), 1U);
   std::fill(first.begin(), first.end(), Pixel{9, 8, 7, 6});
-  const auto skipped = cache
-                           ? renderer.render_tile_backed(
-                                 planet, camera, kOrbitalTestLight, 2, *cache,
-                                 first, covered)
-                           : std::expected<OrbitalRenderStats,
-                                           OrbitalRenderError>{
-                                 std::unexpected{
-                                     OrbitalRenderError::terrain_failure}};
+  const auto skipped =
+      cache ? renderer.render_tile_backed(planet, camera, kOrbitalTestLight, 2,
+                                          *cache, first, covered)
+            : std::expected<OrbitalRenderStats, OrbitalRenderError>{
+                  std::unexpected{OrbitalRenderError::terrain_failure}};
   check(skipped && skipped->surface_pixels == 0 &&
             skipped->terrain_tiles_touched == 0 &&
-            std::ranges::all_of(first, [](Pixel value) {
-              return value == Pixel{9, 8, 7, 6};
-            }),
-        "a fully covered orbital fallback must skip tile sampling and leave its unused pixels untouched");
+            std::ranges::all_of(
+                first, [](Pixel value) { return value == Pixel{9, 8, 7, 6}; }),
+        "a fully covered orbital fallback must skip tile sampling and leave "
+        "its unused pixels untouched");
 }
 
 auto golden_orbital_profiles() -> void {
@@ -10580,9 +10443,8 @@ auto terrain_surface_sampling_contract() -> void {
           "a sampled surface anchor must reconstruct the same position");
   }
   check(!sample_planet_surface(
-             planet,
-             {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 2,
-             *cache),
+            planet, {std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0}, 2,
+            *cache),
         "non-finite surface sampling must be rejected");
   check(!sample_planet_surface(planet, *fixed, kMaxTerrainLod + 1, *cache),
         "surface sampling above the maximum LOD must be rejected");
@@ -10590,8 +10452,8 @@ auto terrain_surface_sampling_contract() -> void {
 
 auto planetary_presentation_contract() -> void {
   const auto generated = generate_planet_descriptor(Seed{0xA5515U});
-  const auto planet = planet_with_atmosphere(
-      generated, AtmosphereClass::temperate, 1'000);
+  const auto planet =
+      planet_with_atmosphere(generated, AtmosphereClass::temperate, 1'000);
   auto cache = TerrainTileCache::create();
   check(cache.has_value(), "presentation surface cache must initialize");
   if (!cache) return;
@@ -10606,21 +10468,21 @@ auto planetary_presentation_contract() -> void {
   if (!surface || !bands) return;
   const double ground = std::max(0.0, surface->elevation_metres);
 
-  auto orbital = presentation_state(
-      planet, bands->orbit_enter_altitude_metres + 1.0, ground,
-      FlightRegime::orbital);
-  auto atmosphere_start = presentation_state(
-      planet, bands->orbit_enter_altitude_metres, ground,
-      FlightRegime::orbital);
-  auto atmosphere_full = presentation_state(
-      planet, bands->atmosphere_enter_altitude_metres, ground,
-      FlightRegime::atmospheric);
-  auto terrain_start = presentation_state(
-      planet, ground + bands->terrain_exit_clearance_metres, ground,
-      FlightRegime::atmospheric);
-  auto terrain_full = presentation_state(
-      planet, ground + bands->terrain_enter_clearance_metres, ground,
-      FlightRegime::terrain_flight);
+  auto orbital =
+      presentation_state(planet, bands->orbit_enter_altitude_metres + 1.0,
+                         ground, FlightRegime::orbital);
+  auto atmosphere_start =
+      presentation_state(planet, bands->orbit_enter_altitude_metres, ground,
+                         FlightRegime::orbital);
+  auto atmosphere_full =
+      presentation_state(planet, bands->atmosphere_enter_altitude_metres,
+                         ground, FlightRegime::atmospheric);
+  auto terrain_start =
+      presentation_state(planet, ground + bands->terrain_exit_clearance_metres,
+                         ground, FlightRegime::atmospheric);
+  auto terrain_full =
+      presentation_state(planet, ground + bands->terrain_enter_clearance_metres,
+                         ground, FlightRegime::terrain_flight);
   const auto orbital_mix = planetary_presentation_mix(planet, orbital);
   const auto atmosphere_start_mix =
       planetary_presentation_mix(planet, atmosphere_start);
@@ -10632,8 +10494,8 @@ auto planetary_presentation_contract() -> void {
       planetary_presentation_mix(planet, terrain_full);
   check(orbital_mix && orbital_mix->atmosphere == 0.0 &&
             orbital_mix->local_terrain == 0.0 && atmosphere_start_mix &&
-            atmosphere_start_mix->atmosphere == 0.0 &&
-            atmosphere_full_mix && atmosphere_full_mix->atmosphere == 1.0,
+            atmosphere_start_mix->atmosphere == 0.0 && atmosphere_full_mix &&
+            atmosphere_full_mix->atmosphere == 1.0,
         "atmosphere blending must use exact orbital hysteresis endpoints");
   check(terrain_start_mix && terrain_start_mix->local_terrain == 0.0 &&
             terrain_full_mix && terrain_full_mix->local_terrain == 1.0,
@@ -10663,18 +10525,19 @@ auto planetary_presentation_contract() -> void {
     PlanetaryFlightState state;
     PlanetaryPresentationMode mode;
   };
-  auto blend_state = presentation_state(
-      planet,
-      ground + (bands->terrain_enter_clearance_metres +
-                bands->terrain_exit_clearance_metres) * 0.5,
-      ground, FlightRegime::atmospheric);
+  auto blend_state =
+      presentation_state(planet,
+                         ground + (bands->terrain_enter_clearance_metres +
+                                   bands->terrain_exit_clearance_metres) *
+                                      0.5,
+                         ground, FlightRegime::atmospheric);
   const std::array stages{
       Stage{orbital, PlanetaryPresentationMode::orbital},
-      Stage{presentation_state(
-                planet,
-                (bands->orbit_enter_altitude_metres +
-                 bands->atmosphere_enter_altitude_metres) * 0.5,
-                ground, FlightRegime::atmospheric),
+      Stage{presentation_state(planet,
+                               (bands->orbit_enter_altitude_metres +
+                                bands->atmosphere_enter_altitude_metres) *
+                                   0.5,
+                               ground, FlightRegime::atmospheric),
             PlanetaryPresentationMode::atmospheric},
       Stage{blend_state, PlanetaryPresentationMode::terrain_blend},
       Stage{presentation_state(planet, ground + 100.0, ground,
@@ -10710,12 +10573,13 @@ auto planetary_presentation_contract() -> void {
       9313099484138567917ULL,
   };
   if (checksums != expected_checksums) {
-    std::fprintf(stderr,
-                 "planetary presentation golden checksums: %llu %llu %llu %llu\n",
-                 static_cast<unsigned long long>(checksums[0]),
-                 static_cast<unsigned long long>(checksums[1]),
-                 static_cast<unsigned long long>(checksums[2]),
-                 static_cast<unsigned long long>(checksums[3]));
+    std::fprintf(
+        stderr,
+        "planetary presentation golden checksums: %llu %llu %llu %llu\n",
+        static_cast<unsigned long long>(checksums[0]),
+        static_cast<unsigned long long>(checksums[1]),
+        static_cast<unsigned long long>(checksums[2]),
+        static_cast<unsigned long long>(checksums[3]));
   }
   check(checksums == expected_checksums,
         "planetary presentation stages must retain golden frame checksums");
@@ -10725,16 +10589,15 @@ auto planetary_presentation_contract() -> void {
         "scripted descent stages must produce distinct nonzero frames");
 
   const std::array handoff_viewports{
-      ViewportSize{320, 240}, ViewportSize{640, 480},
-      ViewportSize{1024, 320}, ViewportSize{320, 1024}};
+      ViewportSize{320, 240}, ViewportSize{640, 480}, ViewportSize{1024, 320},
+      ViewportSize{320, 1024}};
   for (const auto viewport : handoff_viewports) {
     PlanetaryPresentationRenderer handoff_renderer({
         .width = viewport.width,
         .height = viewport.height,
     });
-    std::vector<Pixel> handoff_frame(
-        static_cast<std::size_t>(viewport.width) *
-        static_cast<std::size_t>(viewport.height));
+    std::vector<Pixel> handoff_frame(static_cast<std::size_t>(viewport.width) *
+                                     static_cast<std::size_t>(viewport.height));
     const auto state = presentation_state(
         planet, ground + bands->terrain_enter_clearance_metres, ground,
         FlightRegime::terrain_flight);
@@ -10744,7 +10607,8 @@ auto planetary_presentation_contract() -> void {
               rendered->local_distance_metres > 900.0 &&
               (!rendered->orbital_surface_fallback ||
                rendered->orbital_tiles_touched > 0),
-          "minimum, canonical, wide, and tall viewports must establish local terrain while retaining any required spherical coverage");
+          "minimum, canonical, wide, and tall viewports must establish local "
+          "terrain while retaining any required spherical coverage");
   }
 
   PlanetaryPresentationRenderer clearance_renderer;
@@ -10756,18 +10620,16 @@ auto planetary_presentation_contract() -> void {
     double pitch;
   };
   constexpr std::array coverage_checkpoints{
-      CoverageCheckpoint{2'500.0, 0.0},
-      CoverageCheckpoint{2'250.0, 0.0},
-      CoverageCheckpoint{2'000.0, 0.0},
-      CoverageCheckpoint{1'000.0, -0.18},
+      CoverageCheckpoint{2'500.0, 0.0}, CoverageCheckpoint{2'250.0, 0.0},
+      CoverageCheckpoint{2'000.0, 0.0}, CoverageCheckpoint{1'000.0, -0.18},
       CoverageCheckpoint{100.0, -0.35},
   };
   for (const auto checkpoint : coverage_checkpoints) {
     const auto regime = checkpoint.clearance <= 2'000.0
                             ? FlightRegime::terrain_flight
                             : FlightRegime::atmospheric;
-    const auto state = presentation_state(
-        planet, ground + checkpoint.clearance, ground, regime);
+    const auto state = presentation_state(planet, ground + checkpoint.clearance,
+                                          ground, regime);
     const auto rendered = clearance_renderer.render(
         planet, state, {.pitch_radians = checkpoint.pitch}, clearance_frame);
     const bool terrain_expected = checkpoint.clearance < 2'500.0;
@@ -10777,7 +10639,8 @@ auto planetary_presentation_contract() -> void {
               (!rendered->orbital_surface_fallback ||
                rendered->orbital_tiles_touched > 0) &&
               (terrain_expected || rendered->orbital_tiles_touched > 0),
-          "canonical descent clearances must retain continuous spherical or local surface coverage");
+          "canonical descent clearances must retain continuous spherical or "
+          "local surface coverage");
   }
 
   PlanetaryPresentationRenderer bounded_renderer({
@@ -10793,7 +10656,8 @@ auto planetary_presentation_contract() -> void {
   check(bounded && bounded->local_terrain_pixels == 0 &&
             bounded->orbital_surface_fallback &&
             bounded->orbital_tiles_touched > 0,
-        "a local pass with zero terrain coverage must retain the spherical planet pass");
+        "a local pass with zero terrain coverage must retain the spherical "
+        "planet pass");
 
   PlanetaryPresentationRenderer airless_renderer({
       .width = width,
@@ -10817,7 +10681,8 @@ auto planetary_presentation_contract() -> void {
       average[1] += value.g;
       average[2] += value.b;
     }
-    for (auto& value : average) value /= width;
+    for (auto& value : average)
+      value /= width;
     return average;
   };
   const auto zenith = average_row(atmospheric_context_frame, 0);
@@ -10829,7 +10694,8 @@ auto planetary_presentation_contract() -> void {
             airless_render->mode == PlanetaryPresentationMode::orbital &&
             atmospheric_context_frame != airless_atmospheric_frame &&
             gradient > 8.0,
-        "atmospheric flight must add a visible horizon context while airless approaches remain orbital");
+        "atmospheric flight must add a visible horizon context while airless "
+        "approaches remain orbital");
 
   const auto initial_sun = resolve_local_sun(planet, 0);
   check(initial_sun.has_value(), "the local day/night fixture must resolve");
@@ -10842,8 +10708,8 @@ auto planetary_presentation_contract() -> void {
     night_state.tick = noon_tick + kLocalDayTicks / 2;
     std::vector<Pixel> day_frame(frame.size());
     std::vector<Pixel> night_frame(frame.size());
-    const auto day_render = renderer.render(
-        planet, day_state, {.pitch_radians = 0.0}, day_frame);
+    const auto day_render =
+        renderer.render(planet, day_state, {.pitch_radians = 0.0}, day_frame);
     const auto night_render = renderer.render(
         planet, night_state, {.pitch_radians = 0.0}, night_frame);
     const auto luminance = [](std::span<const Pixel> pixels) {
@@ -10853,17 +10719,16 @@ auto planetary_presentation_contract() -> void {
       }
       return total;
     };
-    const auto night_stars = std::ranges::count_if(
-        std::span{night_frame},
-        [](Pixel value) {
+    const auto night_stars =
+        std::ranges::count_if(std::span{night_frame}, [](Pixel value) {
           return value.r > 140 && value.r == value.g && value.b >= value.r;
         });
     auto airless_night_state = night_state;
     airless_night_state.planet = airless.id;
     std::vector<Pixel> airless_night_frame(frame.size());
-    const auto airless_night = airless_renderer.render(
-        airless, airless_night_state, {.pitch_radians = 0.0},
-        airless_night_frame);
+    const auto airless_night =
+        airless_renderer.render(airless, airless_night_state,
+                                {.pitch_radians = 0.0}, airless_night_frame);
     const bool coherent_cycle =
         day_render && night_render && airless_night &&
         day_render->local_solar_elevation > 0.85 &&
@@ -10871,71 +10736,73 @@ auto planetary_presentation_contract() -> void {
         luminance(day_frame) > luminance(night_frame) && night_stars > 0 &&
         airless_night_frame.front() == Pixel{4, 7, 13, 255};
     if (!coherent_cycle) {
-      std::fprintf(
-          stderr,
-          "day/night diagnostics: day=%.6f night=%.6f day_luma=%llu "
-          "night_luma=%llu stars=%zu airless_first=(%u,%u,%u)\n",
-          day_render ? day_render->local_solar_elevation : 0.0,
-          night_render ? night_render->local_solar_elevation : 0.0,
-          static_cast<unsigned long long>(luminance(day_frame)),
-          static_cast<unsigned long long>(luminance(night_frame)),
-          static_cast<std::size_t>(night_stars), airless_night_frame.front().r,
-          airless_night_frame.front().g, airless_night_frame.front().b);
+      std::fprintf(stderr,
+                   "day/night diagnostics: day=%.6f night=%.6f day_luma=%llu "
+                   "night_luma=%llu stars=%zu airless_first=(%u,%u,%u)\n",
+                   day_render ? day_render->local_solar_elevation : 0.0,
+                   night_render ? night_render->local_solar_elevation : 0.0,
+                   static_cast<unsigned long long>(luminance(day_frame)),
+                   static_cast<unsigned long long>(luminance(night_frame)),
+                   static_cast<std::size_t>(night_stars),
+                   airless_night_frame.front().r, airless_night_frame.front().g,
+                   airless_night_frame.front().b);
     }
     check(coherent_cycle,
-          "local terrain, atmospheric sky, night stars, and airless haze must agree on the shared sun direction");
+          "local terrain, atmospheric sky, night stars, and airless haze must "
+          "agree on the shared sun direction");
   }
 
   auto stationary_orbit = orbital;
   stationary_orbit.velocity = {};
   stationary_orbit.controls = {};
   std::vector<Pixel> stationary_frame(frame.size());
-  check(renderer.render(planet, stationary_orbit,
-                        {.pitch_radians = -0.08}, stationary_frame) &&
+  check(renderer.render(planet, stationary_orbit, {.pitch_radians = -0.08},
+                        stationary_frame) &&
             stationary_frame != moving_orbital_frame,
         "orbital velocity must produce a deterministic visual motion cue");
   auto thrust_orbit = stationary_orbit;
   thrust_orbit.controls.forward = true;
   std::vector<Pixel> thrust_frame(frame.size());
-  check(renderer.render(planet, thrust_orbit,
-                        {.pitch_radians = -0.08}, thrust_frame) &&
+  check(renderer.render(planet, thrust_orbit, {.pitch_radians = -0.08},
+                        thrust_frame) &&
             thrust_frame != stationary_frame,
-        "the first orbital thrust input must produce an immediate visual response");
+        "the first orbital thrust input must produce an immediate visual "
+        "response");
   auto later_orbit = orbital;
   later_orbit.tick += 8;
   std::vector<Pixel> later_frame(frame.size());
-  check(renderer.render(planet, later_orbit,
-                        {.pitch_radians = -0.08}, later_frame) &&
-            later_frame != moving_orbital_frame,
-        "orbital streak motion must advance only from authoritative tick state");
+  check(
+      renderer.render(planet, later_orbit, {.pitch_radians = -0.08},
+                      later_frame) &&
+          later_frame != moving_orbital_frame,
+      "orbital streak motion must advance only from authoritative tick state");
 
   std::vector<Pixel> short_frame(frame.size() - 1, {1, 2, 3, 4});
   check(!renderer.render(planet, orbital, {}, short_frame) &&
-            std::ranges::all_of(short_frame, [](Pixel value) {
-              return value == Pixel{1, 2, 3, 4};
-            }),
+            std::ranges::all_of(
+                short_frame,
+                [](Pixel value) { return value == Pixel{1, 2, 3, 4}; }),
         "a short planetary framebuffer must be rejected unchanged");
 
   auto subpixel_blend = terrain_start;
   subpixel_blend.pose.position.altitude_metres -= 0.5;
   subpixel_blend.clearance_metres -= 0.5;
-  const auto subpixel_result = renderer.render(
-      planet, subpixel_blend, {.pitch_radians = -1.25}, frame);
+  const auto subpixel_result =
+      renderer.render(planet, subpixel_blend, {.pitch_radians = -1.25}, frame);
   check(subpixel_result &&
-            subpixel_result->mode ==
-                PlanetaryPresentationMode::terrain_blend &&
+            subpixel_result->mode == PlanetaryPresentationMode::terrain_blend &&
             subpixel_result->orbital_tiles_touched > 0 &&
             subpixel_result->local_tiles_touched == 0 &&
             subpixel_result->local_render_ms == 0.0,
-        "a subpixel terrain contribution must not render an ineffectual local pass");
+        "a subpixel terrain contribution must not render an ineffectual local "
+        "pass");
   auto invalid_state = orbital;
   invalid_state.pose.position.altitude_metres =
       std::numeric_limits<double>::quiet_NaN();
   std::fill(frame.begin(), frame.end(), Pixel{5, 6, 7, 8});
   check(!renderer.render(planet, invalid_state, {}, frame) &&
-            std::ranges::all_of(frame, [](Pixel value) {
-              return value == Pixel{5, 6, 7, 8};
-            }),
+            std::ranges::all_of(
+                frame, [](Pixel value) { return value == Pixel{5, 6, 7, 8}; }),
         "non-finite planetary state must be rejected unchanged");
   check(!renderer.render(
             planet, orbital,
@@ -10967,27 +10834,24 @@ auto planetary_presentation_contract() -> void {
 }
 
 auto planetfall_acceptance_contract() -> void {
-  const auto invalid = run_planetfall_acceptance({{0, 64}, RenderProfile::local});
+  const auto invalid =
+      run_planetfall_acceptance({{0, 64}, RenderProfile::local});
   check(!invalid &&
-            invalid.error() ==
-                PlanetfallAcceptanceError::invalid_configuration,
+            invalid.error() == PlanetfallAcceptanceError::invalid_configuration,
         "Planetfall acceptance must reject invalid viewport dimensions");
 
-  const auto result = run_planetfall_acceptance(
-      {{96, 64}, std::nullopt});
-  check(result.has_value(),
-        "the canonical Planetfall descent must complete");
+  const auto result = run_planetfall_acceptance({{96, 64}, std::nullopt});
+  check(result.has_value(), "the canonical Planetfall descent must complete");
   if (!result) return;
 
-  check(result->report.planet_id ==
-            PlanetId{kPlanetfallAcceptanceSeed} &&
+  check(result->report.planet_id == PlanetId{kPlanetfallAcceptanceSeed} &&
             result->report.planet_name == "Carayx" &&
             result->report.command_count == 4 &&
-            result->report.final_state.tick ==
-                kPlanetfallAcceptanceTicks &&
+            result->report.final_state.tick == kPlanetfallAcceptanceTicks &&
             planetary_flight_state_checksum(result->report.final_state) ==
                 15251675909814434464ULL,
-        "the canonical Planetfall path must retain its generated identity and final state");
+        "the canonical Planetfall path must retain its generated identity and "
+        "final state");
   check(result->report.final_state.regime == FlightRegime::terrain_flight &&
             result->report.final_state.clearance_metres > 100.0 &&
             result->report.final_state.clearance_metres < 300.0 &&
@@ -11025,25 +10889,26 @@ auto planetfall_acceptance_contract() -> void {
       actual_frames[index] = result->report.stages[index].framebuffer_checksum;
     }
     if (actual_frames != expected_frame_checksums) {
-      std::fprintf(stderr,
-                   "Planetfall acceptance frame checksums: %llu %llu %llu %llu\n",
-                   static_cast<unsigned long long>(actual_frames[0]),
-                   static_cast<unsigned long long>(actual_frames[1]),
-                   static_cast<unsigned long long>(actual_frames[2]),
-                   static_cast<unsigned long long>(actual_frames[3]));
+      std::fprintf(
+          stderr,
+          "Planetfall acceptance frame checksums: %llu %llu %llu %llu\n",
+          static_cast<unsigned long long>(actual_frames[0]),
+          static_cast<unsigned long long>(actual_frames[1]),
+          static_cast<unsigned long long>(actual_frames[2]),
+          static_cast<unsigned long long>(actual_frames[3]));
     }
     for (std::size_t index = 0; index < expected_modes.size(); ++index) {
       const auto& stage = result->report.stages[index];
       check(stage.presentation_mode == expected_modes[index] &&
                 stage.tick == expected_ticks[index] &&
                 stage.flight_checksum == expected_flight_checksums[index] &&
-                stage.framebuffer_checksum ==
-                    expected_frame_checksums[index] &&
+                stage.framebuffer_checksum == expected_frame_checksums[index] &&
                 stage.surface_anchor.tile.planet == result->report.planet_id &&
                 std::isfinite(stage.total_avg_ms) &&
                 std::isfinite(stage.total_p95_ms) &&
                 stage.total_avg_ms >= 0.0 && stage.total_p95_ms >= 0.0,
-            "Planetfall stages must retain ordered deterministic identities and finite diagnostics");
+            "Planetfall stages must retain ordered deterministic identities "
+            "and finite diagnostics");
     }
   }
   check(result->final_frame.size() == 96U * 64U &&
@@ -11052,18 +10917,18 @@ auto planetfall_acceptance_contract() -> void {
         "Planetfall must retain the final local-terrain frame for capture");
 
   const auto json = planetfall_acceptance_json(result->report);
-  check(
-      json.find("\"schema_version\": 1") != std::string::npos &&
-          json.find("\"scenario\": \"v0.3-planetfall\"") != std::string::npos &&
-          json.find("\"final_flight_checksum\": "
-                    "\"15251675909814434464\"") != std::string::npos &&
-          json.find("\"presentation_mode\": \"terrain-blend\"") !=
-              std::string::npos,
-      "Planetfall JSON must preserve its versioned scenario and "
-      "deterministic fields");
+  check(json.find("\"schema_version\": 1") != std::string::npos &&
+            json.find("\"scenario\": \"v0.3-planetfall\"") !=
+                std::string::npos &&
+            json.find("\"final_flight_checksum\": "
+                      "\"15251675909814434464\"") != std::string::npos &&
+            json.find("\"presentation_mode\": \"terrain-blend\"") !=
+                std::string::npos,
+        "Planetfall JSON must preserve its versioned scenario and "
+        "deterministic fields");
 }
 
-}  // namespace
+} // namespace
 
 auto main() -> int {
   generation_failure_matrix();

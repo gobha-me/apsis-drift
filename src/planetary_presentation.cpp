@@ -33,9 +33,9 @@ using Clock = std::chrono::steady_clock;
 inline constexpr std::uint32_t kBlendScale{65'536};
 
 [[nodiscard]] auto blend_weight(double amount) noexcept -> std::uint32_t {
-  return static_cast<std::uint32_t>(std::clamp(
-      std::lround(std::clamp(amount, 0.0, 1.0) * kBlendScale), 0L,
-      static_cast<long>(kBlendScale)));
+  return static_cast<std::uint32_t>(
+      std::clamp(std::lround(std::clamp(amount, 0.0, 1.0) * kBlendScale), 0L,
+                 static_cast<long>(kBlendScale)));
 }
 
 [[nodiscard]] auto blend_channel(std::uint8_t from, std::uint8_t to,
@@ -73,16 +73,16 @@ inline constexpr std::uint32_t kBlendScale{65'536};
 }
 
 [[nodiscard]] auto space_pixel(int x, int y) noexcept -> termforge::Pixel {
-  const auto key = (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x))
-                    << 32U) |
-                   static_cast<std::uint32_t>(y);
+  const auto key =
+      (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32U) |
+      static_cast<std::uint32_t>(y);
   const auto star = mix64(key ^ 0xA0761D6478BD642FULL);
   if ((star & 0x1FFU) == 0U) {
     const auto brightness = static_cast<std::uint8_t>(
         150U + static_cast<unsigned>((star >> 12U) & 0x69U));
     return {brightness, brightness,
-            static_cast<std::uint8_t>(std::min(
-                255U, static_cast<unsigned>(brightness) + 12U)),
+            static_cast<std::uint8_t>(
+                std::min(255U, static_cast<unsigned>(brightness) + 12U)),
             255};
   }
   return {4, 7, 13, 255};
@@ -110,8 +110,8 @@ inline constexpr std::uint32_t kBlendScale{65'536};
 [[nodiscard]] auto shade(termforge::Pixel color, double factor) noexcept
     -> termforge::Pixel {
   const auto channel = [factor](std::uint8_t value) {
-    return static_cast<std::uint8_t>(std::clamp(
-        std::lround(static_cast<double>(value) * factor), 0L, 255L));
+    return static_cast<std::uint8_t>(
+        std::clamp(std::lround(static_cast<double>(value) * factor), 0L, 255L));
   };
   return {channel(color.r), channel(color.g), channel(color.b), 255};
 }
@@ -120,21 +120,21 @@ auto render_atmospheric_context(
     const PlanetaryPresentationSettings& settings,
     const PlanetDescriptor& planet, const PlanetaryFlightState& state,
     const LocalSunGeometry& sun, PlanetaryPresentationCamera camera,
-    double atmosphere_mix,
-    std::span<termforge::Pixel> destination) noexcept -> void {
+    double atmosphere_mix, std::span<termforge::Pixel> destination) noexcept
+    -> void {
   if (planet.atmosphere_class == AtmosphereClass::airless ||
       atmosphere_mix <= 0.0) {
     return;
   }
-  const double tangent = std::tan(settings.field_of_view_degrees *
-                                  std::numbers::pi / 360.0);
+  const double tangent =
+      std::tan(settings.field_of_view_degrees * std::numbers::pi / 360.0);
   const double focal = static_cast<double>(settings.width) / (2.0 * tangent);
   const double horizon = static_cast<double>(settings.height - 1) * 0.5 +
                          std::tan(camera.pitch_radians) * focal;
-  const double pressure = std::clamp(
-      static_cast<double>(planet.atmosphere_pressure.value) /
-          static_cast<double>(AtmospherePressureMillibars::max),
-      0.0, 1.0);
+  const double pressure =
+      std::clamp(static_cast<double>(planet.atmosphere_pressure.value) /
+                     static_cast<double>(AtmospherePressureMillibars::max),
+                 0.0, 1.0);
   const double density = 0.62 + std::sqrt(pressure) * 0.38;
   const auto frame = make_local_tangent_frame(planet, state.pose.position);
   if (!frame) return;
@@ -150,16 +150,15 @@ auto render_atmospheric_context(
         std::max(1.0, static_cast<double>(settings.height) * 0.72);
     const double horizon_haze =
         std::pow(1.0 - std::clamp(horizon_distance, 0.0, 1.0), 2.0);
-    const auto sky = blend(atmosphere, daylight_color,
-                           blend_weight(daylight *
-                                        (0.16 + horizon_haze *
-                                                    (0.20 + pressure * 0.18))));
+    const auto sky =
+        blend(atmosphere, daylight_color,
+              blend_weight(daylight *
+                           (0.16 + horizon_haze * (0.20 + pressure * 0.18))));
     const auto weight = blend_weight(
         atmosphere_mix * density *
-        (0.05 + daylight * 0.17 + horizon_haze *
-                                             (0.10 + daylight * 0.28)));
-    const auto row = static_cast<std::size_t>(y) *
-                     static_cast<std::size_t>(settings.width);
+        (0.05 + daylight * 0.17 + horizon_haze * (0.10 + daylight * 0.28)));
+    const auto row =
+        static_cast<std::size_t>(y) * static_cast<std::size_t>(settings.width);
     for (int x = 0; x < settings.width; ++x) {
       auto& target = destination[row + static_cast<std::size_t>(x)];
       const bool bright_star = target.r > 120 && target.g > 120;
@@ -175,10 +174,9 @@ auto render_orbital_motion_cues(
     const PlanetaryFlightState& state,
     std::span<termforge::Pixel> destination) noexcept -> void {
   if (state.regime != FlightRegime::orbital) return;
-  const double speed = std::hypot(
-      state.velocity.east_metres_per_second,
-      state.velocity.north_metres_per_second,
-      state.velocity.up_metres_per_second);
+  const double speed = std::hypot(state.velocity.east_metres_per_second,
+                                  state.velocity.north_metres_per_second,
+                                  state.velocity.up_metres_per_second);
   if (speed > 1.0) {
     constexpr int streak_count{36};
     const int centre_x = settings.width / 2;
@@ -187,28 +185,29 @@ auto render_orbital_motion_cues(
     const int trail = std::clamp(1 + static_cast<int>(speed / 800.0), 1, 6);
     constexpr double tau{2.0 * std::numbers::pi_v<double>};
     for (int index = 0; index < streak_count; ++index) {
-      const auto key = mix64(state.planet.value ^
-                             (static_cast<std::uint64_t>(index) *
-                              0x9E3779B97F4A7C15ULL));
-      const double angle = static_cast<double>(key >> 11U) *
-                           (tau / 9'007'199'254'740'992.0);
+      const auto key =
+          mix64(state.planet.value ^
+                (static_cast<std::uint64_t>(index) * 0x9E3779B97F4A7C15ULL));
+      const double angle =
+          static_cast<double>(key >> 11U) * (tau / 9'007'199'254'740'992.0);
       const int phase = static_cast<int>(
           (key + state.tick / 2U) % static_cast<std::uint64_t>(radius_limit));
       for (int offset = 0; offset < trail; ++offset) {
         const int radius = std::max(2, phase - offset * 2);
-        const int x = centre_x +
-                      static_cast<int>(std::lround(std::cos(angle) * radius));
-        const int y = centre_y +
-                      static_cast<int>(std::lround(std::sin(angle) * radius));
+        const int x =
+            centre_x + static_cast<int>(std::lround(std::cos(angle) * radius));
+        const int y =
+            centre_y + static_cast<int>(std::lround(std::sin(angle) * radius));
         if (x < 0 || x >= settings.width || y < 0 || y >= settings.height) {
           continue;
         }
-        auto& target = destination[static_cast<std::size_t>(y) *
-                                       static_cast<std::size_t>(settings.width) +
-                                   static_cast<std::size_t>(x)];
+        auto& target =
+            destination[static_cast<std::size_t>(y) *
+                            static_cast<std::size_t>(settings.width) +
+                        static_cast<std::size_t>(x)];
         if (!dark_space(target)) continue;
-        const auto brightness = static_cast<std::uint8_t>(
-            std::clamp(210 - offset * 20, 120, 230));
+        const auto brightness =
+            static_cast<std::uint8_t>(std::clamp(210 - offset * 20, 120, 230));
         target = {brightness, brightness,
                   static_cast<std::uint8_t>(std::min(255, brightness + 18)),
                   255};
@@ -245,8 +244,8 @@ auto render_orbital_motion_cues(
            regime == FlightRegime::terrain_flight;
   };
   const bool regime_valid = valid_regime(state.regime);
-  const bool mode_valid = state.mode == FlightMode::manual ||
-                          state.mode == FlightMode::autopilot;
+  const bool mode_valid =
+      state.mode == FlightMode::manual || state.mode == FlightMode::autopilot;
   const bool transition_valid =
       !state.last_transition ||
       (valid_regime(state.last_transition->from) &&
@@ -304,49 +303,48 @@ struct LocalProjectionRange {
   const double radius = static_cast<double>(planet.radius.value) * 1'000.0;
   const double radial_altitude =
       std::max(0.0, state.pose.position.altitude_metres);
-  const double depression = std::acos(std::clamp(
-      radius / (radius + radial_altitude), 0.0, 1.0));
-  const double spherical_surface_top =
-      horizon + std::tan(depression) * focal;
+  const double depression =
+      std::acos(std::clamp(radius / (radius + radial_altitude), 0.0, 1.0));
+  const double spherical_surface_top = horizon + std::tan(depression) * focal;
 
   double required = settings.local_near_distance_metres;
   const double projected_height =
       static_cast<double>(settings.height) - horizon;
   if (projected_height > 1.0e-9) {
-    required = std::max(
-        required, state.clearance_metres * focal / projected_height * 1.02);
+    required = std::max(required, state.clearance_metres * focal /
+                                      projected_height * 1.02);
   }
   return {std::clamp(required, settings.local_near_distance_metres,
                      settings.local_max_distance_metres),
           spherical_surface_top};
 }
 
-[[nodiscard]] auto render_local(
-    const PlanetaryPresentationSettings& settings,
-    const PlanetDescriptor& planet, const PlanetaryFlightState& state,
-    const LocalSunGeometry& sun, PlanetaryPresentationCamera camera,
-    std::uint8_t lod,
-    TerrainTileCache& cache, std::span<termforge::Pixel> destination,
-    std::span<std::uint8_t> coverage)
+[[nodiscard]] auto render_local(const PlanetaryPresentationSettings& settings,
+                                const PlanetDescriptor& planet,
+                                const PlanetaryFlightState& state,
+                                const LocalSunGeometry& sun,
+                                PlanetaryPresentationCamera camera,
+                                std::uint8_t lod, TerrainTileCache& cache,
+                                std::span<termforge::Pixel> destination,
+                                std::span<std::uint8_t> coverage)
     -> std::expected<LocalRenderStats, PlanetaryPresentationError> {
   if (coverage.size() != destination.size()) {
     return std::unexpected{PlanetaryPresentationError::invalid_framebuffer};
   }
   std::ranges::fill(coverage, std::uint8_t{0});
-  const GeodeticPosition surface_origin{
-      state.pose.position.latitude_radians,
-      state.pose.position.longitude_radians, 0.0};
+  const GeodeticPosition surface_origin{state.pose.position.latitude_radians,
+                                        state.pose.position.longitude_radians,
+                                        0.0};
   const auto frame = make_local_tangent_frame(planet, surface_origin);
   if (!frame) {
     return std::unexpected{PlanetaryPresentationError::coordinate_failure};
   }
 
-  const double tangent = std::tan(settings.field_of_view_degrees *
-                                  std::numbers::pi / 360.0);
+  const double tangent =
+      std::tan(settings.field_of_view_degrees * std::numbers::pi / 360.0);
   const double focal = static_cast<double>(settings.width) / (2.0 * tangent);
-  const double horizon =
-      static_cast<double>(settings.height - 1) * 0.5 +
-      std::tan(camera.pitch_radians) * focal;
+  const double horizon = static_cast<double>(settings.height - 1) * 0.5 +
+                         std::tan(camera.pitch_radians) * focal;
   const double forward_east = std::cos(state.pose.heading_radians);
   const double forward_north = std::sin(state.pose.heading_radians);
   const double right_east = -forward_north;
@@ -378,23 +376,22 @@ struct LocalProjectionRange {
   const termforge::Pixel daylight_color{196, 208, 218, 255};
   const bool airless = planet.atmosphere_class == AtmosphereClass::airless;
   for (int y = 0; y < settings.height; ++y) {
-    const double normalized = settings.height > 1
-                                  ? static_cast<double>(y) /
-                                        static_cast<double>(settings.height - 1)
-                                  : 0.0;
+    const double normalized =
+        settings.height > 1
+            ? static_cast<double>(y) / static_cast<double>(settings.height - 1)
+            : 0.0;
     const double haze = std::clamp(
-        normalized /
-            std::max(1.0 / static_cast<double>(settings.height),
-                     horizon / static_cast<double>(settings.height)),
+        normalized / std::max(1.0 / static_cast<double>(settings.height),
+                              horizon / static_cast<double>(settings.height)),
         0.0, 1.0);
-    const auto atmospheric_sky = blend(
-        atmosphere, daylight_color,
-        blend_weight(daylight * (0.12 + haze * 0.38)));
+    const auto atmospheric_sky =
+        blend(atmosphere, daylight_color,
+              blend_weight(daylight * (0.12 + haze * 0.38)));
     const auto atmospheric_weight = blend_weight(
-        airless ? 0.0 : (0.04 + daylight * 0.16 + haze *
-                                                   (0.08 + daylight * 0.42)));
-    const auto row = static_cast<std::size_t>(y) *
-                     static_cast<std::size_t>(settings.width);
+        airless ? 0.0
+                : (0.04 + daylight * 0.16 + haze * (0.08 + daylight * 0.42)));
+    const auto row =
+        static_cast<std::size_t>(y) * static_cast<std::size_t>(settings.width);
     for (int x = 0; x < settings.width; ++x) {
       const auto space = space_pixel(x, y);
       const bool bright_star = space.r > 120;
@@ -423,10 +420,10 @@ struct LocalProjectionRange {
           projected_x <= 1.0 + 2.0 * radius / settings.width &&
           projected_y >= -1.0 - 2.0 * radius / settings.height &&
           projected_y <= 1.0 + 2.0 * radius / settings.height) {
-        const int sun_x = static_cast<int>(std::lround(
-            (projected_x + 1.0) * 0.5 * (settings.width - 1)));
-        const int sun_y = static_cast<int>(std::lround(
-            (1.0 - projected_y) * 0.5 * (settings.height - 1)));
+        const int sun_x = static_cast<int>(
+            std::lround((projected_x + 1.0) * 0.5 * (settings.width - 1)));
+        const int sun_y = static_cast<int>(
+            std::lround((1.0 - projected_y) * 0.5 * (settings.height - 1)));
         for (int y = std::max(0, sun_y - radius);
              y <= std::min(settings.height - 1, sun_y + radius); ++y) {
           for (int x = std::max(0, sun_x - radius);
@@ -458,21 +455,17 @@ struct LocalProjectionRange {
     const double half_width = distance * tangent;
     double east = forward_east * distance - right_east * half_width;
     double north = forward_north * distance - right_north * half_width;
-    const double step_east =
-        right_east * (2.0 * half_width / settings.width);
-    const double step_north =
-        right_north * (2.0 * half_width / settings.width);
-    const double fog = std::clamp(
-        (distance - settings.local_fog_start_metres) /
-            (settings.local_near_distance_metres -
-             settings.local_fog_start_metres),
-        0.0, 1.0);
+    const double step_east = right_east * (2.0 * half_width / settings.width);
+    const double step_north = right_north * (2.0 * half_width / settings.width);
+    const double fog = std::clamp((distance - settings.local_fog_start_metres) /
+                                      (settings.local_near_distance_metres -
+                                       settings.local_fog_start_metres),
+                                  0.0, 1.0);
     const double sample_footprint =
         2.0 * half_width / static_cast<double>(settings.width);
-    const auto distance_lod = select_terrain_lod(
-        planet,
-        std::max({0.0, eye_altitude, distance * 0.25,
-                  sample_footprint * 16.0}));
+    const auto distance_lod =
+        select_terrain_lod(planet, std::max({0.0, eye_altitude, distance * 0.25,
+                                             sample_footprint * 16.0}));
     if (!distance_lod) {
       return std::unexpected{PlanetaryPresentationError::coordinate_failure};
     }
@@ -498,19 +491,18 @@ struct LocalProjectionRange {
       const double ground = std::max(0.0, sample->elevation_metres);
       const double projected =
           horizon + (eye_altitude - ground) * focal / distance;
-      const int top = static_cast<int>(std::clamp(
-          projected, 0.0, static_cast<double>(settings.height)));
+      const int top = static_cast<int>(
+          std::clamp(projected, 0.0, static_cast<double>(settings.height)));
       const int bottom = occlusion[static_cast<std::size_t>(x)];
       if (top < bottom) {
         auto color = pixel(sample->color);
-        const auto normal = normalized(
-            PlanetFixedDirection{fixed->x, fixed->y, fixed->z});
+        const auto normal =
+            normalized(PlanetFixedDirection{fixed->x, fixed->y, fixed->z});
         const double diffuse = std::max(0.0, dot(normal, sun.planet_to_sun));
         color = shade(color, (airless ? 0.08 : 0.14) + diffuse * 0.92);
-        const auto fog_color = airless
-                                   ? termforge::Pixel{4, 7, 13, 255}
-                                   : blend(atmosphere, daylight_color,
-                                           blend_weight(daylight * 0.35));
+        const auto fog_color = airless ? termforge::Pixel{4, 7, 13, 255}
+                                       : blend(atmosphere, daylight_color,
+                                               blend_weight(daylight * 0.35));
         color = blend(color, fog_color, blend_weight(fog * fog * 0.72));
         for (int y = top; y < bottom; ++y) {
           const auto index = static_cast<std::size_t>(y) *
@@ -536,27 +528,26 @@ struct LocalProjectionRange {
   for (const auto& sampler : samplers) {
     if (sampler) tiles_touched += sampler->tiles_touched();
   }
-  const auto terrain_pixels = static_cast<std::size_t>(
-      std::ranges::count(coverage, std::uint8_t{1}));
-  const int required_top = static_cast<int>(std::clamp(
-      std::ceil(projection.spherical_surface_top), 0.0,
-      static_cast<double>(settings.height)));
+  const auto terrain_pixels =
+      static_cast<std::size_t>(std::ranges::count(coverage, std::uint8_t{1}));
+  const int required_top =
+      static_cast<int>(std::clamp(std::ceil(projection.spherical_surface_top),
+                                  0.0, static_cast<double>(settings.height)));
   const bool spherical_surface_covered =
       required_top >= settings.height ||
-      std::ranges::all_of(occlusion, [required_top](int top) {
-        return top <= required_top;
-      });
-  const auto sun_pixels = static_cast<std::size_t>(std::ranges::count(
-      destination, sun_color));
+      std::ranges::all_of(
+          occlusion, [required_top](int top) { return top <= required_top; });
+  const auto sun_pixels =
+      static_cast<std::size_t>(std::ranges::count(destination, sun_color));
   return LocalRenderStats{tiles_touched, terrain_pixels, sun_pixels,
                           projection.distance_metres,
                           spherical_surface_covered};
 }
 
-}  // namespace
+} // namespace
 
-auto planetary_presentation_mode_name(
-    PlanetaryPresentationMode mode) noexcept -> std::string_view {
+auto planetary_presentation_mode_name(PlanetaryPresentationMode mode) noexcept
+    -> std::string_view {
   switch (mode) {
     case PlanetaryPresentationMode::orbital: return "orbital";
     case PlanetaryPresentationMode::atmospheric: return "atmospheric";
@@ -576,12 +567,11 @@ auto planetary_presentation_mix(const PlanetDescriptor& planet,
   if (!bands) {
     return std::unexpected{PlanetaryPresentationError::invalid_state};
   }
-  double atmosphere = std::clamp(
-      (bands->orbit_enter_altitude_metres -
-       state.pose.position.altitude_metres) /
-          (bands->orbit_enter_altitude_metres -
-           bands->atmosphere_enter_altitude_metres),
-      0.0, 1.0);
+  double atmosphere = std::clamp((bands->orbit_enter_altitude_metres -
+                                  state.pose.position.altitude_metres) /
+                                     (bands->orbit_enter_altitude_metres -
+                                      bands->atmosphere_enter_altitude_metres),
+                                 0.0, 1.0);
   if (planet.atmosphere_class == AtmosphereClass::airless) atmosphere = 0.0;
   const double local = std::clamp(
       (bands->terrain_exit_clearance_metres - state.clearance_metres) /
@@ -595,22 +585,23 @@ PlanetaryPresentationRenderer::PlanetaryPresentationRenderer(
     PlanetaryPresentationSettings settings)
     : m_settings(settings),
       m_cache(optional_cache(settings.terrain_cache_capacity)),
-      m_orbital_renderer({.width = settings.width,
-                          .height = settings.height,
-                          .field_of_view_degrees = settings.field_of_view_degrees,
-                          .horizontal_sample_stride =
-                              settings.width >= kDefaultViewportWidth ? 2 : 1}),
+      m_orbital_renderer(
+          {.width = settings.width,
+           .height = settings.height,
+           .field_of_view_degrees = settings.field_of_view_degrees,
+           .horizontal_sample_stride =
+               settings.width >= kDefaultViewportWidth ? 2 : 1}),
       m_orbital_frame(validate_viewport({settings.width, settings.height})
                           ? static_cast<std::size_t>(settings.width) *
                                 static_cast<std::size_t>(settings.height)
                           : 0U),
       m_local_frame(m_orbital_frame.size()),
-      m_local_coverage(m_orbital_frame.size()) {}
+      m_local_coverage(m_orbital_frame.size()) {
+}
 
 auto PlanetaryPresentationRenderer::render(
     const PlanetDescriptor& planet, const PlanetaryFlightState& state,
-    PlanetaryPresentationCamera camera,
-    std::span<termforge::Pixel> destination)
+    PlanetaryPresentationCamera camera, std::span<termforge::Pixel> destination)
     -> std::expected<PlanetaryRenderStats, PlanetaryPresentationError> {
   const auto total_started = Clock::now();
   if (!valid_settings(m_settings)) {
@@ -675,9 +666,9 @@ auto PlanetaryPresentationRenderer::render(
 
   if (render_local_pass) {
     const auto started = Clock::now();
-    const auto local = render_local(m_settings, planet, state, *sun, camera,
-                                    *selected_lod, *m_cache, m_local_frame,
-                                    m_local_coverage);
+    const auto local =
+        render_local(m_settings, planet, state, *sun, camera, *selected_lod,
+                     *m_cache, m_local_frame, m_local_coverage);
     stats.local_render_ms = elapsed_ms(started, Clock::now());
     if (!local) return std::unexpected{local.error()};
     stats.local_tiles_touched = local->tiles_touched;
@@ -706,19 +697,25 @@ auto PlanetaryPresentationRenderer::render(
     const double heading_cos = std::cos(state.pose.heading_radians);
     const double heading_sin = std::sin(state.pose.heading_radians);
     const PlanetFixedDirection forward{
-        (frame->east.x * heading_cos + frame->north.x * heading_sin) * horizontal +
+        (frame->east.x * heading_cos + frame->north.x * heading_sin) *
+                horizontal +
             frame->up.x * vertical,
-        (frame->east.y * heading_cos + frame->north.y * heading_sin) * horizontal +
+        (frame->east.y * heading_cos + frame->north.y * heading_sin) *
+                horizontal +
             frame->up.y * vertical,
-        (frame->east.z * heading_cos + frame->north.z * heading_sin) * horizontal +
+        (frame->east.z * heading_cos + frame->north.z * heading_sin) *
+                horizontal +
             frame->up.z * vertical};
     const PlanetFixedDirection up{
         frame->up.x * horizontal -
-            (frame->east.x * heading_cos + frame->north.x * heading_sin) * vertical,
+            (frame->east.x * heading_cos + frame->north.x * heading_sin) *
+                vertical,
         frame->up.y * horizontal -
-            (frame->east.y * heading_cos + frame->north.y * heading_sin) * vertical,
+            (frame->east.y * heading_cos + frame->north.y * heading_sin) *
+                vertical,
         frame->up.z * horizontal -
-            (frame->east.z * heading_cos + frame->north.z * heading_sin) * vertical};
+            (frame->east.z * heading_cos + frame->north.z * heading_sin) *
+                vertical};
     const auto started = Clock::now();
     const std::span<const std::uint8_t> covered_pixels =
         local_weight == kBlendScale
@@ -739,11 +736,12 @@ auto PlanetaryPresentationRenderer::render(
     render_orbital_motion_cues(m_settings, state, m_orbital_frame);
   }
 
-  const auto local_frame = make_local_tangent_frame(planet, state.pose.position);
-  const auto solar = local_frame
-                         ? local_solar_elevation(*sun, local_frame->up)
-                         : std::expected<double, LocalSunError>{
-                               std::unexpected{LocalSunError::invalid_geometry}};
+  const auto local_frame =
+      make_local_tangent_frame(planet, state.pose.position);
+  const auto solar =
+      local_frame ? local_solar_elevation(*sun, local_frame->up)
+                  : std::expected<double, LocalSunError>{
+                        std::unexpected{LocalSunError::invalid_geometry}};
   if (!solar) {
     return std::unexpected{PlanetaryPresentationError::celestial_failure};
   }
@@ -759,8 +757,8 @@ auto PlanetaryPresentationRenderer::render(
     } else if (m_local_coverage[index] == 0) {
       result = m_orbital_frame[index];
     } else {
-      result = blend(m_orbital_frame[index], m_local_frame[index],
-                     local_weight);
+      result =
+          blend(m_orbital_frame[index], m_local_frame[index], local_weight);
     }
     destination[index] = result;
   }
@@ -769,4 +767,4 @@ auto PlanetaryPresentationRenderer::render(
   return stats;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

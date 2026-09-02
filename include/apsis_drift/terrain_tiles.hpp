@@ -144,8 +144,7 @@ class TerrainTileCache {
 class TerrainSurfaceSampler {
  public:
   [[nodiscard]] static auto create(const PlanetDescriptor& planet,
-                                   std::uint8_t lod,
-                                   TerrainTileCache& cache)
+                                   std::uint8_t lod, TerrainTileCache& cache)
       -> std::expected<TerrainSurfaceSampler, TerrainTileError>;
 
   TerrainSurfaceSampler(const TerrainSurfaceSampler&) = delete;
@@ -187,9 +186,10 @@ class TerrainSurfaceSampler {
 // Presentation-only sampling resolves one planet-fixed direction through the
 // versioned tile generator and performs quantized bilinear interpolation
 // inside the addressed tile. It does not change generator compatibility data.
-[[nodiscard]] auto sample_planet_surface(
-    const PlanetDescriptor& planet, PlanetFixedPositionMetres position,
-    std::uint8_t lod, TerrainTileCache& cache)
+[[nodiscard]] auto sample_planet_surface(const PlanetDescriptor& planet,
+                                         PlanetFixedPositionMetres position,
+                                         std::uint8_t lod,
+                                         TerrainTileCache& cache)
     -> std::expected<TerrainSurfaceSample, TerrainTileError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

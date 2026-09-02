@@ -12,4 +12,4 @@ auto signal_selection_command(const termforge::KeyEvent& key) noexcept
                    : SignalSelectionCommand::next;
 }
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

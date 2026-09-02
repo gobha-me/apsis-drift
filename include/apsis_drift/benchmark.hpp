@@ -46,8 +46,7 @@ struct BenchmarkSummary {
   double mebibytes_per_second{};
   std::uint64_t total_bytes{};
   std::uint64_t checksum{};
-  std::optional<PlanetaryPresentationBenchmarkSummary>
-      planetary_presentation;
+  std::optional<PlanetaryPresentationBenchmarkSummary> planetary_presentation;
 };
 
 struct BenchmarkMeasurement {
@@ -84,4 +83,4 @@ struct CadenceAssessment {
     std::size_t frames_per_viewport,
     BenchmarkWorkload workload = BenchmarkWorkload::landscape) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

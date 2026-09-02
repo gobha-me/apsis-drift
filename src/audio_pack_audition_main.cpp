@@ -17,19 +17,19 @@ using namespace apsis_drift;
 
 inline constexpr std::uint64_t kAuditionTicks{7'200U};
 
-auto write_le16(std::ostream &output, std::uint16_t value) -> void {
+auto write_le16(std::ostream& output, std::uint16_t value) -> void {
   const char bytes[]{static_cast<char>(value), static_cast<char>(value >> 8U)};
   output.write(bytes, 2);
 }
 
-auto write_le32(std::ostream &output, std::uint32_t value) -> void {
+auto write_le32(std::ostream& output, std::uint32_t value) -> void {
   const char bytes[]{static_cast<char>(value), static_cast<char>(value >> 8U),
                      static_cast<char>(value >> 16U),
                      static_cast<char>(value >> 24U)};
   output.write(bytes, 4);
 }
 
-auto write_wav_header(std::ostream &output) -> bool {
+auto write_wav_header(std::ostream& output) -> bool {
   constexpr std::uint64_t kDataBytes =
       kAuditionTicks * kAudioFramesPerSimulationTick * kAudioChannelCount *
       sizeof(std::int16_t);
@@ -49,7 +49,7 @@ auto write_wav_header(std::ostream &output) -> bool {
   return static_cast<bool>(output);
 }
 
-auto update_hash(std::uint64_t &hash, float value) noexcept -> void {
+auto update_hash(std::uint64_t& hash, float value) noexcept -> void {
   const auto word = std::bit_cast<std::uint32_t>(value);
   for (unsigned byte = 0; byte < 4U; ++byte) {
     hash ^= (word >> (byte * 8U)) & 0xFFU;
@@ -57,52 +57,43 @@ auto update_hash(std::uint64_t &hash, float value) noexcept -> void {
   }
 }
 
-auto update_trace(MusicDirector &director, AudioRuntime &runtime,
+auto update_trace(MusicDirector& director, AudioRuntime& runtime,
                   SimulationTick tick, bool music_only) -> bool {
   const auto emit = [&](AudioCueId cue) {
     return music_only ||
            runtime.emit(tick, cue).status == AudioEmitStatus::queued;
   };
   switch (tick) {
-  case 0U:
-    director.update(MusicState::docked);
-    break;
-  case 120U:
-    return emit(kUiNavigateAudioCue);
-  case 240U:
-    return emit(kUiConfirmAudioCue);
-  case 1'200U:
-    director.update(MusicState::flight);
-    return emit(kCommsNoticeAudioCue);
-  case 2'400U:
-    director.update(MusicState::scanning);
-    return emit(kSignalLockAudioCue);
-  case 3'600U:
-    director.update(MusicState::warning);
-    return emit(kUiRejectAudioCue);
-  case 4'800U:
-    director.update(MusicState::complete);
-    return emit(kSignalCompleteAudioCue);
-  case 5'400U:
-    if (!music_only)
-      director.pause();
-    break;
-  case 5'520U:
-    if (!music_only)
-      director.resume();
-    break;
-  case 6'000U:
-    director.update(MusicState::docked);
-    break;
-  default:
-    break;
+    case 0U: director.update(MusicState::docked); break;
+    case 120U: return emit(kUiNavigateAudioCue);
+    case 240U: return emit(kUiConfirmAudioCue);
+    case 1'200U:
+      director.update(MusicState::flight);
+      return emit(kCommsNoticeAudioCue);
+    case 2'400U:
+      director.update(MusicState::scanning);
+      return emit(kSignalLockAudioCue);
+    case 3'600U:
+      director.update(MusicState::warning);
+      return emit(kUiRejectAudioCue);
+    case 4'800U:
+      director.update(MusicState::complete);
+      return emit(kSignalCompleteAudioCue);
+    case 5'400U:
+      if (!music_only) director.pause();
+      break;
+    case 5'520U:
+      if (!music_only) director.resume();
+      break;
+    case 6'000U: director.update(MusicState::docked); break;
+    default: break;
   }
   return true;
 }
 
 } // namespace
 
-auto main(int argc, char **argv) -> int {
+auto main(int argc, char** argv) -> int {
   if (argc != 4 && argc != 5) {
     std::cerr << "usage: apsis-drift-audio-pack-audition ASSET_ROOT "
                  "OUTPUT.wav REPORT.json [--music-only]\n";
@@ -110,8 +101,7 @@ auto main(int argc, char **argv) -> int {
   }
   const bool music_only =
       argc == 5 && std::string_view{argv[4]} == "--music-only";
-  if (argc == 5 && !music_only)
-    return 2;
+  if (argc == 5 && !music_only) return 2;
   auto loaded = load_first_light_audio_pack(argv[1]);
   if (!loaded) {
     std::cerr << "audio pack load failed: "
@@ -125,8 +115,7 @@ auto main(int argc, char **argv) -> int {
       AudioRuntimeMode::no_device, nullptr, {}, std::move(pack)};
   MusicDirector director{runtime};
   std::ofstream output{argv[2], std::ios::binary};
-  if (!write_wav_header(output))
-    return 1;
+  if (!write_wav_header(output)) return 1;
 
   std::array<float, kAudioFramesPerSimulationTick * kAudioChannelCount> block{};
   std::array<std::int16_t, kAudioFramesPerSimulationTick * kAudioChannelCount>
@@ -154,11 +143,10 @@ auto main(int argc, char **argv) -> int {
           std::lrint(std::clamp(sample, -1.0F, 1.0F) * 32767.0F));
     }
     output.write(
-        reinterpret_cast<const char *>(encoded.data()),
+        reinterpret_cast<const char*>(encoded.data()),
         static_cast<std::streamsize>(encoded.size() * sizeof(std::int16_t)));
   }
-  if (!output)
-    return 1;
+  if (!output) return 1;
 
   const auto diagnostics = runtime.diagnostics();
   std::ofstream report{argv[3]};

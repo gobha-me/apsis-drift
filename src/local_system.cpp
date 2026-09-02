@@ -104,9 +104,9 @@ class SplitMix64 {
 
 [[nodiscard]] auto generate_star(Seed system_seed) -> StarDescriptor {
   const auto seed = derive_seed(system_seed, SeedDomain::star, 0);
-  SplitMix64 physical{stream_seed(
-      seed, SeedDomain::star,
-      static_cast<std::uint64_t>(StarStream::physical))};
+  SplitMix64 physical{
+      stream_seed(seed, SeedDomain::star,
+                  static_cast<std::uint64_t>(StarStream::physical))};
   const auto temperature =
       static_cast<std::uint32_t>(2'800 + physical.bounded(4'701));
   const auto star_class = spectral_class(temperature);
@@ -125,26 +125,25 @@ class SplitMix64 {
 [[nodiscard]] auto generate_orbit(Seed system_seed, PlanetId planet,
                                   std::uint32_t ordinal) -> PlanetOrbit {
   const auto seed = derive_seed(system_seed, SeedDomain::orbit, ordinal);
-  SplitMix64 radius_random{stream_seed(
-      seed, SeedDomain::orbit,
-      static_cast<std::uint64_t>(OrbitStream::radius))};
-  SplitMix64 period_random{stream_seed(
-      seed, SeedDomain::orbit,
-      static_cast<std::uint64_t>(OrbitStream::period))};
+  SplitMix64 radius_random{
+      stream_seed(seed, SeedDomain::orbit,
+                  static_cast<std::uint64_t>(OrbitStream::radius))};
+  SplitMix64 period_random{
+      stream_seed(seed, SeedDomain::orbit,
+                  static_cast<std::uint64_t>(OrbitStream::period))};
   SplitMix64 phase_random{stream_seed(
-      seed, SeedDomain::orbit,
-      static_cast<std::uint64_t>(OrbitStream::phase))};
-  SplitMix64 orientation_random{stream_seed(
-      seed, SeedDomain::orbit,
-      static_cast<std::uint64_t>(OrbitStream::orientation))};
-  const auto radius = kOrbitBaseKilometres +
-                      static_cast<std::uint64_t>(ordinal) *
-                          kOrbitBandKilometres +
-                      radius_random.bounded(kOrbitJitterKilometres + 1);
-  const auto period = kOrbitBasePeriodTicks +
-                      static_cast<SimulationTick>(ordinal) *
-                          kOrbitPeriodBandTicks +
-                      period_random.bounded(kOrbitPeriodJitterTicks + 1);
+      seed, SeedDomain::orbit, static_cast<std::uint64_t>(OrbitStream::phase))};
+  SplitMix64 orientation_random{
+      stream_seed(seed, SeedDomain::orbit,
+                  static_cast<std::uint64_t>(OrbitStream::orientation))};
+  const auto radius =
+      kOrbitBaseKilometres +
+      static_cast<std::uint64_t>(ordinal) * kOrbitBandKilometres +
+      radius_random.bounded(kOrbitJitterKilometres + 1);
+  const auto period =
+      kOrbitBasePeriodTicks +
+      static_cast<SimulationTick>(ordinal) * kOrbitPeriodBandTicks +
+      period_random.bounded(kOrbitPeriodJitterTicks + 1);
   const auto inclination_width =
       static_cast<std::uint64_t>(2) *
           static_cast<std::uint64_t>(kMaximumInclinationMicrodegrees) +
@@ -165,20 +164,20 @@ class SplitMix64 {
   };
 }
 
-[[nodiscard]] auto valid_star(const StarDescriptor& star,
-                              Seed system_seed) -> bool {
+[[nodiscard]] auto valid_star(const StarDescriptor& star, Seed system_seed)
+    -> bool {
   return star == generate_star(system_seed);
 }
 
-[[nodiscard]] auto valid_planet_descriptor(
-    const PlanetDescriptor& planet, Seed expected_seed) -> bool {
-  return planet.seed == expected_seed && planet.id.value == expected_seed.value &&
+[[nodiscard]] auto valid_planet_descriptor(const PlanetDescriptor& planet,
+                                           Seed expected_seed) -> bool {
+  return planet.seed == expected_seed &&
+         planet.id.value == expected_seed.value &&
          planet == generate_planet_descriptor(expected_seed);
 }
 
 [[nodiscard]] auto valid_orbit(const PlanetOrbit& orbit, Seed system_seed,
-                               std::uint32_t ordinal,
-                               PlanetId planet) -> bool {
+                               std::uint32_t ordinal, PlanetId planet) -> bool {
   return orbit == generate_orbit(system_seed, planet, ordinal);
 }
 
@@ -195,16 +194,15 @@ class SplitMix64 {
   return std::round(value * scale) / scale;
 }
 
-}  // namespace
+} // namespace
 
 auto generate_local_system(Seed system_seed) -> LocalSystemDescriptor {
-  SplitMix64 catalog{stream_seed(
-      system_seed, SeedDomain::system,
-      static_cast<std::uint64_t>(LocalSystemStream::catalog))};
+  SplitMix64 catalog{
+      stream_seed(system_seed, SeedDomain::system,
+                  static_cast<std::uint64_t>(LocalSystemStream::catalog))};
   const auto count = static_cast<std::uint32_t>(
       kMinimumLocalSystemPlanets +
-      catalog.bounded(kMaximumLocalSystemPlanets -
-                          kMinimumLocalSystemPlanets +
+      catalog.bounded(kMaximumLocalSystemPlanets - kMinimumLocalSystemPlanets +
                       1U));
   std::vector<LocalSystemPlanet> planets;
   planets.reserve(count);
@@ -280,9 +278,8 @@ auto validate_local_system(const LocalSystemDescriptor& system)
     }
     if (!valid_orbit(planet.orbit, system.seed, ordinal,
                      planet.descriptor.id) ||
-        (index != 0 &&
-         (planet.orbit.radius_kilometres <= previous_radius ||
-          planet.orbit.period_ticks <= previous_period))) {
+        (index != 0 && (planet.orbit.radius_kilometres <= previous_radius ||
+                        planet.orbit.period_ticks <= previous_period))) {
       return std::unexpected{LocalSystemError::invalid_orbit};
     }
     previous_radius = planet.orbit.radius_kilometres;
@@ -308,8 +305,7 @@ auto find_local_system_planet(const LocalSystemDescriptor& system,
 }
 
 auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
-                              PlanetId planet,
-                              EphemerisQueryTime time)
+                              PlanetId planet, EphemerisQueryTime time)
     -> std::expected<PlanetEphemeris, LocalSystemError> {
   if (!finite(time.sub_tick_fraction) || time.sub_tick_fraction < 0.0 ||
       time.sub_tick_fraction >= 1.0) {
@@ -337,8 +333,7 @@ auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
   const double node = std::numbers::pi_v<double> * 2.0 *
                       static_cast<double>(orbit.ascending_node_turns) *
                       turn_scale;
-  const double radius =
-      static_cast<double>(orbit.radius_kilometres) * 1'000.0;
+  const double radius = static_cast<double>(orbit.radius_kilometres) * 1'000.0;
   const double cos_phase = std::cos(phase);
   const double sin_phase = std::sin(phase);
   const double cos_node = std::cos(node);
@@ -346,27 +341,22 @@ auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
   const double cos_inclination = std::cos(inclination);
   const double sin_inclination = std::sin(inclination);
   const SystemPositionMetres position{
-      quantized_position(
-          radius * (cos_phase * cos_node -
-                    sin_phase * sin_node * cos_inclination)),
-      quantized_position(
-          radius * (cos_phase * sin_node +
-                    sin_phase * cos_node * cos_inclination)),
+      quantized_position(radius * (cos_phase * cos_node -
+                                   sin_phase * sin_node * cos_inclination)),
+      quantized_position(radius * (cos_phase * sin_node +
+                                   sin_phase * cos_node * cos_inclination)),
       quantized_position(radius * sin_phase * sin_inclination),
   };
-  const double radians_per_second =
-      std::numbers::pi_v<double> * 2.0 *
-      static_cast<double>(kSimulationHz) /
-      static_cast<double>(orbit.period_ticks);
+  const double radians_per_second = std::numbers::pi_v<double> * 2.0 *
+                                    static_cast<double>(kSimulationHz) /
+                                    static_cast<double>(orbit.period_ticks);
   const SystemVelocityMetresPerSecond velocity{
       quantized_velocity(
           radius * radians_per_second *
-          (-sin_phase * cos_node -
-           cos_phase * sin_node * cos_inclination)),
+          (-sin_phase * cos_node - cos_phase * sin_node * cos_inclination)),
       quantized_velocity(
           radius * radians_per_second *
-          (-sin_phase * sin_node +
-           cos_phase * cos_node * cos_inclination)),
+          (-sin_phase * sin_node + cos_phase * cos_node * cos_inclination)),
       quantized_velocity(radius * radians_per_second * cos_phase *
                          sin_inclination),
   };
@@ -403,8 +393,7 @@ auto resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
   }
   const auto host =
       resolve_planet_ephemeris(system, station.orbit.host_planet, time);
-  if (!host)
-    return std::unexpected{host.error()};
+  if (!host) return std::unexpected{host.error()};
 
   const auto cycle_tick = time.tick % station.orbit.period_ticks;
   constexpr double turn_scale{1.0 / 4'294'967'296.0};
@@ -527,4 +516,4 @@ auto local_system_diagnostic_json(const LocalSystemDescriptor& system)
   return result;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

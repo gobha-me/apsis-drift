@@ -39,14 +39,14 @@ namespace {
            *collection.completion_tick <= flight_tick;
   }
   if (collection.completion_tick ||
-      (collection.target && collection.target != target)) return false;
+      (collection.target && collection.target != target))
+    return false;
   switch (collection.status) {
     case SignalCollectionStatus::approach:
     case SignalCollectionStatus::aborted:
       return collection.consecutive_in_range_ticks == 0;
     case SignalCollectionStatus::in_range:
-      return collection.target &&
-             collection.consecutive_in_range_ticks > 0 &&
+      return collection.target && collection.consecutive_in_range_ticks > 0 &&
              collection.consecutive_in_range_ticks <=
                  kSignalCollectionAcquireTicks;
     case SignalCollectionStatus::scanning:
@@ -55,8 +55,7 @@ namespace {
                  kSignalCollectionAcquireTicks &&
              collection.consecutive_in_range_ticks <
                  kSignalCollectionTotalInRangeTicks;
-    case SignalCollectionStatus::complete:
-      return false;
+    case SignalCollectionStatus::complete: return false;
   }
   return false;
 }
@@ -79,7 +78,7 @@ namespace {
   return PlanetaryFlightEnvironment{sample->elevation_metres};
 }
 
-}  // namespace
+} // namespace
 
 auto initialize_intersystem_planetfall(
     const PlanetDescriptor& planet, SurfaceSignalId target,
@@ -196,4 +195,4 @@ auto advance_intersystem_planetfall(IntersystemPlanetfallState& state,
                                          collection->delta_emitted};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

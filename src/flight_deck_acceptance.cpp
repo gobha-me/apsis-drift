@@ -27,7 +27,7 @@ constexpr std::array kCommands{
     FlightCommand{204, FlightCommandKind::toggle_autopilot},
 };
 
-}  // namespace
+} // namespace
 
 auto flight_deck_acceptance_commands() noexcept
     -> std::span<const FlightCommand> {
@@ -74,12 +74,11 @@ auto flight_deck_acceptance_json(const FlightDeckAcceptanceReport& report)
       "  \"viewport_height\": {},\n"
       "  \"presentation\": \"{}\"\n"
       "}}\n",
-      kFlightDeckAcceptanceScenario, kFlightDeckAcceptanceSeed,
-      kSimulationHz, kFlightDeckAcceptanceTicks, kCommands.size(),
-      report.flight_checksum, report.framebuffer_checksum,
-      profile_name(report.render_configuration),
+      kFlightDeckAcceptanceScenario, kFlightDeckAcceptanceSeed, kSimulationHz,
+      kFlightDeckAcceptanceTicks, kCommands.size(), report.flight_checksum,
+      report.framebuffer_checksum, profile_name(report.render_configuration),
       report.render_configuration.viewport.width,
       report.render_configuration.viewport.height, report.presentation);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

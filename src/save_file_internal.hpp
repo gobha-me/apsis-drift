@@ -17,4 +17,4 @@ enum class AtomicSaveTestInterruption : std::uint8_t {
     AtomicSaveTestInterruption interruption)
     -> std::expected<void, SaveFileError>;
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

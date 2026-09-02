@@ -37,8 +37,8 @@ struct OrbitalRenderStats {
   std::size_t sun_pixels{};
   std::size_t terrain_tiles_touched{};
 
-  friend auto operator==(const OrbitalRenderStats&,
-                         const OrbitalRenderStats&) -> bool = default;
+  friend auto operator==(const OrbitalRenderStats&, const OrbitalRenderStats&)
+      -> bool = default;
 };
 
 enum class OrbitalRenderError {
@@ -59,17 +59,16 @@ class OrbitalRenderer {
  public:
   explicit OrbitalRenderer(OrbitalRenderSettings settings = {});
 
-  [[nodiscard]] auto settings() const noexcept
-      -> const OrbitalRenderSettings& {
+  [[nodiscard]] auto settings() const noexcept -> const OrbitalRenderSettings& {
     return m_settings;
   }
 
   // All inputs are validated before rendering begins. A failure leaves the
   // destination unchanged.
-  [[nodiscard]] auto render(
-      const PlanetDescriptor& planet, const OrbitalCamera& camera,
-      PlanetFixedDirection light_direction,
-      std::span<termforge::Pixel> destination) const
+  [[nodiscard]] auto render(const PlanetDescriptor& planet,
+                            const OrbitalCamera& camera,
+                            PlanetFixedDirection light_direction,
+                            std::span<termforge::Pixel> destination) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
   // The tile-backed path preserves generated surface identity through the
@@ -79,8 +78,7 @@ class OrbitalRenderer {
   [[nodiscard]] auto render_tile_backed(
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
       PlanetFixedDirection light_direction, std::uint8_t terrain_lod,
-      TerrainTileCache& cache,
-      std::span<termforge::Pixel> destination,
+      TerrainTileCache& cache, std::span<termforge::Pixel> destination,
       std::span<const std::uint8_t> covered_pixels = {}) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
@@ -88,12 +86,11 @@ class OrbitalRenderer {
   [[nodiscard]] auto render_impl(
       const PlanetDescriptor& planet, const OrbitalCamera& camera,
       PlanetFixedDirection light_direction, TerrainTileCache* cache,
-      std::uint8_t terrain_lod,
-      std::span<termforge::Pixel> destination,
+      std::uint8_t terrain_lod, std::span<termforge::Pixel> destination,
       std::span<const std::uint8_t> covered_pixels) const
       -> std::expected<OrbitalRenderStats, OrbitalRenderError>;
 
   OrbitalRenderSettings m_settings;
 };
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

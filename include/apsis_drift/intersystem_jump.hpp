@@ -6,9 +6,9 @@
 #include <span>
 #include <string>
 
-#include "termforge/core/types.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/local_system.hpp"
+#include "termforge/core/types.hpp"
 
 namespace apsis_drift {
 
@@ -127,4 +127,4 @@ struct OriginStationFlightState;
     std::span<termforge::Pixel> destination)
     -> std::expected<void, IntersystemJumpError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

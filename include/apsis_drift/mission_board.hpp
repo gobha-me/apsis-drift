@@ -33,8 +33,7 @@ struct MissionBoardSnapshot {
                          const MissionBoardSnapshot&) -> bool = default;
 };
 
-[[nodiscard]] auto mission_board_snapshot(
-    const IntersystemContractState& state)
+[[nodiscard]] auto mission_board_snapshot(const IntersystemContractState& state)
     -> std::expected<MissionBoardSnapshot, MissionBoardError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -116,12 +116,10 @@ struct MenuLayout {
   termforge::Rect hint{};
 
   [[nodiscard]] constexpr auto supported() const noexcept -> bool {
-    return !panel.empty() && !primary_action.empty() &&
-           !exit_action.empty();
+    return !panel.empty() && !primary_action.empty() && !exit_action.empty();
   }
 
-  constexpr auto operator==(const MenuLayout&) const noexcept
-      -> bool = default;
+  constexpr auto operator==(const MenuLayout&) const noexcept -> bool = default;
 };
 
 struct TitleMenuLayout {
@@ -135,8 +133,8 @@ struct TitleMenuLayout {
 
   [[nodiscard]] constexpr auto supported() const noexcept -> bool {
     return !panel.empty() &&
-           std::ranges::none_of(actions,
-                                [](termforge::Rect row) { return row.empty(); });
+           std::ranges::none_of(
+               actions, [](termforge::Rect row) { return row.empty(); });
   }
 
   constexpr auto operator==(const TitleMenuLayout&) const noexcept
@@ -146,8 +144,7 @@ struct TitleMenuLayout {
 [[nodiscard]] auto compute_menu_layout(int cols, int rows) noexcept
     -> MenuLayout;
 
-[[nodiscard]] auto menu_item_at(const MenuLayout& layout, int x,
-                                int y) noexcept
+[[nodiscard]] auto menu_item_at(const MenuLayout& layout, int x, int y) noexcept
     -> std::optional<MenuItem>;
 
 [[nodiscard]] auto compute_title_menu_layout(int cols, int rows) noexcept
@@ -156,4 +153,4 @@ struct TitleMenuLayout {
                                    int y) noexcept
     -> std::optional<TitleAction>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

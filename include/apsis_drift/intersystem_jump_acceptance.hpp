@@ -6,14 +6,14 @@
 #include <string>
 #include <vector>
 
-#include "termforge/core/types.hpp"
 #include "apsis_drift/intersystem_contract.hpp"
+#include "termforge/core/types.hpp"
 
 namespace apsis_drift {
 
 inline constexpr std::uint64_t kIntersystemJumpAcceptanceSeed{42};
-inline constexpr std::size_t kMaximumIntersystemJumpAcceptancePixels{
-    4096U * 4096U};
+inline constexpr std::size_t kMaximumIntersystemJumpAcceptancePixels{4096U *
+                                                                     4096U};
 
 enum class IntersystemJumpAcceptanceError : std::uint8_t {
   invalid_configuration,
@@ -54,4 +54,4 @@ struct IntersystemJumpAcceptanceResult {
 [[nodiscard]] auto intersystem_jump_acceptance_json(
     const IntersystemJumpAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

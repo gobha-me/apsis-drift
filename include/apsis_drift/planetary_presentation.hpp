@@ -83,8 +83,7 @@ enum class PlanetaryPresentationError : std::uint8_t {
 };
 
 [[nodiscard]] auto planetary_presentation_mix(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) noexcept
+    const PlanetDescriptor& planet, const PlanetaryFlightState& state) noexcept
     -> std::expected<PlanetaryPresentationMix, PlanetaryPresentationError>;
 
 class PlanetaryPresentationRenderer {
@@ -99,10 +98,10 @@ class PlanetaryPresentationRenderer {
 
   // A rejected frame leaves destination unchanged. Timing and cache state are
   // presentation diagnostics and never enter deterministic simulation state.
-  [[nodiscard]] auto render(
-      const PlanetDescriptor& planet, const PlanetaryFlightState& state,
-      PlanetaryPresentationCamera camera,
-      std::span<termforge::Pixel> destination)
+  [[nodiscard]] auto render(const PlanetDescriptor& planet,
+                            const PlanetaryFlightState& state,
+                            PlanetaryPresentationCamera camera,
+                            std::span<termforge::Pixel> destination)
       -> std::expected<PlanetaryRenderStats, PlanetaryPresentationError>;
 
  private:
@@ -114,4 +113,4 @@ class PlanetaryPresentationRenderer {
   std::vector<std::uint8_t> m_local_coverage;
 };
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

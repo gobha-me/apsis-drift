@@ -78,10 +78,10 @@ auto hash_word(std::uint64_t& hash, std::uint64_t value) noexcept -> void {
       absolute_heading <= kAlignedHeadingErrorMillidegrees &&
               absolute_velocity <= kAlignedVelocityErrorBasisPoints
           ? IntersystemArrivalQuality::aligned
-          : absolute_heading <= kOffsetHeadingErrorMillidegrees &&
-                    absolute_velocity <= kOffsetVelocityErrorBasisPoints
-                ? IntersystemArrivalQuality::offset
-                : IntersystemArrivalQuality::opposed;
+      : absolute_heading <= kOffsetHeadingErrorMillidegrees &&
+              absolute_velocity <= kOffsetVelocityErrorBasisPoints
+          ? IntersystemArrivalQuality::offset
+          : IntersystemArrivalQuality::opposed;
   return {.heading_error_millidegrees = heading,
           .velocity_error_basis_points = velocity,
           .quality = quality};
@@ -116,14 +116,30 @@ auto hash_word(std::uint64_t& hash, std::uint64_t value) noexcept -> void {
 auto apply_alignment_command(IntersystemJumpAlignmentState& alignment,
                              FlightCommandKind kind) noexcept -> void {
   switch (kind) {
-    case FlightCommandKind::press_forward: alignment.controls.forward = true; break;
-    case FlightCommandKind::release_forward: alignment.controls.forward = false; break;
-    case FlightCommandKind::press_backward: alignment.controls.backward = true; break;
-    case FlightCommandKind::release_backward: alignment.controls.backward = false; break;
-    case FlightCommandKind::press_turn_left: alignment.controls.turn_left = true; break;
-    case FlightCommandKind::release_turn_left: alignment.controls.turn_left = false; break;
-    case FlightCommandKind::press_turn_right: alignment.controls.turn_right = true; break;
-    case FlightCommandKind::release_turn_right: alignment.controls.turn_right = false; break;
+    case FlightCommandKind::press_forward:
+      alignment.controls.forward = true;
+      break;
+    case FlightCommandKind::release_forward:
+      alignment.controls.forward = false;
+      break;
+    case FlightCommandKind::press_backward:
+      alignment.controls.backward = true;
+      break;
+    case FlightCommandKind::release_backward:
+      alignment.controls.backward = false;
+      break;
+    case FlightCommandKind::press_turn_left:
+      alignment.controls.turn_left = true;
+      break;
+    case FlightCommandKind::release_turn_left:
+      alignment.controls.turn_left = false;
+      break;
+    case FlightCommandKind::press_turn_right:
+      alignment.controls.turn_right = true;
+      break;
+    case FlightCommandKind::release_turn_right:
+      alignment.controls.turn_right = false;
+      break;
     default: break;
   }
 }
@@ -136,14 +152,14 @@ auto integrate_alignment(IntersystemJumpAlignmentState& alignment) noexcept
   const auto velocity_intent =
       static_cast<std::int32_t>(alignment.controls.forward) -
       static_cast<std::int32_t>(alignment.controls.backward);
-  alignment.heading_error_millidegrees = std::clamp(
-      alignment.heading_error_millidegrees +
-          heading_intent * kHeadingCorrectionMillidegreesPerTick,
-      -180'000, 180'000);
-  alignment.velocity_error_basis_points = std::clamp(
-      alignment.velocity_error_basis_points +
-          velocity_intent * kVelocityCorrectionBasisPointsPerTick,
-      -10'000, 10'000);
+  alignment.heading_error_millidegrees =
+      std::clamp(alignment.heading_error_millidegrees +
+                     heading_intent * kHeadingCorrectionMillidegreesPerTick,
+                 -180'000, 180'000);
+  alignment.velocity_error_basis_points =
+      std::clamp(alignment.velocity_error_basis_points +
+                     velocity_intent * kVelocityCorrectionBasisPointsPerTick,
+                 -10'000, 10'000);
 }
 
 struct Vector3 {
@@ -173,23 +189,21 @@ struct Vector3 {
 }
 
 [[nodiscard]] auto cross(Vector3 lhs, Vector3 rhs) noexcept -> Vector3 {
-  return {lhs.y * rhs.z - lhs.z * rhs.y,
-          lhs.z * rhs.x - lhs.x * rhs.z,
+  return {lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z,
           lhs.x * rhs.y - lhs.y * rhs.x};
 }
 
-[[nodiscard]] auto rotate(Vector3 value, Vector3 axis,
-                          double angle) noexcept -> Vector3 {
+[[nodiscard]] auto rotate(Vector3 value, Vector3 axis, double angle) noexcept
+    -> Vector3 {
   const auto cosine = std::cos(angle);
   const auto sine = std::sin(angle);
   const auto dot = value.x * axis.x + value.y * axis.y + value.z * axis.z;
   const auto perpendicular = cross(axis, value);
-  return {value.x * cosine + perpendicular.x * sine +
-              axis.x * dot * (1.0 - cosine),
-          value.y * cosine + perpendicular.y * sine +
-              axis.y * dot * (1.0 - cosine),
-          value.z * cosine + perpendicular.z * sine +
-              axis.z * dot * (1.0 - cosine)};
+  return {
+      value.x * cosine + perpendicular.x * sine + axis.x * dot * (1.0 - cosine),
+      value.y * cosine + perpendicular.y * sine + axis.y * dot * (1.0 - cosine),
+      value.z * cosine + perpendicular.z * sine +
+          axis.z * dot * (1.0 - cosine)};
 }
 
 [[nodiscard]] auto resolve_canonical_arrival(
@@ -238,9 +252,8 @@ struct Vector3 {
     }
     const auto tangent = normalized(vector(ephemeris->velocity));
     const auto radial = normalized(vector(ephemeris->position));
-    const auto normal = radial && tangent
-                            ? normalized(cross(*radial, *tangent))
-                            : std::nullopt;
+    const auto normal =
+        radial && tangent ? normalized(cross(*radial, *tangent)) : std::nullopt;
     if (!tangent || !radial || !normal) {
       return std::unexpected{IntersystemJumpError::invalid_arrival};
     }
@@ -258,19 +271,19 @@ struct Vector3 {
       double angle{};
       if (bound_assessment.quality == IntersystemArrivalQuality::offset) {
         const double heading_severity =
-            static_cast<double>(std::abs(
-                bound_assessment.heading_error_millidegrees)) /
+            static_cast<double>(
+                std::abs(bound_assessment.heading_error_millidegrees)) /
             static_cast<double>(kOffsetHeadingErrorMillidegrees);
         const double velocity_severity =
-            static_cast<double>(std::abs(
-                bound_assessment.velocity_error_basis_points)) /
+            static_cast<double>(
+                std::abs(bound_assessment.velocity_error_basis_points)) /
             static_cast<double>(kOffsetVelocityErrorBasisPoints);
-        const double severity = std::clamp(
-            std::max(heading_severity, velocity_severity), 0.0, 1.0);
+        const double severity =
+            std::clamp(std::max(heading_severity, velocity_severity), 0.0, 1.0);
         standoff_radii += 90.0 * severity;
-        angle = static_cast<double>(
-                    bound_assessment.heading_error_millidegrees) *
-                std::numbers::pi_v<double> / 180'000.0;
+        angle =
+            static_cast<double>(bound_assessment.heading_error_millidegrees) *
+            std::numbers::pi_v<double> / 180'000.0;
       }
       const Vector3 trailing{-tangent->x, -tangent->y, -tangent->z};
       const auto approach = rotate(trailing, *normal, angle);
@@ -281,9 +294,9 @@ struct Vector3 {
           ephemeris->position.z + approach.z * standoff,
       };
       const double velocity_scale =
-          1.0 + static_cast<double>(
-                    bound_assessment.velocity_error_basis_points) /
-                    10'000.0;
+          1.0 +
+          static_cast<double>(bound_assessment.velocity_error_basis_points) /
+              10'000.0;
       solution.velocity = {
           ephemeris->velocity.x * velocity_scale,
           ephemeris->velocity.y * velocity_scale,
@@ -297,7 +310,7 @@ struct Vector3 {
   return solution;
 }
 
-}  // namespace
+} // namespace
 
 auto validate_intersystem_arrival_solution(
     const IntersystemContractState& contract,
@@ -316,9 +329,10 @@ auto validate_intersystem_arrival_solution(
   const bool returning =
       contract.travel_phase == IntersystemTravelPhase::return_jump_committed ||
       contract.travel_phase == IntersystemTravelPhase::origin_system_return;
-  const auto expected_destination =
-      outbound ? contract.identities.target_system
-               : returning ? contract.identities.origin_system : SystemId{};
+  const auto expected_destination = outbound ? contract.identities.target_system
+                                    : returning
+                                        ? contract.identities.origin_system
+                                        : SystemId{};
   if ((!outbound && !returning) || destination.id != expected_destination ||
       solution.destination != expected_destination) {
     return std::unexpected{IntersystemJumpError::invalid_arrival};
@@ -344,23 +358,22 @@ auto validate_intersystem_arrival_solution(
   return {};
 }
 
-auto resolve_intersystem_jump_arrival(
-    const IntersystemContractState& contract,
-    const LocalSystemDescriptor& destination)
+auto resolve_intersystem_jump_arrival(const IntersystemContractState& contract,
+                                      const LocalSystemDescriptor& destination)
     -> std::expected<IntersystemArrivalSolution, IntersystemJumpError> {
   if (!validate_intersystem_contract_state(contract)) {
     return std::unexpected{IntersystemJumpError::invalid_contract};
   }
-  const bool outbound = contract.travel_phase ==
-                        IntersystemTravelPhase::outbound_jump_spooling;
-  const bool returning = contract.travel_phase ==
-                         IntersystemTravelPhase::return_jump_spooling;
+  const bool outbound =
+      contract.travel_phase == IntersystemTravelPhase::outbound_jump_spooling;
+  const bool returning =
+      contract.travel_phase == IntersystemTravelPhase::return_jump_spooling;
   if (!outbound && !returning) {
     return std::unexpected{IntersystemJumpError::invalid_phase};
   }
-  const auto expected_destination =
-      outbound ? contract.identities.target_system
-               : contract.identities.origin_system;
+  const auto expected_destination = outbound
+                                        ? contract.identities.target_system
+                                        : contract.identities.origin_system;
   if (destination.id != expected_destination ||
       !validate_local_system(destination)) {
     return std::unexpected{IntersystemJumpError::invalid_destination};
@@ -372,15 +385,15 @@ auto resolve_intersystem_jump_arrival(
   const auto arrival_tick = contract.universe_tick + kJumpTransitTicks;
   const auto assessment =
       outbound
-          ? std::optional{contract.rule_profile == IntersystemRuleProfile::pilot
-                              ? assessment_for(
-                                    contract.jump_alignment
-                                        ->heading_error_millidegrees,
-                                    contract.jump_alignment
-                                        ->velocity_error_basis_points)
-                              : IntersystemArrivalAssessment{
-                                    .quality =
-                                        IntersystemArrivalQuality::aligned}}
+          ? std::
+                optional{contract.rule_profile == IntersystemRuleProfile::pilot
+                             ? assessment_for(contract.jump_alignment
+                                                  ->heading_error_millidegrees,
+                                              contract.jump_alignment
+                                                  ->velocity_error_basis_points)
+                             : IntersystemArrivalAssessment{.quality =
+                                                                IntersystemArrivalQuality::
+                                                                    aligned}}
           : std::nullopt;
   return resolve_canonical_arrival(contract, destination, arrival_tick,
                                    assessment);
@@ -456,10 +469,9 @@ auto begin_intersystem_jump(
   return {};
 }
 
-auto begin_intersystem_jump(
-    IntersystemContractState& contract,
-    const OriginStationFlightState& origin_flight,
-    SystemId selected_destination) noexcept
+auto begin_intersystem_jump(IntersystemContractState& contract,
+                            const OriginStationFlightState& origin_flight,
+                            SystemId selected_destination) noexcept
     -> std::expected<void, IntersystemJumpError> {
   if (selected_destination != contract.identities.target_system) {
     return std::unexpected{IntersystemJumpError::invalid_destination};
@@ -478,28 +490,25 @@ auto cancel_intersystem_jump(IntersystemContractState& contract) noexcept
   return {};
 }
 
-auto advance_intersystem_jump_tick(
-    IntersystemContractState& contract,
-    const LocalSystemDescriptor& destination,
-    std::span<const FlightCommand> commands)
+auto advance_intersystem_jump_tick(IntersystemContractState& contract,
+                                   const LocalSystemDescriptor& destination,
+                                   std::span<const FlightCommand> commands)
     -> std::expected<IntersystemJumpAdvance, IntersystemJumpError> {
   if (!validate_intersystem_contract_state(contract)) {
     return std::unexpected{IntersystemJumpError::invalid_contract};
   }
   const bool outbound =
-      contract.travel_phase ==
-          IntersystemTravelPhase::outbound_jump_spooling ||
-      contract.travel_phase ==
-          IntersystemTravelPhase::outbound_jump_committed;
+      contract.travel_phase == IntersystemTravelPhase::outbound_jump_spooling ||
+      contract.travel_phase == IntersystemTravelPhase::outbound_jump_committed;
   const bool returning =
       contract.travel_phase == IntersystemTravelPhase::return_jump_spooling ||
       contract.travel_phase == IntersystemTravelPhase::return_jump_committed;
   if (!outbound && !returning) {
     return std::unexpected{IntersystemJumpError::invalid_phase};
   }
-  const auto expected_destination =
-      outbound ? contract.identities.target_system
-               : contract.identities.origin_system;
+  const auto expected_destination = outbound
+                                        ? contract.identities.target_system
+                                        : contract.identities.origin_system;
   if (destination.id != expected_destination) {
     return std::unexpected{IntersystemJumpError::invalid_destination};
   }
@@ -507,8 +516,8 @@ auto advance_intersystem_jump_tick(
     const auto target =
         generate_local_system(contract.identities.target_system_seed);
     if (!contract.arrival_solution ||
-        !validate_intersystem_arrival_solution(
-            contract, target, *contract.arrival_solution)) {
+        !validate_intersystem_arrival_solution(contract, target,
+                                               *contract.arrival_solution)) {
       return std::unexpected{IntersystemJumpError::invalid_arrival};
     }
   }
@@ -518,16 +527,15 @@ auto advance_intersystem_jump_tick(
       contract.travel_phase == IntersystemTravelPhase::return_jump_committed;
   if (committed_before &&
       (!contract.arrival_solution ||
-       !validate_intersystem_arrival_solution(
-           contract, destination, *contract.arrival_solution))) {
+       !validate_intersystem_arrival_solution(contract, destination,
+                                              *contract.arrival_solution))) {
     return std::unexpected{IntersystemJumpError::invalid_arrival};
   }
   auto next = contract;
   const bool spooling_before =
       next.travel_phase == IntersystemTravelPhase::outbound_jump_spooling ||
       next.travel_phase == IntersystemTravelPhase::return_jump_spooling;
-  if (!commands.empty() &&
-      (!spooling_before || !next.jump_alignment)) {
+  if (!commands.empty() && (!spooling_before || !next.jump_alignment)) {
     return std::unexpected{IntersystemJumpError::invalid_command};
   }
   for (const auto& command : commands) {
@@ -546,10 +554,10 @@ auto advance_intersystem_jump_tick(
   }
   const auto time_advance = advance_intersystem_time(next, 1);
   if (!time_advance) {
-    return std::unexpected{
-        time_advance.error() == IntersystemContractError::tick_overflow
-            ? IntersystemJumpError::tick_overflow
-            : IntersystemJumpError::transition_failure};
+    return std::unexpected{time_advance.error() ==
+                                   IntersystemContractError::tick_overflow
+                               ? IntersystemJumpError::tick_overflow
+                               : IntersystemJumpError::transition_failure};
   }
   IntersystemJumpAdvance result;
   const bool spooling =
@@ -560,25 +568,24 @@ auto advance_intersystem_jump_tick(
     if (!solution) return std::unexpected{solution.error()};
     const bool outbound_commit =
         next.travel_phase == IntersystemTravelPhase::outbound_jump_spooling;
-    next.travel_phase =
-        outbound_commit ? IntersystemTravelPhase::outbound_jump_committed
-                        : IntersystemTravelPhase::return_jump_committed;
-    next.committed_jump_destination =
-        outbound_commit ? next.identities.target_system
-                        : next.identities.origin_system;
+    next.travel_phase = outbound_commit
+                            ? IntersystemTravelPhase::outbound_jump_committed
+                            : IntersystemTravelPhase::return_jump_committed;
+    next.committed_jump_destination = outbound_commit
+                                          ? next.identities.target_system
+                                          : next.identities.origin_system;
     next.phase_started_tick = next.universe_tick;
     next.jump_alignment.reset();
     next.arrival_solution = std::move(*solution);
     if (!validate_intersystem_contract_state(next) ||
-        !validate_intersystem_arrival_solution(
-            next, destination, *next.arrival_solution)) {
+        !validate_intersystem_arrival_solution(next, destination,
+                                               *next.arrival_solution)) {
       return std::unexpected{IntersystemJumpError::transition_failure};
     }
     result.committed = true;
   } else {
     const bool committed =
-        next.travel_phase ==
-            IntersystemTravelPhase::outbound_jump_committed ||
+        next.travel_phase == IntersystemTravelPhase::outbound_jump_committed ||
         next.travel_phase == IntersystemTravelPhase::return_jump_committed;
     if (committed && elapsed(next) == kJumpTransitTicks) {
       if (!next.arrival_solution ||
@@ -586,18 +593,17 @@ auto advance_intersystem_jump_tick(
         return std::unexpected{IntersystemJumpError::invalid_arrival};
       }
       const bool outbound_arrival =
-          next.travel_phase ==
-          IntersystemTravelPhase::outbound_jump_committed;
-      next.travel_phase =
-          outbound_arrival ? IntersystemTravelPhase::target_system_flight
-                           : IntersystemTravelPhase::origin_system_return;
+          next.travel_phase == IntersystemTravelPhase::outbound_jump_committed;
+      next.travel_phase = outbound_arrival
+                              ? IntersystemTravelPhase::target_system_flight
+                              : IntersystemTravelPhase::origin_system_return;
       next.current_system = outbound_arrival ? next.identities.target_system
                                              : next.identities.origin_system;
       next.committed_jump_destination.reset();
       next.phase_started_tick.reset();
       if (!validate_intersystem_contract_state(next) ||
-          !validate_intersystem_arrival_solution(
-              next, destination, *next.arrival_solution)) {
+          !validate_intersystem_arrival_solution(next, destination,
+                                                 *next.arrival_solution)) {
         return std::unexpected{IntersystemJumpError::transition_failure};
       }
       result.arrived = true;
@@ -607,19 +613,17 @@ auto advance_intersystem_jump_tick(
   return result;
 }
 
-auto resolve_intersystem_jump_guidance(
-    const IntersystemContractState& contract)
+auto resolve_intersystem_jump_guidance(const IntersystemContractState& contract)
     -> std::expected<IntersystemJumpGuidance, IntersystemJumpError> {
   if (!validate_intersystem_contract_state(contract) ||
-      contract.travel_phase !=
-          IntersystemTravelPhase::outbound_jump_spooling ||
+      contract.travel_phase != IntersystemTravelPhase::outbound_jump_spooling ||
       contract.rule_profile != IntersystemRuleProfile::pilot ||
       !contract.jump_alignment) {
     return std::unexpected{IntersystemJumpError::invalid_phase};
   }
-  const auto assessment = assessment_for(
-      contract.jump_alignment->heading_error_millidegrees,
-      contract.jump_alignment->velocity_error_basis_points);
+  const auto assessment =
+      assessment_for(contract.jump_alignment->heading_error_millidegrees,
+                     contract.jump_alignment->velocity_error_basis_points);
   std::string correction{"HOLD ALIGNMENT"};
   if (assessment.heading_error_millidegrees >
       kAlignedHeadingErrorMillidegrees) {
@@ -635,10 +639,8 @@ auto resolve_intersystem_jump_guidance(
     correction = "W / FAST";
   }
   return IntersystemJumpGuidance{
-      .heading_error_millidegrees =
-          assessment.heading_error_millidegrees,
-      .velocity_error_basis_points =
-          assessment.velocity_error_basis_points,
+      .heading_error_millidegrees = assessment.heading_error_millidegrees,
+      .velocity_error_basis_points = assessment.velocity_error_basis_points,
       .projected_quality = assessment.quality,
       .correction = std::move(correction),
   };
@@ -651,8 +653,7 @@ auto intersystem_jump_snapshot(const IntersystemContractState& contract)
     return std::unexpected{IntersystemJumpError::invalid_contract};
   }
   const bool spooling =
-      contract.travel_phase ==
-          IntersystemTravelPhase::outbound_jump_spooling ||
+      contract.travel_phase == IntersystemTravelPhase::outbound_jump_spooling ||
       contract.travel_phase == IntersystemTravelPhase::return_jump_spooling;
   const bool committed =
       contract.travel_phase ==
@@ -664,8 +665,7 @@ auto intersystem_jump_snapshot(const IntersystemContractState& contract)
   const auto duration = spooling ? kJumpSpoolTicks : kJumpTransitTicks;
   const auto ticks = std::min(elapsed(contract), duration);
   const auto destination =
-      contract.travel_phase ==
-                  IntersystemTravelPhase::outbound_jump_spooling ||
+      contract.travel_phase == IntersystemTravelPhase::outbound_jump_spooling ||
               contract.travel_phase ==
                   IntersystemTravelPhase::outbound_jump_committed
           ? contract.identities.target_system
@@ -718,27 +718,25 @@ auto intersystem_arrival_checksum(
   hash_word(hash, std::bit_cast<std::uint64_t>(arrival.velocity.z));
   hash_word(hash, arrival.assessment.has_value() ? 1U : 0U);
   if (arrival.assessment) {
-    hash_word(hash, static_cast<std::uint64_t>(
-                        static_cast<std::int64_t>(
-                            arrival.assessment->heading_error_millidegrees)));
-    hash_word(hash, static_cast<std::uint64_t>(
-                        static_cast<std::int64_t>(
-                            arrival.assessment->velocity_error_basis_points)));
+    hash_word(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(
+                        arrival.assessment->heading_error_millidegrees)));
+    hash_word(hash, static_cast<std::uint64_t>(static_cast<std::int64_t>(
+                        arrival.assessment->velocity_error_basis_points)));
     hash_word(hash, static_cast<std::uint8_t>(arrival.assessment->quality));
   }
   return hash;
 }
 
-auto render_intersystem_jump(const IntersystemJumpSnapshot& snapshot,
-                             int width, int height,
+auto render_intersystem_jump(const IntersystemJumpSnapshot& snapshot, int width,
+                             int height,
                              std::span<termforge::Pixel> destination)
     -> std::expected<void, IntersystemJumpError> {
   if (width <= 0 || height <= 0 ||
       static_cast<std::size_t>(width) >
           std::numeric_limits<std::size_t>::max() /
               static_cast<std::size_t>(height) ||
-      destination.size() != static_cast<std::size_t>(width) *
-                                static_cast<std::size_t>(height) ||
+      destination.size() !=
+          static_cast<std::size_t>(width) * static_cast<std::size_t>(height) ||
       !std::isfinite(snapshot.progress) || snapshot.progress < 0.0 ||
       snapshot.progress > 1.0 || snapshot.duration_ticks == 0 ||
       snapshot.elapsed_ticks > snapshot.duration_ticks ||
@@ -751,21 +749,20 @@ auto render_intersystem_jump(const IntersystemJumpSnapshot& snapshot,
   }
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
-      const auto index = static_cast<std::size_t>(y) *
-                             static_cast<std::size_t>(width) +
-                         static_cast<std::size_t>(x);
+      const auto index =
+          static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+          static_cast<std::size_t>(x);
       const std::uint64_t noise =
           (static_cast<std::uint64_t>(x + 1) * 0x9e3779b185ebca87ULL) ^
           (static_cast<std::uint64_t>(y + 1) * 0xc2b2ae3d27d4eb4fULL) ^
           (snapshot.elapsed_ticks * 0x165667b19e3779f9ULL);
-      const double dx = static_cast<double>(x) -
-                        static_cast<double>(width - 1) * 0.5;
-      const double dy = static_cast<double>(y) -
-                        static_cast<double>(height - 1) * 0.5;
-      const double radius = std::hypot(dx, dy) /
-                            static_cast<double>(std::max(width, height));
-      const bool star =
-          (noise & 0x7ffU) < (snapshot.committed ? 18U : 5U);
+      const double dx =
+          static_cast<double>(x) - static_cast<double>(width - 1) * 0.5;
+      const double dy =
+          static_cast<double>(y) - static_cast<double>(height - 1) * 0.5;
+      const double radius =
+          std::hypot(dx, dy) / static_cast<double>(std::max(width, height));
+      const bool star = (noise & 0x7ffU) < (snapshot.committed ? 18U : 5U);
       const double flare =
           snapshot.committed ? std::max(0.0, 1.0 - radius * 5.0) : 0.0;
       destination[index] = {
@@ -773,10 +770,10 @@ auto render_intersystem_jump(const IntersystemJumpSnapshot& snapshot,
               8.0 + flare * 150.0 + (star ? 120.0 : 0.0), 0.0, 255.0)),
           static_cast<std::uint8_t>(std::clamp(
               15.0 + flare * 190.0 + (star ? 150.0 : 0.0), 0.0, 255.0)),
-          static_cast<std::uint8_t>(std::clamp(
-              28.0 + snapshot.progress * 55.0 + flare * 210.0 +
-                  (star ? 210.0 : 0.0),
-              0.0, 255.0)),
+          static_cast<std::uint8_t>(std::clamp(28.0 + snapshot.progress * 55.0 +
+                                                   flare * 210.0 +
+                                                   (star ? 210.0 : 0.0),
+                                               0.0, 255.0)),
           255};
     }
   }
@@ -792,11 +789,11 @@ auto render_intersystem_jump(const IntersystemJumpSnapshot& snapshot,
     const int center_x = width / 2;
     const int center_y = height / 2;
     const int marker_x = std::clamp(
-        center_x + static_cast<int>(std::round(horizontal * width * 0.35)),
-        0, width - 1);
+        center_x + static_cast<int>(std::round(horizontal * width * 0.35)), 0,
+        width - 1);
     const int marker_y = std::clamp(
-        center_y + static_cast<int>(std::round(vertical * height * 0.35)),
-        0, height - 1);
+        center_y + static_cast<int>(std::round(vertical * height * 0.35)), 0,
+        height - 1);
     const auto paint = [&](int x, int y, termforge::Pixel pixel) {
       if (x < 0 || y < 0 || x >= width || y >= height) return;
       destination[static_cast<std::size_t>(y) *
@@ -817,4 +814,4 @@ auto render_intersystem_jump(const IntersystemJumpSnapshot& snapshot,
   return {};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

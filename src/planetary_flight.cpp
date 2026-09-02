@@ -45,15 +45,12 @@ struct ThermalRates {
     -> bool {
   const auto pressure = planet.atmosphere_pressure.value;
   switch (planet.atmosphere_class) {
-    case AtmosphereClass::airless:
-      return pressure == 0;
-    case AtmosphereClass::tenuous:
-      return pressure >= 1 && pressure <= 249;
+    case AtmosphereClass::airless: return pressure == 0;
+    case AtmosphereClass::tenuous: return pressure >= 1 && pressure <= 249;
     case AtmosphereClass::temperate:
       return pressure >= 250 && pressure <= 1'499;
     case AtmosphereClass::dense:
-      return pressure >= 1'500 &&
-             pressure <= AtmospherePressureMillibars::max;
+      return pressure >= 1'500 && pressure <= AtmospherePressureMillibars::max;
   }
   return false;
 }
@@ -92,18 +89,17 @@ struct ThermalRates {
          valid_palette(planet.palette.family);
 }
 
-[[nodiscard]] auto valid_transition(
-    const PlanetaryFlightState& state) noexcept -> bool {
+[[nodiscard]] auto valid_transition(const PlanetaryFlightState& state) noexcept
+    -> bool {
   if (!state.last_transition) return true;
   const auto& transition = *state.last_transition;
-  const bool adjacent =
-      (transition.from == FlightRegime::orbital &&
-       transition.to == FlightRegime::atmospheric) ||
-      (transition.from == FlightRegime::atmospheric &&
-       (transition.to == FlightRegime::orbital ||
-        transition.to == FlightRegime::terrain_flight)) ||
-      (transition.from == FlightRegime::terrain_flight &&
-       transition.to == FlightRegime::atmospheric);
+  const bool adjacent = (transition.from == FlightRegime::orbital &&
+                         transition.to == FlightRegime::atmospheric) ||
+                        (transition.from == FlightRegime::atmospheric &&
+                         (transition.to == FlightRegime::orbital ||
+                          transition.to == FlightRegime::terrain_flight)) ||
+                        (transition.from == FlightRegime::terrain_flight &&
+                         transition.to == FlightRegime::atmospheric);
   return valid_regime(transition.from) && valid_regime(transition.to) &&
          adjacent && transition.to == state.regime &&
          transition.tick <= state.tick;
@@ -150,8 +146,8 @@ struct ThermalRates {
   return false;
 }
 
-auto apply_command(PlanetaryFlightState& state,
-                   FlightCommandKind kind) noexcept -> void {
+auto apply_command(PlanetaryFlightState& state, FlightCommandKind kind) noexcept
+    -> void {
   const auto manual = [&state](bool& control, bool value) {
     control = value;
     if (value) state.mode = FlightMode::manual;
@@ -196,19 +192,14 @@ auto apply_command(PlanetaryFlightState& state,
     case FlightCommandKind::press_rise:
       manual(state.controls.rise, true);
       break;
-    case FlightCommandKind::release_rise:
-      state.controls.rise = false;
-      break;
+    case FlightCommandKind::release_rise: state.controls.rise = false; break;
     case FlightCommandKind::press_fall:
       manual(state.controls.fall, true);
       break;
-    case FlightCommandKind::release_fall:
-      state.controls.fall = false;
-      break;
+    case FlightCommandKind::release_fall: state.controls.fall = false; break;
     case FlightCommandKind::toggle_autopilot:
-      state.mode = state.mode == FlightMode::autopilot
-                       ? FlightMode::manual
-                       : FlightMode::autopilot;
+      state.mode = state.mode == FlightMode::autopilot ? FlightMode::manual
+                                                       : FlightMode::autopilot;
       state.controls = {};
       break;
     case FlightCommandKind::decrease_time_scale:
@@ -216,8 +207,8 @@ auto apply_command(PlanetaryFlightState& state,
   }
 }
 
-[[nodiscard]] auto atmosphere_ceiling_for(
-    AtmosphereClass atmosphere) noexcept -> double {
+[[nodiscard]] auto atmosphere_ceiling_for(AtmosphereClass atmosphere) noexcept
+    -> double {
   switch (atmosphere) {
     case AtmosphereClass::airless: return kAirlessApproachCeilingMetres;
     case AtmosphereClass::tenuous: return kTenuousAtmosphereCeilingMetres;
@@ -231,9 +222,9 @@ auto apply_command(PlanetaryFlightState& state,
                                  const PlanetaryFlightState& state) noexcept
     -> std::optional<ThermalRates> {
   if (!valid_planet(planet) || !finite_state(state)) return std::nullopt;
-  const double horizontal_speed = std::hypot(
-      state.velocity.east_metres_per_second,
-      state.velocity.north_metres_per_second);
+  const double horizontal_speed =
+      std::hypot(state.velocity.east_metres_per_second,
+                 state.velocity.north_metres_per_second);
   const double speed =
       std::hypot(horizontal_speed, state.velocity.up_metres_per_second);
   if (!std::isfinite(speed)) return std::nullopt;
@@ -262,12 +253,11 @@ auto apply_command(PlanetaryFlightState& state,
   const double cooling =
       load * (kThermalMinimumCoolingPerSecond +
               kThermalVacuumCoolingBonusPerSecond * (1.0 - density));
-  const double angle = std::atan2(state.velocity.up_metres_per_second,
-                                  horizontal_speed) *
-                       180.0 / std::numbers::pi_v<double>;
+  const double angle =
+      std::atan2(state.velocity.up_metres_per_second, horizontal_speed) *
+      180.0 / std::numbers::pi_v<double>;
   const double net = heating - cooling;
-  if (!std::isfinite(density) || !std::isfinite(angle) ||
-      !std::isfinite(net)) {
+  if (!std::isfinite(density) || !std::isfinite(angle) || !std::isfinite(net)) {
     return std::nullopt;
   }
   return ThermalRates{density, angle, net};
@@ -298,23 +288,21 @@ auto advance_thermal_state(const PlanetDescriptor& planet,
     case FlightRegime::orbital:
       return {4'000.0, 2'000.0, 1'000.0, 1'000.0, 0.35};
     case FlightRegime::atmospheric: {
-      const double vertical_speed = std::max(
-          180.0,
-          (atmosphere_ceiling_for(planet.atmosphere_class) -
-           kTerrainFlightEnterClearanceMetres) /
-              kAtmosphericDescentTargetSeconds);
+      const double vertical_speed =
+          std::max(180.0, (atmosphere_ceiling_for(planet.atmosphere_class) -
+                           kTerrainFlightEnterClearanceMetres) /
+                              kAtmosphericDescentTargetSeconds);
       return {500.0, vertical_speed, 180.0,
               vertical_speed / kAtmosphericVerticalResponseSeconds, 0.75};
     }
-    case FlightRegime::terrain_flight:
-      return {120.0, 45.0, 100.0, 60.0, 1.15};
+    case FlightRegime::terrain_flight: return {120.0, 45.0, 100.0, 60.0, 1.15};
   }
   return {};
 }
 
-[[nodiscard]] auto bounded_velocity(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) noexcept -> bool {
+[[nodiscard]] auto bounded_velocity(const PlanetDescriptor& planet,
+                                    const PlanetaryFlightState& state) noexcept
+    -> bool {
   if (!valid_regime(state.regime)) return false;
   const auto parameters = parameters_for(planet, state.regime);
   constexpr double tolerance{1.0e-9};
@@ -332,21 +320,18 @@ auto clamp_velocity(const PlanetDescriptor& planet,
       std::hypot(state.velocity.east_metres_per_second,
                  state.velocity.north_metres_per_second);
   if (horizontal_speed > parameters.maximum_horizontal_speed) {
-    const double scale =
-        parameters.maximum_horizontal_speed / horizontal_speed;
+    const double scale = parameters.maximum_horizontal_speed / horizontal_speed;
     state.velocity.east_metres_per_second *= scale;
     state.velocity.north_metres_per_second *= scale;
   }
   state.velocity.up_metres_per_second = std::clamp(
-      state.velocity.up_metres_per_second,
-      -parameters.maximum_vertical_speed,
+      state.velocity.up_metres_per_second, -parameters.maximum_vertical_speed,
       parameters.maximum_vertical_speed);
 }
 
 [[nodiscard]] auto move_toward(double current, double target,
                                double maximum_delta) noexcept -> double {
-  return current +
-         std::clamp(target - current, -maximum_delta, maximum_delta);
+  return current + std::clamp(target - current, -maximum_delta, maximum_delta);
 }
 
 [[nodiscard]] auto canonical_heading(double heading) noexcept -> double {
@@ -396,15 +381,14 @@ auto clamp_velocity(const PlanetDescriptor& planet,
 }
 
 [[nodiscard]] auto valid_regime_position(
-    const FlightRegimeBands& bands,
-    const PlanetaryFlightState& state) noexcept -> bool {
+    const FlightRegimeBands& bands, const PlanetaryFlightState& state) noexcept
+    -> bool {
   switch (state.regime) {
     case FlightRegime::orbital:
       return state.pose.position.altitude_metres >
              bands.atmosphere_enter_altitude_metres;
     case FlightRegime::atmospheric:
-      return state.clearance_metres >
-                 bands.terrain_enter_clearance_metres &&
+      return state.clearance_metres > bands.terrain_enter_clearance_metres &&
              state.pose.position.altitude_metres <
                  bands.orbit_enter_altitude_metres;
     case FlightRegime::terrain_flight:
@@ -425,7 +409,7 @@ auto hash_bool(std::uint64_t& hash, bool value) noexcept -> void {
   hash_word(hash, value ? 1U : 0U);
 }
 
-}  // namespace
+} // namespace
 
 auto flight_regime_name(FlightRegime regime) noexcept -> std::string_view {
   switch (regime) {
@@ -445,8 +429,7 @@ auto planetary_flight_error_name(PlanetaryFlightError error) noexcept
       return "invalid_environment";
     case PlanetaryFlightError::invalid_step: return "invalid_step";
     case PlanetaryFlightError::invalid_command: return "invalid_command";
-    case PlanetaryFlightError::wrong_command_tick:
-      return "wrong_command_tick";
+    case PlanetaryFlightError::wrong_command_tick: return "wrong_command_tick";
     case PlanetaryFlightError::tick_overflow: return "tick_overflow";
     case PlanetaryFlightError::coordinate_failure: return "coordinate_failure";
   }
@@ -483,8 +466,7 @@ auto flight_regime_bands(const PlanetDescriptor& planet) noexcept
   const double orbit_hysteresis =
       std::max(kMinimumOrbitHysteresisMetres, atmosphere_ceiling * 0.1);
   return FlightRegimeBands{
-      .terrain_enter_clearance_metres =
-          kTerrainFlightEnterClearanceMetres,
+      .terrain_enter_clearance_metres = kTerrainFlightEnterClearanceMetres,
       .terrain_exit_clearance_metres = kTerrainFlightExitClearanceMetres,
       .atmosphere_enter_altitude_metres = atmosphere_ceiling,
       .orbit_enter_altitude_metres = atmosphere_ceiling + orbit_hysteresis,
@@ -516,13 +498,11 @@ auto flight_drive_state(const PlanetaryFlightState& state) noexcept
                     static_cast<double>(state.controls.fall);
   if (state.mode == FlightMode::autopilot) forward = 0.72;
 
-  const double speed = std::hypot(
-      state.velocity.east_metres_per_second,
-      state.velocity.north_metres_per_second,
-      state.velocity.up_metres_per_second);
+  const double speed = std::hypot(state.velocity.east_metres_per_second,
+                                  state.velocity.north_metres_per_second,
+                                  state.velocity.up_metres_per_second);
   if (forward == 0.0 && strafe == 0.0 && vertical == 0.0) {
-    return speed <= 0.5 ? FlightDriveState::idle
-                        : FlightDriveState::coast;
+    return speed <= 0.5 ? FlightDriveState::idle : FlightDriveState::coast;
   }
 
   const double heading_cos = std::cos(state.pose.heading_radians);
@@ -539,13 +519,13 @@ auto flight_drive_state(const PlanetaryFlightState& state) noexcept
   if (strafe != 0.0 || vertical != 0.0) {
     return FlightDriveState::maneuvering;
   }
-  return forward < 0.0 ? FlightDriveState::reverse
-                       : FlightDriveState::forward;
+  return forward < 0.0 ? FlightDriveState::reverse : FlightDriveState::forward;
 }
 
-auto resolve_target_relative_motion(
-    const PlanetDescriptor& planet, const PlanetaryFlightState& state,
-    LocalPositionMetres target, double arrival_radius_metres) noexcept
+auto resolve_target_relative_motion(const PlanetDescriptor& planet,
+                                    const PlanetaryFlightState& state,
+                                    LocalPositionMetres target,
+                                    double arrival_radius_metres) noexcept
     -> std::expected<TargetRelativeMotion, PlanetaryFlightError> {
   if (!valid_planet(planet) || state.planet != planet.id ||
       !finite_state(state) || !std::isfinite(target.east) ||
@@ -566,15 +546,12 @@ auto resolve_target_relative_motion(
        target.up * state.velocity.up_metres_per_second) /
       distance;
   const auto performance = flight_performance(planet, state.regime);
-  if (!performance ||
-      !std::isfinite(motion.closing_speed_metres_per_second)) {
+  if (!performance || !std::isfinite(motion.closing_speed_metres_per_second)) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
   }
-  const double braking_acceleration =
-      std::min(performance->horizontal_acceleration,
-               performance->vertical_acceleration);
-  const double remaining =
-      std::max(0.0, distance - arrival_radius_metres);
+  const double braking_acceleration = std::min(
+      performance->horizontal_acceleration, performance->vertical_acceleration);
+  const double remaining = std::max(0.0, distance - arrival_radius_metres);
   constexpr double motion_threshold{1.0};
   if (motion.closing_speed_metres_per_second > motion_threshold) {
     const double closing = motion.closing_speed_metres_per_second;
@@ -590,9 +567,8 @@ auto resolve_target_relative_motion(
   return motion;
 }
 
-auto resolve_thermal_assessment(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) noexcept
+auto resolve_thermal_assessment(const PlanetDescriptor& planet,
+                                const PlanetaryFlightState& state) noexcept
     -> std::expected<ThermalAssessment, PlanetaryFlightError> {
   if (state.planet != planet.id) {
     return std::unexpected{PlanetaryFlightError::invalid_state};
@@ -630,10 +606,11 @@ auto resolve_thermal_assessment(
   };
 }
 
-auto initial_planetary_flight_state(
-    const PlanetDescriptor& planet, GeodeticPosition position,
-    PlanetaryFlightEnvironment environment, double heading_radians,
-    FlightMode mode) noexcept
+auto initial_planetary_flight_state(const PlanetDescriptor& planet,
+                                    GeodeticPosition position,
+                                    PlanetaryFlightEnvironment environment,
+                                    double heading_radians,
+                                    FlightMode mode) noexcept
     -> std::expected<PlanetaryFlightState, PlanetaryFlightError> {
   const auto bands = flight_regime_bands(planet);
   if (!bands) return std::unexpected{bands.error()};
@@ -648,8 +625,7 @@ auto initial_planetary_flight_state(
   }
   const double clearance =
       position.altitude_metres - environment.surface_elevation_metres;
-  if (!std::isfinite(clearance) ||
-      clearance < kMinimumFlightClearanceMetres) {
+  if (!std::isfinite(clearance) || clearance < kMinimumFlightClearanceMetres) {
     return std::unexpected{PlanetaryFlightError::invalid_environment};
   }
 
@@ -661,8 +637,7 @@ auto initial_planetary_flight_state(
       .clearance_metres = clearance,
       .mode = mode,
       .controls = {},
-      .regime = regime_for_initial(*bands, position.altitude_metres,
-                                   clearance),
+      .regime = regime_for_initial(*bands, position.altitude_metres, clearance),
       .last_transition = std::nullopt,
       .thermal = {},
   };
@@ -672,9 +647,8 @@ auto initial_planetary_flight_state(
   return state;
 }
 
-auto validate_planetary_flight_state(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) noexcept
+auto validate_planetary_flight_state(const PlanetDescriptor& planet,
+                                     const PlanetaryFlightState& state) noexcept
     -> std::expected<void, PlanetaryFlightError> {
   const auto bands = flight_regime_bands(planet);
   if (!bands || state.planet != planet.id || !finite_state(state) ||
@@ -688,10 +662,12 @@ auto validate_planetary_flight_state(
   return {};
 }
 
-auto advance_planetary_flight(
-    const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
-    PlanetaryFlightState& state, std::span<const FlightCommand> commands,
-    SimulationSeconds step, PlanetaryFlightRules rules) noexcept
+auto advance_planetary_flight(const PlanetDescriptor& planet,
+                              PlanetaryFlightEnvironment environment,
+                              PlanetaryFlightState& state,
+                              std::span<const FlightCommand> commands,
+                              SimulationSeconds step,
+                              PlanetaryFlightRules rules) noexcept
     -> std::expected<void, PlanetaryFlightError> {
   const auto bands = flight_regime_bands(planet);
   if (!bands) return std::unexpected{bands.error()};
@@ -722,8 +698,8 @@ auto advance_planetary_flight(
   }
 
   PlanetaryFlightState next = state;
-  next.clearance_metres = next.pose.position.altitude_metres -
-                          environment.surface_elevation_metres;
+  next.clearance_metres =
+      next.pose.position.altitude_metres - environment.surface_elevation_metres;
   if (next.clearance_metres < kMinimumFlightClearanceMetres) {
     next.pose.position.altitude_metres =
         environment.surface_elevation_metres + kMinimumFlightClearanceMetres;
@@ -731,7 +707,8 @@ auto advance_planetary_flight(
     next.velocity.up_metres_per_second =
         std::max(0.0, next.velocity.up_metres_per_second);
   }
-  for (const auto& command : commands) apply_command(next, command.kind);
+  for (const auto& command : commands)
+    apply_command(next, command.kind);
   if (rules.enforce_thermal_abort &&
       next.thermal.load_units == kMaximumThermalLoadUnits) {
     next.thermal.abort_latched = true;
@@ -764,18 +741,16 @@ auto advance_planetary_flight(
 
   const auto parameters = parameters_for(planet, next.regime);
   const double dt = kSimulationStep.count();
-  next.pose.heading_radians = canonical_heading(
-      next.pose.heading_radians +
-      turn * parameters.turn_rate_radians_per_second * dt);
+  next.pose.heading_radians =
+      canonical_heading(next.pose.heading_radians +
+                        turn * parameters.turn_rate_radians_per_second * dt);
 
   const double heading_cos = std::cos(next.pose.heading_radians);
   const double heading_sin = std::sin(next.pose.heading_radians);
-  double target_east =
-      (heading_cos * forward - heading_sin * strafe) *
-      parameters.maximum_horizontal_speed;
-  double target_north =
-      (heading_sin * forward + heading_cos * strafe) *
-      parameters.maximum_horizontal_speed;
+  double target_east = (heading_cos * forward - heading_sin * strafe) *
+                       parameters.maximum_horizontal_speed;
+  double target_north = (heading_sin * forward + heading_cos * strafe) *
+                        parameters.maximum_horizontal_speed;
   const double target_horizontal_speed = std::hypot(target_east, target_north);
   if (target_horizontal_speed > parameters.maximum_horizontal_speed) {
     const double scale =
@@ -793,15 +768,15 @@ auto advance_planetary_flight(
       target_up = next.velocity.up_metres_per_second;
     }
   }
-  next.velocity.east_metres_per_second = move_toward(
-      next.velocity.east_metres_per_second, target_east,
-      parameters.horizontal_acceleration * dt);
-  next.velocity.north_metres_per_second = move_toward(
-      next.velocity.north_metres_per_second, target_north,
-      parameters.horizontal_acceleration * dt);
-  next.velocity.up_metres_per_second = move_toward(
-      next.velocity.up_metres_per_second, target_up,
-      parameters.vertical_acceleration * dt);
+  next.velocity.east_metres_per_second =
+      move_toward(next.velocity.east_metres_per_second, target_east,
+                  parameters.horizontal_acceleration * dt);
+  next.velocity.north_metres_per_second =
+      move_toward(next.velocity.north_metres_per_second, target_north,
+                  parameters.horizontal_acceleration * dt);
+  next.velocity.up_metres_per_second =
+      move_toward(next.velocity.up_metres_per_second, target_up,
+                  parameters.vertical_acceleration * dt);
   clamp_velocity(planet, next);
 
   const auto frame = make_local_tangent_frame(planet, next.pose.position);
@@ -828,24 +803,23 @@ auto advance_planetary_flight(
   next.pose.position = *position;
 
   const double minimum_altitude =
-      environment.surface_elevation_metres +
-      kMinimumFlightClearanceMetres;
+      environment.surface_elevation_metres + kMinimumFlightClearanceMetres;
   if (next.pose.position.altitude_metres < minimum_altitude) {
     next.pose.position.altitude_metres = minimum_altitude;
     next.velocity.up_metres_per_second =
         std::max(0.0, next.velocity.up_metres_per_second);
   }
-  next.clearance_metres = next.pose.position.altitude_metres -
-                          environment.surface_elevation_metres;
+  next.clearance_metres =
+      next.pose.position.altitude_metres - environment.surface_elevation_metres;
   ++next.tick;
 
   const FlightRegime previous_regime = next.regime;
-  next.regime = next_regime(*bands, next.regime,
-                            next.pose.position.altitude_metres,
-                            next.clearance_metres);
+  next.regime =
+      next_regime(*bands, next.regime, next.pose.position.altitude_metres,
+                  next.clearance_metres);
   if (next.regime != previous_regime) {
-    next.last_transition = FlightRegimeTransition{
-        previous_regime, next.regime, next.tick};
+    next.last_transition =
+        FlightRegimeTransition{previous_regime, next.regime, next.tick};
     clamp_velocity(planet, next);
   }
   if (rules.enforce_thermal_abort && next.thermal.abort_latched &&
@@ -865,8 +839,8 @@ auto advance_planetary_flight(
   return {};
 }
 
-auto planetary_flight_state_checksum(
-    const PlanetaryFlightState& state) noexcept -> std::uint64_t {
+auto planetary_flight_state_checksum(const PlanetaryFlightState& state) noexcept
+    -> std::uint64_t {
   constexpr std::uint64_t offset{1469598103934665603ULL};
   std::uint64_t hash = offset;
   hash_word(hash, state.tick);
@@ -877,14 +851,13 @@ auto planetary_flight_state_checksum(
                       state.pose.position.longitude_radians));
   hash_word(hash,
             std::bit_cast<std::uint64_t>(state.pose.position.altitude_metres));
-  hash_word(hash,
-            std::bit_cast<std::uint64_t>(state.pose.heading_radians));
+  hash_word(hash, std::bit_cast<std::uint64_t>(state.pose.heading_radians));
   hash_word(hash, std::bit_cast<std::uint64_t>(
                       state.velocity.east_metres_per_second));
   hash_word(hash, std::bit_cast<std::uint64_t>(
                       state.velocity.north_metres_per_second));
-  hash_word(hash, std::bit_cast<std::uint64_t>(
-                      state.velocity.up_metres_per_second));
+  hash_word(hash,
+            std::bit_cast<std::uint64_t>(state.velocity.up_metres_per_second));
   hash_word(hash, std::bit_cast<std::uint64_t>(state.clearance_metres));
   hash_word(hash, static_cast<std::uint8_t>(state.mode));
   hash_bool(hash, state.controls.forward);
@@ -907,4 +880,4 @@ auto planetary_flight_state_checksum(
   return hash;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -21,27 +21,25 @@ inline constexpr std::uint32_t kSampleRate{48'000};
 inline constexpr std::size_t kWavePeriod{480};
 inline constexpr std::size_t kMaximumAmbientSamples{1'500'000};
 
-auto read_little_u16(std::istream &input) -> std::uint16_t {
+auto read_little_u16(std::istream& input) -> std::uint16_t {
   std::array<unsigned char, 2> bytes{};
-  input.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
-  if (!input)
-    throw std::runtime_error{"truncated WAV input"};
+  input.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+  if (!input) throw std::runtime_error{"truncated WAV input"};
   return static_cast<std::uint16_t>(bytes[0]) |
          static_cast<std::uint16_t>(bytes[1] << 8U);
 }
 
-auto read_little_u32(std::istream &input) -> std::uint32_t {
+auto read_little_u32(std::istream& input) -> std::uint32_t {
   std::array<unsigned char, 4> bytes{};
-  input.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
-  if (!input)
-    throw std::runtime_error{"truncated WAV input"};
+  input.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
+  if (!input) throw std::runtime_error{"truncated WAV input"};
   return static_cast<std::uint32_t>(bytes[0]) |
          (static_cast<std::uint32_t>(bytes[1]) << 8U) |
          (static_cast<std::uint32_t>(bytes[2]) << 16U) |
          (static_cast<std::uint32_t>(bytes[3]) << 24U);
 }
 
-auto read_pcm16_mono_wav(const char *path) -> std::vector<std::int16_t> {
+auto read_pcm16_mono_wav(const char* path) -> std::vector<std::int16_t> {
   std::ifstream input{path, std::ios::binary};
   std::array<char, 4> id{};
   input.read(id.data(), id.size());
@@ -61,7 +59,8 @@ auto read_pcm16_mono_wav(const char *path) -> std::vector<std::int16_t> {
     const std::string_view chunk{id.data(), id.size()};
     if (chunk == "fmt ") {
       if (chunk_size < 16U || read_little_u16(input) != 1U ||
-          read_little_u16(input) != 1U || read_little_u32(input) != kSampleRate) {
+          read_little_u16(input) != 1U ||
+          read_little_u32(input) != kSampleRate) {
         throw std::runtime_error{"ambient WAV must be 48 kHz mono PCM"};
       }
       (void)read_little_u32(input);
@@ -74,14 +73,12 @@ auto read_pcm16_mono_wav(const char *path) -> std::vector<std::int16_t> {
       if (!format_found || chunk_size == 0U || (chunk_size & 1U) != 0U)
         throw std::runtime_error{"invalid ambient WAV data"};
       samples.resize(chunk_size / sizeof(std::int16_t));
-      input.read(reinterpret_cast<char *>(samples.data()), chunk_size);
-      if (!input)
-        throw std::runtime_error{"truncated ambient WAV samples"};
+      input.read(reinterpret_cast<char*>(samples.data()), chunk_size);
+      if (!input) throw std::runtime_error{"truncated ambient WAV samples"};
     } else {
       input.ignore(static_cast<std::streamsize>(chunk_size));
     }
-    if ((chunk_size & 1U) != 0U)
-      input.ignore(1);
+    if ((chunk_size & 1U) != 0U) input.ignore(1);
   }
   if (samples.empty() || samples.size() > kMaximumAmbientSamples)
     throw std::runtime_error{"ambient WAV sample count exceeds budget"};
@@ -132,13 +129,13 @@ auto make_soft_kick() -> std::vector<std::int16_t> {
   return samples;
 }
 
-auto append_be16(std::vector<std::uint8_t> &bytes, std::uint16_t value)
+auto append_be16(std::vector<std::uint8_t>& bytes, std::uint16_t value)
     -> void {
   bytes.push_back(static_cast<std::uint8_t>(value >> 8U));
   bytes.push_back(static_cast<std::uint8_t>(value));
 }
 
-auto append_be32(std::vector<std::uint8_t> &bytes, std::uint32_t value)
+auto append_be32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
     -> void {
   bytes.push_back(static_cast<std::uint8_t>(value >> 24U));
   bytes.push_back(static_cast<std::uint8_t>(value >> 16U));
@@ -146,20 +143,19 @@ auto append_be32(std::vector<std::uint8_t> &bytes, std::uint32_t value)
   bytes.push_back(static_cast<std::uint8_t>(value));
 }
 
-auto append_variable(std::vector<std::uint8_t> &bytes, std::uint32_t value)
+auto append_variable(std::vector<std::uint8_t>& bytes, std::uint32_t value)
     -> void {
   std::uint32_t buffer = value & 0x7FU;
   while ((value >>= 7U) != 0U)
     buffer = (buffer << 8U) | (value & 0x7FU) | 0x80U;
   for (;;) {
     bytes.push_back(static_cast<std::uint8_t>(buffer));
-    if ((buffer & 0x80U) == 0U)
-      break;
+    if ((buffer & 0x80U) == 0U) break;
     buffer >>= 8U;
   }
 }
 
-auto append_meta(std::vector<std::uint8_t> &track, std::uint32_t delta,
+auto append_meta(std::vector<std::uint8_t>& track, std::uint32_t delta,
                  std::uint8_t type, std::span<const std::uint8_t> payload)
     -> void {
   append_variable(track, delta);
@@ -169,14 +165,14 @@ auto append_meta(std::vector<std::uint8_t> &track, std::uint32_t delta,
   track.insert(track.end(), payload.begin(), payload.end());
 }
 
-auto append_text_meta(std::vector<std::uint8_t> &track, std::uint32_t delta,
-                      std::uint8_t type, const std::string &text) -> void {
+auto append_text_meta(std::vector<std::uint8_t>& track, std::uint32_t delta,
+                      std::uint8_t type, const std::string& text) -> void {
   append_meta(
       track, delta, type,
-      {reinterpret_cast<const std::uint8_t *>(text.data()), text.size()});
+      {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()});
 }
 
-auto append_note(std::vector<std::uint8_t> &track, std::uint32_t delta,
+auto append_note(std::vector<std::uint8_t>& track, std::uint32_t delta,
                  std::uint8_t channel, std::uint8_t note,
                  std::uint32_t duration, std::uint8_t velocity) -> void {
   append_variable(track, delta);
@@ -187,7 +183,7 @@ auto append_note(std::vector<std::uint8_t> &track, std::uint32_t delta,
                {static_cast<std::uint8_t>(0x80U | channel), note, 0U});
 }
 
-auto begin_track(const std::string &name, std::uint8_t channel,
+auto begin_track(const std::string& name, std::uint8_t channel,
                  std::uint8_t program, bool conductor)
     -> std::vector<std::uint8_t> {
   std::vector<std::uint8_t> track;
@@ -207,7 +203,7 @@ auto begin_track(const std::string &name, std::uint8_t channel,
   return track;
 }
 
-auto finish_track(std::vector<std::uint8_t> &track) -> void {
+auto finish_track(std::vector<std::uint8_t>& track) -> void {
   append_meta(track, 0, 0x2FU, {});
 }
 
@@ -285,7 +281,7 @@ auto make_tension_track(bool production) -> std::vector<std::uint8_t> {
   return track;
 }
 
-auto write_midi(const char *path, bool production) -> void {
+auto write_midi(const char* path, bool production) -> void {
   const std::vector<std::vector<std::uint8_t>> tracks{
       make_ambient_track(production),
       make_pulse_track(production),
@@ -298,16 +294,15 @@ auto write_midi(const char *path, bool production) -> void {
   append_be16(bytes, 1);
   append_be16(bytes, static_cast<std::uint16_t>(tracks.size()));
   append_be16(bytes, 480);
-  for (const auto &track : tracks) {
+  for (const auto& track : tracks) {
     bytes.insert(bytes.end(), {'M', 'T', 'r', 'k'});
     append_be32(bytes, static_cast<std::uint32_t>(track.size()));
     bytes.insert(bytes.end(), track.begin(), track.end());
   }
   std::ofstream output{path, std::ios::binary};
-  output.write(reinterpret_cast<const char *>(bytes.data()),
+  output.write(reinterpret_cast<const char*>(bytes.data()),
                static_cast<std::streamsize>(bytes.size()));
-  if (!output)
-    throw std::runtime_error{"cannot write MIDI output"};
+  if (!output) throw std::runtime_error{"cannot write MIDI output"};
 }
 
 struct Envelope {
@@ -319,9 +314,9 @@ struct Envelope {
   bool loop{};
 };
 
-auto add_preset(sf2cute::SoundFont &soundfont, const std::string &name,
+auto add_preset(sf2cute::SoundFont& soundfont, const std::string& name,
                 std::vector<std::int16_t> samples, std::uint16_t preset,
-                std::uint8_t root_key, const Envelope &envelope) -> void {
+                std::uint8_t root_key, const Envelope& envelope) -> void {
   const auto sample_count = static_cast<std::uint32_t>(samples.size());
   auto sample = soundfont.NewSample(name, std::move(samples), 0, sample_count,
                                     kSampleRate, root_key, 0);
@@ -348,7 +343,7 @@ auto add_preset(sf2cute::SoundFont &soundfont, const std::string &name,
 
 } // namespace
 
-auto main(int argc, char **argv) -> int {
+auto main(int argc, char** argv) -> int {
   if (argc != 3 && argc != 4) {
     std::cerr << "usage: issue230_asset_builder OUTPUT.sf2 OUTPUT.mid "
                  "[AMBIENT_PCM16_MONO.wav]\n";
@@ -402,10 +397,9 @@ auto main(int argc, char **argv) -> int {
                 .loop = true});
     std::ofstream output{argv[1], std::ios::binary};
     soundfont.Write(output);
-    if (!output)
-      throw std::runtime_error{"cannot write SoundFont output"};
+    if (!output) throw std::runtime_error{"cannot write SoundFont output"};
     write_midi(argv[2], production);
-  } catch (const std::exception &error) {
+  } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
   }

@@ -15,33 +15,29 @@ namespace {
     case SignalScannerStatus::tracking:
     case SignalScannerStatus::out_of_range:
     case SignalScannerStatus::occluded:
-    case SignalScannerStatus::reached:
-      return true;
+    case SignalScannerStatus::reached: return true;
   }
   return false;
 }
 
-[[nodiscard]] auto
-valid_collection_status(SignalCollectionStatus status) noexcept -> bool {
+[[nodiscard]] auto valid_collection_status(
+    SignalCollectionStatus status) noexcept -> bool {
   switch (status) {
     case SignalCollectionStatus::approach:
     case SignalCollectionStatus::in_range:
     case SignalCollectionStatus::scanning:
     case SignalCollectionStatus::complete:
-    case SignalCollectionStatus::aborted:
-      return true;
+    case SignalCollectionStatus::aborted: return true;
   }
   return false;
 }
 
 [[nodiscard]] auto terminal_delta(SaveWorldDeltaKind kind) noexcept -> bool {
   switch (kind) {
-    case SaveWorldDeltaKind::discovered:
-      return false;
+    case SaveWorldDeltaKind::discovered: return false;
     case SaveWorldDeltaKind::collected:
     case SaveWorldDeltaKind::completed:
-    case SaveWorldDeltaKind::removed:
-      return true;
+    case SaveWorldDeltaKind::removed: return true;
   }
   return false;
 }
@@ -79,9 +75,9 @@ valid_collection_status(SignalCollectionStatus status) noexcept -> bool {
   return false;
 }
 
-[[nodiscard]] auto
-valid_navigation(const SurfaceSignalCatalog& catalog,
-                 const SignalNavigationSolution& navigation) noexcept -> bool {
+[[nodiscard]] auto valid_navigation(
+    const SurfaceSignalCatalog& catalog,
+    const SignalNavigationSolution& navigation) noexcept -> bool {
   if (!valid_scanner_status(navigation.status)) return false;
   if (navigation.status == SignalScannerStatus::no_signal) {
     return !navigation.selected;
@@ -110,7 +106,7 @@ auto approach(SignalCollectionState& state,
   state.completion_tick.reset();
 }
 
-}  // namespace
+} // namespace
 
 auto advance_signal_collection(const SurfaceSignalCatalog& catalog,
                                const SignalNavigationSolution& navigation,
@@ -216,4 +212,4 @@ auto advance_signal_collection(const SurfaceSignalCatalog& catalog,
   return SignalCollectionUpdate{.delta_emitted = true};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -12,8 +12,7 @@ namespace {
 
 inline constexpr std::int64_t kFixedOne{65'536};
 inline constexpr std::int64_t kCanonicalFaceExtent{
-    static_cast<std::int64_t>(kTerrainTileIntervalsPerAxis)
-    << kMaxTerrainLod};
+    static_cast<std::int64_t>(kTerrainTileIntervalsPerAxis) << kMaxTerrainLod};
 
 static_assert(kCanonicalFaceExtent == 4'194'304);
 
@@ -49,8 +48,7 @@ struct TerrainParameters {
     case AtmosphereClass::temperate:
       return pressure >= 250 && pressure <= 1'499;
     case AtmosphereClass::dense:
-      return pressure >= 1'500 &&
-             pressure <= AtmospherePressureMillibars::max;
+      return pressure >= 1'500 && pressure <= AtmospherePressureMillibars::max;
   }
   return false;
 }
@@ -111,8 +109,7 @@ struct TerrainParameters {
   return {};
 }
 
-[[nodiscard]] auto canonical_axis(std::uint32_t tile_index,
-                                  std::uint8_t lod,
+[[nodiscard]] auto canonical_axis(std::uint32_t tile_index, std::uint8_t lod,
                                   std::size_t sample_index) noexcept
     -> std::int64_t {
   const auto global_index =
@@ -120,8 +117,8 @@ struct TerrainParameters {
           static_cast<std::uint64_t>(kTerrainTileIntervalsPerAxis) +
       static_cast<std::uint64_t>(sample_index);
   const auto lod_scale = std::uint64_t{1} << (kMaxTerrainLod - lod);
-  const auto offset = static_cast<std::int64_t>(
-      std::uint64_t{2} * global_index * lod_scale);
+  const auto offset =
+      static_cast<std::int64_t>(std::uint64_t{2} * global_index * lod_scale);
   return -kCanonicalFaceExtent + offset;
 }
 
@@ -182,8 +179,7 @@ struct LatticeAxis {
     -> std::int64_t {
   const auto square = static_cast<std::uint64_t>(value * value);
   const auto factor = static_cast<std::uint64_t>(3 * kFixedOne - 2 * value);
-  const auto denominator =
-      static_cast<std::uint64_t>(kFixedOne * kFixedOne);
+  const auto denominator = static_cast<std::uint64_t>(kFixedOne * kFixedOne);
   return static_cast<std::int64_t>(square * factor / denominator);
 }
 
@@ -202,20 +198,19 @@ struct LatticeAxis {
   const auto ty = smooth_fraction(y.fraction);
   const auto tz = smooth_fraction(z.fraction);
 
-  const auto x00 = interpolate(lattice_value(seed, x.cell, y.cell, z.cell),
-                               lattice_value(seed, x.cell + 1, y.cell, z.cell),
-                               tx);
-  const auto x10 = interpolate(
-      lattice_value(seed, x.cell, y.cell + 1, z.cell),
-      lattice_value(seed, x.cell + 1, y.cell + 1, z.cell), tx);
-  const auto x01 = interpolate(
-      lattice_value(seed, x.cell, y.cell, z.cell + 1),
-      lattice_value(seed, x.cell + 1, y.cell, z.cell + 1), tx);
-  const auto x11 = interpolate(
-      lattice_value(seed, x.cell, y.cell + 1, z.cell + 1),
-      lattice_value(seed, x.cell + 1, y.cell + 1, z.cell + 1), tx);
-  return interpolate(interpolate(x00, x10, ty),
-                     interpolate(x01, x11, ty), tz);
+  const auto x00 =
+      interpolate(lattice_value(seed, x.cell, y.cell, z.cell),
+                  lattice_value(seed, x.cell + 1, y.cell, z.cell), tx);
+  const auto x10 =
+      interpolate(lattice_value(seed, x.cell, y.cell + 1, z.cell),
+                  lattice_value(seed, x.cell + 1, y.cell + 1, z.cell), tx);
+  const auto x01 =
+      interpolate(lattice_value(seed, x.cell, y.cell, z.cell + 1),
+                  lattice_value(seed, x.cell + 1, y.cell, z.cell + 1), tx);
+  const auto x11 =
+      interpolate(lattice_value(seed, x.cell, y.cell + 1, z.cell + 1),
+                  lattice_value(seed, x.cell + 1, y.cell + 1, z.cell + 1), tx);
+  return interpolate(interpolate(x00, x10, ty), interpolate(x01, x11, ty), tz);
 }
 
 [[nodiscard]] auto terrain_parameters(TerrainCharacter character) noexcept
@@ -261,20 +256,18 @@ struct LatticeAxis {
       (static_cast<std::int64_t>(planet.water_coverage.value) * field_width +
        5'000) /
           10'000;
-  const auto amplitude =
-      static_cast<std::int64_t>(parameters.amplitude_metres);
+  const auto amplitude = static_cast<std::int64_t>(parameters.amplitude_metres);
   auto elevation = (field - sea_threshold) * amplitude / 32'768;
   if (planet.water_coverage.value == WaterCoverageBasisPoints::min) {
     elevation = std::max<std::int64_t>(1, elevation);
-  } else if (planet.water_coverage.value ==
-             WaterCoverageBasisPoints::max) {
+  } else if (planet.water_coverage.value == WaterCoverageBasisPoints::max) {
     elevation = std::min<std::int64_t>(-1, elevation);
   }
   return static_cast<std::int32_t>(elevation);
 }
 
-[[nodiscard]] auto blend(Rgb8 from, Rgb8 to,
-                         std::int64_t fraction) noexcept -> Rgb8 {
+[[nodiscard]] auto blend(Rgb8 from, Rgb8 to, std::int64_t fraction) noexcept
+    -> Rgb8 {
   const auto channel = [fraction](std::uint8_t first, std::uint8_t second) {
     const auto result =
         static_cast<std::int64_t>(first) +
@@ -288,19 +281,17 @@ struct LatticeAxis {
 [[nodiscard]] auto sample_color(const PlanetDescriptor& planet,
                                 const TerrainParameters& parameters,
                                 std::int32_t elevation) noexcept -> Rgb8 {
-  const auto amplitude =
-      static_cast<std::int64_t>(parameters.amplitude_metres);
+  const auto amplitude = static_cast<std::int64_t>(parameters.amplitude_metres);
   if (elevation <= 0) {
-    const auto depth = std::min(
-        kFixedOne,
-        -static_cast<std::int64_t>(elevation) * kFixedOne / amplitude);
+    const auto depth =
+        std::min(kFixedOne,
+                 -static_cast<std::int64_t>(elevation) * kFixedOne / amplitude);
     return blend(planet.palette.shallow_water, planet.palette.deep_water,
                  depth);
   }
 
-  const auto land = std::min(
-      kFixedOne,
-      static_cast<std::int64_t>(elevation) * kFixedOne / amplitude);
+  const auto land = std::min(kFixedOne, static_cast<std::int64_t>(elevation) *
+                                            kFixedOne / amplitude);
   constexpr std::int64_t highland_start{kFixedOne * 3 / 5};
   if (land <= highland_start) {
     return blend(planet.palette.lowland, planet.palette.highland,
@@ -326,13 +317,13 @@ auto hash_integer(std::uint64_t& hash, Integer value) noexcept -> void {
   }
 }
 
-}  // namespace
+} // namespace
 
 auto derive_terrain_generation_seed(Seed planet_seed,
                                     TerrainGenerationStream stream) noexcept
     -> Seed {
-  const auto terrain = derive_planet_stream_seed(
-      planet_seed, PlanetDescriptorStream::terrain);
+  const auto terrain =
+      derive_planet_stream_seed(planet_seed, PlanetDescriptorStream::terrain);
   return derive_seed(terrain, SeedDomain::terrain,
                      static_cast<std::uint64_t>(stream));
 }
@@ -354,8 +345,7 @@ auto generate_terrain_tile(const PlanetDescriptor& planet, TerrainTileKey key)
           terrain_field(cube_position(key, x, y), shape, detail, parameters);
       const auto elevation = elevation_metres(planet, parameters, field);
       samples[y * kTerrainTileSamplesPerAxis + x] =
-          TerrainSample{elevation,
-                        sample_color(planet, parameters, elevation)};
+          TerrainSample{elevation, sample_color(planet, parameters, elevation)};
     }
   }
   return TerrainTile{key, std::move(samples)};
@@ -364,8 +354,7 @@ auto generate_terrain_tile(const PlanetDescriptor& planet, TerrainTileKey key)
 auto TerrainTile::sample_at(std::size_t x, std::size_t y) const noexcept
     -> std::expected<std::reference_wrapper<const TerrainSample>,
                      TerrainTileError> {
-  if (x >= kTerrainTileSamplesPerAxis ||
-      y >= kTerrainTileSamplesPerAxis) {
+  if (x >= kTerrainTileSamplesPerAxis || y >= kTerrainTileSamplesPerAxis) {
     return std::unexpected{TerrainTileError::invalid_sample_coordinate};
   }
   return std::cref(m_samples[y * kTerrainTileSamplesPerAxis + x]);
@@ -402,9 +391,9 @@ auto TerrainTileCache::get(const PlanetDescriptor& planet, TerrainTileKey key)
   const auto valid = validate_key(planet, key);
   if (!valid) return std::unexpected{valid.error()};
 
-  const auto found = std::find_if(
-      m_entries.begin(), m_entries.end(),
-      [key](const Entry& entry) { return entry.key == key; });
+  const auto found =
+      std::find_if(m_entries.begin(), m_entries.end(),
+                   [key](const Entry& entry) { return entry.key == key; });
   if (found != m_entries.end()) {
     if (found->planet != planet) {
       return std::unexpected{TerrainTileError::invalid_planet};
@@ -428,8 +417,8 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
       m_entries, [key](const Entry& entry) { return entry.key == key; });
 }
 
-[[nodiscard]] auto sample_tile_address(
-    const TerrainTile& tile, const TerrainTileAddress& address)
+[[nodiscard]] auto sample_tile_address(const TerrainTile& tile,
+                                       const TerrainTileAddress& address)
     -> std::expected<TerrainSurfaceSample, TerrainTileError> {
   const auto interpolate_axis = [](double coordinate) {
     const double grid = std::clamp(coordinate, 0.0, 1.0) *
@@ -437,11 +426,9 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
     const auto lower = static_cast<std::size_t>(std::floor(grid));
     const auto upper = std::min(lower + 1, kTerrainTileIntervalsPerAxis);
     const auto fraction = static_cast<std::int64_t>(std::llround(
-        (grid - static_cast<double>(lower)) *
-        static_cast<double>(kFixedOne)));
+        (grid - static_cast<double>(lower)) * static_cast<double>(kFixedOne)));
     return std::tuple{lower, upper,
-                      std::clamp(fraction, std::int64_t{0},
-                                 kFixedOne)};
+                      std::clamp(fraction, std::int64_t{0}, kFixedOne)};
   };
   const auto [x0, x1, tx] = interpolate_axis(address.u);
   const auto [y0, y1, ty] = interpolate_axis(address.v);
@@ -461,10 +448,9 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
                           std::int64_t d) {
     return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
   };
-  const auto elevation = bilerp(s00->get().elevation_metres,
-                                s10->get().elevation_metres,
-                                s01->get().elevation_metres,
-                                s11->get().elevation_metres);
+  const auto elevation =
+      bilerp(s00->get().elevation_metres, s10->get().elevation_metres,
+             s01->get().elevation_metres, s11->get().elevation_metres);
   const auto channel = [&](auto member) {
     return static_cast<std::uint8_t>(std::clamp<std::int64_t>(
         bilerp(s00->get().color.*member, s10->get().color.*member,
@@ -480,8 +466,7 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
 }
 
 auto TerrainSurfaceSampler::create(const PlanetDescriptor& planet,
-                                   std::uint8_t lod,
-                                   TerrainTileCache& cache)
+                                   std::uint8_t lod, TerrainTileCache& cache)
     -> std::expected<TerrainSurfaceSampler, TerrainTileError> {
   const TerrainTileKey validation_key{planet.id, CubeFace::positive_x, lod, 0,
                                       0};
@@ -510,15 +495,14 @@ auto TerrainSurfaceSampler::sample_direction(PlanetFixedDirection direction)
   return sample_address(*address);
 }
 
-auto TerrainSurfaceSampler::sample_address(
-    const TerrainTileAddress& address)
+auto TerrainSurfaceSampler::sample_address(const TerrainTileAddress& address)
     -> std::expected<TerrainSurfaceSample, TerrainTileError> {
   const TerrainTile* tile{};
   if (m_last_tile != nullptr && address.tile == m_last_key) {
     tile = m_last_tile;
   } else {
-    const auto found = std::ranges::find(
-        m_tiles, address.tile, &PinnedTile::key);
+    const auto found =
+        std::ranges::find(m_tiles, address.tile, &PinnedTile::key);
     if (found != m_tiles.end()) {
       tile = found->tile.get();
     } else {
@@ -534,8 +518,8 @@ auto TerrainSurfaceSampler::sample_address(
 }
 
 auto sample_planet_surface(const PlanetDescriptor& planet,
-                           PlanetFixedPositionMetres position,
-                           std::uint8_t lod, TerrainTileCache& cache)
+                           PlanetFixedPositionMetres position, std::uint8_t lod,
+                           TerrainTileCache& cache)
     -> std::expected<TerrainSurfaceSample, TerrainTileError> {
   const auto address = terrain_address_from_planet_fixed(planet, position, lod);
   if (!address) {
@@ -546,4 +530,4 @@ auto sample_planet_surface(const PlanetDescriptor& planet,
   return sample_tile_address(**tile, *address);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

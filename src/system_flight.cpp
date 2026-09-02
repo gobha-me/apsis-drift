@@ -37,8 +37,7 @@ struct Vec3 {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 [[nodiscard]] auto cross(Vec3 a, Vec3 b) noexcept -> Vec3 {
-  return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
-          a.x * b.y - a.y * b.x};
+  return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
 [[nodiscard]] auto length(Vec3 value) noexcept -> double {
   return std::hypot(value.x, value.y, value.z);
@@ -80,21 +79,49 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
     if (value) state.mode = FlightMode::manual;
   };
   switch (kind) {
-    case FlightCommandKind::press_forward: manual(state.controls.forward, true); break;
-    case FlightCommandKind::release_forward: state.controls.forward = false; break;
-    case FlightCommandKind::press_backward: manual(state.controls.backward, true); break;
-    case FlightCommandKind::release_backward: state.controls.backward = false; break;
-    case FlightCommandKind::press_turn_left: manual(state.controls.turn_left, true); break;
-    case FlightCommandKind::release_turn_left: state.controls.turn_left = false; break;
-    case FlightCommandKind::press_turn_right: manual(state.controls.turn_right, true); break;
-    case FlightCommandKind::release_turn_right: state.controls.turn_right = false; break;
-    case FlightCommandKind::press_strafe_left: manual(state.controls.strafe_left, true); break;
-    case FlightCommandKind::release_strafe_left: state.controls.strafe_left = false; break;
-    case FlightCommandKind::press_strafe_right: manual(state.controls.strafe_right, true); break;
-    case FlightCommandKind::release_strafe_right: state.controls.strafe_right = false; break;
-    case FlightCommandKind::press_rise: manual(state.controls.rise, true); break;
+    case FlightCommandKind::press_forward:
+      manual(state.controls.forward, true);
+      break;
+    case FlightCommandKind::release_forward:
+      state.controls.forward = false;
+      break;
+    case FlightCommandKind::press_backward:
+      manual(state.controls.backward, true);
+      break;
+    case FlightCommandKind::release_backward:
+      state.controls.backward = false;
+      break;
+    case FlightCommandKind::press_turn_left:
+      manual(state.controls.turn_left, true);
+      break;
+    case FlightCommandKind::release_turn_left:
+      state.controls.turn_left = false;
+      break;
+    case FlightCommandKind::press_turn_right:
+      manual(state.controls.turn_right, true);
+      break;
+    case FlightCommandKind::release_turn_right:
+      state.controls.turn_right = false;
+      break;
+    case FlightCommandKind::press_strafe_left:
+      manual(state.controls.strafe_left, true);
+      break;
+    case FlightCommandKind::release_strafe_left:
+      state.controls.strafe_left = false;
+      break;
+    case FlightCommandKind::press_strafe_right:
+      manual(state.controls.strafe_right, true);
+      break;
+    case FlightCommandKind::release_strafe_right:
+      state.controls.strafe_right = false;
+      break;
+    case FlightCommandKind::press_rise:
+      manual(state.controls.rise, true);
+      break;
     case FlightCommandKind::release_rise: state.controls.rise = false; break;
-    case FlightCommandKind::press_fall: manual(state.controls.fall, true); break;
+    case FlightCommandKind::press_fall:
+      manual(state.controls.fall, true);
+      break;
     case FlightCommandKind::release_fall: state.controls.fall = false; break;
     case FlightCommandKind::toggle_autopilot:
       state.mode = state.mode == FlightMode::autopilot ? FlightMode::manual
@@ -142,18 +169,16 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
   const double relative_speed = length(craft_relative_velocity);
   const double closing = dot(craft_relative_velocity, *direction);
   const double radial_speed = std::abs(closing);
-  const double stopping = closing > 0.0
-                              ? closing * closing /
-                                    (2.0 * kSystemFlightForwardAcceleration)
-                              : 0.0;
-  const double insertion_radius =
-      *radius * kSystemOrbitInsertionRadiusRadii;
+  const double stopping =
+      closing > 0.0
+          ? closing * closing / (2.0 * kSystemFlightForwardAcceleration)
+          : 0.0;
+  const double insertion_radius = *radius * kSystemOrbitInsertionRadiusRadii;
   const bool approach = distance <= *radius * kSystemApproachRadiusRadii;
-  const bool ready =
-      distance >= *radius + kMinimumFlightClearanceMetres &&
-      distance <= insertion_radius &&
-      relative_speed <= kSystemOrbitInsertionMaximumSpeed &&
-      radial_speed <= kSystemOrbitInsertionMaximumRadialSpeed;
+  const bool ready = distance >= *radius + kMinimumFlightClearanceMetres &&
+                     distance <= insertion_radius &&
+                     relative_speed <= kSystemOrbitInsertionMaximumSpeed &&
+                     radial_speed <= kSystemOrbitInsertionMaximumRadialSpeed;
   const double remaining = std::max(0.0, distance - insertion_radius);
   SystemFlightCue cue = SystemFlightCue::hold;
   if (ready) {
@@ -171,9 +196,9 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
       .distance_metres = distance,
       .closing_speed_metres_per_second = closing,
       .relative_speed_metres_per_second = relative_speed,
-      .arrival_estimate_seconds = closing > 0.5
-                                      ? std::optional<double>{remaining / closing}
-                                      : std::nullopt,
+      .arrival_estimate_seconds =
+          closing > 0.5 ? std::optional<double>{remaining / closing}
+                        : std::nullopt,
       .stopping_distance_metres = stopping,
       .cue = cue,
       .inside_approach_boundary = approach,
@@ -194,8 +219,8 @@ auto advance_one_tick(const LocalSystemDescriptor& system,
     return std::unexpected{target ? current_guidance.error()
                                   : SystemFlightError::ephemeris_failure};
   }
-  const auto target_direction = normalized(
-      subtract(vec(target->position), vec(state.position)));
+  const auto target_direction =
+      normalized(subtract(vec(target->position), vec(state.position)));
   auto forward = normalized(vec(state.forward));
   auto up = normalized(vec(state.up));
   if (!target_direction || !forward || !up) {
@@ -223,38 +248,39 @@ auto advance_one_tick(const LocalSystemDescriptor& system,
       subtract(vec(state.velocity), vec(target->velocity));
   if (state.mode == FlightMode::autopilot) {
     const double radius = *planet_radius(system, state.target);
-    const double remaining = std::max(
-        0.0, current_guidance->distance_metres -
-                 radius * kSystemOrbitInsertionRadiusRadii);
-    const bool braking = remaining <= current_guidance->stopping_distance_metres +
-                                          current_guidance->relative_speed_metres_per_second * dt;
+    const double remaining =
+        std::max(0.0, current_guidance->distance_metres -
+                          radius * kSystemOrbitInsertionRadiusRadii);
+    const bool braking =
+        remaining <=
+        current_guidance->stopping_distance_metres +
+            current_guidance->relative_speed_metres_per_second * dt;
     if (braking && current_guidance->relative_speed_metres_per_second > 1.0) {
       const auto opposite = normalized(multiply(relative_velocity, -1.0));
       if (opposite) {
         acceleration = multiply(*opposite, kSystemFlightForwardAcceleration);
       }
     } else if (remaining > 0.0) {
-      acceleration = multiply(*target_direction,
-                              kSystemFlightForwardAcceleration);
+      acceleration =
+          multiply(*target_direction, kSystemFlightForwardAcceleration);
     }
   } else {
     const int thrust = static_cast<int>(state.controls.forward) -
                        static_cast<int>(state.controls.backward);
-    acceleration = multiply(*forward,
-                            static_cast<double>(thrust) *
-                                kSystemFlightForwardAcceleration);
+    acceleration = multiply(*forward, static_cast<double>(thrust) *
+                                          kSystemFlightForwardAcceleration);
     auto right = normalized(cross(*forward, *up));
     if (!right) return std::unexpected{SystemFlightError::invalid_state};
     const int strafe = static_cast<int>(state.controls.strafe_right) -
                        static_cast<int>(state.controls.strafe_left);
     const int rise = static_cast<int>(state.controls.rise) -
                      static_cast<int>(state.controls.fall);
-    acceleration = add(
-        acceleration,
-        add(multiply(*right, static_cast<double>(strafe) *
-                                 kSystemFlightManeuverAcceleration),
-            multiply(*up, static_cast<double>(rise) *
-                              kSystemFlightManeuverAcceleration)));
+    acceleration =
+        add(acceleration,
+            add(multiply(*right, static_cast<double>(strafe) *
+                                     kSystemFlightManeuverAcceleration),
+                multiply(*up, static_cast<double>(rise) *
+                                  kSystemFlightManeuverAcceleration)));
   }
   Vec3 velocity = add(vec(state.velocity), multiply(acceleration, dt));
   Vec3 new_relative = subtract(velocity, vec(target->velocity));
@@ -272,7 +298,8 @@ auto advance_one_tick(const LocalSystemDescriptor& system,
     velocity = add(vec(target->velocity), new_relative);
   }
   const Vec3 position = add(vec(state.position), multiply(velocity, dt));
-  if (!finite(position)) return std::unexpected{SystemFlightError::invalid_state};
+  if (!finite(position))
+    return std::unexpected{SystemFlightError::invalid_state};
   state.velocity = {velocity.x, velocity.y, velocity.z};
   state.position = {position.x, position.y, position.z};
   ++state.tick;
@@ -300,8 +327,7 @@ auto hash_bool(std::uint64_t& hash, bool value) noexcept -> void {
   const double cosine = std::cos(phase);
   const double sine = std::sin(phase);
   return {cosine * system_vector.x + sine * system_vector.y,
-          -sine * system_vector.x + cosine * system_vector.y,
-          system_vector.z};
+          -sine * system_vector.x + cosine * system_vector.y, system_vector.z};
 }
 
 [[nodiscard]] auto forward_spin(Vec3 fixed_vector, PlanetId planet,
@@ -316,11 +342,10 @@ auto hash_bool(std::uint64_t& hash, bool value) noexcept -> void {
   const double cosine = std::cos(phase);
   const double sine = std::sin(phase);
   return {cosine * fixed_vector.x - sine * fixed_vector.y,
-          sine * fixed_vector.x + cosine * fixed_vector.y,
-          fixed_vector.z};
+          sine * fixed_vector.x + cosine * fixed_vector.y, fixed_vector.z};
 }
 
-}  // namespace
+} // namespace
 
 auto initial_system_flight_state(const LocalSystemDescriptor& system,
                                  PlanetId target,
@@ -333,8 +358,8 @@ auto initial_system_flight_state(const LocalSystemDescriptor& system,
   const auto ephemeris = resolve_planet_ephemeris(
       system, target, {.tick = arrival.arrival_tick, .sub_tick_fraction = 0.0});
   if (!ephemeris) return std::unexpected{SystemFlightError::unknown_target};
-  const auto forward = normalized(subtract(vec(ephemeris->position),
-                                           vec(arrival.position)));
+  const auto forward =
+      normalized(subtract(vec(ephemeris->position), vec(arrival.position)));
   if (!forward) return std::unexpected{SystemFlightError::invalid_arrival};
   SystemFlightState result{
       .tick = arrival.arrival_tick,
@@ -366,9 +391,9 @@ auto validate_system_flight_state(const LocalSystemDescriptor& system,
   const auto forward = normalized(vec(state.forward));
   const auto up = normalized(vec(state.up));
   if (!bounded(vec(state.position), 1.0e16) ||
-      !bounded(vec(state.velocity), 1.0e9) ||
-      !forward || !up || std::abs(dot(*forward, *up)) > 0.999 ||
-      !valid_mode(state.mode) || !valid_scale(state.time_scale)) {
+      !bounded(vec(state.velocity), 1.0e9) || !forward || !up ||
+      std::abs(dot(*forward, *up)) > 0.999 || !valid_mode(state.mode) ||
+      !valid_scale(state.time_scale)) {
     return std::unexpected{SystemFlightError::invalid_state};
   }
   return {};
@@ -408,8 +433,7 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
   if (initial_guidance->inside_approach_boundary) {
     next.time_scale = SystemTimeScale::one;
   }
-  if (steps == 0 ||
-      steps > system_time_scale_value(SystemTimeScale::sixteen)) {
+  if (steps == 0 || steps > system_time_scale_value(SystemTimeScale::sixteen)) {
     return std::unexpected{SystemFlightError::invalid_step};
   }
   if (next.tick > std::numeric_limits<SimulationTick>::max() - steps) {
@@ -452,19 +476,19 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       subtract(vec(state.position), vec(ephemeris->position));
   const Vec3 relative_velocity =
       subtract(vec(state.velocity), vec(ephemeris->velocity));
-  const Vec3 fixed_position = inverse_spin(relative_position, state.target,
-                                           state.tick);
-  Vec3 fixed_velocity = inverse_spin(relative_velocity, state.target,
-                                     state.tick);
-  constexpr double omega = 2.0 * std::numbers::pi_v<double> /
-                           (static_cast<double>(kSystemPlanetFrameRotationTicks) /
-                            static_cast<double>(kSimulationHz));
-  fixed_velocity = subtract(fixed_velocity,
-                            cross({0.0, 0.0, omega}, fixed_position));
+  const Vec3 fixed_position =
+      inverse_spin(relative_position, state.target, state.tick);
+  Vec3 fixed_velocity =
+      inverse_spin(relative_velocity, state.target, state.tick);
+  constexpr double omega =
+      2.0 * std::numbers::pi_v<double> /
+      (static_cast<double>(kSystemPlanetFrameRotationTicks) /
+       static_cast<double>(kSimulationHz));
+  fixed_velocity =
+      subtract(fixed_velocity, cross({0.0, 0.0, omega}, fixed_position));
   const PlanetFixedPositionMetres fixed{fixed_position.x, fixed_position.y,
                                         fixed_position.z};
-  const auto geodetic =
-      geodetic_from_planet_fixed((*body)->descriptor, fixed);
+  const auto geodetic = geodetic_from_planet_fixed((*body)->descriptor, fixed);
   if (!geodetic) return std::unexpected{SystemFlightError::coordinate_failure};
   const auto frame = make_local_tangent_frame((*body)->descriptor, *geodetic);
   if (!frame) return std::unexpected{SystemFlightError::coordinate_failure};
@@ -475,9 +499,8 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
   const double east = component(frame->east);
   const double north = component(frame->north);
   const double up_velocity = component(frame->up);
-  const double heading = std::hypot(east, north) > 1.0e-9
-                             ? std::atan2(north, east)
-                             : 0.0;
+  const double heading =
+      std::hypot(east, north) > 1.0e-9 ? std::atan2(north, east) : 0.0;
   PlanetaryFlightState result{
       .tick = state.tick,
       .planet = state.target,
@@ -503,21 +526,19 @@ auto depart_planetary_orbit(const LocalSystemDescriptor& system,
     return std::unexpected{SystemFlightError::planet_departure_refused};
   }
   const auto body = find_local_system_planet(system, state.planet);
-  if (!body ||
-      !validate_planetary_flight_state((*body)->descriptor, state)) {
+  if (!body || !validate_planetary_flight_state((*body)->descriptor, state)) {
     return std::unexpected{SystemFlightError::invalid_state};
   }
   const auto ephemeris = resolve_planet_ephemeris(
       system, state.planet, {.tick = state.tick, .sub_tick_fraction = 0.0});
   const auto fixed_position =
       planet_fixed_from_geodetic((*body)->descriptor, state.pose.position);
-  const auto frame = make_local_tangent_frame((*body)->descriptor,
-                                               state.pose.position);
+  const auto frame =
+      make_local_tangent_frame((*body)->descriptor, state.pose.position);
   if (!ephemeris || !fixed_position || !frame) {
     return std::unexpected{SystemFlightError::coordinate_failure};
   }
-  const auto combine = [](PlanetFixedDirection east,
-                          PlanetFixedDirection north,
+  const auto combine = [](PlanetFixedDirection east, PlanetFixedDirection north,
                           PlanetFixedDirection up, double east_value,
                           double north_value, double up_value) noexcept {
     return Vec3{east.x * east_value + north.x * north_value + up.x * up_value,
@@ -525,27 +546,25 @@ auto depart_planetary_orbit(const LocalSystemDescriptor& system,
                 east.z * east_value + north.z * north_value + up.z * up_value};
   };
   const Vec3 fixed{fixed_position->x, fixed_position->y, fixed_position->z};
-  Vec3 fixed_velocity = combine(
-      frame->east, frame->north, frame->up,
-      state.velocity.east_metres_per_second,
-      state.velocity.north_metres_per_second,
-      state.velocity.up_metres_per_second);
-  constexpr double omega = 2.0 * std::numbers::pi_v<double> /
-                           (static_cast<double>(kSystemPlanetFrameRotationTicks) /
-                            static_cast<double>(kSimulationHz));
-  fixed_velocity = add(fixed_velocity,
-                       cross({0.0, 0.0, omega}, fixed));
+  Vec3 fixed_velocity = combine(frame->east, frame->north, frame->up,
+                                state.velocity.east_metres_per_second,
+                                state.velocity.north_metres_per_second,
+                                state.velocity.up_metres_per_second);
+  constexpr double omega =
+      2.0 * std::numbers::pi_v<double> /
+      (static_cast<double>(kSystemPlanetFrameRotationTicks) /
+       static_cast<double>(kSimulationHz));
+  fixed_velocity = add(fixed_velocity, cross({0.0, 0.0, omega}, fixed));
   const Vec3 relative_position = forward_spin(fixed, state.planet, state.tick);
   const Vec3 relative_velocity =
       forward_spin(fixed_velocity, state.planet, state.tick);
-  const Vec3 fixed_forward = combine(
-      frame->east, frame->north, frame->up,
-      std::cos(state.pose.heading_radians),
-      std::sin(state.pose.heading_radians), 0.0);
+  const Vec3 fixed_forward = combine(frame->east, frame->north, frame->up,
+                                     std::cos(state.pose.heading_radians),
+                                     std::sin(state.pose.heading_radians), 0.0);
   const Vec3 system_forward =
       forward_spin(fixed_forward, state.planet, state.tick);
-  const Vec3 system_up = forward_spin(
-      {frame->up.x, frame->up.y, frame->up.z}, state.planet, state.tick);
+  const Vec3 system_up = forward_spin({frame->up.x, frame->up.y, frame->up.z},
+                                      state.planet, state.tick);
   SystemFlightState result{
       .tick = state.tick,
       .system = system.id,
@@ -574,10 +593,10 @@ auto system_flight_state_checksum(const SystemFlightState& state) noexcept
   hash_word(hash, state.tick);
   hash_word(hash, state.system.value);
   hash_word(hash, state.target.value);
-  for (const double value : {state.position.x, state.position.y, state.position.z,
-                             state.velocity.x, state.velocity.y, state.velocity.z,
-                             state.forward.x, state.forward.y, state.forward.z,
-                             state.up.x, state.up.y, state.up.z}) {
+  for (const double value :
+       {state.position.x, state.position.y, state.position.z, state.velocity.x,
+        state.velocity.y, state.velocity.z, state.forward.x, state.forward.y,
+        state.forward.z, state.up.x, state.up.y, state.up.z}) {
     hash_word(hash, std::bit_cast<std::uint64_t>(value));
   }
   hash_word(hash, static_cast<std::uint64_t>(state.mode));
@@ -593,4 +612,4 @@ auto system_flight_state_checksum(const SystemFlightState& state) noexcept
   return hash;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

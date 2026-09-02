@@ -47,8 +47,7 @@ inline constexpr std::array kSfxDefinitions{
 [[nodiscard]] auto little_u16(std::span<const std::byte> bytes,
                               std::size_t offset)
     -> std::optional<std::uint16_t> {
-  if (offset > bytes.size() || bytes.size() - offset < 2U)
-    return std::nullopt;
+  if (offset > bytes.size() || bytes.size() - offset < 2U) return std::nullopt;
   return std::to_integer<std::uint16_t>(bytes[offset]) |
          (std::to_integer<std::uint16_t>(bytes[offset + 1U]) << 8U);
 }
@@ -56,20 +55,19 @@ inline constexpr std::array kSfxDefinitions{
 [[nodiscard]] auto little_u32(std::span<const std::byte> bytes,
                               std::size_t offset)
     -> std::optional<std::uint32_t> {
-  if (offset > bytes.size() || bytes.size() - offset < 4U)
-    return std::nullopt;
+  if (offset > bytes.size() || bytes.size() - offset < 4U) return std::nullopt;
   return std::to_integer<std::uint32_t>(bytes[offset]) |
          (std::to_integer<std::uint32_t>(bytes[offset + 1U]) << 8U) |
          (std::to_integer<std::uint32_t>(bytes[offset + 2U]) << 16U) |
          (std::to_integer<std::uint32_t>(bytes[offset + 3U]) << 24U);
 }
 
-[[nodiscard]] auto safe_regular_file(const std::filesystem::path &root,
+[[nodiscard]] auto safe_regular_file(const std::filesystem::path& root,
                                      std::string_view relative)
     -> std::expected<std::filesystem::path, AudioPackError> {
   const std::filesystem::path encoded{relative};
   if (encoded.empty() || encoded.is_absolute() || encoded.has_root_path() ||
-      std::ranges::any_of(encoded, [](const auto &component) {
+      std::ranges::any_of(encoded, [](const auto& component) {
         return component == ".." || component == "." || component.empty();
       })) {
     return std::unexpected{AudioPackError::unsafe_path};
@@ -82,7 +80,7 @@ inline constexpr std::array kSfxDefinitions{
                                  : AudioPackError::unsafe_path};
   }
   auto candidate = canonical_root;
-  for (const auto &component : encoded) {
+  for (const auto& component : encoded) {
     candidate /= component;
     const auto status = std::filesystem::symlink_status(candidate, error);
     if (error || status.type() == std::filesystem::file_type::not_found) {
@@ -98,12 +96,11 @@ inline constexpr std::array kSfxDefinitions{
   return candidate;
 }
 
-[[nodiscard]] auto read_bounded(const std::filesystem::path &path,
+[[nodiscard]] auto read_bounded(const std::filesystem::path& path,
                                 std::size_t maximum, AudioPackError too_large)
     -> std::expected<std::vector<std::byte>, AudioPackError> {
   std::ifstream input{path, std::ios::binary | std::ios::ate};
-  if (!input)
-    return std::unexpected{AudioPackError::missing};
+  if (!input) return std::unexpected{AudioPackError::missing};
   const auto end = input.tellg();
   if (end < 0 || static_cast<std::uint64_t>(end) > maximum) {
     return std::unexpected{too_large};
@@ -111,18 +108,16 @@ inline constexpr std::array kSfxDefinitions{
   std::vector<std::byte> bytes(static_cast<std::size_t>(end));
   input.seekg(0);
   if (!bytes.empty()) {
-    input.read(reinterpret_cast<char *>(bytes.data()), end);
+    input.read(reinterpret_cast<char*>(bytes.data()), end);
   }
-  if (!input)
-    return std::unexpected{AudioPackError::missing};
+  if (!input) return std::unexpected{AudioPackError::missing};
   return bytes;
 }
 
-[[nodiscard]] auto exact_keys(const Json &object,
+[[nodiscard]] auto exact_keys(const Json& object,
                               std::initializer_list<std::string_view> keys)
     -> bool {
-  if (!object.is_object() || object.size() != keys.size())
-    return false;
+  if (!object.is_object() || object.size() != keys.size()) return false;
   return std::ranges::all_of(keys, [&](std::string_view key) {
     return object.contains(std::string{key});
   });
@@ -133,11 +128,9 @@ inline constexpr std::array kSfxDefinitions{
   bool invalid{};
   std::vector<std::set<std::string, std::less<>>> object_keys;
   const auto callback = [&](int depth, Json::parse_event_t event,
-                            Json &parsed) {
-    if (depth > 8)
-      invalid = true;
-    if (event == Json::parse_event_t::object_start)
-      object_keys.emplace_back();
+                            Json& parsed) {
+    if (depth > 8) invalid = true;
+    if (event == Json::parse_event_t::object_start) object_keys.emplace_back();
     if (event == Json::parse_event_t::key) {
       if (object_keys.empty() || !parsed.is_string() ||
           !object_keys.back().insert(parsed.get<std::string>()).second) {
@@ -149,21 +142,20 @@ inline constexpr std::array kSfxDefinitions{
     }
     return true;
   };
-  const auto first = reinterpret_cast<const char *>(bytes.data());
+  const auto first = reinterpret_cast<const char*>(bytes.data());
   auto parsed = Json::parse(first, first + bytes.size(), callback, false, true);
-  if (invalid || parsed.is_discarded())
-    return std::nullopt;
+  if (invalid || parsed.is_discarded()) return std::nullopt;
   return parsed;
 }
 
-[[nodiscard]] auto valid_sidecar(const Json &root) -> bool {
+[[nodiscard]] auto valid_sidecar(const Json& root) -> bool {
   if (!exact_keys(root, {"schema_version", "score", "bank", "master_gain",
                          "layers", "markers", "allowed_transitions"}) ||
       !root["schema_version"].is_number_unsigned() ||
       root["schema_version"].get<unsigned>() != 1U) {
     return false;
   }
-  const auto valid_payload = [](const Json &value, std::string_view id,
+  const auto valid_payload = [](const Json& value, std::string_view id,
                                 std::string_view file) {
     return exact_keys(value, {"asset_id", "file"}) &&
            value["asset_id"].is_string() && value["file"].is_string() &&
@@ -175,8 +167,7 @@ inline constexpr std::array kSfxDefinitions{
                      "music/first-light-bank.sf2")) {
     return false;
   }
-  if (!root["master_gain"].is_number())
-    return false;
+  if (!root["master_gain"].is_number()) return false;
   const double master_gain = root["master_gain"].get<double>();
   if (!std::isfinite(master_gain) || master_gain < 0.0 || master_gain > 1.0) {
     return false;
@@ -187,7 +178,7 @@ inline constexpr std::array kSfxDefinitions{
     return false;
   }
   for (std::size_t index = 0; index < names.size(); ++index) {
-    const auto &layer = root["layers"][index];
+    const auto& layer = root["layers"][index];
     if (!exact_keys(layer, {"id", "track", "default_gain"}) ||
         !layer["id"].is_string() || !layer["track"].is_string() ||
         layer["id"] != names[index] || layer["track"] != names[index] ||
@@ -195,10 +186,9 @@ inline constexpr std::array kSfxDefinitions{
       return false;
     }
     const double gain = layer["default_gain"].get<double>();
-    if (!std::isfinite(gain) || gain < 0.0 || gain > 1.0)
-      return false;
+    if (!std::isfinite(gain) || gain < 0.0 || gain > 1.0) return false;
   }
-  const auto &markers = root["markers"];
+  const auto& markers = root["markers"];
   if (!exact_keys(markers, {"loop_start", "loop_end", "phrase_prefix"}) ||
       markers["loop_start"] != "loop-start" ||
       markers["loop_end"] != "loop-end" ||
@@ -212,9 +202,8 @@ inline constexpr std::array kSfxDefinitions{
     return false;
   }
   std::set<std::string, std::less<>> found;
-  for (const auto &transition : root["allowed_transitions"]) {
-    if (!transition.is_string())
-      return false;
+  for (const auto& transition : root["allowed_transitions"]) {
+    if (!transition.is_string()) return false;
     found.insert(transition.get<std::string>());
   }
   return std::ranges::all_of(transitions, [&](std::string_view transition) {
@@ -235,14 +224,11 @@ inline constexpr std::array kSfxDefinitions{
   bool format_found{};
   std::span<const std::byte> pcm;
   for (std::size_t offset = 12U; offset < bytes.size();) {
-    if (bytes.size() - offset < 8U)
-      return std::nullopt;
+    if (bytes.size() - offset < 8U) return std::nullopt;
     const auto size = little_u32(bytes, offset + 4U);
-    if (!size)
-      return std::nullopt;
+    if (!size) return std::nullopt;
     const std::size_t data_offset = offset + 8U;
-    if (*size > bytes.size() - data_offset)
-      return std::nullopt;
+    if (*size > bytes.size() - data_offset) return std::nullopt;
     if (std::memcmp(bytes.data() + offset, "fmt ", 4U) == 0) {
       if (*size < 16U || little_u16(bytes, data_offset) != 1U ||
           little_u16(bytes, data_offset + 2U) != 1U ||
@@ -254,13 +240,11 @@ inline constexpr std::array kSfxDefinitions{
       }
       format_found = true;
     } else if (std::memcmp(bytes.data() + offset, "data", 4U) == 0) {
-      if (!pcm.empty() || (*size & 1U) != 0U)
-        return std::nullopt;
+      if (!pcm.empty() || (*size & 1U) != 0U) return std::nullopt;
       pcm = bytes.subspan(data_offset, *size);
     }
     const std::size_t padded = static_cast<std::size_t>(*size) + (*size & 1U);
-    if (padded > bytes.size() - data_offset)
-      return std::nullopt;
+    if (padded > bytes.size() - data_offset) return std::nullopt;
     offset = data_offset + padded;
   }
   if (!format_found || pcm.empty() || pcm.size() / 2U > kMaximumSfxFrames) {
@@ -269,8 +253,7 @@ inline constexpr std::array kSfxDefinitions{
   std::vector<float> samples(pcm.size() / 2U);
   for (std::size_t index = 0; index < samples.size(); ++index) {
     const auto encoded = little_u16(pcm, index * 2U);
-    if (!encoded)
-      return std::nullopt;
+    if (!encoded) return std::nullopt;
     samples[index] =
         static_cast<float>(static_cast<std::int16_t>(*encoded)) / 32'768.0F;
   }
@@ -282,11 +265,9 @@ inline constexpr std::array kSfxDefinitions{
   std::optional<std::size_t> decoded;
   for (std::size_t chunk_offset = 12U; chunk_offset < bytes.size();) {
     const auto chunk_size = little_u32(bytes, chunk_offset + 4U);
-    if (!chunk_size || chunk_offset > bytes.size() - 8U)
-      return std::nullopt;
+    if (!chunk_size || chunk_offset > bytes.size() - 8U) return std::nullopt;
     const auto data_offset = chunk_offset + 8U;
-    if (*chunk_size > bytes.size() - data_offset)
-      return std::nullopt;
+    if (*chunk_size > bytes.size() - data_offset) return std::nullopt;
     if (std::memcmp(bytes.data() + chunk_offset, "LIST", 4U) == 0 &&
         *chunk_size >= 4U &&
         std::memcmp(bytes.data() + data_offset, "sdta", 4U) == 0) {
@@ -294,24 +275,20 @@ inline constexpr std::array kSfxDefinitions{
       for (std::size_t sample_offset = data_offset + 4U;
            sample_offset < list_end;) {
         const auto sample_size = little_u32(bytes, sample_offset + 4U);
-        if (!sample_size || sample_offset > list_end - 8U)
-          return std::nullopt;
+        if (!sample_size || sample_offset > list_end - 8U) return std::nullopt;
         if (std::memcmp(bytes.data() + sample_offset, "smpl", 4U) == 0) {
-          if (decoded)
-            return std::nullopt;
+          if (decoded) return std::nullopt;
           decoded = *sample_size;
         }
         const auto padded = static_cast<std::size_t>(*sample_size) +
                             static_cast<std::size_t>(*sample_size & 1U);
-        if (padded > list_end - sample_offset - 8U)
-          return std::nullopt;
+        if (padded > list_end - sample_offset - 8U) return std::nullopt;
         sample_offset += 8U + padded;
       }
     }
     const auto padded = static_cast<std::size_t>(*chunk_size) +
                         static_cast<std::size_t>(*chunk_size & 1U);
-    if (padded > bytes.size() - data_offset)
-      return std::nullopt;
+    if (padded > bytes.size() - data_offset) return std::nullopt;
     chunk_offset = data_offset + padded;
   }
   return decoded;
@@ -325,7 +302,7 @@ struct FirstLightAudioPack::Impl {
     std::vector<float> frames;
   };
   struct Voice {
-    const std::vector<float> *frames{};
+    const std::vector<float>* frames{};
     std::size_t cursor{};
   };
 
@@ -350,11 +327,12 @@ struct FirstLightAudioPack::Impl {
 };
 
 FirstLightAudioPack::FirstLightAudioPack(std::unique_ptr<Impl> impl) noexcept
-    : m_impl{std::move(impl)} {}
-FirstLightAudioPack::FirstLightAudioPack(FirstLightAudioPack &&) noexcept =
+    : m_impl{std::move(impl)} {
+}
+FirstLightAudioPack::FirstLightAudioPack(FirstLightAudioPack&&) noexcept =
     default;
-auto FirstLightAudioPack::operator=(FirstLightAudioPack &&) noexcept
-    -> FirstLightAudioPack & = default;
+auto FirstLightAudioPack::operator=(FirstLightAudioPack&&) noexcept
+    -> FirstLightAudioPack& = default;
 FirstLightAudioPack::~FirstLightAudioPack() = default;
 
 auto FirstLightAudioPack::packaged_bytes() const noexcept -> std::size_t {
@@ -365,16 +343,14 @@ auto FirstLightAudioPack::decoded_bytes() const noexcept -> std::size_t {
 }
 
 auto FirstLightAudioPack::cue(AudioCueId cue_id) noexcept -> void {
-  if (!m_impl)
-    return;
+  if (!m_impl) return;
   const auto sample =
-      std::ranges::find_if(m_impl->samples, [&](const Impl::Sample &candidate) {
+      std::ranges::find_if(m_impl->samples, [&](const Impl::Sample& candidate) {
         return candidate.cue == cue_id;
       });
-  if (sample == m_impl->samples.end())
-    return;
+  if (sample == m_impl->samples.end()) return;
   const auto voice =
-      std::ranges::find_if(m_impl->voices, [](const Impl::Voice &candidate) {
+      std::ranges::find_if(m_impl->voices, [](const Impl::Voice& candidate) {
         return candidate.frames == nullptr;
       });
   if (voice == m_impl->voices.end()) {
@@ -385,8 +361,7 @@ auto FirstLightAudioPack::cue(AudioCueId cue_id) noexcept -> void {
 }
 
 auto FirstLightAudioPack::set_music_state(MusicState state) noexcept -> void {
-  if (!m_impl || state == m_impl->state)
-    return;
+  if (!m_impl || state == m_impl->state) return;
   m_impl->state = state;
   const auto scale = [&](std::array<float, 4> values) {
     for (std::size_t index = 0; index < values.size(); ++index) {
@@ -395,44 +370,41 @@ auto FirstLightAudioPack::set_music_state(MusicState state) noexcept -> void {
     return values;
   };
   switch (state) {
-  case MusicState::silent:
-    m_impl->set_layers({}, TransitionBoundary::immediate);
-    break;
-  case MusicState::docked:
-    m_impl->set_layers(scale({1.0F, 0.0F, 0.0F, 0.0F}),
-                       TransitionBoundary::next_measure);
-    break;
-  case MusicState::flight:
-    m_impl->set_layers(scale({1.0F, 1.0F, 0.0F, 0.0F}),
-                       TransitionBoundary::next_measure);
-    break;
-  case MusicState::scanning:
-    m_impl->set_layers(scale({0.9F, 1.0F, 1.0F, 0.0F}),
-                       TransitionBoundary::next_beat);
-    break;
-  case MusicState::warning:
-    m_impl->set_layers(scale({0.8F, 1.0F, 0.6F, 1.0F}),
-                       TransitionBoundary::immediate);
-    break;
-  case MusicState::complete:
-    m_impl->set_layers(scale({1.0F, 0.5F, 0.0F, 0.0F}),
-                       TransitionBoundary::next_phrase);
-    break;
+    case MusicState::silent:
+      m_impl->set_layers({}, TransitionBoundary::immediate);
+      break;
+    case MusicState::docked:
+      m_impl->set_layers(scale({1.0F, 0.0F, 0.0F, 0.0F}),
+                         TransitionBoundary::next_measure);
+      break;
+    case MusicState::flight:
+      m_impl->set_layers(scale({1.0F, 1.0F, 0.0F, 0.0F}),
+                         TransitionBoundary::next_measure);
+      break;
+    case MusicState::scanning:
+      m_impl->set_layers(scale({0.9F, 1.0F, 1.0F, 0.0F}),
+                         TransitionBoundary::next_beat);
+      break;
+    case MusicState::warning:
+      m_impl->set_layers(scale({0.8F, 1.0F, 0.6F, 1.0F}),
+                         TransitionBoundary::immediate);
+      break;
+    case MusicState::complete:
+      m_impl->set_layers(scale({1.0F, 0.5F, 0.0F, 0.0F}),
+                         TransitionBoundary::next_phrase);
+      break;
   }
 }
 
 auto FirstLightAudioPack::pause_music() noexcept -> void {
-  if (m_impl)
-    (void)m_impl->music.pause();
+  if (m_impl) (void)m_impl->music.pause();
 }
 auto FirstLightAudioPack::resume_music() noexcept -> void {
-  if (m_impl)
-    (void)m_impl->music.play();
+  if (m_impl) (void)m_impl->music.play();
 }
 auto FirstLightAudioPack::reset() noexcept -> void {
-  if (!m_impl)
-    return;
-  for (auto &voice : m_impl->voices)
+  if (!m_impl) return;
+  for (auto& voice : m_impl->voices)
     voice = {};
   (void)m_impl->music.stop();
   (void)m_impl->music.set_looping(true);
@@ -443,20 +415,17 @@ auto FirstLightAudioPack::reset() noexcept -> void {
 
 auto FirstLightAudioPack::render(std::span<float> interleaved_samples) noexcept
     -> bool {
-  if (!m_impl || m_impl->music.render(interleaved_samples))
-    return false;
+  if (!m_impl || m_impl->music.render(interleaved_samples)) return false;
   const auto frames = interleaved_samples.size() / kAudioChannelCount;
   for (std::size_t frame = 0; frame < frames; ++frame) {
     float sfx{};
-    for (auto &voice : m_impl->voices) {
-      if (!voice.frames)
-        continue;
+    for (auto& voice : m_impl->voices) {
+      if (!voice.frames) continue;
       sfx += (*voice.frames)[voice.cursor++] * 0.65F;
-      if (voice.cursor == voice.frames->size())
-        voice = {};
+      if (voice.cursor == voice.frames->size()) voice = {};
     }
     for (std::size_t channel = 0; channel < kAudioChannelCount; ++channel) {
-      auto &output = interleaved_samples[frame * kAudioChannelCount + channel];
+      auto& output = interleaved_samples[frame * kAudioChannelCount + channel];
       output = std::clamp(output + sfx, -1.0F, 1.0F);
     }
   }
@@ -466,7 +435,7 @@ auto FirstLightAudioPack::render(std::span<float> interleaved_samples) noexcept
 auto FirstLightAudioPack::active_sfx_voices() const noexcept -> std::size_t {
   return m_impl ? static_cast<std::size_t>(
                       std::ranges::count_if(m_impl->voices,
-                                            [](const Impl::Voice &voice) {
+                                            [](const Impl::Voice& voice) {
                                               return voice.frames != nullptr;
                                             }))
                 : 0U;
@@ -475,16 +444,14 @@ auto FirstLightAudioPack::dropped_sfx_voices() const noexcept -> std::uint64_t {
   return m_impl ? m_impl->dropped : 0U;
 }
 
-auto load_first_light_audio_pack(const std::filesystem::path &asset_root)
+auto load_first_light_audio_pack(const std::filesystem::path& asset_root)
     -> std::expected<FirstLightAudioPack, AudioPackError> {
   const auto sidecar_path =
       safe_regular_file(asset_root, "music/first-light-score.json");
-  if (!sidecar_path)
-    return std::unexpected{sidecar_path.error()};
+  if (!sidecar_path) return std::unexpected{sidecar_path.error()};
   const auto sidecar = read_bounded(*sidecar_path, kMaximumSidecarBytes,
                                     AudioPackError::sidecar_too_large);
-  if (!sidecar)
-    return std::unexpected{sidecar.error()};
+  if (!sidecar) return std::unexpected{sidecar.error()};
   const auto document = parse_sidecar(*sidecar);
   if (!document || !valid_sidecar(*document)) {
     return std::unexpected{AudioPackError::invalid_sidecar};
@@ -506,11 +473,9 @@ auto load_first_light_audio_pack(const std::filesystem::path &asset_root)
     return std::unexpected{!score ? score.error() : bank.error()};
   }
   const auto schedule = midi_spike::parse_smf(*score);
-  if (!schedule)
-    return std::unexpected{AudioPackError::invalid_midi};
+  if (!schedule) return std::unexpected{AudioPackError::invalid_midi};
   auto engine = MusicEngine::create(*schedule, *bank);
-  if (!engine)
-    return std::unexpected{AudioPackError::invalid_soundfont};
+  if (!engine) return std::unexpected{AudioPackError::invalid_soundfont};
 
   auto impl = std::make_unique<FirstLightAudioPack::Impl>(std::move(*engine));
   impl->packaged = score->size() + bank->size();
@@ -534,17 +499,14 @@ auto load_first_light_audio_pack(const std::filesystem::path &asset_root)
   std::size_t sfx_packaged{};
   std::size_t sfx_frames{};
   for (std::size_t index = 0; index < kSfxDefinitions.size(); ++index) {
-    const auto &definition = kSfxDefinitions[index];
+    const auto& definition = kSfxDefinitions[index];
     const auto path = safe_regular_file(asset_root, definition.file);
-    if (!path)
-      return std::unexpected{path.error()};
+    if (!path) return std::unexpected{path.error()};
     const auto encoded = read_bounded(*path, kMaximumSfxPackagedBytes,
                                       AudioPackError::packaged_budget_exceeded);
-    if (!encoded)
-      return std::unexpected{encoded.error()};
+    if (!encoded) return std::unexpected{encoded.error()};
     auto decoded = decode_pcm16_mono_wav(*encoded);
-    if (!decoded)
-      return std::unexpected{AudioPackError::invalid_sfx};
+    if (!decoded) return std::unexpected{AudioPackError::invalid_sfx};
     if (sfx_packaged > kMaximumSfxPackagedBytes - encoded->size()) {
       return std::unexpected{AudioPackError::packaged_budget_exceeded};
     }
@@ -579,24 +541,17 @@ auto load_first_light_audio_pack(const std::filesystem::path &asset_root)
 
 auto audio_pack_error_name(AudioPackError error) noexcept -> std::string_view {
   switch (error) {
-  case AudioPackError::missing:
-    return "missing";
-  case AudioPackError::unsafe_path:
-    return "unsafe-path";
-  case AudioPackError::sidecar_too_large:
-    return "sidecar-too-large";
-  case AudioPackError::invalid_sidecar:
-    return "invalid-sidecar";
-  case AudioPackError::invalid_midi:
-    return "invalid-midi";
-  case AudioPackError::invalid_soundfont:
-    return "invalid-soundfont";
-  case AudioPackError::invalid_sfx:
-    return "invalid-sfx";
-  case AudioPackError::packaged_budget_exceeded:
-    return "packaged-budget-exceeded";
-  case AudioPackError::decoded_budget_exceeded:
-    return "decoded-budget-exceeded";
+    case AudioPackError::missing: return "missing";
+    case AudioPackError::unsafe_path: return "unsafe-path";
+    case AudioPackError::sidecar_too_large: return "sidecar-too-large";
+    case AudioPackError::invalid_sidecar: return "invalid-sidecar";
+    case AudioPackError::invalid_midi: return "invalid-midi";
+    case AudioPackError::invalid_soundfont: return "invalid-soundfont";
+    case AudioPackError::invalid_sfx: return "invalid-sfx";
+    case AudioPackError::packaged_budget_exceeded:
+      return "packaged-budget-exceeded";
+    case AudioPackError::decoded_budget_exceeded:
+      return "decoded-budget-exceeded";
   }
   return "unknown";
 }
