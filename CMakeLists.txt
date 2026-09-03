@@ -21,10 +21,10 @@ set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
 set(APSIS_DRIFT_TERMFORGE_GIT_TAG
-    "v0.42.0"
+    "v0.57.23"
     CACHE STRING "Pinned TermForge revision used by FetchContent")
 
-find_package(termforge 0.42.0 CONFIG QUIET)
+find_package(termforge 0.57.23 CONFIG QUIET)
 if (NOT TARGET termforge::lib)
   set(termforge_TESTS OFF CACHE BOOL "" FORCE)
   set(termforge_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -34,7 +34,7 @@ if (NOT TARGET termforge::lib)
 
   set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE FALSE)
   if (EXISTS "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}/CMakeLists.txt")
-    if (TERMFORGE_VERSION VERSION_GREATER_EQUAL 0.42.0)
+    if (TERMFORGE_VERSION VERSION_GREATER_EQUAL 0.57.23)
       set(APSIS_DRIFT_TERMFORGE_SOURCE_COMPATIBLE TRUE)
     else ()
       find_package(Git QUIET)
@@ -42,7 +42,7 @@ if (NOT TARGET termforge::lib)
         execute_process(
           COMMAND "${GIT_EXECUTABLE}" -C
                   "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}"
-                  merge-base --is-ancestor v0.42.0 HEAD
+                  merge-base --is-ancestor v0.57.23 HEAD
           RESULT_VARIABLE APSIS_DRIFT_TERMFORGE_ANCESTOR_RESULT
           OUTPUT_QUIET
           ERROR_QUIET
@@ -63,7 +63,7 @@ if (NOT TARGET termforge::lib)
   else ()
     if (EXISTS "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}/CMakeLists.txt")
       message(STATUS
-        "Ignoring TermForge source checkout older than v0.42.0: "
+        "Ignoring TermForge source checkout older than v0.57.23: "
         "${APSIS_DRIFT_TERMFORGE_SOURCE_DIR}")
     endif ()
     message(STATUS
