@@ -44,12 +44,13 @@ Requirements:
   loudness/true-peak checks are enabled
 - clang-format and clang-tidy 20 for repository quality checks
 
-Apsis Drift first looks for a TermForge v0.42.0-or-newer package, then for a
-compatible sibling checkout at `../termforge`. Older siblings are ignored. If
-neither exists, CMake fetches the tagged TermForge v0.42.0 release. This keeps
-structured input while adding explicit image invalidation, bounded synchronized
-output, built-in driver selection, image residency, placement layers and crops,
-and terminal-driven animation registration and payload-free playback control.
+Apsis Drift first looks for a compatible TermForge v0.57.23-or-newer package,
+then for a compatible sibling checkout at `../termforge`. Older siblings are
+ignored. If neither exists, CMake fetches the tagged TermForge v0.57.23 release.
+This keeps structured input while adding explicit image invalidation, bounded
+synchronized output, built-in driver selection, image residency, placement
+layers and crops, and terminal-driven animation registration and payload-free
+playback control.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
