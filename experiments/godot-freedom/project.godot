@@ -1,0 +1,21 @@
+; Isolated frontend evaluation, not the production game.
+config_version=5
+
+[application]
+config/name="Apsis Drift — Freedom rendering study"
+run/main_scene="res://main.tscn"
+
+[display]
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="mobile"
+textures/default_filters/use_nearest_mipmap_filter=false
+
+[audio]
+driver/enable_input=false

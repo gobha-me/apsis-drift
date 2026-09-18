@@ -1,0 +1,30 @@
+{
+  "hero": {
+    "triangles": 814864,
+    "evaluated_before_export": 814864,
+    "unique_mesh_triangles": 744528,
+    "bytes": 27139260,
+    "budget": null
+  },
+  "near": {
+    "triangles": 149249,
+    "evaluated_before_export": 149249,
+    "unique_mesh_triangles": 149249,
+    "bytes": 10513440,
+    "budget": 150000
+  },
+  "mid": {
+    "triangles": 34824,
+    "evaluated_before_export": 34824,
+    "unique_mesh_triangles": 34824,
+    "bytes": 1678748,
+    "budget": 35000
+  },
+  "far": {
+    "triangles": 2024,
+    "evaluated_before_export": 2024,
+    "unique_mesh_triangles": 2024,
+    "bytes": 109068,
+    "budget": 3000
+  }
+}

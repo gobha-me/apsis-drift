@@ -1,0 +1,8 @@
+[configuration]
+entry_symbol = "apsis_freedom_library_init"
+compatibility_minimum = "4.5"
+reloadable = false
+
+[libraries]
+linux.debug.x86_64 = "res://bin/libapsis_freedom_bridge.so"
+linux.release.x86_64 = "res://bin/libapsis_freedom_bridge.so"

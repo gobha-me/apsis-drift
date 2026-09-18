@@ -147,6 +147,16 @@ struct PlanetaryFlightEnvironment {
   double surface_elevation_metres{};
 };
 
+// Per-tick manual input, not persistent state. Record these values alongside
+// their tick for an analog replay; existing digital commands/saves are unchanged.
+// Positive axes mean forward, turn-right, strafe-right, rise respectively.
+struct PlanetaryAnalogInput {
+  double forward{};
+  double turn{};
+  double strafe{};
+  double vertical{};
+};
+
 struct PlanetaryFlightState {
   SimulationTick tick{};
   PlanetId planet;
@@ -221,11 +231,14 @@ enum class PlanetaryFlightError : std::uint8_t {
 // fixed step. The caller supplies kSimulationStep and the deterministic surface
 // elevation for the craft's current subpoint; rendering cadence and terrain
 // cache state are not inputs. Rejected steps leave state untouched.
+// Supplying analog selects manual input for this tick and requires an empty
+// commands span. Omit it to preserve the existing digital/autopilot path.
 [[nodiscard]] auto advance_planetary_flight(
     const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
     PlanetaryFlightState& state,
     std::span<const FlightCommand> commands, SimulationSeconds step,
-    PlanetaryFlightRules rules = {}) noexcept
+    PlanetaryFlightRules rules = {},
+    std::optional<PlanetaryAnalogInput> analog = std::nullopt) noexcept
     -> std::expected<void, PlanetaryFlightError>;
 
 [[nodiscard]] auto planetary_flight_state_checksum(

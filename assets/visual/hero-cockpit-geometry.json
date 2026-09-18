@@ -1,0 +1,28 @@
+{
+  "asset": "hero-cockpit",
+  "blender": "5.2.2 LTS",
+  "objects": 616,
+  "evaluated_triangles": 115370,
+  "collections": {
+    "05 | shared flight cell envelope": 9578,
+    "10 | pilot primary instruments": 68904,
+    "20 | standing service and utility": 33288,
+    "30 | adjustable pilot couch": 2728,
+    "31 | adjustable pedal carriage": 872
+  },
+  "bounds_min": [
+    -2.311901569366455,
+    -1.3870000839233398,
+    -0.05999999865889549
+  ],
+  "bounds_max": [
+    2.321174144744873,
+    3.1369998455047607,
+    2.374742031097412
+  ],
+  "dimensions_m": [
+    4.633,
+    4.524,
+    2.435
+  ]
+}

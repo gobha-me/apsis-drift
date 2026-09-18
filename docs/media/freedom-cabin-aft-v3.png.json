@@ -1,0 +1,38 @@
+{
+  "asset_design_version": 3,
+  "capture_pixels": [
+    3840,
+    2160
+  ],
+  "draw_calls": 38.0,
+  "engine": "4.7.2-stable (official)",
+  "experimental_relief_version": 0,
+  "frame_max_ms": 8.751,
+  "frame_p50_ms": 6.956,
+  "frame_p95_ms": 8.103,
+  "godot_static_memory_bytes": 90889676.0,
+  "godot_video_memory_bytes": 1024392496.0,
+  "head_angles_radians": [
+    -0.140000000596046,
+    2.44000005722046
+  ],
+  "kind": "windowed viewport capture; not a gameplay benchmark",
+  "live_cpp": false,
+  "load_ms": 261.155,
+  "pilot_view": false,
+  "render_primitives": 299758.0,
+  "renderer": "forward_plus",
+  "replay_running": false,
+  "replay_seconds": 0.0,
+  "sample_frames": 120,
+  "schema_version": 1,
+  "snapshot_seed": "42",
+  "terrain_generator_version": 1.0,
+  "terrain_material": "presentation-only mineral layers; no displacement",
+  "view": 3,
+  "viewport": [
+    3840.0,
+    2160.0
+  ],
+  "vram_note": "Godot estimate, not process peak VRAM; excludes some driver allocations"
+}

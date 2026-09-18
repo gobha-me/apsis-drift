@@ -2,6 +2,12 @@
 
 > Project direction snapshot, 2026-08-14.
 
+For the approved 2026-09-17 freedom-first direction, begin with the
+[current roadmap](ROADMAP.md). The [detailed design notes](FREEDOM_DESIGN_PROPOSAL.md)
+record native/Godot evaluation, chart/jump/fuel decisions, unresolved mechanics
+and GitHub reconciliation. They describe planned work, not shipped behavior,
+and do not silently replace the implementation contracts below.
+
 **Apsis Drift** is a deterministic, procedurally generated spaceflight game
 rendered inside a terminal. Its defining view is a spacecraft cockpit framing
 a real-time pixel viewport: orbital flight, atmospheric descent, and low-level

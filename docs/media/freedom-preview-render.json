@@ -1,0 +1,284 @@
+{
+  "atmosphere": "optical review shells, descriptor-gated; not authoritative weather",
+  "capture": "PNG frames saved from Godot Vulkan viewport after frame_post_draw; loading frames excluded",
+  "engine": "4.7.2-stable (official)",
+  "experimental_relief_version": 1.0,
+  "fps": 24,
+  "frames": 960,
+  "geometry": "original hero-tier GLBs; no master mesh changes",
+  "kind": "offline Godot cinematic; scripted cameras, not gameplay or a real-time benchmark",
+  "pixels": [
+    3840,
+    2160
+  ],
+  "planet": "Carayx",
+  "planet_seed": "42",
+  "review_only": false,
+  "runtime_performance_claim": false,
+  "schema_version": 1,
+  "shots": [
+    {
+      "camera_end": {
+        "eye": [
+          -2474550.0,
+          2199600.0,
+          18421650.0
+        ],
+        "fov": 42.0,
+        "target": [
+          0.0,
+          -5499000.0,
+          0.0
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          -4674150.0,
+          3024450.0,
+          20071350.0
+        ],
+        "fov": 42.0,
+        "target": [
+          0.0,
+          -5499000.0,
+          0.0
+        ]
+      },
+      "first_frame": 0,
+      "frames": 168,
+      "id": "world",
+      "seconds": 7,
+      "stream": {
+        "cpu_mesh_bytes": 616554,
+        "generated": 6,
+        "generated_total": 6,
+        "ready": true,
+        "resident_tiles": 6,
+        "retired_total": 0,
+        "reused": 0,
+        "staged_and_resident_tiles": 6,
+        "swaps": 1,
+        "worker_ms": 8.117819
+      }
+    },
+    {
+      "camera_end": {
+        "eye": [
+          190.0,
+          115.0,
+          290.0
+        ],
+        "fov": 42.0,
+        "target": [
+          0.0,
+          20.0,
+          0.0
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          240.0,
+          135.0,
+          270.0
+        ],
+        "fov": 42.0,
+        "target": [
+          0.0,
+          20.0,
+          0.0
+        ]
+      },
+      "first_frame": 168,
+      "frames": 168,
+      "id": "station",
+      "seconds": 7,
+      "stream": {
+        "cpu_mesh_bytes": 616554,
+        "generated": 6,
+        "generated_total": 6,
+        "ready": true,
+        "resident_tiles": 6,
+        "retired_total": 0,
+        "reused": 0,
+        "staged_and_resident_tiles": 6,
+        "swaps": 1,
+        "worker_ms": 8.117819
+      }
+    },
+    {
+      "camera_end": {
+        "eye": [
+          22.0,
+          5.0,
+          13.0
+        ],
+        "fov": 43.0,
+        "target": [
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          18.0,
+          7.0,
+          20.0
+        ],
+        "fov": 43.0,
+        "target": [
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "first_frame": 336,
+      "frames": 144,
+      "id": "shuttle",
+      "seconds": 6,
+      "stream": {
+        "cpu_mesh_bytes": 616554,
+        "generated": 6,
+        "generated_total": 6,
+        "ready": true,
+        "resident_tiles": 6,
+        "retired_total": 0,
+        "reused": 0,
+        "staged_and_resident_tiles": 6,
+        "swaps": 1,
+        "worker_ms": 8.117819
+      }
+    },
+    {
+      "camera_end": {
+        "eye": [
+          0.0,
+          1.74000000953674,
+          0.779999971389771
+        ],
+        "fov": 74.0,
+        "head": [
+          -0.239999994635582,
+          -0.219999998807907
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          0.0,
+          1.74000000953674,
+          0.779999971389771
+        ],
+        "fov": 74.0,
+        "head": [
+          -0.239999994635582,
+          0.360000014305115
+        ]
+      },
+      "first_frame": 480,
+      "frames": 144,
+      "id": "cabin",
+      "seconds": 6,
+      "stream": {
+        "cpu_mesh_bytes": 39459456,
+        "generated": 384,
+        "generated_total": 390,
+        "ready": true,
+        "resident_tiles": 384,
+        "retired_total": 6,
+        "reused": 0,
+        "staged_and_resident_tiles": 384,
+        "swaps": 2,
+        "worker_ms": 1155.077741
+      }
+    },
+    {
+      "camera_end": {
+        "eye": [
+          -1300.0,
+          2700.0,
+          6200.0
+        ],
+        "fov": 57.0,
+        "target": [
+          -2200.0,
+          400.0,
+          -6500.0
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          300.0,
+          3100.0,
+          8500.0
+        ],
+        "fov": 57.0,
+        "target": [
+          -2200.0,
+          400.0,
+          -6500.0
+        ]
+      },
+      "first_frame": 624,
+      "frames": 192,
+      "id": "terrain",
+      "seconds": 8,
+      "stream": {
+        "cpu_mesh_bytes": 39459456,
+        "generated": 122,
+        "generated_total": 512,
+        "ready": true,
+        "resident_tiles": 384,
+        "retired_total": 128,
+        "reused": 262,
+        "staged_and_resident_tiles": 384,
+        "swaps": 3,
+        "worker_ms": 366.840815
+      }
+    },
+    {
+      "camera_end": {
+        "eye": [
+          -23.0,
+          9.0,
+          -29.0
+        ],
+        "fov": 43.0,
+        "target": [
+          0.0,
+          0.800000011920929,
+          0.0
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          -18.0,
+          7.0,
+          -22.0
+        ],
+        "fov": 43.0,
+        "target": [
+          0.0,
+          0.800000011920929,
+          0.0
+        ]
+      },
+      "first_frame": 816,
+      "frames": 144,
+      "id": "closing",
+      "seconds": 6,
+      "stream": {
+        "cpu_mesh_bytes": 39459456,
+        "generated": 122,
+        "generated_total": 512,
+        "ready": true,
+        "resident_tiles": 384,
+        "retired_total": 128,
+        "reused": 262,
+        "staged_and_resident_tiles": 384,
+        "swaps": 3,
+        "worker_ms": 366.840815
+      }
+    }
+  ],
+  "terrain_generator_version": 1.0
+}
