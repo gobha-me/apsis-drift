@@ -49,6 +49,11 @@ and proves continuous ascent/coast/atmospheric return in the C++ lab. Explicit
 practice starts support short playtests. Landing, walking, consequences and
 a navigable galaxy remain open; review flight feel before damage.
 
+[Tracker reconciliation 13](TRACKER_RECONCILIATION_13.md) records the checkpoint
+audit and follow-ups: local impact/fracture proof #253, native ship audio #254,
+and numerical compatibility #255. These are bounded work items, not completed
+features or new economy/mission prerequisites.
+
 [Freedom milestone](https://github.com/gobha-me/apsis-drift/milestone/10) and
 [tracking epic #243](https://github.com/gobha-me/apsis-drift/issues/243) replace
 the former version-number release ladder as the active next work.

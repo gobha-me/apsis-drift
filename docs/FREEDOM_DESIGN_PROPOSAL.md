@@ -455,5 +455,6 @@ lost/blind jumps; departure reference for range; jump-field extent and gravity
 hazard rules; flight consumption curves; station service timing and safe-station
 fallback details; future cargo/upgraded-ship recovery; cumulative damage and
 repair; module/drive relationships and carrier accounting; transition timing;
-remaining native platform qualification. Three fixed charges, free initial station refueling and the
-standard recovery baseline are settled for Freedom, not open questions.
+remaining native platform qualification. Three fixed charges, free initial
+station refueling and the standard recovery baseline are settled for Freedom,
+not open questions.
