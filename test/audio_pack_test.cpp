@@ -21,8 +21,7 @@ using namespace apsis_drift;
 int failures{};
 
 auto check(bool condition, std::string_view message) -> void {
-  if (condition)
-    return;
+  if (condition) return;
   std::cerr << "FAIL: " << message << '\n';
   ++failures;
 }
@@ -46,13 +45,13 @@ struct TemporaryAssets {
   }
 };
 
-[[nodiscard]] auto read_text(const std::filesystem::path &path) -> std::string {
+[[nodiscard]] auto read_text(const std::filesystem::path& path) -> std::string {
   std::ifstream input{path};
   return {std::istreambuf_iterator<char>{input},
           std::istreambuf_iterator<char>{}};
 }
 
-auto write_text(const std::filesystem::path &path, std::string_view contents)
+auto write_text(const std::filesystem::path& path, std::string_view contents)
     -> void {
   std::ofstream output{path, std::ios::trunc};
   output << contents;
@@ -62,11 +61,10 @@ auto production_pack_contract() -> void {
   const std::filesystem::path root{APSIS_DRIFT_AUDIO_ASSET_DIR};
   auto loaded = load_first_light_audio_pack(root);
   check(loaded.has_value(), "the committed First Light pack must load");
-  if (!loaded)
-    return;
-  check(loaded->packaged_bytes() <= 5U * 1024U * 1024U,
+  if (!loaded) return;
+  check(loaded->packaged_bytes() <= std::size_t{5U} * 1024U * 1024U,
         "the combined committed payload must remain bounded");
-  check(loaded->decoded_bytes() <= 20U * 1024U * 1024U,
+  check(loaded->decoded_bytes() <= std::size_t{20U} * 1024U * 1024U,
         "the combined decoded payload must remain bounded");
 
   auto pack = std::make_unique<FirstLightAudioPack>(std::move(*loaded));
@@ -89,7 +87,7 @@ auto production_pack_contract() -> void {
           "each stable production cue must enter the audio queue");
   }
 
-  std::vector<float> samples(4096U * kAudioChannelCount);
+  std::vector<float> samples(std::size_t{4096U} * kAudioChannelCount);
   check(!runtime.render(samples), "the production pack must render");
   check(std::ranges::all_of(samples,
                             [](float sample) {
@@ -134,8 +132,7 @@ auto production_pack_contract() -> void {
         "the coexistence fixture must load the production pack");
   check(coexistence_baseline_pack.has_value(),
         "the coexistence baseline must load the production pack");
-  if (!coexistence_pack || !coexistence_baseline_pack)
-    return;
+  if (!coexistence_pack || !coexistence_baseline_pack) return;
   AudioRuntime coexistence{
       AudioRuntimeMode::no_device,
       nullptr,
@@ -154,8 +151,10 @@ auto production_pack_contract() -> void {
                                                           .atmosphere = 1.0F})
               .status == AudioEmitStatus::queued,
       "flight telemetry must remain accepted with the production pack");
-  std::vector<float> coexistence_samples(4096U * kAudioChannelCount);
-  std::vector<float> coexistence_baseline_samples(4096U * kAudioChannelCount);
+  std::vector<float> coexistence_samples(std::size_t{4096U} *
+                                         kAudioChannelCount);
+  std::vector<float> coexistence_baseline_samples(std::size_t{4096U} *
+                                                  kAudioChannelCount);
   check(!coexistence.render(coexistence_samples) &&
             !coexistence_baseline.render(coexistence_baseline_samples) &&
             coexistence_samples == coexistence_baseline_samples,

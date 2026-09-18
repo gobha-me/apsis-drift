@@ -5,29 +5,26 @@ namespace apsis_drift {
 auto initial_onboarding_progress(NewGameOnboardingChoice choice) noexcept
     -> OnboardingProgress {
   switch (choice) {
-    case NewGameOnboardingChoice::guided:
-      return {};
+    case NewGameOnboardingChoice::guided: return {};
     case NewGameOnboardingChoice::skip:
       return {.state = OnboardingState::skipped, .chapter = std::nullopt};
   }
   return {.state = static_cast<OnboardingState>(255), .chapter = std::nullopt};
 }
 
-auto validate_onboarding_progress(
-    const OnboardingProgress& progress) noexcept -> bool {
+auto validate_onboarding_progress(const OnboardingProgress& progress) noexcept
+    -> bool {
   switch (progress.state) {
     case OnboardingState::guided:
       if (!progress.chapter) return false;
       switch (*progress.chapter) {
         case OnboardingChapter::contract_one:
         case OnboardingChapter::contract_two:
-        case OnboardingChapter::contract_three:
-          return true;
+        case OnboardingChapter::contract_three: return true;
       }
       return false;
     case OnboardingState::skipped:
-    case OnboardingState::completed:
-      return !progress.chapter;
+    case OnboardingState::completed: return !progress.chapter;
   }
   return false;
 }
@@ -37,9 +34,8 @@ auto resolve_onboarding_access(const OnboardingProgress& progress) noexcept
   if (!validate_onboarding_progress(progress)) {
     return std::unexpected{OnboardingError::invalid_state};
   }
-  const bool post_onboarding =
-      progress.state == OnboardingState::skipped ||
-      progress.state == OnboardingState::completed;
+  const bool post_onboarding = progress.state == OnboardingState::skipped ||
+                               progress.state == OnboardingState::completed;
   const bool first_jump =
       post_onboarding ||
       (progress.state == OnboardingState::guided &&
@@ -84,11 +80,10 @@ auto advance_onboarding(OnboardingProgress& progress,
       next.state = OnboardingState::completed;
       next.chapter.reset();
       break;
-    default:
-      return std::unexpected{OnboardingError::invalid_transition};
+    default: return std::unexpected{OnboardingError::invalid_transition};
   }
   progress = next;
   return {};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

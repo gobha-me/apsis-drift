@@ -41,8 +41,7 @@ enum class LocalSunError : std::uint8_t {
 // and the planet-to-sun direction: +1 is local noon, 0 the geometric horizon,
 // and -1 local midnight.
 [[nodiscard]] auto local_solar_elevation(
-    const LocalSunGeometry& sun,
-    PlanetFixedDirection surface_up) noexcept
+    const LocalSunGeometry& sun, PlanetFixedDirection surface_up) noexcept
     -> std::expected<double, LocalSunError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

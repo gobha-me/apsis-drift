@@ -29,8 +29,8 @@ enum class SignalScannerStatus : std::uint8_t {
 struct SignalScannerState {
   std::optional<SurfaceSignalId> selected;
 
-  friend auto operator==(const SignalScannerState&,
-                         const SignalScannerState&) -> bool = default;
+  friend auto operator==(const SignalScannerState&, const SignalScannerState&)
+      -> bool = default;
 };
 
 struct SignalNavigationSolution {
@@ -72,4 +72,4 @@ enum class SignalScannerError : std::uint8_t {
     const SignalScannerState& scanner) noexcept
     -> std::expected<SignalNavigationSolution, SignalScannerError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

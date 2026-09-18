@@ -22,8 +22,8 @@ struct OriginSystemContractCheckpoint {
   std::uint64_t save_checksum{};
 
   friend auto operator==(const OriginSystemContractCheckpoint&,
-                         const OriginSystemContractCheckpoint&) -> bool =
-      default;
+                         const OriginSystemContractCheckpoint&)
+      -> bool = default;
 };
 
 struct OriginSystemContractAcceptanceReport {
@@ -41,8 +41,8 @@ struct OriginSystemContractAcceptanceReport {
   std::vector<OriginSystemContractCheckpoint> checkpoints;
 
   friend auto operator==(const OriginSystemContractAcceptanceReport&,
-                         const OriginSystemContractAcceptanceReport&) -> bool =
-      default;
+                         const OriginSystemContractAcceptanceReport&)
+      -> bool = default;
 };
 
 struct OriginSystemContractAcceptanceResult {
@@ -74,4 +74,4 @@ enum class OriginSystemContractAcceptanceError : std::uint8_t {
 [[nodiscard]] auto origin_system_contract_acceptance_json(
     const OriginSystemContractAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

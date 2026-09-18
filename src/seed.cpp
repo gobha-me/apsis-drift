@@ -29,12 +29,13 @@ auto hash_little_endian(std::uint64_t& hash, Integer value) noexcept -> void {
   }
 }
 
-}  // namespace
+} // namespace
 
-auto derive_seed(Seed parent, SeedDomain domain,
-                 std::uint64_t ordinal) noexcept -> Seed {
+auto derive_seed(Seed parent, SeedDomain domain, std::uint64_t ordinal) noexcept
+    -> Seed {
   auto hash = kFnvOffsetBasis;
-  for (const auto byte : kSeedNamespace) hash_byte(hash, byte);
+  for (const auto byte : kSeedNamespace)
+    hash_byte(hash, byte);
   hash_little_endian(hash, kSeedDerivationVersion);
   hash_little_endian(hash, parent.value);
   hash_little_endian(hash, static_cast<std::uint64_t>(domain));
@@ -42,4 +43,4 @@ auto derive_seed(Seed parent, SeedDomain domain,
   return Seed{hash};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

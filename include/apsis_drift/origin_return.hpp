@@ -175,4 +175,4 @@ enum class OriginStationFlightError : std::uint8_t {
 [[nodiscard]] auto origin_station_flight_state_checksum(
     const OriginStationFlightState& state) noexcept -> std::uint64_t;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

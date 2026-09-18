@@ -134,19 +134,18 @@ enum class LocalSystemError : std::uint8_t {
 [[nodiscard]] auto validate_local_system(const LocalSystemDescriptor& system)
     -> std::expected<void, LocalSystemError>;
 
-[[nodiscard]] auto find_local_system_planet(
-    const LocalSystemDescriptor& system, PlanetId planet)
+[[nodiscard]] auto find_local_system_planet(const LocalSystemDescriptor& system,
+                                            PlanetId planet)
     -> std::expected<const LocalSystemPlanet*, LocalSystemError>;
 
-[[nodiscard]] auto resolve_planet_ephemeris(
-    const LocalSystemDescriptor& system, PlanetId planet,
-    EphemerisQueryTime time)
+[[nodiscard]] auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
+                                            PlanetId planet,
+                                            EphemerisQueryTime time)
     -> std::expected<PlanetEphemeris, LocalSystemError>;
 
-[[nodiscard]] auto
-resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
-                                 const OriginStationDescriptor& station,
-                                 EphemerisQueryTime time)
+[[nodiscard]] auto resolve_origin_station_ephemeris(
+    const LocalSystemDescriptor& system, const OriginStationDescriptor& station,
+    EphemerisQueryTime time)
     -> std::expected<OriginStationEphemeris, LocalSystemError>;
 
 [[nodiscard]] auto star_spectral_class_name(StarSpectralClass value) noexcept
@@ -156,4 +155,4 @@ resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
     const LocalSystemDescriptor& system)
     -> std::expected<std::string, LocalSystemError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -111,4 +111,4 @@ enum class OriginSystemContractError : std::uint8_t {
     const SystemFlightState& home_approach)
     -> std::expected<OriginStationFlightState, OriginSystemContractError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

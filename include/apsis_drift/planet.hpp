@@ -149,4 +149,4 @@ struct PlanetDescriptor {
 [[nodiscard]] auto planet_descriptor_json(const PlanetDescriptor& descriptor)
     -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

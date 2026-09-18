@@ -42,10 +42,9 @@ struct SystemFlightAcceptanceResult {
 };
 
 [[nodiscard]] auto run_system_flight_acceptance(int width, int height)
-    -> std::expected<SystemFlightAcceptanceResult,
-                     SystemFlightAcceptanceError>;
+    -> std::expected<SystemFlightAcceptanceResult, SystemFlightAcceptanceError>;
 
 [[nodiscard]] auto system_flight_acceptance_json(
     const SystemFlightAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

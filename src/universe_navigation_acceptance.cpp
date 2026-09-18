@@ -24,8 +24,7 @@ namespace {
   return hash;
 }
 
-[[nodiscard]] auto one_selectable(const UniverseNavigationView& view)
-    -> bool {
+[[nodiscard]] auto one_selectable(const UniverseNavigationView& view) -> bool {
   return std::ranges::count_if(
              view.destinations,
              [](const NavigationDestinationStatus& destination) {
@@ -33,7 +32,7 @@ namespace {
              }) == 1;
 }
 
-}  // namespace
+} // namespace
 
 auto run_universe_navigation_acceptance()
     -> std::expected<UniverseNavigationAcceptanceReport,
@@ -49,8 +48,8 @@ auto run_universe_navigation_acceptance()
       .state = OnboardingState::guided,
       .chapter = OnboardingChapter::contract_three,
   };
-  const auto guided_view = resolve_onboarding_navigation_view(
-      route, guided_three, route.origin);
+  const auto guided_view =
+      resolve_onboarding_navigation_view(route, guided_three, route.origin);
   const auto skipped_view = resolve_onboarding_navigation_view(
       route, initial_onboarding_progress(NewGameOnboardingChoice::skip),
       route.origin);
@@ -74,8 +73,7 @@ auto run_universe_navigation_acceptance()
       route, route.origin, route.destination, 0,
       static_cast<double>(kDirectCruiseMaximumSpeedMetresPerSecond));
   if (!plan) {
-    return std::unexpected{
-        UniverseNavigationAcceptanceError::travel_failure};
+    return std::unexpected{UniverseNavigationAcceptanceError::travel_failure};
   }
   auto tick = plan->departure_tick;
   std::uint64_t updates{};
@@ -84,8 +82,7 @@ auto run_universe_navigation_acceptance()
         *plan, tick,
         DirectCruiseTimeScale::sixty_five_thousand_five_hundred_thirty_six);
     if (!next || *next <= tick) {
-      return std::unexpected{
-          UniverseNavigationAcceptanceError::travel_failure};
+      return std::unexpected{UniverseNavigationAcceptanceError::travel_failure};
     }
     tick = *next;
     ++updates;
@@ -98,8 +95,7 @@ auto run_universe_navigation_acceptance()
       DirectCruiseTimeScale::sixty_five_thousand_five_hundred_thirty_six);
   if (!arrival || !arrival->arrived ||
       arrival->position != plan->arrival_position) {
-    return std::unexpected{
-        UniverseNavigationAcceptanceError::travel_failure};
+    return std::unexpected{UniverseNavigationAcceptanceError::travel_failure};
   }
   if (!projection || projection->size() >= 1'024U) {
     return std::unexpected{
@@ -163,9 +159,8 @@ auto universe_navigation_acceptance_json(
       report.direct_plan.cruise_distance_metres,
       report.direct_plan.speed_metres_per_second, duration_ticks,
       kDirectCruiseMaximumTimeScale, report.maximum_scale_updates,
-      report.maximum_scale_realtime_milliseconds,
-      report.projected_save_bytes, report.direct_arrival_checksum,
-      report.application_renderer_budget_ms);
+      report.maximum_scale_realtime_milliseconds, report.projected_save_bytes,
+      report.direct_arrival_checksum, report.application_renderer_budget_ms);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

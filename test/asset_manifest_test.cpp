@@ -1,8 +1,8 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include <ranges>
 #include <string>
@@ -98,12 +98,12 @@ struct TemporaryRepository {
   auto code =
       record("visual/code-panel", "visual", "code-authored", "source.cpp");
   code["code_authored"] = {{"author", "Fixture author"},
-                             {"date", "2026-08-30"},
-                             {"construction", "Authored directly in C++"},
-                             {"derived_inputs", Json::array()}};
+                           {"date", "2026-08-30"},
+                           {"construction", "Authored directly in C++"},
+                           {"derived_inputs", Json::array()}};
 
-  auto capture = record("visual/test-capture", "visual", "capture",
-                        "capture.png");
+  auto capture =
+      record("visual/test-capture", "visual", "capture", "capture.png");
   capture["capture"] = {
       {"application", "Apsis Drift"},
       {"scenario", "asset-manifest-test"},
@@ -115,27 +115,27 @@ struct TemporaryRepository {
   auto derived = record("visual/derived-image", "visual", "derived",
                         "assets/visual/derived-image.png");
   derived["derived"] = {{"parents", {"visual/test-capture"}},
-                         {"transformation", "Lossless crop"},
-                         {"tooling", {"fixture transformer"}},
-                         {"date", "2026-08-30"}};
+                        {"transformation", "Lossless crop"},
+                        {"tooling", {"fixture transformer"}},
+                        {"date", "2026-08-30"}};
 
   auto voice = record("voice/code-voice", "voice", "code-authored",
                       "assets/voice/code-voice.wav");
   voice["code_authored"] = {{"author", "Fixture author"},
-                              {"date", "2026-08-30"},
-                              {"construction", "Synthesized by test code"},
-                              {"derived_inputs", Json::array()}};
-
-  auto sfx = record("sfx/code-cue", "sfx", "code-authored",
-                    "assets/sfx/code-cue.wav");
-  sfx["code_authored"] = {{"author", "Fixture author"},
                             {"date", "2026-08-30"},
                             {"construction", "Synthesized by test code"},
                             {"derived_inputs", Json::array()}};
 
-  return {{"schema_version", 1},
-          {"assets",
-           {generated, third_party, code, capture, derived, voice, sfx}}};
+  auto sfx =
+      record("sfx/code-cue", "sfx", "code-authored", "assets/sfx/code-cue.wav");
+  sfx["code_authored"] = {{"author", "Fixture author"},
+                          {"date", "2026-08-30"},
+                          {"construction", "Synthesized by test code"},
+                          {"derived_inputs", Json::array()}};
+
+  return {
+      {"schema_version", 1},
+      {"assets", {generated, third_party, code, capture, derived, voice, sfx}}};
 }
 
 [[nodiscard]] auto mentions(const Diagnostics& diagnostics,
@@ -157,8 +157,8 @@ auto failure_matrix(const TemporaryRepository& repository) -> void {
 
   candidate = valid;
   candidate["assets"][1]["third_party"].erase("canonical_url");
-  candidate["assets"][1]["third_party"]["package"] = {
-      {"name", "example-font"}, {"version", "1.0"}};
+  candidate["assets"][1]["third_party"]["package"] = {{"name", "example-font"},
+                                                      {"version", "1.0"}};
   check(validate_manifest_json(candidate.dump(), repository.path).empty(),
         "pinned third-party packages must validate without a URL");
 
@@ -223,8 +223,7 @@ auto failure_matrix(const TemporaryRepository& repository) -> void {
         "paths outside the repository must fail");
 
   candidate = valid;
-  candidate["assets"][1]["files"][0] =
-      candidate["assets"][0]["files"][0];
+  candidate["assets"][1]["files"][0] = candidate["assets"][0]["files"][0];
   check(mentions(validate_manifest_json(candidate.dump(), repository.path),
                  "already owned"),
         "one file must not have multiple provenance owners");
@@ -278,16 +277,16 @@ auto failure_matrix(const TemporaryRepository& repository) -> void {
                      repository.path),
                  "cannot repeat a key"),
         "duplicate JSON keys must fail");
-  check(mentions(validate_manifest_json("{", repository.path),
-                 "malformed JSON"),
-        "malformed JSON must fail");
-  check(mentions(validate_manifest_json(
-                     std::string((1U << 20U) + 1U, 'x'), repository.path),
+  check(
+      mentions(validate_manifest_json("{", repository.path), "malformed JSON"),
+      "malformed JSON must fail");
+  check(mentions(validate_manifest_json(std::string((1U << 20U) + 1U, 'x'),
+                                        repository.path),
                  "exceeds 1048576 bytes"),
         "oversized manifests must fail before parsing");
 }
 
-}  // namespace
+} // namespace
 
 auto main() -> int {
   const TemporaryRepository repository;

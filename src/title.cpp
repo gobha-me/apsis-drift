@@ -18,22 +18,14 @@ struct Glyph {
 };
 
 inline constexpr std::array kGlyphs{
-    Glyph{'A', {0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001,
-                0b10001}},
-    Glyph{'D', {0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001,
-                0b11110}},
-    Glyph{'F', {0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000,
-                0b10000}},
-    Glyph{'I', {0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
-                0b11111}},
-    Glyph{'P', {0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000,
-                0b10000}},
-    Glyph{'R', {0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010,
-                0b10001}},
-    Glyph{'S', {0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001,
-                0b11110}},
-    Glyph{'T', {0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
-                0b00100}},
+    Glyph{'A', {0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001}},
+    Glyph{'D', {0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110}},
+    Glyph{'F', {0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000}},
+    Glyph{'I', {0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111}},
+    Glyph{'P', {0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000}},
+    Glyph{'R', {0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001}},
+    Glyph{'S', {0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110}},
+    Glyph{'T', {0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100}},
     Glyph{' ', {0, 0, 0, 0, 0, 0, 0}},
 };
 
@@ -46,8 +38,7 @@ inline constexpr int kLogoHeight{2 * kGlyphHeight + kLineGap};
 inline constexpr std::string_view kTop{"APSIS"};
 inline constexpr std::string_view kBottom{"DRIFT"};
 
-[[nodiscard]] constexpr auto glyph_for(char letter) noexcept
-    -> const Glyph* {
+[[nodiscard]] constexpr auto glyph_for(char letter) noexcept -> const Glyph* {
   for (const auto& glyph : kGlyphs) {
     if (glyph.letter == letter) return &glyph;
   }
@@ -62,8 +53,7 @@ auto fill_rect(std::span<Pixel> pixels, int width, int height, int x, int y,
   const int bottom = std::clamp(y + rect_height, 0, height);
   for (int row = top; row < bottom; ++row) {
     for (int column = left; column < right; ++column) {
-      pixels[static_cast<std::size_t>(row) *
-                 static_cast<std::size_t>(width) +
+      pixels[static_cast<std::size_t>(row) * static_cast<std::size_t>(width) +
              static_cast<std::size_t>(column)] = color;
     }
   }
@@ -77,8 +67,8 @@ auto draw_word(std::span<Pixel> pixels, int width, int height,
     if (glyph == nullptr) continue;
     for (int row = 0; row < kGlyphHeight; ++row) {
       for (int column = 0; column < kGlyphWidth; ++column) {
-        const auto bit = static_cast<std::uint8_t>(1U <<
-                                                   (kGlyphWidth - column - 1));
+        const auto bit =
+            static_cast<std::uint8_t>(1U << (kGlyphWidth - column - 1));
         if ((glyph->rows[static_cast<std::size_t>(row)] & bit) == 0) continue;
         fill_rect(pixels, width, height,
                   x + static_cast<int>(index) * kGlyphAdvance * scale +
@@ -89,7 +79,7 @@ auto draw_word(std::span<Pixel> pixels, int width, int height,
   }
 }
 
-}  // namespace
+} // namespace
 
 auto render_title(ViewportSize size,
                   std::span<termforge::Pixel> destination) noexcept
@@ -104,8 +94,8 @@ auto render_title(ViewportSize size,
     return std::unexpected{TitleRenderError::buffer_size_mismatch};
   }
 
-  const int scale = std::min((size.width - 8) / kLogoWidth,
-                             (size.height - 8) / kLogoHeight);
+  const int scale =
+      std::min((size.width - 8) / kLogoWidth, (size.height - 8) / kLogoHeight);
   if (scale < 1) return std::unexpected{TitleRenderError::too_small};
 
   constexpr Pixel deep_space{5, 12, 22, 255};
@@ -119,10 +109,9 @@ auto render_title(ViewportSize size,
     const int blend = (y * 255) / std::max(1, size.height - 1);
     const auto channel = [blend](std::uint8_t top,
                                  std::uint8_t bottom) -> std::uint8_t {
-      return static_cast<std::uint8_t>(
-          (static_cast<int>(top) * (255 - blend) +
-           static_cast<int>(bottom) * blend) /
-          255);
+      return static_cast<std::uint8_t>((static_cast<int>(top) * (255 - blend) +
+                                        static_cast<int>(bottom) * blend) /
+                                       255);
     };
     const Pixel background{channel(upper_space.r, deep_space.r),
                            channel(upper_space.g, deep_space.g),
@@ -130,9 +119,8 @@ auto render_title(ViewportSize size,
     for (int x = 0; x < size.width; ++x) {
       auto& pixel = destination[static_cast<std::size_t>(y) * width +
                                 static_cast<std::size_t>(x)];
-      const std::uint32_t hash =
-          static_cast<std::uint32_t>(x) * 73856093U ^
-          static_cast<std::uint32_t>(y) * 19349663U;
+      const std::uint32_t hash = static_cast<std::uint32_t>(x) * 73856093U ^
+                                 static_cast<std::uint32_t>(y) * 19349663U;
       pixel = hash % 997U == 0U ? star : background;
     }
   }
@@ -144,8 +132,8 @@ auto render_title(ViewportSize size,
   const int shadow_offset = std::max(1, scale / 5);
   const int second_line_y = logo_y + (kGlyphHeight + kLineGap) * scale;
 
-  draw_word(destination, size.width, size.height, kTop,
-            logo_x + shadow_offset, logo_y + shadow_offset, scale, shadow);
+  draw_word(destination, size.width, size.height, kTop, logo_x + shadow_offset,
+            logo_y + shadow_offset, scale, shadow);
   draw_word(destination, size.width, size.height, kBottom,
             logo_x + shadow_offset, second_line_y + shadow_offset, scale,
             shadow);
@@ -154,10 +142,10 @@ auto render_title(ViewportSize size,
   draw_word(destination, size.width, size.height, kBottom, logo_x,
             second_line_y, scale, title);
 
-  const int accent_y = std::min(size.height - 2,
-                                logo_y + logo_height + std::max(1, scale / 2));
-  fill_rect(destination, size.width, size.height, logo_x, accent_y,
-            logo_width, std::max(1, scale / 5), accent);
+  const int accent_y =
+      std::min(size.height - 2, logo_y + logo_height + std::max(1, scale / 2));
+  fill_rect(destination, size.width, size.height, logo_x, accent_y, logo_width,
+            std::max(1, scale / 5), accent);
 
   return TitleRenderResult{
       .scale = scale,
@@ -165,4 +153,4 @@ auto render_title(ViewportSize size,
   };
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

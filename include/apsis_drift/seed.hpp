@@ -36,4 +36,4 @@ enum class SeedDomain : std::uint64_t {
 [[nodiscard]] auto derive_seed(Seed parent, SeedDomain domain,
                                std::uint64_t ordinal = 0) noexcept -> Seed;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

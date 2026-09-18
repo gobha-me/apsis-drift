@@ -436,10 +436,11 @@ planned; it did not implement gameplay, choose an engine, or publish a release.
 ## Proposed next work, in order
 
 1. Follow the reconciled Freedom milestone #243; use a GPU-capable desktop for
-   build/render iteration. Engine selection and any terminal archive still need
-   explicit evidence-based decisions.
+   build/render iteration. Godot was selected on 2026-09-18; follow
+   [the ownership decision](GODOT_ADOPTION.md). Any terminal archive still needs
+   an explicit evidence-based decision.
 2. Inventory retained behavior/tests and reproduce the reported surface defect.
-3. Run a bounded Godot evaluation using real C++ terrain/state and release-size,
+3. Continue qualifying Godot using real C++ terrain/state and release-size,
    memory, streaming, coordinate, controller, and native-display measurements.
    Compare to the retained implementation, not to hypothetical SDL performance.
 4. Prove free flight -> actual landing -> suit traversal -> reboarding -> ascent
@@ -454,5 +455,5 @@ lost/blind jumps; departure reference for range; jump-field extent and gravity
 hazard rules; flight consumption curves; station service timing and safe-station
 fallback details; future cargo/upgraded-ship recovery; cumulative damage and
 repair; module/drive relationships and carrier accounting; transition timing;
-engine selection. Three fixed charges, free initial station refueling and the
+remaining native platform qualification. Three fixed charges, free initial station refueling and the
 standard recovery baseline are settled for Freedom, not open questions.

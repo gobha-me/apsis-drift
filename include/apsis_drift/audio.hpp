@@ -23,8 +23,8 @@ struct SystemFlightState;
 
 inline constexpr std::uint32_t kAudioSampleRate{48'000};
 inline constexpr std::uint8_t kAudioChannelCount{2};
-inline constexpr std::uint32_t kAudioFramesPerSimulationTick{
-    kAudioSampleRate / kSimulationHz};
+inline constexpr std::uint32_t kAudioFramesPerSimulationTick{kAudioSampleRate /
+                                                             kSimulationHz};
 inline constexpr std::size_t kAudioEventQueueCapacity{256};
 inline constexpr std::size_t kMaximumAudioFramesPerCallback{4096};
 
@@ -56,8 +56,8 @@ struct AudioEventIdentity {
   SimulationTick tick{};
   std::uint16_t sequence{};
 
-  friend auto operator==(const AudioEventIdentity&,
-                         const AudioEventIdentity&) -> bool = default;
+  friend auto operator==(const AudioEventIdentity&, const AudioEventIdentity&)
+      -> bool = default;
 };
 
 struct FlightAudioParameters {
@@ -96,11 +96,9 @@ inline constexpr AudioCueId kSignalCompleteAudioCue{0xAD00'0106U};
 [[nodiscard]] auto resolve_flight_audio(const FlightState& state) noexcept
     -> std::expected<FlightAudioTelemetry, FlightAudioError>;
 [[nodiscard]] auto resolve_flight_audio(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) noexcept
+    const PlanetDescriptor& planet, const PlanetaryFlightState& state) noexcept
     -> std::expected<FlightAudioTelemetry, FlightAudioError>;
-[[nodiscard]] auto resolve_flight_audio(
-    const SystemFlightState& state) noexcept
+[[nodiscard]] auto resolve_flight_audio(const SystemFlightState& state) noexcept
     -> std::expected<FlightAudioTelemetry, FlightAudioError>;
 [[nodiscard]] auto resolve_flight_audio(
     const OriginStationFlightState& state) noexcept
@@ -215,8 +213,7 @@ class AudioBackend {
  public:
   virtual ~AudioBackend() = default;
   [[nodiscard]] virtual auto name() const noexcept -> std::string_view = 0;
-  [[nodiscard]] virtual auto state() const noexcept
-      -> AudioBackendState = 0;
+  [[nodiscard]] virtual auto state() const noexcept -> AudioBackendState = 0;
   [[nodiscard]] virtual auto diagnostics() const noexcept
       -> AudioBackendDiagnostics = 0;
   [[nodiscard]] virtual auto start(AudioFormat format,
@@ -228,13 +225,11 @@ class AudioBackend {
 class NoDeviceAudioBackend final : public AudioBackend {
  public:
   [[nodiscard]] auto name() const noexcept -> std::string_view override;
-  [[nodiscard]] auto state() const noexcept
-      -> AudioBackendState override;
+  [[nodiscard]] auto state() const noexcept -> AudioBackendState override;
   [[nodiscard]] auto diagnostics() const noexcept
       -> AudioBackendDiagnostics override;
   [[nodiscard]] auto start(AudioFormat format,
-                           AudioRenderSource& source) noexcept
-      -> bool override;
+                           AudioRenderSource& source) noexcept -> bool override;
   auto stop() noexcept -> void override;
 
  private:
@@ -365,8 +360,7 @@ class AudioRuntime final : public AudioRenderSource {
   [[nodiscard]] auto emit_flight_parameters(
       SimulationTick tick, FlightAudioParameters parameters) noexcept
       -> AudioEmitResult;
-  [[nodiscard]] auto try_take_event() noexcept
-      -> std::optional<AudioEvent>;
+  [[nodiscard]] auto try_take_event() noexcept -> std::optional<AudioEvent>;
   auto service() noexcept -> void;
   auto reset(AudioResetReason reason) noexcept -> void;
   auto backend_lost() -> void;
@@ -375,8 +369,7 @@ class AudioRuntime final : public AudioRenderSource {
   auto pause_music() noexcept -> void;
   auto resume_music() noexcept -> void;
 
-  [[nodiscard]] auto render(
-      std::span<float> interleaved_samples) noexcept
+  [[nodiscard]] auto render(std::span<float> interleaved_samples) noexcept
       -> std::optional<AudioBufferError> override;
   [[nodiscard]] auto diagnostics() const noexcept -> AudioDiagnostics;
 
@@ -384,8 +377,7 @@ class AudioRuntime final : public AudioRenderSource {
   static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 
   auto start_backend(std::unique_ptr<AudioBackend> backend) -> void;
-  [[nodiscard]] auto emit_event(AudioEvent event) noexcept
-      -> AudioEmitResult;
+  [[nodiscard]] auto emit_event(AudioEvent event) noexcept -> AudioEmitResult;
   auto apply_event(const AudioEvent& event) noexcept -> void;
   [[nodiscard]] auto render_sample() noexcept -> float;
   auto reset_synth() noexcept -> void;
@@ -399,10 +391,8 @@ class AudioRuntime final : public AudioRenderSource {
   std::optional<SimulationTick> m_last_parameter_tick;
   std::uint32_t m_next_sequence{};
   bool m_stopped{};
-  std::atomic<AudioEmitStatus> m_last_emit_status{
-      AudioEmitStatus::disabled};
-  std::atomic<AudioResetReason> m_last_reset_reason{
-      AudioResetReason::none};
+  std::atomic<AudioEmitStatus> m_last_emit_status{AudioEmitStatus::disabled};
+  std::atomic<AudioResetReason> m_last_reset_reason{AudioResetReason::none};
   std::atomic<std::uint64_t> m_identities_assigned{};
   std::atomic<std::uint64_t> m_events_queued{};
   std::atomic<std::uint64_t> m_events_dequeued{};
@@ -466,4 +456,4 @@ struct AudioSynthesisBenchmark {
 [[nodiscard]] auto audio_benchmark_json(
     const AudioSynthesisBenchmark& benchmark) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -17,4 +17,4 @@ struct SurfaceSignalPlacementLimits {
     SurfaceSignalPlacementLimits limits)
     -> std::expected<SurfaceSignalCatalog, SurfaceSignalError>;
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

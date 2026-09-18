@@ -116,8 +116,7 @@ struct ProjectedBody {
          settings.field_of_view_degrees > 1.0 &&
          settings.field_of_view_degrees < 179.0 &&
          finite(settings.near_clip_metres) &&
-         finite(settings.far_clip_metres) &&
-         settings.near_clip_metres > 0.0 &&
+         finite(settings.far_clip_metres) && settings.near_clip_metres > 0.0 &&
          settings.far_clip_metres > settings.near_clip_metres &&
          finite(settings.handoff_start_radius_pixels) &&
          finite(settings.handoff_complete_radius_pixels) &&
@@ -145,8 +144,7 @@ struct ProjectedBody {
 [[nodiscard]] auto space_pixel(int x, int y, Seed seed) noexcept
     -> termforge::Pixel {
   auto key = static_cast<std::uint64_t>(static_cast<std::uint32_t>(x));
-  key = std::rotl(key, 32) |
-        static_cast<std::uint32_t>(y);
+  key = std::rotl(key, 32) | static_cast<std::uint32_t>(y);
   const auto sample = mix64(key ^ seed.value ^ 0xA0761D6478BD642FULL);
   if ((sample & 0x3FFU) == 0U) {
     const auto value = static_cast<std::uint8_t>(
@@ -170,21 +168,21 @@ struct ProjectedBody {
           channel(from.b * (1.0 - amount) + to.b * amount), 255};
 }
 
-[[nodiscard]] auto project_body(
-    const LocalSystemRenderSettings& settings, const CameraBasis& basis,
-    Vector3 camera, Vector3 center, double radius_metres, BodyKind kind,
-    std::size_t ordinal, PlanetId planet, Rgb8 color)
+[[nodiscard]] auto project_body(const LocalSystemRenderSettings& settings,
+                                const CameraBasis& basis, Vector3 camera,
+                                Vector3 center, double radius_metres,
+                                BodyKind kind, std::size_t ordinal,
+                                PlanetId planet, Rgb8 color)
     -> std::optional<ProjectedBody> {
   const auto relative = subtract(center, camera);
   const double distance = length(relative);
   const double depth = dot(relative, basis.forward);
   if (!finite(distance) || !finite(depth) || distance <= 0.0 ||
-      depth < settings.near_clip_metres ||
-      depth > settings.far_clip_metres) {
+      depth < settings.near_clip_metres || depth > settings.far_clip_metres) {
     return std::nullopt;
   }
-  const double tangent = std::tan(settings.field_of_view_degrees *
-                                  std::numbers::pi / 360.0);
+  const double tangent =
+      std::tan(settings.field_of_view_degrees * std::numbers::pi / 360.0);
   const double focal = static_cast<double>(settings.width) / (2.0 * tangent);
   const double screen_x = static_cast<double>(settings.width - 1) * 0.5 +
                           dot(relative, basis.right) / depth * focal;
@@ -197,8 +195,8 @@ struct ProjectedBody {
   }
   const double minimum = kind == BodyKind::star ? 2.0 : 1.0;
   const double maximum = kind == BodyKind::star ? 96.0 : 32.0;
-  const int draw_radius = static_cast<int>(std::lround(
-      std::clamp(physical_radius, minimum, maximum)));
+  const int draw_radius = static_cast<int>(
+      std::lround(std::clamp(physical_radius, minimum, maximum)));
   const double visibility_radius =
       std::max(static_cast<double>(draw_radius), physical_radius);
   if (screen_x + visibility_radius < 0.0 ||
@@ -207,8 +205,8 @@ struct ProjectedBody {
       screen_y - visibility_radius >= settings.height) {
     return std::nullopt;
   }
-  return ProjectedBody{kind, ordinal, planet, color, depth, screen_x,
-                       screen_y, physical_radius, draw_radius};
+  return ProjectedBody{kind,     ordinal,  planet,          color,      depth,
+                       screen_x, screen_y, physical_radius, draw_radius};
 }
 
 auto draw_body(const LocalSystemRenderSettings& settings,
@@ -228,10 +226,10 @@ auto draw_body(const LocalSystemRenderSettings& settings,
     if (y < 0 || y >= settings.height) continue;
     for (int x = center_x - radius; x <= center_x + radius; ++x) {
       if (x < 0 || x >= settings.width) continue;
-      const double dx = static_cast<double>(x - center_x) /
-                        static_cast<double>(radius);
-      const double dy = static_cast<double>(y - center_y) /
-                        static_cast<double>(radius);
+      const double dx =
+          static_cast<double>(x - center_x) / static_cast<double>(radius);
+      const double dy =
+          static_cast<double>(y - center_y) / static_cast<double>(radius);
       const double radial = dx * dx + dy * dy;
       if (radial > 1.0) continue;
       double shade = 0.52 + 0.48 * std::sqrt(1.0 - radial);
@@ -264,10 +262,10 @@ auto draw_selection_marker(const ProjectedBody& body,
                            const LocalSystemRenderSettings& settings,
                            std::span<termforge::Pixel> destination) noexcept
     -> void {
-  const double bounded_radius = std::clamp(
-      std::max(static_cast<double>(body.draw_radius),
-               body.physical_radius_pixels),
-      2.0, 49.0);
+  const double bounded_radius =
+      std::clamp(std::max(static_cast<double>(body.draw_radius),
+                          body.physical_radius_pixels),
+                 2.0, 49.0);
   const int radius = static_cast<int>(std::ceil(bounded_radius)) + 3;
   if (body.screen_x < -static_cast<double>(radius) ||
       body.screen_x >= static_cast<double>(settings.width + radius) ||
@@ -318,12 +316,10 @@ auto draw_station_edge_cue(const CameraBasis& basis, Vector3 camera,
   const double half_height =
       std::max(1.0, static_cast<double>(settings.height - 1) * 0.5 - margin);
   const double scale = std::min(
-      std::abs(horizontal) > 1.0e-12
-          ? half_width / std::abs(horizontal)
-          : std::numeric_limits<double>::infinity(),
-      std::abs(vertical) > 1.0e-12
-          ? half_height / std::abs(vertical)
-          : std::numeric_limits<double>::infinity());
+      std::abs(horizontal) > 1.0e-12 ? half_width / std::abs(horizontal)
+                                     : std::numeric_limits<double>::infinity(),
+      std::abs(vertical) > 1.0e-12 ? half_height / std::abs(vertical)
+                                   : std::numeric_limits<double>::infinity());
   if (!finite(scale)) return;
   const int center_x = std::clamp(
       static_cast<int>(std::lround(
@@ -351,7 +347,7 @@ auto draw_station_edge_cue(const CameraBasis& basis, Vector3 camera,
   }
 }
 
-}  // namespace
+} // namespace
 
 auto resolve_system_navigation(const LocalSystemDescriptor& system,
                                const LocalSystemView& view)
@@ -368,20 +364,20 @@ auto resolve_system_navigation(const LocalSystemDescriptor& system,
   if (!target) {
     return std::unexpected{LocalSystemRenderError::unknown_target};
   }
-  const auto ephemeris = resolve_planet_ephemeris(
-      system, view.selected_planet, view.time);
+  const auto ephemeris =
+      resolve_planet_ephemeris(system, view.selected_planet, view.time);
   if (!ephemeris) {
     return std::unexpected{LocalSystemRenderError::ephemeris_failure};
   }
-  const auto relative = subtract(vector(ephemeris->position),
-                                 vector(view.position));
+  const auto relative =
+      subtract(vector(ephemeris->position), vector(view.position));
   const double distance = length(relative);
   if (!finite(distance) || distance <= 0.0) {
     return std::unexpected{LocalSystemRenderError::invalid_view};
   }
   const auto direction = multiply(relative, 1.0 / distance);
-  const auto relative_velocity = subtract(vector(ephemeris->velocity),
-                                          vector(view.velocity));
+  const auto relative_velocity =
+      subtract(vector(ephemeris->velocity), vector(view.velocity));
   const double closing_speed = -dot(relative_velocity, direction);
   if (!finite(closing_speed)) {
     return std::unexpected{LocalSystemRenderError::invalid_view};
@@ -391,31 +387,37 @@ auto resolve_system_navigation(const LocalSystemDescriptor& system,
   const double elevation =
       std::asin(std::clamp(dot(direction, basis->up), -1.0, 1.0));
   constexpr double motion_epsilon{0.5};
-  const auto motion = closing_speed > motion_epsilon
-                          ? SystemTargetMotion::closing
-                          : (closing_speed < -motion_epsilon
-                                 ? SystemTargetMotion::opening
-                                 : SystemTargetMotion::holding);
-  return SystemNavigationSolution{
-      view.selected_planet, (*target)->descriptor.display_name, bearing,
-      elevation, distance, closing_speed, motion, forward > 0.0};
+  const auto motion =
+      closing_speed > motion_epsilon
+          ? SystemTargetMotion::closing
+          : (closing_speed < -motion_epsilon ? SystemTargetMotion::opening
+                                             : SystemTargetMotion::holding);
+  return SystemNavigationSolution{view.selected_planet,
+                                  (*target)->descriptor.display_name,
+                                  bearing,
+                                  elevation,
+                                  distance,
+                                  closing_speed,
+                                  motion,
+                                  forward > 0.0};
 }
 
 LocalSystemRenderer::LocalSystemRenderer(LocalSystemRenderSettings settings)
     : m_settings(settings),
-      m_orbital_renderer({.width = settings.width,
-                          .height = settings.height,
-                          .field_of_view_degrees =
-                              settings.field_of_view_degrees}),
+      m_orbital_renderer(
+          {.width = settings.width,
+           .height = settings.height,
+           .field_of_view_degrees = settings.field_of_view_degrees}),
       m_system_frame(valid_settings(settings)
                          ? static_cast<std::size_t>(settings.width) *
                                static_cast<std::size_t>(settings.height)
                          : 0U),
-      m_orbital_frame(m_system_frame.size()) {}
+      m_orbital_frame(m_system_frame.size()) {
+}
 
-auto LocalSystemRenderer::render(
-    const LocalSystemDescriptor& system, const LocalSystemView& view,
-    std::span<termforge::Pixel> destination)
+auto LocalSystemRenderer::render(const LocalSystemDescriptor& system,
+                                 const LocalSystemView& view,
+                                 std::span<termforge::Pixel> destination)
     -> std::expected<LocalSystemRenderStats, LocalSystemRenderError> {
   if (!valid_settings(m_settings)) {
     return std::unexpected{LocalSystemRenderError::invalid_settings};
@@ -450,15 +452,15 @@ auto LocalSystemRenderer::render(
   std::optional<PlanetEphemeris> selected_ephemeris;
   for (std::size_t index = 0; index < system.planets.size(); ++index) {
     const auto& planet = system.planets[index];
-    const auto ephemeris = resolve_planet_ephemeris(
-        system, planet.descriptor.id, view.time);
+    const auto ephemeris =
+        resolve_planet_ephemeris(system, planet.descriptor.id, view.time);
     if (!ephemeris) {
       return std::unexpected{LocalSystemRenderError::ephemeris_failure};
     }
-    const Rgb8 color = planet.descriptor.atmosphere_class ==
-                               AtmosphereClass::airless
-                           ? planet.descriptor.palette.highland
-                           : planet.descriptor.palette.atmosphere;
+    const Rgb8 color =
+        planet.descriptor.atmosphere_class == AtmosphereClass::airless
+            ? planet.descriptor.palette.highland
+            : planet.descriptor.palette.atmosphere;
     auto projected = project_body(
         m_settings, *basis, vector(view.position), vector(ephemeris->position),
         static_cast<double>(planet.descriptor.radius.value) * 1'000.0,
@@ -470,12 +472,14 @@ auto LocalSystemRenderer::render(
     if (projected) bodies.push_back(*projected);
   }
 
-  std::ranges::sort(bodies, [](const ProjectedBody& left,
-                               const ProjectedBody& right) {
-    if (left.depth != right.depth) return left.depth > right.depth;
-    if (left.kind != right.kind) return left.kind < right.kind;
-    return left.ordinal > right.ordinal;
-  });
+  std::ranges::sort(bodies,
+                    [](const ProjectedBody& left, const ProjectedBody& right) {
+                      if (left.depth != right.depth)
+                        return left.depth > right.depth;
+                      if (left.kind != right.kind)
+                        return left.kind < right.kind;
+                      return left.ordinal > right.ordinal;
+                    });
 
   LocalSystemRenderStats stats;
   stats.navigation = *navigation;
@@ -496,31 +500,29 @@ auto LocalSystemRenderer::render(
     if (!target) {
       return std::unexpected{LocalSystemRenderError::unknown_target};
     }
-    const auto camera_relative = subtract(vector(view.position),
-                                          vector(selected_ephemeris->position));
+    const auto camera_relative =
+        subtract(vector(view.position), vector(selected_ephemeris->position));
     OrbitalCamera camera;
-    camera.position = {camera_relative.x, camera_relative.y,
-                       camera_relative.z};
+    camera.position = {camera_relative.x, camera_relative.y, camera_relative.z};
     camera.forward = {view.forward.x, view.forward.y, view.forward.z};
     camera.up = {view.up.x, view.up.y, view.up.z};
-    const PlanetFixedDirection light{
-        -selected_ephemeris->position.x, -selected_ephemeris->position.y,
-        -selected_ephemeris->position.z};
+    const PlanetFixedDirection light{-selected_ephemeris->position.x,
+                                     -selected_ephemeris->position.y,
+                                     -selected_ephemeris->position.z};
     const auto rendered = m_orbital_renderer.render(
         (*target)->descriptor, camera, light, m_orbital_frame);
     if (!rendered) {
       return std::unexpected{LocalSystemRenderError::orbital_failure};
     }
-    stats.orbital_mix = std::clamp(
-        (selected_projection->physical_radius_pixels -
-         m_settings.handoff_start_radius_pixels) /
-            (m_settings.handoff_complete_radius_pixels -
-             m_settings.handoff_start_radius_pixels),
-        0.0, 1.0);
+    stats.orbital_mix =
+        std::clamp((selected_projection->physical_radius_pixels -
+                    m_settings.handoff_start_radius_pixels) /
+                       (m_settings.handoff_complete_radius_pixels -
+                        m_settings.handoff_start_radius_pixels),
+                   0.0, 1.0);
     for (std::size_t index = 0; index < m_system_frame.size(); ++index) {
-      m_system_frame[index] =
-          blend(m_system_frame[index], m_orbital_frame[index],
-                stats.orbital_mix);
+      m_system_frame[index] = blend(m_system_frame[index],
+                                    m_orbital_frame[index], stats.orbital_mix);
     }
     stats.mode = stats.orbital_mix >= 1.0
                      ? LocalSystemPresentationMode::orbital_target
@@ -560,8 +562,7 @@ auto LocalSystemRenderer::render_origin_station(
     return std::unexpected{LocalSystemRenderError::ephemeris_failure};
   }
   const auto basis = camera_basis(view);
-  if (!basis)
-    return std::unexpected{basis.error()};
+  if (!basis) return std::unexpected{basis.error()};
   const auto projected = project_body(
       m_settings, *basis, vector(view.position), vector(station.position),
       1'000.0, BodyKind::planet, 0, station.host_planet, Rgb8{126, 214, 210});
@@ -589,4 +590,4 @@ auto LocalSystemRenderer::render_origin_station(
   return {};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

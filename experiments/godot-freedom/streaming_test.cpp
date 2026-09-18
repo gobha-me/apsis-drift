@@ -7,19 +7,18 @@
 using namespace apsis_drift;
 using namespace apsis_drift::godot_spike;
 
-static auto check(bool condition, const char *message) -> void {
-  if (!condition)
-    throw std::runtime_error(message);
+static auto check(bool condition, const char* message) -> void {
+  if (!condition) throw std::runtime_error(message);
 }
 template <class F> static auto rejects(F function) -> void {
   try {
     function();
-  } catch (const std::invalid_argument &) {
+  } catch (const std::invalid_argument&) {
     return;
   }
   throw std::runtime_error("invalid streaming input accepted");
 }
-static auto complete_cover(const std::vector<StreamKey> &keys) -> void {
+static auto complete_cover(const std::vector<StreamKey>& keys) -> void {
   std::array<double, 6> areas{};
   std::set<StreamKey> unique(keys.begin(), keys.end());
   check(unique.size() == keys.size() && keys.size() <= kStreamMaxTiles,
@@ -36,12 +35,11 @@ static auto complete_cover(const std::vector<StreamKey> &keys) -> void {
   for (auto area : areas)
     check(area == 1.0, "planet cover has holes");
 }
-static auto await_batch(PlanetStream &stream) -> StreamBatch {
+static auto await_batch(PlanetStream& stream) -> StreamBatch {
   const auto limit =
       std::chrono::steady_clock::now() + std::chrono::seconds(30);
   while (std::chrono::steady_clock::now() < limit) {
-    if (auto batch = stream.poll())
-      return std::move(*batch);
+    if (auto batch = stream.poll()) return std::move(*batch);
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   throw std::runtime_error("stream worker timed out");
@@ -97,9 +95,11 @@ auto main() -> int {
         const auto left = row * n + n - 1;
         const auto right = row * 2 * n;
         check(length(sub(add(coarse_edge->vertices[left], coarse_edge->anchor),
-                         add(fine_edge->vertices[right], fine_edge->anchor))) < 1e-5,
+                         add(fine_edge->vertices[right], fine_edge->anchor))) <
+                  1e-5,
               "cross-LOD canonical position mismatch");
-        check(length(sub(coarse_edge->normals[left], fine_edge->normals[right])) < 1e-5,
+        check(length(sub(coarse_edge->normals[left],
+                         fine_edge->normals[right])) < 1e-5,
               "cross-LOD normal recipe changed at shared position");
       }
     }
@@ -166,7 +166,7 @@ auto main() -> int {
     check(stream.request(origin), "return request not scheduled");
     auto back = await_batch(stream);
     check(back.tiles.size() == initial.tiles.size(), "return coverage changed");
-    for (const auto &[key, tile] : initial.tiles)
+    for (const auto& [key, tile] : initial.tiles)
       check(back.tiles.at(key)->vertices == tile->vertices,
             "return mesh differs");
     std::cout << "Planet stream: 245 global/polar covers, orbital levels, face "
@@ -177,7 +177,7 @@ auto main() -> int {
               << "; worker ms=" << initial.milliseconds
               << "; moved generated/reused=" << next.generated << "/"
               << next.reused << '\n';
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     return 1;
   }

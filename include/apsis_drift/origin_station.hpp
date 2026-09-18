@@ -31,10 +31,10 @@ inline constexpr std::uint16_t kOriginHomeMinimumWaterBasisPoints{1'000};
 inline constexpr std::uint16_t kOriginHomeMaximumWaterBasisPoints{4'500};
 inline constexpr std::uint32_t kOriginStationMinimumAltitudeKilometres{400};
 inline constexpr std::uint32_t kOriginStationMaximumAltitudeKilometres{600};
-inline constexpr SimulationTick kOriginStationMinimumPeriodTicks{90U * 60U *
-                                                                 kSimulationHz};
-inline constexpr SimulationTick kOriginStationMaximumPeriodTicks{120U * 60U *
-                                                                 kSimulationHz};
+inline constexpr SimulationTick kOriginStationMinimumPeriodTicks{
+    SimulationTick{90U} * 60U * kSimulationHz};
+inline constexpr SimulationTick kOriginStationMaximumPeriodTicks{
+    SimulationTick{120U} * 60U * kSimulationHz};
 inline constexpr std::int32_t kOriginStationMaximumInclinationMicrodegrees{
     5'000'000};
 
@@ -88,8 +88,8 @@ struct OriginStationDescriptor {
 [[nodiscard]] auto generate_origin_home_planet(Seed home_system_seed)
     -> PlanetDescriptor;
 
-[[nodiscard]] auto
-is_tutorial_safe_home_planet(const PlanetDescriptor& planet) noexcept -> bool;
+[[nodiscard]] auto is_tutorial_safe_home_planet(
+    const PlanetDescriptor& planet) noexcept -> bool;
 
 // The station is a child of the origin system's settlement domain. It is not
 // the universe root, system barycenter, or parent of unrelated content.
@@ -151,4 +151,4 @@ enum class OriginOnboardingError : std::uint8_t {
     OriginOnboardingState& state, OriginOnboardingCommand command) noexcept
     -> std::expected<void, OriginOnboardingError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

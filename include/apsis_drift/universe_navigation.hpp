@@ -18,8 +18,10 @@ namespace apsis_drift {
 // catalog or mutable discovery store.
 inline constexpr std::uint32_t kUniverseNavigationVersion{1};
 inline constexpr std::int64_t kMetresPerLightSecond{299'792'458};
-inline constexpr std::uint64_t kMinimumFirstRouteLightSeconds{48U * 3'600U};
-inline constexpr std::uint64_t kMaximumFirstRouteLightSeconds{96U * 3'600U};
+inline constexpr std::uint64_t kMinimumFirstRouteLightSeconds{
+    std::uint64_t{48U} * 3'600U};
+inline constexpr std::uint64_t kMaximumFirstRouteLightSeconds{
+    std::uint64_t{96U} * 3'600U};
 inline constexpr std::int64_t kLocalSystemBoundaryMetres{100'000'000'000LL};
 inline constexpr std::uint64_t kDirectCruiseMaximumSpeedMetresPerSecond{
     1'000'000U};
@@ -57,8 +59,8 @@ struct FirstUniverseRoute {
   UniversePositionMetres origin_position;
   UniversePositionMetres destination_position;
 
-  friend auto operator==(const FirstUniverseRoute&,
-                         const FirstUniverseRoute&) -> bool = default;
+  friend auto operator==(const FirstUniverseRoute&, const FirstUniverseRoute&)
+      -> bool = default;
 };
 
 enum class NavigationKnowledgeLevel : std::uint8_t {
@@ -75,8 +77,8 @@ struct NavigationKnowledge {
   SystemId system;
   NavigationKnowledgeLevel level{NavigationKnowledgeLevel::contact};
 
-  friend auto operator==(const NavigationKnowledge&,
-                         const NavigationKnowledge&) -> bool = default;
+  friend auto operator==(const NavigationKnowledge&, const NavigationKnowledge&)
+      -> bool = default;
 };
 
 enum class NavigationDisabledReason : std::uint8_t {
@@ -162,8 +164,8 @@ struct DirectTravelSample {
   UniversePositionMetres position;
   bool arrived{};
 
-  friend auto operator==(const DirectTravelSample&,
-                         const DirectTravelSample&) -> bool = default;
+  friend auto operator==(const DirectTravelSample&, const DirectTravelSample&)
+      -> bool = default;
 };
 
 enum class UniverseNavigationError : std::uint8_t {
@@ -211,20 +213,22 @@ enum class UniverseNavigationError : std::uint8_t {
     UniverseNavigationSelectionCommand command) noexcept
     -> std::expected<void, UniverseNavigationError>;
 
-[[nodiscard]] auto make_direct_travel_plan(
-    const FirstUniverseRoute& route, SystemId origin, SystemId destination,
-    SimulationTick departure_tick, double speed_metres_per_second)
+[[nodiscard]] auto make_direct_travel_plan(const FirstUniverseRoute& route,
+                                           SystemId origin,
+                                           SystemId destination,
+                                           SimulationTick departure_tick,
+                                           double speed_metres_per_second)
     -> std::expected<DirectTravelPlan, UniverseNavigationError>;
 
-[[nodiscard]] auto resolve_direct_travel(
-    const DirectTravelPlan& plan, SimulationTick tick) noexcept
+[[nodiscard]] auto resolve_direct_travel(const DirectTravelPlan& plan,
+                                         SimulationTick tick) noexcept
     -> std::expected<DirectTravelSample, UniverseNavigationError>;
 
 // One application update advances an exact number of authoritative ticks and
 // clamps at arrival. It never integrates one physics step per skipped tick.
-[[nodiscard]] auto advance_direct_travel(
-    const DirectTravelPlan& plan, SimulationTick tick,
-    DirectCruiseTimeScale scale) noexcept
+[[nodiscard]] auto advance_direct_travel(const DirectTravelPlan& plan,
+                                         SimulationTick tick,
+                                         DirectCruiseTimeScale scale) noexcept
     -> std::expected<SimulationTick, UniverseNavigationError>;
 
 [[nodiscard]] auto direct_travel_save_projection_json(
@@ -232,4 +236,4 @@ enum class UniverseNavigationError : std::uint8_t {
     DirectCruiseTimeScale scale)
     -> std::expected<std::string, UniverseNavigationError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

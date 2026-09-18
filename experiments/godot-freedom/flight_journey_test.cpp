@@ -4,9 +4,8 @@
 #include <set>
 using namespace apsis_drift;
 using namespace apsis_drift::flight_lab;
-void check(bool ok, const char *message) {
-  if (!ok)
-    throw std::runtime_error(message);
+void check(bool ok, const char* message) {
+  if (!ok) throw std::runtime_error(message);
 }
 int main() {
   try {
@@ -30,7 +29,7 @@ int main() {
     bool rejected = false;
     try {
       (void)orbit_info(planet, invalid);
-    } catch (const std::invalid_argument &) {
+    } catch (const std::invalid_argument&) {
       rejected = true;
     }
     check(rejected, "nonfinite navigation accepted");
@@ -51,7 +50,7 @@ int main() {
       check(stars[i].color ==
                 generate_local_system(stars[i].system_seed).star.color,
             "star descriptor mismatch");
-      const auto &d = stars[i].direction;
+      const auto& d = stars[i].direction;
       const int longitude =
           std::clamp(int((std::atan2(d.z, d.x) + std::numbers::pi) /
                          (2 * std::numbers::pi) * 12),
@@ -100,8 +99,7 @@ int main() {
         const V acceleration = radial * radial_accel + tangent * tangent_accel;
         desired = unit(acceleration);
         d.main = std::clamp(length(acceleration) / main_accel, 0.0, 1.0);
-        if (tick < 240)
-          d.heave = 1;
+        if (tick < 240) d.heave = 1;
         if (info.clear_orbit && info.eccentricity < .035 && alt > 180000) {
           phase = 1;
           orbit_time = tick / 120.0;
@@ -116,10 +114,8 @@ int main() {
         }
       } else if (phase == 2) {
         desired = unit(s.velocity) * (-1);
-        if (dot(desired, s.back * (-1)) > .97)
-          d.main = 1;
-        if (info.periapsis < 30000)
-          phase = 3;
+        if (dot(desired, s.back * (-1)) > .97) d.main = 1;
+        if (info.periapsis < 30000) phase = 3;
       } else {
         desired = unit(s.velocity);
         if (alt < info.atmosphere_edge && entry_time == 0 &&
@@ -149,7 +145,7 @@ int main() {
     }
     throw std::runtime_error(
         "journey did not complete before bounded time limit");
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     return 1;
   }

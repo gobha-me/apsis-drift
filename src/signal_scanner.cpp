@@ -29,17 +29,16 @@ namespace {
   };
   for (std::size_t index = 0; index < catalog.signals.size(); ++index) {
     const auto& signal = catalog.signals[index];
-    constexpr auto tile_count =
-        std::uint32_t{1} << kSurfaceSignalPlacementLod;
+    constexpr auto tile_count = std::uint32_t{1} << kSurfaceSignalPlacementLod;
     if (signal.ordinal != index ||
         signal.anchor.tile.planet != catalog.planet ||
         signal.anchor.tile.lod != kSurfaceSignalPlacementLod ||
         !valid_face(signal.anchor.tile.face) ||
         signal.anchor.tile.x >= tile_count ||
-        signal.anchor.tile.y >= tile_count ||
-        !std::isfinite(signal.anchor.u) || !std::isfinite(signal.anchor.v) ||
-        signal.anchor.u < 0.0 || signal.anchor.u > 1.0 ||
-        signal.anchor.v < 0.0 || signal.anchor.v > 1.0 ||
+        signal.anchor.tile.y >= tile_count || !std::isfinite(signal.anchor.u) ||
+        !std::isfinite(signal.anchor.v) || signal.anchor.u < 0.0 ||
+        signal.anchor.u > 1.0 || signal.anchor.v < 0.0 ||
+        signal.anchor.v > 1.0 ||
         signal.strength_basis_points <
             kSurfaceSignalMinimumStrengthBasisPoints ||
         signal.strength_basis_points >
@@ -76,11 +75,10 @@ namespace {
 
 [[nodiscard]] auto occluded_by_reference_sphere(
     const PlanetDescriptor& planet, const SurfaceSignal& signal,
-    PlanetFixedPositionMetres craft,
-    PlanetFixedPositionMetres target) noexcept -> bool {
-  const PlanetFixedPositionMetres segment{target.x - craft.x,
-                                          target.y - craft.y,
-                                          target.z - craft.z};
+    PlanetFixedPositionMetres craft, PlanetFixedPositionMetres target) noexcept
+    -> bool {
+  const PlanetFixedPositionMetres segment{
+      target.x - craft.x, target.y - craft.y, target.z - craft.z};
   const double length_squared = squared_magnitude(segment);
   if (!std::isfinite(length_squared) || length_squared <= 0.0) return false;
   const double projection =
@@ -99,7 +97,7 @@ namespace {
   return closest_radius_squared < reference_radius * reference_radius;
 }
 
-}  // namespace
+} // namespace
 
 auto advance_signal_selection(const SurfaceSignalCatalog& catalog,
                               SignalScannerState& state,
@@ -122,8 +120,8 @@ auto advance_signal_selection(const SurfaceSignalCatalog& catalog,
     if (command == SignalSelectionCommand::next) {
       selected = (*current + 1U) % catalog.signals.size();
     } else {
-      selected = (*current + catalog.signals.size() - 1U) %
-                 catalog.signals.size();
+      selected =
+          (*current + catalog.signals.size() - 1U) % catalog.signals.size();
     }
   } else if (command == SignalSelectionCommand::previous) {
     selected = catalog.signals.size() - 1U;
@@ -157,8 +155,7 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
     return std::unexpected{SignalScannerError::invalid_selection};
   }
   const auto& signal = catalog.signals[*index];
-  const auto craft =
-      planet_fixed_from_geodetic(planet, flight.pose.position);
+  const auto craft = planet_fixed_from_geodetic(planet, flight.pose.position);
   const auto target = planet_fixed_from_terrain_address(
       planet, signal.anchor,
       static_cast<double>(signal.approach_altitude_metres));
@@ -175,8 +172,7 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
   const double dy = target->y - craft->y;
   const double dz = target->z - craft->z;
   const double distance = std::hypot(dx, dy, dz);
-  const double horizontal =
-      std::hypot(local_target->east, local_target->north);
+  const double horizontal = std::hypot(local_target->east, local_target->north);
   if (!std::isfinite(distance) || !std::isfinite(horizontal)) {
     return std::unexpected{SignalScannerError::coordinate_failure};
   }
@@ -186,15 +182,14 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
     return std::unexpected{SignalScannerError::invalid_flight_state};
   }
 
-  const double absolute =
+  const double absolute = horizontal == 0.0
+                              ? canonical_angle(flight.pose.heading_radians)
+                              : canonical_angle(std::atan2(local_target->north,
+                                                           local_target->east));
+  const double relative =
       horizontal == 0.0
-          ? canonical_angle(flight.pose.heading_radians)
-          : canonical_angle(
-                std::atan2(local_target->north, local_target->east));
-  const double relative = horizontal == 0.0
-                              ? 0.0
-                              : canonical_angle(
-                                    absolute - flight.pose.heading_radians);
+          ? 0.0
+          : canonical_angle(absolute - flight.pose.heading_radians);
   SignalScannerStatus status{SignalScannerStatus::tracking};
   if (distance <= kSignalScannerReachedRadiusMetres +
                       kSignalScannerDistanceToleranceMetres) {
@@ -217,4 +212,4 @@ auto resolve_signal_navigation(const PlanetDescriptor& planet,
   };
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

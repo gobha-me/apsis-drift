@@ -37,4 +37,4 @@ enum class KeyboardChoice { enhanced, press_only };
   return caps;
 }
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

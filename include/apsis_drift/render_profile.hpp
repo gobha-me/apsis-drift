@@ -10,7 +10,8 @@ namespace apsis_drift {
 inline constexpr int kDefaultViewportWidth{640};
 inline constexpr int kDefaultViewportHeight{480};
 inline constexpr int kMaxViewportAxis{4096};
-inline constexpr std::size_t kMaxViewportPixels{4U * 1024U * 1024U};
+inline constexpr std::size_t kMaxViewportPixels{std::size_t{4U} * 1024U *
+                                                1024U};
 
 struct ViewportSize {
   int width{};
@@ -40,8 +41,8 @@ struct RenderConfiguration {
     -> ViewportSize;
 [[nodiscard]] auto profile_name(RenderProfile profile) noexcept
     -> std::string_view;
-[[nodiscard]] auto profile_name(const RenderConfiguration& configuration)
-    noexcept -> std::string_view;
+[[nodiscard]] auto profile_name(
+    const RenderConfiguration& configuration) noexcept -> std::string_view;
 [[nodiscard]] auto parse_render_profile(std::string_view text) noexcept
     -> std::optional<RenderProfile>;
 
@@ -53,9 +54,10 @@ struct RenderConfiguration {
     -> std::string_view;
 
 [[nodiscard]] auto resolve_render_configuration(
-    RenderProfile profile, std::optional<ViewportSize> override = std::nullopt)
-    noexcept -> RenderConfiguration;
+    RenderProfile profile,
+    std::optional<ViewportSize> override = std::nullopt) noexcept
+    -> RenderConfiguration;
 [[nodiscard]] auto default_render_configuration() noexcept
     -> RenderConfiguration;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

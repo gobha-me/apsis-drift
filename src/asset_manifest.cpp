@@ -4,8 +4,8 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <iterator>
 #include <nlohmann/json.hpp>
@@ -65,15 +65,13 @@ auto validate_fields(const Json& object, std::string_view path,
   for (const auto& [key, unused] : object.items()) {
     (void)unused;
     if (!contains(required, key) && !contains(optional, key)) {
-      add(diagnostics, std::format("{}.{}", path, key),
-          "unknown field");
+      add(diagnostics, std::format("{}.{}", path, key), "unknown field");
     }
   }
 }
 
 [[nodiscard]] auto read_string(const Json& object, std::string_view field,
-                               std::string_view path,
-                               Diagnostics& diagnostics,
+                               std::string_view path, Diagnostics& diagnostics,
                                bool allow_empty = false)
     -> std::optional<std::string> {
   const auto found = object.find(field);
@@ -156,9 +154,8 @@ auto validate_date(const Json& object, std::string_view field,
 
 auto validate_json_bounds(const Json& value, std::string_view path,
                           Diagnostics& diagnostics) -> void {
-  if (value.is_string() &&
-      value.get_ref<const std::string&>().size() >
-          kMaximumManifestStringBytes) {
+  if (value.is_string() && value.get_ref<const std::string&>().size() >
+                               kMaximumManifestStringBytes) {
     add(diagnostics, std::string{path}, "string exceeds 16384 bytes");
     return;
   }
@@ -167,7 +164,7 @@ auto validate_json_bounds(const Json& value, std::string_view path,
                                          : kMaximumManifestCollectionEntries)) {
     add(diagnostics, std::string{path},
         path == "$.assets" ? "asset collection exceeds 1024 entries"
-                            : "collection exceeds 256 entries");
+                           : "collection exceeds 256 entries");
   }
   if (value.is_array()) {
     for (std::size_t index = 0; index < value.size(); ++index) {
@@ -176,8 +173,7 @@ auto validate_json_bounds(const Json& value, std::string_view path,
     }
   } else if (value.is_object()) {
     for (const auto& [key, child] : value.items()) {
-      validate_json_bounds(child, std::format("{}.{}", path, key),
-                           diagnostics);
+      validate_json_bounds(child, std::format("{}.{}", path, key), diagnostics);
     }
   }
 }
@@ -211,8 +207,7 @@ auto validate_existing_file(const std::filesystem::path& repository_root,
     const auto status = std::filesystem::symlink_status(current, error);
     if (error) {
       if (error == std::errc::no_such_file_or_directory) {
-        add(diagnostics, std::string{path},
-            "referenced file does not exist");
+        add(diagnostics, std::string{path}, "referenced file does not exist");
         return;
       }
       add(diagnostics, std::string{path},
@@ -241,8 +236,8 @@ auto validate_existing_file(const std::filesystem::path& repository_root,
   if (found == asset.end()) return {};
   const auto license_path = std::format("{}.license", path);
   validate_fields(*found, license_path,
-                  {"expression", "terms", "permitted_uses",
-                   "redistribution", "derivatives", "attribution"},
+                  {"expression", "terms", "permitted_uses", "redistribution",
+                   "derivatives", "attribution"},
                   {}, diagnostics);
   if (!found->is_object()) return {};
 
@@ -253,9 +248,9 @@ auto validate_existing_file(const std::filesystem::path& repository_root,
     validate_existing_file(repository_root, *terms,
                            std::format("{}.terms", license_path), diagnostics);
   }
-  const auto permitted_uses = validate_string_array(
-      *found, "permitted_uses", license_path, diagnostics, false,
-      {"source", "documentation", "runtime"});
+  const auto permitted_uses =
+      validate_string_array(*found, "permitted_uses", license_path, diagnostics,
+                            false, {"source", "documentation", "runtime"});
   const auto redistribution =
       read_string(*found, "redistribution", license_path, diagnostics);
   if (redistribution && *redistribution != "allowed" &&
@@ -283,10 +278,10 @@ auto validate_file_usage(const std::vector<std::string>& files,
                          Diagnostics& diagnostics) -> void {
   for (std::size_t index = 0; index < files.size(); ++index) {
     const auto& file = files[index];
-    const auto required = file.starts_with("assets/")
-                              ? "runtime"
-                              : (file.starts_with("docs/") ? "documentation"
-                                                            : "source");
+    const auto required =
+        file.starts_with("assets/")
+            ? "runtime"
+            : (file.starts_with("docs/") ? "documentation" : "source");
     if (!license.permitted_uses.contains(required)) {
       add(diagnostics, std::format("{}.files[{}]", path, index),
           std::format("license must permit {} use for this path", required));
@@ -336,8 +331,7 @@ auto validate_third_party(const Json& object, std::string_view path,
   const auto author = read_string(object, "author", path, diagnostics);
   const auto publisher = read_string(object, "publisher", path, diagnostics);
   if (!author && !publisher) {
-    add(diagnostics, std::string{path},
-        "must identify an author or publisher");
+    add(diagnostics, std::string{path}, "must identify an author or publisher");
   }
   validate_date(object, "retrieved", path, diagnostics);
   (void)read_string(object, "upstream_license", path, diagnostics);
@@ -407,7 +401,8 @@ auto validate_capture(const Json& object, std::string_view path,
   }
   if (has_not_applicable) {
     (void)read_string(*inputs, "not_applicable",
-                      std::format("{}.deterministic_inputs", path), diagnostics);
+                      std::format("{}.deterministic_inputs", path),
+                      diagnostics);
   }
 }
 
@@ -477,17 +472,16 @@ auto validate_relationships(const std::vector<AssetSummary>& assets,
          parent_index < assets[index].parents.size(); ++parent_index) {
       const auto& parent = assets[index].parents[parent_index];
       const auto found = indices.find(parent);
-      const auto path = std::format("$.assets[{}].{}[{}]",
-                                    assets[index].record_index,
-                                    assets[index].source_kind == "derived"
-                                        ? "derived.parents"
-                                        : "code_authored.derived_inputs",
-                                    parent_index);
+      const auto path =
+          std::format("$.assets[{}].{}[{}]", assets[index].record_index,
+                      assets[index].source_kind == "derived"
+                          ? "derived.parents"
+                          : "code_authored.derived_inputs",
+                      parent_index);
       if (found == indices.end()) {
         add(diagnostics, path, "references an unknown asset ID");
       } else if (assets[found->second].derivatives != "allowed") {
-        add(diagnostics, path,
-            "parent license does not permit derived assets");
+        add(diagnostics, path, "parent license does not permit derived assets");
       }
     }
   }
@@ -496,8 +490,7 @@ auto validate_relationships(const std::vector<AssetSummary>& assets,
   std::function<void(std::size_t)> visit = [&](std::size_t index) {
     if (state[index] == 2U) return;
     if (state[index] == 1U) {
-      add(diagnostics,
-          std::format("$.assets[{}]", assets[index].record_index),
+      add(diagnostics, std::format("$.assets[{}]", assets[index].record_index),
           "asset parent graph contains a cycle");
       return;
     }
@@ -509,10 +502,11 @@ auto validate_relationships(const std::vector<AssetSummary>& assets,
     }
     state[index] = 2U;
   };
-  for (std::size_t index = 0; index < assets.size(); ++index) visit(index);
+  for (std::size_t index = 0; index < assets.size(); ++index)
+    visit(index);
 }
 
-}  // namespace
+} // namespace
 
 auto validate_manifest_json(std::string_view json_text,
                             const std::filesystem::path& repository_root)
@@ -547,8 +541,8 @@ auto validate_manifest_json(std::string_view json_text,
 
   Json root;
   try {
-    root = Json::parse(json_text.begin(), json_text.end(), callback, true,
-                       false);
+    root =
+        Json::parse(json_text.begin(), json_text.end(), callback, true, false);
   } catch (const nlohmann::json::exception& error) {
     add(diagnostics, "$", std::format("malformed JSON: {}", error.what()));
     return diagnostics;
@@ -588,12 +582,12 @@ auto validate_manifest_json(std::string_view json_text,
   for (std::size_t index = 0; index < records->size(); ++index) {
     const auto path = std::format("$.assets[{}]", index);
     const auto& asset = (*records)[index];
-    validate_fields(asset, path,
-                    {"id", "media_type", "source_kind", "files", "purpose",
-                     "edits", "license"},
-                    {"generated", "third_party", "code_authored", "capture",
-                     "derived"},
-                    diagnostics);
+    validate_fields(
+        asset, path,
+        {"id", "media_type", "source_kind", "files", "purpose", "edits",
+         "license"},
+        {"generated", "third_party", "code_authored", "capture", "derived"},
+        diagnostics);
     if (!asset.is_object()) continue;
 
     auto id = read_string(asset, "id", path, diagnostics).value_or("");
@@ -612,17 +606,16 @@ auto validate_manifest_json(std::string_view json_text,
       add(diagnostics, std::format("{}.id", path),
           "duplicates an earlier asset ID");
     }
-    if (!contains({"visual", "font", "music", "voice", "sfx"},
-                  media_type)) {
+    if (!contains({"visual", "font", "music", "voice", "sfx"}, media_type)) {
       add(diagnostics, std::format("{}.media_type", path),
           "unknown media type");
     } else if (!id.empty() && !id.starts_with(media_type + "/")) {
       add(diagnostics, std::format("{}.id", path),
           "ID namespace must match media_type");
     }
-    if (!contains({"generated", "third-party", "code-authored", "capture",
-                   "derived"},
-                  source_kind)) {
+    if (!contains(
+            {"generated", "third-party", "code-authored", "capture", "derived"},
+            source_kind)) {
       add(diagnostics, std::format("{}.source_kind", path),
           "unknown source kind");
     }
@@ -635,8 +628,7 @@ auto validate_manifest_json(std::string_view json_text,
     }
     for (std::size_t file_index = 0; file_index < encoded_files.size();
          ++file_index) {
-      const auto file_path =
-          std::format("{}.files[{}]", path, file_index);
+      const auto file_path = std::format("{}.files[{}]", path, file_index);
       const auto& encoded = encoded_files[file_index];
       validate_existing_file(repository_root, encoded, file_path, diagnostics);
       if (contains({"generated", "third-party", "derived"}, source_kind) &&
@@ -726,4 +718,4 @@ auto validate_manifest_file(const std::filesystem::path& manifest_path,
   return validate_manifest_json(contents, repository_root);
 }
 
-}  // namespace apsis_drift::asset_provenance
+} // namespace apsis_drift::asset_provenance

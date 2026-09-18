@@ -99,17 +99,16 @@ class LocalSystemRenderer {
 
   // A rejected frame leaves destination unchanged. Ephemeris time is an
   // explicit input; rendering cadence never advances generated-world state.
-  [[nodiscard]] auto render(
-      const LocalSystemDescriptor& system, const LocalSystemView& view,
-      std::span<termforge::Pixel> destination)
+  [[nodiscard]] auto render(const LocalSystemDescriptor& system,
+                            const LocalSystemView& view,
+                            std::span<termforge::Pixel> destination)
       -> std::expected<LocalSystemRenderStats, LocalSystemRenderError>;
 
   // Draws presentation-only station geometry at its resolved system-space
   // location without feeding projection or terminal state back into simulation.
-  [[nodiscard]] auto
-  render_origin_station(const LocalSystemView& view,
-                        const OriginStationEphemeris& station,
-                        std::span<termforge::Pixel> destination)
+  [[nodiscard]] auto render_origin_station(
+      const LocalSystemView& view, const OriginStationEphemeris& station,
+      std::span<termforge::Pixel> destination)
       -> std::expected<void, LocalSystemRenderError>;
 
  private:
@@ -119,4 +118,4 @@ class LocalSystemRenderer {
   std::vector<termforge::Pixel> m_orbital_frame;
 };
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

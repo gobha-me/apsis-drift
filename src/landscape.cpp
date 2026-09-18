@@ -80,8 +80,7 @@ class XorShift32 {
          std::isfinite(camera.pitch);
 }
 
-[[nodiscard]] auto finite_direction(WorldDirection direction) noexcept
-    -> bool {
+[[nodiscard]] auto finite_direction(WorldDirection direction) noexcept -> bool {
   return std::isfinite(direction.x) && std::isfinite(direction.y) &&
          std::isfinite(direction.z);
 }
@@ -140,7 +139,7 @@ class XorShift32 {
   return std::clamp(0.48F + diffuse * 0.74F, 0.48F, 1.22F);
 }
 
-}  // namespace
+} // namespace
 
 auto project_world_direction(const Camera& camera, WorldDirection direction,
                              const RenderSettings& settings) noexcept
@@ -178,8 +177,8 @@ auto project_world_direction(const Camera& camera, WorldDirection direction,
   }
 
   const float horizontal_tangent = horizontal_half_tangent(settings);
-  const float aspect = static_cast<float>(settings.width) /
-                       static_cast<float>(settings.height);
+  const float aspect =
+      static_cast<float>(settings.width) / static_cast<float>(settings.height);
   const float vertical_tangent = horizontal_tangent / aspect;
   return std::optional<ProjectedDirection>{ProjectedDirection{
       .x = dot(direction, right) / forward_depth / horizontal_tangent,
@@ -204,11 +203,11 @@ auto project_local_horizon(const Camera& camera,
 }
 
 Terrain::Terrain(int size)
-    : m_size(size),
-      m_heights(static_cast<std::size_t>(size) *
-                static_cast<std::size_t>(size)),
+    : m_size(size), m_heights(static_cast<std::size_t>(size) *
+                              static_cast<std::size_t>(size)),
       m_colors(static_cast<std::size_t>(size) *
-               static_cast<std::size_t>(size)) {}
+               static_cast<std::size_t>(size)) {
+}
 
 auto Terrain::generate(int size, std::uint32_t seed)
     -> std::expected<Terrain, TerrainError> {
@@ -219,9 +218,8 @@ auto Terrain::generate(int size, std::uint32_t seed)
   if (size > 4096) return std::unexpected{TerrainError::size_too_large};
 
   Terrain terrain{size};
-  std::vector<float> field(static_cast<std::size_t>(size) *
-                               static_cast<std::size_t>(size),
-                           0.0F);
+  std::vector<float> field(
+      static_cast<std::size_t>(size) * static_cast<std::size_t>(size), 0.0F);
   const auto wrapped_index = [size](int x, int y) {
     const int wx = (x % size + size) % size;
     const int wy = (y % size + size) % size;
@@ -238,12 +236,11 @@ auto Terrain::generate(int size, std::uint32_t seed)
 
     for (int y = half; y < size; y += step) {
       for (int x = half; x < size; x += step) {
-        const float average =
-            (field[wrapped_index(x - half, y - half)] +
-             field[wrapped_index(x + half, y - half)] +
-             field[wrapped_index(x - half, y + half)] +
-             field[wrapped_index(x + half, y + half)]) *
-            0.25F;
+        const float average = (field[wrapped_index(x - half, y - half)] +
+                               field[wrapped_index(x + half, y - half)] +
+                               field[wrapped_index(x - half, y + half)] +
+                               field[wrapped_index(x + half, y + half)]) *
+                              0.25F;
         field[wrapped_index(x, y)] =
             average + random.signed_unit() * displacement;
       }
@@ -252,12 +249,11 @@ auto Terrain::generate(int size, std::uint32_t seed)
     for (int y = 0; y < size; y += half) {
       const int start_x = (y + half) % step;
       for (int x = start_x; x < size; x += step) {
-        const float average =
-            (field[wrapped_index(x - half, y)] +
-             field[wrapped_index(x + half, y)] +
-             field[wrapped_index(x, y - half)] +
-             field[wrapped_index(x, y + half)]) *
-            0.25F;
+        const float average = (field[wrapped_index(x - half, y)] +
+                               field[wrapped_index(x + half, y)] +
+                               field[wrapped_index(x, y - half)] +
+                               field[wrapped_index(x, y + half)]) *
+                              0.25F;
         field[wrapped_index(x, y)] =
             average + random.signed_unit() * displacement;
       }
@@ -317,7 +313,8 @@ VoxelRenderer::VoxelRenderer(RenderSettings settings)
     : m_settings(settings),
       m_occlusion(validate_viewport({settings.width, settings.height})
                       ? static_cast<std::size_t>(settings.width)
-                      : 0U) {}
+                      : 0U) {
+}
 
 auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
                            std::span<termforge::Pixel> destination) -> bool {
@@ -345,13 +342,12 @@ auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
 
   for (int y = 0; y < height; ++y) {
     const float t = height > 1
-                        ? static_cast<float>(y) /
-                              static_cast<float>(height - 1)
+                        ? static_cast<float>(y) / static_cast<float>(height - 1)
                         : 0.0F;
-    const float haze = std::clamp(
-        t / (sky_horizon / static_cast<float>(height)), 0.0F, 1.0F);
-    const termforge::Pixel sky = mix({28, 68, 116, 255},
-                                     {178, 199, 207, 255}, haze);
+    const float haze =
+        std::clamp(t / (sky_horizon / static_cast<float>(height)), 0.0F, 1.0F);
+    const termforge::Pixel sky =
+        mix({28, 68, 116, 255}, {178, 199, 207, 255}, haze);
     std::fill_n(destination.begin() + static_cast<std::ptrdiff_t>(y) * width,
                 width, sky);
   }
@@ -365,10 +361,10 @@ auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
         static_cast<float>(sun_radius * 2) / static_cast<float>(height);
     if (sun.x >= -1.0F - radius_x && sun.x <= 1.0F + radius_x &&
         sun.y >= -1.0F - radius_y && sun.y <= 1.0F + radius_y) {
-      const int sun_x = static_cast<int>(std::lround(
-          (sun.x + 1.0F) * 0.5F * static_cast<float>(width - 1)));
-      const int sun_y = static_cast<int>(std::lround(
-          (1.0F - sun.y) * 0.5F * static_cast<float>(height - 1)));
+      const int sun_x = static_cast<int>(
+          std::lround((sun.x + 1.0F) * 0.5F * static_cast<float>(width - 1)));
+      const int sun_y = static_cast<int>(
+          std::lround((1.0F - sun.y) * 0.5F * static_cast<float>(height - 1)));
       for (int y = std::max(0, sun_y - sun_radius);
            y < std::min(height, sun_y + sun_radius + 1); ++y) {
         for (int x = std::max(0, sun_x - sun_radius);
@@ -378,8 +374,7 @@ auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
           if (dx * dx + dy * dy <= sun_radius * sun_radius) {
             destination[static_cast<std::size_t>(y) *
                             static_cast<std::size_t>(width) +
-                        static_cast<std::size_t>(x)] =
-                {247, 220, 151, 255};
+                        static_cast<std::size_t>(x)] = {247, 220, 151, 255};
           }
         }
       }
@@ -416,13 +411,12 @@ auto VoxelRenderer::render(const Terrain& terrain, const Camera& camera,
       const int map_x = static_cast<int>(std::floor(sample_x));
       const int map_y = static_cast<int>(std::floor(sample_y));
       const auto raw_height = terrain.height_at(map_x, map_y);
-      const float ground = static_cast<float>(
-          std::max(raw_height, kWaterLevel));
-      const float projected =
-          horizon_row_pixels +
-          (camera.height - ground) * terrain_scale / distance;
-      const int top = static_cast<int>(std::clamp(
-          projected, 0.0F, static_cast<float>(height)));
+      const float ground =
+          static_cast<float>(std::max(raw_height, kWaterLevel));
+      const float projected = horizon_row_pixels + (camera.height - ground) *
+                                                       terrain_scale / distance;
+      const int top = static_cast<int>(
+          std::clamp(projected, 0.0F, static_cast<float>(height)));
       const int bottom = m_occlusion[static_cast<std::size_t>(screen_x)];
 
       if (top < bottom) {
@@ -461,4 +455,4 @@ auto pixel_checksum(std::span<const termforge::Pixel> pixels) noexcept
   return hash;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

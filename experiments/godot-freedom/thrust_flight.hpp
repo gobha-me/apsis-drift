@@ -15,7 +15,7 @@
 namespace apsis_drift::flight_lab {
 struct V {
   double x{}, y{}, z{};
-  friend auto operator==(const V &, const V &) -> bool = default;
+  friend auto operator==(const V&, const V&) -> bool = default;
 };
 inline auto operator+(V a, V b) -> V {
   return {a.x + b.x, a.y + b.y, a.z + b.z};
@@ -32,7 +32,9 @@ inline auto dot(V a, V b) -> double {
 inline auto cross(V a, V b) -> V {
   return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
-inline auto length(V a) -> double { return std::sqrt(dot(a, a)); }
+inline auto length(V a) -> double {
+  return std::sqrt(dot(a, a));
+}
 inline auto finite(V a) -> bool {
   return std::isfinite(a.x) && std::isfinite(a.y) && std::isfinite(a.z);
 }
@@ -42,7 +44,9 @@ inline auto unit(V a) -> V {
     throw std::invalid_argument("degenerate flight vector");
   return a * (1 / n);
 }
-inline auto vec(PlanetFixedDirection d) -> V { return {d.x, d.y, d.z}; }
+inline auto vec(PlanetFixedDirection d) -> V {
+  return {d.x, d.y, d.z};
+}
 inline auto rotate(V v, V axis, double angle) -> V {
   return v * std::cos(angle) + cross(axis, v) * std::sin(angle) +
          axis * (dot(axis, v) * (1 - std::cos(angle)));
@@ -65,7 +69,7 @@ struct State {
   double density{}, dynamic_pressure{}, clearance{}, acceleration{};
   V thrust_body; // actual limited engine/RCS acceleration, including assist
   bool floor_guard{}, assist{true};
-  friend auto operator==(const State &, const State &) -> bool = default;
+  friend auto operator==(const State&, const State&) -> bool = default;
 };
 inline constexpr double mass_kg = 8000;
 inline constexpr double main_accel = 45;
@@ -76,10 +80,10 @@ inline constexpr double down_accel = 18;
 inline constexpr double test_floor =
     16; // explicit safety guard, NOT collision/landing
 
-inline auto to_world(const State &s, V body) -> V {
+inline auto to_world(const State& s, V body) -> V {
   return s.right * body.x + s.up * body.y + s.back * body.z;
 }
-inline auto to_body(const State &s, V world) -> V {
+inline auto to_body(const State& s, V world) -> V {
   return {dot(s.right, world), dot(s.up, world), dot(s.back, world)};
 }
 inline auto validate(Demand d) -> void {
@@ -89,11 +93,10 @@ inline auto validate(Demand d) -> void {
   if (d.main < 0 || d.retro < 0)
     throw std::invalid_argument("negative engine demand");
 }
-inline auto validate(const State &s) -> void {
+inline auto validate(const State& s) -> void {
   for (V v : {s.position, s.velocity, s.right, s.up, s.back, s.angular,
               s.thrust_body})
-    if (!finite(v))
-      throw std::invalid_argument("nonfinite flight lab state");
+    if (!finite(v)) throw std::invalid_argument("nonfinite flight lab state");
   if (length(s.position) < 1000 || length(s.position) > 1e10 ||
       length(s.velocity) > 100000 || length(s.angular) > 10)
     throw std::invalid_argument("flight lab numerical envelope exceeded");
@@ -111,13 +114,11 @@ inline auto validate(const State &s) -> void {
       s.dynamic_pressure < 0 || s.acceleration < 0)
     throw std::invalid_argument("invalid flight lab scalar");
 }
-inline auto initial(const PlanetDescriptor &planet, GeodeticPosition origin,
+inline auto initial(const PlanetDescriptor& planet, GeodeticPosition origin,
                     double heading) -> State {
-  if (!std::isfinite(heading))
-    throw std::invalid_argument("invalid heading");
+  if (!std::isfinite(heading)) throw std::invalid_argument("invalid heading");
   const auto frame = make_local_tangent_frame(planet, origin);
-  if (!frame)
-    throw std::invalid_argument("invalid flight origin");
+  if (!frame) throw std::invalid_argument("invalid flight origin");
   State s;
   s.position = {frame->origin.x, frame->origin.y, frame->origin.z};
   const V forward = vec(frame->east) * std::cos(heading) +
@@ -128,15 +129,15 @@ inline auto initial(const PlanetDescriptor &planet, GeodeticPosition origin,
   validate(s);
   return s;
 }
-inline auto density(const PlanetDescriptor &planet, double altitude) -> double {
+inline auto density(const PlanetDescriptor& planet, double altitude) -> double {
   // Explicit fiction/tuning approximation: pressure-scaled isothermal
   // atmosphere. No weather, wind, planetary rotation or supersonic coefficient
   // model yet.
   return 1.225 * (planet.atmosphere_pressure.value / 1013.25) *
          std::exp(-std::max(0.0, altitude) / 8500.0);
 }
-inline auto advance(const PlanetDescriptor &planet, double surface,
-                    State &state, Demand demand,
+inline auto advance(const PlanetDescriptor& planet, double surface,
+                    State& state, Demand demand,
                     SimulationSeconds step = kSimulationStep) -> void {
   validate(state);
   validate(demand);
@@ -187,10 +188,8 @@ inline auto advance(const PlanetDescriptor &planet, double surface,
     // Support gravity with actual available thrusters. Upright hover is not
     // free antigravity; inversion/high gravity can saturate the available jets.
     thrust = thrust - to_body(s, gravity);
-    if (std::abs(demand.strafe) < .001)
-      thrust.x -= air_velocity.x * .65;
-    if (std::abs(demand.heave) < .001)
-      thrust.y -= air_velocity.y * .65;
+    if (std::abs(demand.strafe) < .001) thrust.x -= air_velocity.x * .65;
+    if (std::abs(demand.heave) < .001) thrust.y -= air_velocity.y * .65;
     // Deliberately no forward speed hold: releasing main thrust permits
     // coasting.
   }
@@ -214,8 +213,7 @@ inline auto advance(const PlanetDescriptor &planet, double surface,
     const V normal = unit(s.position);
     s.position = normal * (radius + surface + test_floor);
     const double inward = dot(s.velocity, normal);
-    if (inward < 0)
-      s.velocity = s.velocity - normal * inward;
+    if (inward < 0) s.velocity = s.velocity - normal * inward;
     s.clearance = test_floor;
   }
   s.assist = demand.assist;
@@ -223,7 +221,7 @@ inline auto advance(const PlanetDescriptor &planet, double surface,
   validate(s);
   state = s;
 }
-inline auto checksum(const State &s) -> std::uint64_t {
+inline auto checksum(const State& s) -> std::uint64_t {
   std::uint64_t hash = 1469598103934665603ULL;
   auto add = [&](std::uint64_t bits) {
     for (int i = 0; i < 8; ++i) {

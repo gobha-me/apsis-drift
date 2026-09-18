@@ -25,8 +25,7 @@ struct Vector3 {
   return finite(value.x) && finite(value.y) && finite(value.z);
 }
 
-[[nodiscard]] auto vector(PlanetFixedPositionMetres value) noexcept
-    -> Vector3 {
+[[nodiscard]] auto vector(PlanetFixedPositionMetres value) noexcept -> Vector3 {
   return {value.x, value.y, value.z};
 }
 
@@ -53,8 +52,7 @@ struct Vector3 {
 }
 
 [[nodiscard]] auto length(Vector3 value) noexcept -> double {
-  return std::sqrt(value.x * value.x + value.y * value.y +
-                   value.z * value.z);
+  return std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
 }
 
 [[nodiscard]] auto normalized(Vector3 value) noexcept -> Vector3 {
@@ -76,8 +74,7 @@ struct Vector3 {
     case AtmosphereClass::temperate:
       return pressure >= 250 && pressure <= 1'499;
     case AtmosphereClass::dense:
-      return pressure >= 1'500 &&
-             pressure <= AtmospherePressureMillibars::max;
+      return pressure >= 1'500 && pressure <= AtmospherePressureMillibars::max;
   }
   return false;
 }
@@ -128,10 +125,8 @@ struct Vector3 {
     -> double {
   auto value = seed;
   value ^= mix64(static_cast<std::uint32_t>(x) + 0x9E3779B9ULL);
-  value ^= std::rotl(mix64(static_cast<std::uint32_t>(y) + 0x85EBCA6BULL),
-                     21);
-  value ^= std::rotl(mix64(static_cast<std::uint32_t>(z) + 0xC2B2AE35ULL),
-                     42);
+  value ^= std::rotl(mix64(static_cast<std::uint32_t>(y) + 0x85EBCA6BULL), 21);
+  value ^= std::rotl(mix64(static_cast<std::uint32_t>(z) + 0xC2B2AE35ULL), 42);
   constexpr double denominator{16'777'215.0};
   return static_cast<double>(mix64(value) >> 40U) / denominator;
 }
@@ -193,13 +188,13 @@ struct Vector3 {
       break;
   }
 
-  const auto terrain_seed = derive_planet_stream_seed(
-      planet.seed, PlanetDescriptorStream::terrain);
-  const double broad = value_noise(multiply(normal, base_frequency),
-                                   terrain_seed.value);
-  const double regional = value_noise(multiply(normal, base_frequency * 2.7),
-                                      terrain_seed.value ^
-                                          0xD1B54A32D192ED03ULL);
+  const auto terrain_seed =
+      derive_planet_stream_seed(planet.seed, PlanetDescriptorStream::terrain);
+  const double broad =
+      value_noise(multiply(normal, base_frequency), terrain_seed.value);
+  const double regional =
+      value_noise(multiply(normal, base_frequency * 2.7),
+                  terrain_seed.value ^ 0xD1B54A32D192ED03ULL);
   const double combined = broad * 0.68 + regional * 0.32;
   return std::clamp(0.5 + (combined - 0.5) * contrast, 0.0, 1.0);
 }
@@ -240,8 +235,7 @@ struct Vector3 {
   const double water_threshold =
       water_fraction <= 0.0
           ? 0.0
-          : (water_fraction >= 1.0 ? 1.0
-                                   : 0.28 + water_fraction * 0.44);
+          : (water_fraction >= 1.0 ? 1.0 : 0.28 + water_fraction * 0.44);
   if (water_threshold > 0.0 && field < water_threshold) {
     const double depth =
         std::clamp((water_threshold - field) / water_threshold, 0.0, 1.0);
@@ -249,29 +243,29 @@ struct Vector3 {
                  pixel(planet.palette.deep_water), depth);
   }
 
-  const double land = std::clamp(
-      (field - water_threshold) /
-          std::max(1.0e-9, 1.0 - water_threshold),
-      0.0, 1.0);
+  const double land = std::clamp((field - water_threshold) /
+                                     std::max(1.0e-9, 1.0 - water_threshold),
+                                 0.0, 1.0);
   if (land < 0.68) {
-    return blend(pixel(planet.palette.lowland),
-                 pixel(planet.palette.highland), land / 0.68);
+    return blend(pixel(planet.palette.lowland), pixel(planet.palette.highland),
+                 land / 0.68);
   }
   return blend(pixel(planet.palette.highland), pixel(planet.palette.peak),
                (land - 0.68) / 0.32);
 }
 
 [[nodiscard]] auto space_pixel(int x, int y) noexcept -> termforge::Pixel {
-  const auto key = (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x))
-                    << 32U) |
-                   static_cast<std::uint32_t>(y);
+  const auto key =
+      (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32U) |
+      static_cast<std::uint32_t>(y);
   const auto star = mix64(key ^ 0xA0761D6478BD642FULL);
   if ((star & 0x7FFU) == 0U) {
-    const auto brightness = static_cast<std::uint8_t>(150U +
-        static_cast<unsigned>((star >> 12U) & 0x69U));
+    const auto brightness = static_cast<std::uint8_t>(
+        150U + static_cast<unsigned>((star >> 12U) & 0x69U));
     return {brightness, brightness,
-            static_cast<std::uint8_t>(std::min(255U,
-                static_cast<unsigned>(brightness) + 12U)), 255};
+            static_cast<std::uint8_t>(
+                std::min(255U, static_cast<unsigned>(brightness) + 12U)),
+            255};
   }
   return {4, 7, 13, 255};
 }
@@ -279,21 +273,21 @@ struct Vector3 {
 [[nodiscard]] auto atmosphere_strength(const PlanetDescriptor& planet) noexcept
     -> double {
   if (planet.atmosphere_class == AtmosphereClass::airless) return 0.0;
-  return std::clamp(
-      static_cast<double>(planet.atmosphere_pressure.value) /
-          static_cast<double>(AtmospherePressureMillibars::max),
-      0.08, 1.0);
+  return std::clamp(static_cast<double>(planet.atmosphere_pressure.value) /
+                        static_cast<double>(AtmospherePressureMillibars::max),
+                    0.08, 1.0);
 }
 
-}  // namespace
+} // namespace
 
 OrbitalRenderer::OrbitalRenderer(OrbitalRenderSettings settings)
-    : m_settings(settings) {}
+    : m_settings(settings) {
+}
 
-auto OrbitalRenderer::render(
-    const PlanetDescriptor& planet, const OrbitalCamera& camera,
-    PlanetFixedDirection light_direction,
-    std::span<termforge::Pixel> destination) const
+auto OrbitalRenderer::render(const PlanetDescriptor& planet,
+                             const OrbitalCamera& camera,
+                             PlanetFixedDirection light_direction,
+                             std::span<termforge::Pixel> destination) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   return render_impl(planet, camera, light_direction, nullptr, 0, destination,
                      {});
@@ -302,8 +296,7 @@ auto OrbitalRenderer::render(
 auto OrbitalRenderer::render_tile_backed(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
     PlanetFixedDirection light_direction, std::uint8_t terrain_lod,
-    TerrainTileCache& cache,
-    std::span<termforge::Pixel> destination,
+    TerrainTileCache& cache, std::span<termforge::Pixel> destination,
     std::span<const std::uint8_t> covered_pixels) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   return render_impl(planet, camera, light_direction, &cache, terrain_lod,
@@ -313,8 +306,7 @@ auto OrbitalRenderer::render_tile_backed(
 auto OrbitalRenderer::render_impl(
     const PlanetDescriptor& planet, const OrbitalCamera& camera,
     PlanetFixedDirection light_direction, TerrainTileCache* cache,
-    std::uint8_t terrain_lod,
-    std::span<termforge::Pixel> destination,
+    std::uint8_t terrain_lod, std::span<termforge::Pixel> destination,
     std::span<const std::uint8_t> covered_pixels) const
     -> std::expected<OrbitalRenderStats, OrbitalRenderError> {
   if (!validate_viewport({m_settings.width, m_settings.height})) {
@@ -381,8 +373,8 @@ auto OrbitalRenderer::render_impl(
   }
   const Vector3 light = normalized(raw_light);
 
-  const double horizontal_tangent = std::tan(
-      m_settings.field_of_view_degrees * std::numbers::pi / 360.0);
+  const double horizontal_tangent =
+      std::tan(m_settings.field_of_view_degrees * std::numbers::pi / 360.0);
   if (!finite(horizontal_tangent) || horizontal_tangent <= 0.0) {
     return std::unexpected{OrbitalRenderError::invalid_field_of_view};
   }
@@ -390,14 +382,14 @@ auto OrbitalRenderer::render_impl(
                         static_cast<double>(m_settings.height);
   const double vertical_tangent = horizontal_tangent / aspect;
   const double sun_angular_radius = std::max(
-      0.012,
-      std::atan(vertical_tangent) /
-          static_cast<double>(std::max(1, m_settings.height)) * 2.5);
+      0.012, std::atan(vertical_tangent) /
+                 static_cast<double>(std::max(1, m_settings.height)) * 2.5);
   const double sun_threshold = std::cos(sun_angular_radius);
   const double camera_radius_squared = dot(camera_position, camera_position);
   const double atmosphere = atmosphere_strength(planet);
   const double atmosphere_radius = radius * (1.0 + 0.018 + atmosphere * 0.025);
-  const double atmosphere_radius_squared = atmosphere_radius * atmosphere_radius;
+  const double atmosphere_radius_squared =
+      atmosphere_radius * atmosphere_radius;
   const auto atmosphere_color = pixel(planet.palette.atmosphere);
 
   OrbitalRenderStats stats;
@@ -410,10 +402,9 @@ auto OrbitalRenderer::render_impl(
     terrain_sampler.emplace(std::move(*created));
   }
   for (int y = 0; y < m_settings.height; ++y) {
-    const double screen_y =
-        (1.0 - (static_cast<double>(y) + 0.5) * 2.0 /
-                   static_cast<double>(m_settings.height)) *
-        vertical_tangent;
+    const double screen_y = (1.0 - (static_cast<double>(y) + 0.5) * 2.0 /
+                                       static_cast<double>(m_settings.height)) *
+                            vertical_tangent;
     for (int x = 0; x < m_settings.width;
          x += m_settings.horizontal_sample_stride) {
       const int sample_width =
@@ -431,21 +422,17 @@ auto OrbitalRenderer::render_impl(
       const double sample_x =
           static_cast<double>(x) + static_cast<double>(sample_width) * 0.5;
       const double screen_x =
-          (sample_x * 2.0 /
-               static_cast<double>(m_settings.width) -
-           1.0) *
+          (sample_x * 2.0 / static_cast<double>(m_settings.width) - 1.0) *
           horizontal_tangent;
-      const Vector3 ray = normalized(add(
-          forward, add(multiply(right, screen_x), multiply(up, screen_y))));
+      const Vector3 ray = normalized(
+          add(forward, add(multiply(right, screen_x), multiply(up, screen_y))));
       const double camera_along_ray = dot(camera_position, ray);
-      const double discriminant =
-          camera_along_ray * camera_along_ray -
-          (camera_radius_squared - radius * radius);
+      const double discriminant = camera_along_ray * camera_along_ray -
+                                  (camera_radius_squared - radius * radius);
       if (discriminant >= 0.0) {
         const double distance = -camera_along_ray - std::sqrt(discriminant);
         if (distance > 0.0) {
-          const Vector3 point =
-              add(camera_position, multiply(ray, distance));
+          const Vector3 point = add(camera_position, multiply(ray, distance));
           const Vector3 normal = normalized(point);
           termforge::Pixel color;
           if (terrain_sampler) {
@@ -468,8 +455,7 @@ auto OrbitalRenderer::render_impl(
                 std::pow(1.0 - view, 2.2) * (0.18 + atmosphere * 0.36);
             color = blend(color, atmosphere_color, scatter);
           }
-          std::fill_n(destination.begin() +
-                          static_cast<std::ptrdiff_t>(index),
+          std::fill_n(destination.begin() + static_cast<std::ptrdiff_t>(index),
                       sample_width, color);
           stats.surface_pixels += static_cast<std::size_t>(sample_width);
           continue;
@@ -478,8 +464,8 @@ auto OrbitalRenderer::render_impl(
 
       auto background = space_pixel(x, y);
       if (atmosphere > 0.0 && camera_along_ray < 0.0) {
-        const double closest_squared = camera_radius_squared -
-                                       camera_along_ray * camera_along_ray;
+        const double closest_squared =
+            camera_radius_squared - camera_along_ray * camera_along_ray;
         if (closest_squared < atmosphere_radius_squared &&
             closest_squared > radius * radius) {
           const double closest = std::sqrt(std::max(0.0, closest_squared));
@@ -506,4 +492,4 @@ auto OrbitalRenderer::render_impl(
   return stats;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

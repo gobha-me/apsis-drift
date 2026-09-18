@@ -13,7 +13,7 @@
 
 namespace apsis_drift::midi_spike {
 
-inline constexpr std::size_t kMaximumMidiBytes{64U * 1024U};
+inline constexpr std::size_t kMaximumMidiBytes{std::size_t{64U} * 1024U};
 inline constexpr std::uint16_t kMaximumMidiTracks{16};
 inline constexpr std::size_t kMaximumMidiEvents{16'384};
 inline constexpr std::uint16_t kMaximumMidiPpq{960};
@@ -22,8 +22,10 @@ inline constexpr std::size_t kMaximumMusicVoices{64};
 inline constexpr std::size_t kMusicLayerCount{4};
 inline constexpr std::size_t kMusicCommandCapacity{32};
 inline constexpr std::size_t kMusicGainRampFrames{480};
-inline constexpr std::size_t kMaximumSoundFontBytes{4U * 1024U * 1024U};
-inline constexpr std::size_t kMaximumDecodedSoundFontBytes{16U * 1024U * 1024U};
+inline constexpr std::size_t kMaximumSoundFontBytes{std::size_t{4U} * 1024U *
+                                                    1024U};
+inline constexpr std::size_t kMaximumDecodedSoundFontBytes{std::size_t{16U} *
+                                                           1024U * 1024U};
 
 enum class MidiError : std::uint8_t {
   empty,
@@ -149,8 +151,8 @@ struct MusicDiagnostics {
 
 class MusicEngine {
  public:
-  [[nodiscard]] static auto create(
-      MidiSchedule schedule, std::span<const std::byte> soundfont)
+  [[nodiscard]] static auto create(MidiSchedule schedule,
+                                   std::span<const std::byte> soundfont)
       -> std::expected<MusicEngine, MidiError>;
 
   MusicEngine(MusicEngine&&) noexcept;
@@ -167,8 +169,8 @@ class MusicEngine {
       -> std::optional<MidiError>;
   [[nodiscard]] auto set_music_volume(float gain) noexcept
       -> std::optional<MidiError>;
-  [[nodiscard]] auto set_layer_target(
-      MusicLayer layer, float gain, TransitionBoundary boundary) noexcept
+  [[nodiscard]] auto set_layer_target(MusicLayer layer, float gain,
+                                      TransitionBoundary boundary) noexcept
       -> std::optional<MidiError>;
   [[nodiscard]] auto render(std::span<float> interleaved_samples) noexcept
       -> std::optional<MidiError>;
@@ -180,4 +182,4 @@ class MusicEngine {
   std::unique_ptr<Impl> m_impl;
 };
 
-}  // namespace apsis_drift::midi_spike
+} // namespace apsis_drift::midi_spike

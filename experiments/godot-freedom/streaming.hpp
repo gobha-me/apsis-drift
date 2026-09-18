@@ -47,9 +47,9 @@ inline auto unit(StreamPoint a) -> StreamPoint {
 
 struct StreamKey {
   unsigned face{}, lod{}, x{}, y{};
-  auto operator<=>(const StreamKey &) const = default;
+  auto operator<=>(const StreamKey&) const = default;
 };
-inline auto tile_key(const PlanetDescriptor &planet, StreamKey key)
+inline auto tile_key(const PlanetDescriptor& planet, StreamKey key)
     -> TerrainTileKey {
   if (key.face > 5 || key.lod > kStreamMaxLod || key.x >= (1U << key.lod) ||
       key.y >= (1U << key.lod))
@@ -61,7 +61,7 @@ inline auto stream_id(StreamKey k) -> std::string {
   return std::to_string(k.face) + ":" + std::to_string(k.lod) + ":" +
          std::to_string(k.x) + ":" + std::to_string(k.y);
 }
-inline auto tile_point(const PlanetDescriptor &p, StreamKey k, double u,
+inline auto tile_point(const PlanetDescriptor& p, StreamKey k, double u,
                        double v, double height = 0) -> StreamPoint {
   return require(
       planet_fixed_from_terrain_address(p, {tile_key(p, k), u, v}, height));
@@ -71,7 +71,7 @@ inline auto tile_point(const PlanetDescriptor &p, StreamKey k, double u,
 // it never drops a visible region to fit that budget. No camera-facing culling
 // in this first planner: rapid head turns always have a resident coarse
 // surface.
-inline auto plan_tiles(const PlanetDescriptor &planet, StreamPoint observer,
+inline auto plan_tiles(const PlanetDescriptor& planet, StreamPoint observer,
                        unsigned budget = kStreamMaxTiles)
     -> std::vector<StreamKey> {
   if (budget < 6 || budget > kStreamMaxTiles ||
@@ -82,7 +82,7 @@ inline auto plan_tiles(const PlanetDescriptor &planet, StreamPoint observer,
     double score;
     StreamKey key;
   };
-  auto lower = [](const Candidate &a, const Candidate &b) {
+  auto lower = [](const Candidate& a, const Candidate& b) {
     return a.score == b.score ? a.key > b.key : a.score < b.score;
   };
   std::priority_queue<Candidate, std::vector<Candidate>, decltype(lower)> queue(
@@ -96,16 +96,14 @@ inline auto plan_tiles(const PlanetDescriptor &planet, StreamPoint observer,
     const double distance =
         std::max(80.0, length(sub(observer, center)) - width * .85 - 4000.0);
     leaves.emplace(k, true);
-    if (k.lod < kStreamMaxLod)
-      queue.push({width / distance, k});
+    if (k.lod < kStreamMaxLod) queue.push({width / distance, k});
   };
   for (unsigned face = 0; face < 6; ++face)
     insert({face, 0, 0, 0});
   while (!queue.empty() && leaves.size() + 3 <= budget) {
     auto best = queue.top();
     queue.pop();
-    if (best.score < 1.6)
-      break;
+    if (best.score < 1.6) break;
     leaves.erase(best.key);
     for (unsigned y = 0; y < 2; ++y)
       for (unsigned x = 0; x < 2; ++x)
@@ -113,7 +111,7 @@ inline auto plan_tiles(const PlanetDescriptor &planet, StreamPoint observer,
                 best.key.y * 2 + y});
   }
   std::vector<StreamKey> result;
-  for (const auto &[key, _] : leaves)
+  for (const auto& [key, _] : leaves)
     result.push_back(key);
   return result;
 }
@@ -133,9 +131,9 @@ struct StreamTile {
   }
 };
 
-inline auto build_stream_tile(const PlanetDescriptor &planet, StreamKey key,
+inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
                               unsigned source_lod, unsigned relief_version,
-                              TerrainTileCache &cache)
+                              TerrainTileCache& cache)
     -> std::shared_ptr<const StreamTile> {
   if (source_lod > 10 || relief_version > kExperimentalReliefVersion)
     throw std::invalid_argument("invalid stream recipe");
@@ -150,8 +148,7 @@ inline auto build_stream_tile(const PlanetDescriptor &planet, StreamKey key,
   // high-LOD tiles merely to draw a distant hemisphere. Fine meshes use exactly
   // the same source-LOD interpolation as live flight.
   std::shared_ptr<const TerrainTile> coarse;
-  if (key.lod <= source_lod)
-    coarse = require(cache.get(planet, address_key));
+  if (key.lod <= source_lod) coarse = require(cache.get(planet, address_key));
   for (unsigned row = 0; row < n; ++row)
     for (unsigned col = 0; col < n; ++col) {
       const double u = static_cast<double>(col) / kStreamIntervals;
@@ -159,7 +156,7 @@ inline auto build_stream_tile(const PlanetDescriptor &planet, StreamKey key,
       const auto reference = tile_point(planet, key, u, v);
       TerrainSurfaceSample sample;
       if (coarse) {
-        const auto &exact = require(coarse->sample_at(col * 2, row * 2)).get();
+        const auto& exact = require(coarse->sample_at(col * 2, row * 2)).get();
         sample = {{address_key, u, v},
                   static_cast<double>(exact.elevation_metres),
                   exact.color};
@@ -202,7 +199,7 @@ inline auto build_stream_tile(const PlanetDescriptor &planet, StreamKey key,
       triangle(a, a + 1, a + n, true);
       triangle(a + 1, a + n + 1, a + n, true);
     }
-  for (auto &normal : tile->normals)
+  for (auto& normal : tile->normals)
     normal = unit(normal);
   // Near tiles need normals from the same continuous surface, not independent
   // one-sided triangle fans at each tile edge. A fixed metre-scale stencil also
@@ -273,7 +270,7 @@ struct StreamBatch {
   double milliseconds{};
   auto bytes() const -> std::size_t {
     std::size_t sum = 0;
-    for (const auto &[_, tile] : tiles)
+    for (const auto& [_, tile] : tiles)
       sum += tile->bytes();
     return sum;
   }
@@ -292,24 +289,22 @@ class PlanetStream {
   std::future<StreamBatch> future;
   std::stop_source stop;
 
-public:
-  PlanetStream(const PlanetDescriptor &p, unsigned lod, unsigned relief)
+ public:
+  PlanetStream(const PlanetDescriptor& p, unsigned lod, unsigned relief)
       : planet(p), source_lod(lod), relief_version(relief) {
     if (lod > 10 || relief > kExperimentalReliefVersion)
       throw std::invalid_argument("invalid stream recipe");
   }
   ~PlanetStream() {
     stop.request_stop();
-    if (future.valid())
-      future.wait();
+    if (future.valid()) future.wait();
   }
-  PlanetStream(const PlanetStream &) = delete;
-  auto operator=(const PlanetStream &) -> PlanetStream & = delete;
+  PlanetStream(const PlanetStream&) = delete;
+  auto operator=(const PlanetStream&) -> PlanetStream& = delete;
   auto busy() const -> bool { return future.valid(); }
   auto request(StreamPoint observer) -> bool {
     const auto plan = plan_tiles(planet, observer); // Validate even while busy.
-    if (busy() || plan == requested)
-      return false;
+    if (busy() || plan == requested) return false;
     requested = plan;
     const auto token = stop.get_token();
     future = std::async(std::launch::async, [p = planet, lod = source_lod,
@@ -318,9 +313,8 @@ public:
       const auto begin = std::chrono::steady_clock::now();
       StreamBatch batch;
       auto cache = require(TerrainTileCache::create(64));
-      for (const auto &key : plan) {
-        if (token.stop_requested())
-          break;
+      for (const auto& key : plan) {
+        if (token.stop_requested()) break;
         if (auto it = old.find(key); it != old.end()) {
           batch.tiles.emplace(key, it->second);
           ++batch.reused;

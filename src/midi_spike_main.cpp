@@ -6,8 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -38,8 +38,7 @@ class MidiSpikeRenderSource final : public AudioRenderSource {
  public:
   explicit MidiSpikeRenderSource(MusicEngine& engine) : m_engine{engine} {}
 
-  [[nodiscard]] auto render(
-      std::span<float> interleaved_samples) noexcept
+  [[nodiscard]] auto render(std::span<float> interleaved_samples) noexcept
       -> std::optional<AudioBufferError> override {
     const auto error = m_engine.render(interleaved_samples);
     if (!error) return std::nullopt;
@@ -73,10 +72,14 @@ class MidiSpikeRenderSource final : public AudioRenderSource {
     const std::string_view argument{argv[index]};
     if (index + 1 >= argc) return std::nullopt;
     const std::string_view value{argv[++index]};
-    if (argument == "--midi") options.midi = value;
-    else if (argument == "--soundfont") options.soundfont = value;
-    else if (argument == "--output") options.output = value;
-    else if (argument == "--report") options.report = value;
+    if (argument == "--midi")
+      options.midi = value;
+    else if (argument == "--soundfont")
+      options.soundfont = value;
+    else if (argument == "--output")
+      options.output = value;
+    else if (argument == "--report")
+      options.report = value;
     else if (argument == "--blocks") {
       const auto count = parse_count(value);
       if (!count) return std::nullopt;
@@ -126,7 +129,8 @@ auto write_le32(std::ostream& output, std::uint32_t value) -> void {
 auto write_wav(const std::filesystem::path& path,
                std::span<const std::int16_t> samples) -> bool {
   const auto data_bytes = samples.size() * sizeof(std::int16_t);
-  if (data_bytes > std::numeric_limits<std::uint32_t>::max() - 36U) return false;
+  if (data_bytes > std::numeric_limits<std::uint32_t>::max() - 36U)
+    return false;
   std::ofstream output{path, std::ios::binary};
   output.write("RIFF", 4);
   write_le32(output, static_cast<std::uint32_t>(36U + data_bytes));
@@ -153,7 +157,7 @@ auto update_hash(std::uint64_t& hash, float value) noexcept -> void {
   }
 }
 
-}  // namespace
+} // namespace
 
 auto main(int argc, char** argv) -> int {
   const auto options = parse_options(argc, argv);
@@ -268,15 +272,15 @@ auto main(int argc, char** argv) -> int {
   }
 
   std::ranges::sort(callback_milliseconds);
-  const auto p99_index = std::min(
-      callback_milliseconds.size() - 1U,
-      static_cast<std::size_t>(static_cast<double>(callback_milliseconds.size()) *
-                               0.99));
+  const auto p99_index =
+      std::min(callback_milliseconds.size() - 1U,
+               static_cast<std::size_t>(
+                   static_cast<double>(callback_milliseconds.size()) * 0.99));
   const auto total_samples = options->blocks * block.size();
   const auto rms = std::sqrt(static_cast<double>(square_sum / total_samples));
-  const auto average = std::ranges::fold_left(callback_milliseconds, 0.0,
-                                               std::plus<>{}) /
-                       static_cast<double>(callback_milliseconds.size());
+  const auto average =
+      std::ranges::fold_left(callback_milliseconds, 0.0, std::plus<>{}) /
+      static_cast<double>(callback_milliseconds.size());
   rusage usage{};
   (void)getrusage(RUSAGE_SELF, &usage);
   const auto diagnostics = engine.diagnostics();
@@ -289,11 +293,10 @@ auto main(int argc, char** argv) -> int {
       std::abs(diagnostics.layer_gains[3]) < 0.001F;
   if (!transitions_complete) {
     std::cerr << "semantic layer transitions did not complete: commands="
-              << diagnostics.commands_applied << " gains="
-              << diagnostics.layer_gains[0] << ','
-              << diagnostics.layer_gains[1] << ','
-              << diagnostics.layer_gains[2] << ','
-              << diagnostics.layer_gains[3] << '\n';
+              << diagnostics.commands_applied
+              << " gains=" << diagnostics.layer_gains[0] << ','
+              << diagnostics.layer_gains[1] << ',' << diagnostics.layer_gains[2]
+              << ',' << diagnostics.layer_gains[3] << '\n';
     return 1;
   }
 
@@ -301,7 +304,8 @@ auto main(int argc, char** argv) -> int {
   report << std::format(
       "{{\n"
       "  \"schema_version\": 1,\n"
-      "  \"decision_candidate\": \"TinySoundFont + Drift bounded SMF parser\",\n"
+      "  \"decision_candidate\": \"TinySoundFont + Drift bounded SMF "
+      "parser\",\n"
       "  \"schedule_checksum\": \"{}\",\n"
       "  \"pcm_checksum\": \"{}\",\n"
       "  \"blocks\": {},\n"
@@ -329,7 +333,7 @@ auto main(int argc, char** argv) -> int {
             << " p99_ms=" << callback_milliseconds[p99_index]
             << " max_delta=" << maximum_delta << '\n';
   constexpr double kP99BudgetMilliseconds{1000.0 * kBlockFrames /
-                                           kAudioSampleRate / 2.0};
+                                          kAudioSampleRate / 2.0};
   return callback_milliseconds[p99_index] < kP99BudgetMilliseconds &&
                  maximum_delta < 0.1F
              ? 0

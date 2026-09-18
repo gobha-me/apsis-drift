@@ -19,15 +19,13 @@ class SplitMix64 {
 
   [[nodiscard]] auto bounded(std::uint64_t exclusive_upper) noexcept
       -> std::uint64_t {
-    if (exclusive_upper == 0)
-      return 0;
+    if (exclusive_upper == 0) return 0;
     const auto threshold =
         (std::numeric_limits<std::uint64_t>::max() - exclusive_upper + 1U) %
         exclusive_upper;
     for (;;) {
       const auto value = next();
-      if (value >= threshold)
-        return value % exclusive_upper;
+      if (value >= threshold) return value % exclusive_upper;
     }
   }
 
@@ -101,7 +99,7 @@ template <typename Integer>
   return false;
 }
 
-}  // namespace
+} // namespace
 
 auto generate_origin_home_planet(Seed home_system_seed) -> PlanetDescriptor {
   const auto planet_seed = home_planet_seed(home_system_seed);
@@ -231,8 +229,8 @@ auto initial_origin_onboarding_state(
   };
 }
 
-auto advance_origin_onboarding(
-    OriginOnboardingState& state, OriginOnboardingCommand command) noexcept
+auto advance_origin_onboarding(OriginOnboardingState& state,
+                               OriginOnboardingCommand command) noexcept
     -> std::expected<void, OriginOnboardingError> {
   if (!valid_state(state)) {
     return std::unexpected{OriginOnboardingError::invalid_state};
@@ -283,12 +281,11 @@ auto advance_origin_onboarding(
       }
       next.first_objective = FirstObjectiveStatus::turned_in;
       break;
-    default:
-      return std::unexpected{OriginOnboardingError::invalid_transition};
+    default: return std::unexpected{OriginOnboardingError::invalid_transition};
   }
 
   state = next;
   return {};
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

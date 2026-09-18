@@ -1,0 +1,15 @@
+# clangd config for Apsis Drift's C++23 build. CMake's compile database is the
+# source of truth for compiler, standard, warnings and include paths. These
+# flags are only a fallback for files absent from the database.
+CompileFlags:
+  Add: [-std=c++23, -I, include]
+Index:
+  StandardLibrary: Yes
+
+# clangd reads the repository's .clang-tidy directly. Keep editor-only behavior
+# here instead of maintaining a second check policy. tools/lint.sh runs the full
+# configured policy in CI.
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    FastCheckFilter: Strict

@@ -25,8 +25,7 @@ struct WorldDirection {
   auto operator==(const WorldDirection&) const -> bool = default;
 };
 
-inline constexpr WorldDirection kLocalSunDirection{
-    0.747F, 0.475F, 0.342F};
+inline constexpr WorldDirection kLocalSunDirection{0.747F, 0.475F, 0.342F};
 
 enum class TerrainError {
   size_too_small,
@@ -41,8 +40,7 @@ class Terrain {
 
   [[nodiscard]] auto size() const noexcept -> int { return m_size; }
   [[nodiscard]] auto height_at(int x, int y) const noexcept -> std::uint8_t;
-  [[nodiscard]] auto color_at(int x, int y) const noexcept
-      -> termforge::Pixel;
+  [[nodiscard]] auto color_at(int x, int y) const noexcept -> termforge::Pixel;
   [[nodiscard]] auto checksum() const noexcept -> std::uint64_t;
 
  private:
@@ -121,7 +119,7 @@ class VoxelRenderer {
   std::vector<int> m_occlusion;
 };
 
-[[nodiscard]] auto pixel_checksum(std::span<const termforge::Pixel> pixels)
-    noexcept -> std::uint64_t;
+[[nodiscard]] auto pixel_checksum(
+    std::span<const termforge::Pixel> pixels) noexcept -> std::uint64_t;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

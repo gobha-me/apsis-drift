@@ -47,8 +47,8 @@ enum class SurfaceSignalKind : std::uint8_t {
 struct SurfaceSignalReward {
   std::uint16_t discovery_points{};
 
-  friend auto operator==(const SurfaceSignalReward&,
-                         const SurfaceSignalReward&) -> bool = default;
+  friend auto operator==(const SurfaceSignalReward&, const SurfaceSignalReward&)
+      -> bool = default;
 };
 
 struct SurfaceSignal {
@@ -89,4 +89,4 @@ enum class SurfaceSignalError : std::uint8_t {
 
 [[nodiscard]] auto surface_signal_id_string(SurfaceSignalId id) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

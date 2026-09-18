@@ -140,8 +140,7 @@ enum class CoordinateError : std::uint8_t {
     -> std::expected<PlanetFixedPositionMetres, CoordinateError>;
 
 [[nodiscard]] auto geodetic_from_planet_fixed(
-    const PlanetDescriptor& planet,
-    PlanetFixedPositionMetres position) noexcept
+    const PlanetDescriptor& planet, PlanetFixedPositionMetres position) noexcept
     -> std::expected<GeodeticPosition, CoordinateError>;
 
 [[nodiscard]] auto make_local_tangent_frame(const PlanetDescriptor& planet,
@@ -149,8 +148,7 @@ enum class CoordinateError : std::uint8_t {
     -> std::expected<LocalTangentFrame, CoordinateError>;
 
 [[nodiscard]] auto local_from_planet_fixed(
-    const LocalTangentFrame& frame,
-    PlanetFixedPositionMetres position) noexcept
+    const LocalTangentFrame& frame, PlanetFixedPositionMetres position) noexcept
     -> std::expected<LocalPositionMetres, CoordinateError>;
 
 [[nodiscard]] auto planet_fixed_from_local(
@@ -183,4 +181,4 @@ enum class CoordinateError : std::uint8_t {
                                       double altitude_metres) noexcept
     -> std::expected<std::uint8_t, CoordinateError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

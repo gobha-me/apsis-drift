@@ -9,13 +9,12 @@ struct OrbitInfo {
   double periapsis{}, apoapsis{}, eccentricity{}, atmosphere_edge{};
   bool bound{}, clear_orbit{};
 };
-inline auto orbit_info(const PlanetDescriptor &p, const State &s) -> OrbitInfo {
+inline auto orbit_info(const PlanetDescriptor& p, const State& s) -> OrbitInfo {
   validate(s);
   const double radius = p.radius.value * 1000.0;
   const double mu =
       9.80665 * p.surface_gravity.value / 1000.0 * radius * radius;
-  if (!(mu > 0))
-    throw std::invalid_argument("invalid orbital gravity");
+  if (!(mu > 0)) throw std::invalid_argument("invalid orbital gravity");
   const double r = length(s.position), v2 = dot(s.velocity, s.velocity);
   const V radial = unit(s.position), h = cross(s.position, s.velocity);
   const double e = length(cross(s.velocity, h) * (1 / mu) - radial);

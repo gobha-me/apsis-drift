@@ -21,15 +21,15 @@ namespace {
   return "INVALID";
 }
 
-}  // namespace
+} // namespace
 
 auto mission_board_snapshot(const IntersystemContractState& state)
     -> std::expected<MissionBoardSnapshot, MissionBoardError> {
   if (!validate_intersystem_contract_state(state)) {
     return std::unexpected{MissionBoardError::invalid_contract};
   }
-  const auto destination = generate_local_system(
-      state.identities.target_system_seed);
+  const auto destination =
+      generate_local_system(state.identities.target_system_seed);
   if (!validate_local_system(destination) || destination.planets.empty() ||
       destination.id != state.identities.target_system ||
       destination.planets.front().descriptor.id !=
@@ -43,14 +43,13 @@ auto mission_board_snapshot(const IntersystemContractState& state)
       .destination_system = destination.star.display_name + " // " +
                             system_id_string(destination.id),
       .destination_planet = destination.planets.front().descriptor.display_name,
-      .objective =
-          "SIGNAL SURVEY // " +
-          surface_signal_id_string(state.identities.target_objective),
+      .objective = "SIGNAL SURVEY // " +
+                   surface_signal_id_string(state.identities.target_objective),
       .return_destination =
           origin_station_id_string(state.identities.origin_station),
       .status = std::string{mission_status(state.mission_phase)},
-      .rule_profile = std::string{
-          intersystem_rule_profile_name(state.rule_profile)},
+      .rule_profile =
+          std::string{intersystem_rule_profile_name(state.rule_profile)},
       .rule_profile_description =
           state.rule_profile == IntersystemRuleProfile::assisted
               ? "FORGIVING ENTRY // OPTIMAL FTL ARRIVAL"
@@ -76,4 +75,4 @@ auto mission_board_snapshot(const IntersystemContractState& state)
   return snapshot;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

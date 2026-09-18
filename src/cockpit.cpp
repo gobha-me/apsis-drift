@@ -56,10 +56,8 @@ inline constexpr double kRadiansToDegrees{
 [[nodiscard]] auto telemetry_is_finite(const FlightState& state) noexcept
     -> bool {
   return std::isfinite(state.pose.x) && std::isfinite(state.pose.y) &&
-         std::isfinite(state.pose.yaw) &&
-         std::isfinite(state.pose.altitude) &&
-         std::isfinite(state.clearance) &&
-         std::isfinite(state.velocity.x) &&
+         std::isfinite(state.pose.yaw) && std::isfinite(state.pose.altitude) &&
+         std::isfinite(state.clearance) && std::isfinite(state.velocity.x) &&
          std::isfinite(state.velocity.y) &&
          std::isfinite(state.velocity.vertical) && valid_mode(state.mode);
 }
@@ -79,8 +77,8 @@ inline constexpr double kRadiansToDegrees{
   return rounded ? std::format("ALT {:05}", *rounded) : "ALT #####";
 }
 
-[[nodiscard]] auto format_three_digit(std::string_view label,
-                                      double value) -> std::string {
+[[nodiscard]] auto format_three_digit(std::string_view label, double value)
+    -> std::string {
   const auto rounded = rounded_in_range(value, 0, 999);
   return rounded ? std::format("{} {:03}  ", label, *rounded)
                  : std::format("{} ###  ", label);
@@ -121,8 +119,8 @@ inline constexpr double kRadiansToDegrees{
   return "CLS #### ";
 }
 
-[[nodiscard]] auto format_arrival(
-    std::optional<double> seconds) -> std::string {
+[[nodiscard]] auto format_arrival(std::optional<double> seconds)
+    -> std::string {
   if (!seconds || !std::isfinite(*seconds) || *seconds < 0.0) {
     return "ETA --:--";
   }
@@ -142,15 +140,13 @@ inline constexpr double kRadiansToDegrees{
 
   using i64 = std::int64_t;
   int width = available.w;
-  int height = static_cast<int>(
-      (i64{width} * viewport.height * cell_pixels.w) /
-      (i64{viewport.width} * cell_pixels.h));
+  int height = static_cast<int>((i64{width} * viewport.height * cell_pixels.w) /
+                                (i64{viewport.width} * cell_pixels.h));
   height = std::max(1, height);
   if (height > available.h) {
     height = available.h;
-    width = static_cast<int>(
-        (i64{height} * viewport.width * cell_pixels.h) /
-        (i64{viewport.height} * cell_pixels.w));
+    width = static_cast<int>((i64{height} * viewport.width * cell_pixels.h) /
+                             (i64{viewport.height} * cell_pixels.w));
     width = std::clamp(width, 1, available.w);
   }
 
@@ -158,12 +154,10 @@ inline constexpr double kRadiansToDegrees{
           available.y + (available.h - height) / 2, width, height};
 }
 
-}  // namespace
+} // namespace
 
-auto compute_cockpit_layout(int cols, int rows,
-                            termforge::Extent cell_pixels,
-                            ViewportSize viewport) noexcept
-    -> CockpitLayout {
+auto compute_cockpit_layout(int cols, int rows, termforge::Extent cell_pixels,
+                            ViewportSize viewport) noexcept -> CockpitLayout {
   CockpitLayout layout;
   if (cols <= 0 || rows <= 0) return layout;
   layout.screen = {0, 0, cols, rows};
@@ -176,20 +170,17 @@ auto compute_cockpit_layout(int cols, int rows,
   }
 
   const bool wide = cols >= kWideCockpitCols && rows >= kWideCockpitRows;
-  layout.mode = wide ? CockpitLayoutMode::wide
-                     : CockpitLayoutMode::compact;
+  layout.mode = wide ? CockpitLayoutMode::wide : CockpitLayoutMode::compact;
   const int rail_cols = wide ? kWideRailCols : kCompactRailCols;
 
   layout.header = {0, 0, cols, kHeaderRows};
-  layout.messages = {0, rows - kStatusRows - kMessageRows, cols,
-                     kMessageRows};
+  layout.messages = {0, rows - kStatusRows - kMessageRows, cols, kMessageRows};
   layout.status = {0, rows - kStatusRows, cols, kStatusRows};
 
   const int deck_y = kHeaderRows;
   const int deck_rows = rows - kHeaderRows - kMessageRows - kStatusRows;
   layout.left_instruments = {0, deck_y, rail_cols, deck_rows};
-  layout.right_instruments = {cols - rail_cols, deck_y, rail_cols,
-                              deck_rows};
+  layout.right_instruments = {cols - rail_cols, deck_y, rail_cols, deck_rows};
 
   const termforge::Rect center{
       rail_cols + kRailGutterCols,
@@ -226,33 +217,32 @@ auto format_flight_instruments(const FlightState& state)
     readout.altitude = "ALT -----";
     readout.clearance = "CLR ---  ";
     readout.speed = "SPD ---  ";
-    readout.mode = valid_mode(state.mode)
-                       ? (state.mode == FlightMode::autopilot ? "MODE AUTO"
-                                                               : "MODE MAN ")
-                       : "MODE ----";
+    readout.mode =
+        valid_mode(state.mode)
+            ? (state.mode == FlightMode::autopilot ? "MODE AUTO" : "MODE MAN ")
+            : "MODE ----";
     readout.drive = "THR ---- ";
     readout.alert = "TELEM ERR";
     readout.alert_state = CockpitAlert::invalid_telemetry;
     return readout;
   }
 
-  double heading = std::fmod(
-      static_cast<double>(state.pose.yaw) * kRadiansToDegrees, 360.0);
+  double heading =
+      std::fmod(static_cast<double>(state.pose.yaw) * kRadiansToDegrees, 360.0);
   if (heading < 0.0) heading += 360.0;
   int heading_degrees = static_cast<int>(std::round(heading)) % 360;
   readout.heading = std::format("HDG {:03}  ", heading_degrees);
   readout.altitude = format_altitude(state.pose.altitude);
   readout.clearance = format_three_digit("CLR", state.clearance);
-  readout.speed = format_speed(std::hypot(
-      static_cast<double>(state.velocity.x),
-      static_cast<double>(state.velocity.y),
-      static_cast<double>(state.velocity.vertical)));
-  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
-                                                      : "MODE MAN ";
-  const double speed = std::hypot(
-      static_cast<double>(state.velocity.x),
-      static_cast<double>(state.velocity.y),
-      static_cast<double>(state.velocity.vertical));
+  readout.speed =
+      format_speed(std::hypot(static_cast<double>(state.velocity.x),
+                              static_cast<double>(state.velocity.y),
+                              static_cast<double>(state.velocity.vertical)));
+  readout.mode =
+      state.mode == FlightMode::autopilot ? "MODE AUTO" : "MODE MAN ";
+  const double speed = std::hypot(static_cast<double>(state.velocity.x),
+                                  static_cast<double>(state.velocity.y),
+                                  static_cast<double>(state.velocity.vertical));
   readout.drive = state.mode == FlightMode::autopilot
                       ? "THR AUTO "
                       : (speed > 0.5 ? "COAST    " : "THR IDLE ");
@@ -268,22 +258,21 @@ auto format_flight_instruments(const FlightState& state)
 auto format_flight_instruments(const PlanetaryFlightState& state)
     -> FlightInstrumentReadout {
   FlightInstrumentReadout readout;
-  const bool valid =
-      std::isfinite(state.pose.position.altitude_metres) &&
-      std::isfinite(state.pose.heading_radians) &&
-      std::isfinite(state.clearance_metres) &&
-      std::isfinite(state.velocity.east_metres_per_second) &&
-      std::isfinite(state.velocity.north_metres_per_second) &&
-      valid_mode(state.mode);
+  const bool valid = std::isfinite(state.pose.position.altitude_metres) &&
+                     std::isfinite(state.pose.heading_radians) &&
+                     std::isfinite(state.clearance_metres) &&
+                     std::isfinite(state.velocity.east_metres_per_second) &&
+                     std::isfinite(state.velocity.north_metres_per_second) &&
+                     valid_mode(state.mode);
   if (!valid) {
     readout.heading = "HDG ---  ";
     readout.altitude = "ALT -----";
     readout.clearance = "CLR ---  ";
     readout.speed = "SPD ---  ";
-    readout.mode = valid_mode(state.mode)
-                       ? (state.mode == FlightMode::autopilot ? "MODE AUTO"
-                                                               : "MODE MAN ")
-                       : "MODE ----";
+    readout.mode =
+        valid_mode(state.mode)
+            ? (state.mode == FlightMode::autopilot ? "MODE AUTO" : "MODE MAN ")
+            : "MODE ----";
     readout.drive = "THR ---- ";
     readout.alert = "TELEM ERR";
     readout.alert_state = CockpitAlert::invalid_telemetry;
@@ -293,18 +282,17 @@ auto format_flight_instruments(const PlanetaryFlightState& state)
   double heading =
       std::fmod(state.pose.heading_radians * kRadiansToDegrees, 360.0);
   if (heading < 0.0) heading += 360.0;
-  readout.heading = std::format(
-      "HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
+  readout.heading =
+      std::format("HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
   readout.altitude =
       format_altitude(static_cast<float>(state.pose.position.altitude_metres));
-  readout.clearance =
-      format_three_digit("CLR", state.clearance_metres);
-  readout.speed = format_speed(std::hypot(
-      state.velocity.east_metres_per_second,
-      state.velocity.north_metres_per_second,
-      state.velocity.up_metres_per_second));
-  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
-                                                      : "MODE MAN ";
+  readout.clearance = format_three_digit("CLR", state.clearance_metres);
+  readout.speed =
+      format_speed(std::hypot(state.velocity.east_metres_per_second,
+                              state.velocity.north_metres_per_second,
+                              state.velocity.up_metres_per_second));
+  readout.mode =
+      state.mode == FlightMode::autopilot ? "MODE AUTO" : "MODE MAN ";
   const auto drive = flight_drive_state(state);
   readout.drive = drive ? format_drive(*drive) : "THR ---- ";
   if (state.clearance_metres <= kLowClearanceWarning) {
@@ -319,32 +307,34 @@ auto format_flight_instruments(const PlanetaryFlightState& state)
 auto format_flight_instruments(const SystemFlightState& state)
     -> FlightInstrumentReadout {
   FlightInstrumentReadout readout;
-  const double speed = std::hypot(state.velocity.x, state.velocity.y,
-                                  state.velocity.z);
+  const double speed =
+      std::hypot(state.velocity.x, state.velocity.y, state.velocity.z);
   const bool valid = std::isfinite(state.forward.x) &&
                      std::isfinite(state.forward.y) &&
                      std::isfinite(state.forward.z) && std::isfinite(speed) &&
                      valid_mode(state.mode);
   if (!valid) {
-    readout = {.heading = "HDG ---  ", .altitude = "SYS ---- ",
-               .clearance = "TIME --- ", .speed = "SPD ---  ",
-               .mode = "MODE ----", .drive = "THR ---- ",
+    readout = {.heading = "HDG ---  ",
+               .altitude = "SYS ---- ",
+               .clearance = "TIME --- ",
+               .speed = "SPD ---  ",
+               .mode = "MODE ----",
+               .drive = "THR ---- ",
                .alert = "TELEM ERR",
                .alert_state = CockpitAlert::invalid_telemetry};
     return readout;
   }
   double heading = std::fmod(
-      std::atan2(state.forward.y, state.forward.x) * kRadiansToDegrees,
-      360.0);
+      std::atan2(state.forward.y, state.forward.x) * kRadiansToDegrees, 360.0);
   if (heading < 0.0) heading += 360.0;
-  readout.heading = std::format(
-      "HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
+  readout.heading =
+      std::format("HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
   readout.altitude = "SYS FLT  ";
-  readout.clearance = std::format(
-      "TIME {:>2}x ", system_time_scale_value(state.time_scale));
+  readout.clearance =
+      std::format("TIME {:>2}x ", system_time_scale_value(state.time_scale));
   readout.speed = format_speed(speed);
-  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
-                                                      : "MODE MAN ";
+  readout.mode =
+      state.mode == FlightMode::autopilot ? "MODE AUTO" : "MODE MAN ";
   const bool maneuver = state.controls.turn_left || state.controls.turn_right ||
                         state.controls.strafe_left ||
                         state.controls.strafe_right || state.controls.rise ||
@@ -371,23 +361,25 @@ auto format_flight_instruments(const OriginStationFlightState& state)
                      std::isfinite(state.forward.z) && std::isfinite(speed) &&
                      valid_mode(state.mode);
   if (!valid) {
-    return {.heading = "HDG ---  ", .altitude = "SYS ---- ",
-            .clearance = "DOCK --- ", .speed = "SPD ---  ",
-            .mode = "MODE ----", .drive = "THR ---- ",
+    return {.heading = "HDG ---  ",
+            .altitude = "SYS ---- ",
+            .clearance = "DOCK --- ",
+            .speed = "SPD ---  ",
+            .mode = "MODE ----",
+            .drive = "THR ---- ",
             .alert = "TELEM ERR",
             .alert_state = CockpitAlert::invalid_telemetry};
   }
   double heading = std::fmod(
-      std::atan2(state.forward.y, state.forward.x) * kRadiansToDegrees,
-      360.0);
+      std::atan2(state.forward.y, state.forward.x) * kRadiansToDegrees, 360.0);
   if (heading < 0.0) heading += 360.0;
-  readout.heading = std::format(
-      "HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
+  readout.heading =
+      std::format("HDG {:03}  ", static_cast<int>(std::round(heading)) % 360);
   readout.altitude = "SYS RTN  ";
   readout.clearance = "DOCK ARMED";
   readout.speed = format_speed(speed);
-  readout.mode = state.mode == FlightMode::autopilot ? "MODE AUTO"
-                                                      : "MODE MAN ";
+  readout.mode =
+      state.mode == FlightMode::autopilot ? "MODE AUTO" : "MODE MAN ";
   const bool maneuver = state.controls.turn_left || state.controls.turn_right ||
                         state.controls.strafe_left ||
                         state.controls.strafe_right || state.controls.rise ||
@@ -422,19 +414,18 @@ auto format_flight_regime(const PlanetaryFlightState& state)
 
   readout.regime = std::format("REG {:<5}", short_regime_name(state.regime));
   if (state.last_transition) {
-    readout.transition =
-        std::format("{:<4}>{:<4}",
-                    short_regime_name(state.last_transition->from),
-                    short_regime_name(state.last_transition->to));
+    readout.transition = std::format(
+        "{:<4}>{:<4}", short_regime_name(state.last_transition->from),
+        short_regime_name(state.last_transition->to));
   } else {
     readout.transition = std::string(kInstrumentLineWidth, ' ');
   }
   return readout;
 }
 
-auto format_thermal_instruments(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) -> ThermalInstrumentReadout {
+auto format_thermal_instruments(const PlanetDescriptor& planet,
+                                const PlanetaryFlightState& state)
+    -> ThermalInstrumentReadout {
   const auto assessment = resolve_thermal_assessment(planet, state);
   if (!assessment) {
     return {.load = "HEAT --- ",
@@ -448,21 +439,21 @@ auto format_thermal_instruments(
       assessment->trend == ThermalTrend::heating
           ? "TEMP +   "
           : (assessment->trend == ThermalTrend::cooling ? "TEMP -   "
-                                                         : "TEMP =   ");
+                                                        : "TEMP =   ");
   const std::string_view cue =
       assessment->cue == ThermalCue::abort_climb
           ? "ABRT CLMB"
           : (assessment->cue == ThermalCue::slow_and_rise
                  ? "SLOW+RISE"
                  : (assessment->cue == ThermalCue::cooling ? "COOLING  "
-                                                            : "HEAT OK  "));
+                                                           : "HEAT OK  "));
   return {
       .load = std::format("HEAT {:03}%", assessment->load_percent),
       .trend = std::string{trend},
       .limit = "LIM 100% ",
       .flight_path_angle = std::format(
-          "{:<9}", std::format("FPA {:+.0f}",
-                                assessment->flight_path_angle_degrees)),
+          "{:<9}",
+          std::format("FPA {:+.0f}", assessment->flight_path_angle_degrees)),
       .cue = std::string{cue},
       .trend_state = assessment->trend,
       .cue_state = assessment->cue,
@@ -484,23 +475,21 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
   };
   if (navigation.status == SignalScannerStatus::no_signal) return readout;
 
-  const bool valid = navigation.selected.has_value() &&
-                     navigation.ordinal < kSurfaceSignalCount &&
-                     std::isfinite(navigation.absolute_bearing_radians) &&
-                     std::isfinite(navigation.relative_bearing_radians) &&
-                     std::isfinite(navigation.distance_metres) &&
-                     navigation.distance_metres >= 0.0 &&
-                     std::isfinite(
-                         navigation.motion.closing_speed_metres_per_second) &&
-                     std::isfinite(
-                         navigation.motion.stopping_distance_metres) &&
-                     navigation.motion.stopping_distance_metres >= 0.0 &&
-                     (!navigation.motion.arrival_estimate_seconds ||
-                      (std::isfinite(
-                           *navigation.motion.arrival_estimate_seconds) &&
-                       *navigation.motion.arrival_estimate_seconds >= 0.0)) &&
-                     valid_target_motion_cue(navigation.motion.cue) &&
-                     navigation.strength_basis_points <= 10'000;
+  const bool valid =
+      navigation.selected.has_value() &&
+      navigation.ordinal < kSurfaceSignalCount &&
+      std::isfinite(navigation.absolute_bearing_radians) &&
+      std::isfinite(navigation.relative_bearing_radians) &&
+      std::isfinite(navigation.distance_metres) &&
+      navigation.distance_metres >= 0.0 &&
+      std::isfinite(navigation.motion.closing_speed_metres_per_second) &&
+      std::isfinite(navigation.motion.stopping_distance_metres) &&
+      navigation.motion.stopping_distance_metres >= 0.0 &&
+      (!navigation.motion.arrival_estimate_seconds ||
+       (std::isfinite(*navigation.motion.arrival_estimate_seconds) &&
+        *navigation.motion.arrival_estimate_seconds >= 0.0)) &&
+      valid_target_motion_cue(navigation.motion.cue) &&
+      navigation.strength_basis_points <= 10'000;
   if (!valid) {
     readout.status = SignalScannerStatus::no_signal;
     readout.cue = "SCAN ERR ";
@@ -509,45 +498,35 @@ auto format_signal_scanner(const SignalNavigationSolution& navigation)
 
   readout.target = std::format("TGT {:02}/{:02}", navigation.ordinal + 1U,
                                kSurfaceSignalCount);
-  double degrees = std::fmod(
-      navigation.absolute_bearing_radians * kRadiansToDegrees, 360.0);
+  double degrees =
+      std::fmod(navigation.absolute_bearing_radians * kRadiansToDegrees, 360.0);
   if (degrees < 0.0) degrees += 360.0;
-  readout.bearing = std::format(
-      "BRG {:03}  ", static_cast<int>(std::round(degrees)) % 360);
+  readout.bearing =
+      std::format("BRG {:03}  ", static_cast<int>(std::round(degrees)) % 360);
 
   char distance_unit{'m'};
-  auto rounded_distance =
-      rounded_in_range(navigation.distance_metres, 0, 9999);
+  auto rounded_distance = rounded_in_range(navigation.distance_metres, 0, 9999);
   if (!rounded_distance) {
     distance_unit = 'k';
     rounded_distance =
         rounded_in_range(navigation.distance_metres / 1'000.0, 0, 9999);
   }
   readout.distance =
-      rounded_distance ? std::format("DST {:>4}{}", *rounded_distance,
-                                     distance_unit)
-                       : "DST #### ";
-  readout.motion = format_closing_speed(
-      navigation.motion.closing_speed_metres_per_second);
-  readout.arrival =
-      format_arrival(navigation.motion.arrival_estimate_seconds);
-  const auto strength_percent = static_cast<unsigned>(
-      (navigation.strength_basis_points + 50U) / 100U);
+      rounded_distance
+          ? std::format("DST {:>4}{}", *rounded_distance, distance_unit)
+          : "DST #### ";
+  readout.motion =
+      format_closing_speed(navigation.motion.closing_speed_metres_per_second);
+  readout.arrival = format_arrival(navigation.motion.arrival_estimate_seconds);
+  const auto strength_percent =
+      static_cast<unsigned>((navigation.strength_basis_points + 50U) / 100U);
   readout.strength = std::format("SIG {:03}% ", strength_percent);
 
   switch (navigation.status) {
-    case SignalScannerStatus::no_signal:
-      readout.cue = "NO SIGNAL";
-      break;
-    case SignalScannerStatus::out_of_range:
-      readout.cue = "OUT RANGE";
-      break;
-    case SignalScannerStatus::occluded:
-      readout.cue = "OCCLUDED ";
-      break;
-    case SignalScannerStatus::reached:
-      readout.cue = "REACHED! ";
-      break;
+    case SignalScannerStatus::no_signal: readout.cue = "NO SIGNAL"; break;
+    case SignalScannerStatus::out_of_range: readout.cue = "OUT RANGE"; break;
+    case SignalScannerStatus::occluded: readout.cue = "OCCLUDED "; break;
+    case SignalScannerStatus::reached: readout.cue = "REACHED! "; break;
     case SignalScannerStatus::tracking: {
       if (navigation.motion.cue == TargetMotionCue::brake) {
         readout.cue = "BRAKE NOW";
@@ -598,14 +577,14 @@ auto format_signal_collection(const SignalCollectionState& collection)
         readout.message = " Scan state invalid | progress unavailable ";
         break;
       }
-      readout.progress_percent = static_cast<unsigned>(
-          (collection.consecutive_in_range_ticks * 100U +
-           kSignalCollectionAcquireTicks / 2U) /
-          kSignalCollectionAcquireTicks);
+      readout.progress_percent =
+          static_cast<unsigned>((collection.consecutive_in_range_ticks * 100U +
+                                 kSignalCollectionAcquireTicks / 2U) /
+                                kSignalCollectionAcquireTicks);
       readout.cue = std::format("LOCK {:03}%", readout.progress_percent);
-      readout.message = std::format(
-          " Target lock {:03}% | remain within 1000m ",
-          readout.progress_percent);
+      readout.message =
+          std::format(" Target lock {:03}% | remain within 1000m ",
+                      readout.progress_percent);
       break;
     }
     case SignalCollectionStatus::scanning: {
@@ -618,15 +597,14 @@ auto format_signal_collection(const SignalCollectionState& collection)
         readout.message = " Scan state invalid | progress unavailable ";
         break;
       }
-      const auto scan_ticks = collection.consecutive_in_range_ticks -
-                              kSignalCollectionAcquireTicks;
+      const auto scan_ticks =
+          collection.consecutive_in_range_ticks - kSignalCollectionAcquireTicks;
       readout.progress_percent = static_cast<unsigned>(
           (scan_ticks * 100U + kSignalCollectionScanTicks / 2U) /
           kSignalCollectionScanTicks);
       readout.cue = std::format("SCAN {:03}%", readout.progress_percent);
-      readout.message = std::format(
-          " Scanning {:03}% | remain within 1000m ",
-          readout.progress_percent);
+      readout.message = std::format(" Scanning {:03}% | remain within 1000m ",
+                                    readout.progress_percent);
       break;
     }
     case SignalCollectionStatus::complete:
@@ -650,8 +628,7 @@ auto format_signal_collection(const SignalCollectionState& collection)
         break;
       }
       readout.cue = "SCAN LOST";
-      readout.message =
-          " Scan lost | re-enter 1000m radius to restart ";
+      readout.message = " Scan lost | re-enter 1000m radius to restart ";
       break;
     default:
       readout.cue = "SCAN ERR ";
@@ -669,26 +646,22 @@ auto format_system_navigation(const SystemNavigationSolution& navigation)
       0, std::min<std::size_t>(4, navigation.display_name.size()));
   result.target = std::format("TGT {:<4} ", short_name);
 
-  const double bearing_degrees = navigation.bearing_radians *
-                                 kRadiansToDegrees;
-  const double elevation_degrees = navigation.elevation_radians *
-                                   kRadiansToDegrees;
+  const double bearing_degrees = navigation.bearing_radians * kRadiansToDegrees;
+  const double elevation_degrees =
+      navigation.elevation_radians * kRadiansToDegrees;
   const auto bearing = rounded_in_range(std::abs(bearing_degrees), 0, 180);
   const auto elevation = rounded_in_range(std::abs(elevation_degrees), 0, 90);
-  result.bearing = bearing
-                       ? std::format("BRG {}{:03} ",
-                                     bearing_degrees < 0.0 ? 'L' : 'R',
-                                     *bearing)
-                       : "BRG #### ";
-  result.elevation = elevation
-                         ? std::format("ELV {}{:02}  ",
-                                       elevation_degrees < 0.0 ? '-' : '+',
-                                       *elevation)
-                         : "ELV ###  ";
+  result.bearing =
+      bearing ? std::format("BRG {}{:03} ", bearing_degrees < 0.0 ? 'L' : 'R',
+                            *bearing)
+              : "BRG #### ";
+  result.elevation =
+      elevation ? std::format("ELV {}{:02}  ",
+                              elevation_degrees < 0.0 ? '-' : '+', *elevation)
+                : "ELV ###  ";
 
   const double kilometres = navigation.distance_metres / 1'000.0;
-  if (std::isfinite(kilometres) && kilometres >= 0.0 &&
-      kilometres < 9'999.5) {
+  if (std::isfinite(kilometres) && kilometres >= 0.0 && kilometres < 9'999.5) {
     result.distance = std::format("RNG {:04.0f}k", kilometres);
   } else if (std::isfinite(kilometres) && kilometres >= 0.0 &&
              kilometres < 9'999'500.0) {
@@ -700,22 +673,18 @@ auto format_system_navigation(const SystemNavigationSolution& navigation)
     result.distance = "RNG #### ";
   }
   const double closing_speed = navigation.closing_speed_metres_per_second;
-  const auto rounded_speed =
-      rounded_in_range(std::abs(closing_speed), 0, 999);
+  const auto rounded_speed = rounded_in_range(std::abs(closing_speed), 0, 999);
   if (rounded_speed) {
-    result.motion = std::format("CLS {}{:03} ",
-                                closing_speed < 0.0 ? '-' : '+',
+    result.motion = std::format("CLS {}{:03} ", closing_speed < 0.0 ? '-' : '+',
                                 *rounded_speed);
   } else if (std::isfinite(closing_speed) &&
              std::abs(closing_speed) < 999'500.0) {
-    result.motion = std::format("CLS {}{:03}k",
-                                closing_speed < 0.0 ? '-' : '+',
-                                static_cast<long long>(std::lround(
-                                    std::abs(closing_speed) / 1'000.0)));
+    result.motion = std::format(
+        "CLS {}{:03}k", closing_speed < 0.0 ? '-' : '+',
+        static_cast<long long>(std::lround(std::abs(closing_speed) / 1'000.0)));
   } else if (std::isfinite(closing_speed) &&
              std::abs(closing_speed) < 9'950'000.0) {
-    result.motion = std::format("CLS {:+.1f}M",
-                                closing_speed / 1'000'000.0);
+    result.motion = std::format("CLS {:+.1f}M", closing_speed / 1'000'000.0);
   } else {
     result.motion = "CLS #### ";
   }
@@ -724,8 +693,7 @@ auto format_system_navigation(const SystemNavigationSolution& navigation)
   if (!navigation.in_front ||
       std::abs(bearing_degrees) > steering_tolerance_degrees) {
     result.cue = bearing_degrees < 0.0 ? "TURN LEFT" : "TURN RGHT";
-  } else if (std::abs(elevation_degrees) >
-             steering_tolerance_degrees) {
+  } else if (std::abs(elevation_degrees) > steering_tolerance_degrees) {
     result.cue = elevation_degrees < 0.0 ? "PITCH DN " : "PITCH UP ";
   } else {
     switch (navigation.motion) {
@@ -742,8 +710,8 @@ auto format_system_navigation(const SystemNavigationSolution& navigation,
                               const SystemFlightGuidance& guidance)
     -> SystemNavigationReadout {
   auto result = format_system_navigation(navigation);
-  result.motion = format_closing_speed(
-      guidance.closing_speed_metres_per_second);
+  result.motion =
+      format_closing_speed(guidance.closing_speed_metres_per_second);
   result.arrival = format_arrival(guidance.arrival_estimate_seconds);
   switch (guidance.cue) {
     case SystemFlightCue::hold: result.cue = "HOLD      "; break;
@@ -789,15 +757,15 @@ auto format_system_flight_status(const SystemFlightState& state,
   }
 
   SystemFlightStatusReadout result{
-      .message = guidance.orbit_insertion_ready
-                     ? std::format(" ORBIT RDY | ENTER INSERT ORBIT | {} | {}x ",
-                                   mode, scale)
-                     : std::format(
-                           " {} | {}x | {} | REL {:.0f}km/s | STOP {:.0f}km | "
-                           "[] time | SPACE mode ",
-                           mode, scale, cue,
-                           guidance.relative_speed_metres_per_second / 1'000.0,
-                           guidance.stopping_distance_metres / 1'000.0),
+      .message =
+          guidance.orbit_insertion_ready
+              ? std::format(" ORBIT RDY | ENTER INSERT ORBIT | {} | {}x ", mode,
+                            scale)
+              : std::format(" {} | {}x | {} | REL {:.0f}km/s | STOP {:.0f}km | "
+                            "[] time | SPACE mode ",
+                            mode, scale, cue,
+                            guidance.relative_speed_metres_per_second / 1'000.0,
+                            guidance.stopping_distance_metres / 1'000.0),
       .insertion_refusal = " INSERT BLOCKED",
       .insertion_ready = guidance.orbit_insertion_ready,
   };
@@ -811,8 +779,8 @@ auto format_system_flight_status(const SystemFlightState& state,
   const double altitude_metres =
       guidance.distance_metres - guidance.target_radius_metres;
   if (altitude_metres < kMinimumFlightClearanceMetres) {
-    result.insertion_refusal += std::format(
-        " | ALT {:.0f}<16m", altitude_metres);
+    result.insertion_refusal +=
+        std::format(" | ALT {:.0f}<16m", altitude_metres);
   }
   if (distance_radii > kSystemOrbitInsertionRadiusRadii) {
     result.insertion_refusal +=
@@ -820,9 +788,9 @@ auto format_system_flight_status(const SystemFlightState& state,
   }
   if (guidance.relative_speed_metres_per_second >
       kSystemOrbitInsertionMaximumSpeed) {
-    result.insertion_refusal += std::format(
-        " | REL {:.1f}k>4k",
-        guidance.relative_speed_metres_per_second / 1'000.0);
+    result.insertion_refusal +=
+        std::format(" | REL {:.1f}k>4k",
+                    guidance.relative_speed_metres_per_second / 1'000.0);
   }
   const double radial_speed =
       std::abs(guidance.closing_speed_metres_per_second);
@@ -837,4 +805,4 @@ auto format_system_flight_status(const SystemFlightState& state,
   return result;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

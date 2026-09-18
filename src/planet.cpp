@@ -107,7 +107,7 @@ constexpr std::array<PlanetPalette, 5> kPalettes{
   return std::format("#{:02x}{:02x}{:02x}", color.red, color.green, color.blue);
 }
 
-}  // namespace
+} // namespace
 
 auto derive_planet_stream_seed(Seed planet_seed,
                                PlanetDescriptorStream stream) noexcept -> Seed {
@@ -175,14 +175,10 @@ auto generate_planet_descriptor(Seed planet_seed) -> PlanetDescriptor {
 
 auto atmosphere_class_name(AtmosphereClass value) noexcept -> std::string_view {
   switch (value) {
-    case AtmosphereClass::airless:
-      return "airless";
-    case AtmosphereClass::tenuous:
-      return "tenuous";
-    case AtmosphereClass::temperate:
-      return "temperate";
-    case AtmosphereClass::dense:
-      return "dense";
+    case AtmosphereClass::airless: return "airless";
+    case AtmosphereClass::tenuous: return "tenuous";
+    case AtmosphereClass::temperate: return "temperate";
+    case AtmosphereClass::dense: return "dense";
   }
   return "unknown";
 }
@@ -190,74 +186,63 @@ auto atmosphere_class_name(AtmosphereClass value) noexcept -> std::string_view {
 auto terrain_character_name(TerrainCharacter value) noexcept
     -> std::string_view {
   switch (value) {
-    case TerrainCharacter::oceanic:
-      return "oceanic";
-    case TerrainCharacter::plains:
-      return "plains";
-    case TerrainCharacter::rugged:
-      return "rugged";
-    case TerrainCharacter::alpine:
-      return "alpine";
-    case TerrainCharacter::volcanic:
-      return "volcanic";
+    case TerrainCharacter::oceanic: return "oceanic";
+    case TerrainCharacter::plains: return "plains";
+    case TerrainCharacter::rugged: return "rugged";
+    case TerrainCharacter::alpine: return "alpine";
+    case TerrainCharacter::volcanic: return "volcanic";
   }
   return "unknown";
 }
 
 auto palette_family_name(PaletteFamily value) noexcept -> std::string_view {
   switch (value) {
-    case PaletteFamily::verdant:
-      return "verdant";
-    case PaletteFamily::arid:
-      return "arid";
-    case PaletteFamily::glacial:
-      return "glacial";
-    case PaletteFamily::volcanic:
-      return "volcanic";
-    case PaletteFamily::alien:
-      return "alien";
+    case PaletteFamily::verdant: return "verdant";
+    case PaletteFamily::arid: return "arid";
+    case PaletteFamily::glacial: return "glacial";
+    case PaletteFamily::volcanic: return "volcanic";
+    case PaletteFamily::alien: return "alien";
   }
   return "unknown";
 }
 
 auto planet_descriptor_json(const PlanetDescriptor& descriptor) -> std::string {
-  return std::format(
-      "{{\n"
-      "  \"schema_version\": 1,\n"
-      "  \"generator_version\": {},\n"
-      "  \"planet_seed\": \"{}\",\n"
-      "  \"planet_id\": \"planet-{:016x}\",\n"
-      "  \"display_name\": \"{}\",\n"
-      "  \"radius_km\": {},\n"
-      "  \"surface_gravity_milli_g\": {},\n"
-      "  \"atmosphere\": {{\"class\": \"{}\", "
-      "\"pressure_millibars\": {}}},\n"
-      "  \"terrain_character\": \"{}\",\n"
-      "  \"water_coverage_basis_points\": {},\n"
-      "  \"palette\": {{\n"
-      "    \"family\": \"{}\",\n"
-      "    \"atmosphere\": \"{}\",\n"
-      "    \"deep_water\": \"{}\",\n"
-      "    \"shallow_water\": \"{}\",\n"
-      "    \"lowland\": \"{}\",\n"
-      "    \"highland\": \"{}\",\n"
-      "    \"peak\": \"{}\"\n"
-      "  }}\n"
-      "}}\n",
-      kPlanetGeneratorVersion, descriptor.seed.value, descriptor.id.value,
-      descriptor.display_name, descriptor.radius.value,
-      descriptor.surface_gravity.value,
-      atmosphere_class_name(descriptor.atmosphere_class),
-      descriptor.atmosphere_pressure.value,
-      terrain_character_name(descriptor.terrain_character),
-      descriptor.water_coverage.value,
-      palette_family_name(descriptor.palette.family),
-      color_hex(descriptor.palette.atmosphere),
-      color_hex(descriptor.palette.deep_water),
-      color_hex(descriptor.palette.shallow_water),
-      color_hex(descriptor.palette.lowland),
-      color_hex(descriptor.palette.highland),
-      color_hex(descriptor.palette.peak));
+  return std::format("{{\n"
+                     "  \"schema_version\": 1,\n"
+                     "  \"generator_version\": {},\n"
+                     "  \"planet_seed\": \"{}\",\n"
+                     "  \"planet_id\": \"planet-{:016x}\",\n"
+                     "  \"display_name\": \"{}\",\n"
+                     "  \"radius_km\": {},\n"
+                     "  \"surface_gravity_milli_g\": {},\n"
+                     "  \"atmosphere\": {{\"class\": \"{}\", "
+                     "\"pressure_millibars\": {}}},\n"
+                     "  \"terrain_character\": \"{}\",\n"
+                     "  \"water_coverage_basis_points\": {},\n"
+                     "  \"palette\": {{\n"
+                     "    \"family\": \"{}\",\n"
+                     "    \"atmosphere\": \"{}\",\n"
+                     "    \"deep_water\": \"{}\",\n"
+                     "    \"shallow_water\": \"{}\",\n"
+                     "    \"lowland\": \"{}\",\n"
+                     "    \"highland\": \"{}\",\n"
+                     "    \"peak\": \"{}\"\n"
+                     "  }}\n"
+                     "}}\n",
+                     kPlanetGeneratorVersion, descriptor.seed.value,
+                     descriptor.id.value, descriptor.display_name,
+                     descriptor.radius.value, descriptor.surface_gravity.value,
+                     atmosphere_class_name(descriptor.atmosphere_class),
+                     descriptor.atmosphere_pressure.value,
+                     terrain_character_name(descriptor.terrain_character),
+                     descriptor.water_coverage.value,
+                     palette_family_name(descriptor.palette.family),
+                     color_hex(descriptor.palette.atmosphere),
+                     color_hex(descriptor.palette.deep_water),
+                     color_hex(descriptor.palette.shallow_water),
+                     color_hex(descriptor.palette.lowland),
+                     color_hex(descriptor.palette.highland),
+                     color_hex(descriptor.palette.peak));
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -59,11 +59,10 @@ enum class PlanetfallAcceptanceError : std::uint8_t {
   incomplete_path,
 };
 
-[[nodiscard]] auto run_planetfall_acceptance(
-    RenderConfiguration configuration)
+[[nodiscard]] auto run_planetfall_acceptance(RenderConfiguration configuration)
     -> std::expected<PlanetfallAcceptanceResult, PlanetfallAcceptanceError>;
 
 [[nodiscard]] auto planetfall_acceptance_json(
     const PlanetfallAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

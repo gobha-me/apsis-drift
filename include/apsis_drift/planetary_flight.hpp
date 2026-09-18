@@ -60,8 +60,8 @@ struct ThermalAssessment {
   ThermalCue cue{ThermalCue::nominal};
   bool at_limit{};
 
-  friend auto operator==(const ThermalAssessment&,
-                         const ThermalAssessment&) -> bool = default;
+  friend auto operator==(const ThermalAssessment&, const ThermalAssessment&)
+      -> bool = default;
 };
 
 struct FlightRegimeBands {
@@ -70,8 +70,8 @@ struct FlightRegimeBands {
   double atmosphere_enter_altitude_metres{};
   double orbit_enter_altitude_metres{};
 
-  friend auto operator==(const FlightRegimeBands&,
-                         const FlightRegimeBands&) -> bool = default;
+  friend auto operator==(const FlightRegimeBands&, const FlightRegimeBands&)
+      -> bool = default;
 };
 
 struct PlanetaryFlightPose {
@@ -80,8 +80,8 @@ struct PlanetaryFlightPose {
   // east and positive angles turn toward north.
   double heading_radians{};
 
-  friend auto operator==(const PlanetaryFlightPose&,
-                         const PlanetaryFlightPose&) -> bool = default;
+  friend auto operator==(const PlanetaryFlightPose&, const PlanetaryFlightPose&)
+      -> bool = default;
 };
 
 struct PlanetaryFlightVelocity {
@@ -100,8 +100,8 @@ struct FlightPerformance {
   double vertical_acceleration{};
   double turn_rate_radians_per_second{};
 
-  friend auto operator==(const FlightPerformance&,
-                         const FlightPerformance&) -> bool = default;
+  friend auto operator==(const FlightPerformance&, const FlightPerformance&)
+      -> bool = default;
 };
 
 enum class FlightDriveState : std::uint8_t {
@@ -148,8 +148,9 @@ struct PlanetaryFlightEnvironment {
 };
 
 // Per-tick manual input, not persistent state. Record these values alongside
-// their tick for an analog replay; existing digital commands/saves are unchanged.
-// Positive axes mean forward, turn-right, strafe-right, rise respectively.
+// their tick for an analog replay; existing digital commands/saves are
+// unchanged. Positive axes mean forward, turn-right, strafe-right, rise
+// respectively.
 struct PlanetaryAnalogInput {
   double forward{};
   double turn{};
@@ -193,8 +194,7 @@ enum class PlanetaryFlightError : std::uint8_t {
 [[nodiscard]] auto thermal_cue_name(ThermalCue cue) noexcept
     -> std::string_view;
 
-[[nodiscard]] auto flight_regime_bands(
-    const PlanetDescriptor& planet) noexcept
+[[nodiscard]] auto flight_regime_bands(const PlanetDescriptor& planet) noexcept
     -> std::expected<FlightRegimeBands, PlanetaryFlightError>;
 
 [[nodiscard]] auto flight_performance(const PlanetDescriptor& planet,
@@ -211,8 +211,7 @@ enum class PlanetaryFlightError : std::uint8_t {
     LocalPositionMetres target, double arrival_radius_metres) noexcept
     -> std::expected<TargetRelativeMotion, PlanetaryFlightError>;
 [[nodiscard]] auto resolve_thermal_assessment(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) noexcept
+    const PlanetDescriptor& planet, const PlanetaryFlightState& state) noexcept
     -> std::expected<ThermalAssessment, PlanetaryFlightError>;
 
 [[nodiscard]] auto initial_planetary_flight_state(
@@ -235,13 +234,12 @@ enum class PlanetaryFlightError : std::uint8_t {
 // commands span. Omit it to preserve the existing digital/autopilot path.
 [[nodiscard]] auto advance_planetary_flight(
     const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
-    PlanetaryFlightState& state,
-    std::span<const FlightCommand> commands, SimulationSeconds step,
-    PlanetaryFlightRules rules = {},
+    PlanetaryFlightState& state, std::span<const FlightCommand> commands,
+    SimulationSeconds step, PlanetaryFlightRules rules = {},
     std::optional<PlanetaryAnalogInput> analog = std::nullopt) noexcept
     -> std::expected<void, PlanetaryFlightError>;
 
 [[nodiscard]] auto planetary_flight_state_checksum(
     const PlanetaryFlightState& state) noexcept -> std::uint64_t;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

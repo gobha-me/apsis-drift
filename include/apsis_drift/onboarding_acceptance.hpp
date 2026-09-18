@@ -74,4 +74,4 @@ enum class OnboardingAcceptanceError : std::uint8_t {
 [[nodiscard]] auto onboarding_acceptance_json(
     const OnboardingAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

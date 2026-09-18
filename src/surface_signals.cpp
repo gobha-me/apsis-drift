@@ -65,22 +65,19 @@ constexpr std::array<std::size_t, 3> kReliefSampleCoordinates{16, 32, 48};
   return SurfaceSignalError::terrain_failure;
 }
 
-[[nodiscard]] auto candidate_key(const PlanetDescriptor& planet,
-                                 CubeFace face,
+[[nodiscard]] auto candidate_key(const PlanetDescriptor& planet, CubeFace face,
                                  SplitMix64& random) noexcept
     -> TerrainTileKey {
-  constexpr auto tiles_per_axis =
-      std::uint32_t{1} << kSurfaceSignalPlacementLod;
+  constexpr auto tiles_per_axis = std::uint32_t{1}
+                                  << kSurfaceSignalPlacementLod;
   constexpr auto central_begin = tiles_per_axis / 4U;
   constexpr auto central_width = tiles_per_axis / 2U;
   return {
       planet.id,
       face,
       kSurfaceSignalPlacementLod,
-      central_begin +
-          static_cast<std::uint32_t>(random.bounded(central_width)),
-      central_begin +
-          static_cast<std::uint32_t>(random.bounded(central_width)),
+      central_begin + static_cast<std::uint32_t>(random.bounded(central_width)),
+      central_begin + static_cast<std::uint32_t>(random.bounded(central_width)),
   };
 }
 
@@ -133,15 +130,15 @@ struct AcceptedTerrain {
   const auto reward_width =
       static_cast<std::uint64_t>(kSurfaceSignalMaximumRewardPoints) -
       kSurfaceSignalMinimumRewardPoints + 1U;
-  const auto strength = static_cast<std::uint16_t>(
-      kSurfaceSignalMinimumStrengthBasisPoints +
-      random.bounded(strength_width));
+  const auto strength =
+      static_cast<std::uint16_t>(kSurfaceSignalMinimumStrengthBasisPoints +
+                                 random.bounded(strength_width));
   const auto reward = static_cast<std::uint16_t>(
       kSurfaceSignalMinimumRewardPoints + random.bounded(reward_width));
   return {kind, strength, SurfaceSignalReward{reward}};
 }
 
-}  // namespace
+} // namespace
 
 auto derive_surface_signal_seed(Seed signal_seed,
                                 SurfaceSignalStream stream) noexcept -> Seed {
@@ -158,8 +155,8 @@ auto detail::generate_surface_signals_with_limits(
     const auto ordinal = static_cast<std::uint32_t>(index);
     const auto signal_seed =
         derive_seed(planet.seed, SeedDomain::encounter, ordinal);
-    SplitMix64 placement{
-        derive_surface_signal_seed(signal_seed, SurfaceSignalStream::placement)};
+    SplitMix64 placement{derive_surface_signal_seed(
+        signal_seed, SurfaceSignalStream::placement)};
 
     std::optional<AcceptedTerrain> accepted;
     std::uint16_t accepted_attempt{};
@@ -204,4 +201,4 @@ auto surface_signal_id_string(SurfaceSignalId id) -> std::string {
   return std::format("signal-{:016x}", id.value);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

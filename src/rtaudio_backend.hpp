@@ -9,4 +9,4 @@ namespace apsis_drift::detail {
 [[nodiscard]] auto make_rtaudio_backend(AudioOutputSelection selection)
     -> std::unique_ptr<AudioBackend>;
 
-}  // namespace apsis_drift::detail
+} // namespace apsis_drift::detail

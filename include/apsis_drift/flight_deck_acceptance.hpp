@@ -33,4 +33,4 @@ struct FlightDeckAcceptanceReport {
 [[nodiscard]] auto flight_deck_acceptance_json(
     const FlightDeckAcceptanceReport& report) -> std::string;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

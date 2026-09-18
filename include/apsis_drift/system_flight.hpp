@@ -110,8 +110,8 @@ enum class SystemFlightError : std::uint8_t {
 
 // Converts an orbital planet-fixed craft state back into system-inertial
 // flight without changing the authoritative tick or mission target.
-[[nodiscard]] auto depart_planetary_orbit(
-    const LocalSystemDescriptor& system, const PlanetaryFlightState& state)
+[[nodiscard]] auto depart_planetary_orbit(const LocalSystemDescriptor& system,
+                                          const PlanetaryFlightState& state)
     -> std::expected<SystemFlightState, SystemFlightError>;
 
 [[nodiscard]] auto system_flight_state_checksum(
@@ -122,4 +122,4 @@ enum class SystemFlightError : std::uint8_t {
   return static_cast<SimulationTick>(scale);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

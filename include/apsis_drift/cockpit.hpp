@@ -3,12 +3,12 @@
 #include <cstddef>
 #include <string>
 
+#include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/render_profile.hpp"
 #include "apsis_drift/signal_collection.hpp"
 #include "apsis_drift/simulation.hpp"
 #include "apsis_drift/system_flight.hpp"
-#include "apsis_drift/origin_return.hpp"
 #include "apsis_drift/system_rendering.hpp"
 #include "termforge/core/types.hpp"
 
@@ -122,9 +122,10 @@ struct CockpitLayout {
 // Compute cockpit regions in terminal cells. The driver-provided `cell_pixels`
 // keeps the logical pixel viewport's aspect ratio correct on Kitty and ANSI
 // half-block paths without moving terminal policy into the game.
-[[nodiscard]] auto compute_cockpit_layout(
-    int cols, int rows, termforge::Extent cell_pixels,
-    ViewportSize viewport) noexcept -> CockpitLayout;
+[[nodiscard]] auto compute_cockpit_layout(int cols, int rows,
+                                          termforge::Extent cell_pixels,
+                                          ViewportSize viewport) noexcept
+    -> CockpitLayout;
 
 // Build fixed-width cockpit lines exclusively from authoritative simulation
 // state. Invalid numeric telemetry remains renderable as explicit sentinels.
@@ -140,15 +141,15 @@ struct CockpitLayout {
 // Build cockpit-ready fixed-width regime and most-recent-transition lines.
 // Presentation decides when and where to show them; simulation remains the
 // sole owner of transition timing.
-[[nodiscard]] auto format_flight_regime(
-    const PlanetaryFlightState& state) -> FlightRegimeReadout;
+[[nodiscard]] auto format_flight_regime(const PlanetaryFlightState& state)
+    -> FlightRegimeReadout;
 
 // Thermal feedback is derived from authoritative planet and flight state.
 // Fixed-width text keeps load, trend, limit, angle, and correction equivalent
 // on Kitty and ANSI paths.
-[[nodiscard]] auto format_thermal_instruments(
-    const PlanetDescriptor& planet,
-    const PlanetaryFlightState& state) -> ThermalInstrumentReadout;
+[[nodiscard]] auto format_thermal_instruments(const PlanetDescriptor& planet,
+                                              const PlanetaryFlightState& state)
+    -> ThermalInstrumentReadout;
 
 // Scanner lines are fixed width and communicate direction and status in text,
 // so the Kitty and ANSI cockpit paths do not depend on color alone.
@@ -172,7 +173,7 @@ struct CockpitLayout {
 // The insertion action appears only when authoritative guidance is ready; the
 // refusal text names every unmet threshold without changing flight state.
 [[nodiscard]] auto format_system_flight_status(
-    const SystemFlightState& state,
-    const SystemFlightGuidance& guidance) -> SystemFlightStatusReadout;
+    const SystemFlightState& state, const SystemFlightGuidance& guidance)
+    -> SystemFlightStatusReadout;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

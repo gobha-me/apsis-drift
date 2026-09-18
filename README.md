@@ -69,13 +69,15 @@ Requirements:
   Linux)
 - FFmpeg when the optional offline MIDI/audition targets and their automated
   loudness/true-peak checks are enabled
+- clang-format and clang-tidy 20 for repository quality checks
 
-Apsis Drift first looks for a TermForge v0.42.0-or-newer package, then for a
-compatible sibling checkout at `../termforge`. Older siblings are ignored. If
-neither exists, CMake fetches the tagged TermForge v0.42.0 release. This keeps
-structured input while adding explicit image invalidation, bounded synchronized
-output, built-in driver selection, image residency, placement layers and crops,
-and terminal-driven animation registration and payload-free playback control.
+Apsis Drift first looks for a compatible TermForge v0.57.23-or-newer package,
+then for a compatible sibling checkout at `../termforge`. Older siblings are
+ignored. If neither exists, CMake fetches the tagged TermForge v0.57.23 release.
+This keeps structured input while adding explicit image invalidation, bounded
+synchronized output, built-in driver selection, image residency, placement
+layers and crops, and terminal-driven animation registration and payload-free
+playback control.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -112,6 +114,30 @@ To use a checkout in a different location:
 cmake -S . -B build \
   -DAPSIS_DRIFT_TERMFORGE_SOURCE_DIR=/path/to/termforge
 ```
+
+## Format and lint
+
+The repository uses an LLVM-derived style pinned to clang-format 20. The helper
+checks tracked and new C/C++ files and rejects other formatter major versions:
+
+```bash
+tools/format.sh --check
+tools/format.sh --fix
+tools/lint.sh
+```
+
+The lint helper configures `build-tidy/`, validates suppression policy, and
+runs the curated analyzer, bug-prone, performance, portability, and low-churn
+modernization checks over CMake-owned `src/` and `test/` translation units.
+Both quality checks are mandatory in CI.
+
+Set `CLANG_FORMAT`, `CLANG_TIDY`, `RUN_CLANG_TIDY`, or `CLANGXX` when versioned
+executables have different local names. `APSIS_DRIFT_TIDY_BUILD_DIR` selects the
+analysis build directory and `APSIS_DRIFT_TIDY_JOBS` controls parallelism.
+
+A clang-tidy suppression is an exceptional local waiver. It must name exact
+checks and include a same-line explanation; bare, wildcard, unexplained,
+nested, mismatched, and unclosed directives fail `tools/check_nolint.sh`.
 
 ## Run
 

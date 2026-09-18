@@ -56,8 +56,7 @@ struct SurfaceSignalWorldProjection {
   std::array<SurfaceSignalWorldEntry, kSurfaceSignalCount> signals;
 
   friend auto operator==(const SurfaceSignalWorldProjection&,
-                         const SurfaceSignalWorldProjection&)
-      -> bool = default;
+                         const SurfaceSignalWorldProjection&) -> bool = default;
 };
 
 [[nodiscard]] auto surface_signal_object_key(SurfaceSignalId id) -> std::string;
@@ -71,4 +70,4 @@ struct SurfaceSignalWorldProjection {
     const SurfaceSignalCatalog& catalog, const WorldDeltaJournal& journal)
     -> std::expected<SurfaceSignalWorldProjection, WorldDeltaJournalError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

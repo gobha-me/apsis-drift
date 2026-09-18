@@ -36,7 +36,7 @@ namespace {
          planet.radius.value <= PlanetRadiusKm::max;
 }
 
-}  // namespace
+} // namespace
 
 auto resolve_local_sun(const PlanetDescriptor& planet,
                        SimulationTick tick) noexcept
@@ -45,8 +45,8 @@ auto resolve_local_sun(const PlanetDescriptor& planet,
     return std::unexpected{LocalSunError::invalid_planet};
   }
 
-  const auto seed = derive_planet_stream_seed(
-      planet.seed, PlanetDescriptorStream::celestial);
+  const auto seed =
+      derive_planet_stream_seed(planet.seed, PlanetDescriptorStream::celestial);
   const auto phase_seed = mix64(seed.value ^ 0xA0761D6478BD642FULL);
   const auto declination_seed = mix64(seed.value ^ 0xE7037ED1A0B428DBULL);
   const SimulationTick phase_offset = phase_seed % kLocalDayTicks;
@@ -58,26 +58,22 @@ auto resolve_local_sun(const PlanetDescriptor& planet,
                        static_cast<double>(kLocalDayTicks);
   // One-degree steps bound the v1 seasonal declination while keeping every
   // generated world away from a permanent polar day/night extreme.
-  const int declination_degrees =
-      static_cast<int>(declination_seed % 61U) - 30;
-  const double declination =
-      static_cast<double>(declination_degrees) *
-      std::numbers::pi_v<double> / 180.0;
+  const int declination_degrees = static_cast<int>(declination_seed % 61U) - 30;
+  const double declination = static_cast<double>(declination_degrees) *
+                             std::numbers::pi_v<double> / 180.0;
   const double horizontal = std::cos(declination);
   LocalSunGeometry result{
-      .planet_to_sun =
-          {quantized(horizontal * std::cos(phase)),
-           quantized(horizontal * std::sin(phase)),
-           quantized(std::sin(declination))},
+      .planet_to_sun = {quantized(horizontal * std::cos(phase)),
+                        quantized(horizontal * std::sin(phase)),
+                        quantized(std::sin(declination))},
       .cycle_tick = cycle_tick,
       .phase_radians = quantized(phase),
       .declination_radians = quantized(declination),
   };
   const double magnitude = length(result.planet_to_sun);
   if (!finite(result.planet_to_sun) || !std::isfinite(result.phase_radians) ||
-      !std::isfinite(result.declination_radians) ||
-      !std::isfinite(magnitude) || magnitude < 0.999999 ||
-      magnitude > 1.000001) {
+      !std::isfinite(result.declination_radians) || !std::isfinite(magnitude) ||
+      magnitude < 0.999999 || magnitude > 1.000001) {
     return std::unexpected{LocalSunError::invalid_geometry};
   }
   return result;
@@ -99,4 +95,4 @@ auto local_solar_elevation(const LocalSunGeometry& sun,
   return std::clamp(dot / (sun_length * up_length), -1.0, 1.0);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

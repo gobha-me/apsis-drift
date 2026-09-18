@@ -4,19 +4,18 @@
 
 using namespace apsis_drift;
 using namespace apsis_drift::flight_lab;
-auto check(bool ok, const char *message) -> void {
-  if (!ok)
-    throw std::runtime_error(message);
+auto check(bool ok, const char* message) -> void {
+  if (!ok) throw std::runtime_error(message);
 }
 template <class F> auto rejects(F f) -> void {
   try {
     f();
-  } catch (const std::invalid_argument &) {
+  } catch (const std::invalid_argument&) {
     return;
   }
   throw std::runtime_error("invalid input accepted");
 }
-auto evolve(const PlanetDescriptor &p, State s, Demand d, int ticks) -> State {
+auto evolve(const PlanetDescriptor& p, State s, Demand d, int ticks) -> State {
   for (int i = 0; i < ticks; ++i)
     advance(p, 0, s, d);
   return s;
@@ -109,12 +108,9 @@ auto main() -> int {
           "flip and main burn not stronger than retro");
     for (int axis = 0; axis < 3; ++axis) {
       Demand d;
-      if (axis == 0)
-        d.pitch = 1;
-      if (axis == 1)
-        d.yaw = 1;
-      if (axis == 2)
-        d.roll = 1;
+      if (axis == 0) d.pitch = 1;
+      if (axis == 1) d.yaw = 1;
+      if (axis == 2) d.roll = 1;
       const auto rotated = evolve(planet, base, d, 180);
       check(length(rotated.up - base.up) + length(rotated.back - base.back) >
                 .5,
@@ -157,7 +153,7 @@ auto main() -> int {
               << length(half.velocity) << " / " << length(retro.velocity)
               << " m/s\n";
     return 0;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     return 1;
   }

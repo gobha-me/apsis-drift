@@ -11,7 +11,8 @@ namespace apsis_drift {
 
 inline constexpr SimulationTick kSignalCollectionAcquireTicks{kSimulationHz /
                                                               2};
-inline constexpr SimulationTick kSignalCollectionScanTicks{kSimulationHz * 3};
+inline constexpr SimulationTick kSignalCollectionScanTicks{kSimulationHz *
+                                                           SimulationTick{3}};
 inline constexpr SimulationTick kSignalCollectionTotalInRangeTicks{
     kSignalCollectionAcquireTicks + kSignalCollectionScanTicks};
 
@@ -53,11 +54,10 @@ enum class SignalCollectionError : std::uint8_t {
 // Advances exactly one application-owned simulation tick. Acquisition and
 // scanning require consecutive ticks inside the scanner's reached radius.
 // Rejected updates leave both state and journal untouched.
-[[nodiscard]] auto
-advance_signal_collection(const SurfaceSignalCatalog& catalog,
-                          const SignalNavigationSolution& navigation,
-                          SimulationTick tick, WorldDeltaJournal& journal,
-                          SignalCollectionState& state)
+[[nodiscard]] auto advance_signal_collection(
+    const SurfaceSignalCatalog& catalog,
+    const SignalNavigationSolution& navigation, SimulationTick tick,
+    WorldDeltaJournal& journal, SignalCollectionState& state)
     -> std::expected<SignalCollectionUpdate, SignalCollectionError>;
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

@@ -20,15 +20,12 @@ namespace {
   constexpr float coordinate_limit =
       static_cast<float>(std::numeric_limits<int>::max() / 2);
   return std::isfinite(state.pose.x) && std::isfinite(state.pose.y) &&
-         std::isfinite(state.pose.altitude) &&
-         std::isfinite(state.pose.yaw) &&
-         std::isfinite(state.velocity.x) &&
-         std::isfinite(state.velocity.y) &&
+         std::isfinite(state.pose.altitude) && std::isfinite(state.pose.yaw) &&
+         std::isfinite(state.velocity.x) && std::isfinite(state.velocity.y) &&
          std::isfinite(state.velocity.vertical) &&
          std::isfinite(state.clearance) &&
          std::abs(state.pose.x) <= coordinate_limit &&
-         std::abs(state.pose.y) <= coordinate_limit &&
-         valid_mode(state.mode);
+         std::abs(state.pose.y) <= coordinate_limit && valid_mode(state.mode);
 }
 
 [[nodiscard]] auto valid_command(FlightCommandKind kind) noexcept -> bool {
@@ -109,20 +106,15 @@ auto apply_command(FlightState& state, FlightCommandKind kind) noexcept
       state.controls.rise = true;
       state.mode = FlightMode::manual;
       break;
-    case FlightCommandKind::release_rise:
-      state.controls.rise = false;
-      break;
+    case FlightCommandKind::release_rise: state.controls.rise = false; break;
     case FlightCommandKind::press_fall:
       state.controls.fall = true;
       state.mode = FlightMode::manual;
       break;
-    case FlightCommandKind::release_fall:
-      state.controls.fall = false;
-      break;
+    case FlightCommandKind::release_fall: state.controls.fall = false; break;
     case FlightCommandKind::toggle_autopilot:
-      state.mode = state.mode == FlightMode::autopilot
-                       ? FlightMode::manual
-                       : FlightMode::autopilot;
+      state.mode = state.mode == FlightMode::autopilot ? FlightMode::manual
+                                                       : FlightMode::autopilot;
       clear_controls(state.controls);
       break;
     case FlightCommandKind::decrease_time_scale:
@@ -142,7 +134,7 @@ auto hash_bool(std::uint64_t& hash, bool value) noexcept -> void {
   hash_word(hash, value ? 1U : 0U);
 }
 
-}  // namespace
+} // namespace
 
 auto FixedStepClock::advance(SimulationSeconds elapsed) noexcept
     -> std::expected<SimulationAdvance, SimulationTimeError> {
@@ -163,16 +155,15 @@ auto FixedStepClock::advance(SimulationSeconds elapsed) noexcept
   constexpr double boundary_epsilon = kSimulationStep.count() * 1.0e-9;
   result.steps = std::min(
       kMaxCatchUpSteps,
-      static_cast<int>(std::floor(
-          (m_accumulator.count() + boundary_epsilon) /
-          kSimulationStep.count())));
+      static_cast<int>(std::floor((m_accumulator.count() + boundary_epsilon) /
+                                  kSimulationStep.count())));
   m_accumulator -= kSimulationStep * result.steps;
   if (m_accumulator.count() < 0.0 &&
       m_accumulator.count() >= -boundary_epsilon) {
     m_accumulator = SimulationSeconds::zero();
   }
-  result.interpolation_alpha = std::clamp(
-      m_accumulator.count() / kSimulationStep.count(), 0.0, 1.0);
+  result.interpolation_alpha =
+      std::clamp(m_accumulator.count() / kSimulationStep.count(), 0.0, 1.0);
   return result;
 }
 
@@ -213,7 +204,8 @@ auto advance_flight(const Terrain& terrain, FlightState& state,
   }
 
   FlightState next = state;
-  for (const auto& command : commands) apply_command(next, command.kind);
+  for (const auto& command : commands)
+    apply_command(next, command.kind);
 
   float forward = static_cast<float>(next.controls.forward) -
                   static_cast<float>(next.controls.backward);
@@ -241,8 +233,8 @@ auto advance_flight(const Terrain& terrain, FlightState& state,
   next.velocity.y = (forward_y * forward + right_y * strafe) * speed;
   next.pose.x += next.velocity.x * dt;
   next.pose.y += next.velocity.y * dt;
-  next.clearance = std::clamp(next.clearance + vertical * 45.0F * dt,
-                              16.0F, 160.0F);
+  next.clearance =
+      std::clamp(next.clearance + vertical * 45.0F * dt, 16.0F, 160.0F);
 
   if (!finite_state(next)) {
     return std::unexpected{FlightError::invalid_state};
@@ -251,16 +243,15 @@ auto advance_flight(const Terrain& terrain, FlightState& state,
   const float world = static_cast<float>(terrain.size());
   next.pose.x = std::fmod(std::fmod(next.pose.x, world) + world, world);
   next.pose.y = std::fmod(std::fmod(next.pose.y, world) + world, world);
-  const float floor = std::max<float>(
-      terrain.height_at(static_cast<int>(next.pose.x),
-                        static_cast<int>(next.pose.y)),
-      kWaterLevel);
+  const float floor =
+      std::max<float>(terrain.height_at(static_cast<int>(next.pose.x),
+                                        static_cast<int>(next.pose.y)),
+                      kWaterLevel);
   const float target_altitude = floor + next.clearance;
   const float previous_altitude = next.pose.altitude;
-  next.pose.altitude += (target_altitude - next.pose.altitude) *
-                        std::min(1.0F, dt * 3.0F);
-  next.velocity.vertical =
-      (next.pose.altitude - previous_altitude) / dt;
+  next.pose.altitude +=
+      (target_altitude - next.pose.altitude) * std::min(1.0F, dt * 3.0F);
+  next.velocity.vertical = (next.pose.altitude - previous_altitude) / dt;
   ++next.tick;
 
   if (!finite_state(next)) {
@@ -283,8 +274,7 @@ auto derive_camera(const FlightState& state) noexcept
   return camera;
 }
 
-auto flight_state_checksum(const FlightState& state) noexcept
-    -> std::uint64_t {
+auto flight_state_checksum(const FlightState& state) noexcept -> std::uint64_t {
   constexpr std::uint64_t offset{1469598103934665603ULL};
   std::uint64_t hash = offset;
   hash_word(hash, state.tick);
@@ -308,4 +298,4 @@ auto flight_state_checksum(const FlightState& state) noexcept
   return hash;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

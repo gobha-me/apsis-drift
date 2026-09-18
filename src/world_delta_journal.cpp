@@ -16,8 +16,7 @@ inline constexpr std::string_view kSurfaceSignalObjectPrefix{"signal-"};
     case SaveWorldDeltaKind::discovered:
     case SaveWorldDeltaKind::collected:
     case SaveWorldDeltaKind::completed:
-    case SaveWorldDeltaKind::removed:
-      return true;
+    case SaveWorldDeltaKind::removed: return true;
   }
   return false;
 }
@@ -27,14 +26,14 @@ inline constexpr std::string_view kSurfaceSignalObjectPrefix{"signal-"};
 }
 
 auto canonicalize(std::vector<SaveWorldDelta>& entries) -> void {
-  std::ranges::sort(entries, [](const SaveWorldDelta& left,
-                               const SaveWorldDelta& right) {
-    if (left.tick != right.tick) return left.tick < right.tick;
-    return left.object_key < right.object_key;
-  });
+  std::ranges::sort(
+      entries, [](const SaveWorldDelta& left, const SaveWorldDelta& right) {
+        if (left.tick != right.tick) return left.tick < right.tick;
+        return left.object_key < right.object_key;
+      });
 }
 
-}  // namespace
+} // namespace
 
 auto WorldDeltaJournal::create(std::span<const SaveWorldDelta> deltas)
     -> std::expected<WorldDeltaJournal, WorldDeltaJournalError> {
@@ -138,4 +137,4 @@ auto apply_world_delta_journal(const SurfaceSignalCatalog& catalog,
   return projection;
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift

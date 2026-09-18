@@ -23,7 +23,7 @@ namespace {
   return value;
 }
 
-}  // namespace
+} // namespace
 
 auto profile_viewport(RenderProfile profile) noexcept -> ViewportSize {
   switch (profile) {
@@ -66,8 +66,7 @@ auto validate_viewport(ViewportSize viewport) noexcept
   if (viewport.width <= 0 || viewport.height <= 0) {
     return std::unexpected{ViewportError::non_positive};
   }
-  if (viewport.width > kMaxViewportAxis ||
-      viewport.height > kMaxViewportAxis) {
+  if (viewport.width > kMaxViewportAxis || viewport.height > kMaxViewportAxis) {
     return std::unexpected{ViewportError::dimension_too_large};
   }
   const auto pixels = static_cast<std::size_t>(viewport.width) *
@@ -128,4 +127,4 @@ auto default_render_configuration() noexcept -> RenderConfiguration {
   return resolve_render_configuration(RenderProfile::local);
 }
 
-}  // namespace apsis_drift
+} // namespace apsis_drift
