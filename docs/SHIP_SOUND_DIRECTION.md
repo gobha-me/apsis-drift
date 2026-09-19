@@ -24,10 +24,33 @@ with higher playback volume, add a permanent crescendo, or bring back a fan
 wash. Near-frequency interaction and repetitive flutter require listening
 review; a larger oscillator count alone is not an improvement.
 
+### Confirmed correction: one overall level, dynamic character
+
+After direction 23, the user clarified and confirmed that demand should change
+the blend, **not make the healthy engine louder**. Matching the average level
+of two complete clips is insufficient when each still swells with throttle.
+The next audition must hold a comparable overall perceived level from powered
+idle through high demand, smoothly replacing contributions rather than adding
+more signal on top. The player's volume control sets playback loudness.
+
+Use overlapping idle, light, core and dense regions, not hard percentage
+switches. The idle voice is continuous while powered; zero commanded thrust
+does not silence it. Engine-off and existing pause/mute/focus/invalid-state
+safety gates still silence output. Fault cues remain separate future work.
+This is a healthy-engine mixing target, not an instruction to flatten every
+alarm or atmosphere sound through a new global compressor.
+
+Calibrate the actual correlated mix at intermediate blend positions as well as
+anchors. Prefer a smooth known gain curve over a reactive automatic gain
+control that pumps with each waveform fluctuation. Equal RMS is a useful
+diagnostic, not proof of equal perceived loudness; the sustained human audition
+must confirm that the tonal change does not sound like a volume change.
+
 Absolute flight speed must not drive fictional engine RPM. Thrust can cease
-while velocity persists in vacuum. Quiet powered machinery remains distinct
-from active propulsion; this engine-only audition does not redefine the idle
-cabin bed or exterior-vacuum policy. Atmosphere remains an additional
+while velocity persists in vacuum. Powered idle and active propulsion remain
+distinguishable by character rather than relying on loudness. This revises the
+earlier engine-only audition's silent zero-throttle behavior, not the existing
+running prototype or exterior-vacuum policy. Atmosphere remains an additional
 pressure-dependent transmission/airflow layer around the same ship identity.
 
 ## Preserve room for condition
@@ -41,9 +64,11 @@ Existing visual/status information must remain useful without sound.
 
 ## Listening and implementation gates
 
-1. Compare the new dense layer and the three-layer blend against the preferred
-   direction 22 / 02 on identical short throttle timing. Report linear level
-   matching and peaks honestly; RMS is not perceived loudness or comfort.
+1. Compare the idle-to-dense dynamic blend on identical short throttle timing.
+   Keep direction 22 / 02 as the character reference, not its throttle-driven
+   gain envelope. Report individual steady-load levels, intermediate-position
+   behavior and peaks, not only full-clip normalization. RMS is not perceived
+   loudness or comfort.
 2. Include a longer uninterrupted audition with steady light/heavy-load holds,
    transitions and a quiet end. Do not repeat a short clip and call that a
    sustained synthesis test. Human listening on ordinary stereo speakers is
