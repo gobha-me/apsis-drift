@@ -20,14 +20,25 @@ var _age := TELEMETRY_TIMEOUT
 var _desired := Vector3.ZERO
 var _targets := Vector3.ZERO
 var _gains := Vector3.ZERO
-var _engine_hz := 48.0
-var _target_hz := 48.0
+var _engine_hz := 54.0
+var _power := 0.0
+var _spool := 0.0
+var _spool_target := 0.0
 var _phase := 0.0
 var _machinery_phase := 0.0
+var _beat_phase := 0.0
 var _noise_state: int = 0x51A7D123
 var _low_noise := 0.0
+var _growl_low := 0.0
+var _growl_high := 0.0
+var _growl_smooth := 0.0
+var _coolant_low := 0.0
+var _coolant_high := 0.0
+var _uneven := 0.0
 var _air_low := 0.0
 var _air_high := 0.0
+var _air_side := 0.0
+var _buffet := 0.0
 var _rendered := 0
 var _rejected := 0
 var _player: AudioStreamPlayer
@@ -61,7 +72,7 @@ func update_telemetry(state: Dictionary, cockpit: bool, active: bool) -> bool:
 	_desired = Vector3(MAX_GAINS.x if cockpit else 0.0,
 		MAX_GAINS.y * sqrt(power) * conduction,
 		MAX_GAINS.z * sqrt(pressure) * air * (0.55 if cockpit else 1.0))
-	_target_hz = 48.0 + power * 108.0
+	_power = power
 	_refresh_targets()
 	return true
 
@@ -80,6 +91,7 @@ func set_muted(value: bool) -> void:
 
 func _refresh_targets() -> void:
 	_targets = _desired if _valid and _active and not muted and _age < TELEMETRY_TIMEOUT else Vector3.ZERO
+	_spool_target = _power if _targets.y > 0 else 0.0
 
 func advance_presentation(delta: float) -> void:
 	# Testable presentation watchdog, not a simulation clock or catch-up loop.
@@ -100,19 +112,38 @@ func _sample() -> Vector2:
 	_gains.x = move_toward(_gains.x, _targets.x, MAX_GAINS.x / (FADE_SECONDS * SAMPLE_RATE))
 	_gains.y = move_toward(_gains.y, _targets.y, MAX_GAINS.y / (FADE_SECONDS * SAMPLE_RATE))
 	_gains.z = move_toward(_gains.z, _targets.z, MAX_GAINS.z / (FADE_SECONDS * SAMPLE_RATE))
-	_engine_hz = move_toward(_engine_hz, _target_hz, 240.0 / SAMPLE_RATE)
+	# Texture has mechanical inertia; safety gates still use the fast gain fade.
+	_spool = move_toward(_spool, _spool_target, 1.0 / ((0.55 if _spool_target > _spool else 0.9) * SAMPLE_RATE))
+	_engine_hz = 54.0 + _spool * 14.0
 	_phase = fposmod(_phase + _engine_hz / SAMPLE_RATE, 1.0)
-	_machinery_phase = fposmod(_machinery_phase + 37.0 / SAMPLE_RATE, 1.0)
+	_machinery_phase = fposmod(_machinery_phase + 34.0 / SAMPLE_RATE, 1.0)
+	_beat_phase = fposmod(_beat_phase + (6.5 + _spool * 3.5) / SAMPLE_RATE, 1.0)
 	var noise := _noise()
-	_low_noise += 0.025 * (noise - _low_noise)
-	_air_low += 0.30 * (noise - _air_low)
-	_air_high += 0.035 * (noise - _air_high)
-	var machinery := sin(TAU * _machinery_phase) * 0.7 + sin(TAU * _machinery_phase * 3.0) * 0.3
-	var engine := sin(TAU * _phase) * 0.55 + sin(TAU * _phase * 2.0) * 0.20 + _low_noise * 0.25
-	var wind := (_air_low - _air_high) * 0.7
+	var air_noise := _noise()
+	_low_noise += 0.018 * (noise - _low_noise)
+	_uneven += 0.0015 * (noise - _uneven)
+	_growl_low += (0.105 + _spool * 0.065) * (noise - _growl_low)
+	_growl_high += 0.018 * (noise - _growl_high)
+	# Band-limited irregular compression, not a prominent clean turbine whistle.
+	var rough := tanh((_growl_low - _growl_high) * (3.0 + _spool * 2.5))
+	_growl_smooth += 0.20 * (rough - _growl_smooth)
+	_coolant_low += 0.32 * (noise - _coolant_low)
+	_coolant_high += 0.12 * (noise - _coolant_high)
+	_air_low += 0.23 * (air_noise - _air_low)
+	_air_high += 0.025 * (air_noise - _air_high)
+	_air_side += 0.11 * (air_noise - _air_side)
+	_buffet += 0.0025 * (air_noise - _buffet)
+	var machinery := sin(TAU * _machinery_phase * 3.0) * 0.35 + sin(TAU * _machinery_phase * 2.0) * 0.20 + _low_noise * 0.45
+	var uneven := clampf(0.84 + 0.10 * sin(TAU * _beat_phase) + _uneven * 1.4, 0.60, 1.0)
+	# Audible body harmonics support small speakers; no dependence on sub-40Hz bass.
+	var body := sin(TAU * _phase) * 0.55 + sin(TAU * _phase * 2.0) * 0.30 + sin(TAU * _phase * 3.0) * 0.15
+	var engine := body * 0.42 + _growl_smooth * (0.30 + _spool * 0.16) * uneven + (_coolant_low - _coolant_high) * 0.045
+	var wind := (_air_low - _air_high) * 0.60 + _buffet * 1.2
 	var common := _gains.x * machinery + _gains.y * engine
 	var left := common + _gains.z * wind
-	var right := common + _gains.z * wind * 0.94
+	# Centered mechanical core, gentle correlated air width; no phase inversion,
+	# delay tricks or claimed physical spatialization. Mono fold-down is stable.
+	var right := common + _gains.z * (wind * 0.90 + (_air_side - _air_high) * 0.06)
 	_rendered += 1
 	_silent_frames = _silent_frames + 1 if _gains == Vector3.ZERO else 0
 	return Vector2(clampf(left, -LIMIT, LIMIT), clampf(right, -LIMIT, LIMIT))
@@ -130,6 +161,7 @@ func synthesize_frames(count: int) -> PackedVector2Array:
 func diagnostics() -> Dictionary:
 	return {"muted": muted, "active": _active, "valid": _valid,
 		"targets": _targets, "gains": _gains, "rendered_frames": _rendered,
+		"spool": _spool, "engine_hz": _engine_hz,
 		"rejected_updates": _rejected, "telemetry_age": _age,
 		"queued_frames": maxi(0, _capacity - _playback.get_frames_available()) if _playback != null else 0,
 		"playback_running": _playback != null,
@@ -165,6 +197,8 @@ func _stop_playback() -> void:
 	_playback = null
 	_capacity = 0
 	_gains = Vector3.ZERO
+	_spool = 0.0
+	_engine_hz = 54.0
 	_silent_frames = 0
 
 func _process(delta: float) -> void:

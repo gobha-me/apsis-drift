@@ -96,6 +96,34 @@ func _initialize() -> void:
 		fragmented.append_array(b.synthesize_frames(1))
 	check(grouped == fragmented, "Synth depends on rendering chunk size or shared noise")
 	check(peak(grouped) <= ShipAudio.LIMIT, "Combined layers exceeded limit")
+	# Full demand changes texture gradually, rather than sweeping a clean high tone.
+	var spool := ShipAudio.new()
+	spool.update_telemetry(telemetry(1), true, true)
+	render(spool, 2400)
+	check(spool.diagnostics().spool > 0.1 and spool.diagnostics().spool < 0.25, "Mechanical spool lacks bounded spin-up inertia")
+	check(spool.diagnostics().engine_hz >= 54 and spool.diagnostics().engine_hz < 58, "Thrust immediately jumped to a high pure pitch")
+	render(spool, 14000)
+	check(is_equal_approx(spool.diagnostics().spool, 1.0) and spool.diagnostics().engine_hz <= 68, "Spool failed to settle within restrained pitch range")
+	spool.update_telemetry(telemetry(), true, true)
+	render(spool, 2400)
+	check(spool.diagnostics().spool > 0.8 and spool.diagnostics().spool < 0.95, "Mechanical spin-down lost inertia")
+	spool.set_muted(true)
+	render(spool, 2000)
+	check(peak(render(spool, 1024)) == 0, "Spool inertia bypassed mute fade")
+	spool.free()
+	var mono_energy := 0.0
+	var stereo_energy := 0.0
+	for sample in grouped:
+		mono_energy += pow((sample.x + sample.y) * 0.5, 2)
+		stereo_energy += (sample.x * sample.x + sample.y * sample.y) * 0.5
+	check(mono_energy >= stereo_energy * 0.99, "Stereo texture cancels significantly in mono")
+	var vacuum_core := ShipAudio.new()
+	var air_core := ShipAudio.new()
+	vacuum_core.update_telemetry(telemetry(0.8), true, true)
+	air_core.update_telemetry(telemetry(0.8, 1.0, 0.0), true, true)
+	check(render(vacuum_core, 4000) == render(air_core, 4000), "Atmosphere replaced the conducted engine identity even without airflow")
+	vacuum_core.free()
+	air_core.free()
 	# Live adapter must not open a device in this headless/Dummy test.
 	root.add_child(audio)
 	audio.update_telemetry(telemetry(1), true, true)
