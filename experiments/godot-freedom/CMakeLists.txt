@@ -5,6 +5,12 @@ target_compile_options(apsis-drift-godot-snapshot PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-surface-start-tests surface_start_test.cpp)
+  target_link_libraries(apsis-drift-surface-start-tests PRIVATE apsis-drift::lib nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-surface-start-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME godot-surface-start-contract COMMAND apsis-drift-surface-start-tests)
+  set_tests_properties(godot-surface-start-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-flight-journey-tests flight_journey_test.cpp)
   target_link_libraries(apsis-drift-flight-journey-tests PRIVATE apsis-drift::lib)
   target_compile_options(apsis-drift-flight-journey-tests PRIVATE
