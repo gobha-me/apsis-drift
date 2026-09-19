@@ -2,6 +2,7 @@ extends Node3D
 ## Runtime displays sit inside existing bezels; source GLBs remain unchanged.
 var screens: Array[Control] = []
 var elapsed := 1.0
+var guidance_screen: Control
 
 func _ready() -> void:
 	for i in 3:
@@ -15,6 +16,14 @@ func _ready() -> void:
 		screen.size = Vector2(896, 560)
 		viewport.add_child(screen)
 		screens.append(screen)
+		if i == 0:
+			guidance_screen = preload("res://guidance_screen.gd").new()
+			guidance_screen.cockpit = true
+			guidance_screen.size = Vector2(836, 440)
+			guidance_screen.position = Vector2(30, 94)
+			guidance_screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			screen.add_child(guidance_screen)
+			guidance_screen.hide()
 		var panel := MeshInstance3D.new()
 		var quad := QuadMesh.new()
 		quad.size = Vector2(0.465, 0.335)
@@ -34,6 +43,9 @@ func refresh(state: Dictionary, delta: float) -> void:
 	if elapsed < 0.1:
 		return
 	elapsed = 0
+	guidance_screen.guidance = state.get("guidance", {})
+	guidance_screen.visible = not guidance_screen.guidance.is_empty()
+	guidance_screen.queue_redraw()
 	for screen in screens:
 		screen.state = state
 		screen.queue_redraw()

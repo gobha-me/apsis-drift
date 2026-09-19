@@ -5,6 +5,7 @@ signal reset_flight
 signal debug_changed(value: bool)
 signal camera_distance_changed(value: float)
 signal practice_requested(reentry: bool)
+signal guidance_requested
 var controls: Node
 var rotational_coasting := false
 var panel: Control
@@ -63,6 +64,7 @@ func _ready() -> void:
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
 	add_button(left, "Reset experimental flight", func(): reset_flight.emit())
 	if controls.thrust_mode:
+		add_button(left, "Flight guidance — flight continues; no autopilot", func(): guidance_requested.emit())
 		add_button(left, "Orbit practice — relocates unsaved flight", func(): practice_requested.emit(false))
 		add_button(left, "Re-entry practice — relocates unsaved flight", func(): practice_requested.emit(true))
 	add_button(left, "Toggle fullscreen", func():
@@ -197,6 +199,11 @@ func _process(_delta: float) -> void:
 		var device_name := Input.get_joy_name(controls.device) if controls.device >= 0 else ""
 		message.text = ("No controller detected. " if controls.device < 0 else "Controller: %s. " % (device_name if not device_name.is_empty() else "mapped test device")) + controls.status
 		refresh_bindings()
+
+func _input(_event: InputEvent) -> void:
+	# Stop queued GUI accepts/navigation while the window safety pause owns focus.
+	if panel.visible and not controls.focused:
+		get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if panel.visible and controls.waiting_action.is_empty() and event.is_action_pressed("ui_cancel"):

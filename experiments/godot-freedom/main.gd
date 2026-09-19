@@ -43,11 +43,17 @@ var planet_stream: Node3D
 var player_input: Node
 var pause_menu: CanvasLayer
 var flight_displays: Node3D
+var flight_plan_menu: CanvasLayer
+var flight_plan := 0 # Presentation-only selection; never part of flight state.
+var guidance_elapsed := 0.0
+var flight_guidance: Dictionary = {}
+var guidance_overlay: Control
 var navigation_sky: ShaderMaterial
 var debug_visible := true
 var debug_backdrop: ColorRect
 var chase_angles := Vector2.ZERO
 var chase_distance := 36.0
+var chase_follow := preload("res://chase_camera.gd").new()
 var live_presentation := false
 var world_view: Node
 
@@ -264,7 +270,28 @@ func setup_player_controls() -> void:
 	pause_menu.controls = player_input
 	pause_menu.rotational_coasting = live_bridge != null and live_bridge.get_state().get("flight_model", "") == "thrust-lab-2"
 	add_child(pause_menu)
-	player_input.pause_requested.connect(func(): set_player_paused(not pause_menu.panel.visible))
+	flight_plan_menu = preload("res://flight_plan_menu.gd").new()
+	flight_plan_menu.setup(player_input)
+	add_child(flight_plan_menu)
+	flight_plan_menu.plan_selected.connect(select_flight_plan)
+	var guidance_layer := CanvasLayer.new()
+	guidance_layer.layer = 8
+	add_child(guidance_layer)
+	guidance_overlay = preload("res://guidance_screen.gd").new()
+	guidance_overlay.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	guidance_overlay.position = Vector2(-440, 24)
+	guidance_overlay.size = Vector2(420, 385)
+	guidance_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	guidance_layer.add_child(guidance_overlay)
+	guidance_overlay.hide()
+	player_input.pause_requested.connect(func():
+		if flight_plan_menu.active:
+			flight_plan_menu.close()
+		else:
+			set_player_paused(not pause_menu.panel.visible))
+	pause_menu.guidance_requested.connect(func():
+		set_player_paused(false)
+		flight_plan_menu.open(flight_plan))
 	player_input.safety_pause.connect(func(reason: String): set_player_paused(true, reason))
 	player_input.camera_requested.connect(func():
 		if live_bridge != null and mode == 1:
@@ -285,8 +312,33 @@ func setup_player_controls() -> void:
 		player_input.needs_neutral = true
 		head_angles = Vector2.ZERO
 		chase_angles = Vector2.ZERO
+		chase_follow.reset(live_bridge.get_state().body_basis)
+		flight_guidance = {}
+		guidance_elapsed = 1.0
 		pause_menu.controls.status = "Practice start loaded (relocated, unsaved). Assist OFF. Resume when ready."
 		flight_displays.elapsed = 1.0)
+
+
+func select_flight_plan(value: int) -> void:
+	if value < 0 or value > 3:
+		return
+	flight_plan = value
+	flight_guidance = {}
+	guidance_elapsed = 1.0
+	if is_instance_valid(flight_displays):
+		flight_displays.elapsed = 1.0
+	if is_instance_valid(guidance_overlay):
+		guidance_overlay.hide()
+
+
+func plan_shortcut_available(pad: bool) -> bool:
+	for action in player_input.bindings:
+		var binding: Dictionary = player_input.bindings[action]["pad" if pad else "key"]
+		if pad and binding.kind == "button" and int(binding.code) in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT]:
+			return false
+		if not pad and int(binding.code) == KEY_G:
+			return false
+	return true
 
 
 func set_chase_distance(value: float) -> void:
@@ -302,7 +354,12 @@ func orbit_camera(relative: Vector2) -> void:
 
 
 func set_player_paused(paused: bool, reason := "") -> void:
+	# A queued GUI accept must not resume through the focus-safety pause.
+	if not paused and not window_focused:
+		return
 	live_paused = paused
+	if paused and is_instance_valid(flight_plan_menu):
+		flight_plan_menu.close()
 	player_input.set_enabled(not paused)
 	if paused:
 		head_angles = Vector2.ZERO
@@ -313,6 +370,7 @@ func set_player_paused(paused: bool, reason := "") -> void:
 
 
 func reset_live_flight() -> void:
+	select_flight_plan(0)
 	if live_bridge != null and live_bridge.initialize(snapshot_text):
 		if options.get("--flight-model", "legacy") == "thrust" and not live_bridge.enable_surface_practice():
 			fail("Thrust reset failed: " + str(live_bridge.get_last_error()))
@@ -569,6 +627,7 @@ func toggle_pilot() -> void:
 	chase_angles = Vector2.ZERO
 	camera.fov = 75 if pilot_view else 55
 	if not pilot_view:
+		chase_follow.reset(ship.basis)
 		set_view(1)
 	else:
 		update_head_camera()
@@ -589,6 +648,13 @@ func update_head_camera() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if player_input != null and (not window_focused or pause_menu.panel.visible):
 		return
+	if player_input != null and player_input.thrust_mode and event.is_pressed() and not event.is_echo():
+		var open_pad: bool = event is InputEventJoypadButton and event.device == player_input.device and event.button_index == JOY_BUTTON_DPAD_UP and plan_shortcut_available(true)
+		var open_key: bool = event is InputEventKey and event.physical_keycode == KEY_G and not event.ctrl_pressed and not event.alt_pressed and not event.meta_pressed and plan_shortcut_available(false)
+		if open_pad or open_key:
+			flight_plan_menu.toggle(flight_plan)
+			get_viewport().set_input_as_handled()
+			return
 	if live_presentation and event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F3:
 		debug_visible = not debug_visible
 		get_viewport().set_input_as_handled()
@@ -722,14 +788,25 @@ func _process(delta: float) -> void:
 			update_head_camera()
 		elif live_presentation:
 			var orbit_basis := Basis.from_euler(Vector3(chase_angles.x - 0.12, chase_angles.y, 0))
-			camera.position = ship.position + ship.basis * (orbit_basis * Vector3(0, chase_distance * 0.20, chase_distance))
+			# Track translation immediately; attitude follows independently instead
+			# of mounting the camera on a rigid boom attached to the ship's nose.
+			var follow_basis: Basis = chase_follow.follow(ship.basis, delta)
+			camera.position = ship.position + follow_basis * (orbit_basis * Vector3(0, chase_distance * 0.20, chase_distance))
 			if streaming_requested:
 				var camera_clearance: float = live_bridge.camera_clearance(camera.position - ship.position)
 				if is_finite(camera_clearance) and camera_clearance < 2:
 					camera.position.y += 2 - camera_clearance
-			camera.look_at(ship.position + ship.basis.y * 1.2, ship.basis.y)
+			camera.look_at(ship.position + follow_basis.y * 1.2, follow_basis.y)
 		if live_presentation:
+			guidance_elapsed += delta
+			if flight_plan != 0 and guidance_elapsed >= 0.2:
+				flight_guidance = live_bridge.get_flight_guidance(flight_plan)
+				guidance_elapsed = 0.0
+			state["guidance"] = flight_guidance
 			flight_displays.refresh(state, delta)
+			guidance_overlay.guidance = flight_guidance
+			guidance_overlay.visible = flight_plan != 0 and not pilot_view and not flight_plan_menu.active
+			guidance_overlay.queue_redraw()
 			navigation_sky.set_shader_parameter("radius", state.planet_radius)
 			navigation_sky.set_shader_parameter("altitude", maxf(0, state.altitude))
 			navigation_sky.set_shader_parameter("view_to_inertial", state.view_to_inertial)
@@ -789,7 +866,7 @@ func _process(delta: float) -> void:
 			var state: Dictionary = live_bridge.get_state()
 			var status: Dictionary = preload("res://flight_status.gd").describe(state)
 			label.text = "%s  |  %s\nALT %s  |  GROUND CLEARANCE %s  |  %.0f m/s\n%s  |  VERTICAL %+.0f m/s" % [data.planet.display_name.to_upper(), status.environment, preload("res://flight_status.gd").distance(state.altitude), preload("res://flight_status.gd").distance(state.clearance), state.speed, status.trajectory, state.climb_rate]
-			caption.text = "" if pilot_view else "X / Square: cockpit · Hold L3: orbit camera · Start: controls"
+			caption.text = "" if pilot_view else "X / Square: cockpit · Hold L3: orbit camera · D-pad up / G: guidance · Start: controls"
 			if state.floor_guard:
 				caption.text = "TEST FLOOR GUARD — COLLISION / LANDING NOT IMPLEMENTED"
 			elif player_input != null and player_input.needs_neutral:

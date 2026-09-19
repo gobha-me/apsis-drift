@@ -26,6 +26,8 @@ func _draw() -> void:
 		write(Vector2(35, 155), "WAITING FOR FLIGHT DATA", 36, WARN)
 		return
 	if page == 0:
+		if not state.get("guidance", {}).is_empty():
+			return # Optional guidance child takes the NAV area only while selected.
 		var status: Dictionary = preload("res://flight_status.gd").describe(state)
 		write(Vector2(35, 127), status.environment, 30)
 		write(Vector2(35, 172), status.trajectory, 30, GREEN if state.clear_orbit else WARN)
