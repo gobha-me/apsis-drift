@@ -202,6 +202,87 @@ auto opposed_contract(const Fixture& fixture) -> void {
        "equal main/retro fractions retain documented stronger main thrust");
 }
 
+auto shared_attitude_contract(const Fixture& fixture) -> void {
+  for (const bool assistance : {false, true}) {
+    auto state = fixture.state();
+    state.orientation = {.5, .5, .5, .5};
+    state.angular_velocity_radians_per_second = {.31, -.47, .29};
+    for (int tick = 0; tick < 240; ++tick) {
+      VacuumIntent intent;
+      intent.assistance = assistance;
+      intent.negative_translation = {.2, .1, .7};
+      intent.positive_translation = {.4, .3, .1};
+      intent.positive_rotation = {.03, .02, tick % 80 < 40 ? .05 : 0};
+      intent.negative_rotation = {tick % 100 < 50 ? .015 : 0, .01, .01};
+      const auto attitude = advance_vacuum_attitude(
+          state.craft, state.orientation,
+          state.angular_velocity_radians_per_second, intent.positive_rotation,
+          intent.negative_rotation, assistance);
+      const auto full = advance_vacuum_dynamics(fixture.context, state, intent);
+      check(attitude.has_value() && full.has_value(),
+            "shared attitude kernel and coupled vacuum step both advance");
+      if (!attitude || !full) return;
+      auto projected = state;
+      projected.orientation = attitude->orientation;
+      projected.angular_velocity_radians_per_second =
+          attitude->angular_velocity_radians_per_second;
+      check(
+          same_bits(projected, state),
+          "attitude helper is bit-exact with coupled-force RK4 angular state");
+      const auto& a = attitude->actuation;
+      check(a.requested_torque_newton_metres ==
+                    full->requested_torque_newton_metres &&
+                a.assist_torque_newton_metres ==
+                    full->assist_torque_newton_metres &&
+                a.applied_torque_newton_metres ==
+                    full->applied_torque_newton_metres &&
+                a.positive_torque_newton_metres ==
+                    full->positive_torque_newton_metres &&
+                a.negative_torque_newton_metres ==
+                    full->negative_torque_newton_metres &&
+                a.frame_angular_impulse_newton_metre_seconds ==
+                    full->world_angular_impulse_newton_metre_seconds &&
+                a.assistance == full->assistance &&
+                a.torque_saturated == full->torque_saturated,
+            "shared attitude ledger matches full physical torque accounting");
+    }
+  }
+  const auto recipe = fixture.state().craft;
+  for (const auto q :
+       {RigidOrientation{0, 0, 0, 0}, RigidOrientation{-1, 0, 0, 0},
+        RigidOrientation{1, -0.0, 0, 0}, RigidOrientation{2, 0, 0, 0},
+        RigidOrientation{NAN, 0, 0, 0}, RigidOrientation{1, 0, INFINITY, 0}})
+    check(!advance_vacuum_attitude(recipe, q, {}, {}, {}, false),
+          "attitude helper refuses invalid or noncanonical orientation");
+  for (const auto craft : {CraftFrameRecipe{{0}, 1}, CraftFrameRecipe{{1}, 2}})
+    check(!advance_vacuum_attitude(craft, {}, {}, {}, {}, false),
+          "attitude helper resolves immutable craft before using inertia");
+  for (double step : {0.0, -1.0, .1, std::numeric_limits<double>::quiet_NaN(),
+                      std::numeric_limits<double>::infinity()})
+    check(!advance_vacuum_attitude(recipe, {}, {}, {}, {}, false,
+                                   SimulationSeconds{step}),
+          "attitude helper rejects invalid step");
+  for (std::size_t axis = 0; axis < 3; ++axis) {
+    for (double bad : {-0.0, 100.001, std::numeric_limits<double>::quiet_NaN(),
+                       std::numeric_limits<double>::infinity()}) {
+      RigidVector3 omega;
+      *axes(omega)[axis] = bad;
+      check(!advance_vacuum_attitude(recipe, {}, omega, {}, {}, false),
+            "attitude helper rejects every noncanonical/nonfinite/excessive "
+            "angular axis");
+    }
+    for (double bad : {-.001, 1.001, std::numeric_limits<double>::quiet_NaN(),
+                       std::numeric_limits<double>::infinity()}) {
+      RigidVector3 demand;
+      *axes(demand)[axis] = bad;
+      check(
+          !advance_vacuum_attitude(recipe, {}, {}, demand, {}, false) &&
+              !advance_vacuum_attitude(recipe, {}, {}, {}, demand, false),
+          "attitude helper rejects each invalid positive/negative demand axis");
+    }
+  }
+}
+
 auto analytic_golden_contract(const Fixture& fixture) -> void {
   auto state = fixture.state();
   auto intent = coast_intent();
@@ -584,6 +665,7 @@ auto main() -> int {
   rejection_contract(fixture);
   axis_contract(fixture);
   opposed_contract(fixture);
+  shared_attitude_contract(fixture);
   analytic_golden_contract(fixture);
   assist_contract(fixture);
   conservation_contract(fixture);

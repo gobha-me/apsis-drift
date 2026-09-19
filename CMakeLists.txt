@@ -297,6 +297,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME vacuum-dynamics-contract COMMAND apsis-drift-vacuum-dynamics-tests)
   set_tests_properties(vacuum-dynamics-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-rotation-coast-tests
+    experiments/godot-freedom/rotation_coast_test.cpp)
+  target_link_libraries(apsis-drift-rotation-coast-tests PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-rotation-coast-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME godot-rotation-coast-contract COMMAND apsis-drift-rotation-coast-tests)
+  set_tests_properties(godot-rotation-coast-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE

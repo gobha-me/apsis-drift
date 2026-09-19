@@ -8,7 +8,7 @@ signal bindings_changed
 
 const SETTINGS_PATH := "user://freedom-controls-v4.json"
 const ACTIONS := ["forward", "backward", "turn_left", "turn_right", "strafe_left", "strafe_right", "rise", "fall", "look_left", "look_right", "look_up", "look_down", "camera", "recenter", "look_hold", "pitch_up", "pitch_down", "roll_left", "roll_right", "assist"]
-const TITLES := ["Main thrust", "Retro thrust", "Yaw left", "Yaw right", "Strafe left", "Strafe right", "Rise", "Fall", "Look left (modifier)", "Look right (modifier)", "Look up (modifier)", "Look down (modifier)", "Cockpit / chase", "Recenter head", "Hold to look", "Pitch up", "Pitch down", "Roll left", "Roll right", "Toggle translation / gravity assist"]
+const TITLES := ["Main thrust", "Retro thrust", "Yaw left", "Yaw right", "Strafe left", "Strafe right", "Rise", "Fall", "Look left (modifier)", "Look right (modifier)", "Look up (modifier)", "Look down (modifier)", "Cockpit / chase", "Recenter head", "Hold to look", "Pitch up", "Pitch down", "Roll left", "Roll right", "Toggle flight assist"]
 const KEYS := [KEY_W, KEY_S, KEY_A, KEY_D, KEY_Q, KEY_E, KEY_SPACE, KEY_CTRL, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_C, KEY_HOME, KEY_ALT, KEY_I, KEY_K, KEY_Z, KEY_X, KEY_F]
 var settings := {"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0}
 var bindings: Dictionary = {}

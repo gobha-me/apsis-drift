@@ -39,6 +39,33 @@ enum class VacuumDynamicsError : std::uint8_t {
   unsafe_arithmetic
 };
 
+struct VacuumTorqueActuation {
+  RigidVector3 requested_torque_newton_metres;
+  RigidVector3 assist_torque_newton_metres; // algebraic delta, not extra fuel
+  RigidVector3 applied_torque_newton_metres;
+  RigidVector3 positive_torque_newton_metres, negative_torque_newton_metres;
+  RigidVector3 frame_angular_impulse_newton_metre_seconds;
+  bool assistance{}, torque_saturated{};
+};
+
+struct VacuumAttitudeResult {
+  RigidOrientation orientation;
+  RigidVector3 angular_velocity_radians_per_second;
+  VacuumTorqueActuation actuation;
+};
+
+// Attitude-only use of the SAME RK4/torque kernel in any nonrotating frame.
+// q rotates body axes into that frame; omega is resolved on body axes.
+// No fabricated world identity, pose, tick or coordinate handoff is needed.
+// Inputs must already be canonical; no implicit initial normalization. Returns
+// a complete candidate without mutating inputs. The caller owns tick/position.
+[[nodiscard]] auto advance_vacuum_attitude(
+    CraftFrameRecipe craft, RigidOrientation orientation,
+    RigidVector3 angular_velocity_radians_per_second,
+    RigidVector3 positive_rotation, RigidVector3 negative_rotation,
+    bool assistance, SimulationSeconds step = kSimulationStep)
+    -> std::expected<VacuumAttitudeResult, VacuumDynamicsError>;
+
 // One fixed120Hz step, all-or-nothing. No external forces, spool/filter state,
 // renderer data or implicit coordinate transform. Only system_inertial is
 // supported until the frame-composition provider supplies noninertial terms.

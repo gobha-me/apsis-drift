@@ -68,11 +68,15 @@ func _draw() -> void:
 				draw_rect(Rect2(210, y - 25, 455, 24), Color("19303d"))
 				draw_rect(Rect2(210, y - 25, 455 * value, 24), GREEN if i == 0 else WARN)
 				write(Vector2(704, y), "%3.0f%%" % (value * 100), 34)
-			row(282, "ASSIST", "ON / LIMITED" if state.assist else "OFF", WARN if state.assist else GREEN)
+			var inertial_rotation: bool = state.get("flight_model", "") == "thrust-lab-2"
+			row(282, "ASSIST", "ON / LIMITED" if state.assist else ("OFF / COAST" if inertial_rotation else "OFF"), WARN if state.assist else GREEN)
 			var thrust: Vector3 = state.rcs_acceleration
 			row(344, "ACTUAL X/Y/Z", "%+.0f / %+.0f / %+.0f" % [thrust.x, thrust.y, thrust.z])
 			row(406, "AIR LOAD", "%.1f kPa" % (state.dynamic_pressure / 1000))
 			write(Vector2(35, 465), "Actual thrust includes assist / units m/s²", 27, DIM)
-			write(Vector2(35, 510), "Fuel / heat / damage: not simulated", 28, WARN)
+			var limitation := "Fuel / heat / damage: not simulated"
+			if inertial_rotation:
+				limitation = "Spin %s | fuel/heat/damage: not simulated" % ("stabilized" if state.assist else "coasts")
+			write(Vector2(35, 510), limitation, 26 if inertial_rotation else 28, WARN)
 	if state.floor_guard:
 		write(Vector2(35, 545), "TEST FLOOR GUARD — NOT A LANDING", 26, WARN)

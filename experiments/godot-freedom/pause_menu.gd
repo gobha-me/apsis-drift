@@ -6,6 +6,7 @@ signal debug_changed(value: bool)
 signal camera_distance_changed(value: float)
 signal practice_requested(reentry: bool)
 var controls: Node
+var rotational_coasting := false
 var panel: Control
 var resume_button: Button
 var message: Label
@@ -55,6 +56,9 @@ func _ready() -> void:
 	note.add_theme_font_size_override("font_size", 23)
 	if controls.thrust_mode:
 		note.text += "\nOutside: L3 + right stick orbits the ship.\nOrbit requires sideways speed, not just height.\nCoast with assist OFF; watch periapsis on NAV."
+	if controls.thrust_mode and rotational_coasting:
+		note.text = note.text.replace("Y / Triangle: translation / gravity assist", "Y / Triangle: flight stabilization")
+		note.text = note.text.replace("No forward speed hold. Attitude damping stays.", "OFF: release sticks to coast, including spin.\nCounter-steer or enable assist to stop a spin.\nHeld sticks request bounded turn rates.\nNo forward speed hold in either mode.")
 	left.add_child(note)
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
 	add_button(left, "Reset experimental flight", func(): reset_flight.emit())

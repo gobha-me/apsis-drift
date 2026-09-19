@@ -9,6 +9,9 @@ menu. Physical controller and SteamOS qualification remain outstanding.
 Current [layout 4 / thrust flight lab](../../docs/THRUST_FLIGHT_LAB_09.md)
 uses left-stick pitch/roll, right-stick yaw/vertical, bumper strafe, analog
 main/retro triggers and hold-left-stick-click head-look with release-to-center.
+Native practice uses [lab 2 rotational coasting](../../docs/ROTATIONAL_COASTING_LAB_15.md):
+assist OFF releases spin as well as translation; active sticks retain bounded
+turn-rate commands. Historical standalone model-1 fixtures remain unchanged.
 `--flight-model=thrust` opts into full C++ attitude, gravity, drag and inertia;
 the legacy model remains the default. Landing and collisions are not implemented.
 [Presentation 10](../../docs/FLIGHT_PRESENTATION_10.md) adds live instruments,
