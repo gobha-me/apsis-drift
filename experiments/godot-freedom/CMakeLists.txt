@@ -5,6 +5,12 @@ target_compile_options(apsis-drift-godot-snapshot PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-flight-guidance-tests flight_guidance_test.cpp)
+  target_link_libraries(apsis-drift-flight-guidance-tests PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-flight-guidance-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME godot-flight-guidance-contract COMMAND apsis-drift-flight-guidance-tests)
+  set_tests_properties(godot-flight-guidance-contract PROPERTIES TIMEOUT 30)
   add_executable(apsis-drift-surface-start-tests surface_start_test.cpp)
   target_link_libraries(apsis-drift-surface-start-tests PRIVATE apsis-drift::lib nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-surface-start-tests PRIVATE

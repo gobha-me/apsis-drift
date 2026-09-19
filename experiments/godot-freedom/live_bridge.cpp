@@ -1,4 +1,4 @@
-#include "flight_navigation.hpp"
+#include "flight_guidance.hpp"
 #include "snapshot.hpp"
 #include "streaming.hpp"
 #include "surface_start.hpp"
@@ -190,6 +190,8 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::advance_thrust);
     godot::ClassDB::bind_method(godot::D_METHOD("get_state"),
                                 &FreedomBridge::get_state);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_flight_guidance", "mode"),
+                                &FreedomBridge::get_flight_guidance);
     godot::ClassDB::bind_method(godot::D_METHOD("get_last_error"),
                                 &FreedomBridge::get_last_error);
     godot::ClassDB::bind_method(godot::D_METHOD("enable_streaming"),
@@ -383,6 +385,97 @@ class FreedomBridge : public godot::RefCounted {
     } catch (const std::exception& e) {
       last_error = e.what();
       return false;
+    }
+  }
+
+  auto get_flight_guidance(std::int64_t mode) const -> godot::Dictionary {
+    godot::Dictionary out;
+    try {
+      if (mode < 0 || mode > 3 || !world || !world->lab)
+        throw std::invalid_argument(
+            "guidance requires a native flight state and mode 0..3");
+      const auto& state = *world->lab;
+      const auto g = flight_lab::flight_guidance(
+          world->planet, state, {static_cast<flight_lab::GuidanceMode>(mode)});
+      out["ok"] = true;
+      out["mode"] = mode;
+      if (mode == 0) return out;
+      const double radius = world->planet.radius.value * 1000.0;
+      const auto radial = flight_lab::unit(state.position);
+      auto tangent =
+          state.velocity - radial * flight_lab::dot(state.velocity, radial);
+      if (flight_lab::length(tangent) < 1e-6) {
+        tangent =
+            state.back * -1 - radial * flight_lab::dot(state.back * -1, radial);
+        if (flight_lab::length(tangent) < 1e-6)
+          tangent = flight_lab::cross(std::abs(radial.z) < .9
+                                          ? flight_lab::V{0, 0, 1}
+                                          : flight_lab::V{0, 1, 0},
+                                      radial);
+      }
+      tangent = flight_lab::unit(tangent);
+      godot::PackedVector2Array coast;
+      for (const auto& sample : g.coast_samples)
+        coast.push_back(
+            godot::Vector2(flight_lab::dot(sample.position, tangent) / radius,
+                           -flight_lab::dot(sample.position, radial) / radius));
+      godot::PackedVector2Array reference;
+      if (g.target_available) {
+        const double a_radius = g.reference_radius_metres;
+        for (int i = 0; i <= 96; ++i) {
+          const double angle =
+              (mode == 3 ? 2.0 : 2 * std::numbers::pi) * i / 96;
+          double r = a_radius;
+          if (mode == 2) {
+            const double peri = g.reference_periapsis_radius_metres;
+            const double eccentricity = (a_radius - peri) / (a_radius + peri);
+            r = a_radius * (1 - eccentricity) /
+                (1 - eccentricity * std::cos(angle));
+          } else if (mode == 3) {
+            r = 2 * a_radius / (1 + std::cos(angle));
+          }
+          reference.push_back(godot::Vector2(r * std::sin(angle) / radius,
+                                             -r * std::cos(angle) / radius));
+        }
+      }
+      out["coast"] = coast;
+      out["reference"] = reference;
+      out["air_radius"] = 1 + g.orbit.atmosphere_edge / radius;
+      out["seconds"] =
+          g.coast_samples.empty() ? 0 : g.coast_samples.back().seconds;
+      out["termination"] = static_cast<std::int64_t>(g.termination);
+      using flight_lab::GuidanceCue;
+      const char* cue = "none";
+      switch (g.cue) {
+        case GuidanceCue::none: break;
+        case GuidanceCue::below_reference_surface: cue = "below_surface"; break;
+        case GuidanceCue::climb_above_atmosphere: cue = "climb"; break;
+        case GuidanceCue::atmosphere_model_limit: cue = "in_atmosphere"; break;
+        case GuidanceCue::build_horizontal_speed: cue = "sideways"; break;
+        case GuidanceCue::circular_reference: cue = "circular"; break;
+        case GuidanceCue::orbit_established: cue = "orbit"; break;
+        case GuidanceCue::return_reference: cue = "return"; break;
+        case GuidanceCue::escape_reference: cue = "escape"; break;
+        case GuidanceCue::escape_energy_reached: cue = "unbound"; break;
+      }
+      out["cue"] = godot::String{cue};
+      out["radial_degenerate"] = g.radial_degenerate;
+      out["reference_altitude"] = g.reference_radius_metres - radius;
+      out["reference_speed"] = flight_lab::length(g.target_velocity);
+      out["horizontal_speed"] = g.orbit.horizontal_speed;
+      out["radial_speed"] = g.orbit.radial_speed;
+      out["delta_available"] = g.delta_velocity_available;
+      out["delta_speed"] = flight_lab::length(g.delta_velocity);
+      const auto body_delta = flight_lab::to_body(state, g.delta_velocity);
+      out["body_delta"] =
+          godot::Vector3(body_delta.x, body_delta.y, body_delta.z);
+      out["assist"] = state.assist;
+      out["thrust_active"] = flight_lab::length(state.thrust_body) > 0.01;
+      return out;
+    } catch (const std::exception& error) {
+      out["ok"] = false;
+      out["error"] = godot::String{error.what()};
+      return out;
     }
   }
 
