@@ -1,6 +1,7 @@
 #include "flight_navigation.hpp"
 #include "snapshot.hpp"
 #include "streaming.hpp"
+#include "surface_start.hpp"
 #include "thrust_flight.hpp"
 
 #include <charconv>
@@ -35,12 +36,15 @@ struct LiveWorld {
   double span_metres{};
   unsigned relief_version{};
   std::optional<flight_lab::State> lab;
+  const Request reference_start;
+  std::uint64_t reference_flight_checksum{};
+  std::optional<SurfacePracticeStart> surface_start;
 
   explicit LiveWorld(const Request& request)
       : planet{generate_planet_descriptor(request.planet_seed)},
         cache{require(TerrainTileCache::create())}, lod{request.lod},
         span_metres{request.span_metres},
-        relief_version{request.relief_version} {
+        relief_version{request.relief_version}, reference_start{request} {
     validate(request);
     auto origin = GeodeticPosition{request.latitude, request.longitude, 0};
     const auto probe = require(planet_fixed_from_geodetic(planet, origin));
@@ -52,6 +56,7 @@ struct LiveWorld {
     origin.altitude_metres += 60.0;
     flight = require(initial_planetary_flight_state(
         planet, origin, {sample.elevation_metres}, 0.3, FlightMode::manual));
+    reference_flight_checksum = planetary_flight_state_checksum(flight);
   }
 
   auto advance(double elapsed, unsigned buttons,
@@ -172,6 +177,8 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::advance_analog);
     godot::ClassDB::bind_method(godot::D_METHOD("enable_thrust_flight"),
                                 &FreedomBridge::enable_thrust_flight);
+    godot::ClassDB::bind_method(godot::D_METHOD("enable_surface_practice"),
+                                &FreedomBridge::enable_surface_practice);
     godot::ClassDB::bind_method(godot::D_METHOD("get_sky_catalog"),
                                 &FreedomBridge::get_sky_catalog);
     godot::ClassDB::bind_method(godot::D_METHOD("start_practice", "reentry"),
@@ -329,6 +336,39 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  auto enable_surface_practice() -> bool {
+    try {
+      if (!world || world->flight.tick != 0 || world->lab ||
+          world->flight.pose.position.latitude_radians !=
+              world->reference_start.latitude ||
+          world->flight.pose.position.longitude_radians !=
+              world->reference_start.longitude ||
+          planetary_flight_state_checksum(world->flight) !=
+              world->reference_flight_checksum)
+        throw std::invalid_argument(
+            "surface practice requires a fresh original snapshot session");
+      const auto candidate =
+          survey_surface_start(world->planet, world->reference_start,
+                               world->cache, world->flight.tick);
+      // The legacy-shaped projection is only terrain/camera telemetry, never a
+      // replacement legacy replay or a saved career. Commit both views
+      // together.
+      auto projected = world->flight;
+      projected.pose.position = candidate.pose;
+      projected.pose.heading_radians = kSurfaceStartHeadingRadians;
+      projected.velocity = {};
+      projected.clearance_metres = candidate.flight.clearance;
+      world->flight = projected;
+      world->lab = candidate.flight;
+      world->surface_start = candidate;
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& e) {
+      last_error = e.what();
+      return false;
+    }
+  }
+
   auto advance_thrust(double elapsed, const godot::PackedFloat64Array& axes,
                       bool assist) -> bool {
     try {
@@ -375,6 +415,27 @@ class FreedomBridge : public godot::RefCounted {
     result["altitude"] = flight.pose.position.altitude_metres;
     result["planet_radius"] = world->planet.radius.value * 1000.0;
     result["flight_model"] = world->lab ? "thrust-lab-1" : "legacy";
+    if (world->surface_start) {
+      const auto& start = *world->surface_start;
+      godot::Dictionary reference;
+      reference["version"] = kSurfaceStartVersion;
+      reference["planet_seed"] =
+          godot::String{std::to_string(world->planet.seed.value).c_str()};
+      reference["latitude"] = start.reference.latitude_radians;
+      reference["longitude"] = start.reference.longitude_radians;
+      reference["heading"] = kSurfaceStartHeadingRadians;
+      reference["source_lod"] = world->lod;
+      reference["relief_version"] = world->relief_version;
+      reference["grid_half_extent_metres"] = kSurfaceStartHalfExtentMetres;
+      reference["grid_spacing_metres"] = kSurfaceStartSpacingMetres;
+      reference["sample_count"] = kSurfaceStartSamples;
+      reference["margin_metres"] = kSurfaceStartMarginMetres;
+      reference["center_elevation_metres"] = start.center_elevation_metres;
+      reference["maximum_sampled_elevation_metres"] =
+          start.maximum_sampled_elevation_metres;
+      reference["altitude_metres"] = start.pose.altitude_metres;
+      result["surface_start_reference"] = reference;
+    }
     if (world->lab) {
       const auto& lab = *world->lab;
       const auto view_frame =

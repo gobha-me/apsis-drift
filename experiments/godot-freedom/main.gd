@@ -171,7 +171,7 @@ func _ready() -> void:
 		if live_bridge == null or options.get("--controls", "true") != "true" or options.has("--capture"):
 			fail("Thrust flight requires --live=true or --stream=true and interactive controls")
 			return
-		if not live_bridge.enable_thrust_flight():
+		if not live_bridge.enable_surface_practice():
 			fail("Thrust flight initialization failed: " + str(live_bridge.get_last_error()))
 			return
 	capture_path = options.get("--capture", "")
@@ -309,7 +309,7 @@ func set_player_paused(paused: bool, reason := "") -> void:
 
 func reset_live_flight() -> void:
 	if live_bridge != null and live_bridge.initialize(snapshot_text):
-		if options.get("--flight-model", "legacy") == "thrust" and not live_bridge.enable_thrust_flight():
+		if options.get("--flight-model", "legacy") == "thrust" and not live_bridge.enable_surface_practice():
 			fail("Thrust reset failed: " + str(live_bridge.get_last_error()))
 			return
 	if streaming_requested:

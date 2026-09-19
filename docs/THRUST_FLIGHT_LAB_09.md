@@ -17,6 +17,10 @@ Omit `--flight-model=thrust` for the unchanged legacy physics. The lab requires
 interactive controls and live/streaming mode. It is not the completed Freedom
 milestone and does not implement landing, collisions, fuel, damage or saving.
 
+Native startup/reset now uses the [repeatable surface practice survey](SAFE_SURFACE_START.md)
+to begin above nearby ridges. It preserves the original seed and reference
+coordinates; historical standalone lab fixtures remain unchanged.
+
 ## Controller layout 4
 
 The agreed follow-up removes roll's modifier. Mapping stays the same in
