@@ -75,6 +75,13 @@ func run() -> void:
 	await capture("cockpit-nav")
 	study.head_angles = Vector2(-0.38, -0.48)
 	await capture("cockpit-systems")
+	if study.live_bridge.get_state().flight_model == "thrust-lab-2":
+		study.player_input.assist = false
+		await frames(20)
+		check(not study.live_bridge.get_state().attitude_stabilized, "Coasting instruments retain stabilized state")
+		await capture("cockpit-systems-coast")
+		study.player_input.assist = true
+		await frames(20)
 	study.head_angles = Vector2.ZERO
 	study.toggle_pilot()
 	await frames(3)

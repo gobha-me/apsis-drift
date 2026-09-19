@@ -1,5 +1,11 @@
 # Thrust flight lab 1 — handling before visual polish
 
+2026-09-19 amendment: native surface practice now selects
+[lab 2 rotational coasting](ROTATIONAL_COASTING_LAB_15.md). Its assistance
+toggle also releases rotational stabilization; active sticks retain bounded
+turn-rate commands. The model-1 checksum and always-damped attitude described
+below remain the historical standalone fixture, not current native handling.
+
 Follow-up: [presentation 10](FLIGHT_PRESENTATION_10.md) adds live instruments,
 clean/debug modes, stars, orbit camera, orbital telemetry and practice starts,
 with continuous ascent/coast/atmospheric return test evidence.

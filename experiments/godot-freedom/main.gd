@@ -262,6 +262,7 @@ func setup_player_controls() -> void:
 	add_child(player_input)
 	pause_menu = preload("res://pause_menu.gd").new()
 	pause_menu.controls = player_input
+	pause_menu.rotational_coasting = live_bridge != null and live_bridge.get_state().get("flight_model", "") == "thrust-lab-2"
 	add_child(pause_menu)
 	player_input.pause_requested.connect(func(): set_player_paused(not pause_menu.panel.visible))
 	player_input.safety_pause.connect(func(reason: String): set_player_paused(true, reason))
@@ -713,7 +714,7 @@ func _process(delta: float) -> void:
 			scene_environment.background_mode = Environment.BG_SKY if atmosphere > 0.01 else Environment.BG_COLOR
 		camera.position += state.position - ship.position
 		ship.position = state.position
-		if state.flight_model == "thrust-lab-1":
+		if state.flight_model in ["thrust-lab-1", "thrust-lab-2"]:
 			ship.basis = state.body_basis
 		else:
 			ship.rotation.y = float(state.heading) - PI / 2.0
@@ -752,7 +753,9 @@ func _process(delta: float) -> void:
 			if player_input.thrust_mode:
 				label.text += "\n%.0f km/h | CLIMB %+.1f m/s | MAIN %.0f%% / RETRO %.0f%% | q %.1f kPa" % [state.speed * 3.6, state.climb_rate, state.main_thrust * 100, state.retro_thrust * 100, state.dynamic_pressure / 1000]
 				label.text += "\nASSIST: %s | THRUST xyz %+.1f / %+.1f / %+.1f m/s² | DROPPED %.2f s%s" % ["ON" if player_input.assist else "OFF", state.rcs_acceleration.x, state.rcs_acceleration.y, state.rcs_acceleration.z, state.dropped_seconds, " | FLOOR GUARD" if state.floor_guard else ""]
-				caption.text = "THRUST LAB 1 | %s: main / %s: weak retro | %s: assist | Esc / Start: pause\n" % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("assist", family)]
+				caption.text = "THRUST LAB %s | %s: main / %s: weak retro | %s: assist | Esc / Start: pause\n" % [str(state.flight_model).trim_prefix("thrust-lab-"), player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("assist", family)]
+				if state.flight_model == "thrust-lab-2":
+					label.text += " | ROTATION: " + ("STABILIZED" if state.assist else "COAST")
 				caption.text += "Hold %s: head-look (release centers) | Direct analog roll | No landing / collision / fuel yet" % player_input.binding_label("look_hold", family)
 			if player_input.needs_neutral:
 				caption.text += "  |  RELEASE CONTROLS TO ARM"

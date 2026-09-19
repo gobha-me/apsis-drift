@@ -4,12 +4,14 @@
 // contract.
 #include "apsis_drift/coordinates.hpp"
 #include "apsis_drift/simulation.hpp"
+#include "apsis_drift/vacuum_dynamics.hpp"
 
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 namespace apsis_drift::flight_lab {
@@ -69,6 +71,12 @@ struct State {
   double density{}, dynamic_pressure{}, clearance{}, acceleration{};
   V thrust_body; // actual limited engine/RCS acceleration, including assist
   bool floor_guard{}, assist{true};
+  // Version one keeps its historical basis-only attitude and checksum.
+  // Version two owns q in the same nonrotating frame; basis is derived only.
+  unsigned angular_model{1};
+  std::optional<RigidOrientation> orientation;
+  V torque_body;
+  bool torque_saturated{};
   friend auto operator==(const State&, const State&) -> bool = default;
 };
 inline constexpr double mass_kg = 8000;
@@ -86,6 +94,21 @@ inline auto to_world(const State& s, V body) -> V {
 inline auto to_body(const State& s, V world) -> V {
   return {dot(s.right, world), dot(s.up, world), dot(s.back, world)};
 }
+inline auto orientation_axes(RigidOrientation q) -> std::array<V, 3> {
+  const double xx = q.x * q.x, yy = q.y * q.y, zz = q.z * q.z;
+  const double xy = q.x * q.y, xz = q.x * q.z, yz = q.y * q.z;
+  const double wx = q.w * q.x, wy = q.w * q.y, wz = q.w * q.z;
+  return {V{1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy)},
+          V{2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx)},
+          V{2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy)}};
+}
+inline auto set_orientation(State& s, RigidOrientation orientation) -> void {
+  s.orientation = orientation;
+  const auto axes = orientation_axes(orientation);
+  s.right = axes[0];
+  s.up = axes[1];
+  s.back = axes[2];
+}
 inline auto validate(Demand d) -> void {
   for (double v : {d.main, d.retro, d.pitch, d.yaw, d.roll, d.strafe, d.heave})
     if (!std::isfinite(v) || std::abs(v) > 1)
@@ -94,6 +117,10 @@ inline auto validate(Demand d) -> void {
     throw std::invalid_argument("negative engine demand");
 }
 inline auto validate(const State& s) -> void {
+  if (s.angular_model != 1 && s.angular_model != 2)
+    throw std::invalid_argument("unknown flight lab angular model");
+  if ((s.angular_model == 2) != s.orientation.has_value())
+    throw std::invalid_argument("flight lab angular model/state mismatch");
   for (V v : {s.position, s.velocity, s.right, s.up, s.back, s.angular,
               s.thrust_body})
     if (!finite(v)) throw std::invalid_argument("nonfinite flight lab state");
@@ -113,9 +140,69 @@ inline auto validate(const State& s) -> void {
   if (s.main < 0 || s.main > 1 || s.retro < 0 || s.retro > 1 || s.density < 0 ||
       s.dynamic_pressure < 0 || s.acceleration < 0)
     throw std::invalid_argument("invalid flight lab scalar");
+  if (s.angular_model == 2) {
+    const auto& q = *s.orientation;
+    for (double component : {s.angular.x, s.angular.y, s.angular.z})
+      if (component == 0 && std::signbit(component))
+        throw std::invalid_argument("noncanonical lab angular velocity");
+    bool first = true;
+    for (double component : {q.w, q.x, q.y, q.z}) {
+      if (!std::isfinite(component) || std::abs(component) > 2 ||
+          (component == 0 && std::signbit(component)))
+        throw std::invalid_argument("invalid canonical lab orientation");
+      if (component != 0 && first) {
+        if (component < 0)
+          throw std::invalid_argument("noncanonical lab orientation sign");
+        first = false;
+      }
+    }
+    const double norm = ((q.w * q.w + q.x * q.x) + q.y * q.y) + q.z * q.z;
+    if (std::abs(norm - 1) > kRigidBodyOrientationSquaredNormTolerance ||
+        !finite(s.torque_body))
+      throw std::invalid_argument("invalid lab orientation or torque");
+    const auto axes = orientation_axes(q);
+    if (length(s.right - axes[0]) > 1e-10 || length(s.up - axes[1]) > 1e-10 ||
+        length(s.back - axes[2]) > 1e-10)
+      throw std::invalid_argument("lab basis diverges from authoritative q");
+  }
+}
+inline auto enable_rigid_attitude(State& state) -> void {
+  validate(state);
+  if (state.tick != 0 || state.angular_model != 1)
+    throw std::invalid_argument("rigid attitude requires a fresh lab1 state");
+  // One conversion at initialization, never a renderer or per-tick roundtrip.
+  const V r = state.right, u = state.up, b = state.back;
+  const double trace = r.x + u.y + b.z;
+  RigidOrientation q;
+  if (trace > 0) {
+    const double scale = 2 * std::sqrt(trace + 1);
+    q = {scale / 4, (u.z - b.y) / scale, (b.x - r.z) / scale,
+         (r.y - u.x) / scale};
+  } else if (r.x > u.y && r.x > b.z) {
+    const double scale = 2 * std::sqrt(1 + r.x - u.y - b.z);
+    q = {(u.z - b.y) / scale, scale / 4, (u.x + r.y) / scale,
+         (b.x + r.z) / scale};
+  } else if (u.y > b.z) {
+    const double scale = 2 * std::sqrt(1 + u.y - r.x - b.z);
+    q = {(b.x - r.z) / scale, (u.x + r.y) / scale, scale / 4,
+         (b.y + u.z) / scale};
+  } else {
+    const double scale = 2 * std::sqrt(1 + b.z - r.x - u.y);
+    q = {(r.y - u.x) / scale, (b.x + r.z) / scale, (b.y + u.z) / scale,
+         scale / 4};
+  }
+  const auto normalized = normalize_rigid_orientation(q);
+  if (!normalized) throw std::invalid_argument("invalid initial lab attitude");
+  State candidate = state;
+  candidate.angular_model = 2;
+  set_orientation(candidate, *normalized);
+  validate(candidate);
+  state = candidate;
 }
 inline auto initial(const PlanetDescriptor& planet, GeodeticPosition origin,
-                    double heading) -> State {
+                    double heading, unsigned angular_model = 1) -> State {
+  if (angular_model != 1 && angular_model != 2)
+    throw std::invalid_argument("unknown initial angular model");
   if (!std::isfinite(heading)) throw std::invalid_argument("invalid heading");
   const auto frame = make_local_tangent_frame(planet, origin);
   if (!frame) throw std::invalid_argument("invalid flight origin");
@@ -127,6 +214,7 @@ inline auto initial(const PlanetDescriptor& planet, GeodeticPosition origin,
   s.up = vec(frame->up);
   s.right = unit(cross(forward, s.up));
   validate(s);
+  if (angular_model == 2) enable_rigid_attitude(s);
   return s;
 }
 inline auto density(const PlanetDescriptor& planet, double altitude) -> double {
@@ -161,19 +249,80 @@ inline auto advance(const PlanetDescriptor& planet, double surface,
   // aerodynamics.
   const double authority =
       std::clamp(1 / (1 + s.dynamic_pressure / 40000), .35, 1.0);
-  const V target{demand.pitch * 1.15 * authority, -demand.yaw * .90 * authority,
-                 -demand.roll * 1.70 * authority};
-  s.angular = {toward(s.angular.x, target.x, 2.8 * dt),
-               toward(s.angular.y, target.y, 2.8 * dt),
-               toward(s.angular.z, target.z, 4.0 * dt)};
-  const V omega = to_world(s, s.angular);
-  const double angular_speed = length(omega);
-  if (angular_speed > 1e-12) {
-    const V axis = omega * (1 / angular_speed);
-    s.right = unit(rotate(s.right, axis, angular_speed * dt));
-    s.up = rotate(s.up, axis, angular_speed * dt);
-    s.up = unit(s.up - s.right * dot(s.right, s.up));
-    s.back = cross(s.right, s.up);
+  if (s.angular_model == 1) {
+    const V target{demand.pitch * 1.15 * authority,
+                   -demand.yaw * .90 * authority,
+                   -demand.roll * 1.70 * authority};
+    s.angular = {toward(s.angular.x, target.x, 2.8 * dt),
+                 toward(s.angular.y, target.y, 2.8 * dt),
+                 toward(s.angular.z, target.z, 4.0 * dt)};
+    const V omega = to_world(s, s.angular);
+    const double angular_speed = length(omega);
+    if (angular_speed > 1e-12) {
+      const V axis = omega * (1 / angular_speed);
+      s.right = unit(rotate(s.right, axis, angular_speed * dt));
+      s.up = rotate(s.up, axis, angular_speed * dt);
+      s.up = unit(s.up - s.right * dot(s.right, s.up));
+      s.back = cross(s.right, s.up);
+    }
+  } else {
+    // Existing pressure-dependent command tuning, not aerodynamic torque.
+    // The shared provider owns rotational inertia and bounded stabilization.
+    const V command{demand.pitch * authority, -demand.yaw * authority,
+                    -demand.roll * authority};
+    RigidVector3 positive{std::max(command.x, 0.0), std::max(command.y, 0.0),
+                          std::max(command.z, 0.0)};
+    RigidVector3 negative{std::max(-command.x, 0.0), std::max(-command.y, 0.0),
+                          std::max(-command.z, 0.0)};
+    bool command_saturated = false;
+    if (!demand.assist) {
+      // The lab sticks remain rate commands while deflected. Assistance OFF
+      // changes only released axes: exactly zero commanded torque there.
+      // Active-axis gyro compensation is bounded, real actuator activity;
+      // this does not change the vacuum provider's raw actuator semantics.
+      const auto& frame = starter_shuttle_frame().properties;
+      const V inertia{static_cast<double>(frame.principal_inertia_kg_m2[0]),
+                      static_cast<double>(frame.principal_inertia_kg_m2[1]),
+                      static_cast<double>(frame.principal_inertia_kg_m2[2])};
+      const V momentum{inertia.x * s.angular.x, inertia.y * s.angular.y,
+                       inertia.z * s.angular.z};
+      const V gyro = cross(s.angular, momentum);
+      const std::array commands{command.x, command.y, command.z};
+      const std::array omega{s.angular.x, s.angular.y, s.angular.z};
+      const std::array gyroscopic{gyro.x, gyro.y, gyro.z};
+      const std::array plus{&positive.x, &positive.y, &positive.z};
+      const std::array minus{&negative.x, &negative.y, &negative.z};
+      for (std::size_t axis = 0; axis < commands.size(); ++axis) {
+        double torque = 0;
+        if (commands[axis] != 0) {
+          const double target =
+              commands[axis] *
+              frame.max_angular_rate_milliradians_per_second[axis] * .001;
+          const double requested =
+              static_cast<double>(frame.principal_inertia_kg_m2[axis]) *
+                  (target - omega[axis]) / dt +
+              gyroscopic[axis];
+          const double limit = frame.torque_newton_metres[axis];
+          torque = std::clamp(requested, -limit, limit);
+          command_saturated = command_saturated || requested != torque;
+        }
+        const double fraction = torque / frame.torque_newton_metres[axis];
+        *plus[axis] = std::max(fraction, 0.0);
+        *minus[axis] = std::max(-fraction, 0.0);
+      }
+    }
+    const auto attitude = advance_vacuum_attitude(
+        {kStarterShuttleFrameId, kStarterShuttleFrameVersion}, *s.orientation,
+        {s.angular.x, s.angular.y, s.angular.z}, positive, negative,
+        demand.assist, step);
+    if (!attitude) throw std::invalid_argument("lab2 attitude step rejected");
+    set_orientation(s, attitude->orientation);
+    const auto angular = attitude->angular_velocity_radians_per_second;
+    s.angular = {angular.x, angular.y, angular.z};
+    const auto torque = attitude->actuation.applied_torque_newton_metres;
+    s.torque_body = {torque.x, torque.y, torque.z};
+    s.torque_saturated =
+        command_saturated || attitude->actuation.torque_saturated;
   }
   s.main = toward(s.main, demand.main, 3.0 * dt);
   s.retro = toward(s.retro, demand.retro, 8.0 * dt);
@@ -230,7 +379,7 @@ inline auto checksum(const State& s) -> std::uint64_t {
       bits >>= 8;
     }
   };
-  add(1);
+  add(s.angular_model);
   add(s.tick);
   add(s.assist);
   add(s.floor_guard);
@@ -241,6 +390,13 @@ inline auto checksum(const State& s) -> std::uint64_t {
   for (double x : {s.main, s.retro, s.density, s.dynamic_pressure, s.clearance,
                    s.acceleration})
     add(std::bit_cast<std::uint64_t>(x));
+  if (s.angular_model == 2 && s.orientation) {
+    for (double x :
+         {s.orientation->w, s.orientation->x, s.orientation->y,
+          s.orientation->z, s.torque_body.x, s.torque_body.y, s.torque_body.z})
+      add(std::bit_cast<std::uint64_t>(x));
+    add(s.torque_saturated);
+  }
   return hash;
 }
 } // namespace apsis_drift::flight_lab

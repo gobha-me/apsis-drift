@@ -118,6 +118,45 @@ Save/resume therefore needs the canonical physical state and the same subsequent
 semantic input trace, including its explicit assistance choices, not a hidden
 actuator history. This is not a new gameplay save menu or a persisted preference.
 
+## Shared attitude-only boundary (#262)
+
+`advance_vacuum_attitude` exposes the same attitude integration and torque
+allocation to the separately versioned native lab adapter. It takes only an
+immutable craft recipe, canonical authoritative quaternion/body angular
+velocity, positive/negative rotation fractions, assistance flag, and fixed step.
+It returns a new quaternion/body angular velocity and actual torque ledger.
+There is no system/planet/station identity, position, tick, generated-world
+context, basis-to-quaternion reconstruction, or fake save owner in this API.
+
+The quaternion must express body orientation in a **nonrotating** reference
+frame. Translating that reference origin does not change angular dynamics;
+rotating coordinates require a separate explicit composition that this API
+does not provide. Its angular-impulse telemetry is therefore named
+`frame_angular_impulse_newton_metre_seconds`, meaning the caller's reference
+frame, not a fabricated system-global frame.
+
+The helper validates the same immutable craft definition, canonical quaternion
+sign/positive-zero/norm rules and body-angular-velocity component limits, as
+well as all actuator fractions and the fixed step. It refuses malformed inputs
+without initial normalization. It returns a fully validated candidate by value;
+the caller can accept it atomically with its other simulation updates or discard
+it without changing the previous state. The caller owns tick overflow checks.
+
+Both consumers call one private torque allocator and one private coupled RK4
+kernel. The attitude-only wrapper supplies zero position, velocity and force;
+the full vacuum step retains its actual translation/force and therefore still
+rotates propulsion using the same intermediate quaternion stages. It must not
+be rewritten as a separately advanced orientation followed by translation with
+one frozen attitude. This extraction does not change provider version-one
+arithmetic, four exact trace goldens, or final normalization cadence.
+
+This narrow sharing serves two concrete consumers, not a generic engine
+extraction. The #262 lab adapter retains its authoritative quaternion rather
+than reconstructing it from a presentation basis each frame. Its existing
+experimental translation, gravity, atmosphere, spool and floor guard remain
+that adapter's separate behavior; sharing attitude does not qualify the complete
+gravity/atmosphere composition or change the historical lab1 fixtures.
+
 ## Numerical safety and qualification
 
 All #191 finite representation bounds remain enforced, including the 100 rad/s

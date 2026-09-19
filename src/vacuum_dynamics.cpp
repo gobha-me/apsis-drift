@@ -110,6 +110,55 @@ auto allocate(V positive_request, V negative_request, V desired_net,
   return result;
 }
 
+struct TorquePlan {
+  V requested;
+  Allocation allocation;
+};
+auto torque_plan(const CraftFrameProperties& properties, V angular,
+                 V positive_rotation, V negative_rotation, bool assistance,
+                 double dt) -> std::expected<TorquePlan, VacuumDynamicsError> {
+  const auto torque_limit = vector(properties.torque_newton_metres);
+  const auto inertia = vector(properties.principal_inertia_kg_m2);
+  const auto positive = multiply(positive_rotation, torque_limit);
+  const auto negative = multiply(negative_rotation, torque_limit);
+  const auto requested = subtract(positive, negative);
+  auto desired = requested;
+  if (assistance) {
+    // Rate ratings bound command targets, not existing angular momentum.
+    // Gyroscopic compensation is actual torque allocated and reported below.
+    const auto target = multiply(
+        subtract(positive_rotation, negative_rotation),
+        scale(vector(properties.max_angular_rate_milliradians_per_second),
+              .001));
+    desired = add(scale(multiply(inertia, subtract(target, angular)), 1.0 / dt),
+                  cross(angular, multiply(inertia, angular)));
+  }
+  if (!finite(desired))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  return TorquePlan{requested, allocate(positive, negative, desired,
+                                        torque_limit, torque_limit)};
+}
+
+auto valid_attitude(Q q, V omega) -> bool {
+  if (!finite(q) || !finite(omega)) return false;
+  bool first = true;
+  for (const double value : {q.w, q.x, q.y, q.z}) {
+    if (std::abs(value) > 2 || (value == 0 && std::signbit(value)))
+      return false;
+    if (value != 0 && first) {
+      if (value < 0) return false;
+      first = false;
+    }
+  }
+  if (std::abs(norm_squared(q) - 1) > kRigidBodyOrientationSquaredNormTolerance)
+    return false;
+  for (const double value : {omega.x, omega.y, omega.z})
+    if (std::abs(value) > kRigidBodyMaximumAngularVelocityRadiansPerSecond ||
+        (value == 0 && std::signbit(value)))
+      return false;
+  return true;
+}
+
 struct Integrated {
   V position, velocity;
   Q orientation;
@@ -143,7 +192,106 @@ auto weighted(V a, V b, V c, V d) -> V {
 auto weighted(Q a, Q b, Q c, Q d) -> Q {
   return add(add(add(a, scale(b, 2)), scale(c, 2)), d);
 }
+
+struct IntegratedResult {
+  V position, velocity;
+  Q orientation;
+  V angular, linear_impulse, angular_impulse;
+};
+auto integrate(const Integrated& initial, V inertia, double mass, V force,
+               V torque, double dt)
+    -> std::expected<IntegratedResult, VacuumDynamicsError> {
+  // Shared coupled RK4: full flight must retain these same attitude stages
+  // when rotating thrust/torque into its owning frame. The attitude-only
+  // caller supplies zero translation and force, not a different integrator.
+  const auto a = derivative(initial, inertia, mass, force, torque);
+  const auto second = sum(initial, a, dt * .5);
+  if (!valid_stage(second))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  const auto b = derivative(second, inertia, mass, force, torque);
+  const auto third = sum(initial, b, dt * .5);
+  if (!valid_stage(third))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  const auto c = derivative(third, inertia, mass, force, torque);
+  const auto fourth = sum(initial, c, dt);
+  if (!valid_stage(fourth))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  const auto d = derivative(fourth, inertia, mass, force, torque);
+  const double weight = dt / 6.0;
+  const auto impulse = scale(
+      weighted(a.velocity, b.velocity, c.velocity, d.velocity), mass * weight);
+  const auto angular_impulse =
+      scale(weighted(a.angular_momentum, b.angular_momentum, c.angular_momentum,
+                     d.angular_momentum),
+            weight);
+  const auto next_orientation = normalize_rigid_orientation(
+      add(initial.orientation, scale(weighted(a.orientation, b.orientation,
+                                              c.orientation, d.orientation),
+                                     weight)));
+  if (!next_orientation || !finite(impulse) || !finite(angular_impulse))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  return IntegratedResult{
+      add(initial.position,
+          scale(weighted(a.position, b.position, c.position, d.position),
+                weight)),
+      add(initial.velocity,
+          scale(weighted(a.velocity, b.velocity, c.velocity, d.velocity),
+                weight)),
+      *next_orientation,
+      divide(rotate(conjugate(*next_orientation),
+                    add(initial.angular_momentum, angular_impulse)),
+             inertia),
+      impulse,
+      angular_impulse};
+}
 } // namespace
+
+auto advance_vacuum_attitude(CraftFrameRecipe craft,
+                             RigidOrientation orientation,
+                             RigidVector3 angular_velocity_radians_per_second,
+                             RigidVector3 positive_rotation,
+                             RigidVector3 negative_rotation, bool assistance,
+                             SimulationSeconds step)
+    -> std::expected<VacuumAttitudeResult, VacuumDynamicsError> {
+  if (!std::isfinite(step.count()) || step != kSimulationStep)
+    return std::unexpected{VacuumDynamicsError::invalid_step};
+  const auto frame = resolve_craft_frame(craft);
+  if (!frame || !validate_craft_frame_properties(frame->properties) ||
+      !supports_operation(frame->properties, CraftOperation::vacuum))
+    return std::unexpected{VacuumDynamicsError::invalid_craft_frame};
+  if (!valid_attitude(orientation, angular_velocity_radians_per_second))
+    return std::unexpected{VacuumDynamicsError::invalid_state};
+  if (!valid_fraction(positive_rotation) || !valid_fraction(negative_rotation))
+    return std::unexpected{VacuumDynamicsError::invalid_intent};
+  const auto& properties = frame->properties;
+  const auto plan = torque_plan(properties, angular_velocity_radians_per_second,
+                                positive_rotation, negative_rotation,
+                                assistance, step.count());
+  if (!plan) return std::unexpected{plan.error()};
+  const auto inertia = vector(properties.principal_inertia_kg_m2);
+  const Integrated initial{
+      {},
+      {},
+      orientation,
+      rotate(orientation,
+             multiply(inertia, angular_velocity_radians_per_second))};
+  const auto integrated = integrate(initial, inertia, properties.dry_mass_kg,
+                                    {}, plan->allocation.net, step.count());
+  if (!integrated) return std::unexpected{integrated.error()};
+  auto angular = integrated->angular;
+  angular.x = angular.x == 0 ? 0.0 : angular.x;
+  angular.y = angular.y == 0 ? 0.0 : angular.y;
+  angular.z = angular.z == 0 ? 0.0 : angular.z;
+  if (!valid_attitude(integrated->orientation, angular))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  const auto& allocation = plan->allocation;
+  return VacuumAttitudeResult{
+      integrated->orientation,
+      angular,
+      {plan->requested, subtract(allocation.net, plan->requested),
+       allocation.net, allocation.positive, allocation.negative,
+       integrated->angular_impulse, assistance, allocation.saturated}};
+}
 
 auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
                              RigidBodyState& state, const VacuumIntent& intent,
@@ -170,7 +318,6 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
   const auto& properties = frame->properties;
   const auto positive_limit = vector(properties.positive_force_newtons);
   const auto negative_limit = vector(properties.negative_force_newtons);
-  const auto torque_limit = vector(properties.torque_newton_metres);
   const auto inertia = vector(properties.principal_inertia_kg_m2);
   const double mass = properties.dry_mass_kg;
   const double dt = step.count();
@@ -178,15 +325,10 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
       multiply(intent.positive_translation, positive_limit);
   const auto negative_force =
       multiply(intent.negative_translation, negative_limit);
-  const auto positive_torque = multiply(intent.positive_rotation, torque_limit);
-  const auto negative_torque = multiply(intent.negative_rotation, torque_limit);
   VacuumActuation report;
   report.assistance = intent.assistance;
   report.requested_force_newtons = subtract(positive_force, negative_force);
-  report.requested_torque_newton_metres =
-      subtract(positive_torque, negative_torque);
   auto desired_force = report.requested_force_newtons;
-  auto desired_torque = report.requested_torque_newton_metres;
   const auto angular = state.angular_velocity_radians_per_second;
   if (intent.assistance) {
     const auto body_velocity = rotate(conjugate(state.orientation),
@@ -199,23 +341,17 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
         intent.negative_translation.y == 0)
       desired_force.y =
           -mass * kVacuumLateralDampingPerSecond * body_velocity.y;
-    // No forward velocity hold. Target angular rates are command ratings,
-    // not a post-integration speed clamp. Gyroscopic compensation is real,
-    // bounded, reported torque and belongs in future fuel accounting.
-    const auto target = multiply(
-        subtract(intent.positive_rotation, intent.negative_rotation),
-        scale(vector(properties.max_angular_rate_milliradians_per_second),
-              .001));
-    desired_torque =
-        add(scale(multiply(inertia, subtract(target, angular)), 1.0 / dt),
-            cross(angular, multiply(inertia, angular)));
   }
-  if (!finite(desired_force) || !finite(desired_torque))
+  if (!finite(desired_force))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  const auto plan =
+      torque_plan(properties, angular, intent.positive_rotation,
+                  intent.negative_rotation, intent.assistance, dt);
+  if (!plan) return std::unexpected{plan.error()};
   const auto force = allocate(positive_force, negative_force, desired_force,
                               positive_limit, negative_limit);
-  const auto torque = allocate(positive_torque, negative_torque, desired_torque,
-                               torque_limit, torque_limit);
+  const auto& torque = plan->allocation;
+  report.requested_torque_newton_metres = plan->requested;
   report.positive_force_newtons = force.positive;
   report.negative_force_newtons = force.negative;
   report.applied_force_newtons = force.net;
@@ -232,50 +368,21 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
   const Integrated initial{
       state.position_metres, state.linear_velocity_metres_per_second,
       state.orientation, rotate(state.orientation, multiply(inertia, angular))};
-  const auto a = derivative(initial, inertia, mass, force.net, torque.net);
-  const auto second = sum(initial, a, dt * .5);
-  if (!valid_stage(second))
-    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto b = derivative(second, inertia, mass, force.net, torque.net);
-  const auto third = sum(initial, b, dt * .5);
-  if (!valid_stage(third))
-    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto c = derivative(third, inertia, mass, force.net, torque.net);
-  const auto fourth = sum(initial, c, dt);
-  if (!valid_stage(fourth))
-    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto d = derivative(fourth, inertia, mass, force.net, torque.net);
-  const double weight = dt / 6.0;
-  const auto impulse = scale(
-      weighted(a.velocity, b.velocity, c.velocity, d.velocity), mass * weight);
-  const auto angular_impulse =
-      scale(weighted(a.angular_momentum, b.angular_momentum, c.angular_momentum,
-                     d.angular_momentum),
-            weight);
-  const auto next_orientation = normalize_rigid_orientation(
-      add(initial.orientation, scale(weighted(a.orientation, b.orientation,
-                                              c.orientation, d.orientation),
-                                     weight)));
-  if (!next_orientation || !finite(impulse) || !finite(angular_impulse))
-    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+  const auto integrated =
+      integrate(initial, inertia, mass, force.net, torque.net, dt);
+  if (!integrated) return std::unexpected{integrated.error()};
   auto candidate = state;
-  candidate.position_metres = add(
-      initial.position,
-      scale(weighted(a.position, b.position, c.position, d.position), weight));
-  candidate.linear_velocity_metres_per_second = add(
-      initial.velocity,
-      scale(weighted(a.velocity, b.velocity, c.velocity, d.velocity), weight));
-  candidate.orientation = *next_orientation;
-  candidate.angular_velocity_radians_per_second =
-      divide(rotate(conjugate(candidate.orientation),
-                    add(initial.angular_momentum, angular_impulse)),
-             inertia);
+  candidate.position_metres = integrated->position;
+  candidate.linear_velocity_metres_per_second = integrated->velocity;
+  candidate.orientation = integrated->orientation;
+  candidate.angular_velocity_radians_per_second = integrated->angular;
   ++candidate.tick;
   const auto canonical = canonicalize_rigid_body_state(context, candidate);
   if (!canonical)
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  report.world_linear_impulse_newton_seconds = impulse;
-  report.world_angular_impulse_newton_metre_seconds = angular_impulse;
+  report.world_linear_impulse_newton_seconds = integrated->linear_impulse;
+  report.world_angular_impulse_newton_metre_seconds =
+      integrated->angular_impulse;
   state = *canonical;
   return report;
 }

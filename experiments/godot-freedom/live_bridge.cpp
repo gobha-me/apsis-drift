@@ -350,6 +350,8 @@ class FreedomBridge : public godot::RefCounted {
       const auto candidate =
           survey_surface_start(world->planet, world->reference_start,
                                world->cache, world->flight.tick);
+      auto lab_candidate = candidate.flight;
+      flight_lab::enable_rigid_attitude(lab_candidate);
       // The legacy-shaped projection is only terrain/camera telemetry, never a
       // replacement legacy replay or a saved career. Commit both views
       // together.
@@ -359,7 +361,7 @@ class FreedomBridge : public godot::RefCounted {
       projected.velocity = {};
       projected.clearance_metres = candidate.flight.clearance;
       world->flight = projected;
-      world->lab = candidate.flight;
+      world->lab = lab_candidate;
       world->surface_start = candidate;
       last_error = godot::String{};
       return true;
@@ -414,7 +416,10 @@ class FreedomBridge : public godot::RefCounted {
     result["longitude"] = flight.pose.position.longitude_radians;
     result["altitude"] = flight.pose.position.altitude_metres;
     result["planet_radius"] = world->planet.radius.value * 1000.0;
-    result["flight_model"] = world->lab ? "thrust-lab-1" : "legacy";
+    result["flight_model"] =
+        world->lab
+            ? (world->lab->angular_model == 2 ? "thrust-lab-2" : "thrust-lab-1")
+            : "legacy";
     if (world->surface_start) {
       const auto& start = *world->surface_start;
       godot::Dictionary reference;
@@ -482,11 +487,20 @@ class FreedomBridge : public godot::RefCounted {
       result["acceleration"] = lab.acceleration;
       result["floor_guard"] = lab.floor_guard;
       result["assist"] = lab.assist;
+      result["angular_model"] = lab.angular_model;
+      result["angular_velocity_body"] =
+          godot::Vector3(lab.angular.x, lab.angular.y, lab.angular.z);
+      result["attitude_stabilized"] = lab.angular_model == 1 || lab.assist;
+      result["applied_torque_body"] = godot::Vector3(
+          lab.torque_body.x, lab.torque_body.y, lab.torque_body.z);
+      result["torque_saturated"] = lab.torque_saturated;
       result["climb_rate"] = flight.velocity.up_metres_per_second;
       result["rcs_acceleration"] = godot::Vector3(
           lab.thrust_body.x, lab.thrust_body.y, lab.thrust_body.z);
-      result["checksum"] = godot::String{
-          ("lab1:" + std::to_string(flight_lab::checksum(lab))).c_str()};
+      result["checksum"] =
+          godot::String{((lab.angular_model == 2 ? "lab2:" : "lab1:") +
+                         std::to_string(flight_lab::checksum(lab)))
+                            .c_str()};
     }
     return result;
   }
@@ -633,12 +647,15 @@ class FreedomBridge : public godot::RefCounted {
       auto candidate = require(initial_planetary_flight_state(
           world->planet, pose, {sample.elevation_metres}, 0.0,
           FlightMode::manual));
-      world->flight = candidate;
+      auto lab_candidate = world->lab;
       if (world->lab) {
-        world->lab = flight_lab::initial(world->planet, pose, 0);
-        world->lab->clearance = candidate.clearance_metres;
-        world->lab->density = flight_lab::density(world->planet, altitude);
+        lab_candidate = flight_lab::initial(world->planet, pose, 0,
+                                            world->lab->angular_model);
+        lab_candidate->clearance = candidate.clearance_metres;
+        lab_candidate->density = flight_lab::density(world->planet, altitude);
       }
+      world->flight = candidate;
+      world->lab = lab_candidate;
       world->clock = FixedStepClock{};
       world->previous_buttons = 0;
       last_error = godot::String{};
