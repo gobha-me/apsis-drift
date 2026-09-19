@@ -31,7 +31,7 @@ var clear_live_input := false
 var snapshot_text := ""
 var pilot_cockpit: Node3D
 var pilot_view := false
-var head_angles := Vector2(-0.19, 0.0) # pitch, yaw, relative to the ship
+var head_angles := Vector2.ZERO # pitch/yaw; same centerline as recenter and look release
 const CockpitLayout = preload("res://cockpit_layout.gd")
 var pilot_eye := CockpitLayout.eye()
 const HEAD_YAW_LIMIT := 2.44 # 140 degrees: shoulders remain in the seat
@@ -466,7 +466,7 @@ func build_overlay() -> void:
 func set_view(next: int) -> void:
 	mode = clampi(next, 1, 4)
 	pilot_view = false
-	head_angles = Vector2(-0.19, 0.0)
+	head_angles = Vector2.ZERO
 	if pilot_cockpit != null:
 		pilot_cockpit.visible = true
 	ship.visible = true
@@ -558,7 +558,7 @@ func toggle_pilot() -> void:
 	pilot_view = not pilot_view
 	pilot_cockpit.visible = true
 	ship.visible = true
-	head_angles = Vector2(-0.19, 0.0)
+	head_angles = Vector2.ZERO
 	chase_angles = Vector2.ZERO
 	camera.fov = 75 if pilot_view else 55
 	if not pilot_view:
