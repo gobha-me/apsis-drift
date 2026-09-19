@@ -26,7 +26,7 @@
       "source_kind": "code-authored",
       "files": ["experiments/godot-freedom/ship_audio.gd"],
       "purpose": "Opt-in procedural native ship machinery, thrust vibration and atmosphere airflow study; no replacement of the existing score or sound pack",
-      "edits": ["Refined engine voice into a lower layered mechanical growl with spool inertia, audible body overtones and restrained atmosphere texture; no external audio source"],
+      "edits": ["Refined engine voice into a lower layered mechanical growl with spool inertia, audible body overtones and restrained atmosphere texture; no external audio source", "Ported human-accepted direction24 into a constant-level powered idle/light/core/dense blend with a static coherent-sum correction curve and bounded causal private-noise filters; atmospheric airflow remains separate"],
       "license": {
         "expression": "BSD-3-Clause", "terms": "LICENSE.md",
         "permitted_uses": ["source", "documentation", "runtime"],

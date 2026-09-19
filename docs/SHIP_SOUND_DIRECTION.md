@@ -7,6 +7,12 @@ contract, MIDI and other existing audio work are preserved.
 
 ## Approved intent, not final sound acceptance
 
+Human checkpoint: direction 24's constant-level dynamic blend is accepted for
+the next implementation pass. The variation is subtle and may be difficult to
+notice; retain that as a known future refinement, not permission to exaggerate
+the voice now. This accepts the offline sound direction for now, not the
+unheard runtime port or long-session/device qualification.
+
 The engine is a recurring companion during play. Its normal sound should be
 comfortable and almost pleasurable to hear over time, not merely impressive
 for an eight-second demonstration. Direction 22's second audition (heavier

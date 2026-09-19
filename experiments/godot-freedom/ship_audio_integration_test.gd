@@ -139,7 +139,8 @@ func run() -> void:
 	study.set_player_paused(false)
 	refresh_audio()
 	check(study.live_bridge.get_state().main_thrust == 0.0, "Resume fixture retained native engine demand")
-	check(study.ship_audio.diagnostics().active and study.ship_audio.diagnostics().valid and study.ship_audio.diagnostics().targets.y == 0.0 and study.ship_audio.diagnostics().targets.x > 0.0, "Resume replayed stale thrust instead of current neutral cockpit telemetry")
+	var neutral_audio: Dictionary = study.ship_audio.diagnostics()
+	check(neutral_audio.active and neutral_audio.valid and neutral_audio.targets.y == 1.0 and neutral_audio.targets.x == 0.0 and neutral_audio.requested_load == 0.0, "Resume failed to restore current neutral powered voice without stale thrust or a duplicate idle bed")
 
 	study._notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT)
 	check(study.live_paused, "Focus loss did not invoke safety pause")

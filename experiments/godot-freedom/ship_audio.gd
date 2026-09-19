@@ -10,8 +10,16 @@ const MAX_PROCESS_FRAMES := 2048
 const QUEUE_FRAMES := 1920 # At most 80 ms of authored samples, excluding device latency.
 const TELEMETRY_TIMEOUT := 0.25
 const LIMIT := 0.26
-const MAX_GAINS := Vector3(0.018, 0.12, 0.10)
+const MAX_GAINS := Vector3(0.0, 1.0, 0.10) # Reserved old bed, unified powered core, airflow.
 const FADE_SECONDS := 0.06
+# Approved direction24 coherent-sum calibration,21loads in0.05increments.
+# Static correction, NOT signal-following AGC. Native causal-filter acceptance
+# qualifies the port separately from the offlineFFT audition (not identicalPCM).
+const LEVEL_DB := [-15.95223868, -15.95521183, -15.93961331, -15.95470744,
+	-16.01216941, -16.09233273, -16.20744719, -16.38353145, -16.63467375,
+	-16.91793885, -17.19583185, -17.40527280, -17.55829733, -17.73349189,
+	-17.92624874, -18.11927822, -18.31717124, -18.51508905, -18.69817072,
+	-18.86857976, -19.00482827]
 
 var muted := false
 var _active := false
@@ -20,21 +28,18 @@ var _age := TELEMETRY_TIMEOUT
 var _desired := Vector3.ZERO
 var _targets := Vector3.ZERO
 var _gains := Vector3.ZERO
-var _engine_hz := 54.0
+var _engine_hz := 91.0
 var _power := 0.0
 var _spool := 0.0
 var _spool_target := 0.0
 var _phase := 0.0
-var _machinery_phase := 0.0
-var _beat_phase := 0.0
 var _noise_state: int = 0x51A7D123
-var _low_noise := 0.0
-var _growl_low := 0.0
-var _growl_high := 0.0
-var _growl_smooth := 0.0
-var _coolant_low := 0.0
-var _coolant_high := 0.0
-var _uneven := 0.0
+var _irregular_low := 0.0
+var _irregular_high := 0.0
+var _flex_low := 0.0
+var _flex_high := 0.0
+var _grain_low := 0.0
+var _grain_high := 0.0
 var _air_low := 0.0
 var _air_high := 0.0
 var _air_side := 0.0
@@ -67,10 +72,10 @@ func update_telemetry(state: Dictionary, cockpit: bool, active: bool) -> bool:
 	var power: float = maxf(state.main_thrust, state.retro_thrust * 0.65)
 	var air: float = clampf(float(state.effective_air_density) / 0.02, 0.0, 1.0)
 	var pressure: float = clampf(float(state.dynamic_pressure) / 25000.0, 0.0, 1.0)
-	# Cockpit engine/machinery sound is structure-conducted. Exterior vacuum is silent.
+	# One calibrated powered voice includes idle. No extra machinery bed and no
+	# throttle-volume multiplier. Airflow remains a separate medium-dependent layer.
 	var conduction := 1.0 if cockpit else air
-	_desired = Vector3(MAX_GAINS.x if cockpit else 0.0,
-		MAX_GAINS.y * sqrt(power) * conduction,
+	_desired = Vector3(0.0, conduction,
 		MAX_GAINS.z * sqrt(pressure) * air * (0.55 if cockpit else 1.0))
 	_power = power
 	_refresh_targets()
@@ -109,37 +114,53 @@ func _noise() -> float:
 	return float(_noise_state) / 1073741824.0 - 1.0
 
 func _sample() -> Vector2:
-	_gains.x = move_toward(_gains.x, _targets.x, MAX_GAINS.x / (FADE_SECONDS * SAMPLE_RATE))
 	_gains.y = move_toward(_gains.y, _targets.y, MAX_GAINS.y / (FADE_SECONDS * SAMPLE_RATE))
 	_gains.z = move_toward(_gains.z, _targets.z, MAX_GAINS.z / (FADE_SECONDS * SAMPLE_RATE))
-	# Texture has mechanical inertia; safety gates still use the fast gain fade.
-	_spool = move_toward(_spool, _spool_target, 1.0 / ((0.55 if _spool_target > _spool else 0.9) * SAMPLE_RATE))
-	_engine_hz = 54.0 + _spool * 14.0
-	_phase = fposmod(_phase + _engine_hz / SAMPLE_RATE, 1.0)
-	_machinery_phase = fposmod(_machinery_phase + 34.0 / SAMPLE_RATE, 1.0)
-	_beat_phase = fposmod(_beat_phase + (6.5 + _spool * 3.5) / SAMPLE_RATE, 1.0)
-	var noise := _noise()
+	# Direction24 exponential loadstate drives timbre and STATIC level correction;
+	# the independent60ms gate is the only mute/inactive amplitude envelope.
+	_spool += (_spool_target - _spool) * (0.00010416124150780526 if _spool_target > _spool else 0.0000641005095770586)
+	var clock_rate := 1.0 + 0.018 * _spool
+	_engine_hz = 91.0 * clock_rate
+	# Integerrelated carriers share a wrapped1Hz phase, including acrossblocks.
+	_phase = fposmod(_phase + clock_rate / SAMPLE_RATE, 1.0)
+	var clock_phase := TAU * _phase
+	# Private causal difference-of-lowpass filters replace offline Fourier noise.
+	# Normalizers use analyticalwhite-noise variance, never a running RMS/AGC.
+	var n0 := _noise()
+	var n1 := _noise()
+	var n2 := _noise()
 	var air_noise := _noise()
-	_low_noise += 0.018 * (noise - _low_noise)
-	_uneven += 0.0015 * (noise - _uneven)
-	_growl_low += (0.105 + _spool * 0.065) * (noise - _growl_low)
-	_growl_high += 0.018 * (noise - _growl_high)
-	# Band-limited irregular compression, not a prominent clean turbine whistle.
-	var rough := tanh((_growl_low - _growl_high) * (3.0 + _spool * 2.5))
-	_growl_smooth += 0.20 * (rough - _growl_smooth)
-	_coolant_low += 0.32 * (noise - _coolant_low)
-	_coolant_high += 0.12 * (noise - _coolant_high)
+	_irregular_low += 0.0007850898189896149 * (n0 - _irregular_low)
+	_irregular_high += 0.00013089112690845006 * (n0 - _irregular_high)
+	_flex_low += 0.003658482813704511 * (n1 - _flex_low)
+	_flex_high += 0.000523461721680829 * (n1 - _flex_high)
+	_grain_low += 0.11808862170182366 * (n2 - _grain_low)
+	_grain_high += 0.038508840198592464 * (n2 - _grain_high)
+	var irregular := tanh((_irregular_low - _irregular_high) * 113.28837371441487)
+	var flex := tanh((_flex_low - _flex_high) * 50.462691367818486)
+	var grain := (_grain_low - _grain_high) * 11.529988379887314
 	_air_low += 0.23 * (air_noise - _air_low)
 	_air_high += 0.025 * (air_noise - _air_high)
 	_air_side += 0.11 * (air_noise - _air_side)
 	_buffet += 0.0025 * (air_noise - _buffet)
-	var machinery := sin(TAU * _machinery_phase * 3.0) * 0.35 + sin(TAU * _machinery_phase * 2.0) * 0.20 + _low_noise * 0.45
-	var uneven := clampf(0.84 + 0.10 * sin(TAU * _beat_phase) + _uneven * 1.4, 0.60, 1.0)
-	# Audible body harmonics support small speakers; no dependence on sub-40Hz bass.
-	var body := sin(TAU * _phase) * 0.55 + sin(TAU * _phase * 2.0) * 0.30 + sin(TAU * _phase * 3.0) * 0.15
-	var engine := body * 0.42 + _growl_smooth * (0.30 + _spool * 0.16) * uneven + (_coolant_low - _coolant_high) * 0.045
+	var s91 := sin(91.0 * clock_phase)
+	var s148 := sin(148.0 * clock_phase + 0.02 * flex)
+	var s219 := sin(219.0 * clock_phase + 0.045 * flex)
+	var s291 := sin(291.0 * clock_phase + 0.04 * flex)
+	var s357 := sin(357.0 * clock_phase + 0.03 * flex)
+	var idle := tanh((0.27*s91 + 0.34*s148 + 0.20*s219 + 0.12*s291 + 0.07*s357)*1.05)*(0.96+0.018*irregular)+0.004*grain
+	var light := (0.15*s91 + 0.30*s148 + 0.27*s219 + 0.18*s291 + 0.10*s357)*(0.94+0.025*irregular)+0.007*grain
+	var body := 0.27*s91 + 0.34*s148 + (0.14+0.17*_spool)*s219 + (0.065+0.12*_spool)*s291 + (0.015+0.075*_spool)*s357
+	var core := tanh(body*(1.05+0.48*_spool))*(0.94+0.045*irregular)+0.009*grain
+	var dense_body := 0.38*s91 + 0.32*s148 + 0.12*s219 + 0.10*sin(182.0*clock_phase) + 0.08*s291
+	var dense := tanh(dense_body*(1.12+0.62*_spool))*(0.96+0.018*irregular)
+	var blend := blend_weights(_spool)
+	var table_position := clampf(_spool * 20.0, 0.0, 20.0)
+	var table_index := mini(int(table_position), 19)
+	var correction := db_to_linear(lerpf(LEVEL_DB[table_index], LEVEL_DB[table_index+1], table_position-table_index))
+	var engine := (idle*blend.x + light*blend.y + core*blend.z + dense*blend.w) * correction
 	var wind := (_air_low - _air_high) * 0.60 + _buffet * 1.2
-	var common := _gains.x * machinery + _gains.y * engine
+	var common := _gains.y * engine
 	var left := common + _gains.z * wind
 	# Centered mechanical core, gentle correlated air width; no phase inversion,
 	# delay tricks or claimed physical spatialization. Mono fold-down is stable.
@@ -147,6 +168,25 @@ func _sample() -> Vector2:
 	_rendered += 1
 	_silent_frames = _silent_frames + 1 if _gains == Vector3.ZERO else 0
 	return Vector2(clampf(left, -LIMIT, LIMIT), clampf(right, -LIMIT, LIMIT))
+
+static func blend_weights(load_value: float) -> Vector4:
+	var f: float
+	var a: Vector4
+	var b: Vector4
+	if load_value < 0.25:
+		f = load_value / 0.25
+		a = Vector4(0.70, 0.20, 0.10, 0.0)
+		b = Vector4(0.25, 0.40, 0.32, 0.03)
+	elif load_value < 0.55:
+		f = (load_value - 0.25) / 0.30
+		a = Vector4(0.25, 0.40, 0.32, 0.03)
+		b = Vector4(0.05, 0.15, 0.66, 0.14)
+	else:
+		f = (load_value - 0.55) / 0.45
+		a = Vector4(0.05, 0.15, 0.66, 0.14)
+		b = Vector4(0.0, 0.05, 0.67, 0.28)
+	f = clampf(f, 0.0, 1.0)
+	return a.lerp(b, f*f*(3.0-2.0*f))
 
 func synthesize_frames(count: int) -> PackedVector2Array:
 	# Invalid sizes are transactional: no noise, phases or envelopes are advanced.
@@ -162,6 +202,7 @@ func diagnostics() -> Dictionary:
 	return {"muted": muted, "active": _active, "valid": _valid,
 		"targets": _targets, "gains": _gains, "rendered_frames": _rendered,
 		"spool": _spool, "engine_hz": _engine_hz,
+		"requested_load": _power, "blend_weights": blend_weights(_spool),
 		"rejected_updates": _rejected, "telemetry_age": _age,
 		"queued_frames": maxi(0, _capacity - _playback.get_frames_available()) if _playback != null else 0,
 		"playback_running": _playback != null,
@@ -198,7 +239,7 @@ func _stop_playback() -> void:
 	_capacity = 0
 	_gains = Vector3.ZERO
 	_spool = 0.0
-	_engine_hz = 54.0
+	_engine_hz = 91.0
 	_silent_frames = 0
 
 func _process(delta: float) -> void:

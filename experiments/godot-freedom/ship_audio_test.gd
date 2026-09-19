@@ -90,9 +90,9 @@ func _initialize() -> void:
 	var b := ShipAudio.new()
 	a.update_telemetry(telemetry(0.7, 0.1, 30000), true, true)
 	b.update_telemetry(telemetry(0.7, 0.1, 30000), true, true)
-	var grouped := render(a, 3072)
+	var grouped := render(a, 30000) # Cross wrapped carrier phase and block boundaries.
 	var fragmented := PackedVector2Array()
-	for index in 3072:
+	for index in 30000:
 		fragmented.append_array(b.synthesize_frames(1))
 	check(grouped == fragmented, "Synth depends on rendering chunk size or shared noise")
 	check(peak(grouped) <= ShipAudio.LIMIT, "Combined layers exceeded limit")
@@ -101,9 +101,11 @@ func _initialize() -> void:
 	spool.update_telemetry(telemetry(1), true, true)
 	render(spool, 2400)
 	check(spool.diagnostics().spool > 0.1 and spool.diagnostics().spool < 0.25, "Mechanical spool lacks bounded spin-up inertia")
-	check(spool.diagnostics().engine_hz >= 54 and spool.diagnostics().engine_hz < 58, "Thrust immediately jumped to a high pure pitch")
+	check(spool.diagnostics().engine_hz >= 91 and spool.diagnostics().engine_hz < 91.5, "Thrust immediately jumped to a high pure pitch")
 	render(spool, 14000)
-	check(is_equal_approx(spool.diagnostics().spool, 1.0) and spool.diagnostics().engine_hz <= 68, "Spool failed to settle within restrained pitch range")
+	check(spool.diagnostics().spool > 0.8 and spool.diagnostics().spool < 0.85, "Exponential loadstate lost its approved inertia")
+	render(spool, 48000)
+	check(spool.diagnostics().spool > 0.99 and spool.diagnostics().engine_hz <= 92.6381, "Loadstate failed to settle within restrained carrier range")
 	spool.update_telemetry(telemetry(), true, true)
 	render(spool, 2400)
 	check(spool.diagnostics().spool > 0.8 and spool.diagnostics().spool < 0.95, "Mechanical spin-down lost inertia")
@@ -111,6 +113,14 @@ func _initialize() -> void:
 	render(spool, 2000)
 	check(peak(render(spool, 1024)) == 0, "Spool inertia bypassed mute fade")
 	spool.free()
+	var idle := ShipAudio.new()
+	idle.update_telemetry(telemetry(), true, true)
+	check(idle.diagnostics().targets.x == 0 and idle.diagnostics().targets.y == 1, "Poweredidle missing or old machinerybed doubled")
+	check(peak(render(idle, 4000)) > 0.01, "Zero thrust incorrectly silenced poweredidle")
+	idle.update_telemetry({}, true, true)
+	render(idle, 2000)
+	check(peak(render(idle, 1024)) == 0, "Invalid input retained continuous idle")
+	idle.free()
 	var mono_energy := 0.0
 	var stereo_energy := 0.0
 	for sample in grouped:

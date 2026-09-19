@@ -4,6 +4,12 @@
 not a new authoritative audio policy, replacement score, or damage simulation.
 Existing C++ procedural audio, MIDI work and First Light assets are unchanged.
 
+This document records the historical baseline. The subsequently accepted
+[healthy engine direction](SHIP_SOUND_DIRECTION.md) replaces thrust-driven
+loudness with a constant-level idle-to-dense blend. It does not waive the
+adapter, invalid-state, device, pause/mute or exterior-vacuum safety boundaries
+described here.
+
 ## What should be heard
 
 - Inside the cockpit, quiet machinery continues during a vacuum coast.
