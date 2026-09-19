@@ -111,3 +111,8 @@ preference, not final sound acceptance. The next offline comparison retains its
 resonant body while reducing regular flutter and adding load-dependent texture
 and restrained spool/settling behavior. It does not replace the running game's
 audio or add an audible association between thrust and absolute flight speed.
+
+Subsequent human review preferred direction 22 / 02 and requested a denser
+third component blended with both 22 variants for a comfortable continuous
+engine range. Further audio direction is recorded in
+[Healthy ship sound](SHIP_SOUND_DIRECTION.md).
