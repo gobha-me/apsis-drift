@@ -2,6 +2,26 @@
   "schema_version": 1,
   "assets": [
     {
+      "id": "sfx/native-ship-audio-prototype",
+      "media_type": "sfx",
+      "source_kind": "code-authored",
+      "files": ["experiments/godot-freedom/ship_audio.gd"],
+      "purpose": "Opt-in procedural native ship machinery, thrust vibration and atmosphere airflow study; no replacement of the existing score or sound pack",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-19",
+        "construction": "Original bounded oscillator and filtered private-noise synthesis driven by read-only native flight telemetry. No external samples, model service, or world-generation random stream.",
+        "derived_inputs": []
+      }
+    },
+    {
       "id": "visual/terrain-continuity-11",
       "media_type": "visual",
       "source_kind": "capture",

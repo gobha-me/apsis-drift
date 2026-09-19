@@ -6,6 +6,8 @@ signal debug_changed(value: bool)
 signal camera_distance_changed(value: float)
 signal practice_requested(reentry: bool)
 signal guidance_requested
+signal ship_audio_muted(value: bool)
+var ship_audio_available := false
 var controls: Node
 var rotational_coasting := false
 var orbit_preserving_assist := false
@@ -15,6 +17,7 @@ var message: Label
 var binding_buttons: Array[Dictionary] = []
 var diagnostic_toggle: CheckButton
 var camera_slider: HSlider
+var audio_toggle: CheckButton
 
 func _ready() -> void:
 	layer = 20
@@ -66,6 +69,11 @@ func _ready() -> void:
 		note.text = note.text.replace("Coast with assist OFF; watch periapsis on NAV.", "SPACE: coast with assist ON or OFF.\nON stabilizes rotation; it preserves orbital motion.\nAtmospheric support fades out through trace air.\nAirless worlds: no automatic hover support.")
 	left.add_child(note)
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
+	if ship_audio_available:
+		audio_toggle = CheckButton.new()
+		audio_toggle.text = "Mute ship audio prototype (this session)"
+		audio_toggle.toggled.connect(func(value: bool): ship_audio_muted.emit(value))
+		left.add_child(audio_toggle)
 	add_button(left, "Reset experimental flight", func(): reset_flight.emit())
 	if controls.thrust_mode:
 		add_button(left, "Flight guidance — flight continues; no autopilot", func(): guidance_requested.emit())
