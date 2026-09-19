@@ -139,6 +139,7 @@ add_library(apsis_drift_lib STATIC
   src/celestial.cpp
   src/cockpit.cpp
   src/coordinates.cpp
+  src/craft_frame.cpp
   src/flight_deck_acceptance.cpp
   src/flight_input.cpp
   src/intersystem_contract.cpp
@@ -273,6 +274,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift-asset-validator
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
+  add_executable(apsis-drift-craft-frame-tests test/craft_frame_test.cpp)
+  target_link_libraries(apsis-drift-craft-frame-tests PRIVATE apsis-drift::lib nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-craft-frame-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME craft-frame-contract COMMAND apsis-drift-craft-frame-tests)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE

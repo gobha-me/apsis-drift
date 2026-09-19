@@ -32,6 +32,13 @@ func button(code: int, pressed: bool) -> void:
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
 
+func seated_camera() -> Transform3D:
+	return study.ship.transform.affine_inverse() * study.camera.transform
+
+func check_centered_camera(message: String) -> void:
+	var expected: Transform3D = study.CockpitLayout.mount() * Transform3D(Basis.IDENTITY, study.pilot_eye)
+	check(study.pilot_view and study.head_angles == Vector2.ZERO and seated_camera().is_equal_approx(expected) and study.camera.fov == 75, message)
+
 func run() -> void:
 	study = load("res://main.tscn").instantiate()
 	root.add_child(study)
@@ -61,6 +68,21 @@ func run() -> void:
 		await frames(1)
 	print("Controller smoke: terrain ready")
 	await frames(3)
+	check_centered_camera("Initial cockpit camera differs from recentered seat view")
+	# Use the real camera action; compare ship-relative poses as physics continues.
+	for cycle in 2:
+		study.turn_head(Vector2(90, 35))
+		button(JOY_BUTTON_X, true)
+		button(JOY_BUTTON_X, false)
+		await frames(2)
+		check(not study.pilot_view, "Camera action did not leave cockpit")
+		button(JOY_BUTTON_X, true)
+		button(JOY_BUTTON_X, false)
+		await frames(2)
+		check_centered_camera("Cockpit/chase round trip changed centered camera")
+		study.turn_head(Vector2(-70, 40))
+		controls.recenter_requested.emit()
+		check_centered_camera("Explicit recenter differs from cockpit entry")
 	var initial: Dictionary = study.live_bridge.get_state()
 	axis(JOY_AXIS_TRIGGER_RIGHT, 0.6)
 	axis(JOY_AXIS_RIGHT_X, 0.4)
@@ -76,6 +98,7 @@ func run() -> void:
 	button(JOY_BUTTON_LEFT_STICK, false)
 	await frames(2)
 	check(study.head_angles == Vector2.ZERO, "Releasing look did not snap to ship centerline")
+	check_centered_camera("Head-look release differs from cockpit entry/recenter")
 	check((int(study.live_bridge.get_state().controls) & 204) == 0, "Release leaked held stick into yaw/heave")
 	if controls.thrust_mode:
 		axis(JOY_AXIS_RIGHT_X, 0)
