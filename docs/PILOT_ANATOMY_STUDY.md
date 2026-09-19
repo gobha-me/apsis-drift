@@ -55,3 +55,19 @@ still apply: distinct male/female character design, practical tailored garments,
 consistent interfaces, real restraint/grip contact, and verified seated fit.
 No changes to cockpit datums, player-camera behavior or gameplay fiction are
 authorized by this asset experiment.
+
+## Local proof and review boundary
+
+The isolated run produces `build-godot/mpfb-proof/portrait-front.png`,
+`portrait-three-quarter.png`, and an editable `female-anatomy-proof.blend`.
+Its neighboring provenance records the pinned archives, macro settings,
+graphical inputs, output hashes and authoring-isolation findings. Keep that
+record with the images when sharing them. Do not copy the entire authoring
+download or its asset library into a game distribution.
+
+The reviewed face has a substantially stronger anatomical foundation than the
+procedural mannequin. Hair is omitted to expose both eyes and facial form;
+the plain review cover is not a proposed suit. Skin, eyes, expression, character
+identity, helmet and tailored clothing still need art work. No rigging,
+cockpit fitting, runtime export, animation or LOD acceptance is claimed by a
+portrait. This is an anatomy workflow proof, not the promised finished pilot.
