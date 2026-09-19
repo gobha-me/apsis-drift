@@ -11,6 +11,7 @@ class NoWorldDrawing extends Node:
 		pass
 
 const DEVICE := 77
+const Status = preload("res://flight_status.gd")
 var failures := 0
 var study: Variant
 
@@ -47,6 +48,14 @@ func refresh() -> void:
 	study.flight_displays.elapsed = 1.0
 	study._process(0)
 
+func check_shared_orbit(expected: String) -> void:
+	check(study.current_orbit_status.trajectory == expected, "Main orbit status disagrees with expected classification")
+	check(study.guidance_overlay.orbit_status == study.current_orbit_status, "Chase overlay did not receive shared orbit status")
+	check(study.flight_displays.guidance_screen.orbit_status == study.current_orbit_status, "Cockpit guidance did not receive shared orbit status")
+	for screen in study.flight_displays.screens:
+		check(screen.state.get("orbit_status", {}) == study.current_orbit_status, "Instrument state did not receive shared orbit status")
+		check(Status.describe(screen.state).trajectory == expected, "NAV recomputation disagrees with shared orbit status/history")
+
 func _initialize() -> void:
 	call_deferred("run")
 
@@ -71,7 +80,7 @@ func run() -> void:
 	study.data = JSON.parse_string(study.snapshot_text)
 	study.options = {"--flight-model": "thrust", "--controls-persist": "false"}
 	study.live_bridge = ClassDB.instantiate("FreedomBridge")
-	if not study.live_bridge.initialize(study.snapshot_text) or not study.live_bridge.enable_surface_practice() or not study.live_bridge.enable_streaming() or not study.live_bridge.start_practice(false):
+	if not study.live_bridge.initialize(study.snapshot_text) or not study.live_bridge.enable_orbit_practice() or not study.live_bridge.enable_streaming() or not study.live_bridge.start_practice(false):
 		push_error("Native integration fixture could not initialize orbit practice")
 		quit(1)
 		return
@@ -200,6 +209,81 @@ func run() -> void:
 	study.set_player_paused(false)
 	controls.sample()
 	check(study.live_bridge.get_state() == before, "Explicit resume itself advanced state")
+
+	# New lab 3 preserves the same authoritative orbital classification with
+	# manual or assisted controls. Real native ticks, not manufactured velocity.
+	check(study.live_bridge.get_state().flight_model == "thrust-lab-3" and study.live_bridge.get_state().translation_policy == 2, "Default orbit practice did not select lab 3 translation policy")
+	study.pause_menu.practice_requested.emit(false)
+	check(not study.orbit_was_established and study.current_orbit_status.is_empty(), "Orbit-practice callback retained old UI history")
+	controls.sample()
+	refresh()
+	check(study.orbit_was_established and study.live_bridge.get_state().clear_orbit, "Native orbit-practice fixture did not establish an orbit")
+	check_shared_orbit("ORBIT ESTABLISHED")
+	study.select_flight_plan(1)
+	refresh()
+	for assist in [true, false]:
+		check(controls.assist != assist, "Assist toggle test did not begin in opposite mode")
+		press_pad(JOY_BUTTON_Y)
+		check(controls.assist == assist, "Real controller assist toggle failed")
+		for tick in 120:
+			study._process(1.0 / 120)
+		refresh()
+		var orbital: Dictionary = study.live_bridge.get_state()
+		check(orbital.assist == assist and orbital.bound_orbit and orbital.clear_orbit, "Bound orbit lost under bounded neutral assist/manual flight")
+		check_shared_orbit("ORBIT ESTABLISHED")
+		check(study.orbit_was_established, "Assist toggle erased orbit history")
+	before = study.live_bridge.get_state()
+	study.select_flight_plan(0)
+	refresh()
+	check(study.orbit_was_established and study.live_bridge.get_state() == before, "Clearing guidance erased established history or mutated native flight")
+	check_shared_orbit("ORBIT ESTABLISHED")
+
+	# Relocate the native fixture directly, deliberately bypassing the practice
+	# callback's history reset, to exercise a genuine lower-periapsis observation.
+	# This qualifies presentation transitions, not a flown reentry maneuver.
+	check(study.live_bridge.start_practice(true), "Native below-threshold orbit fixture failed")
+	check(not study.live_bridge.get_state().clear_orbit, "Reentry fixture unexpectedly remains a clear orbit")
+	study.flight_displays.elapsed = 0.0
+	study._process(0)
+	check_shared_orbit("ORBIT AT RISK")
+	check(study.flight_displays.elapsed == 0.0, "Critical orbit transition did not bypass stale instrument refresh interval")
+	study.select_flight_plan(0)
+	refresh()
+	check(study.orbit_was_established, "Clearing guidance erased at-risk history")
+	check_shared_orbit("ORBIT AT RISK")
+	before = study.live_bridge.get_state()
+	study.observe_orbit(before.duplicate(true))
+	check(study.live_bridge.get_state() == before, "Observing orbital history mutated native flight")
+
+	# Exercise the actual pause-menu practice signal and connected callback.
+	study.set_player_paused(true)
+	study.pause_menu.practice_requested.emit(true)
+	check(not study.orbit_was_established and study.current_orbit_status.is_empty(), "Reentry-practice callback retained stale at-risk history")
+	study.set_player_paused(false)
+	controls.sample()
+	refresh()
+	check_shared_orbit("NOT IN ORBIT")
+	check(not study.orbit_was_established and not controls.assist, "Fresh reentry practice inherited orbit history or assistance")
+	study.pause_menu.practice_requested.emit(false)
+	controls.sample()
+	refresh()
+	check_shared_orbit("ORBIT ESTABLISHED")
+	# The real reset callback initializes the native lab again. Temporarily skip
+	# only its terrain/asset rebootstrap branch (outside this headless fixture),
+	# then restore native streaming before the next inherited scene update.
+	study.set_player_paused(true)
+	study.streaming_requested = false
+	study.pause_menu.reset_flight.emit()
+	check(not study.orbit_was_established and study.current_orbit_status.is_empty() and study.flight_plan == 0, "Reset callback retained old history, status or selected plan")
+	check(study.live_bridge.get_state().flight_model == "thrust-lab-3", "Native reset silently reverted default model")
+	check(study.live_bridge.enable_streaming(), "Restoring native stream after headless reset failed")
+	study.streaming_requested = true
+	controls.assist = study.live_bridge.get_state().assist
+	study.set_player_paused(false)
+	controls.sample()
+	refresh()
+	check_shared_orbit("NOT IN ORBIT")
+	check(not study.orbit_was_established, "Reset surface start inherited stale orbit history")
 	print("Guidance main/bridge integration: %d failures; real input routing and C++ state, graphics bootstrap stubbed; no GPU/hardware qualification" % failures)
 	study.queue_free()
 	quit(0 if failures == 0 else 1)

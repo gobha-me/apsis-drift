@@ -8,6 +8,7 @@ signal practice_requested(reentry: bool)
 signal guidance_requested
 var controls: Node
 var rotational_coasting := false
+var orbit_preserving_assist := false
 var panel: Control
 var resume_button: Button
 var message: Label
@@ -60,6 +61,9 @@ func _ready() -> void:
 	if controls.thrust_mode and rotational_coasting:
 		note.text = note.text.replace("Y / Triangle: translation / gravity assist", "Y / Triangle: flight stabilization")
 		note.text = note.text.replace("No forward speed hold. Attitude damping stays.", "OFF: release sticks to coast, including spin.\nCounter-steer or enable assist to stop a spin.\nHeld sticks request bounded turn rates.\nNo forward speed hold in either mode.")
+	if controls.thrust_mode and orbit_preserving_assist:
+		note.text = note.text.replace("Orbit requires sideways speed, not just height.", "Orbit needs speed along the horizon, not just height.")
+		note.text = note.text.replace("Coast with assist OFF; watch periapsis on NAV.", "SPACE: coast with assist ON or OFF.\nON stabilizes rotation; it preserves orbital motion.\nAtmospheric support fades out through trace air.\nAirless worlds: no automatic hover support.")
 	left.add_child(note)
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
 	add_button(left, "Reset experimental flight", func(): reset_flight.emit())

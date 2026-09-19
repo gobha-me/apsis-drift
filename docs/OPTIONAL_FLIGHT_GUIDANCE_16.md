@@ -2,6 +2,10 @@
 
 2026-09-19; first bounded increment of #268, related to #238, #50 and #171.
 
+Later native lab-3 amendment: [orbit-preserving assist](ORBIT_ASSIST_18.md)
+supersedes this study's assist/coasting warnings and orbit-status wording.
+The optional, read-only plan interaction described here remains in force.
+
 ## Approved interaction
 
 Guidance is off at startup. D-pad Up opens a live-flight plan menu; G is the

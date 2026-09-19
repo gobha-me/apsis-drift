@@ -48,6 +48,8 @@ var flight_plan := 0 # Presentation-only selection; never part of flight state.
 var guidance_elapsed := 0.0
 var flight_guidance: Dictionary = {}
 var guidance_overlay: Control
+var orbit_was_established := false
+var current_orbit_status: Dictionary = {}
 var navigation_sky: ShaderMaterial
 var debug_visible := true
 var debug_backdrop: ColorRect
@@ -181,7 +183,7 @@ func _ready() -> void:
 		if live_bridge == null or options.get("--controls", "true") != "true" or options.has("--capture"):
 			fail("Thrust flight requires --live=true or --stream=true and interactive controls")
 			return
-		if not live_bridge.enable_surface_practice():
+		if not live_bridge.enable_orbit_practice():
 			fail("Thrust flight initialization failed: " + str(live_bridge.get_last_error()))
 			return
 	capture_path = options.get("--capture", "")
@@ -268,7 +270,8 @@ func setup_player_controls() -> void:
 	add_child(player_input)
 	pause_menu = preload("res://pause_menu.gd").new()
 	pause_menu.controls = player_input
-	pause_menu.rotational_coasting = live_bridge != null and live_bridge.get_state().get("flight_model", "") == "thrust-lab-2"
+	pause_menu.rotational_coasting = live_bridge != null and live_bridge.get_state().get("angular_model", 1) == 2
+	pause_menu.orbit_preserving_assist = live_bridge != null and live_bridge.get_state().get("translation_policy", 1) == 2
 	add_child(pause_menu)
 	flight_plan_menu = preload("res://flight_plan_menu.gd").new()
 	flight_plan_menu.setup(player_input)
@@ -313,6 +316,7 @@ func setup_player_controls() -> void:
 		head_angles = Vector2.ZERO
 		chase_angles = Vector2.ZERO
 		chase_follow.reset(live_bridge.get_state().body_basis)
+		reset_orbit_status()
 		flight_guidance = {}
 		guidance_elapsed = 1.0
 		pause_menu.controls.status = "Practice start loaded (relocated, unsaved). Assist OFF. Resume when ready."
@@ -329,6 +333,23 @@ func select_flight_plan(value: int) -> void:
 		flight_displays.elapsed = 1.0
 	if is_instance_valid(guidance_overlay):
 		guidance_overlay.hide()
+
+
+func reset_orbit_status() -> void:
+	orbit_was_established = false
+	current_orbit_status = {}
+
+
+func observe_orbit(state: Dictionary) -> void:
+	# Remember only UI history; never use it to control flight or alter truth.
+	state["orbit_was_established"] = orbit_was_established
+	var previous: String = current_orbit_status.get("orbit_label", "")
+	current_orbit_status = preload("res://flight_status.gd").describe(state)
+	state["orbit_status"] = current_orbit_status
+	if previous != current_orbit_status.get("orbit_label", "") and is_instance_valid(flight_displays):
+		flight_displays.elapsed = 1.0 # Critical label transitions bypass display throttling.
+	if current_orbit_status.get("established", false):
+		orbit_was_established = true
 
 
 func plan_shortcut_available(pad: bool) -> bool:
@@ -371,8 +392,9 @@ func set_player_paused(paused: bool, reason := "") -> void:
 
 func reset_live_flight() -> void:
 	select_flight_plan(0)
+	reset_orbit_status()
 	if live_bridge != null and live_bridge.initialize(snapshot_text):
-		if options.get("--flight-model", "legacy") == "thrust" and not live_bridge.enable_surface_practice():
+		if options.get("--flight-model", "legacy") == "thrust" and not live_bridge.enable_orbit_practice():
 			fail("Thrust reset failed: " + str(live_bridge.get_last_error()))
 			return
 	if streaming_requested:
@@ -780,7 +802,7 @@ func _process(delta: float) -> void:
 			scene_environment.background_mode = Environment.BG_SKY if atmosphere > 0.01 else Environment.BG_COLOR
 		camera.position += state.position - ship.position
 		ship.position = state.position
-		if state.flight_model in ["thrust-lab-1", "thrust-lab-2"]:
+		if state.flight_model in ["thrust-lab-1", "thrust-lab-2", "thrust-lab-3"]:
 			ship.basis = state.body_basis
 		else:
 			ship.rotation.y = float(state.heading) - PI / 2.0
@@ -798,6 +820,7 @@ func _process(delta: float) -> void:
 					camera.position.y += 2 - camera_clearance
 			camera.look_at(ship.position + follow_basis.y * 1.2, follow_basis.y)
 		if live_presentation:
+			observe_orbit(state)
 			guidance_elapsed += delta
 			if flight_plan != 0 and guidance_elapsed >= 0.2:
 				flight_guidance = live_bridge.get_flight_guidance(flight_plan)
@@ -805,6 +828,7 @@ func _process(delta: float) -> void:
 			state["guidance"] = flight_guidance
 			flight_displays.refresh(state, delta)
 			guidance_overlay.guidance = flight_guidance
+			guidance_overlay.orbit_status = current_orbit_status
 			guidance_overlay.visible = flight_plan != 0 and not pilot_view and not flight_plan_menu.active
 			guidance_overlay.queue_redraw()
 			navigation_sky.set_shader_parameter("radius", state.planet_radius)
@@ -831,7 +855,7 @@ func _process(delta: float) -> void:
 				label.text += "\n%.0f km/h | CLIMB %+.1f m/s | MAIN %.0f%% / RETRO %.0f%% | q %.1f kPa" % [state.speed * 3.6, state.climb_rate, state.main_thrust * 100, state.retro_thrust * 100, state.dynamic_pressure / 1000]
 				label.text += "\nASSIST: %s | THRUST xyz %+.1f / %+.1f / %+.1f m/s² | DROPPED %.2f s%s" % ["ON" if player_input.assist else "OFF", state.rcs_acceleration.x, state.rcs_acceleration.y, state.rcs_acceleration.z, state.dropped_seconds, " | FLOOR GUARD" if state.floor_guard else ""]
 				caption.text = "THRUST LAB %s | %s: main / %s: weak retro | %s: assist | Esc / Start: pause\n" % [str(state.flight_model).trim_prefix("thrust-lab-"), player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("assist", family)]
-				if state.flight_model == "thrust-lab-2":
+				if state.get("angular_model", 1) == 2:
 					label.text += " | ROTATION: " + ("STABILIZED" if state.assist else "COAST")
 				caption.text += "Hold %s: head-look (release centers) | Direct analog roll | No landing / collision / fuel yet" % player_input.binding_label("look_hold", family)
 			if player_input.needs_neutral:
@@ -864,7 +888,7 @@ func _process(delta: float) -> void:
 		label.visible = debug_visible or not pilot_view
 		if not debug_visible:
 			var state: Dictionary = live_bridge.get_state()
-			var status: Dictionary = preload("res://flight_status.gd").describe(state)
+			var status: Dictionary = current_orbit_status if not current_orbit_status.is_empty() else preload("res://flight_status.gd").describe(state)
 			label.text = "%s  |  %s\nALT %s  |  GROUND CLEARANCE %s  |  %.0f m/s\n%s  |  VERTICAL %+.0f m/s" % [data.planet.display_name.to_upper(), status.environment, preload("res://flight_status.gd").distance(state.altitude), preload("res://flight_status.gd").distance(state.clearance), state.speed, status.trajectory, state.climb_rate]
 			caption.text = "" if pilot_view else "X / Square: cockpit · Hold L3: orbit camera · D-pad up / G: guidance · Start: controls"
 			if state.floor_guard:

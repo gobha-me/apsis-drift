@@ -135,7 +135,7 @@ func run() -> void:
 		button(JOY_BUTTON_Y, false)
 		await frames(3)
 		check(not study.live_bridge.get_state().assist, "Assist toggle not consumed by physics")
-		if study.live_bridge.get_state().flight_model == "thrust-lab-2":
+		if study.live_bridge.get_state().get("angular_model", 1) == 2:
 			check(not study.live_bridge.get_state().attitude_stabilized, "Assist-off still reports rotational stabilization")
 			axis(JOY_AXIS_LEFT_X, 0.7)
 			await frames(15)
