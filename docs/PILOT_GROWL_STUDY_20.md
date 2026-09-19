@@ -4,6 +4,12 @@
 pilot seat report (#267). This remains an opt-in art/sound study, not final
 character acceptance, character creation, EVA, spatial audio or new physics.
 
+Human review supersedes the pending acceptance notes below: the pilot art is
+placeholder-only and the engine reads as an air filter/fan, not convincing
+loaded machinery. Neither appearance nor sound is accepted. Automated
+integration and safety results remain useful, but are not artistic approval.
+See [the revised art brief](PILOT_ART_DIRECTION.md) for the character direction.
+
 ## Engine character
 
 The first audition established useful thrust response but exposed a dominant

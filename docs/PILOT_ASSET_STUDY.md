@@ -1,5 +1,10 @@
 # Seated pilot presentation studies
 
+**Build 20 human review: placeholder only, not accepted character art.**
+The pilots read as cartoonish; the female variant is not sufficiently distinct.
+Passing cabin-fit and visibility tests does not meet the cinematic visual bar.
+See [the revised art brief](PILOT_ART_DIRECTION.md) before further mesh work.
+
 These are original procedural Blender meshes, not finished character art. The
 male and female adult studies share one pressure-suit design and the existing
 1.78 m synthetic cockpit fit fixture. Modest torso/hip proportions differ; this
