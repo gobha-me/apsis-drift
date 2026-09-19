@@ -1,8 +1,12 @@
 # Pilot art direction after build 20
 
 2026-09-19. Related issues: #267 (characters), #254 (sound).
-Status: proposed direction, pending human review. Existing pilots are
-placeholders, not a completed character deliverable.
+Status: human-approved visual direction (concept v1), not an approved production
+blueprint or runtime asset. Existing pilots remain placeholders, not a completed
+character deliverable. The concept's human anatomy, clearly feminine female
+character, tailored suit construction and material quality set the target.
+Helmet/connector identity, consistent restraints and actual cockpit fit still
+require authored design work; concept approval does not waive those checks.
 
 ## What failed
 
@@ -50,7 +54,8 @@ construction identity. Keep amber service/identity markings sparse. A recessed
 keyed service manifold and protected seat-side umbilical make the suit belong
 to a craft; no loose hoses across controls. A low-profile squared-oval visor,
 compact cheek seals and visible locking interfaces replace the egg helmet.
-These choices are a proposal, not established fiction or user approval.
+The general visual direction is approved; these particular interface/helmet
+details still require refinement and do not establish new gameplay fiction.
 
 Both characters need authored human anatomy under the garment. The female
 variant must read clearly feminine in face, shoulder-to-hip relationship,
@@ -99,3 +104,10 @@ less persistent noise. Compare alternatives at matched levels before touching
 the live mix. Airflow remains a separate pressure-dependent atmosphere layer;
 ventilation may exist quietly as cabin machinery but must not define thrust.
 No new engine fiction, spatial-audio completion or human approval is implied.
+
+The follow-up audition selected direction 02 (pulsed structural resonance) as
+the better starting point, but it still sounded like hovering. That is a
+preference, not final sound acceptance. The next offline comparison retains its
+resonant body while reducing regular flutter and adding load-dependent texture
+and restrained spool/settling behavior. It does not replace the running game's
+audio or add an audible association between thrust and absolute flight speed.
