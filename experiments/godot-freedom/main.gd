@@ -58,6 +58,7 @@ var chase_distance := 36.0
 var chase_follow := preload("res://chase_camera.gd").new()
 var live_presentation := false
 var world_view: Node
+var ship_audio: Node
 
 
 func fail(message: String) -> void:
@@ -230,6 +231,7 @@ func _ready() -> void:
 		world_view = preload("res://world_view.gd").new()
 		add_child(world_view)
 		world_view.install(self)
+		setup_ship_audio()
 	if capture_path.is_empty() and options.get("--controls", "true") == "true":
 		setup_player_controls()
 	set_view(int(options.get("--view", "1")))
@@ -263,6 +265,25 @@ func vector(values: Array) -> Vector3:
 	return Vector3(float(values[0]), float(values[1]), float(values[2]))
 
 
+func setup_ship_audio() -> void:
+	# Opt-in presentation prototype. No soundtrack replacement or flight writes.
+	if options.get("--ship-audio", "false") != "true" or not live_presentation:
+		return
+	ship_audio = preload("res://ship_audio.gd").new()
+	add_child(ship_audio)
+
+
+func update_ship_audio() -> void:
+	if not is_instance_valid(ship_audio):
+		return
+	var available := live_bridge != null and live_presentation
+	var active := available and mode == 1 and not live_paused and window_focused
+	active = active and (planet_stream == null or planet_stream.is_ready)
+	if is_instance_valid(pause_menu) and is_instance_valid(pause_menu.panel):
+		active = active and not pause_menu.panel.visible
+	ship_audio.update_telemetry(live_bridge.get_state() if available else {}, pilot_view, active)
+
+
 func setup_player_controls() -> void:
 	player_input = preload("res://player_input.gd").new()
 	player_input.thrust_mode = options.get("--flight-model", "legacy") == "thrust"
@@ -272,6 +293,10 @@ func setup_player_controls() -> void:
 	pause_menu.controls = player_input
 	pause_menu.rotational_coasting = live_bridge != null and live_bridge.get_state().get("angular_model", 1) == 2
 	pause_menu.orbit_preserving_assist = live_bridge != null and live_bridge.get_state().get("translation_policy", 1) == 2
+	pause_menu.ship_audio_available = is_instance_valid(ship_audio)
+	pause_menu.ship_audio_muted.connect(func(value: bool):
+		if is_instance_valid(ship_audio):
+			ship_audio.set_muted(value))
 	add_child(pause_menu)
 	flight_plan_menu = preload("res://flight_plan_menu.gd").new()
 	flight_plan_menu.setup(player_input)
@@ -379,6 +404,7 @@ func set_player_paused(paused: bool, reason := "") -> void:
 	if not paused and not window_focused:
 		return
 	live_paused = paused
+	update_ship_audio()
 	if paused and is_instance_valid(flight_plan_menu):
 		flight_plan_menu.close()
 	player_input.set_enabled(not paused)
@@ -725,6 +751,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	# Runs before early exits so menus, inspection modes and terrain loading
+	# cannot leave the last engine demand sounding indefinitely.
+	update_ship_audio()
 	if data.is_empty() or ship == null:
 		return
 	var command := {"axes": PackedFloat64Array([0, 0, 0, 0]), "look": Vector2.ZERO}
@@ -901,6 +930,7 @@ func _process(delta: float) -> void:
 				caption.text = "TERRAIN — DESCENDING"
 			elif state.dynamic_pressure > 50000:
 				caption.text = "HIGH ATMOSPHERIC LOAD — %.0f kPa (damage not simulated)" % (state.dynamic_pressure / 1000)
+	update_ship_audio() # Fresh post-step demand, before any capture/stream early exit.
 	if not capture_path.is_empty():
 		if planet_stream != null and (not planet_stream.is_ready or not planet_stream.pending.is_empty()):
 			last_frame_usec = Time.get_ticks_usec()
