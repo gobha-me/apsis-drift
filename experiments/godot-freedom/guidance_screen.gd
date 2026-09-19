@@ -1,6 +1,7 @@
 extends Control
 ## Presentation of read-only C++ coast samples and geometric references.
 var guidance: Dictionary = {}
+var orbit_status: Dictionary = {}
 var cockpit := false
 const INK := Color("bcebf0")
 const WARN := Color("ffc478")
@@ -9,6 +10,21 @@ const REFERENCE := Color("69baff")
 
 func text_at(at: Vector2, text: String, pixels := 17, color := INK) -> void:
 	draw_string(ThemeDB.fallback_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, pixels, color)
+
+static func cue_text(plan: Dictionary, status: Dictionary) -> String:
+	if int(plan.get("mode", 0)) == 1 and status.get("established", false):
+		return "Reference circle is optional"
+	match str(plan.get("cue", "")):
+		"below_surface": return "Below surface; forecast stopped"
+		"climb": return "Climb clear of atmosphere first"
+		"sideways": return "Build speed along the horizon"
+		"circular": return "Reference circle is optional"
+		"orbit": return "Check current orbit status above"
+		"return": return "Return reference ends at air edge"
+		"escape": return "Escape reference: energy threshold"
+		"unbound": return "Escape energy reached; check path"
+		"in_atmosphere": return "In air; vacuum forecast unavailable"
+	return "Ideal reference; not a scheduled burn"
 
 func _draw() -> void:
 	if guidance.is_empty():
@@ -20,10 +36,12 @@ func _draw() -> void:
 	var mode: int = guidance.get("mode", 0)
 	if mode < 1 or mode > 3:
 		return
-	var title: String = ["", "ESTABLISH ORBIT", "ATMOSPHERIC RETURN", "ESCAPE"][mode]
-	text_at(Vector2(20, 38) if cockpit else Vector2(14, 27), title + (" / MANUAL" if cockpit else ""), 34 if cockpit else 20)
-	if not cockpit:
-		text_at(Vector2(14, 50), "MANUAL / REFERENCE ONLY", 15, WARN)
+	var title: String = ["", "ORBIT GUIDANCE", "RETURN GUIDANCE", "ESCAPE GUIDANCE"][mode]
+	text_at(Vector2(20, 35) if cockpit else Vector2(14, 25), title, 28 if cockpit else 17)
+	# The exact same authoritative status is injected into cockpit and chase
+	# views. A circle, forecast cue or speed target cannot establish an orbit.
+	text_at(Vector2(20, 80) if cockpit else Vector2(14, 55), str(orbit_status.get("orbit_label", "ORBIT DATA UNAVAILABLE")), 38 if cockpit else 25, COAST if orbit_status.get("established", false) else WARN)
+	text_at(Vector2(20, 112) if cockpit else Vector2(14, 78), str(orbit_status.get("orbit_reason", "Check flight telemetry")), 26 if cockpit else 17)
 	var coast: PackedVector2Array = guidance.coast
 	var reference: PackedVector2Array = guidance.reference
 	var extent := maxf(1.0, float(guidance.air_radius))
@@ -32,8 +50,8 @@ func _draw() -> void:
 			if not point.is_finite():
 				return
 			extent = maxf(extent, point.length())
-	var center := Vector2(180, 235) if cockpit else Vector2(size.x * 0.5, 145)
-	var scale_px := (120.0 if cockpit else 80.0) / extent
+	var center := Vector2(170, 270) if cockpit else Vector2(size.x * 0.5, 156)
+	var scale_px := (92.0 if cockpit else 60.0) / extent
 	draw_circle(center, scale_px * float(guidance.air_radius), Color("70567e"), false, 1.0)
 	draw_circle(center, scale_px, Color("243d48"))
 	for pair in [[reference, REFERENCE], [coast, COAST]]:
@@ -46,19 +64,8 @@ func _draw() -> void:
 	if not coast.is_empty():
 		draw_circle(center + coast[0] * scale_px, 4, INK)
 	if not cockpit:
-		text_at(Vector2(14, 244), "Green: coast %.0f s  /  Blue: reference" % guidance.seconds, 16)
-	var cue := "Ideal reference; not a scheduled burn"
-	match str(guidance.cue):
-		"below_surface": cue = "Below reference surface; forecast stopped"
-		"climb": cue = "Climb clear of atmosphere first"
-		"sideways": cue = "Build sideways speed above atmosphere"
-		"circular": cue = "Circular reference: remove radial motion"
-		"orbit": cue = "Clear orbit; coast and watch periapsis"
-		"return": cue = "Return reference reaches air edge, not ground"
-		"escape": cue = "Escape reference: zero-energy threshold"
-		"unbound": cue = "Escape energy reached; check coast path"
-		"in_atmosphere": cue = "In atmosphere; vacuum forecast unavailable"
-	text_at(Vector2(20, 80) if cockpit else Vector2(14, 266), cue, 28 if cockpit else 16, WARN)
+		text_at(Vector2(14, 235), "Green: coast %.0f s / Blue: reference" % guidance.seconds, 15)
+	text_at(Vector2(20, 148) if cockpit else Vector2(14, 257), cue_text(guidance, orbit_status), 26 if cockpit else 16, WARN)
 	var limit := "Vacuum only; thrust, drag and terrain omitted"
 	if int(guidance.termination) == 2:
 		limit = "Stops at air edge; entry safety NOT predicted"
@@ -67,18 +74,19 @@ func _draw() -> void:
 	elif int(guidance.termination) == 4:
 		limit = "Forecast truncated at numerical limit"
 	if cockpit:
-		text_at(Vector2(365, 145), "SIDEWAYS / m/s", 26)
-		text_at(Vector2(365, 192), "%.0f" % guidance.horizontal_speed, 44, COAST)
-		text_at(Vector2(365, 236), "REF %.0f m/s" % guidance.reference_speed, 30, REFERENCE)
-		text_at(Vector2(365, 280), "VERTICAL %+.0f m/s" % guidance.radial_speed, 28)
-		text_at(Vector2(365, 322), "REF ALT %.0f km" % (guidance.reference_altitude / 1000.0), 27, REFERENCE)
+		text_at(Vector2(365, 190), "HORIZON SPEED / m/s", 26)
+		text_at(Vector2(365, 237), "%.0f" % guidance.horizontal_speed, 44, COAST)
+		text_at(Vector2(365, 275), "REF %.0f m/s" % guidance.reference_speed, 30, REFERENCE)
+		text_at(Vector2(365, 313), "VERTICAL %+.0f m/s" % guidance.radial_speed, 28)
+		text_at(Vector2(365, 350), "REF ALT %.0f km" % (guidance.reference_altitude / 1000.0), 27, REFERENCE)
 		text_at(Vector2(20, 390), limit, 26, WARN)
 		text_at(Vector2(20, 425), "GREEN coast %.0f s / BLUE ideal reference" % guidance.seconds, 26)
 		return
-	text_at(Vector2(14, 289), "REF %.0f m/s at %.0f km datum altitude" % [guidance.reference_speed, guidance.reference_altitude / 1000.0], 16, REFERENCE)
-	text_at(Vector2(14, 312), "NOW sideways %.0f / vertical %+.0f m/s" % [guidance.horizontal_speed, guidance.radial_speed], 16)
-	text_at(Vector2(14, 340), limit, 15, WARN)
-	var footer := "Reference plane uses projected ship heading" if guidance.radial_degenerate else "Flight continues; selecting never fires engines"
-	if guidance.assist or guidance.thrust_active:
-		footer = "Assist / thrust active: coast path will change"
-	text_at(Vector2(14, 364), footer, 15)
+	text_at(Vector2(14, 280), "REF %.0f m/s at %.0f km datum altitude" % [guidance.reference_speed, guidance.reference_altitude / 1000.0], 16, REFERENCE)
+	text_at(Vector2(14, 302), "HORIZON %.0f / VERTICAL %+.0f m/s" % [guidance.horizontal_speed, guidance.radial_speed], 16)
+	text_at(Vector2(14, 325), limit, 15, WARN)
+	var footer := "Reference uses projected ship heading" if guidance.radial_degenerate else "Flight continues; guidance never fires engines"
+	if guidance.thrust_active:
+		footer = "Active thrust can change the coast path"
+	text_at(Vector2(14, 347), footer, 15)
+	text_at(Vector2(14, 369), str(orbit_status.get("motion", "")), 15)

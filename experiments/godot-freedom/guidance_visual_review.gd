@@ -19,7 +19,7 @@ func capture(name: String) -> void:
 		push_error("Guidance capture failed")
 		return
 	var file := FileAccess.open(path + "/" + name + ".json", FileAccess.WRITE)
-	file.store_string(JSON.stringify({"license": "BSD-3-Clause; Apsis Drift contributors", "source": "Original project assets rendered natively in Godot", "inspection_relocation": true, "guidance": study.flight_guidance, "flight_state": study.live_bridge.get_state(), "note": "Paused inspection, not achieved orbit or controller qualification"}, "\t"))
+	file.store_string(JSON.stringify({"license": "BSD-3-Clause; Apsis Drift contributors", "source": "Original project assets rendered natively in Godot", "inspection_relocation": true, "guidance": study.flight_guidance, "orbit_status": study.current_orbit_status, "flight_state": study.live_bridge.get_state(), "note": "Paused inspection, not achieved orbit or controller qualification"}, "\t"))
 
 func run() -> void:
 	study = load("res://main.tscn").instantiate()

@@ -44,6 +44,7 @@ func refresh(state: Dictionary, delta: float) -> void:
 		return
 	elapsed = 0
 	guidance_screen.guidance = state.get("guidance", {})
+	guidance_screen.orbit_status = state.get("orbit_status", {})
 	guidance_screen.visible = not guidance_screen.guidance.is_empty()
 	guidance_screen.queue_redraw()
 	for screen in screens:

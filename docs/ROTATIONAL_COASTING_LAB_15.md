@@ -4,6 +4,10 @@
 off also releases rotational stabilization. This is an unsaved native practice
 model, not the completed planetary dynamics, damage or persistence milestone.
 
+Later native lab-3 amendment: [orbit-preserving assist](ORBIT_ASSIST_18.md)
+supersedes automatic translation assistance in space. The angular behavior
+below remains unchanged; lab 2 remains available as a historical test model.
+
 ## Pilot contract
 
 The existing controller layout and saved bindings remain unchanged. Y/Triangle

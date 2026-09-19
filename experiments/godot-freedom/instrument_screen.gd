@@ -34,7 +34,7 @@ func _draw() -> void:
 		row(227, "APOAPSIS", distance_text(state.apoapsis) if state.bound_orbit else "UNBOUND")
 		row(282, "PERIAPSIS", "INTERSECTS BODY" if state.periapsis < 0 else distance_text(state.periapsis), WARN if state.periapsis < state.atmosphere_edge else GREEN)
 		row(337, "ALT / DATUM", distance_text(state.altitude))
-		row(392, "HORIZONTAL", "%.0f m/s" % state.horizontal_speed)
+		row(392, "HORIZON SPEED", "%.0f m/s" % state.horizontal_speed)
 		row(447, "CIRCULAR SPEED", "%.0f m/s" % state.circular_speed)
 		write(Vector2(35, 505), "AIR EDGE %s | Coast forecast only" % distance_text(state.atmosphere_edge), 27, DIM)
 	else:
@@ -70,8 +70,11 @@ func _draw() -> void:
 				draw_rect(Rect2(210, y - 25, 455, 24), Color("19303d"))
 				draw_rect(Rect2(210, y - 25, 455 * value, 24), GREEN if i == 0 else WARN)
 				write(Vector2(704, y), "%3.0f%%" % (value * 100), 34)
-			var inertial_rotation: bool = state.get("flight_model", "") == "thrust-lab-2"
-			row(282, "ASSIST", "ON / LIMITED" if state.assist else ("OFF / COAST" if inertial_rotation else "OFF"), WARN if state.assist else GREEN)
+			var inertial_rotation: bool = state.get("angular_model", 1) == 2
+			var assist_text := "ON / LIMITED" if state.assist else ("OFF / COAST" if inertial_rotation else "OFF")
+			if state.assist and state.get("translation_policy", 1) == 2 and state.get("translation_assist_weight", 1.0) == 0.0:
+				assist_text = "ON / ROTATION"
+			row(282, "ASSIST", assist_text, WARN if state.assist else GREEN)
 			var thrust: Vector3 = state.rcs_acceleration
 			row(344, "ACTUAL X/Y/Z", "%+.0f / %+.0f / %+.0f" % [thrust.x, thrust.y, thrust.z])
 			row(406, "AIR LOAD", "%.1f kPa" % (state.dynamic_pressure / 1000))

@@ -179,6 +179,8 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::enable_thrust_flight);
     godot::ClassDB::bind_method(godot::D_METHOD("enable_surface_practice"),
                                 &FreedomBridge::enable_surface_practice);
+    godot::ClassDB::bind_method(godot::D_METHOD("enable_orbit_practice"),
+                                &FreedomBridge::enable_orbit_practice);
     godot::ClassDB::bind_method(godot::D_METHOD("get_sky_catalog"),
                                 &FreedomBridge::get_sky_catalog);
     godot::ClassDB::bind_method(godot::D_METHOD("start_practice", "reentry"),
@@ -339,6 +341,14 @@ class FreedomBridge : public godot::RefCounted {
   }
 
   auto enable_surface_practice() -> bool {
+    return enable_surface_practice_impl(false);
+  }
+
+  auto enable_orbit_practice() -> bool {
+    return enable_surface_practice_impl(true);
+  }
+
+  auto enable_surface_practice_impl(bool orbital_assist) -> bool {
     try {
       if (!world || world->flight.tick != 0 || world->lab ||
           world->flight.pose.position.latitude_radians !=
@@ -354,6 +364,8 @@ class FreedomBridge : public godot::RefCounted {
                                world->cache, world->flight.tick);
       auto lab_candidate = candidate.flight;
       flight_lab::enable_rigid_attitude(lab_candidate);
+      if (orbital_assist)
+        flight_lab::enable_orbit_preserving_translation(lab_candidate);
       // The legacy-shaped projection is only terrain/camera telemetry, never a
       // replacement legacy replay or a saved career. Commit both views
       // together.
@@ -509,10 +521,14 @@ class FreedomBridge : public godot::RefCounted {
     result["longitude"] = flight.pose.position.longitude_radians;
     result["altitude"] = flight.pose.position.altitude_metres;
     result["planet_radius"] = world->planet.radius.value * 1000.0;
-    result["flight_model"] =
-        world->lab
-            ? (world->lab->angular_model == 2 ? "thrust-lab-2" : "thrust-lab-1")
-            : "legacy";
+    const unsigned lab_version = !world->lab ? 0
+                                 : world->lab->translation_policy == 2
+                                     ? 3
+                                     : world->lab->angular_model;
+    result["flight_model"] = lab_version == 3   ? "thrust-lab-3"
+                             : lab_version == 2 ? "thrust-lab-2"
+                             : lab_version == 1 ? "thrust-lab-1"
+                                                : "legacy";
     if (world->surface_start) {
       const auto& start = *world->surface_start;
       godot::Dictionary reference;
@@ -581,6 +597,11 @@ class FreedomBridge : public godot::RefCounted {
       result["floor_guard"] = lab.floor_guard;
       result["assist"] = lab.assist;
       result["angular_model"] = lab.angular_model;
+      result["translation_policy"] = lab.translation_policy;
+      result["translation_assist_weight"] =
+          flight_lab::assist_translation_weight(world->planet, lab);
+      result["effective_air_density"] =
+          flight_lab::effective_aerodynamic_density(world->planet, lab);
       result["angular_velocity_body"] =
           godot::Vector3(lab.angular.x, lab.angular.y, lab.angular.z);
       result["attitude_stabilized"] = lab.angular_model == 1 || lab.assist;
@@ -591,7 +612,9 @@ class FreedomBridge : public godot::RefCounted {
       result["rcs_acceleration"] = godot::Vector3(
           lab.thrust_body.x, lab.thrust_body.y, lab.thrust_body.z);
       result["checksum"] =
-          godot::String{((lab.angular_model == 2 ? "lab2:" : "lab1:") +
+          godot::String{((lab_version == 3   ? "lab3:"
+                          : lab_version == 2 ? "lab2:"
+                                             : "lab1:") +
                          std::to_string(flight_lab::checksum(lab)))
                             .c_str()};
     }
@@ -744,6 +767,8 @@ class FreedomBridge : public godot::RefCounted {
       if (world->lab) {
         lab_candidate = flight_lab::initial(world->planet, pose, 0,
                                             world->lab->angular_model);
+        if (world->lab->translation_policy == 2)
+          flight_lab::enable_orbit_preserving_translation(*lab_candidate);
         lab_candidate->clearance = candidate.clearance_metres;
         lab_candidate->density = flight_lab::density(world->planet, altitude);
       }
@@ -798,8 +823,12 @@ class FreedomBridge : public godot::RefCounted {
       s.assist = false;
       s.density =
           flight_lab::density(world->planet, reentry ? 90000.0 : 250000.0);
+      const double aerodynamic_density =
+          s.translation_policy == 1
+              ? s.density
+              : flight_lab::effective_aerodynamic_density(world->planet, s);
       s.dynamic_pressure =
-          .5 * s.density * flight_lab::dot(s.velocity, s.velocity);
+          .5 * aerodynamic_density * flight_lab::dot(s.velocity, s.velocity);
       world->advance_thrust(0, {0, 0, 0, 0, 0, 0, 0, false});
       last_error = godot::String{};
       return true;

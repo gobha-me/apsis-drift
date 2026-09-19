@@ -77,6 +77,10 @@ struct State {
   std::optional<RigidOrientation> orientation;
   V torque_body;
   bool torque_saturated{};
+  // Independent experimental translation policy. One preserves historical
+  // assist/checksum behavior; two fades atmospheric support to true vacuum
+  // coasting. This does not select a rotational model or alter saved careers.
+  unsigned translation_policy{1};
   friend auto operator==(const State&, const State&) -> bool = default;
 };
 inline constexpr double mass_kg = 8000;
@@ -117,6 +121,8 @@ inline auto validate(Demand d) -> void {
     throw std::invalid_argument("negative engine demand");
 }
 inline auto validate(const State& s) -> void {
+  if (s.translation_policy != 1 && s.translation_policy != 2)
+    throw std::invalid_argument("unknown flight lab translation policy");
   if (s.angular_model != 1 && s.angular_model != 2)
     throw std::invalid_argument("unknown flight lab angular model");
   if ((s.angular_model == 2) != s.orientation.has_value())
@@ -165,6 +171,13 @@ inline auto validate(const State& s) -> void {
         length(s.back - axes[2]) > 1e-10)
       throw std::invalid_argument("lab basis diverges from authoritative q");
   }
+}
+inline auto enable_orbit_preserving_translation(State& state) -> void {
+  validate(state);
+  if (state.tick != 0 || state.translation_policy != 1)
+    throw std::invalid_argument(
+        "translation policy requires a fresh lab state");
+  state.translation_policy = 2;
 }
 inline auto enable_rigid_attitude(State& state) -> void {
   validate(state);
@@ -224,6 +237,46 @@ inline auto density(const PlanetDescriptor& planet, double altitude) -> double {
   return 1.225 * (planet.atmosphere_pressure.value / 1013.25) *
          std::exp(-std::max(0.0, altitude) / 8500.0);
 }
+// Available translational-assist envelope, independent of the runtime assist
+// toggle. Actual automatic support is this weight only while assist is ON.
+// Policy two has no automatic airless hover: that needs a later explicit mode,
+// not an altitude switch that would erase low-altitude ballistic trajectories.
+inline auto assist_translation_weight(const PlanetDescriptor& planet,
+                                      const State& state) -> double {
+  validate(state);
+  if (planet.radius.value < PlanetRadiusKm::min ||
+      planet.radius.value > PlanetRadiusKm::max ||
+      planet.surface_gravity.value < SurfaceGravityMilliG::min ||
+      planet.surface_gravity.value > SurfaceGravityMilliG::max ||
+      planet.atmosphere_pressure.value > AtmospherePressureMillibars::max)
+    throw std::invalid_argument("invalid translation assist planet");
+  if (state.translation_policy == 1) return 1.0;
+  const double sea_density = density(planet, 0);
+  constexpr double space_density = 1e-6;
+  if (sea_density <= space_density) return 0.0;
+  const double altitude = length(state.position) - planet.radius.value * 1000.0;
+  const double atmosphere_edge = std::max(
+      0.0, 8500 * std::log(std::max(1.0, sea_density / space_density)));
+  if (altitude >= atmosphere_edge) return 0.0;
+  // Explicit C1 density ramp: full support at 0.001 kg/m^3 (or sea-level
+  // density for a thinner atmosphere), exactly zero at the existing air edge.
+  const double full_density = std::min(sea_density, 0.001);
+  const double fraction =
+      std::clamp((density(planet, altitude) - space_density) /
+                     (full_density - space_density),
+                 0.0, 1.0);
+  return fraction * fraction * (3.0 - 2.0 * fraction);
+}
+// The same explicit experimental air/space fade applies to aerodynamic forces
+// regardless of the assist toggle. Raw State::density remains environmental
+// telemetry; policy-two dynamic pressure/drag use this effective density.
+inline auto effective_aerodynamic_density(const PlanetDescriptor& planet,
+                                          const State& state) -> double {
+  const double weight = assist_translation_weight(planet, state);
+  const double raw =
+      density(planet, length(state.position) - planet.radius.value * 1000.0);
+  return state.translation_policy == 1 ? raw : raw * weight;
+}
 inline auto advance(const PlanetDescriptor& planet, double surface,
                     State& state, Demand demand,
                     SimulationSeconds step = kSimulationStep) -> void {
@@ -243,7 +296,11 @@ inline auto advance(const PlanetDescriptor& planet, double surface,
   const double dt = step.count(), radius = planet.radius.value * 1000.0;
   const double distance = length(s.position), altitude = distance - radius;
   s.density = density(planet, altitude);
-  s.dynamic_pressure = .5 * s.density * dot(s.velocity, s.velocity);
+  const double translation_weight =
+      s.translation_policy == 1 ? 1.0 : assist_translation_weight(planet, s);
+  const double aerodynamic_density =
+      s.translation_policy == 1 ? s.density : s.density * translation_weight;
+  s.dynamic_pressure = .5 * aerodynamic_density * dot(s.velocity, s.velocity);
   // Bounded attitude controller: no Euler-angle/gimbal restriction. High q
   // reduces requested rate continuously; this is tuning, not measured
   // aerodynamics.
@@ -333,7 +390,7 @@ inline auto advance(const PlanetDescriptor& planet, double surface,
   V thrust{demand.strafe * side_accel,
            demand.heave * (demand.heave >= 0 ? up_accel : down_accel),
            s.retro * retro_accel - s.main * main_accel};
-  if (demand.assist) {
+  if (demand.assist && s.translation_policy == 1) {
     // Support gravity with actual available thrusters. Upright hover is not
     // free antigravity; inversion/high gravity can saturate the available jets.
     thrust = thrust - to_body(s, gravity);
@@ -341,16 +398,25 @@ inline auto advance(const PlanetDescriptor& planet, double surface,
     if (std::abs(demand.heave) < .001) thrust.y -= air_velocity.y * .65;
     // Deliberately no forward speed hold: releasing main thrust permits
     // coasting.
+  } else if (demand.assist) {
+    const double weight = translation_weight;
+    if (weight > 0) {
+      thrust = thrust - to_body(s, gravity) * weight;
+      if (std::abs(demand.strafe) < .001)
+        thrust.x -= air_velocity.x * .65 * weight;
+      if (std::abs(demand.heave) < .001)
+        thrust.y -= air_velocity.y * .65 * weight;
+    }
   }
   s.thrust_body = {std::clamp(thrust.x, -side_accel, side_accel),
                    std::clamp(thrust.y, -down_accel, up_accel),
                    std::clamp(thrust.z, -main_accel, retro_accel)};
   // D = 1/2 rho v^2 Cd A, resolved against body axes with authored Cd*A values.
-  const V drag{-.5 * s.density * 54 * air_velocity.x *
+  const V drag{-.5 * aerodynamic_density * 54 * air_velocity.x *
                    std::abs(air_velocity.x) / mass_kg,
-               -.5 * s.density * 80 * air_velocity.y *
+               -.5 * aerodynamic_density * 80 * air_velocity.y *
                    std::abs(air_velocity.y) / mass_kg,
-               -.5 * s.density * 3.84 * air_velocity.z *
+               -.5 * aerodynamic_density * 3.84 * air_velocity.z *
                    std::abs(air_velocity.z) / mass_kg};
   const V acceleration = gravity + to_world(s, s.thrust_body + drag);
   s.acceleration = length(acceleration);
@@ -396,6 +462,10 @@ inline auto checksum(const State& s) -> std::uint64_t {
           s.orientation->z, s.torque_body.x, s.torque_body.y, s.torque_body.z})
       add(std::bit_cast<std::uint64_t>(x));
     add(s.torque_saturated);
+  }
+  if (s.translation_policy == 2) {
+    add(0x5452414e534c4154ULL); // TRANSLAT: new policy, no legacy byte changes.
+    add(s.translation_policy);
   }
   return hash;
 }
