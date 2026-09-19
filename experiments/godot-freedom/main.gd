@@ -33,6 +33,7 @@ var pilot_cockpit: Node3D
 var pilot_view := false
 var head_angles := Vector2.ZERO # pitch/yaw; same centerline as recenter and look release
 const CockpitLayout = preload("res://cockpit_layout.gd")
+const AssetMaterials = preload("res://asset_materials.gd")
 var pilot_eye := CockpitLayout.eye()
 const HEAD_YAW_LIMIT := 2.44 # 140 degrees: shoulders remain in the seat
 const FLIGHT_KEYS := [KEY_W, KEY_S, KEY_A, KEY_D, KEY_Q, KEY_E, KEY_SPACE, KEY_CTRL]
@@ -127,6 +128,9 @@ func _ready() -> void:
 			options[pair[0]] = pair[1]
 	var snapshot_path: String = options.get("--snapshot", "")
 	assets_path = options.get("--assets", "")
+	if options.get("--asset-materials", "tuned") not in ["baseline", "tuned"]:
+		fail("Asset materials must be baseline or tuned")
+		return
 	if not pilot_eye.is_finite():
 		fail("Invalid cockpit eye anchor")
 		return
@@ -347,6 +351,8 @@ func load_model(filename: String) -> Node3D:
 	var scene := document.generate_scene(state) as Node3D
 	if scene == null:
 		fail("GLB generated no scene: " + filename)
+	elif filename.begins_with("hero-ship-") or filename.begins_with("hero-cockpit-"):
+		AssetMaterials.apply(scene, filename.begins_with("hero-cockpit-"), options.get("--asset-materials", "tuned"))
 	return scene
 
 
