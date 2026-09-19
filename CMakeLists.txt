@@ -142,6 +142,7 @@ add_library(apsis_drift_lib STATIC
   src/craft_frame.cpp
   src/rigid_body.cpp
   src/vacuum_dynamics.cpp
+  src/touchdown.cpp
   src/flight_deck_acceptance.cpp
   src/flight_input.cpp
   src/intersystem_contract.cpp
@@ -193,7 +194,7 @@ add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/vacuum_dynamics.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/vacuum_dynamics.cpp src/touchdown.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 target_include_directories(apsis_drift_lib
@@ -297,6 +298,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME vacuum-dynamics-contract COMMAND apsis-drift-vacuum-dynamics-tests)
   set_tests_properties(vacuum-dynamics-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
+  target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-touchdown-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME touchdown-envelope-contract COMMAND apsis-drift-touchdown-tests)
+  set_tests_properties(touchdown-envelope-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-rotation-coast-tests
     experiments/godot-freedom/rotation_coast_test.cpp)
   target_link_libraries(apsis-drift-rotation-coast-tests PRIVATE apsis-drift::lib)
