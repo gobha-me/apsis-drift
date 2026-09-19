@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "frames": 960,
+  "unique_source_frames": 949,
+  "seconds": 40,
+  "fps": 24,
+  "source_pixels": [
+    3840,
+    2160
+  ],
+  "deliveries": [
+    {
+      "file": "freedom-preview-4k.mp4",
+      "bytes": 38957561,
+      "sha256": "a27b3b869937f9fabd1e51c9d977b9c54a8ba7beb8d15c0e77a59c7e55efd443",
+      "pixels": [
+        3840,
+        2160
+      ],
+      "full_decode": "passed"
+    },
+    {
+      "file": "freedom-preview-1080p.mp4",
+      "bytes": 7882755,
+      "sha256": "72a176b130a109e1650977b101c52aee913fd0d7cd0a2659b3535cc56d4edc94",
+      "pixels": [
+        1920,
+        1080
+      ],
+      "full_decode": "passed"
+    }
+  ]
+}

@@ -6,6 +6,33 @@
 A deterministic, procedurally generated spaceflight experiment rendered inside
 a terminal.
 
+The existing terminal implementation is retained. The approved next direction
+is [Freedom: native exploration before progression](docs/ROADMAP.md), beginning
+with Godot now [selected for native presentation](docs/GODOT_ADOPTION.md).
+That roadmap describes planned work; the run
+and build instructions below describe the current implementation.
+
+The opt-in [native streaming study](docs/GODOT_STUDY_04.md) now renders a bounded
+spherical terrain cover and whole-planet inspection view from the existing C++
+world. It is an experiment, not yet the playable Freedom milestone.
+
+For handling playtests, the opt-in [thrust flight lab](docs/THRUST_FLIGHT_LAB_09.md)
+adds full attitude, analog main/retro propulsion, coasting, gravity and drag:
+`tools/run_godot_study.sh --stream=true --relief=true --pilot=true --flight-model=thrust --start-paused=true`.
+Existing simulation/replay physics remain the default; landing is not implemented.
+
+[Flight presentation 10](docs/FLIGHT_PRESENTATION_10.md) adds working cockpit
+instruments, a clean/debug toggle, chase-camera orbit, seeded stars and explicit
+orbit/re-entry practice starts. A continuous C++ ascent/coast/return test now
+passes; impacts, landing, heating and damage remain future work.
+
+[Checkpoint 12](docs/NATIVE_CHECKPOINT_12.md) clarifies planet/altitude,
+trace atmosphere, space and orbital trajectory labels without changing controls.
+
+Watch the [40-second Godot technical preview](docs/FREEDOM_PREVIEW_01.md):
+original cockpit, shuttle and station assets, streamed terrain, and the existing
+First Light score. It is a scripted offline rendering preview, not gameplay.
+
 Audio policy is also application-owned. The current
 [audio contract](docs/AUDIO.md) provides deterministic tick-addressed cues,
 bounded non-blocking delivery, optional RtAudio device output, and a no-device

@@ -7777,14 +7777,22 @@ auto deterministic_planetary_flight_replay() -> void {
       planetary_flight_state_checksum(fixture->expected);
   constexpr std::uint64_t expected_checksum{5033951390750856009ULL};
   if (actual_checksum != expected_checksum) {
-    std::fprintf(stderr, "planetary replay checksum: %llu\n",
-                 static_cast<unsigned long long>(actual_checksum));
+    std::fprintf(stderr,
+                 "planetary replay checksums: direct=%llu 30fps=%llu "
+                 "60fps=%llu golden=%llu\n",
+                 static_cast<unsigned long long>(actual_checksum),
+                 static_cast<unsigned long long>(
+                     at_30 ? planetary_flight_state_checksum(*at_30) : 0),
+                 static_cast<unsigned long long>(
+                     at_60 ? planetary_flight_state_checksum(*at_60) : 0),
+                 static_cast<unsigned long long>(expected_checksum));
   }
   check(actual_checksum == expected_checksum,
         "the planetary flight replay must retain its golden checksum");
-  check(at_30 && at_60 &&
-            planetary_flight_state_checksum(*at_30) == expected_checksum &&
-            planetary_flight_state_checksum(*at_60) == expected_checksum,
+  // Cadence independence and compatibility with an old golden are separate
+  // contracts. Compare complete states here; retain the golden check above.
+  check(at_30 && at_60 && *at_30 == fixture->expected &&
+            *at_60 == fixture->expected,
         "render cadence must not alter planetary flight state");
   check(
       fixture->expected.regime == FlightRegime::orbital &&
@@ -10929,7 +10937,15 @@ auto planetfall_acceptance_contract() -> void {
 
 } // namespace
 
-auto main() -> int {
+auto main(int argc, char** argv) -> int {
+  if (argc == 2 && std::string_view{argv[1]} == "--planetary-replay") {
+    deterministic_planetary_flight_replay();
+    return failures == 0 ? 0 : 1;
+  }
+  if (argc != 1) {
+    std::fputs("usage: apsis-drift-tests [--planetary-replay]\n", stderr);
+    return 2;
+  }
   generation_failure_matrix();
   deterministic_generation();
   seed_derivation_contract();

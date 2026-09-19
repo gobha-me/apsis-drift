@@ -662,13 +662,22 @@ auto validate_planetary_flight_state(const PlanetDescriptor& planet,
   return {};
 }
 
-auto advance_planetary_flight(const PlanetDescriptor& planet,
-                              PlanetaryFlightEnvironment environment,
-                              PlanetaryFlightState& state,
-                              std::span<const FlightCommand> commands,
-                              SimulationSeconds step,
-                              PlanetaryFlightRules rules) noexcept
+auto advance_planetary_flight(
+    const PlanetDescriptor& planet, PlanetaryFlightEnvironment environment,
+    PlanetaryFlightState& state, std::span<const FlightCommand> commands,
+    SimulationSeconds step, PlanetaryFlightRules rules,
+    std::optional<PlanetaryAnalogInput> analog) noexcept
     -> std::expected<void, PlanetaryFlightError> {
+  if (analog) {
+    for (double axis :
+         {analog->forward, analog->turn, analog->strafe, analog->vertical}) {
+      if (!std::isfinite(axis) || axis < -1.0 || axis > 1.0)
+        return std::unexpected{PlanetaryFlightError::invalid_command};
+    }
+    // A tick has one input source; never silently override a recorded command.
+    if (!commands.empty())
+      return std::unexpected{PlanetaryFlightError::invalid_command};
+  }
   const auto bands = flight_regime_bands(planet);
   if (!bands) return std::unexpected{bands.error()};
   if (!rules.enforce_thermal_abort && state.thermal.abort_latched) {
@@ -709,6 +718,13 @@ auto advance_planetary_flight(const PlanetDescriptor& planet,
   }
   for (const auto& command : commands)
     apply_command(next, command.kind);
+  if (analog) {
+    next.mode = FlightMode::manual;
+    next.controls = {analog->forward > 0,  analog->forward < 0,
+                     analog->turn < 0,     analog->turn > 0,
+                     analog->strafe < 0,   analog->strafe > 0,
+                     analog->vertical > 0, analog->vertical < 0};
+  }
   if (rules.enforce_thermal_abort &&
       next.thermal.load_units == kMaximumThermalLoadUnits) {
     next.thermal.abort_latched = true;
@@ -729,6 +745,12 @@ auto advance_planetary_flight(const PlanetDescriptor& planet,
                   static_cast<double>(next.controls.strafe_left);
   double vertical = static_cast<double>(next.controls.rise) -
                     static_cast<double>(next.controls.fall);
+  if (analog) {
+    forward = analog->forward;
+    turn = analog->turn;
+    strafe = analog->strafe;
+    vertical = analog->vertical;
+  }
   if (next.mode == FlightMode::autopilot) {
     forward = 0.72;
     turn = 0.055;

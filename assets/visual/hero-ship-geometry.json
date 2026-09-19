@@ -1,0 +1,30 @@
+{
+  "asset": "hero-ship",
+  "blender": "5.2.2 LTS",
+  "objects": 935,
+  "evaluated_triangles": 153886,
+  "collections": {
+    "00 | continuous pressure hull and thermal belly": 3480,
+    "05 | shared flight cell envelope": 1294,
+    "20 | main propulsion and thrust frame": 36072,
+    "30 | inset machinery and thermal management": 71952,
+    "40 | stowed landing bay doors": 2820,
+    "41 | ventral lift propulsion": 14064,
+    "50 | markings and captive hardware": 24204
+  },
+  "bounds_min": [
+    -7.0,
+    -9.319999694824219,
+    -0.5999999642372131
+  ],
+  "bounds_max": [
+    7.0,
+    10.0,
+    3.334056854248047
+  ],
+  "dimensions_m": [
+    14.0,
+    19.32,
+    3.934
+  ]
+}

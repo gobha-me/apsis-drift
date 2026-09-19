@@ -1,0 +1,57 @@
+{
+  "asset_design_version": 3,
+  "capture_pixels": [
+    3840,
+    2160
+  ],
+  "draw_calls": 47.0,
+  "engine": "4.7.2-stable (official)",
+  "experimental_relief_version": 1.0,
+  "frame_max_ms": 8.074,
+  "frame_p50_ms": 6.903,
+  "frame_p95_ms": 7.926,
+  "godot_static_memory_bytes": 79391225.0,
+  "godot_video_memory_bytes": 1018481184.0,
+  "head_angles_radians": [
+    -0.189999997615814,
+    0.0
+  ],
+  "kind": "windowed viewport capture; not a gameplay benchmark",
+  "live_cpp": true,
+  "live_state": {
+    "checksum": "16433164133893615211",
+    "clearance_metres": 60.0,
+    "dropped_seconds": 0.0,
+    "speed_metres_per_second": 0.0,
+    "tick": 0
+  },
+  "load_ms": 101.417,
+  "pilot_view": false,
+  "planet_stream": {
+    "cpu_mesh_bytes": 2774493,
+    "generated": 27,
+    "generated_total": 27,
+    "ready": true,
+    "resident_tiles": 27,
+    "retired_total": 0,
+    "reused": 0,
+    "staged_and_resident_tiles": 27,
+    "swaps": 1,
+    "worker_ms": 39.049255
+  },
+  "render_primitives": 199984.0,
+  "renderer": "forward_plus",
+  "replay_running": false,
+  "replay_seconds": 0.0,
+  "sample_frames": 120,
+  "schema_version": 1,
+  "snapshot_seed": "42",
+  "terrain_generator_version": 1.0,
+  "terrain_material": "presentation-only mineral layers; no displacement",
+  "view": 4,
+  "viewport": [
+    3840.0,
+    2160.0
+  ],
+  "vram_note": "Godot estimate, not process peak VRAM; excludes some driver allocations"
+}

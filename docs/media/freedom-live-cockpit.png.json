@@ -1,0 +1,38 @@
+{
+  "capture_pixels": [
+    3840,
+    2160
+  ],
+  "draw_calls": 83.0,
+  "engine": "4.7.2-stable (official)",
+  "frame_max_ms": 61.529,
+  "frame_p50_ms": 6.934,
+  "frame_p95_ms": 7.818,
+  "godot_static_memory_bytes": 90261690.0,
+  "godot_video_memory_bytes": 1026450976.0,
+  "kind": "windowed viewport capture; not a gameplay benchmark",
+  "live_cpp": true,
+  "live_state": {
+    "checksum": "14525315731822472531",
+    "clearance_metres": 62.0000012814999,
+    "dropped_seconds": 0.025,
+    "speed_metres_per_second": 71.8891894206324,
+    "tick": 142
+  },
+  "load_ms": 201.305,
+  "pilot_view": true,
+  "render_primitives": 911558.0,
+  "renderer": "forward_plus",
+  "replay_running": false,
+  "replay_seconds": 0.0,
+  "sample_frames": 120,
+  "schema_version": 1,
+  "snapshot_seed": "42",
+  "terrain_generator_version": 1.0,
+  "view": 1,
+  "viewport": [
+    3840.0,
+    2160.0
+  ],
+  "vram_note": "Godot estimate, not process peak VRAM; excludes some driver allocations"
+}

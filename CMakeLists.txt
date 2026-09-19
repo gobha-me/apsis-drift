@@ -17,6 +17,13 @@ option(APSIS_DRIFT_TESTS "Build the Apsis Drift tests" ON)
 option(APSIS_DRIFT_RTAUDIO "Build the RtAudio output backend" ON)
 option(APSIS_DRIFT_MIDI_SPIKE
        "Build the isolated deterministic MIDI score research spike" OFF)
+option(APSIS_DRIFT_GODOT_SPIKE
+       "Build the isolated C++ world snapshot for the Godot evaluation" OFF)
+option(APSIS_DRIFT_GODOT_LIVE
+       "Build the optional experimental Godot live C++ adapter" OFF)
+if (APSIS_DRIFT_GODOT_LIVE AND NOT APSIS_DRIFT_GODOT_SPIKE)
+  message(FATAL_ERROR "APSIS_DRIFT_GODOT_LIVE requires APSIS_DRIFT_GODOT_SPIKE")
+endif ()
 set(APSIS_DRIFT_TERMFORGE_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../termforge"
     CACHE PATH "Path to a TermForge source checkout")
@@ -205,6 +212,13 @@ add_executable(apsis-drift
   src/main.cpp
 )
 target_link_libraries(apsis-drift PRIVATE apsis-drift::lib)
+
+if (APSIS_DRIFT_GODOT_SPIKE)
+  if (APSIS_DRIFT_GODOT_LIVE)
+    set_target_properties(apsis_drift_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  endif ()
+  add_subdirectory(experiments/godot-freedom)
+endif ()
 
 add_library(apsis_drift_asset_manifest STATIC
   src/asset_manifest.cpp

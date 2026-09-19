@@ -2,6 +2,464 @@
   "schema_version": 1,
   "assets": [
     {
+      "id": "visual/terrain-continuity-11",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-terrain-85km-v11.png",
+        "docs/media/freedom-terrain-85km-v11.json",
+        "docs/media/freedom-terrain-30km-v11.png",
+        "docs/media/freedom-terrain-30km-v11.json"
+      ],
+      "purpose": "4K native inspection of cross-LOD normal continuity and distance-filtered slope shading at 30 and 85 km; stationary survey fixtures, not flight or benchmark evidence",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom study",
+        "scenario": "Stationary 30 km and 85 km survey; complete cover replacement and worker-idle checks before capture",
+        "application_version": "0.4.44 plus terrain continuity 11",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {
+            "planet_seed": 42,
+            "experimental_relief_version": 1,
+            "latitude_radians": 0.25,
+            "longitude_radians": 0.4,
+            "viewport": "3840x2160",
+            "input_script": "experiments/godot-freedom/terrain_transition_review.gd",
+            "timing": "Asynchronous completion, not pixel-deterministic replay; actual state and tile counts in adjacent JSON",
+            "sources": "Original ship GLB and authoritative C++ terrain; no external or generated image source"
+          }
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/streaming.hpp", "experiments/godot-freedom/terrain.gdshader", "experiments/godot-freedom/terrain_transition_review.gd"]
+      }
+    },
+    {
+      "id": "visual/flight-presentation-10",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-live-instruments-v10.png",
+        "docs/media/freedom-live-instruments-v10.json",
+        "docs/media/freedom-orbit-stars-v10.png",
+        "docs/media/freedom-orbit-stars-v10.json",
+        "docs/media/freedom-reentry-v10.png",
+        "docs/media/freedom-reentry-v10.json"
+      ],
+      "purpose": "Native 4K review of live cockpit instruments, seeded preview stars and an explicit atmospheric-return practice start; not proof of ascent or a sustained performance benchmark",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom study",
+        "scenario": "Presentation 10: cockpit near surface; stationary 650 km sky inspection; 90 km descending practice fixture",
+        "application_version": "0.4.44 plus flight presentation 10",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {
+            "planet_seed": 42,
+            "experimental_relief_version": 1,
+            "flight_model": "thrust-lab-1",
+            "sky_catalog_version": 1,
+            "viewport": "3840x2160",
+            "input_script": "experiments/godot-freedom/presentation_smoke.gd",
+            "timing": "Live frame cadence; synthetic events, not pixel-deterministic replay",
+            "state": "Adjacent JSON records identify relocation and actual C++ state",
+            "sources": "Original code-authored cockpit and ship GLBs; C++ procedural terrain and star identities; runtime GDScript instruments and shader atmosphere"
+          }
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/presentation_smoke.gd"]
+      }
+    },
+    {
+      "id": "visual/flight-instrument-sky-code",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "experiments/godot-freedom/instrument_screen.gd",
+        "experiments/godot-freedom/flight_status.gd",
+        "experiments/godot-freedom/flight_displays.gd",
+        "experiments/godot-freedom/navigation_sky.gd",
+        "experiments/godot-freedom/navigation_sky.gdshader"
+      ],
+      "purpose": "Original runtime instrument graphics and bounded procedural star/atmosphere presentation; no external image model or bitmap source",
+      "edits": ["Adjusted display geometry to revision-5 bezels after native capture inspection; decorrelated catalog directions and refined star splats"],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-18",
+        "construction": "Godot Control drawing into three SubViewports; a runtime texture from C++ star identities; original short analytic atmosphere shader",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "visual/cockpit-control-clearance-07",
+      "media_type": "visual", "source_kind": "capture",
+      "files": ["docs/media/freedom-cockpit-clear-small-v7.png", "docs/media/freedom-cockpit-clear-medium-v7.png", "docs/media/freedom-cockpit-clear-tall-v7.png", "docs/media/freedom-cockpit-controls-side-v7.png"],
+      "purpose": "Native review of lowered FLIGHT/JUMP pods, clear displays and retained synthetic seated fit",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift cockpit fit inspection",
+        "scenario": "Flight cell 5 / control layout 2 / three adjusted eye positions",
+        "application_version": "0.4.44 plus cockpit control clearance 07",
+        "date": "2026-09-18",
+        "deterministic_inputs": {"values": {"geometry_revision": 5, "control_layout_revision": 2, "viewport": "3840x2160", "poses": "assets/visual/cockpit-fit-report.json", "camera_plan": "experiments/godot-freedom/cockpit_fit_review.gd", "instrument_state": "static artwork"}},
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "Blender 5.2.2 LTS", "tools/build_flight_cell.py"]
+      }
+    },
+    {
+      "id": "visual/controller-foundation-06",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": ["docs/media/freedom-controller-menu-v6.png"],
+      "purpose": "Native 1080p controller settings and remapping screen; synthetic controller integration test, not physical device qualification",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom study",
+        "scenario": "Controller foundation 06 / pause menu during streamed C++ flight",
+        "application_version": "0.4.44 plus controller foundation 06",
+        "date": "2026-09-18",
+        "deterministic_inputs": {"values": {"planet_seed": 42, "experimental_relief_version": 1, "viewport": "1920x1080", "input_script": "experiments/godot-freedom/controller_smoke.gd", "timing": "live frame cadence; synthetic event sequence, not pixel-deterministic replay", "controller": "synthetic mapped events; automatic prompt family falls back to Xbox labels", "instrument_state": "static artwork"}},
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/pause_menu.gd", "experiments/godot-freedom/controller_smoke.gd"]
+      }
+    },
+    {
+      "id": "visual/cockpit-fit-fixtures-05",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": ["assets/visual/cockpit-fit-small.glb", "assets/visual/cockpit-fit-medium.glb", "assets/visual/cockpit-fit-tall.glb", "assets/visual/cockpit-fit-report.json"],
+      "purpose": "Optional synthetic suited mannequins for 1.60, 1.78 and 1.96 metre seated design fixtures; not finished characters or population coverage",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors", "date": "2026-09-18",
+        "construction": "Original segmented mannequin geometry using tools/flight_cell.py synthetic proportions and two-segment limb poses, authored/exported by tools/build_flight_cell.py in Blender; no downloaded human model or anthropometric certification",
+        "derived_inputs": ["visual/hero-asset-toolkit"]
+      }
+    },
+    {
+      "id": "visual/cockpit-fit-review-05",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-fit-exterior-v5.png", "docs/media/freedom-fit-hull-cutaway-v5.png",
+        "docs/media/freedom-fit-side-v5.png", "docs/media/freedom-fit-small-v5.png",
+        "docs/media/freedom-fit-medium-v5.png", "docs/media/freedom-fit-tall-v5.png",
+        "docs/media/freedom-fit-eye-small-v5.png", "docs/media/freedom-fit-eye-medium-v5.png",
+        "docs/media/freedom-fit-eye-tall-v5.png", "docs/media/freedom-fit-shuttle-v5.png",
+        "docs/media/freedom-fit-terrain-v5.png"
+      ],
+      "purpose": "Native shared cockpit/exterior glazing, adjustable seated fit and reach inspection; cutaways deliberately remove skins and near-side secondary console; not gameplay or certified ergonomics",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native cockpit fit inspection",
+        "scenario": "Revision 5 / real shared glazing / three adjusted seated design fixtures",
+        "application_version": "0.4.44 plus flight-cell revision 5",
+        "date": "2026-09-18",
+        "deterministic_inputs": {"values": {"geometry_revision": 5, "viewport": "3840x2160", "poses": "assets/visual/cockpit-fit-report.json", "camera_plan": "experiments/godot-freedom/cockpit_fit_review.gd; terrain frame uses film.gd cabin review midpoint", "terrain_frame": "planet seed 42, relief 1, elevated stationary survey; not gameplay", "instrument_state": "static artwork"}},
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "Blender 5.2.2 LTS", "tools/build_flight_cell.py", "experiments/godot-freedom/film.gd"]
+      }
+    },
+    {
+      "id": "visual/cockpit-dashboard-review-04",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": ["docs/media/freedom-cockpit-dashboard-v4.png", "docs/media/freedom-cockpit-dashboard-left-v4.png"],
+      "purpose": "Native 4K seated inspection of revision-four closed forward dashboard and removal of nonfunctional HUD frame",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom film review rig",
+        "scenario": "cabin review frames 1 and 0; original seated eye and bounded head turn",
+        "application_version": "0.4.44 plus cockpit geometry revision 4",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {"planet_seed": "42", "experimental_relief_version": 1, "viewport": "3840x2160", "cockpit_geometry_revision": 4, "instruments": "static artwork"}
+        },
+        "tooling": ["Blender 5.2.2 LTS", "Godot 4.7.2 stable / Vulkan Forward+", "tools/build_hero_assets.py", "experiments/godot-freedom/film.gd"]
+      }
+    },
+    {
+      "id": "visual/freedom-preview-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/freedom-preview-4k.mp4",
+        "assets/visual/freedom-preview-1080p.mp4"
+      ],
+      "purpose": "Forty-second scripted Godot technical preview with original hero geometry, C++ procedural terrain and the existing First Light soundtrack; not gameplay or a real-time benchmark",
+      "edits": [
+        "Rendered 960 actual 3840x2160 Godot Vulkan viewport frames at a frame-addressed 24 FPS timeline",
+        "Applied code-authored surface finish and descriptor-gated optical atmosphere review shells, with in-engine camera animation, titles and fades",
+        "Mixed the existing C++ music-only First Light render with fades and loudness normalization",
+        "Encoded SDR BT.709 H.264/AAC 4K and downsampled 1080p deliveries"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause AND LicenseRef-Apsis-First-Light-Generated-Output",
+        "terms": "docs/licenses/FREEDOM_PREVIEW_01.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; First Light ambient source generated with Stable Audio 2.5 through Venice.ai; rendered with Godot Engine"
+      },
+      "derived": {
+        "parents": ["visual/hero-cockpit", "visual/hero-ship", "visual/hero-station", "music/first-light-score", "music/first-light-bank"],
+        "transformation": "tools/render_freedom_film.sh; frame-addressed Godot rendering with original C++ planet seed 42 and experimental relief recipe 1; native optical/material appearance pass; offline C++ MIDI render; FFmpeg encoding and soundtrack mix",
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "C++ apsis-drift-audio-pack-audition / TinySoundFont", "FFmpeg libx264 / AAC"],
+        "date": "2026-09-18"
+      }
+    },
+    {
+      "id": "visual/freedom-preview-poster",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": ["docs/media/freedom-preview-poster.png"],
+      "purpose": "Unmodified orbital frame from the native 4K preview sequence; atmospheric appearance prototype",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom film rig",
+        "scenario": "freedom-preview-01 / world / frame 84",
+        "application_version": "0.4.44 plus native preview 01",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {"planet_seed": "42", "experimental_relief_version": 1, "frame": 84, "fps": 24, "viewport": "3840x2160", "optical_shells": "descriptor-gated visual prototype, not simulated weather"}
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/film.gd", "experiments/godot-freedom/film_plan.gd"]
+      }
+    },
+    {
+      "id": "visual/freedom-preview-cockpit",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": ["docs/media/freedom-preview-cockpit.png"],
+      "purpose": "Unmodified native 4K film frame for cockpit detail review; instruments remain static art",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom film rig",
+        "scenario": "freedom-preview-01 / cabin / frame 552",
+        "application_version": "0.4.44 plus native preview 01",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {"planet_seed": "42", "experimental_relief_version": 1, "frame": 552, "fps": 24, "viewport": "3840x2160", "instruments": "static art, not live telemetry"}
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/film.gd", "experiments/godot-freedom/film_plan.gd"]
+      }
+    },
+    {
+      "id": "visual/freedom-native-study-04",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-stream-orbit-v4.png",
+        "docs/media/freedom-stream-approach-v4.png",
+        "docs/media/freedom-stream-cockpit-v4.png"
+      ],
+      "purpose": "Native bounded spherical streaming evidence; scripted survey/approach is not simulated orbital flight or completed circumnavigation",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom study 04",
+        "scenario": "bounded planet tiles, orbit inspection, scripted approach and live surface cockpit",
+        "application_version": "0.4.44 plus isolated study 04",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {
+            "planet_seed": "42",
+            "terrain_generator_version": 1,
+            "experimental_relief_version": 1,
+            "viewport": "3840x2160",
+            "max_resident_tiles": 384,
+            "state": "Camera/survey route and actual state in adjacent JSON; capture scheduling is wall-time based"
+          }
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/streaming.hpp", "experiments/godot-freedom/planet_stream.gd", "experiments/godot-freedom/stream_smoke.gd", "experiments/godot-freedom/terrain.gdshader"]
+      }
+    },
+    {
+      "id": "visual/freedom-native-study-03",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-cabin-right-v3.png",
+        "docs/media/freedom-cabin-left-v3.png",
+        "docs/media/freedom-cabin-floor-v3.png",
+        "docs/media/freedom-cabin-aft-v3.png",
+        "docs/media/freedom-cabin-flight-v3.png",
+        "docs/media/freedom-ship-belly-v3.png",
+        "docs/media/freedom-terrain-relief-v3.png"
+      ],
+      "purpose": "Native revision-three geometry and explicitly experimental C++ relief review; not finished production art",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native Freedom study 03",
+        "scenario": "seated cabin, mounting structure, flight gear state and optional relief",
+        "application_version": "0.4.44 plus isolated study 03",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {
+            "planet_seed": "42",
+            "terrain_generator_version": 1,
+            "experimental_relief_version": "1 in terrain/live cockpit; 0 in other views",
+            "viewport": "3840x2160",
+            "assets": "Code-authored revision-three cockpit and ship near GLBs",
+            "state": "Camera angles and actual live state recorded in adjacent JSON; capture scheduling is wall-time based"
+          }
+        },
+        "tooling": ["Blender 5.2.2 LTS", "Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/main.gd", "experiments/godot-freedom/relief.hpp", "experiments/godot-freedom/terrain.gdshader"]
+      }
+    },
+    {
+      "id": "visual/freedom-live-study-02",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-live-flight.png",
+        "docs/media/freedom-live-cockpit.png"
+      ],
+      "purpose": "Native GPU evidence of optional live C++ flight and cockpit presentation; not production art",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native live C++ flight study",
+        "scenario": "freedom-godot-study-02",
+        "application_version": "0.4.44 plus isolated study 02",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {
+            "planet_seed": "42",
+            "terrain_generator_version": 1,
+            "snapshot_schema_version": 1,
+            "viewport": "3840x2160",
+            "input": "Synthetic native key events and simulated focus notifications; frame-addressed smoke, not canonical tick replay",
+            "state": "Actual C++ final tick/checksum recorded in adjacent JSON; wall-time capture scheduling varies",
+            "assets": "Existing BSD-3-Clause hero-ship and hero-cockpit near GLBs"
+          }
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "godot-cpp 4.5 / MIT", "experiments/godot-freedom/live_smoke.gd"]
+      }
+    },
+    {
+      "id": "visual/freedom-native-study-01",
+      "media_type": "visual",
+      "source_kind": "capture",
+      "files": [
+        "docs/media/freedom-native-ship.png",
+        "docs/media/freedom-native-station.png",
+        "docs/media/freedom-native-cockpit.png",
+        "docs/media/freedom-native-terrain.png"
+      ],
+      "purpose": "Direct native viewport evidence for the bounded Godot evaluation, not finished production artwork",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "capture": {
+        "application": "Apsis Drift native presentation study",
+        "scenario": "freedom-godot-study-01",
+        "application_version": "0.4.44 plus isolated study 01",
+        "date": "2026-09-18",
+        "deterministic_inputs": {
+          "values": {
+            "planet_seed": "42",
+            "terrain_generator_version": 1,
+            "snapshot_schema_version": 1,
+            "samples_per_axis": 129,
+            "span_metres": 64000,
+            "assets": "Existing BSD-3-Clause hero-ship, hero-cockpit and hero-station near GLBs",
+            "presentation": "Code-authored sky and lighting fixtures; no external image inputs"
+          }
+        },
+        "tooling": ["Godot 4.7.2 stable / Vulkan Forward+", "experiments/godot-freedom/main.gd"]
+      }
+    },
+    {
       "id": "visual/title-alphabet",
       "media_type": "visual",
       "source_kind": "code-authored",
@@ -476,6 +934,274 @@
         "generation_date": "2026-09-01",
         "source_output": "Original MP3 SHA-256 f071e2f404be9da5733f1f0df37682e0362f040618e486a8512e7550d89bb0bd; retained outside the repository generation workspace",
         "seed": {"unavailable": "the provider did not expose a seed"}
+      }
+    },
+    {
+      "id": "visual/wayfinder-design-family",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/build_visual_designs.py",
+        "docs/VISUAL_DESIGN_KIT.md",
+        "assets/visual/apsis-drift-design-board.png",
+        "assets/visual/wayfinder-cockpit.blend",
+        "assets/visual/wayfinder-cockpit.glb",
+        "assets/visual/wayfinder-cockpit-preview.png",
+        "assets/visual/wayfinder-courier.blend",
+        "assets/visual/wayfinder-courier.glb",
+        "assets/visual/wayfinder-courier-preview.png",
+        "assets/visual/origin-apse-station.blend",
+        "assets/visual/origin-apse-station.glb",
+        "assets/visual/origin-apse-station-preview.png"
+      ],
+      "purpose": "Editable high-detail cockpit, starter courier, and Origin Station design masters with portable exchange models and remote-review PNG renders",
+      "edits": [
+        "Rendered deterministic presentation previews from the editable Blender masters",
+        "Exported portable GLB exchange models from the same authored scenes",
+        "Composed the three previews into one labeled remote-review design board",
+        "2026-09-18: Removed private source-path PNG metadata; verified decoded pixel signatures unchanged"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-17",
+        "construction": "Authored deterministically in Blender 5.2 as named primitive-based assemblies, repository-owned materials, lights, cameras, scene metadata, GLB exports, and PNG previews using tools/build_visual_designs.py; the design board was composed from those previews with ImageMagick 7",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "visual/hero-asset-toolkit",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/build_hero_assets.py",
+        "tools/build_flight_cell.py",
+        "tools/flight_cell.py",
+        "tools/verify_flight_cell.py",
+        "experiments/godot-freedom/cockpit-layout.json",
+        "experiments/godot-freedom/cockpit_layout.gd",
+        "experiments/godot-freedom/cockpit_fit_review.gd",
+        "docs/COCKPIT_FIT_05.md",
+        "tools/render_hero_views.py",
+        "tools/verify_hero_assets.py",
+        "tools/verify_cabin_structure.py",
+        "tools/review_hero_lods.py",
+        "tools/export_hero_lods.py",
+        "tools/package_hero_assets.py",
+        "tools/compose_hero_board.sh",
+        "docs/HERO_ASSET_REVIEW.md",
+        "docs/GODOT_STUDY_03.md"
+      ],
+      "purpose": "Reproducible geometry construction through shared flight-cell revision five, native fit review, semantic reduction, mounting-envelope and GLB verification",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-17",
+        "construction": "Original Python-authored Blender geometry and shader nodes, shell-authored contact sheet composition, and binary GLB validation; Blender built-in font and installed DejaVu glyphs used for labels; no external model or texture packs",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "visual/hero-cockpit",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "assets/visual/hero-cockpit.blend",
+        "assets/visual/hero-cockpit-view-01.png",
+        "assets/visual/hero-cockpit-view-02.png",
+        "assets/visual/hero-cockpit-hero.glb",
+        "assets/visual/hero-cockpit-near.glb",
+        "assets/visual/hero-cockpit-mid.glb",
+        "assets/visual/hero-cockpit-far.glb",
+        "assets/visual/hero-cockpit-geometry.json",
+        "assets/visual/hero-cockpit-lods.json",
+        "assets/visual/hero-cockpit-lod-near.png",
+        "assets/visual/hero-cockpit-lod-mid.png",
+        "assets/visual/hero-cockpit-lod-far.png"
+      ],
+      "purpose": "Revision-five cockpit master and four geometry tiers with shared ship glazing and control-layout refinement 2; earlier PNGs remain historical, current pod-clearance evidence is cockpit-control-clearance-07",
+      "edits": [
+        "2026-09-18: Removed private source-path PNG metadata; verified decoded pixel signatures unchanged",
+        "2026-09-18 control layout 2: Lowered FLIGHT/JUMP pods 110 mm and moved them 90 mm toward pilot, with flatter operating faces, shorter attached risers and relocated guarded buttons; retained display/eye/grip positions; 1683 sampled display sightlines across three seated fixtures pass",
+        "2026-09-18 revision 5: Shared metre-scale flight cell with ship; adjustable seat/pedal fixtures, near primary controls and distant service cabinets; real glazing and updated native camera anchor; optional mannequins excluded from cockpit game tiers",
+        "2026-09-18 revision 4: Enclosed tapered forward avionics dashboard, attached bearers, access covers and demister details; removed nonfunctional HUD frame; retained pilot/controls position and closed deck in far proxy",
+        "2026-09-18: Closed cabin, inward/upward control faces, connected structural mounts, floor panels, cable trays and retained low-tier floor/backing; native renders reviewed in study 03",
+        "Iterated geometry, camera framing and surface separation after direct render inspection",
+        "Exported material-factor GLBs; preserved procedural finish in the editable Blender source"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-17",
+        "construction": "Authored by tools/build_hero_assets.py with Blender 5.2.2 LTS; original mesh profiles, named functional collections, material shader nodes, and separate authored silhouette proxies; rendered with CPU Cycles and denoising",
+        "derived_inputs": [
+          "visual/hero-asset-toolkit"
+        ]
+      }
+    },
+    {
+      "id": "visual/hero-ship",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "assets/visual/hero-ship.blend",
+        "assets/visual/hero-ship-view-01.png",
+        "assets/visual/hero-ship-view-02.png",
+        "assets/visual/hero-ship-hero.glb",
+        "assets/visual/hero-ship-near.glb",
+        "assets/visual/hero-ship-mid.glb",
+        "assets/visual/hero-ship-far.glb",
+        "assets/visual/hero-ship-geometry.json",
+        "assets/visual/hero-ship-lods.json",
+        "assets/visual/hero-ship-lod-near.png",
+        "assets/visual/hero-ship-lod-mid.png",
+        "assets/visual/hero-ship-lod-far.png"
+      ],
+      "purpose": "Revision-five ship master and four tiers with shared cockpit flight cell, real window apertures, revised nose and stowed gear; older PNGs remain historical, current evidence is cockpit-fit-review-05",
+      "edits": [
+        "2026-09-18: Removed private source-path PNG metadata; verified decoded pixel signatures unchanged",
+        "2026-09-18 revision 5: Removed opaque hull behind canopy, built glazing from shared cockpit coordinates, revised nose roof and surface markings, moved forward RCS behind glazing; native assembly mounts the separate cockpit module at its documented translation",
+        "2026-09-18: Stowed flight configuration with closed landing bay doors, editable excluded deployed-gear concept, and ventral lift units with thrust ties; native underside render reviewed in study 03",
+        "Iterated geometry, camera framing and surface separation after direct render inspection",
+        "Exported material-factor GLBs; preserved procedural finish in the editable Blender source"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-17",
+        "construction": "Authored by tools/build_hero_assets.py with Blender 5.2.2 LTS; original mesh profiles, named functional collections, material shader nodes, and separate authored silhouette proxies; rendered with CPU Cycles and denoising",
+        "derived_inputs": [
+          "visual/hero-asset-toolkit"
+        ]
+      }
+    },
+    {
+      "id": "visual/hero-station",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "assets/visual/hero-station.blend",
+        "assets/visual/hero-station-view-01.png",
+        "assets/visual/hero-station-view-02.png",
+        "assets/visual/hero-station-hero.glb",
+        "assets/visual/hero-station-near.glb",
+        "assets/visual/hero-station-mid.glb",
+        "assets/visual/hero-station-far.glb",
+        "assets/visual/hero-station-geometry.json",
+        "assets/visual/hero-station-lods.json",
+        "assets/visual/hero-station-lod-near.png",
+        "assets/visual/hero-station-lod-mid.png",
+        "assets/visual/hero-station-lod-far.png"
+      ],
+      "purpose": "Detailed revision-two station master with direct Cycles render evidence, inspection view and four measured geometry tiers",
+      "edits": [
+        "2026-09-18: Removed private source-path PNG metadata; verified decoded pixel signatures unchanged",
+        "Iterated geometry, camera framing and surface separation after direct render inspection",
+        "Exported material-factor GLBs; preserved procedural finish in the editable Blender source"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-17",
+        "construction": "Authored by tools/build_hero_assets.py with Blender 5.2.2 LTS; original mesh profiles, named functional collections, material shader nodes, and separate authored silhouette proxies; rendered with CPU Cycles and denoising",
+        "derived_inputs": [
+          "visual/hero-asset-toolkit"
+        ]
+      }
+    },
+    {
+      "id": "visual/hero-design-board",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hero-design-board.png",
+        "assets/visual/hero-lod-board.png"
+      ],
+      "purpose": "Remote review contact sheet showing full primary and inspection frames of all three revision-two assets",
+      "edits": [
+        "Fit full frames without cropping, add labels, and assemble paired views",
+        "2026-09-18: Removed private source-path PNG metadata; verified decoded pixel signatures unchanged"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "derived": {
+        "parents": [
+          "visual/hero-cockpit",
+          "visual/hero-ship",
+          "visual/hero-station"
+        ],
+        "transformation": "ImageMagick fit and labeled composition of six direct Blender renders using tools/compose_hero_board.sh",
+        "tooling": [
+          "Blender 5.2.2 LTS / Cycles",
+          "ImageMagick 7"
+        ],
+        "date": "2026-09-17"
       }
     }
   ]

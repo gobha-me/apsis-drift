@@ -1,0 +1,30 @@
+{
+  "asset": "hero-station",
+  "blender": "5.2.2 LTS",
+  "objects": 4938,
+  "evaluated_triangles": 814864,
+  "collections": {
+    "00 | habitat structural rings": 157056,
+    "10 | central nonrotating core and spokes": 27732,
+    "20 | axial drydock and docking spurs": 63268,
+    "30 | photovoltaic wings and radiators": 527660,
+    "40 | propellant farm": 12768,
+    "50 | habitat service detail": 24160,
+    "41 | communications crown": 2220
+  },
+  "bounds_min": [
+    -155.0,
+    -79.6937026977539,
+    -66.0
+  ],
+  "bounds_max": [
+    155.0,
+    79.6937026977539,
+    88.0
+  ],
+  "dimensions_m": [
+    310.0,
+    159.387,
+    154.0
+  ]
+}

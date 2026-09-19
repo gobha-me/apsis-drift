@@ -1,0 +1,64 @@
+{
+  "atmosphere": "optical review shells, descriptor-gated; not authoritative weather",
+  "capture": "PNG frames saved from Godot Vulkan viewport after frame_post_draw; loading frames excluded",
+  "engine": "4.7.2-stable (official)",
+  "experimental_relief_version": 1.0,
+  "fps": 24,
+  "frames": 3,
+  "geometry": "original hero-tier GLBs; no master mesh changes",
+  "kind": "offline Godot cinematic; scripted cameras, not gameplay or a real-time benchmark",
+  "pixels": [
+    3840,
+    2160
+  ],
+  "planet": "Carayx",
+  "planet_seed": "42",
+  "review_only": true,
+  "runtime_performance_claim": false,
+  "schema_version": 1,
+  "shots": [
+    {
+      "camera_end": {
+        "eye": [
+          0.0,
+          1.28540003299713,
+          0.194999992847443
+        ],
+        "fov": 74.0,
+        "head": [
+          -0.140000000596046,
+          -0.219999998807907
+        ]
+      },
+      "camera_start": {
+        "eye": [
+          0.0,
+          1.28540003299713,
+          0.194999992847443
+        ],
+        "fov": 74.0,
+        "head": [
+          -0.140000000596046,
+          0.360000014305115
+        ]
+      },
+      "first_frame": 0,
+      "frames": 3,
+      "id": "cabin",
+      "seconds": 6,
+      "stream": {
+        "cpu_mesh_bytes": 39459456,
+        "generated": 384,
+        "generated_total": 384,
+        "ready": true,
+        "resident_tiles": 384,
+        "retired_total": 0,
+        "reused": 0,
+        "staged_and_resident_tiles": 384,
+        "swaps": 1,
+        "worker_ms": 1125.870051
+      }
+    }
+  ],
+  "terrain_generator_version": 1.0
+}
