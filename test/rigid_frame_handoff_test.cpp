@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <source_location>
 #include <string_view>
 
 namespace {
@@ -22,9 +23,12 @@ auto check(bool condition, std::string_view message) -> void {
 }
 
 template <typename T, typename E>
-auto required(const std::expected<T, E>& result) -> T {
+auto required(const std::expected<T, E>& result,
+              std::source_location location = std::source_location::current())
+    -> T {
   if (!result) {
-    std::cerr << "FAIL: fixture API rejected valid input\n";
+    std::cerr << "FAIL: fixture API rejected valid input at " << location.line()
+              << '\n';
     std::exit(1);
   }
   return *result;
@@ -377,12 +381,406 @@ auto validation(const Fixture& fixture) -> void {
     }
   }
 }
+
+using Matrix = std::array<std::array<double, 3>, 3>;
+auto matrix(RigidOrientation q) -> Matrix {
+  const double n = ((q.w * q.w + q.x * q.x) + q.y * q.y) + q.z * q.z;
+  const double s = 2 / n;
+  return {{{1 - s * (q.y * q.y + q.z * q.z), s * (q.x * q.y - q.w * q.z),
+            s * (q.x * q.z + q.w * q.y)},
+           {s * (q.x * q.y + q.w * q.z), 1 - s * (q.x * q.x + q.z * q.z),
+            s * (q.y * q.z - q.w * q.x)},
+           {s * (q.x * q.z - q.w * q.y), s * (q.y * q.z + q.w * q.x),
+            1 - s * (q.x * q.x + q.y * q.y)}}};
+}
+auto transpose(Matrix m) -> Matrix {
+  return {{{m[0][0], m[1][0], m[2][0]},
+           {m[0][1], m[1][1], m[2][1]},
+           {m[0][2], m[1][2], m[2][2]}}};
+}
+auto apply(Matrix m, RigidVector3 v) -> RigidVector3 {
+  return {(m[0][0] * v.x + m[0][1] * v.y) + m[0][2] * v.z,
+          (m[1][0] * v.x + m[1][1] * v.y) + m[1][2] * v.z,
+          (m[2][0] * v.x + m[2][1] * v.y) + m[2][2] * v.z};
+}
+auto product(Matrix a, Matrix b) -> Matrix {
+  Matrix result{};
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = 0; j < 3; ++j)
+      result[i][j] =
+          (a[i][0] * b[0][j] + a[i][1] * b[1][j]) + a[i][2] * b[2][j];
+  return result;
+}
+auto plus(RigidVector3 a, RigidVector3 b) -> RigidVector3 {
+  return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+auto minus(RigidVector3 a, RigidVector3 b) -> RigidVector3 {
+  return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+auto cross(RigidVector3 a, RigidVector3 b) -> RigidVector3 {
+  return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+auto scale(RigidVector3 v, double s) -> RigidVector3 {
+  return {v.x * s, v.y * s, v.z * s};
+}
+auto max_component(RigidVector3 v) -> double {
+  return std::max({std::abs(v.x), std::abs(v.y), std::abs(v.z)});
+}
+auto close(RigidVector3 a, RigidVector3 b, double tolerance) -> bool {
+  return max_component(minus(a, b)) <= tolerance;
+}
+auto close(Matrix a, Matrix b, double tolerance) -> bool {
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = 0; j < 3; ++j)
+      if (std::abs(a[i][j] - b[i][j]) > tolerance) return false;
+  return true;
+}
+
+auto rotating_contract(const Fixture& fixture) -> void {
+  std::uint64_t corpus{14695981039346656037ULL};
+  for (const auto& body : fixture.system.planets) {
+    const auto recipe = required(
+        generate_planet_rotation_recipe(fixture.system, body.descriptor.id));
+    const auto wrap = recipe.period_ticks - recipe.epoch_phase_tick;
+    const std::array ticks{
+        SimulationTick{0}, SimulationTick{1234567},
+        wrap - 1,          wrap,
+        wrap + 1,          std::numeric_limits<SimulationTick>::max() - 1};
+    for (const auto tick : ticks) {
+      auto source = fixture.state();
+      source.frame = {
+          RigidFrameKind::planet_fixed, fixture.system.id, recipe.planet, {}};
+      source.tick = tick;
+      const double radius =
+          static_cast<double>(body.descriptor.radius.value) * 1000;
+      source.position_metres = {radius * .8, -radius * .3, radius * .7};
+      source.linear_velocity_metres_per_second = {.123, -1234.567, 876.543};
+      const auto before = source;
+      const auto g =
+          required(resolve_planet_rotation(fixture.system, recipe, tick));
+      const Matrix r = matrix(g.fixed_to_system);
+      const RigidVector3 origin{g.planet_position.x, g.planet_position.y,
+                                g.planet_position.z};
+      const RigidVector3 velocity{g.planet_velocity.x, g.planet_velocity.y,
+                                  g.planet_velocity.z};
+      const RigidVector3 omega{g.angular_velocity_radians_per_second.x,
+                               g.angular_velocity_radians_per_second.y,
+                               g.angular_velocity_radians_per_second.z};
+      const auto destination = required(reframe_rigid_body(
+          fixture.context, source, {fixture.system_frame(), tick}, recipe));
+      const auto r_system = apply(r, source.position_metres);
+      const auto q_system = product(r, matrix(source.orientation));
+      constexpr double eps = std::numeric_limits<double>::epsilon();
+      const double p_bound =
+          128 * eps *
+          std::max({1.0, max_component(source.position_metres),
+                    max_component(origin)});
+      const double v_bound =
+          256 * eps *
+          std::max({1.0,
+                    max_component(source.linear_velocity_metres_per_second),
+                    max_component(velocity),
+                    max_component(omega) *
+                        std::max(max_component(source.position_metres),
+                                 max_component(origin))});
+      check(close(destination.position_metres, plus(origin, r_system), p_bound),
+            "independent rotating position oracle");
+      check(
+          close(destination.linear_velocity_metres_per_second,
+                plus(plus(velocity,
+                          apply(r, source.linear_velocity_metres_per_second)),
+                     cross(omega, r_system)),
+                v_bound),
+          "translation plus local motion plus Omega cross radius exactly once");
+      check(close(matrix(destination.orientation), q_system, 2e-14),
+            "full attitude composition independent matrix oracle");
+      check(close(destination.angular_velocity_radians_per_second,
+                  plus(source.angular_velocity_radians_per_second,
+                       apply(transpose(q_system), omega)),
+                  2e-14),
+            "frame spin expressed in BODY axes, not fixed or system axes");
+      check(same_bits(source, before),
+            "rotating provider never normalizes/mutates source");
+      check(source.craft == destination.craft &&
+                source.tick == destination.tick,
+            "rotating handoff retains recipe and tick");
+      const auto back = required(reframe_rigid_body(
+          fixture.context, destination, {source.frame, tick}, recipe));
+      check(close(back.position_metres, source.position_metres, p_bound),
+            "rotating position roundtrip scale-qualified bound");
+      check(close(back.linear_velocity_metres_per_second,
+                  source.linear_velocity_metres_per_second, v_bound),
+            "rotating velocity roundtrip includes "
+            "translation/cancellation/spin error budget");
+      check(close(matrix(back.orientation), matrix(source.orientation), 2e-14),
+            "orientation roundtrip is geometric, not quaternion bit identity");
+      check(close(back.angular_velocity_radians_per_second,
+                  source.angular_velocity_radians_per_second, 2e-14),
+            "body angular-rate roundtrip");
+      for (const auto& saved : {source, destination}) {
+        const auto json =
+            required(encode_rigid_body_state_json(fixture.context, saved));
+        const auto loaded =
+            required(decode_rigid_body_state_json(fixture.context, json));
+        check(same_bits(saved, loaded),
+              "JSON hydration retains accepted rotating state bits");
+        const auto target =
+            saved.frame == source.frame ? fixture.system_frame() : source.frame;
+        check(same_bits(required(reframe_rigid_body(fixture.context, saved,
+                                                    {target, tick}, recipe)),
+                        required(reframe_rigid_body(fixture.context, loaded,
+                                                    {target, tick}, recipe))),
+              "same explicitly retained recipe gives exact JSON continuation");
+      }
+      const auto checksum =
+          required(rigid_body_state_checksum(fixture.context, destination));
+      for (unsigned shift = 0; shift < 64; shift += 8) {
+        corpus ^= (checksum >> shift) & 255U;
+        corpus *= 1099511628211ULL;
+      }
+    }
+  }
+  std::cout << "rotating handoff corpus " << corpus << '\n';
+  // New explicit-recipe fixture observed equal under GCC/Clang. The original
+  // three station checksums above are neither updated nor replaced.
+  check(corpus == 14154589409055641355ULL,
+        "explicit rotating handoff cross-compiler corpus golden");
+
+  auto fixed = fixture.state();
+  fixed.frame = fixture.planet_frame();
+  const auto recipe = required(
+      generate_planet_rotation_recipe(fixture.system, *fixed.frame.planet));
+  const auto g =
+      required(resolve_planet_rotation(fixture.system, recipe, fixed.tick));
+  const Matrix r = matrix(g.fixed_to_system);
+  const RigidVector3 origin{g.planet_position.x, g.planet_position.y,
+                            g.planet_position.z};
+  const RigidVector3 velocity{g.planet_velocity.x, g.planet_velocity.y,
+                              g.planet_velocity.z};
+  const RigidVector3 omega{g.angular_velocity_radians_per_second.x,
+                           g.angular_velocity_radians_per_second.y,
+                           g.angular_velocity_radians_per_second.z};
+  fixed.position_metres = {4e6, -3e6, 2e6};
+  fixed.linear_velocity_metres_per_second = {};
+  fixed.angular_velocity_radians_per_second = {};
+  const auto corotating = required(reframe_rigid_body(
+      fixture.context, fixed, {fixture.system_frame(), fixed.tick}, recipe));
+  check(close(corotating.linear_velocity_metres_per_second,
+              plus(velocity, cross(omega, apply(r, fixed.position_metres))),
+              1e-8),
+        "surface-fixed craft carries translational and rotational velocity");
+  check(max_component(corotating.angular_velocity_radians_per_second) > 1e-6,
+        "surface-fixed craft spins in inertial space");
+
+  auto inertial = corotating;
+  inertial.orientation = {};
+  inertial.linear_velocity_metres_per_second = velocity;
+  inertial.angular_velocity_radians_per_second = {};
+  const auto nonspinning = required(reframe_rigid_body(
+      fixture.context, inertial, {fixed.frame, fixed.tick}, recipe));
+  check(
+      close(nonspinning.angular_velocity_radians_per_second, scale(omega, -1),
+            1e-18),
+      "inertially nonspinning craft has negative frame spin in its body axes");
+  check(close(nonspinning.linear_velocity_metres_per_second,
+              apply(transpose(r),
+                    scale(cross(omega, minus(inertial.position_metres, origin)),
+                          -1)),
+              1e-8),
+        "inertial motion subtracts rotating surface speed once");
+
+  // Local finite-difference world displacement independently checks velocity
+  // sign. Planet-centre motion is excluded here because its existing
+  // whole-metre ephemeris quantization is not an exact differentiable position
+  // function.
+  fixed.linear_velocity_metres_per_second = {12.5, -23.75, 34.125};
+  const double dt = 1.0 / static_cast<double>(kSimulationHz);
+  const auto prior =
+      required(resolve_planet_rotation(fixture.system, recipe, fixed.tick - 1));
+  const auto next =
+      required(resolve_planet_rotation(fixture.system, recipe, fixed.tick + 1));
+  const auto a =
+      apply(matrix(prior.fixed_to_system),
+            minus(fixed.position_metres,
+                  scale(fixed.linear_velocity_metres_per_second, dt)));
+  const auto b =
+      apply(matrix(next.fixed_to_system),
+            plus(fixed.position_metres,
+                 scale(fixed.linear_velocity_metres_per_second, dt)));
+  const auto moved = required(reframe_rigid_body(
+      fixture.context, fixed, {fixture.system_frame(), fixed.tick}, recipe));
+  check(close(scale(minus(b, a), .5 / dt),
+              minus(moved.linear_velocity_metres_per_second, velocity), 2e-5),
+        "independent local finite-difference displacement agrees with handoff "
+        "velocity");
+
+  for (const auto orientation : {RigidOrientation{1 + 4e-13, 0, 0, 0},
+                                 RigidOrientation{0, 0, 1 - 4e-13, 0}}) {
+    fixed.orientation = orientation;
+    const auto original = fixed;
+    check(same_bits(
+              required(reframe_rigid_body(fixture.context, fixed,
+                                          {fixed.frame, fixed.tick}, recipe)),
+              fixed),
+          "explicit same-planet identity preserves near-tolerance norm "
+          "residual exactly");
+    const auto system = required(reframe_rigid_body(
+        fixture.context, fixed, {fixture.system_frame(), fixed.tick}, recipe));
+    const auto back = required(reframe_rigid_body(
+        fixture.context, system, {fixed.frame, fixed.tick}, recipe));
+    check(same_bits(fixed, original), "new attitude normalization never "
+                                      "modifies accepted input norm residual");
+    check(close(matrix(back.orientation), matrix(fixed.orientation), 2e-14),
+          "near-tolerance quaternion roundtrip preserves orientation, not norm "
+          "residual bits");
+  }
+}
+
+auto rotating_refusals(const Fixture& fixture) -> void {
+  auto source = fixture.state();
+  source.frame = fixture.planet_frame();
+  const auto recipe = required(
+      generate_planet_rotation_recipe(fixture.system, *source.frame.planet));
+  const auto reject = [&](const RigidBodyState& state,
+                          const RigidFrameHandoffRequest& request,
+                          const PlanetRotationRecipe& selection, Code code,
+                          std::optional<PlanetRotationError> detail = {}) {
+    const auto before = state;
+    const auto result =
+        reframe_rigid_body(fixture.context, state, request, selection);
+    check(!result && result.error().code == code,
+          "explicit rotating request fails expected category");
+    check(same_bits(before, state),
+          "rotating refusal preserves complete source bits");
+    if (!result && detail)
+      check(result.error().rotation_error == detail,
+            "rotation refusal retains detailed provider error");
+  };
+  reject(source, {fixture.system_frame(), source.tick + 1}, recipe,
+         Code::stale_tick);
+  auto bad_recipe = recipe;
+  ++bad_recipe.version;
+  reject(source, {source.frame, source.tick}, bad_recipe,
+         Code::invalid_rotation_recipe,
+         PlanetRotationError::unsupported_version);
+  bad_recipe = recipe;
+  ++bad_recipe.epoch_phase_tick;
+  reject(source, {fixture.system_frame(), source.tick}, bad_recipe,
+         Code::invalid_rotation_recipe);
+  bad_recipe = recipe;
+  bad_recipe.catalog_kind = LocalSystemKind::procedural;
+  reject(source, {source.frame, source.tick}, bad_recipe,
+         Code::invalid_rotation_recipe);
+  bad_recipe = required(generate_planet_rotation_recipe(
+      fixture.system, fixture.system.planets[1].descriptor.id));
+  reject(source, {fixture.system_frame(), source.tick}, bad_recipe,
+         Code::invalid_rotation_recipe);
+  const RigidCoordinateFrame other_planet{
+      RigidFrameKind::planet_fixed, fixture.system.id, bad_recipe.planet, {}};
+  reject(source, {other_planet, source.tick}, recipe,
+         Code::unsupported_frame_pair);
+  reject(source, {fixture.station_frame(), source.tick}, recipe,
+         Code::unsupported_frame_pair);
+  auto station = source;
+  station.frame = fixture.station_frame();
+  reject(station, {source.frame, source.tick}, recipe,
+         Code::unsupported_frame_pair);
+  auto inertial = source;
+  inertial.frame = fixture.system_frame();
+  reject(inertial, {inertial.frame, inertial.tick}, recipe,
+         Code::unsupported_frame_pair);
+  reject(inertial, {fixture.station_frame(), inertial.tick}, recipe,
+         Code::unsupported_frame_pair);
+  auto destination = source.frame;
+  destination.planet = PlanetId{source.frame.planet->value + 1};
+  reject(inertial, {destination, inertial.tick}, recipe,
+         Code::invalid_destination);
+  destination = source.frame;
+  ++destination.system.value;
+  reject(inertial, {destination, inertial.tick}, recipe,
+         Code::invalid_destination);
+  for (const auto q :
+       {RigidOrientation{0, 0, 0, 0}, RigidOrientation{-1, 0, 0, 0},
+        RigidOrientation{1, -0.0, 0, 0}}) {
+    auto invalid = source;
+    invalid.orientation = q;
+    reject(invalid, {fixture.system_frame(), invalid.tick}, recipe,
+           Code::invalid_source);
+  }
+  auto bad_tick = source;
+  bad_tick.tick = std::numeric_limits<SimulationTick>::max();
+  reject(bad_tick, {fixture.system_frame(), bad_tick.tick}, recipe,
+         Code::invalid_source);
+  for (const double scalar : {std::numeric_limits<double>::quiet_NaN(),
+                              std::numeric_limits<double>::infinity(), -0.0}) {
+    for (const unsigned vector : {0U, 1U, 2U}) {
+      auto invalid = source;
+      (vector == 0   ? invalid.position_metres.x
+       : vector == 1 ? invalid.linear_velocity_metres_per_second.y
+                     : invalid.angular_velocity_radians_per_second.z) = scalar;
+      reject(invalid, {fixture.system_frame(), invalid.tick}, recipe,
+             Code::invalid_source);
+    }
+  }
+  auto excessive = source;
+  excessive.position_metres = {
+      1e14, 0, 0}; // Legal p; Omega cross r alone exceeds v bound.
+  reject(excessive, {fixture.system_frame(), excessive.tick}, recipe,
+         Code::invalid_result);
+  excessive = source;
+  excessive.position_metres = {1e15, 1e15, 1e15};
+  reject(excessive, {fixture.system_frame(), excessive.tick}, recipe,
+         Code::invalid_result);
+  excessive = source;
+  excessive.orientation = {};
+  excessive.angular_velocity_radians_per_second = {0, 0, 100};
+  reject(excessive, {fixture.system_frame(), excessive.tick}, recipe,
+         Code::invalid_result);
+  excessive = inertial;
+  excessive.orientation = {};
+  const auto g =
+      required(resolve_planet_rotation(fixture.system, recipe, source.tick));
+  const auto omega = components({g.angular_velocity_radians_per_second.x,
+                                 g.angular_velocity_radians_per_second.y,
+                                 g.angular_velocity_radians_per_second.z});
+  const std::array rates{&excessive.angular_velocity_radians_per_second.x,
+                         &excessive.angular_velocity_radians_per_second.y,
+                         &excessive.angular_velocity_radians_per_second.z};
+  const auto axis = static_cast<std::size_t>(
+      std::max_element(
+          omega.begin(), omega.end(),
+          [](double a, double b) { return std::abs(a) < std::abs(b); }) -
+      omega.begin());
+  *rates[axis] = -std::copysign(100.0, omega[axis]);
+  reject(excessive, {source.frame, excessive.tick}, recipe,
+         Code::invalid_result);
+  excessive = inertial;
+  excessive.position_metres = {g.planet_position.x, g.planet_position.y,
+                               g.planet_position.z};
+  excessive.linear_velocity_metres_per_second = {1e9, 1e9, 1e9};
+  const auto inverse = transpose(matrix(g.fixed_to_system));
+  const RigidVector3 planet_velocity{g.planet_velocity.x, g.planet_velocity.y,
+                                     g.planet_velocity.z};
+  check(max_component(
+            apply(inverse, minus(excessive.linear_velocity_metres_per_second,
+                                 planet_velocity))) >
+            kRigidBodyMaximumVelocityMetresPerSecond,
+        "reverse velocity-bound fixture independently exceeds component bound");
+  reject(excessive, {source.frame, excessive.tick}, recipe,
+         Code::invalid_result);
+  // Original API still refuses reinterpretation, even though a canonical
+  // rotation provider is now available in the linked application.
+  expect_error(fixture.context, source, {fixture.system_frame(), source.tick},
+               Code::unsupported_frame_pair);
+}
 } // namespace
 
 auto main() -> int {
   const Fixture fixture;
   transforms(fixture);
   validation(fixture);
+  rotating_contract(fixture);
+  rotating_refusals(fixture);
   std::cout << "rigid frame handoff: " << failures << " failures\n";
   return failures == 0 ? 0 : 1;
 }

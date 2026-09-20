@@ -28,7 +28,8 @@ func native_references(audio: Node) -> Array[WeakRef]:
 	for stream in audio._streams:
 		references.append(weakref(stream))
 	for player in audio._players:
-		references.append(weakref(player.get_stream_playback()))
+		if player.has_stream_playback():
+			references.append(weakref(player.get_stream_playback()))
 	return references
 
 func run() -> void:
@@ -53,7 +54,7 @@ func run() -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_buffer(Fixtures.fixture(2))
 	file.close()
-	for route in ["menu", "window", "silent", "blocked-retirement"]:
+	for route in ["menu", "window", "paused-window", "muted-menu", "silent", "blocked-retirement"]:
 		var study := TestMain.new()
 		root.add_child(study)
 		study.snapshot_text = FileAccess.get_file_as_string(snapshot)
@@ -75,19 +76,31 @@ func run() -> void:
 				audio._process(0.01)
 			check(audio.diagnostics().playback_running, "No actual native playback before quit")
 		var native_refs := native_references(audio)
+		if route == "paused-window":
+			study.set_player_paused(true)
+			audio._process(0.1)
+		elif route == "muted-menu":
+			audio.set_muted(true)
+			audio._process(0.1)
+		if route in ["paused-window", "muted-menu"]:
+			check(not audio._players.is_empty() and not audio.diagnostics().playback_running, "Stopped-player shutdown fixture still playing or lacks player nodes")
+			for player in audio._players:
+				check(not player.has_stream_playback(), "Stopped-player fixture retained an active playback")
 		# Deliberately retain one real resource outside the node, simulating a
 		# backend reference that does not retire. This tests the deadline without
 		# mocking shutdown_drained() or changing production playback behavior.
 		var retained_stream: AudioStreamWAV = audio._streams[0] if route == "blocked-retirement" else null
 		var before: Dictionary = study.live_bridge.get_state()
 		var requested_at_usec := Time.get_ticks_usec()
-		if route == "window":
+		if route in ["window", "paused-window"]:
 			study._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
 		else:
 			study.pause_menu.quit_requested.emit()
 		check(study.quitting and study.live_paused and not study.is_processing(), "Quit failed to freeze presentation")
 		check(not audio.diagnostics().playback_running and audio.diagnostics().gains == Vector3.ZERO, "Quit retained native playback")
-		check(study.finished == (1 if route == "silent" else 0), "Wrong native drain behavior")
+		check(study.finished == 1 if route == "silent" else study.finished <= 1, "Wrong native drain behavior")
+		if not audio.shutdown_drained():
+			check(study.finished == 0, "Quit completed before pending native retirement or deadline")
 		study.request_quit() # Repeated close must not enqueue another exit.
 		study.set_player_paused(false)
 		study._notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_IN)
@@ -134,5 +147,5 @@ func run() -> void:
 	check(legacy.get_child_count() == 0, "Legacy silent exit created playback nodes")
 	legacy_study.free()
 	check(DirAccess.remove_absolute(ProjectSettings.globalize_path(path)) == OK, "Fixture cleanup")
-	print("Recorded audio shutdown: %d failures; menu/window/repeated quit, native Dummy drain/deadline, no restart, legacy/silent exit, unchanged flight" % failures)
+	print("Recorded audio shutdown: %d failures; active/paused/muted menu/window/repeated quit, native Dummy drain/deadline, no restart, legacy/silent exit, unchanged flight" % failures)
 	quit(0 if failures == 0 else 1)

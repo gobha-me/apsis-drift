@@ -314,9 +314,13 @@ func prepare_shutdown() -> float:
 	for stream in _streams:
 		_shutdown_refs.append(weakref(stream))
 	for player in _players:
-		var playback := player.get_stream_playback()
-		if playback != null:
-			_shutdown_refs.append(weakref(playback))
+		# Pause/mute may already have stopped this player while retaining the
+		# reusable node. Godot diagnoses get_stream_playback() on an inactive
+		# player; only acquire a handle when an actual playback still exists.
+		if player.has_stream_playback():
+			var playback := player.get_stream_playback()
+			if playback != null:
+				_shutdown_refs.append(weakref(playback))
 	_stop_players()
 	for player in _players:
 		player.free()

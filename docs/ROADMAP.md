@@ -22,6 +22,10 @@ before choosing the missions, economy or story that give those actions purpose.
 - Players can attempt physically hazardous choices and learn consistent,
   understandable consequences. Default loss permits recovery, not permadeath.
 - Two fuels: one shared by sub-light and surface flight, one special to jumps.
+- Planet-specific physical rotation and star lighting share authoritative
+  simulation time. Optional time acceleration is deferred and must advance the
+  whole simulation, not an independent fast lighting clock. Preserve legacy
+  rotation/lighting recipes explicitly until versioned native integration.
 - Compact content is an engineering discipline, not a fixed size ceiling.
   Measure content, runtime, total installation, caches, saves, RAM and VRAM
   separately. A small download that silently generates an enormous cache does
@@ -53,6 +57,21 @@ a navigable galaxy remain open; review flight feel before damage.
 audit and follow-ups: local impact/fracture proof #253, native ship audio #254,
 and numerical compatibility #255. These are bounded work items, not completed
 features or new economy/mission prerequisites.
+
+The 2026-09-20 [occupied-cockpit study](OCCUPIED_PILOT_MOTION.md) connects seated
+pilot arms and movable controls to resolved flight commands, with first-person
+head masking and separate matched cabin exports. The owner reports build 33
+looks good; this is incremental playtest feedback, not final character-art,
+restraint/collision or animation acceptance. The accepted recording mix stays
+unchanged. A [paused flight reference](NATIVE_FLIGHT_REFERENCE.md) explains the
+current orbit/coast/guidance behavior and unimplemented mechanics.
+
+The [rotation/star geometry provider](PLANET_ROTATION.md) and
+[rigid-frame handoffs](RIGID_FRAME_HANDOFF.md) are tested C++ foundations, not
+yet replacement gameplay physics. Catalog-backed native startup, saved recipe
+selection, coherent rotating terrain/ship/light presentation and the remaining
+physical landing loop are still required. Do not relabel the nonrotating lab
+or its standalone seed-42 fixture as a completed persistent universe.
 
 [Freedom milestone](https://github.com/gobha-me/apsis-drift/milestone/10) and
 [tracking epic #243](https://github.com/gobha-me/apsis-drift/issues/243) replace
