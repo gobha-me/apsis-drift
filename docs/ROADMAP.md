@@ -26,6 +26,10 @@ before choosing the missions, economy or story that give those actions purpose.
   simulation time. Optional time acceleration is deferred and must advance the
   whole simulation, not an independent fast lighting clock. Preserve legacy
   rotation/lighting recipes explicitly until versioned native integration.
+- New native universes also use physically scaled planetary orbital periods,
+  derived from orbital distance and an explicitly versioned stellar mass
+  parameter. Keep existing worlds/demo catalogs on their original recipes;
+  do not change saved generator defaults or silently reinterpret short years.
 - Compact content is an engineering discipline, not a fixed size ceiling.
   Measure content, runtime, total installation, caches, saves, RAM and VRAM
   separately. A small download that silently generates an enormous cache does
@@ -66,7 +70,8 @@ restraint/collision or animation acceptance. The accepted recording mix stays
 unchanged. A [paused flight reference](NATIVE_FLIGHT_REFERENCE.md) explains the
 current orbit/coast/guidance behavior and unimplemented mechanics.
 
-The [rotation/star geometry provider](PLANET_ROTATION.md) and
+The [physical orbital catalog](PHYSICAL_LOCAL_SYSTEM.md),
+[rotation/star geometry provider](PLANET_ROTATION.md) and
 [rigid-frame handoffs](RIGID_FRAME_HANDOFF.md) are tested C++ foundations, not
 yet replacement gameplay physics. Catalog-backed native startup, saved recipe
 selection, coherent rotating terrain/ship/light presentation and the remaining
