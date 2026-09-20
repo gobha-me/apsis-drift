@@ -99,6 +99,24 @@ Static art and in-engine motion have separate review gates for both pilots.
 This does not add walking/EVA locomotion, autopilot, NPC behavior or a generic
 animation engine, and no animation completion is claimed by this plan.
 
+## Isolated seated rig proof — 2026-09-20
+
+One female anatomy has now been seated against the existing eye, grip and pedal
+datums without rescaling the cockpit or stretching limbs. An 11.36-degree torso
+recline resolves the seated pose. A 49-frame, three-second Blender study moves
+the grips through a provisional +/-8-degree pitch/roll sweep; this is a reach
+and deformation experiment, not an accepted authored control range or a live
+semantic action mapping. Independent checks of the saved moving grip meshes
+and wrists agree throughout the sweep; maximum arm reach is 87% of arm length.
+
+The borrowed CC0 bib coverall and shoes are fit-test clothing, not the original
+flight suit. Known fit limits include about 7.5 mm of cushion overlap and a
+13.25 mm heel gap. Restraints, helmet, hair, canopy collision, first-person
+visibility and Godot export/motion acceptance are unproved. Male fit remains
+pending. Static and animated Blender masters, PNGs, the short clip, input
+licenses and verified provenance stay in isolated ignored authoring output;
+no new character or third-party tooling is promoted into the runtime here.
+
 ## Acceptance sequence
 
 1. Approve distinct male/female silhouettes and original suit identity in

@@ -21,6 +21,7 @@ var binding_buttons: Array[Dictionary] = []
 var diagnostic_toggle: CheckButton
 var camera_slider: HSlider
 var audio_toggle: CheckButton
+var left_scroll: ScrollContainer
 
 func _ready() -> void:
 	layer = 20
@@ -44,7 +45,7 @@ func _ready() -> void:
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	columns.add_theme_constant_override("separation", 40)
 	layout.add_child(columns)
-	var left_scroll := ScrollContainer.new()
+	left_scroll = ScrollContainer.new()
 	left_scroll.custom_minimum_size.x = 600
 	left_scroll.follow_focus = true
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -237,6 +238,15 @@ func show_menu(reason := "") -> void:
 	panel.show()
 	refresh_bindings()
 	resume_button.grab_focus()
+	ensure_entry_focus_visible()
+
+func ensure_entry_focus_visible() -> void:
+	# First show can precede container layout. follow_focus alone scrolls using
+	# the old geometry, leaving the controller's focused Resume button offscreen.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if panel.visible and resume_button.has_focus():
+		left_scroll.ensure_control_visible(resume_button)
 
 func hide_menu() -> void:
 	controls.waiting_action = ""

@@ -112,7 +112,9 @@ func run() -> void:
 	check(study.ship_audio.diagnostics().gains.y > 0, "Native power failed to request propulsion")
 	study.set_player_paused(true)
 	silent("Pause")
-	await process_frame
+	for i in 4:
+		await process_frame
+	check(study.pause_menu.left_scroll.get_global_rect().encloses(study.pause_menu.resume_button.get_global_rect()), "First-open focused Resume is clipped outside scroll viewport")
 	before = study.live_bridge.get_state()
 	for key in ["master", "machinery", "propulsion", "atmosphere"]:
 		var slider: HSlider = study.pause_menu.audio_sliders[key].slider
