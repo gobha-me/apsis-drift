@@ -247,20 +247,36 @@ class FreedomBridge : public godot::RefCounted {
           seed.data(), seed.data() + seed.size(), request.planet_seed.value);
       if (parsed.ec != std::errc{} || parsed.ptr != seed.data() + seed.size())
         throw std::invalid_argument("invalid planet seed");
-      const auto samples = data.at("samples").get<double>();
+      // Snapshot v1 owns an unchanged standalone procedural planet. Compare
+      // the complete canonical projection, including nested metadata and keys;
+      // a seed alone cannot authorize an authored origin-home variant.
+      const auto canonical_planet =
+          nlohmann::json::parse(planet_descriptor_json(
+              generate_planet_descriptor(request.planet_seed)));
+      if (data.at("planet") != canonical_planet)
+        throw std::invalid_argument(
+            "snapshot planet differs from C++ descriptor");
+      const auto numeric = [](const nlohmann::json& value) -> double {
+        // get<double>() also accepts JSON booleans; snapshot scalars do not.
+        if (!value.is_number())
+          throw std::invalid_argument("snapshot scalar must be numeric");
+        return value.get<double>();
+      };
+      const auto samples = numeric(data.at("samples"));
       if (!std::isfinite(samples) || samples < 2 || samples > 513 ||
           std::trunc(samples) != samples)
         throw std::invalid_argument("invalid sample dimensions");
       request.samples = static_cast<unsigned>(samples);
-      request.span_metres = data.at("span_metres").get<double>();
-      request.latitude = data.at("frame").at("latitude_radians").get<double>();
-      request.longitude =
-          data.at("frame").at("longitude_radians").get<double>();
-      const auto lod = data.at("lod").get<double>();
+      request.span_metres = numeric(data.at("span_metres"));
+      request.latitude = numeric(data.at("frame").at("latitude_radians"));
+      request.longitude = numeric(data.at("frame").at("longitude_radians"));
+      const auto lod = numeric(data.at("lod"));
       if (!std::isfinite(lod) || lod < 0 || lod > 10 || std::trunc(lod) != lod)
         throw std::invalid_argument("invalid LOD");
       request.lod = static_cast<std::uint8_t>(lod);
-      const auto relief = data.value("experimental_relief_version", 0.0);
+      const auto relief = data.contains("experimental_relief_version")
+                              ? numeric(data.at("experimental_relief_version"))
+                              : 0.0;
       if (!std::isfinite(relief) || relief < 0 ||
           relief > kExperimentalReliefVersion || std::trunc(relief) != relief)
         throw std::invalid_argument("unsupported experimental relief version");
@@ -714,7 +730,7 @@ class FreedomBridge : public godot::RefCounted {
     godot::Array result;
     try {
       if (!stream || anchors.size() % 3 ||
-          anchors.size() > kStreamMaxTiles * 2 * 3)
+          anchors.size() > static_cast<std::int64_t>(kStreamMaxTiles) * 2 * 3)
         throw std::invalid_argument("invalid tile anchor buffer");
       for (std::int64_t i = 0; i < anchors.size(); ++i)
         if (!std::isfinite(anchors[i]) || std::abs(anchors[i]) > 1.0e10)
