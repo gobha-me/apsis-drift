@@ -15,6 +15,81 @@ func make_bridge(snapshot: String) -> Variant:
 	return bridge
 
 
+func reject_snapshot(bridge: Variant, data: Dictionary, expected: Dictionary, label: String) -> void:
+	check(not bridge.initialize(JSON.stringify(data)), "Invalid snapshot accepted: " + label)
+	check(bridge.get_state() == expected, "Rejected snapshot changed session: " + label)
+	check(not str(bridge.get_last_error()).is_empty(), "Refusal lacks diagnostic: " + label)
+
+
+func descriptor_contract(bridge: Variant, data: Dictionary, expected: Dictionary) -> void:
+	var reencoded: Variant = make_bridge(JSON.stringify(data))
+	check(reencoded.get_state().checksum == data.replay[0].checksum, "Godot numeric re-encoding changed descriptor compatibility")
+	var reordered: Dictionary = data.duplicate(true)
+	var keys: Array = reordered.planet.keys()
+	keys.reverse()
+	var planet := {}
+	for key in keys:
+		planet[key] = reordered.planet[key]
+	reordered.planet = planet
+	check(reencoded.initialize(JSON.stringify(reordered)), "Descriptor key order changed compatibility")
+	check(bridge.enable_streaming(), "Could not create retained-stream fixture")
+	check(bridge.get_state().checksum == expected.checksum, "Stream setup changed flight checksum")
+	# Enabling the stream changes presentation telemetry, not flight. Snapshot
+	# the whole dictionary after that legitimate change for refusal assertions.
+	expected = bridge.get_state()
+	var anchors := PackedFloat64Array([1, 2, 3])
+	var transforms: Array = bridge.stream_transforms(anchors)
+	check(transforms.size() == 1, "Retained-stream fixture lacks transform")
+	# Every canonical field, including nested palette entries, is authoritative.
+	for key in data.planet:
+		if data.planet[key] is Dictionary:
+			for nested in data.planet[key]:
+				var bad: Dictionary = data.duplicate(true)
+				bad.planet[key][nested] = null
+				reject_snapshot(bridge, bad, expected, "planet.%s.%s" % [key, nested])
+		else:
+			var bad: Dictionary = data.duplicate(true)
+			bad.planet[key] = null
+			reject_snapshot(bridge, bad, expected, "planet." + key)
+	for key in ["radius_km", "surface_gravity_milli_g", "water_coverage_basis_points"]:
+		for replacement in [float(data.planet[key]) + 1, 3.5, true]:
+			var bad: Dictionary = data.duplicate(true)
+			bad.planet[key] = replacement
+			reject_snapshot(bridge, bad, expected, "altered " + key)
+	for replacement in [float(data.planet.atmosphere.pressure_millibars) + 1, 3.5, false]:
+		var bad: Dictionary = data.duplicate(true)
+		bad.planet.atmosphere.pressure_millibars = replacement
+		reject_snapshot(bridge, bad, expected, "altered pressure")
+	for key in ["planet_id", "planet_seed", "display_name"]:
+		var bad: Dictionary = data.duplicate(true)
+		bad.planet[key] = str(data.planet[key]) + "0"
+		reject_snapshot(bridge, bad, expected, "altered " + key)
+	var extra: Dictionary = data.duplicate(true)
+	extra.planet.owner = {"catalog_kind": "origin_home"}
+	reject_snapshot(bridge, extra, expected, "unrecognized planet owner")
+	var missing: Dictionary = data.duplicate(true)
+	missing.planet.erase("radius_km")
+	reject_snapshot(bridge, missing, expected, "missing radius")
+	var palette: Dictionary = data.duplicate(true)
+	palette.planet.palette.lowland = "#ffffff" if data.planet.palette.lowland != "#ffffff" else "#000000"
+	reject_snapshot(bridge, palette, expected, "changed valid-shaped palette color")
+	for key in ["samples", "span_metres", "lod", "experimental_relief_version"]:
+		for replacement in [true, false, "1"]:
+			var bad: Dictionary = data.duplicate(true)
+			bad[key] = replacement
+			reject_snapshot(bridge, bad, expected, "nonnumeric " + key)
+	for key in ["schema_version", "terrain_generator_version", "seed_derivation_version", "lod"]:
+		for replacement in [true, 3.5]:
+			var bad: Dictionary = data.duplicate(true)
+			bad[key] = replacement
+			reject_snapshot(bridge, bad, expected, "invalid integer " + key)
+	for key in ["latitude_radians", "longitude_radians"]:
+		var bad: Dictionary = data.duplicate(true)
+		bad.frame[key] = false
+		reject_snapshot(bridge, bad, expected, "boolean " + key)
+	check(bridge.stream_transforms(anchors) == transforms, "Rejected snapshot destroyed or altered stream placement")
+
+
 func _initialize() -> void:
 	var arguments := OS.get_cmdline_user_args()
 	if arguments.size() != 1:
@@ -63,6 +138,8 @@ func _initialize() -> void:
 			check(reference.get_state().checksum == data.replay[int((tick + 1) / 4)].checksum,
 				"Live C++ state differs from exported replay at tick %d" % (tick + 1))
 	var expected: Dictionary = reference.get_state()
+	# Reject after real progress, not only at an indistinguishable tick-zero pose.
+	descriptor_contract(reference, data, expected)
 	for fps in [30, 60, 144]:
 		var bridge: Variant = make_bridge(snapshot)
 		for frame in range(fps * 10):
