@@ -70,6 +70,12 @@ restraint/collision or animation acceptance. The accepted recording mix stays
 unchanged. A [paused flight reference](NATIVE_FLIGHT_REFERENCE.md) explains the
 current orbit/coast/guidance behavior and unimplemented mechanics.
 
+The owner accepted build34's screenshot-level thumb-button/index-trigger fit
+as sufficient to continue iteration. Both pilot variants retain the established
+seat/eye/wrist/control datums and existing stick motion. This is not acceptance
+of final character art, a full controller playtest, or button-press animation;
+no new action bindings were added. Restraint refinements remain a separate study.
+
 The [physical orbital catalog](PHYSICAL_LOCAL_SYSTEM.md),
 [rotation/star geometry provider](PLANET_ROTATION.md) and
 [rigid-frame handoffs](RIGID_FRAME_HANDOFF.md) are tested C++ foundations, not

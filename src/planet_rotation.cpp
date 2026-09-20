@@ -13,6 +13,8 @@ static_assert(kSeedDerivationVersion == 1 && kPlanetGeneratorVersion == 1 &&
               kLocalSystemGeneratorVersion == 1 &&
               kAnalyticEphemerisVersion == 1 &&
               kOriginHomePlanetGeneratorVersion == 1);
+static_assert(kPhysicalLocalSystemGeneratorVersion == 1 &&
+              kOriginStationGeneratorVersion == 2);
 constexpr double tau{2.0 * std::numbers::pi_v<double>};
 constexpr double turn_scale{1.0 / 4'294'967'296.0};
 constexpr SimulationTick ticks_per_minute{60ULL * kSimulationHz};
@@ -82,6 +84,34 @@ auto finite(RigidVector3 vector) -> bool {
   return std::isfinite(vector.x) && std::isfinite(vector.y) &&
          std::isfinite(vector.z);
 }
+
+auto physical_recipe_for(const PhysicalLocalSystem& system,
+                         const PlanetDescriptor& planet)
+    -> PhysicalPlanetRotationRecipe {
+  return {.physical_catalog_generator = system.generator_version,
+          .source_catalog_generator = system.source_catalog_generator,
+          .ephemeris_version = system.ephemeris_version,
+          .origin_universe_seed = system.origin_universe_seed,
+          .rotation = recipe_for(system.catalog, planet)};
+}
+
+auto validate_query(SimulationTick tick, PlanetFixedPositionMetres observer)
+    -> std::expected<void, PlanetRotationError> {
+  if (tick == std::numeric_limits<SimulationTick>::max())
+    return std::unexpected{PlanetRotationError::invalid_tick};
+  for (const double value : {observer.x, observer.y, observer.z}) {
+    if (!std::isfinite(value) ||
+        std::abs(value) > kPlanetRotationMaximumObserverComponentMetres)
+      return std::unexpected{PlanetRotationError::invalid_observer};
+  }
+  return {};
+}
+
+auto resolve_geometry(const PlanetRotationRecipe& recipe,
+                      const PlanetOrbit& orbit, StarId star,
+                      const PlanetEphemeris& ephemeris, SimulationTick tick,
+                      PlanetFixedPositionMetres observer)
+    -> std::expected<PlanetRotationGeometry, PlanetRotationError>;
 } // namespace
 
 auto generate_planet_rotation_recipe(const LocalSystemDescriptor& system,
@@ -112,24 +142,30 @@ auto resolve_planet_rotation(const LocalSystemDescriptor& system,
   if (!body) return std::unexpected{PlanetRotationError::unknown_planet};
   if (recipe != recipe_for(system, (*body)->descriptor))
     return std::unexpected{PlanetRotationError::invalid_recipe};
-  if (tick == std::numeric_limits<SimulationTick>::max())
-    return std::unexpected{PlanetRotationError::invalid_tick};
-  for (const double value : {observer.x, observer.y, observer.z}) {
-    if (!std::isfinite(value) ||
-        std::abs(value) > kPlanetRotationMaximumObserverComponentMetres)
-      return std::unexpected{PlanetRotationError::invalid_observer};
-  }
+  const auto valid_query = validate_query(tick, observer);
+  if (!valid_query) return std::unexpected{valid_query.error()};
   const auto ephemeris =
       resolve_planet_ephemeris(system, recipe.planet, {tick, 0});
   if (!ephemeris)
     return std::unexpected{PlanetRotationError::unsafe_arithmetic};
+  return resolve_geometry(recipe, (*body)->orbit, system.star.id, *ephemeris,
+                          tick, observer);
+}
+
+namespace {
+// Both public families validate their exact recipe/context and resolve their
+// own same-tick ephemeris before entering this common numerical kernel.
+auto resolve_geometry(const PlanetRotationRecipe& recipe,
+                      const PlanetOrbit& orbit, StarId star,
+                      const PlanetEphemeris& ephemeris, SimulationTick tick,
+                      PlanetFixedPositionMetres observer)
+    -> std::expected<PlanetRotationGeometry, PlanetRotationError> {
   // Both terms < P <= 31,104,000, so the addition cannot overflow and no
   // information is lost by conversion to double even for near-maximum ticks.
   const auto cycle = (tick % recipe.period_ticks + recipe.epoch_phase_tick) %
                      recipe.period_ticks;
   const double phase = tau * static_cast<double>(cycle) /
                        static_cast<double>(recipe.period_ticks);
-  const auto& orbit = (*body)->orbit;
   const double node =
       tau * static_cast<double>(orbit.ascending_node_turns) * turn_scale;
   const double inclination =
@@ -156,8 +192,8 @@ auto resolve_planet_rotation(const LocalSystemDescriptor& system,
   const auto omega = rotate(*pole, {0, 0, spin});
   const auto inverse = RigidOrientation{q.w, -q.x, -q.y, -q.z};
   const auto star_fixed =
-      rotate(inverse, {-ephemeris->position.x, -ephemeris->position.y,
-                       -ephemeris->position.z});
+      rotate(inverse, {-ephemeris.position.x, -ephemeris.position.y,
+                       -ephemeris.position.z});
   const RigidVector3 to_star{star_fixed.x - observer.x,
                              star_fixed.y - observer.y,
                              star_fixed.z - observer.z};
@@ -181,14 +217,65 @@ auto resolve_planet_rotation(const LocalSystemDescriptor& system,
       phase,
       q,
       {omega.x, omega.y, omega.z},
-      ephemeris->position,
-      ephemeris->velocity,
-      system.star.id,
+      ephemeris.position,
+      ephemeris.velocity,
+      star,
       {star_fixed.x, star_fixed.y, star_fixed.z},
       observer,
       {light_fixed.x, light_fixed.y, light_fixed.z},
       {light_system.x, light_system.y, light_system.z},
       distance};
+}
+} // namespace
+
+auto generate_planet_rotation_recipe(const PhysicalLocalSystem& system,
+                                     PlanetId planet, std::uint32_t version)
+    -> std::expected<PhysicalPlanetRotationRecipe, PlanetRotationError> {
+  if (version != kPlanetRotationGeneratorVersion)
+    return std::unexpected{PlanetRotationError::unsupported_version};
+  const auto body = find_local_system_planet(system, planet);
+  if (!body)
+    return std::unexpected{body.error() ==
+                                   PhysicalLocalSystemError::unknown_planet
+                               ? PlanetRotationError::unknown_planet
+                               : PlanetRotationError::invalid_world_context};
+  return physical_recipe_for(system, (*body)->descriptor);
+}
+
+auto resolve_planet_rotation(const PhysicalLocalSystem& system,
+                             const PhysicalPlanetRotationRecipe& recipe,
+                             SimulationTick tick,
+                             PlanetFixedPositionMetres observer)
+    -> std::expected<PhysicalPlanetRotationGeometry, PlanetRotationError> {
+  if (recipe.catalog_family != PlanetRotationOwnerFamily::physical_circular ||
+      recipe.owner_version != kPhysicalPlanetRotationOwnerVersion ||
+      recipe.physical_catalog_generator !=
+          kPhysicalLocalSystemGeneratorVersion ||
+      recipe.source_catalog_generator != kLocalSystemGeneratorVersion ||
+      recipe.ephemeris_version != kAnalyticEphemerisVersion ||
+      recipe.rotation.version != kPlanetRotationGeneratorVersion)
+    return std::unexpected{PlanetRotationError::unsupported_version};
+  if (!validate_local_system(system))
+    return std::unexpected{PlanetRotationError::invalid_world_context};
+  if (recipe.rotation.system != system.catalog.id ||
+      recipe.rotation.catalog_kind != system.catalog.kind ||
+      recipe.origin_universe_seed != system.origin_universe_seed)
+    return std::unexpected{PlanetRotationError::owner_mismatch};
+  const auto body = find_local_system_planet(system, recipe.rotation.planet);
+  if (!body) return std::unexpected{PlanetRotationError::unknown_planet};
+  if (recipe != physical_recipe_for(system, (*body)->descriptor))
+    return std::unexpected{PlanetRotationError::invalid_recipe};
+  const auto valid_query = validate_query(tick, observer);
+  if (!valid_query) return std::unexpected{valid_query.error()};
+  const auto ephemeris =
+      resolve_planet_ephemeris(system, recipe.rotation.planet, {tick, 0});
+  if (!ephemeris)
+    return std::unexpected{PlanetRotationError::unsafe_arithmetic};
+  const auto geometry =
+      resolve_geometry(recipe.rotation, (*body)->orbit, system.catalog.star.id,
+                       *ephemeris, tick, observer);
+  if (!geometry) return std::unexpected{geometry.error()};
+  return PhysicalPlanetRotationGeometry{recipe, *geometry};
 }
 
 } // namespace apsis_drift

@@ -89,9 +89,11 @@ qualification evidence, not universal cross-libm determinism; #255 remains.
 Native bootstrap must explicitly retain this family/version and universe owner
 with the active session, derive descriptor metadata from that context, and
 create fresh context-scoped terrain caches. It must not accept a physical
-catalog via legacy snapshot-v1 or a legacy save16 tuple. The current rotation
-and contact wrappers need explicit physical-context ownership before use with
-this provider; seed-only reinterpretation is not a bridge.
+catalog via legacy snapshot-v1 or a legacy save16 tuple. The
+[physical rotation adapter](PLANET_ROTATION.md#explicit-physical-catalog-adapter)
+retains explicit physical-context ownership for spin and star geometry. Contact
+and rigid-handoff consumers still need their own physical-context boundary;
+seed-only reinterpretation is not a bridge.
 
 Origin-station relative orbits remain their separately authored legacy
 90–120-minute recipe. This provider has no physical station overload. A later
