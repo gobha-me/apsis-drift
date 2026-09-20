@@ -45,6 +45,14 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-snapshot-contract COMMAND apsis-drift-godot-snapshot-tests)
   find_package(Threads REQUIRED)
+  add_executable(apsis-drift-contact-surface-tests
+    contact_surface.cpp contact_surface_test.cpp)
+  target_link_libraries(apsis-drift-contact-surface-tests PRIVATE
+    apsis-drift::lib nlohmann_json::nlohmann_json Threads::Threads)
+  target_compile_options(apsis-drift-contact-surface-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME godot-contact-surface-contract COMMAND apsis-drift-contact-surface-tests)
+  set_tests_properties(godot-contact-surface-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-planet-stream-tests streaming_test.cpp)
   target_link_libraries(apsis-drift-planet-stream-tests PRIVATE apsis-drift::lib
     nlohmann_json::nlohmann_json Threads::Threads)

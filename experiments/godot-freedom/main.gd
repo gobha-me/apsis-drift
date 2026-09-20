@@ -59,6 +59,9 @@ var chase_follow := preload("res://chase_camera.gd").new()
 var live_presentation := false
 var world_view: Node
 var ship_audio: Node
+var audio_preferences: RefCounted
+var seated_pilot: Node3D
+const PilotPresentation = preload("res://pilot_presentation.gd")
 
 
 func fail(message: String) -> void:
@@ -212,6 +215,11 @@ func _ready() -> void:
 		return
 	surface.add_child(ship)
 	pilot_cockpit = install_ship_interior(ship)
+	if options.has("--pilot-asset"):
+		seated_pilot = PilotPresentation.load_into(pilot_cockpit, options["--pilot-asset"])
+		if seated_pilot == null:
+			fail("Pilot study requires an absolute GLB path with separate PilotHead and PilotBody mesh groups")
+			return
 	ship.position = Vector3.ZERO if streaming_requested else vector(data.replay[0].position)
 	ship.rotation.y = float(data.replay[0].heading) - PI / 2.0
 	add_child(camera)
@@ -267,10 +275,32 @@ func vector(values: Array) -> Vector3:
 
 func setup_ship_audio() -> void:
 	# Opt-in presentation prototype. No soundtrack replacement or flight writes.
-	if options.get("--ship-audio", "false") != "true" or not live_presentation:
+	var selection: String = options.get("--ship-audio", "false")
+	if selection not in ["true", "recorded"] or not live_presentation or is_instance_valid(ship_audio):
 		return
-	ship_audio = preload("res://ship_audio.gd").new()
+	if selection == "recorded":
+		var candidate := preload("res://recorded_ship_audio.gd").new()
+		if not candidate.configure_recordings(options.get("--audio-hum", ""), options.get("--audio-propulsion", "")):
+			push_warning("Recorded ship audio disabled: invalid/missing loop WAVs. No synthesized fallback.")
+			candidate.free()
+			return
+		ship_audio = candidate
+		audio_preferences = preload("res://audio_preferences.gd").new()
+		audio_preferences.persist = options.get("--audio-persist", options.get("--controls-persist", "true")) == "true"
+		audio_preferences.load_settings()
+	else:
+		# Retained only as an explicit historical synthesis/regression experiment.
+		ship_audio = preload("res://ship_audio.gd").new()
 	add_child(ship_audio)
+	apply_audio_preferences()
+
+
+func apply_audio_preferences() -> void:
+	if not is_instance_valid(ship_audio) or audio_preferences == null:
+		return
+	var levels: Dictionary = audio_preferences.levels
+	ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere)
+	ship_audio.set_muted(audio_preferences.muted)
 
 
 func update_ship_audio() -> void:
@@ -294,6 +324,8 @@ func setup_player_controls() -> void:
 	pause_menu.rotational_coasting = live_bridge != null and live_bridge.get_state().get("angular_model", 1) == 2
 	pause_menu.orbit_preserving_assist = live_bridge != null and live_bridge.get_state().get("translation_policy", 1) == 2
 	pause_menu.ship_audio_available = is_instance_valid(ship_audio)
+	pause_menu.audio_preferences = audio_preferences
+	pause_menu.audio_mix_changed.connect(apply_audio_preferences)
 	pause_menu.ship_audio_muted.connect(func(value: bool):
 		if is_instance_valid(ship_audio):
 			ship_audio.set_muted(value))
@@ -448,10 +480,10 @@ func start_stream() -> void:
 	surface.add_child(planet_stream)
 
 
-func load_model(filename: String) -> Node3D:
+func load_model(filename: String, explicit_path := "") -> Node3D:
 	var document := GLTFDocument.new()
 	var state := GLTFState.new()
-	var result := document.append_from_file(assets_path.path_join(filename), state)
+	var result := document.append_from_file(assets_path.path_join(filename) if explicit_path.is_empty() else explicit_path, state)
 	if result != OK:
 		fail("Could not import existing asset: " + filename)
 		return null
@@ -464,7 +496,11 @@ func load_model(filename: String) -> Node3D:
 
 
 func install_ship_interior(hull: Node3D, tier: String = "near") -> Node3D:
-	var cabin := load_model("hero-cockpit-%s.glb" % tier)
+	var occupied: String = options.get("--pilot-cabin", "") if options.has("--pilot-asset") else ""
+	if options.has("--pilot-asset") and (not occupied.is_absolute_path() or occupied.get_extension().to_lower() != "glb"):
+		fail("Pilot study requires --pilot-cabin=/absolute/path/to/occupied-cockpit.glb")
+		return null
+	var cabin := load_model("hero-cockpit-%s.glb" % tier, occupied)
 	if cabin == null:
 		return null
 	hull.add_child(cabin)
@@ -579,6 +615,7 @@ func build_overlay() -> void:
 func set_view(next: int) -> void:
 	mode = clampi(next, 1, 4)
 	pilot_view = false
+	PilotPresentation.set_first_person(seated_pilot, false)
 	head_angles = Vector2.ZERO
 	if pilot_cockpit != null:
 		pilot_cockpit.visible = true
@@ -669,6 +706,7 @@ func toggle_pilot() -> void:
 		if pilot_cockpit == null:
 			return
 	pilot_view = not pilot_view
+	PilotPresentation.set_first_person(seated_pilot, pilot_view)
 	pilot_cockpit.visible = true
 	ship.visible = true
 	head_angles = Vector2.ZERO

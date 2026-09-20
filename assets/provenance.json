@@ -2,12 +2,31 @@
   "schema_version": 1,
   "assets": [
     {
+      "id": "visual/seated-pilot-study-code",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": ["tools/build_seated_pilots.py", "tools/build_occupied_cabin.py"],
+      "purpose": "Original static male and female suited seated pilot studies fitted to the shared cockpit; editable source, not finished character or animation acceptance",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause", "terms": "LICENSE.md",
+        "permitted_uses": ["source", "documentation", "runtime"],
+        "redistribution": "allowed", "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors", "date": "2026-09-19",
+        "construction": "Original Blender mesh construction using the existing project cockpit fit anchors, with separate own-head/body groups and generated study provenance. No external scans, character libraries, textures or model-service inputs.",
+        "derived_inputs": []
+      }
+    },
+    {
       "id": "sfx/native-ship-audio-prototype",
       "media_type": "sfx",
       "source_kind": "code-authored",
       "files": ["experiments/godot-freedom/ship_audio.gd"],
       "purpose": "Opt-in procedural native ship machinery, thrust vibration and atmosphere airflow study; no replacement of the existing score or sound pack",
-      "edits": [],
+      "edits": ["Refined engine voice into a lower layered mechanical growl with spool inertia, audible body overtones and restrained atmosphere texture; no external audio source", "Ported human-accepted direction24 into a constant-level powered idle/light/core/dense blend with a static coherent-sum correction curve and bounded causal private-noise filters; atmospheric airflow remains separate"],
       "license": {
         "expression": "BSD-3-Clause", "terms": "LICENSE.md",
         "permitted_uses": ["source", "documentation", "runtime"],

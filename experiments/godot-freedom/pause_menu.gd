@@ -7,7 +7,11 @@ signal camera_distance_changed(value: float)
 signal practice_requested(reentry: bool)
 signal guidance_requested
 signal ship_audio_muted(value: bool)
+signal audio_mix_changed
 var ship_audio_available := false
+var audio_preferences: RefCounted
+var audio_sliders: Dictionary = {}
+var control_sliders: Dictionary = {}
 var controls: Node
 var rotational_coasting := false
 var orbit_preserving_assist := false
@@ -18,6 +22,7 @@ var binding_buttons: Array[Dictionary] = []
 var diagnostic_toggle: CheckButton
 var camera_slider: HSlider
 var audio_toggle: CheckButton
+var left_scroll: ScrollContainer
 
 func _ready() -> void:
 	layer = 20
@@ -41,7 +46,7 @@ func _ready() -> void:
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	columns.add_theme_constant_override("separation", 40)
 	layout.add_child(columns)
-	var left_scroll := ScrollContainer.new()
+	left_scroll = ScrollContainer.new()
 	left_scroll.custom_minimum_size.x = 600
 	left_scroll.follow_focus = true
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -71,9 +76,29 @@ func _ready() -> void:
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
 	if ship_audio_available:
 		audio_toggle = CheckButton.new()
-		audio_toggle.text = "Mute ship audio prototype (this session)"
-		audio_toggle.toggled.connect(func(value: bool): ship_audio_muted.emit(value))
+		audio_toggle.text = "Mute ship audio" if audio_preferences != null else "Mute ship audio prototype (this session)"
+		if audio_preferences != null:
+			audio_toggle.button_pressed = audio_preferences.muted
+		audio_toggle.toggled.connect(func(value: bool):
+			if audio_preferences != null:
+				audio_preferences.muted = value
+				audio_preferences.save_settings()
+			ship_audio_muted.emit(value))
 		left.add_child(audio_toggle)
+		if audio_preferences != null:
+			for item in [["master", "Ship audio master"], ["machinery", "Background machinery"],
+				["propulsion", "Propulsion"], ["atmosphere", "Atmospheric airflow"]]:
+				add_audio_slider(left, item[1], item[0])
+			add_button(left, "Restore ship audio defaults", func():
+				audio_preferences.reset_defaults()
+				audio_preferences.save_settings()
+				audio_toggle.set_pressed_no_signal(false)
+				for key in audio_sliders:
+					var item: Dictionary = audio_sliders[key]
+					item.slider.set_value_no_signal(audio_preferences.levels[key])
+					item.label.text = "%s: %d%%" % [item.title, roundi(audio_preferences.levels[key]*100)]
+				ship_audio_muted.emit(false)
+				audio_mix_changed.emit())
 	add_button(left, "Reset experimental flight", func(): reset_flight.emit())
 	if controls.thrust_mode:
 		add_button(left, "Flight guidance — flight continues; no autopilot", func(): guidance_requested.emit())
@@ -179,6 +204,7 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 	slider.max_value = high
 	slider.step = step
 	slider.value = controls.settings[key]
+	control_sliders[key] = slider
 	slider.custom_minimum_size.y = 30
 	slider.value_changed.connect(func(value: float):
 		controls.settings[key] = value
@@ -191,11 +217,38 @@ func refresh_bindings() -> void:
 	for item in binding_buttons:
 		item.button.text = ("Key: " if item.family == "key" else "Pad: ") + controls.binding_label(item.action, item.family)
 
+func add_audio_slider(parent: Node, title: String, key: String) -> void:
+	var label := Label.new()
+	label.text = "%s: %d%%" % [title, roundi(audio_preferences.levels[key]*100)]
+	parent.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 1
+	slider.step = 0.05
+	slider.value = audio_preferences.levels[key]
+	slider.custom_minimum_size.y = 34
+	parent.add_child(slider)
+	audio_sliders[key] = {"slider": slider, "label": label, "title": title}
+	slider.value_changed.connect(func(value: float):
+		if audio_preferences.set_level(key, value):
+			label.text = "%s: %d%%" % [title, roundi(value*100)]
+			audio_preferences.save_settings()
+			audio_mix_changed.emit())
+
 func show_menu(reason := "") -> void:
 	controls.status = reason if not reason.is_empty() else controls.status
 	panel.show()
 	refresh_bindings()
 	resume_button.grab_focus()
+	ensure_entry_focus_visible()
+
+func ensure_entry_focus_visible() -> void:
+	# First show can precede container layout. follow_focus alone scrolls using
+	# the old geometry, leaving the controller's focused Resume button offscreen.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if panel.visible and resume_button.has_focus():
+		left_scroll.ensure_control_visible(resume_button)
 
 func hide_menu() -> void:
 	controls.waiting_action = ""
@@ -210,6 +263,8 @@ func _process(_delta: float) -> void:
 	if panel.visible:
 		var device_name := Input.get_joy_name(controls.device) if controls.device >= 0 else ""
 		message.text = ("No controller detected. " if controls.device < 0 else "Controller: %s. " % (device_name if not device_name.is_empty() else "mapped test device")) + controls.status
+		if audio_preferences != null and not audio_preferences.status.is_empty():
+			message.text += "\n" + audio_preferences.status
 		refresh_bindings()
 
 func _input(_event: InputEvent) -> void:
