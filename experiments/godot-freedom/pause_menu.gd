@@ -11,6 +11,7 @@ signal audio_mix_changed
 var ship_audio_available := false
 var audio_preferences: RefCounted
 var audio_sliders: Dictionary = {}
+var control_sliders: Dictionary = {}
 var controls: Node
 var rotational_coasting := false
 var orbit_preserving_assist := false
@@ -203,6 +204,7 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 	slider.max_value = high
 	slider.step = step
 	slider.value = controls.settings[key]
+	control_sliders[key] = slider
 	slider.custom_minimum_size.y = 30
 	slider.value_changed.connect(func(value: float):
 		controls.settings[key] = value

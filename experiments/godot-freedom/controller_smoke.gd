@@ -168,8 +168,14 @@ func run() -> void:
 	check(root.gui_get_focus_owner() != study.pause_menu.resume_button, "Controller could not navigate menu")
 	# Exercise a settings control through native GUI input, not direct assignment.
 	var sliders: Array[Node] = study.pause_menu.find_children("*", "HSlider", true, false)
-	check(sliders.size() == 4, "Controller settings sliders missing")
-	var deadzone: HSlider = sliders[0]
+	check(sliders.size() == 4 + study.pause_menu.audio_sliders.size(), "Controller/audio settings sliders missing")
+	# Audio categories can precede control settings; identify by meaning, not
+	# incidental child order, and still exercise the actual GUI input path.
+	var deadzone: HSlider = study.pause_menu.control_sliders.get("deadzone")
+	if deadzone == null:
+		check(false, "Deadzone settings slider missing")
+		quit(1)
+		return
 	deadzone.grab_focus()
 	var old_deadzone: float = controls.settings.deadzone
 	button(JOY_BUTTON_DPAD_RIGHT, true)
