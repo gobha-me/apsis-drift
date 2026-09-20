@@ -142,6 +142,7 @@ add_library(apsis_drift_lib STATIC
   src/craft_frame.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
+  src/planet_rotation.cpp
   src/vacuum_dynamics.cpp
   src/touchdown.cpp
   src/flight_deck_acceptance.cpp
@@ -195,7 +196,7 @@ add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/vacuum_dynamics.cpp src/touchdown.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/vacuum_dynamics.cpp src/touchdown.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 target_include_directories(apsis_drift_lib
@@ -299,6 +300,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME rigid-frame-handoff-contract COMMAND apsis-drift-rigid-frame-handoff-tests)
   set_tests_properties(rigid-frame-handoff-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-planet-rotation-tests test/planet_rotation_test.cpp)
+  target_link_libraries(apsis-drift-planet-rotation-tests PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-planet-rotation-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME planet-rotation-contract COMMAND apsis-drift-planet-rotation-tests)
+  set_tests_properties(planet-rotation-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-vacuum-dynamics-tests test/vacuum_dynamics_test.cpp)
   target_link_libraries(apsis-drift-vacuum-dynamics-tests PRIVATE apsis-drift::lib)
   target_compile_options(apsis-drift-vacuum-dynamics-tests PRIVATE

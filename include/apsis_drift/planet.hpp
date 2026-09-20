@@ -22,6 +22,7 @@ enum class PlanetDescriptorStream : std::uint64_t {
   hydrology = 5,
   palette = 6,
   celestial = 7,
+  rotation = 8,
 };
 
 struct PlanetId {
