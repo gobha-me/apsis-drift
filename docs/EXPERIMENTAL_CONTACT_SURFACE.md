@@ -10,6 +10,11 @@ experiment 1, terrain generator 1, source LOD 8, relief 1, mesh LOD 13,
 recipes are rejected rather than silently substituted. This is not a new
 supported-save terrain recipe and adds no generator detail.
 
+An explicit [owner-qualified context extension](EXPERIMENTAL_CONTACT_CONTEXT.md)
+also admits the exact authored origin-home descriptor from its validated
+catalog. The standalone APIs described here remain unchanged and still refuse
+that override; contextual identities must retain their owner wrapper.
+
 ## What the query establishes
 
 - Stable identity is **recipe + planet + cube face + tile X/Y + cell X/Y + half**.

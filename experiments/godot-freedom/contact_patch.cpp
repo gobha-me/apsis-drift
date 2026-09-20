@@ -37,11 +37,10 @@ auto rotate(RigidOrientation q, V v) -> V {
                           cross(imaginary, cross(imaginary, v))),
                       2.0 / norm2));
 }
-} // namespace
-
-auto certify_contact_patch(const RigidBodyWorldContext& context,
-                           const RigidBodyState& state, unsigned support_index,
-                           ContactSurfaceRecipe recipe, TerrainTileCache& cache)
+auto certify_patch_impl(const RigidBodyWorldContext& context,
+                        const RigidBodyState& state, unsigned support_index,
+                        ContactSurfaceRecipe recipe, TerrainTileCache& cache,
+                        bool context_owned, ExperimentalContactOwner& owner)
     -> std::expected<ContactPatch, ContactPatchError> {
   if (recipe != kExperimentalContactSurface)
     return std::unexpected{ContactPatchError::unsupported_recipe};
@@ -86,9 +85,23 @@ auto certify_contact_patch(const RigidBodyWorldContext& context,
 
   // Input validation and query bounds above touch no terrain cache. This one
   // candidate is chosen by radial center, not claimed to be a first normal hit.
-  const auto id = locate_contact_triangle(planet, recipe, direction(center));
-  if (!id) return std::unexpected{ContactPatchError::surface_query_failed};
-  const auto triangle = build_contact_triangle(planet, recipe, *id, cache);
+  const auto triangle =
+      [&]() -> std::expected<ContactTriangle, ContactSurfaceError> {
+    if (context_owned) {
+      const auto id = locate_owned_contact_triangle(context.system, planet.id,
+                                                    recipe, direction(center));
+      if (!id) return std::unexpected{id.error()};
+      const auto result =
+          build_owned_contact_triangle(context.system, *id, cache);
+      if (!result) return std::unexpected{result.error()};
+      owner =
+          result->owner; // Private temporary; never published on later refusal.
+      return result->triangle;
+    }
+    const auto id = locate_contact_triangle(planet, recipe, direction(center));
+    if (!id) return std::unexpected{id.error()};
+    return build_contact_triangle(planet, recipe, *id, cache);
+  }();
   if (!triangle)
     return std::unexpected{ContactPatchError::surface_query_failed};
   const auto& vertices = triangle->vertices;
@@ -148,6 +161,29 @@ auto certify_contact_patch(const RigidBodyWorldContext& context,
       !std::isfinite(result.maximum_gap_metres))
     return std::unexpected{ContactPatchError::ill_conditioned_geometry};
   return result;
+}
+} // namespace
+
+auto certify_contact_patch(const RigidBodyWorldContext& context,
+                           const RigidBodyState& state, unsigned support_index,
+                           ContactSurfaceRecipe recipe, TerrainTileCache& cache)
+    -> std::expected<ContactPatch, ContactPatchError> {
+  ExperimentalContactOwner unused;
+  return certify_patch_impl(context, state, support_index, recipe, cache, false,
+                            unused);
+}
+
+auto certify_owned_contact_patch(const RigidBodyWorldContext& context,
+                                 const RigidBodyState& state,
+                                 unsigned support_index,
+                                 ContactSurfaceRecipe recipe,
+                                 TerrainTileCache& cache)
+    -> std::expected<ExperimentalOwnedContactPatch, ContactPatchError> {
+  ExperimentalContactOwner owner;
+  const auto patch = certify_patch_impl(context, state, support_index, recipe,
+                                        cache, true, owner);
+  if (!patch) return std::unexpected{patch.error()};
+  return ExperimentalOwnedContactPatch{owner, *patch};
 }
 
 } // namespace apsis_drift::godot_spike

@@ -35,6 +35,9 @@ jobs:
       - name: Check formatting
         run: tools/format.sh --check
 
+      - name: Check native test-runner failure handling
+        run: python3 test/native_runner_test.py
+
       - name: Run static analysis
         run: tools/lint.sh
 
