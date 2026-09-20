@@ -367,6 +367,241 @@ auto varied_planets_contract() -> void {
     }
   }
 }
+auto owned_hash(const ExperimentalOwnedSurfacePoint& hit) -> std::uint64_t {
+  auto result = hash(hit.point);
+  const auto& owner = hit.owner;
+  const std::array<std::uint64_t, 9> fields{
+      owner.format,
+      owner.system.value,
+      static_cast<unsigned>(owner.catalog_kind),
+      owner.planet.value,
+      owner.seed_derivation,
+      owner.system_generator,
+      owner.planet_generator,
+      static_cast<unsigned>(owner.descriptor_variant),
+      owner.origin_home_generator};
+  for (auto field : fields)
+    for (unsigned i = 0; i < 8; ++i) {
+      result ^= (field >> (8 * i)) & 255U;
+      result *= 1099511628211ULL;
+    }
+  return result;
+}
+auto owned_contract() -> void {
+  const auto home = generate_origin_system(Seed{42});
+  const auto procedural = generate_local_system(home.seed);
+  const auto& home_planet = home.planets.front().descriptor;
+  const auto& plain_planet = procedural.planets.front().descriptor;
+  const auto recipe = kExperimentalContactSurface;
+  constexpr PlanetFixedDirection d{1, .31415, -.27182};
+  check(home_planet.id == plain_planet.id && home_planet != plain_planet,
+        "origin variant fixture must share ID but not descriptor");
+  auto home_cache = require(TerrainTileCache::create(1));
+  auto plain_cache = require(TerrainTileCache::create(1));
+  const auto home_id =
+      require(locate_owned_contact_triangle(home, home_planet.id, recipe, d));
+  const auto plain_id = require(
+      locate_owned_contact_triangle(procedural, plain_planet.id, recipe, d));
+  check(home_id.triangle == plain_id.triangle && home_id != plain_id,
+        "same-ID descriptor variants lost qualified identity");
+  check(home_id.owner.system == home.id &&
+            home_id.owner.planet == home_planet.id &&
+            home_id.owner.catalog_kind == LocalSystemKind::origin_home &&
+            home_id.owner.descriptor_variant ==
+                ContactDescriptorVariant::origin_home &&
+            home_id.owner.origin_home_generator ==
+                kOriginHomePlanetGeneratorVersion &&
+            plain_id.owner.origin_home_generator == 0 &&
+            plain_id.owner.descriptor_variant ==
+                ContactDescriptorVariant::procedural,
+        "resolved context owner has incorrect generator/variant provenance");
+  const auto home_hit = require(
+      query_owned_contact_surface(home, home_planet.id, recipe, d, home_cache));
+  const auto plain_hit = require(query_owned_contact_surface(
+      procedural, plain_planet.id, recipe, d, plain_cache));
+  check(home_hit.point.position != plain_hit.point.position,
+        "authored terrain silently substituted procedural geometry");
+  const auto standalone =
+      require(query_contact_surface(plain_planet, recipe, d, plain_cache));
+  check(plain_hit.point == standalone,
+        "context wrapper changed procedural geometry bits");
+  error(query_contact_surface(home_planet, recipe, d, home_cache),
+        ContactSurfaceError::invalid_planet,
+        "standalone origin refusal contract changed");
+  check(require(build_owned_contact_triangle(home, home_id, home_cache))
+                .triangle == home_hit.point.triangle,
+        "owned extraction and radial query disagree");
+  geometric_contract(home_hit.point, d);
+
+  auto reject_id = [&](ExperimentalOwnedTriangleId id,
+                       ContactSurfaceError wanted) {
+    auto untouched = require(TerrainTileCache::create(1));
+    error(build_owned_contact_triangle(home, id, untouched), wanted,
+          "forged owner/triangle accepted");
+    check(untouched.size() == 0, "invalid owner accessed terrain cache");
+  };
+  for (auto member : {&ExperimentalContactOwner::format,
+                      &ExperimentalContactOwner::seed_derivation,
+                      &ExperimentalContactOwner::system_generator,
+                      &ExperimentalContactOwner::planet_generator,
+                      &ExperimentalContactOwner::origin_home_generator}) {
+    auto bad = home_id;
+    ++(bad.owner.*member);
+    reject_id(bad, ContactSurfaceError::owner_mismatch);
+  }
+  auto bad = home_id;
+  bad.owner.system.value ^= 1;
+  reject_id(bad, ContactSurfaceError::owner_mismatch);
+  bad = home_id;
+  bad.owner.catalog_kind = LocalSystemKind::procedural;
+  reject_id(bad, ContactSurfaceError::owner_mismatch);
+  bad = home_id;
+  bad.owner.descriptor_variant = ContactDescriptorVariant::procedural;
+  reject_id(bad, ContactSurfaceError::owner_mismatch);
+  bad = home_id;
+  bad.owner.descriptor_variant = static_cast<ContactDescriptorVariant>(255);
+  reject_id(bad, ContactSurfaceError::owner_mismatch);
+  bad = home_id;
+  bad.owner.planet.value ^= 1;
+  reject_id(bad, ContactSurfaceError::unknown_context_planet);
+  bad = home_id;
+  bad.triangle.planet.value ^= 1;
+  reject_id(bad, ContactSurfaceError::wrong_planet);
+  bad = home_id;
+  bad.triangle.cell_x = 32;
+  reject_id(bad, ContactSurfaceError::invalid_triangle);
+  bad = home_id;
+  bad.recipe.version = 2;
+  reject_id(bad, ContactSurfaceError::unsupported_recipe);
+  auto untouched = require(TerrainTileCache::create(1));
+  error(build_owned_contact_triangle(procedural, home_id, untouched),
+        ContactSurfaceError::owner_mismatch,
+        "qualified home triangle accepted in same-seed procedural catalog");
+  auto wrong_catalog = home;
+  wrong_catalog.kind = LocalSystemKind::procedural;
+  error(query_owned_contact_surface(wrong_catalog, home_planet.id, recipe, d,
+                                    untouched),
+        ContactSurfaceError::invalid_context,
+        "authored override under wrong catalog kind accepted");
+  auto wrong_owner = home;
+  wrong_owner.id.value ^= 1;
+  error(query_owned_contact_surface(wrong_owner, home_planet.id, recipe, d,
+                                    untouched),
+        ContactSurfaceError::invalid_context,
+        "catalog owner/seed mismatch accepted");
+  auto wrong_ordinal = home;
+  wrong_ordinal.planets.front().orbit.ordinal = 1;
+  error(query_owned_contact_surface(wrong_ordinal, home_planet.id, recipe, d,
+                                    untouched),
+        ContactSurfaceError::invalid_context,
+        "wrong authored ordinal accepted");
+  const PlanetDescriptor plausible_override{
+      home_planet.seed,
+      home_planet.id,
+      home_planet.display_name,
+      PlanetRadiusKm{home_planet.radius.value ==
+                             kOriginHomeMaximumRadiusKilometres
+                         ? home_planet.radius.value - 1
+                         : home_planet.radius.value + 1},
+      home_planet.surface_gravity,
+      home_planet.atmosphere_class,
+      home_planet.atmosphere_pressure,
+      home_planet.terrain_character,
+      home_planet.water_coverage,
+      home_planet.palette};
+  check(is_tutorial_safe_home_planet(plausible_override),
+        "forged descriptor fixture must remain within tutorial-safe ranges");
+  auto forged_catalog = home;
+  std::vector<LocalSystemPlanet> forged_planets;
+  forged_planets.push_back({plausible_override, home.planets.front().orbit});
+  for (std::size_t i = 1; i < home.planets.size(); ++i)
+    forged_planets.push_back(home.planets[i]);
+  forged_catalog.planets = std::move(forged_planets);
+  error(query_owned_contact_surface(forged_catalog, home_planet.id, recipe, d,
+                                    untouched),
+        ContactSurfaceError::invalid_context,
+        "tutorial-safe fields substituted for exact authored descriptor");
+  error(query_owned_contact_surface(home, PlanetId{0}, recipe, d, untouched),
+        ContactSurfaceError::unknown_context_planet,
+        "unknown planet resolved by replacement");
+  error(query_owned_contact_surface(
+            home, home_planet.id, recipe,
+            {std::numeric_limits<double>::quiet_NaN(), 0, 0}, untouched),
+        ContactSurfaceError::invalid_direction,
+        "owned path accepted nonfinite ray");
+  check(untouched.size() == 0, "invalid catalog/direction sampled terrain");
+
+  // Retain the cache's deliberate descriptor-collision refusal. No implicit
+  // replacing/flushing a still-valid procedural cache to accommodate origin.
+  error(
+      query_owned_contact_surface(home, home_planet.id, recipe, d, plain_cache),
+      ContactSurfaceError::sampling_failure,
+      "same-key different-descriptor cache silently replaced");
+  check(require(query_owned_contact_surface(procedural, plain_planet.id, recipe,
+                                            d, plain_cache)) == plain_hit,
+        "cache conflict corrupted previous context's geometry");
+  (void)require(query_owned_contact_surface(home, home_planet.id, recipe,
+                                            {-1, .2, .1}, home_cache));
+  check(require(query_owned_contact_surface(home, home_planet.id, recipe, d,
+                                            home_cache)) == home_hit,
+        "owned cache eviction changed geometry/provenance");
+  // Other planets in an origin catalog remain procedural, not authored-home.
+  const auto& neighbor = home.planets[1].descriptor;
+  auto neighbor_cache = require(TerrainTileCache::create(1));
+  const auto neighbor_hit = require(query_owned_contact_surface(
+      home, neighbor.id, recipe, d, neighbor_cache));
+  check(neighbor_hit.owner.descriptor_variant ==
+                ContactDescriptorVariant::procedural &&
+            neighbor_hit.owner.origin_home_generator == 0 &&
+            neighbor_hit.owner.catalog_kind == LocalSystemKind::origin_home &&
+            neighbor_hit.point == require(query_contact_surface(
+                                      neighbor, recipe, d, neighbor_cache)),
+        "origin catalog incorrectly overrides non-home planet");
+
+  auto mesh_cache = require(TerrainTileCache::create(8));
+  for (unsigned face = 0; face < 6; ++face) {
+    const StreamKey key{face, 13, 4123, 3671};
+    const auto mesh = build_stream_tile(home_planet, key, 8, 1, mesh_cache);
+    for (unsigned cell : {0U, 31U, 511U, 1023U})
+      for (unsigned half : {0U, 1U}) {
+        auto id = home_id;
+        id.triangle = {home_planet.id,
+                       static_cast<CubeFace>(face),
+                       key.x,
+                       key.y,
+                       cell % 32,
+                       cell / 32,
+                       half};
+        const auto triangle =
+            require(build_owned_contact_triangle(home, id, mesh_cache));
+        const auto first = (cell * 2 + half) * 3;
+        for (auto vertex : triangle.triangle.vertices) {
+          bool found = false;
+          for (unsigned i = 0; i < 3; ++i)
+            found |= vertex == add(mesh->anchor,
+                                   mesh->vertices[mesh->indices[first + i]]);
+          check(found, "context home vertex differs from unchanged native "
+                       "stream builder");
+        }
+      }
+  }
+  for (double x : {-1.0, 0.0, 1.0})
+    for (double y : {-1.0, 0.0, 1.0})
+      for (double z : {-1.0, 0.0, 1.0}) {
+        if (x == 0 && y == 0 && z == 0) continue;
+        const PlanetFixedDirection ray{x, y, z};
+        const auto hit = require(query_owned_contact_surface(
+            home, home_planet.id, recipe, ray, home_cache));
+        geometric_contract(hit.point, ray);
+      }
+  std::cout << "owned origin golden " << owned_hash(home_hit) << '\n';
+  std::cout << "owned procedural golden " << owned_hash(plain_hit) << '\n';
+  // Owner-inclusive new fixtures observed identically in GCC/Clang runs.
+  check(owned_hash(home_hit) == 17524982012417750703ULL,
+        "experimental owned origin golden changed");
+  check(owned_hash(plain_hit) == 13132756775747483476ULL,
+        "experimental owned procedural golden changed");
+}
 } // namespace
 
 auto main() -> int {
@@ -377,6 +612,7 @@ auto main() -> int {
     mesh_contract(planet);
     queries_contract(planet);
     varied_planets_contract();
+    owned_contract();
     std::cout << "experimental contact surface: PASS (not footprint/collision "
                  "proof)\n";
     return 0;

@@ -23,8 +23,9 @@ altitude are rejected before touching the triangle cache.
 The underlying point query currently accepts only unchanged procedural planet
 descriptors. The valid authored tutorial-safe origin-home variant is therefore
 refused as `surface_query_failed`, not substituted with a different planet.
-Supporting that variant needs an explicit context-aware point-provider extension;
-this patch helper does not relax its descriptor identity contract.
+The separate [owner-qualified context extension](EXPERIMENTAL_CONTACT_CONTEXT.md)
+now supports that exact variant through `certify_owned_contact_patch`. The
+original `certify_contact_patch` retains its refusal and identity contract.
 
 ### Next provider boundary: authoritative catalog ownership
 

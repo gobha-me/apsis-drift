@@ -43,6 +43,51 @@ auto valid_id(ContactTriangleId id) -> bool {
   return static_cast<unsigned>(id.face) <= 5 && id.tile_x < 8192 &&
          id.tile_y < 8192 && id.cell_x < 32 && id.cell_y < 32 && id.half < 2;
 }
+struct ResolvedOwner {
+  ExperimentalContactOwner owner;
+  const PlanetDescriptor* planet;
+};
+auto resolve_owner(const LocalSystemDescriptor& context, PlanetId planet,
+                   ContactSurfaceRecipe recipe)
+    -> std::expected<ResolvedOwner, ContactSurfaceError> {
+  static_assert(kLocalSystemGeneratorVersion == 1);
+  static_assert(kOriginHomePlanetGeneratorVersion == 1);
+  if (recipe != kExperimentalContactSurface)
+    return std::unexpected{ContactSurfaceError::unsupported_recipe};
+  const auto body = find_local_system_planet(context, planet);
+  if (!body)
+    return std::unexpected{body.error() == LocalSystemError::unknown_planet
+                               ? ContactSurfaceError::unknown_context_planet
+                               : ContactSurfaceError::invalid_context};
+  ExperimentalContactOwner owner;
+  owner.system = context.id;
+  owner.catalog_kind = context.kind;
+  owner.planet = planet;
+  const bool home =
+      context.kind == LocalSystemKind::origin_home &&
+      context.planets[kOriginHomePlanetOrdinal].descriptor.id == planet;
+  if (home) {
+    owner.descriptor_variant = ContactDescriptorVariant::origin_home;
+    owner.origin_home_generator = kOriginHomePlanetGeneratorVersion;
+  }
+  return ResolvedOwner{owner, &(*body)->descriptor};
+}
+auto locate_validated(const PlanetDescriptor& planet,
+                      PlanetFixedDirection direction)
+    -> std::expected<ContactTriangleId, ContactSurfaceError> {
+  if (!valid_direction(direction))
+    return std::unexpected{ContactSurfaceError::invalid_direction};
+  const auto address =
+      terrain_address_from_planet_direction(planet, direction, 13);
+  if (!address) return std::unexpected{ContactSurfaceError::coordinate_failure};
+  const auto u = address->u * 32, v = address->v * 32;
+  const auto x = std::min(static_cast<unsigned>(u), 31U);
+  const auto y = std::min(static_cast<unsigned>(v), 31U);
+  const auto half = (u - x) + (v - y) <= 1.0 ? 0U : 1U;
+  return ContactTriangleId{
+      planet.id, address->tile.face, address->tile.x, address->tile.y, x, y,
+      half};
+}
 auto build_validated(const PlanetDescriptor& planet,
                      ContactSurfaceRecipe recipe, ContactTriangleId id,
                      TerrainTileCache& cache)
@@ -86,6 +131,38 @@ auto build_validated(const PlanetDescriptor& planet,
                              sign * (normal.z / area)};
   return triangle;
 }
+auto intersect_validated(const ContactTriangle& triangle,
+                         PlanetFixedDirection direction)
+    -> std::expected<ContactSurfacePoint, ContactSurfaceError> {
+  const auto magnitude = std::hypot(direction.x, direction.y, direction.z);
+  const Point ray{direction.x / magnitude, direction.y / magnitude,
+                  direction.z / magnitude};
+  const auto n = triangle.outward_normal;
+  const Point normal{n.x, n.y, n.z};
+  const auto denominator = product(normal, ray);
+  if (!std::isfinite(denominator) || denominator <= 1e-8)
+    return std::unexpected{ContactSurfaceError::unsafe_geometry};
+  const auto distance = product(normal, triangle.vertices[0]) / denominator;
+  const Point hit{ray.x * distance, ray.y * distance, ray.z * distance};
+  if (!std::isfinite(distance) || distance <= 0 || distance > 1e8 ||
+      !valid_point(hit))
+    return std::unexpected{ContactSurfaceError::unsafe_geometry};
+  const auto a = difference(triangle.vertices[1], triangle.vertices[0]);
+  const auto b = difference(triangle.vertices[2], triangle.vertices[0]);
+  const auto c = difference(hit, triangle.vertices[0]);
+  const auto aa = product(a, a), ab = product(a, b), bb = product(b, b);
+  const auto ca = product(c, a), cb = product(c, b);
+  const auto determinant = aa * bb - ab * ab;
+  if (!std::isfinite(determinant) || determinant <= 1e-8)
+    return std::unexpected{ContactSurfaceError::unsafe_geometry};
+  const auto y = (bb * ca - ab * cb) / determinant;
+  const auto z = (aa * cb - ab * ca) / determinant;
+  const std::array<double, 3> barycentric{1.0 - y - z, y, z};
+  for (const auto weight : barycentric)
+    if (!std::isfinite(weight) || weight < -1e-7 || weight > 1.0 + 1e-7)
+      return std::unexpected{ContactSurfaceError::unsafe_geometry};
+  return ContactSurfacePoint{triangle, hit, distance, barycentric};
+}
 } // namespace
 
 auto locate_contact_triangle(const PlanetDescriptor& planet,
@@ -94,18 +171,7 @@ auto locate_contact_triangle(const PlanetDescriptor& planet,
     -> std::expected<ContactTriangleId, ContactSurfaceError> {
   const auto valid = validate(planet, recipe);
   if (!valid) return std::unexpected{valid.error()};
-  if (!valid_direction(direction))
-    return std::unexpected{ContactSurfaceError::invalid_direction};
-  const auto address =
-      terrain_address_from_planet_direction(planet, direction, 13);
-  if (!address) return std::unexpected{ContactSurfaceError::coordinate_failure};
-  const auto u = address->u * 32, v = address->v * 32;
-  const auto x = std::min(static_cast<unsigned>(u), 31U);
-  const auto y = std::min(static_cast<unsigned>(v), 31U);
-  const auto half = (u - x) + (v - y) <= 1.0 ? 0U : 1U;
-  return ContactTriangleId{
-      planet.id, address->tile.face, address->tile.x, address->tile.y, x, y,
-      half};
+  return locate_validated(planet, direction);
 }
 
 auto build_contact_triangle(const PlanetDescriptor& planet,
@@ -130,34 +196,52 @@ auto query_contact_surface(const PlanetDescriptor& planet,
   if (!id) return std::unexpected{id.error()};
   const auto triangle = build_validated(planet, recipe, *id, cache);
   if (!triangle) return std::unexpected{triangle.error()};
-  const auto magnitude = std::hypot(direction.x, direction.y, direction.z);
-  const Point ray{direction.x / magnitude, direction.y / magnitude,
-                  direction.z / magnitude};
-  const auto n = triangle->outward_normal;
-  const Point normal{n.x, n.y, n.z};
-  const auto denominator = product(normal, ray);
-  if (!std::isfinite(denominator) || denominator <= 1e-8)
-    return std::unexpected{ContactSurfaceError::unsafe_geometry};
-  const auto distance = product(normal, triangle->vertices[0]) / denominator;
-  const Point hit{ray.x * distance, ray.y * distance, ray.z * distance};
-  if (!std::isfinite(distance) || distance <= 0 || distance > 1e8 ||
-      !valid_point(hit))
-    return std::unexpected{ContactSurfaceError::unsafe_geometry};
-  const auto a = difference(triangle->vertices[1], triangle->vertices[0]);
-  const auto b = difference(triangle->vertices[2], triangle->vertices[0]);
-  const auto c = difference(hit, triangle->vertices[0]);
-  const auto aa = product(a, a), ab = product(a, b), bb = product(b, b);
-  const auto ca = product(c, a), cb = product(c, b);
-  const auto determinant = aa * bb - ab * ab;
-  if (!std::isfinite(determinant) || determinant <= 1e-8)
-    return std::unexpected{ContactSurfaceError::unsafe_geometry};
-  const auto y = (bb * ca - ab * cb) / determinant;
-  const auto z = (aa * cb - ab * ca) / determinant;
-  const std::array<double, 3> barycentric{1.0 - y - z, y, z};
-  for (const auto weight : barycentric)
-    if (!std::isfinite(weight) || weight < -1e-7 || weight > 1.0 + 1e-7)
-      return std::unexpected{ContactSurfaceError::unsafe_geometry};
-  return ContactSurfacePoint{*triangle, hit, distance, barycentric};
+  return intersect_validated(*triangle, direction);
+}
+
+auto locate_owned_contact_triangle(const LocalSystemDescriptor& context,
+                                   PlanetId planet, ContactSurfaceRecipe recipe,
+                                   PlanetFixedDirection direction)
+    -> std::expected<ExperimentalOwnedTriangleId, ContactSurfaceError> {
+  const auto resolved = resolve_owner(context, planet, recipe);
+  if (!resolved) return std::unexpected{resolved.error()};
+  const auto id = locate_validated(*resolved->planet, direction);
+  if (!id) return std::unexpected{id.error()};
+  return ExperimentalOwnedTriangleId{resolved->owner, recipe, *id};
+}
+
+auto build_owned_contact_triangle(const LocalSystemDescriptor& context,
+                                  const ExperimentalOwnedTriangleId& id,
+                                  TerrainTileCache& cache)
+    -> std::expected<ExperimentalOwnedTriangle, ContactSurfaceError> {
+  const auto resolved = resolve_owner(context, id.owner.planet, id.recipe);
+  if (!resolved) return std::unexpected{resolved.error()};
+  if (id.owner != resolved->owner)
+    return std::unexpected{ContactSurfaceError::owner_mismatch};
+  if (id.triangle.planet != id.owner.planet)
+    return std::unexpected{ContactSurfaceError::wrong_planet};
+  if (!valid_id(id.triangle))
+    return std::unexpected{ContactSurfaceError::invalid_triangle};
+  const auto triangle =
+      build_validated(*resolved->planet, id.recipe, id.triangle, cache);
+  if (!triangle) return std::unexpected{triangle.error()};
+  return ExperimentalOwnedTriangle{resolved->owner, *triangle};
+}
+
+auto query_owned_contact_surface(const LocalSystemDescriptor& context,
+                                 PlanetId planet, ContactSurfaceRecipe recipe,
+                                 PlanetFixedDirection direction,
+                                 TerrainTileCache& cache)
+    -> std::expected<ExperimentalOwnedSurfacePoint, ContactSurfaceError> {
+  const auto resolved = resolve_owner(context, planet, recipe);
+  if (!resolved) return std::unexpected{resolved.error()};
+  const auto id = locate_validated(*resolved->planet, direction);
+  if (!id) return std::unexpected{id.error()};
+  const auto triangle = build_validated(*resolved->planet, recipe, *id, cache);
+  if (!triangle) return std::unexpected{triangle.error()};
+  const auto point = intersect_validated(*triangle, direction);
+  if (!point) return std::unexpected{point.error()};
+  return ExperimentalOwnedSurfacePoint{resolved->owner, *point};
 }
 
 } // namespace apsis_drift::godot_spike

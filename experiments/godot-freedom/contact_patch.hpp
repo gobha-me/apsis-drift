@@ -70,4 +70,22 @@ enum class ContactPatchError : std::uint8_t {
                                          TerrainTileCache&)
     -> std::expected<ContactPatch, ContactPatchError>;
 
+struct ExperimentalOwnedContactPatch {
+  ExperimentalContactOwner owner;
+  ContactPatch patch;
+  friend auto operator==(const ExperimentalOwnedContactPatch&,
+                         const ExperimentalOwnedContactPatch&)
+      -> bool = default;
+};
+
+// Same geometric contract/limits, but uses the owner-qualified descriptor
+// lookup and retains that owner with the result. This is the only patch path
+// admitting the authored origin-home variant. No live adapter or support claim.
+[[nodiscard]] auto certify_owned_contact_patch(const RigidBodyWorldContext&,
+                                               const RigidBodyState&,
+                                               unsigned support_index,
+                                               ContactSurfaceRecipe,
+                                               TerrainTileCache&)
+    -> std::expected<ExperimentalOwnedContactPatch, ContactPatchError>;
+
 } // namespace apsis_drift::godot_spike

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/local_system.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 
 #include <array>
@@ -58,6 +59,9 @@ enum class ContactSurfaceError : std::uint8_t {
   coordinate_failure,
   sampling_failure,
   unsafe_geometry,
+  invalid_context,
+  unknown_context_planet,
+  owner_mismatch,
 };
 
 // Requires an unchanged generated descriptor. Direction need not be unit, but
@@ -87,5 +91,67 @@ enum class ContactSurfaceError : std::uint8_t {
                                          PlanetFixedDirection,
                                          TerrainTileCache&)
     -> std::expected<ContactSurfacePoint, ContactSurfaceError>;
+
+// Context-qualified experiment only: NOT production/save identities. The
+// authored origin and its procedural counterpart share a PlanetId but can
+// differ geometrically. Never strip this owner when storing contextual data.
+enum class ContactDescriptorVariant : std::uint8_t {
+  procedural = 1,
+  origin_home = 2
+};
+struct ExperimentalContactOwner {
+  std::uint32_t format{1};
+  SystemId system;
+  LocalSystemKind catalog_kind{LocalSystemKind::procedural};
+  PlanetId planet;
+  std::uint32_t seed_derivation{kSeedDerivationVersion},
+      system_generator{kLocalSystemGeneratorVersion},
+      planet_generator{kPlanetGeneratorVersion};
+  ContactDescriptorVariant descriptor_variant{
+      ContactDescriptorVariant::procedural};
+  std::uint32_t
+      origin_home_generator{}; // 0 for procedural, authored version otherwise
+  friend auto operator==(const ExperimentalContactOwner&,
+                         const ExperimentalContactOwner&) -> bool = default;
+};
+struct ExperimentalOwnedTriangleId {
+  ExperimentalContactOwner owner;
+  ContactSurfaceRecipe recipe;
+  ContactTriangleId triangle;
+  friend auto operator==(const ExperimentalOwnedTriangleId&,
+                         const ExperimentalOwnedTriangleId&) -> bool = default;
+};
+struct ExperimentalOwnedTriangle {
+  ExperimentalContactOwner owner;
+  ContactTriangle triangle;
+  friend auto operator==(const ExperimentalOwnedTriangle&,
+                         const ExperimentalOwnedTriangle&) -> bool = default;
+};
+struct ExperimentalOwnedSurfacePoint {
+  ExperimentalContactOwner owner;
+  ContactSurfacePoint point;
+  friend auto operator==(const ExperimentalOwnedSurfacePoint&,
+                         const ExperimentalOwnedSurfacePoint&)
+      -> bool = default;
+};
+
+// Resolve the descriptor solely through validated catalog membership. The old
+// standalone API above remains strict and still refuses authored overrides.
+// Scope cache lifetime to one catalog/descriptor variant. Existing same-key /
+// different-descriptor cache conflicts remain refusals, never replacements.
+// No coordinate transform or live-session context is inferred here.
+[[nodiscard]] auto locate_owned_contact_triangle(const LocalSystemDescriptor&,
+                                                 PlanetId, ContactSurfaceRecipe,
+                                                 PlanetFixedDirection)
+    -> std::expected<ExperimentalOwnedTriangleId, ContactSurfaceError>;
+[[nodiscard]] auto build_owned_contact_triangle(
+    const LocalSystemDescriptor&, const ExperimentalOwnedTriangleId&,
+    TerrainTileCache&)
+    -> std::expected<ExperimentalOwnedTriangle, ContactSurfaceError>;
+[[nodiscard]] auto query_owned_contact_surface(const LocalSystemDescriptor&,
+                                               PlanetId, ContactSurfaceRecipe,
+                                               PlanetFixedDirection,
+                                               TerrainTileCache&)
+    -> std::expected<ExperimentalOwnedSurfacePoint, ContactSurfaceError>;
 
 } // namespace apsis_drift::godot_spike

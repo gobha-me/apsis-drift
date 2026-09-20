@@ -235,6 +235,10 @@ auto malformed(Fixture& f) -> void {
                 std::bit_cast<std::uint64_t>(after[i]),
             "refused query mutated authoritative input bits");
     check(cache.size() == 0, "malformed request accessed triangle cache");
+    const auto owned =
+        certify_owned_contact_patch(f.context, s, support, recipe, cache);
+    check(!owned && owned.error() == error && cache.size() == 0,
+          "owned path weakened malformed-state or pre-cache validation");
   };
   auto s = state;
   s.position_metres.x = std::numeric_limits<double>::quiet_NaN();
@@ -344,6 +348,13 @@ auto geometry(Fixture& f) -> void {
           f.state(add(center(triangle), mul(normal, -.1)), q, support);
       const auto before = require(rigid_body_state_checksum(f.context, s));
       const auto result = require(f.certificate(s, support));
+      const auto owned = require(certify_owned_contact_patch(
+          f.context, s, support, kExperimentalContactSurface, f.cache));
+      check(owned.patch == result && owned.owner.system == f.system.id &&
+                owned.owner.planet == f.planet().id &&
+                owned.owner.descriptor_variant ==
+                    ContactDescriptorVariant::procedural,
+            "context qualification changed existing procedural patch bits");
       check(result.triangle.id == triangle.id && result.frame == s.frame &&
                 result.tick == s.tick && result.support_index == support &&
                 result.craft == s.craft,
@@ -543,6 +554,106 @@ auto boundaries(Fixture& f) -> void {
           "diagonal/tile/cube boundary crossing was certified");
   }
 }
+auto owned_patch_hash(const ExperimentalOwnedContactPatch& patch)
+    -> std::uint64_t {
+  auto result = hash(patch.patch);
+  const auto& owner = patch.owner;
+  const std::array<std::uint64_t, 9> fields{
+      owner.format,
+      owner.system.value,
+      static_cast<unsigned>(owner.catalog_kind),
+      owner.planet.value,
+      owner.seed_derivation,
+      owner.system_generator,
+      owner.planet_generator,
+      static_cast<unsigned>(owner.descriptor_variant),
+      owner.origin_home_generator};
+  for (auto field : fields)
+    for (unsigned i = 0; i < 8; ++i) {
+      result ^= (field >> (8 * i)) & 255;
+      result *= 1099511628211ULL;
+    }
+  return result;
+}
+auto owned_patches() -> void {
+  Fixture home{generate_origin_system(Seed{42})};
+  auto selected = require(locate_owned_contact_triangle(
+      home.system, home.planet().id, kExperimentalContactSurface, {1, 0, 0}));
+  for (unsigned face = 0; face < 6; ++face) {
+    selected.triangle = {
+        home.planet().id, static_cast<CubeFace>(face), 4123, 3671, 10, 19, 0};
+    const auto triangle = require(
+        build_owned_contact_triangle(home.system, selected, home.cache));
+    const auto n = vector(triangle.triangle.outward_normal);
+    const auto q = align_up(n);
+    for (unsigned support = 0; support < 3; ++support) {
+      const auto state =
+          home.state(add(center(triangle.triangle), mul(n, -.1)), q, support);
+      const auto before =
+          require(rigid_body_state_checksum(home.context, state));
+      const auto result = require(
+          certify_owned_contact_patch(home.context, state, support,
+                                      kExperimentalContactSurface, home.cache));
+      check(result.owner == selected.owner &&
+                result.patch.frame == state.frame &&
+                result.patch.triangle == triangle.triangle &&
+                result.patch.tick == state.tick &&
+                result.patch.support_index == support,
+            "origin patch lost canonical owner/triangle/state provenance");
+      oracle(result.patch);
+      near(result.patch.minimum_gap_metres, -.1 - kContactPatchAllowanceMetres,
+           2e-8,
+           "owned origin level gap differs from independent plane geometry");
+      check(require(rigid_body_state_checksum(home.context, state)) == before,
+            "owned patch query mutated authoritative rigid state");
+      auto separate = require(TerrainTileCache::create(1));
+      const auto cold = require(certify_owned_contact_patch(
+          home.context, state, support, kExperimentalContactSurface, separate));
+      auto distant = selected;
+      distant.triangle.tile_x = 1;
+      distant.triangle.tile_y = 1;
+      (void)require(
+          build_owned_contact_triangle(home.system, distant, separate));
+      check(require(certify_owned_contact_patch(home.context, state, support,
+                                                kExperimentalContactSurface,
+                                                separate)) == cold &&
+                cold == result,
+            "context-scoped cache eviction changed origin patch");
+      const auto standalone = home.certificate(state, support);
+      check(!standalone &&
+                standalone.error() == ContactPatchError::surface_query_failed,
+            "existing standalone origin patch refusal changed");
+      if (face == 2 && support == 0) {
+        std::cout << "owned patch level golden " << owned_patch_hash(result)
+                  << '\n';
+        check(owned_patch_hash(result) == 7643701639146807608ULL,
+              "experimental owned level patch golden changed");
+      }
+    }
+    const auto tilted =
+        home.state(center(triangle.triangle), compose(q, {.96, .28, 0, 0}));
+    const auto result = require(certify_owned_contact_patch(
+        home.context, tilted, 0, kExperimentalContactSurface, home.cache));
+    oracle(result.patch);
+    near(result.patch.minimum_gap_metres,
+         -.55 * .5376 - kContactPatchAllowanceMetres, 2e-8,
+         "owned origin tilted gap differs from analytic rectangle");
+    if (face == 2) {
+      std::cout << "owned patch tilted golden " << owned_patch_hash(result)
+                << '\n';
+      check(owned_patch_hash(result) == 4396711435420471693ULL,
+            "experimental owned tilted patch golden changed");
+    }
+    const auto wrong_system = generate_local_system(Seed{7});
+    const RigidBodyWorldContext wrong{wrong_system};
+    auto untouched = require(TerrainTileCache::create(1));
+    const auto refused = certify_owned_contact_patch(
+        wrong, tilted, 0, kExperimentalContactSurface, untouched);
+    check(!refused && refused.error() == ContactPatchError::invalid_state &&
+              untouched.size() == 0,
+          "owned patch admitted mismatched frame/system provenance");
+  }
+}
 } // namespace
 
 auto main() -> int {
@@ -551,6 +662,7 @@ auto main() -> int {
     malformed(fixture);
     geometry(fixture);
     boundaries(fixture);
+    owned_patches();
     std::cout << "contact patch: PASS (normal-projection geometry only)\n";
     return 0;
   } catch (const std::exception& error) {

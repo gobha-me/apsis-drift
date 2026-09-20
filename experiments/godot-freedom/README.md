@@ -149,6 +149,34 @@ string identities before allocation. Files above 96 MiB are rejected.
 
 ## Verify
 
+For the native GDScript contracts, first finish a build with both
+`APSIS_DRIFT_GODOT_SPIKE=ON` and `APSIS_DRIFT_GODOT_LIVE=ON`, then run:
+
+```sh
+python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
+```
+
+This Linux runner stages the selected build's exporter and bridge, copies the
+test project, generates atmospheric/airless fixtures, and runs 24 explicitly
+listed contracts headlessly with Dummy audio. Each run gets a fresh retained
+directory under `build-godot`, isolated preferences/cache, per-test logs and a
+JSON report with source/binary hashes. It does not build, download content,
+import the editor, launch a visible window or use private recordings. Finish
+building before starting it; it does not synchronize with concurrent builds.
+
+Nonzero/crash exits, deadlines, engine/script errors, leaked resources and
+missing completion markers fail the run. A zero process exit alone is not a
+pass. The shutdown contract's deliberately exercised drain-deadline warning
+remains expected. `--test NAME` selects a subset (repeatable); `--timeout` sets
+the per-process deadline within 1–600 seconds. Reports identify the selected
+subset, not a full-suite pass. `python3 test/native_runner_test.py` tests runner
+failure handling without Godot and runs in hosted CI.
+
+These checks cover generated/synthetic fixtures and the actual native bridge,
+not GPU appearance, imported-art fit, physical controllers, device hotplug,
+speaker listening or frame-rate performance. The full native run remains an
+explicit local check; the hosted runner unit test is not equivalent to it.
+
 ```sh
 cmake -S . -B build -DAPSIS_DRIFT_GODOT_SPIKE=ON
 cmake --build build --target apsis-drift-godot-snapshot apsis-drift-godot-snapshot-tests
