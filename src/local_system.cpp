@@ -1,4 +1,5 @@
 #include "apsis_drift/local_system.hpp"
+#include "local_system_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -314,7 +315,12 @@ auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
   }
   const auto found = find_local_system_planet(system, planet);
   if (!found) return std::unexpected{found.error()};
-  const auto& orbit = (*found)->orbit;
+  return detail::resolve_validated_circular_orbit((*found)->orbit, time);
+}
+
+auto detail::resolve_validated_circular_orbit(const PlanetOrbit& orbit,
+                                              EphemerisQueryTime time)
+    -> std::expected<PlanetEphemeris, LocalSystemError> {
   if (orbit.period_ticks == 0) {
     return std::unexpected{LocalSystemError::invalid_orbit};
   }
@@ -367,7 +373,7 @@ auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
     return std::unexpected{LocalSystemError::unsafe_arithmetic};
   }
   return PlanetEphemeris{
-      .planet = planet,
+      .planet = orbit.planet,
       .position = position,
       .velocity = velocity,
       .cycle_tick = cycle_tick,
