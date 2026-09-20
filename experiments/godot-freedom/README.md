@@ -157,7 +157,7 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 ```
 
 This Linux runner stages the selected build's exporter and bridge, copies the
-test project, generates atmospheric/airless fixtures, and runs 24 explicitly
+test project, generates atmospheric/airless fixtures, and runs 26 explicitly
 listed contracts headlessly with Dummy audio. Each run gets a fresh retained
 directory under `build-godot`, isolated preferences/cache, per-test logs and a
 JSON report with source/binary hashes. It does not build, download content,
