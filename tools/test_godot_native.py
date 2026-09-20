@@ -31,6 +31,8 @@ TESTS = {
     "asset_materials": "none",
     "pilot_presentation": "none",
     "pilot_view_integration": "none",
+    "pilot_motion": "none",
+    "pilot_motion_input": "named_snapshot",
     "audio_preferences": "none",
     "recorded_ship_audio": "none",
     "ship_audio": "none",
