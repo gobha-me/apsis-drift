@@ -26,6 +26,7 @@ var sun_light: DirectionalLight3D
 var render_size := Vector2i.ZERO
 var live_bridge: Variant = null
 var live_paused := false
+var quitting := false
 var window_focused := true
 var clear_live_input := false
 var snapshot_text := ""
@@ -361,6 +362,8 @@ func setup_player_controls() -> void:
 		if pilot_view or mode == 3:
 			update_head_camera())
 	pause_menu.resumed.connect(func(): set_player_paused(false))
+	pause_menu.quit_requested.connect(request_quit)
+	get_tree().auto_accept_quit = false
 	pause_menu.reset_flight.connect(reset_live_flight)
 	pause_menu.debug_changed.connect(func(value: bool): debug_visible = value)
 	pause_menu.camera_distance_changed.connect(set_chase_distance)
@@ -432,6 +435,8 @@ func orbit_camera(relative: Vector2) -> void:
 
 
 func set_player_paused(paused: bool, reason := "") -> void:
+	if quitting:
+		return
 	# A queued GUI accept must not resume through the focus-safety pause.
 	if not paused and not window_focused:
 		return
@@ -446,6 +451,37 @@ func set_player_paused(paused: bool, reason := "") -> void:
 		pause_menu.show_menu(reason)
 	else:
 		pause_menu.hide_menu()
+
+
+func request_quit() -> void:
+	if quitting:
+		return
+	quitting = true
+	live_paused = true
+	set_process(false)
+	if is_instance_valid(player_input):
+		player_input.set_enabled(false)
+	if is_instance_valid(pause_menu):
+		pause_menu.hide_menu()
+	if is_instance_valid(flight_plan_menu):
+		flight_plan_menu.close()
+	var drain := 0.0
+	if is_instance_valid(ship_audio):
+		if ship_audio.has_method("prepare_shutdown"):
+			drain = ship_audio.prepare_shutdown()
+		else:
+			ship_audio.set_muted(true)
+	if drain > 0:
+		var deadline := Time.get_ticks_msec() + ceili(drain * 1000)
+		while not ship_audio.shutdown_drained() and Time.get_ticks_msec() < deadline:
+			await get_tree().process_frame
+		if not ship_audio.shutdown_drained():
+			push_warning("Audio shutdown reached its bounded drain deadline; exiting without waiting indefinitely.")
+	finish_quit()
+
+
+func finish_quit() -> void:
+	get_tree().quit()
 
 
 func reset_live_flight() -> void:
@@ -732,6 +768,8 @@ func update_head_camera() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if quitting:
+		return
 	if player_input != null and (not window_focused or pause_menu.panel.visible):
 		return
 	if player_input != null and player_input.thrust_mode and event.is_pressed() and not event.is_echo():
@@ -789,6 +827,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if quitting:
+		return
 	# Runs before early exits so menus, inspection modes and terrain loading
 	# cannot leave the last engine demand sounding indefinitely.
 	update_ship_audio()
@@ -1034,6 +1074,11 @@ func _process(delta: float) -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		request_quit()
+		return
+	if quitting:
+		return
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		window_focused = false
 		if player_input != null:

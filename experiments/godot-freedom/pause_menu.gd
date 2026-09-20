@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## Native focus-navigation controls. Menu input never advances flight.
 signal resumed
+signal quit_requested
 signal reset_flight
 signal debug_changed(value: bool)
 signal camera_distance_changed(value: float)
@@ -148,7 +149,7 @@ func _ready() -> void:
 		controls.install()
 		controls.save_settings()
 		refresh_bindings())
-	add_button(left, "Quit study", func(): get_tree().quit())
+	add_button(left, "Quit study", func(): quit_requested.emit())
 	message = Label.new()
 	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	message.custom_minimum_size.y = 64

@@ -37,7 +37,13 @@ clearance or a claim that imported audio is original BSD synthesis. Preserve
 source/license records and establish the distribution source chain before
 shipping samples. The opt-in recording adapter and saved category controls are
 implemented in [study 28](RECORDED_SHIP_AUDIO_28.md); native listening and loop
-comfort still require a human audition. Offline acceptance is not that gate.
+comfort require a human audition. Offline acceptance is not that gate.
+
+Build 28 native listening checkpoint: the user reports the in-game sound is
+"a lot better" and asks to continue development. Preserve this recording mix
+as the current playable baseline rather than retuning it speculatively. This
+positive checkpoint does not establish long-session comfort, spatial audio,
+all device configurations or public recording redistribution rights.
 
 ## Historical synthesis direction, not current sound acceptance
 

@@ -46,7 +46,11 @@ capacity, fluid support, slope everywhere beneath a pad, belly clearance,
 continuous/swept contact, time of impact, impulse, or a contact episode. A
 surface below generated sea level is still only geometry, not a landable
 surface. Whole-pad coverage must enumerate intersected triangles or refuse
-ambiguity under a separate bounded contract. No frame/owner adapter, landed
+ambiguity under a separate bounded contract. The new
+[single-triangle patch experiment](EXPERIMENTAL_CONTACT_PATCH.md) proves normal
+projection containment and plane-gap bounds only when the whole registered pad
+fits strictly inside one facet; it refuses uncertain/crossing cases and still
+cannot establish physical support. No frame/owner adapter, landed
 state, gear action, condition/damage, save transition or recovery is added.
 
 Before live consequences, near-contact presentation must match this surface;

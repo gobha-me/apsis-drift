@@ -72,5 +72,11 @@ Run the scripts with the project's Godot executable and
 - `res://recorded_audio_integration_test.gd`, followed by
   `-- --snapshot=/absolute/native-snapshot.json` (requires the native bridge).
 
-The next human gate is native stereo listening: idle versus sustained thrust,
-several loop boundaries, coast, atmosphere/vacuum, and saved slider comfort.
+The native build 28 audition received positive human feedback ("a lot better")
+and permission to continue the loop. Preserve this baseline. Longer listening,
+several loop boundaries, device variety, atmosphere/vacuum transitions and
+saved-slider comfort remain qualification work, not implied exhaustive passes.
+
+[Study 29](NATIVE_CHECKPOINT_29.md) preserves this mix and adds bounded normal-exit
+cleanup for deferred native playback references. Build 28's frozen playtest is
+unchanged.
