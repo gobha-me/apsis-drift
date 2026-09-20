@@ -95,6 +95,10 @@ retains explicit physical-context ownership for spin and star geometry. Contact
 and rigid-handoff consumers still need their own physical-context boundary;
 seed-only reinterpretation is not a bridge.
 
+The opt-in [native physical-home study](NATIVE_PHYSICAL_HOME.md) implements a
+separate schema2 bootstrap and visual lighting consumer with those ownership
+checks. It does not alter the default demo or migrate flight to rotating frames.
+
 Origin-station relative orbits remain their separately authored legacy
 90–120-minute recipe. This provider has no physical station overload. A later
 station recipe can derive its period from host gravity/radius without silently

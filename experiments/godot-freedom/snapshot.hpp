@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "apsis_drift/planet_rotation.hpp"
 #include "apsis_drift/planetary_flight.hpp"
 #include "apsis_drift/terrain_tiles.hpp"
 #include "relief.hpp"
@@ -24,6 +25,9 @@ struct Request {
   double longitude{0.4};
   std::uint8_t lod{8};
   unsigned relief_version{0};
+  // Explicit schema2 origin-world request. When present, the selected planet
+  // is the canonical authored home; planet_seed is a legacy-mode input only.
+  std::optional<Seed> physical_origin_seed;
 };
 
 inline auto validate(const Request& request) -> void {
@@ -46,10 +50,82 @@ inline auto require(std::expected<T, E> result) -> T {
   return std::move(*result);
 }
 
+struct SnapshotWorld {
+  PlanetDescriptor planet;
+  std::optional<PhysicalLocalSystem> physical;
+  std::optional<PhysicalPlanetRotationRecipe> rotation;
+};
+
+inline auto resolve_snapshot_world(const Request& request) -> SnapshotWorld {
+  validate(request);
+  if (!request.physical_origin_seed)
+    return {generate_planet_descriptor(request.planet_seed), {}, {}};
+  auto physical =
+      require(generate_physical_origin_system(*request.physical_origin_seed));
+  const auto id =
+      physical.catalog.planets[kOriginHomePlanetOrdinal].descriptor.id;
+  const auto planet =
+      require(find_local_system_planet(physical, id))->descriptor;
+  auto rotation = require(generate_planet_rotation_recipe(physical, id));
+  return {planet, std::move(physical), std::move(rotation)};
+}
+
+inline auto snapshot_world_context(const SnapshotWorld& world)
+    -> nlohmann::json {
+  if (!world.physical && !world.rotation) return nullptr;
+  if (!world.physical || !world.rotation ||
+      !world.physical->origin_universe_seed ||
+      world.physical->catalog.kind != LocalSystemKind::origin_home ||
+      !validate_local_system(*world.physical))
+    throw std::invalid_argument(
+        "snapshot world requires a validated physical origin owner");
+  const auto& physical = *world.physical;
+  const auto& rotation = *world.rotation;
+  const auto home =
+      physical.catalog.planets[kOriginHomePlanetOrdinal].descriptor.id;
+  if (world.planet !=
+          require(find_local_system_planet(physical, home))->descriptor ||
+      rotation != require(generate_planet_rotation_recipe(physical, home)))
+    throw std::invalid_argument(
+        "snapshot world planet/rotation differs from authored home");
+  const auto planet =
+      nlohmann::json::parse(planet_descriptor_json(world.planet));
+  return {{"family", kPhysicalLocalSystemRecipeFamily},
+          {"generator_version", physical.generator_version},
+          {"source_catalog_generator", physical.source_catalog_generator},
+          {"ephemeris_version", physical.ephemeris_version},
+          {"seed_derivation_version", kSeedDerivationVersion},
+          {"planet_generator_version", kPlanetGeneratorVersion},
+          {"origin_home_generator_version", kOriginHomePlanetGeneratorVersion},
+          {"origin_station_generator_version", kOriginStationGeneratorVersion},
+          {"origin_universe_seed",
+           std::to_string(physical.origin_universe_seed->value)},
+          {"system_seed", std::to_string(physical.catalog.seed.value)},
+          {"system_id", system_id_string(physical.catalog.id)},
+          {"catalog_kind", "origin_home"},
+          {"descriptor_variant", "origin_home"},
+          {"planet_id", planet.at("planet_id")},
+          {"planet_seed", planet.at("planet_seed")},
+          {"star_id", star_id_string(physical.catalog.star.id)},
+          {"stellar_mass_millisolar", physical.stellar_mass_millisolar},
+          {"stellar_gm_km3_per_second2",
+           std::to_string(physical.stellar_gm_km3_per_second2)},
+          {"rotation",
+           {{"catalog_family", "physical_circular"},
+            {"owner_version", rotation.owner_version},
+            {"generator_version", rotation.rotation.version},
+            {"period_ticks", std::to_string(rotation.rotation.period_ticks)},
+            {"epoch_phase_tick",
+             std::to_string(rotation.rotation.epoch_phase_tick)},
+            {"tilt_microdegrees", rotation.rotation.tilt_microdegrees},
+            {"pole_azimuth_turns", rotation.rotation.pole_azimuth_turns}}}};
+}
+
 inline auto snapshot(const Request& request) -> nlohmann::json {
   validate(
       request); // Bound allocations and reject NaN before touching terrain.
-  const auto planet = generate_planet_descriptor(request.planet_seed);
+  const auto world = resolve_snapshot_world(request);
+  const auto& planet = world.planet;
   auto cache = require(TerrainTileCache::create());
   auto sampler =
       require(TerrainSurfaceSampler::create(planet, request.lod, cache));
@@ -145,6 +221,10 @@ inline auto snapshot(const Request& request) -> nlohmann::json {
       {"replay", std::move(replay)}};
   if (request.relief_version != 0)
     result["experimental_relief_version"] = request.relief_version;
+  if (world.physical) {
+    result["schema_version"] = 2;
+    result["world_context"] = snapshot_world_context(world);
+  }
   return result;
 }
 } // namespace apsis_drift::godot_spike

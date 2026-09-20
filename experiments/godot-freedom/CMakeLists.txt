@@ -44,6 +44,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-godot-snapshot-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-snapshot-contract COMMAND apsis-drift-godot-snapshot-tests)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if (Python3_Interpreter_FOUND)
+    add_test(NAME godot-physical-snapshot-cli-contract
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/snapshot_cli_test.py"
+        "$<TARGET_FILE:apsis-drift-godot-snapshot>")
+    set_tests_properties(godot-physical-snapshot-cli-contract PROPERTIES TIMEOUT 90)
+  endif ()
   find_package(Threads REQUIRED)
   add_executable(apsis-drift-contact-surface-tests
     contact_surface.cpp contact_surface_test.cpp)

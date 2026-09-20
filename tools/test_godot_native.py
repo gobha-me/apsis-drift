@@ -26,6 +26,7 @@ TESTS = {
     "input": "none",
     "chase_camera": "none",
     "flight_status": "none",
+    "planet_lighting": "none",
     "flight_plan_menu": "none",
     "flight_basics": "none",
     "film": "none",
@@ -41,6 +42,8 @@ TESTS = {
     "ship_audio": "none",
     "ship_audio_playback": "none",
     "live": "snapshot",
+    "physical_world": "physical_snapshots",
+    "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",
     "surface_start": "snapshot",
@@ -131,6 +134,38 @@ def main(argv=None):
     if not bridge.is_file():
         parser.error(f"missing native bridge: {bridge}; build GODOT_LIVE first")
     selected = list(dict.fromkeys(args.test or TESTS))
+    def prepare_physical_fixtures():
+        for seed in (42, 43):
+            path = work / f"physical-{seed}.json"
+            log = work / f"physical-{seed}.log"
+            result = run_logged([str(exporter), str(path), f"--physical-origin={seed}",
+                                 "--samples=3", "--span-metres=32000", "--relief-version=1"],
+                                log, env, args.timeout)
+            report["setup"].append({"family": "physical_circular", "seed": seed,
+                                    "returncode": result[0], "timed_out": result[1]})
+            save()
+            if result[0] != 0 or result[1]:
+                print(f"FAIL physical fixture {seed}: {log}", flush=True)
+                return 1
+            report["setup"][-1]["snapshot_sha256"] = sha256(path)
+            save()
+        # Generate the genuine same-ID procedural counterpart, never forge its
+        # descriptor or replay by editing the authored-home snapshot.
+        home_seed = json.loads((work / "physical-42.json").read_text())["planet"]["planet_seed"]
+        alias_path = work / "procedural-home-42.json"
+        alias_log = work / "procedural-home-42.log"
+        result = run_logged([str(exporter), str(alias_path), home_seed, "3", "32000", "1"],
+                            alias_log, env, args.timeout)
+        report["setup"].append({"family": "standalone", "seed": home_seed,
+                                "returncode": result[0], "timed_out": result[1]})
+        save()
+        if result[0] != 0 or result[1]:
+            print(f"FAIL procedural home fixture: {alias_log}", flush=True)
+            return 1
+        report["setup"][-1]["snapshot_sha256"] = sha256(alias_path)
+        save()
+        return 0
+
     # Preflight every source before creating output or running a subprocess.
     for name in selected:
         if not (source / f"{name}_test.gd").is_file():
@@ -183,6 +218,9 @@ def main(argv=None):
             return 1
         report["setup"][-1]["snapshot_sha256"] = sha256(work / f"snapshot-{seed}.json")
         save()
+    if any(TESTS[name] == "physical_snapshots" for name in selected):
+        if prepare_physical_fixtures() != 0:
+            return 1
     for name in selected:
         arguments = []
         if TESTS[name] == "snapshot":
@@ -191,6 +229,9 @@ def main(argv=None):
             arguments = [str(work / f"snapshot-{seed}.json") for seed in (42, 4)]
         elif TESTS[name] == "named_snapshot":
             arguments = [f"--snapshot={work / 'snapshot-42.json'}"]
+        elif TESTS[name] == "physical_snapshots":
+            arguments = [str(work / path) for path in
+                         ("snapshot-42.json", "physical-42.json", "physical-43.json", "procedural-home-42.json")]
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
                    "--path", str(project), "--script", f"res://{name}_test.gd",
