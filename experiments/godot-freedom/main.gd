@@ -62,6 +62,7 @@ var world_view: Node
 var ship_audio: Node
 var audio_preferences: RefCounted
 var seated_pilot: Node3D
+var pilot_motion_hook: Node
 const PilotPresentation = preload("res://pilot_presentation.gd")
 
 
@@ -217,7 +218,7 @@ func _ready() -> void:
 	surface.add_child(ship)
 	pilot_cockpit = install_ship_interior(ship)
 	if options.has("--pilot-asset"):
-		seated_pilot = PilotPresentation.load_into(pilot_cockpit, options["--pilot-asset"])
+		seated_pilot = PilotPresentation.load_into(pilot_cockpit, options["--pilot-asset"], options.get("--pilot-motion", "false") == "true")
 		if seated_pilot == null:
 			fail("Pilot study requires an absolute GLB path with separate PilotHead and PilotBody mesh groups")
 			return
@@ -243,6 +244,8 @@ func _ready() -> void:
 		setup_ship_audio()
 	if capture_path.is_empty() and options.get("--controls", "true") == "true":
 		setup_player_controls()
+	if not setup_pilot_motion():
+		return
 	set_view(int(options.get("--view", "1")))
 	if options.get("--pilot", "false") == "true" and live_bridge != null and mode == 1:
 		toggle_pilot()
@@ -272,6 +275,42 @@ func _ready() -> void:
 
 func vector(values: Array) -> Vector3:
 	return Vector3(float(values[0]), float(values[1]), float(values[2]))
+
+
+func setup_pilot_motion() -> bool:
+	if options.get("--pilot-motion", "false") != "true":
+		return true
+	if is_instance_valid(pilot_motion_hook):
+		return true
+	if not live_presentation or live_bridge == null or not is_instance_valid(player_input) or not player_input.thrust_mode or not is_instance_valid(seated_pilot) or not options.has("--pilot-asset") or not options.has("--pilot-cabin"):
+		fail("Pilot motion requires live thrust controls and compatible explicit --pilot-asset / --pilot-cabin study assets")
+		return false
+	var candidate := preload("res://pilot_motion_hook.gd").new()
+	add_child(candidate)
+	if not candidate.configure(seated_pilot):
+		var reason: String = candidate.last_error
+		candidate.free()
+		fail("Pilot motion study incompatible: " + reason)
+		return false
+	pilot_motion_hook = candidate
+	return true
+
+
+func update_pilot_motion(command: Dictionary, delta: float) -> void:
+	if not is_instance_valid(pilot_motion_hook):
+		return
+	var active := live_presentation and live_bridge != null and mode == 1 and not live_paused and window_focused
+	active = active and not data.is_empty() and is_instance_valid(ship)
+	active = active and is_instance_valid(player_input) and player_input.thrust_mode and player_input.enabled and player_input.focused and not player_input.needs_neutral
+	active = active and (planet_stream == null or planet_stream.is_ready)
+	if is_instance_valid(pause_menu) and is_instance_valid(pause_menu.panel):
+		active = active and not pause_menu.panel.visible
+	# Guidance intentionally leaves flight live; its reserved menu inputs are
+	# excluded by input ownership, not a second animation-only flight policy.
+	var previous_error: String = pilot_motion_hook.last_error
+	if not pilot_motion_hook.update_command(command, active, delta):
+		if pilot_motion_hook.last_error != previous_error:
+			push_warning("Pilot motion returned to neutral: " + pilot_motion_hook.last_error)
 
 
 func setup_ship_audio() -> void:
@@ -441,6 +480,8 @@ func set_player_paused(paused: bool, reason := "") -> void:
 	if not paused and not window_focused:
 		return
 	live_paused = paused
+	if paused and is_instance_valid(pilot_motion_hook):
+		pilot_motion_hook.reset_neutral()
 	update_ship_audio()
 	if paused and is_instance_valid(flight_plan_menu):
 		flight_plan_menu.close()
@@ -457,6 +498,8 @@ func request_quit() -> void:
 	if quitting:
 		return
 	quitting = true
+	if is_instance_valid(pilot_motion_hook):
+		pilot_motion_hook.reset_neutral()
 	live_paused = true
 	set_process(false)
 	if is_instance_valid(player_input):
@@ -833,10 +876,13 @@ func _process(delta: float) -> void:
 	# cannot leave the last engine demand sounding indefinitely.
 	update_ship_audio()
 	if data.is_empty() or ship == null:
+		update_pilot_motion({}, delta)
 		return
 	var command := {"axes": PackedFloat64Array([0, 0, 0, 0]), "look": Vector2.ZERO}
 	if player_input != null:
 		command = player_input.sample()
+	update_pilot_motion(command, delta)
+	if player_input != null:
 		if command.recenter:
 			head_angles = Vector2.ZERO
 		if pause_menu.panel.visible:
