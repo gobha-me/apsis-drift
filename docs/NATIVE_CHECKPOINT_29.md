@@ -56,8 +56,9 @@ quality remain separate concerns; this is not cinematic-art completion.
 The refined female pose has been rechecked through the same provisional
 49-frame +/-8-degree grip sweep. Actual grip/wrist tracking, unchanged seat and
 pedal transforms, and return to the revised neutral elbow pose pass. Rendered
-extremes were inspected. This is a Blender motion proof only; male motion and
-actual Godot semantic control animation remain open.
+extremes were inspected. This Blender motion proof is separate from the native
+export check below; male motion and actual semantic flight-control integration
+remain open.
 
 Measurement correction: earlier cushion-gap receipts evaluated the coarse
 viewport garment, while their PNGs used render subdivision. The new study
@@ -66,10 +67,48 @@ explicitly measures render-evaluated meshes. The female garment has about
 gap. These do not supersede older numbers as though the evaluated geometry were
 identical. Prior proofs and receipts are retained unchanged.
 
-These remain isolated Blender studies with borrowed CC0 fit clothing, source
-receipts and editable masters. They are not replacements for the original suit
-design, final skin/hair/gloves, restraint fit, runtime export or Godot review.
-The running/frozen build 28 assets are not modified.
+These remain isolated studies with borrowed CC0 fit clothing, source receipts
+and editable masters. They are not replacements for the original suit design,
+final skin/hair/gloves, restraint fit or gameplay character acceptance. The
+frozen build 28 assets are not modified.
+
+## Native skeletal export check
+
+The refined female study now renders and animates in an isolated Godot Forward+
+scene, using a real skinned skeleton rather than a per-frame vertex cache.
+The exported skeleton and both control pivots play together in one clip. Native
+capture checks their relative motion rather than merely checking that the arms
+move: the provisional sweep retains wrist/control alignment to approximately
+0.0341 mm across 90 sampled native frames. This measures rig/control transforms,
+not finger-surface contact or final glove fit.
+
+This export bakes one subdivision level in rest space and uses linear skinning.
+It does not reproduce Blender's dual-quaternion skin deformation or its
+post-deformation render subdivision. Weights are limited to eight influences;
+the largest removed weight total is about 2.2051% on a garment vertex, followed
+by normalization. The earlier Blender skin/cushion clearances
+must not be reused as native surface-clearance certificates. Material export
+also needed explicit handling of opaque surfaces, transparent eye layers and
+an incorrectly assigned eyebrow normal texture.
+
+Exported rigid seat vertices independently retain about 3.17 mm separation
+between the lift cylinders and cushion, and 0.100 mm between pan and cushion.
+That verifies the support repair survived export; it says nothing about the
+skinned occupant's contact with the seat.
+
+The complete isolated fixture (pilot, seat, controls, pedals and studio floor)
+contains 163 bones, 121,484 triangles and a 22,753,660-byte GLB. Its three-second
+1080p clip is 239,741 bytes: an excerpt of the 3.0625-second source clip, not a
+qualified seamless loop. Seven embedded source images retain exact upstream
+CC0 hashes; original fixture geometry retains its separate BSD license. Source
+and output receipts accompany the ignored proof. These are whole-fixture sizes,
+not a final pilot-only budget or a reason to ship unoptimized source textures.
+
+The 1080p native screenshots and short capture establish an actual engine
+pipeline, not final character quality, a gameplay frame-rate benchmark, 4K
+qualification or first-person visibility. The source is still a provisional
+16 fps control sweep interpolated in the capture, not animation driven by live
+semantic flight demands. No gameplay pilot asset is replaced by this check.
 
 ## Validation scope
 

@@ -26,6 +26,28 @@ refused as `surface_query_failed`, not substituted with a different planet.
 Supporting that variant needs an explicit context-aware point-provider extension;
 this patch helper does not relax its descriptor identity contract.
 
+### Next provider boundary: authoritative catalog ownership
+
+The authored home descriptor and its unmodified procedural base share a
+planet seed/ID, but not necessarily radius or terrain. A context-aware extension
+must therefore qualify results by their validated system/catalog variant and
+supported generation versions. Resolve the exact descriptor through
+`find_local_system_planet`; neither regeneration from the planet seed nor a
+"tutorial-safe" range check establishes that identity. Keep the existing
+standalone API and its origin-variant refusal unchanged.
+
+Scope caches to one validated catalog variant and retain the terrain cache's
+same-key/different-descriptor rejection. Before integration, test both variants,
+wrong owners/versions, forged catalogs, conflicting cache contents and matching
+procedural geometry across GCC and Clang. This is a proposed next boundary,
+not an implemented extension or a new save identity.
+
+The native lab currently owns a standalone descriptor reconstructed from its
+snapshot planet seed, not an authoritative local-system context. Live use needs
+an explicit C++ session/bootstrap and frame adapter first. The displayed stars
+must not be used to invent that missing ownership; snapshot-v1 behavior and the
+floor guard remain intact in this study.
+
 ## Why this covers the rectangle, not just sample points
 
 The center's radial direction selects one candidate triangle from the existing
