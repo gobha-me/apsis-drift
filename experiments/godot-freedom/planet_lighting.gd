@@ -41,9 +41,12 @@ static func parameters(sample: Dictionary, radius: float, altitude: float, press
 	# A display-only spherical limb test for sunlight on the nearby craft.
 	# Terrain keeps its directional sun so an orbital crescent is not switched
 	# off merely because the observer lies in the planet's shadow.
-	var horizon := -sqrt(maxf(0, 1.0 - ratio * ratio))
-	var width := maxf(0.00001, sin(sample.star_angular_radius_radians))
-	var visibility := smoothstep(horizon - width, horizon + width, sample.direction.y)
+	# Compare angles, not sine offsets: sine-space widths leak sunlight at
+	# high-altitude anti-solar poles even when the star is fully occulted.
+	var horizon := -acos(clampf(ratio, 0, 1))
+	var width := maxf(0.00001, sample.star_angular_radius_radians)
+	var elevation := asin(clampf(sample.direction.y, -1, 1))
+	var visibility := smoothstep(horizon - width, horizon + width, elevation)
 	var day := smoothstep(-0.12, 0.16, sample.solar_elevation_sine)
 	var air := clampf(pressure / 1013.25, 0, 4) * exp(-height / 18000.0)
 	var direction: Vector3 = sample.direction

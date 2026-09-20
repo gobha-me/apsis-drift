@@ -32,6 +32,19 @@ func _initialize() -> void:
 	check(Lighting.parameters(low_sun, 6371000, 0, 1013.25).near_sun_visibility == 0, "Below ground horizon")
 	check(Lighting.parameters(low_sun, 6371000, 250000, 1013.25).near_sun_visibility == 1, "Visible below local horizontal from orbit")
 	check(Lighting.parameters(noon, 6371000, 0, 0).ambient == dark.ambient, "No fabricated atmospheric ambient in vacuum")
+	# Actual authored-home globe inspection: star radius 10.5 degrees, planet
+	# radius 23.6 degrees at observer radius 2.5R. No anti-solar light leak.
+	var large_star := sample(Vector3.DOWN)
+	large_star.star_angular_radius_radians = 0.183547532694299
+	check(Lighting.parameters(large_star, 5764000, 8646000, 0).near_sun_visibility == 0, "High-altitude anti-solar star fully occulted")
+	for height_ratio in [0.0, 0.04, 1.5, 10.0]:
+		var horizon := -acos(1.0 / (1.0 + height_ratio))
+		for offset in [-0.02, 0.0, 0.02]:
+			var angle: float = horizon + offset
+			var limb := sample(Vector3(cos(angle), sin(angle), 0))
+			limb.star_angular_radius_radians = 0.01
+			var visibility: float = Lighting.parameters(limb, 6371000, 6371000 * height_ratio, 0).near_sun_visibility
+			check(absf(visibility - (0.0 if offset < 0 else (1.0 if offset > 0 else 0.5))) < 0.0001, "Angular limb coverage independent of observer height")
 	for patch in [{"enabled": false}, {"direction": Vector3.ZERO}, {"direction": Vector3(NAN, 0, 0)},
 		{"direction": Vector3(2, 0, 0)}, {"local_to_system": Basis(Vector3.ONE, Vector3.ONE, Vector3.ONE)},
 		{"local_to_system": Basis.FLIP_X}, {"solar_elevation_sine": NAN}, {"solar_elevation_sine": true},

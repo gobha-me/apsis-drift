@@ -59,9 +59,10 @@ void sky() {
 		scatter += vec3(0.55, 0.19, 0.065) * warm * pow(toward_sun, 4.0);
 		vec3 night = vec3(0.001, 0.002, 0.004);
 		COLOR = mix(ground ? night : starlight, night + scatter * sun_color, haze);
-		float horizon = -sqrt(max(0.0, 1.0 - pow(radius / (radius + max(0.0, altitude)), 2.0)));
-		float limb_width = max(0.00001, sin(sun_angular_radius));
-		float visibility = smoothstep(horizon - limb_width, horizon + limb_width, sun_direction.y);
+		float horizon = -acos(clamp(radius / (radius + max(0.0, altitude)), 0.0, 1.0));
+		float limb_width = max(0.00001, sun_angular_radius);
+		float elevation = asin(clamp(sun_direction.y, -1.0, 1.0));
+		float visibility = smoothstep(horizon - limb_width, horizon + limb_width, elevation);
 		float sun_angle = acos(clamp(dot(d, sun_direction), -1.0, 1.0));
 		float antialias = max(0.00001, fwidth(sun_angle));
 		float disc = 1.0 - smoothstep(max(0.0, sun_angular_radius - antialias), sun_angular_radius + antialias, sun_angle);
