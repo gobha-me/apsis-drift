@@ -150,7 +150,13 @@ This standalone provider does not change supported saves or the current
 playable flight model. Analytic pad fixtures prove the envelope rules, not
 terrain fidelity or a landing-capable build.
 
-## Next provider: evaluated direction, not implemented here
+## Next provider: experimental point geometry, not footprint support
+
+The standalone [experimental finest-triangle query](EXPERIMENTAL_CONTACT_SURFACE.md)
+now implements bounded triangle extraction and radial point intersection for
+the native reference recipe below. It is not wired into the pad evaluator or
+live flight and does not establish whole-footprint or hull contact. The
+remaining coverage, fluid, frame and presentation requirements still apply.
 
 An independent audit identified a narrow route to contact that need not invent
 different mountains: explicitly version the current finest surface

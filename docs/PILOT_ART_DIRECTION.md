@@ -71,6 +71,34 @@ merely because the old fixture used one skeleton. Separate engineering fit from
 art approval. Seat adjustment remains a future player feature, not implemented
 by this direction sheet.
 
+## Asset plan 3a / 3b: appearance and interaction
+
+User-approved extension, 2026-09-20:
+
+- **3a — pilot assets:** high-quality male/female anatomy, tailored equipment,
+  cockpit fit, materials and exported appearance remain in
+  [#267](https://github.com/gobha-me/apsis-drift/issues/267).
+- **3b — animated interaction:** corresponding arms/hands and authored controls
+  move when flight actions occur, tracked separately in
+  [#277](https://github.com/gobha-me/apsis-drift/issues/277).
+
+Prepare rigs, grip anchors and movable control pivots during 3a. Start motion
+once seated proportions and cockpit fit are stable, before final material
+polish. First prove continuous hand/control tracking and believable limb/suit
+deformation; follow with a bounded discrete reach/press/return interaction.
+Pedals move only for actions assigned to them in the authored cockpit layout.
+
+Drive presentation from semantic demands/actions and actual system state, not
+specific controller buttons. Equivalent remapped or keyboard inputs must give
+equivalent motion. An attempted/refused action must not falsely indicate an
+accepted system change. Animation cannot delay flight response or mutate the
+authoritative simulation. Preserve grip contact, neutral/pause/focus safety,
+pose continuity across camera changes and unobstructed first-person head-look.
+
+Static art and in-engine motion have separate review gates for both pilots.
+This does not add walking/EVA locomotion, autopilot, NPC behavior or a generic
+animation engine, and no animation completion is claimed by this plan.
+
 ## Acceptance sequence
 
 1. Approve distinct male/female silhouettes and original suit identity in

@@ -5,7 +5,41 @@ runtime integration or an acoustic simulation. The existing native adapter and
 safety boundaries remain in [study 19](NATIVE_SHIP_AUDIO_19.md); the C++ audio
 contract, MIDI and other existing audio work are preserved.
 
-## Approved intent, not final sound acceptance
+## Latest human checkpoint: recording-based direction
+
+The native build 25 audition did not pass: the user found the continuous sound
+annoying and could not clearly distinguish idle from load. Earlier offline
+acceptance of direction 24 does not override that native listening result.
+Numerical level stability alone is not sound-design acceptance.
+
+The user subsequently narrowed references to Low Engine Hum (kaboose102) and
+Space Flight 10 (Bret Bernhoft), and preferred the private recording-based
+comparison. Low Engine Hum should sit as slightly quieter background machinery;
+Space Flight's level in comparison 26 is accepted as the propulsion reference.
+Comparison 27 lowers only the hum by 2 dB; the user accepted that comparison
+("perfect"). The numeric offset was our implementation of the requested modest
+reduction, not a number specified by the user. This background/propulsion difference
+amends the earlier strict single-level direction; it is not permission to make
+thrust drive an unbounded volume crescendo.
+
+Plan player-adjustable audio levels rather than treating this default mix as
+universal. Keep source character/load response, player category gains, and
+listener position/transmission as separate concerns. A compact shuttle has
+machinery near its pilot; future larger ships can have a quiet bridge and
+audible machinery spaces. Ship size alone is not a master-volume multiplier:
+placement and compartment isolation matter. Do not implement autopilot,
+walkable large-ship interiors or generic acoustic simulation under this note.
+Safety mute/pause/focus gates and existing music/audio remain preserved.
+
+The supplied references are Pixabay-named MP3s. Matching creator CC0 originals
+have been located, but the private auditions are not a public-redistribution
+clearance or a claim that imported audio is original BSD synthesis. Preserve
+source/license records and establish the distribution source chain before
+shipping samples. The opt-in recording adapter and saved category controls are
+implemented in [study 28](RECORDED_SHIP_AUDIO_28.md); native listening and loop
+comfort still require a human audition. Offline acceptance is not that gate.
+
+## Historical synthesis direction, not current sound acceptance
 
 Human checkpoint: direction 24's constant-level dynamic blend is accepted for
 the next implementation pass. The variation is subtle and may be difficult to
