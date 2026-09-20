@@ -6,6 +6,11 @@ the FLIGHT/JUMP pods without moving the displays or pilot eye.
 Interactive live flight now has a [controller-first input foundation 06](../../docs/CONTROLLER_FOUNDATION_06.md):
 analog C++ demands, remapping, saved settings and a controller-navigable pause
 menu. Physical controller and SteamOS qualification remain outstanding.
+The paused menu includes [Flight basics](../../docs/NATIVE_FLIGHT_REFERENCE.md),
+with current binding examples and explicit orbit/guidance/prototype limits.
+An [opt-in occupied pilot motion study](../../docs/OCCUPIED_PILOT_MOTION.md)
+connects compatible skeletal pilots and controls to resolved flight demands;
+it requires a matched exported pilot/cabin pair and is not final character art.
 Current [layout 4 / thrust flight lab](../../docs/THRUST_FLIGHT_LAB_09.md)
 uses left-stick pitch/roll, right-stick yaw/vertical, bumper strafe, analog
 main/retro triggers and hold-left-stick-click head-look with release-to-center.
@@ -157,7 +162,7 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 ```
 
 This Linux runner stages the selected build's exporter and bridge, copies the
-test project, generates atmospheric/airless fixtures, and runs 26 explicitly
+test project, generates atmospheric/airless fixtures, and runs 29 explicitly
 listed contracts headlessly with Dummy audio. Each run gets a fresh retained
 directory under `build-godot`, isolated preferences/cache, per-test logs and a
 JSON report with source/binary hashes. It does not build, download content,

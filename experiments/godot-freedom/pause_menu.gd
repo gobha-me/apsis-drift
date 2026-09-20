@@ -24,6 +24,9 @@ var diagnostic_toggle: CheckButton
 var camera_slider: HSlider
 var audio_toggle: CheckButton
 var left_scroll: ScrollContainer
+var menu_margin: MarginContainer
+var basics: Control
+var basics_button: Button
 
 func _ready() -> void:
 	layer = 20
@@ -32,6 +35,7 @@ func _ready() -> void:
 	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(panel)
 	var margin := MarginContainer.new()
+	menu_margin = margin
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 48)
@@ -61,20 +65,14 @@ func _ready() -> void:
 	margin.theme = theme
 	var note := Label.new()
 	if controls.thrust_mode:
-		note.text = "THRUST LAB / LAYOUT 4\nRT / R2: main   ·   LT / L2: weak retro\nLeft stick: roll / pitch (pull back: up)\nRight stick: yaw / rise-fall\nLB / L1: strafe left · RB / R1: strafe right\nHold left stick click / L3: head-look\nRelease: snap to ship centerline\nCenter right stick to resume yaw / rise-fall.\nSame mapping in atmosphere and space.\nY / Triangle: translation / gravity assist\nNo forward speed hold. Attitude damping stays.\nW/S thrust · A/D yaw · I/K pitch · Z/X roll\nQ/E strafe · Space/Ctrl vertical · F assist\nNo collision / landing; 16 m test floor guard.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: resume"
+		note.text = "THRUST LAB / CURRENT BINDINGS ON THE RIGHT\nFlight basics explains movement, orbit and limits.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: resume"
 	else:
 		note.text = "LEGACY FOUR-AXIS FLIGHT / LAYOUT 4\nRT / R2: forward · LT / L2: reverse\nRight stick: heading / rise-fall\nLB / L1: strafe left · RB / R1: strafe right\nHold left stick click / L3: head-look\nRelease: snap to ship centerline\nCenter right stick to resume yaw / rise-fall.\nLeft-stick pitch / roll require thrust model.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: resume"
 	note.add_theme_font_size_override("font_size", 23)
-	if controls.thrust_mode:
-		note.text += "\nOutside: L3 + right stick orbits the ship.\nOrbit requires sideways speed, not just height.\nCoast with assist OFF; watch periapsis on NAV."
-	if controls.thrust_mode and rotational_coasting:
-		note.text = note.text.replace("Y / Triangle: translation / gravity assist", "Y / Triangle: flight stabilization")
-		note.text = note.text.replace("No forward speed hold. Attitude damping stays.", "OFF: release sticks to coast, including spin.\nCounter-steer or enable assist to stop a spin.\nHeld sticks request bounded turn rates.\nNo forward speed hold in either mode.")
-	if controls.thrust_mode and orbit_preserving_assist:
-		note.text = note.text.replace("Orbit requires sideways speed, not just height.", "Orbit needs speed along the horizon, not just height.")
-		note.text = note.text.replace("Coast with assist OFF; watch periapsis on NAV.", "SPACE: coast with assist ON or OFF.\nON stabilizes rotation; it preserves orbital motion.\nAtmospheric support fades out through trace air.\nAirless worlds: no automatic hover support.")
 	left.add_child(note)
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
+	if controls.thrust_mode:
+		basics_button = add_button(left, "Flight basics (paused)", show_basics)
 	if ship_audio_available:
 		audio_toggle = CheckButton.new()
 		audio_toggle.text = "Mute ship audio" if audio_preferences != null else "Mute ship audio prototype (this session)"
@@ -185,6 +183,13 @@ func _ready() -> void:
 			bind.custom_minimum_size.x = 260
 			binding_buttons.append({"button": bind, "action": action, "family": family})
 	controls.bindings_changed.connect(refresh_bindings)
+	if controls.thrust_mode:
+		basics = preload("res://flight_basics.gd").new()
+		basics.controls = controls
+		basics.rotational_coasting = rotational_coasting
+		basics.orbit_preserving_assist = orbit_preserving_assist
+		panel.add_child(basics)
+		basics.back_requested.connect(close_basics)
 	refresh_bindings()
 	panel.hide()
 
@@ -217,6 +222,23 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 func refresh_bindings() -> void:
 	for item in binding_buttons:
 		item.button.text = ("Key: " if item.family == "key" else "Pad: ") + controls.binding_label(item.action, item.family)
+	if is_instance_valid(basics):
+		basics.refresh()
+
+func show_basics() -> void:
+	if not panel.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(basics):
+		return
+	menu_margin.hide()
+	basics.open()
+
+func close_basics() -> void:
+	if not is_instance_valid(basics):
+		return
+	basics.hide()
+	menu_margin.show()
+	if panel.visible:
+		basics_button.grab_focus()
+		left_scroll.ensure_control_visible(basics_button)
 
 func add_audio_slider(parent: Node, title: String, key: String) -> void:
 	var label := Label.new()
@@ -237,6 +259,9 @@ func add_audio_slider(parent: Node, title: String, key: String) -> void:
 			audio_mix_changed.emit())
 
 func show_menu(reason := "") -> void:
+	if is_instance_valid(basics):
+		basics.hide()
+	menu_margin.show()
 	controls.status = reason if not reason.is_empty() else controls.status
 	panel.show()
 	refresh_bindings()
