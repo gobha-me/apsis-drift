@@ -131,7 +131,12 @@ newly generated universe or the mission-selected home planet.
   Station/cockpit views are isolated exhibits, not placed world entities.
   Lighting and sky are review fixtures, not the simulated atmosphere or sun.
 - Existing MIDI, TinySoundFont, RtAudio, procedural audio and music files remain
-  intact. This viewer is intentionally silent; audio integration is unproven.
+  intact. The read-only viewer remains silent. The opt-in native thrust study
+  now has [recording-based audio and saved mix controls](../../docs/RECORDED_SHIP_AUDIO_28.md);
+  local prepared WAVs require their own source/license receipts and are not
+  distributed with this code. `--ship-audio=true` retains the historical,
+  subsequently rejected synthesis experiment; it is not the current sound
+  direction or an automatic fallback for missing recordings.
 - There is no water surface, collision, landing, walking, docking,
   jump control, save/load bridge, HDR or SteamOS validation. Controller mapping
   exists as an initial tested-with-synthetic-input implementation, not hardware qualification.

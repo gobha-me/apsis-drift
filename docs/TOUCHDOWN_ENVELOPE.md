@@ -158,6 +158,12 @@ the native reference recipe below. It is not wired into the pad evaluator or
 live flight and does not establish whole-footprint or hull contact. The
 remaining coverage, fluid, frame and presentation requirements still apply.
 
+Study 29 adds a [one-triangle normal-projection certificate](EXPERIMENTAL_CONTACT_PATCH.md)
+for the complete registered pad rectangle. It provides conservative plane-gap
+bounds while refusing edge/crossing ambiguity. It is not an observation adapter:
+first-hit obstruction, material/bearing support and multi-triangle coverage are
+still unproved, so it cannot set `footprint_supported` or enable landing.
+
 An independent audit identified a narrow route to contact that need not invent
 different mountains: explicitly version the current finest surface
 triangulation and query those triangles in application-owned double precision.

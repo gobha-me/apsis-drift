@@ -112,10 +112,32 @@ and wrists agree throughout the sweep; maximum arm reach is 87% of arm length.
 The borrowed CC0 bib coverall and shoes are fit-test clothing, not the original
 flight suit. Known fit limits include about 7.5 mm of cushion overlap and a
 13.25 mm heel gap. Restraints, helmet, hair, canopy collision, first-person
-visibility and Godot export/motion acceptance are unproved. Male fit remains
-pending. Static and animated Blender masters, PNGs, the short clip, input
+visibility and Godot export/motion acceptance are unproved. A separate male
+static fit now preserves the same external datums with independently solved
+anatomy: 14.31-degree torso recline and 79.33% arm reach. It leaves a measured
+17 mm cushion gap and 4.31 mm heel gap; these are unresolved support defects,
+not reasons to stretch limbs or silently move cockpit controls. Male motion
+remains pending. Static and animated Blender masters, PNGs, the short clip, input
 licenses and verified provenance stay in isolated ignored authoring output;
 no new character or third-party tooling is promoted into the runtime here.
+
+Those first garment/cushion numbers came from coarse viewport evaluation, not
+the subdivided meshes used for their renders. [Study 29](NATIVE_CHECKPOINT_29.md)
+records the correction, connected seat-support repair, revised arm pose and
+new female motion checks. Render-level male cushion fit is still unresolved;
+do not interpret differences between evaluation levels as physical improvement.
+
+### Human review of the seated proof
+
+The user finds the seated fit and motion a good starting point, while requiring
+substantial polish before either meets the intended quality bar. A small seat
+support protrusion through the cushion must be traced to actual geometry and
+fixed, not concealed by a preferred camera angle. Arms still evoke early-2000s
+CGI: shoulder/elbow volume, anatomical transitions, wrist/hand contact and
+deformation need close moving inspection. Extra subdivision or surface detail
+alone is not evidence that those defects are solved. This feedback accepts the
+direction of the proof, not final character art, runtime integration or either
+issue's completion. Preserve the original source/provenance for comparison.
 
 ## Acceptance sequence
 

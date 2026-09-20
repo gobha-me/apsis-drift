@@ -29,6 +29,8 @@ var _receipts: Array[Dictionary] = []
 var _rejected := 0
 var _device_failed := false
 var _last_error := ""
+var _shutting_down := false
+var _shutdown_refs: Array[WeakRef] = []
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -129,6 +131,8 @@ static func _load_loop(path: String) -> Dictionary:
 	return decode_loop_wav(file.get_buffer(size))
 
 func configure_recordings(hum_path: String, propulsion_path: String) -> bool:
+	if _shutting_down:
+		return false
 	# Transactional: a failed replacement leaves previous streams/settings intact.
 	var hum := _load_loop(hum_path)
 	if hum.has("error"):
@@ -190,6 +194,8 @@ func set_mix_levels(master: float, machinery: float, propulsion: float, atmosphe
 	return true
 
 func update_telemetry(state: Dictionary, cockpit: bool, active: bool) -> bool:
+	if _shutting_down:
+		return false
 	for key in ["main_thrust", "retro_thrust", "dynamic_pressure", "effective_air_density"]:
 		if not state.has(key) or typeof(state[key]) not in [TYPE_FLOAT, TYPE_INT]:
 			return _reject()
@@ -221,7 +227,7 @@ func set_muted(value: bool) -> void:
 
 func _refresh_targets() -> void:
 	_targets = Vector3.ZERO
-	if not _configured or not _active or not _valid or muted or _age >= TELEMETRY_TIMEOUT:
+	if _shutting_down or not _configured or not _active or not _valid or muted or _age >= TELEMETRY_TIMEOUT:
 		return
 	var theta := clampf(_spool, 0.0, 1.0) * PI * 0.5
 	_targets = Vector3(cos(theta) * _mix.y, sin(theta) * _mix.z, _air * 0.12 * _mix.w) * _mix.x
@@ -291,6 +297,44 @@ func _stop_players() -> void:
 func _process(delta: float) -> void:
 	advance_presentation(delta)
 	_sync_players()
+
+func prepare_shutdown() -> float:
+	# Native playback references retire on the audio thread after stop(). Keep
+	# the scene alive briefly before normal application exit; never block it.
+	if _shutting_down:
+		return 0.5 if not shutdown_drained() else 0.0
+	_shutting_down = true
+	_active = false
+	_valid = false
+	_power = 0.0
+	_spool = 0.0
+	_targets = Vector3.ZERO
+	set_process(false)
+	var had_players := not _players.is_empty()
+	for stream in _streams:
+		_shutdown_refs.append(weakref(stream))
+	for player in _players:
+		var playback := player.get_stream_playback()
+		if playback != null:
+			_shutdown_refs.append(weakref(playback))
+	_stop_players()
+	for player in _players:
+		player.free()
+	_players.clear()
+	_streams.clear()
+	_configured = false
+	return 0.5 if had_players else 0.0
+
+func shutdown_drained() -> bool:
+	# Keep temporary strong references inside this non-yielding function, not
+	# alive in a coroutine across frames while waiting for their own deletion.
+	for reference in _shutdown_refs:
+		if reference.get_ref() != null:
+			return false
+	return true
+
+func _exit_tree() -> void:
+	_stop_players()
 
 func diagnostics() -> Dictionary:
 	var running := false

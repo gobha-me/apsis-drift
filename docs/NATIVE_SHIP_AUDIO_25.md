@@ -1,5 +1,11 @@
 # Native constant-level ship sound, study 25
 
+**Historical experiment:** the subsequent native build 25 listening review
+rejected this voice. Earlier offline approval did not carry through to native
+acceptance. The current recording-based baseline is documented in
+[study 28](RECORDED_SHIP_AUDIO_28.md) and [the listening direction](SHIP_SOUND_DIRECTION.md).
+The original implementation evidence below is retained for regression/history.
+
 2026-09-19, issue #254. Ports the human-accepted direction 24 into the existing
 native audio node. The subtle range is accepted for now; this is not permission
 to exaggerate it or to claim the final sound design is complete.
