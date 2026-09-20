@@ -80,3 +80,13 @@ saved-slider comfort remain qualification work, not implied exhaustive passes.
 [Study 29](NATIVE_CHECKPOINT_29.md) preserves this mix and adds bounded normal-exit
 cleanup for deferred native playback references. Build 28's frozen playtest is
 unchanged.
+
+The build 33 playtest exposed a separate stopped-player exit case: pause or
+mute may stop playback while keeping reusable player nodes. Requesting a
+playback handle from those inactive nodes caused Godot diagnostics on quit.
+Shutdown now checks for an existing playback before taking a weak reference;
+stream retirement and the cooperative deadline remain unchanged. Generated
+Dummy-audio regressions reproduce both paused-window and muted-menu exits and
+check absence of engine diagnostics, resource retirement, idempotent quit and
+unchanged flight state. No recording, gain, blend or audio setting is changed;
+the frozen build 33 remains intact rather than being silently patched.
