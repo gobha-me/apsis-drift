@@ -563,6 +563,253 @@ auto malformed_contract() -> void {
                                          PlanetId{recipe.planet.value + 1}),
         "generator unknown planet refusal");
 }
+
+auto physical_geometry_contract() -> void {
+  Hash hash;
+  for (const auto seed :
+       std::array{Seed{0}, Seed{42},
+                  Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    for (const bool origin : {false, true}) {
+      const auto system =
+          required(origin ? generate_physical_origin_system(seed)
+                          : generate_physical_local_system(seed));
+      const auto legacy =
+          origin ? generate_origin_system(seed) : generate_local_system(seed);
+      for (const auto& body : system.catalog.planets) {
+        const auto recipe = required(
+            generate_planet_rotation_recipe(system, body.descriptor.id));
+        const auto old_recipe = required(
+            generate_planet_rotation_recipe(legacy, body.descriptor.id));
+        check(recipe.rotation == old_recipe,
+              "Physical catalog does not alter planet-specific spin recipe");
+        check(recipe.origin_universe_seed == system.origin_universe_seed &&
+                  recipe.physical_catalog_generator ==
+                      system.generator_version &&
+                  recipe.source_catalog_generator ==
+                      system.source_catalog_generator &&
+                  recipe.ephemeris_version == system.ephemeris_version,
+              "Physical rotation retains complete catalog provenance");
+        check(!generate_planet_rotation_recipe(system.catalog,
+                                               body.descriptor.id),
+              "Embedded physical catalog cannot use legacy rotation API");
+        hash.word(static_cast<std::uint64_t>(recipe.catalog_family));
+        hash.word(recipe.owner_version);
+        hash.word(recipe.physical_catalog_generator);
+        hash.word(recipe.source_catalog_generator);
+        hash.word(recipe.ephemeris_version);
+        hash.word(recipe.origin_universe_seed.has_value());
+        hash.word(recipe.origin_universe_seed
+                      ? recipe.origin_universe_seed->value
+                      : 0);
+        hash.recipe(recipe.rotation);
+        const auto wrap =
+            recipe.rotation.period_ticks - recipe.rotation.epoch_phase_tick;
+        const std::array ticks{
+            SimulationTick{0}, SimulationTick{1234567},
+            wrap - 1,          wrap,
+            wrap + 1,          std::numeric_limits<SimulationTick>::max() - 1};
+        for (const auto tick : ticks) {
+          const PlanetFixedPositionMetres observer{1234, -5678, 91011};
+          const auto result =
+              required(resolve_planet_rotation(system, recipe, tick, observer));
+          const auto& g = result.geometry;
+          const auto old = required(
+              resolve_planet_rotation(legacy, old_recipe, tick, observer));
+          const auto ephemeris = required(
+              resolve_planet_ephemeris(system, body.descriptor.id, {tick, 0}));
+          check(result.recipe == recipe && g.recipe == recipe.rotation &&
+                    g.tick == tick,
+                "Physical result retains wrapper and exact spin/tick payload");
+          check(g.fixed_to_system == old.fixed_to_system &&
+                    g.angular_velocity_radians_per_second ==
+                        old.angular_velocity_radians_per_second,
+                "Shared kernel keeps same spin and fixed pole across catalog "
+                "families");
+          check(g.planet_position == ephemeris.position &&
+                    g.planet_velocity == ephemeris.velocity,
+                "Physical rotation uses physical same-tick ephemeris, not "
+                "legacy periods");
+          if (tick == 1234567) {
+            check(g.planet_position != old.planet_position &&
+                      g.planet_velocity != old.planet_velocity &&
+                      g.observer_to_star_system != old.observer_to_star_system,
+                  "Nonzero tick demonstrates genuinely different physical "
+                  "orbital lighting");
+          }
+          const auto expected_rotation = oracle(body, recipe.rotation, tick);
+          const auto actual_rotation = quaternion_matrix(g.fixed_to_system);
+          for (std::size_t axis = 0; axis < 3; ++axis)
+            check(close(actual_rotation[axis], expected_rotation[axis], 3e-15),
+                  "Physical quaternion matches independent matrix oracle");
+          const auto offset =
+              apply(expected_rotation, {observer.x, observer.y, observer.z});
+          const V toward_star{-ephemeris.position.x - offset[0],
+                              -ephemeris.position.y - offset[1],
+                              -ephemeris.position.z - offset[2]};
+          check(close(normalized(toward_star),
+                      {g.observer_to_star_system.x, g.observer_to_star_system.y,
+                       g.observer_to_star_system.z},
+                      3e-15),
+                "Physical observer light matches independent system-space "
+                "direction");
+          check(std::abs(magnitude(toward_star) -
+                         g.observer_star_distance_metres) <=
+                    magnitude(toward_star) * 2e-15,
+                "Physical finite-distance star distance matches independent "
+                "oracle");
+          hash.geometry(g);
+        }
+        const auto at = required(resolve_planet_rotation(system, recipe, 123));
+        const auto after = required(resolve_planet_rotation(
+            system, recipe, 123 + recipe.rotation.period_ticks));
+        check(at.geometry.fixed_to_system == after.geometry.fixed_to_system &&
+                  at.geometry.angular_velocity_radians_per_second ==
+                      after.geometry.angular_velocity_radians_per_second,
+              "Physical spin wraps independently of orbital year");
+        check(at.geometry.observer_to_star_fixed !=
+                  after.geometry.observer_to_star_fixed,
+              "Physical solar geometry is not looped at sidereal period");
+        check(required(generate_planet_rotation_recipe(
+                  system, body.descriptor.id)) == recipe,
+              "Physical query never mutates its recipe");
+      }
+      check(system == required(origin ? generate_physical_origin_system(seed)
+                                      : generate_physical_local_system(seed)),
+            "Physical query never mutates its world context");
+    }
+  }
+  std::cout << "physical rotation geometry corpus " << hash.value << '\n';
+  // Observed identical with GCC and Clang on the qualification host; analytic
+  // matrix/ephemeris checks above remain separate correctness evidence.
+  check(hash.value == 3325105109563507698ULL,
+        "physical owner-wrapper geometry corpus golden");
+}
+
+auto physical_refusal_contract() -> void {
+  const auto system = required(generate_physical_origin_system(Seed{42}));
+  const auto recipe = required(generate_planet_rotation_recipe(
+      system, system.catalog.planets.front().descriptor.id));
+  auto rejected = [&](auto change, Error error) {
+    auto bad = recipe;
+    change(bad);
+    const auto before = bad;
+    const auto result = resolve_planet_rotation(system, bad, 12345);
+    check(!result && result.error() == error,
+          "Physical forged recipe refused with expected category");
+    check(before == bad, "Physical recipe refusal is read-only");
+  };
+  rejected(
+      [](auto& r) {
+        r.catalog_family = static_cast<PlanetRotationOwnerFamily>(0);
+      },
+      Error::unsupported_version);
+  rejected([](auto& r) { ++r.owner_version; }, Error::unsupported_version);
+  rejected([](auto& r) { ++r.physical_catalog_generator; },
+           Error::unsupported_version);
+  rejected([](auto& r) { ++r.source_catalog_generator; },
+           Error::unsupported_version);
+  rejected([](auto& r) { ++r.ephemeris_version; }, Error::unsupported_version);
+  rejected([](auto& r) { ++r.rotation.version; }, Error::unsupported_version);
+  rejected([](auto& r) { r.origin_universe_seed.reset(); },
+           Error::owner_mismatch);
+  rejected([](auto& r) { ++r.origin_universe_seed->value; },
+           Error::owner_mismatch);
+  rejected([](auto& r) { ++r.rotation.system.value; }, Error::owner_mismatch);
+  rejected(
+      [](auto& r) { r.rotation.catalog_kind = LocalSystemKind::procedural; },
+      Error::owner_mismatch);
+  rejected([](auto& r) { ++r.rotation.planet.value; }, Error::unknown_planet);
+  rejected([](auto& r) { r.rotation.period_ticks = 0; }, Error::invalid_recipe);
+  rejected(
+      [](auto& r) {
+        r.rotation.period_ticks = std::numeric_limits<SimulationTick>::max();
+      },
+      Error::invalid_recipe);
+  rejected([](auto& r) { ++r.rotation.period_ticks; }, Error::invalid_recipe);
+  rejected(
+      [](auto& r) { r.rotation.epoch_phase_tick = r.rotation.period_ticks; },
+      Error::invalid_recipe);
+  rejected([](auto& r) { ++r.rotation.epoch_phase_tick; },
+           Error::invalid_recipe);
+  rejected([](auto& r) { ++r.rotation.tilt_microdegrees; },
+           Error::invalid_recipe);
+  rejected([](auto& r) { ++r.rotation.pole_azimuth_turns; },
+           Error::invalid_recipe);
+
+  auto forged_context = [&](auto change) {
+    auto bad = system;
+    change(bad);
+    const auto before = bad;
+    const auto generated =
+        generate_planet_rotation_recipe(bad, recipe.rotation.planet);
+    const auto resolved = resolve_planet_rotation(bad, recipe, 12345);
+    check(!generated && generated.error() == Error::invalid_world_context &&
+              !resolved && resolved.error() == Error::invalid_world_context,
+          "Both physical APIs reject forged catalog before geometry");
+    check(before == bad, "Physical context refusal is read-only");
+  };
+  forged_context([](auto& s) { ++s.generator_version; });
+  forged_context([](auto& s) { ++s.stellar_gm_km3_per_second2; });
+  forged_context([](auto& s) { ++s.stellar_mass_millisolar; });
+  forged_context(
+      [](auto& s) { ++s.catalog.planets.front().orbit.period_ticks; });
+  forged_context([](auto& s) { ++s.origin_universe_seed->value; });
+  forged_context([](auto& s) { s.origin_universe_seed.reset(); });
+  forged_context([](auto& s) { ++s.catalog.star.radius_kilometres; });
+  const auto other = required(generate_physical_origin_system(Seed{43}));
+  const auto wrong_world = resolve_planet_rotation(other, recipe, 12345);
+  check(!wrong_world && wrong_world.error() == Error::owner_mismatch,
+        "Another physical universe cannot consume the origin recipe");
+  const auto procedural =
+      required(generate_physical_local_system(system.catalog.seed));
+  const auto alias = required(
+      generate_planet_rotation_recipe(procedural, recipe.rotation.planet));
+  check(alias != recipe && alias.rotation.planet == recipe.rotation.planet,
+        "Same-ID authored/procedural physical owners remain distinct");
+  const auto wrong_variant = resolve_planet_rotation(procedural, recipe, 12345);
+  check(!wrong_variant && wrong_variant.error() == Error::owner_mismatch,
+        "Physical recipe cannot cross authored/procedural variants");
+  check(!generate_planet_rotation_recipe(system, recipe.rotation.planet, 0),
+        "Physical generation rejects unsupported spin version");
+  const auto unknown = generate_planet_rotation_recipe(
+      system, PlanetId{recipe.rotation.planet.value + 1});
+  check(!unknown && unknown.error() == Error::unknown_planet,
+        "Physical generation rejects foreign planet");
+  const auto invalid_tick = resolve_planet_rotation(
+      system, recipe, std::numeric_limits<SimulationTick>::max());
+  check(!invalid_tick && invalid_tick.error() == Error::invalid_tick,
+        "Physical rotation rejects reserved tick");
+  const double bound = kPlanetRotationMaximumObserverComponentMetres;
+  for (std::size_t axis = 0; axis < 3; ++axis) {
+    for (const double value :
+         {std::numeric_limits<double>::quiet_NaN(),
+          std::numeric_limits<double>::infinity(),
+          -std::numeric_limits<double>::infinity(),
+          std::nextafter(bound, std::numeric_limits<double>::infinity()),
+          -std::nextafter(bound, std::numeric_limits<double>::infinity())}) {
+      PlanetFixedPositionMetres observer{};
+      const std::array fields{&observer.x, &observer.y, &observer.z};
+      *fields[axis] = value;
+      const auto result =
+          resolve_planet_rotation(system, recipe, 12345, observer);
+      check(!result && result.error() == Error::invalid_observer,
+            "Physical observer axis rejected at invalid bound");
+    }
+  }
+  check(resolve_planet_rotation(system, recipe, 12345, {bound, -bound, bound})
+            .has_value(),
+        "Physical observer inclusive component bounds accepted");
+  const auto centre = required(resolve_planet_rotation(system, recipe, 12345));
+  const auto zero = required(
+      resolve_planet_rotation(system, recipe, 12345, {-0.0, -0.0, -0.0}));
+  check(zero == centre &&
+            !std::signbit(zero.geometry.observer_position_fixed.x),
+        "Physical observer signed zeros canonicalized in output");
+  const auto coincident = resolve_planet_rotation(
+      system, recipe, 12345, centre.geometry.star_position_fixed);
+  check(!coincident && coincident.error() == Error::observer_at_star,
+        "Physical coincident point-star observer refused");
+}
 } // namespace
 
 auto main() -> int {
@@ -570,6 +817,8 @@ auto main() -> int {
   geometry_contract();
   illumination_contract();
   malformed_contract();
+  physical_refusal_contract();
+  physical_geometry_contract();
   std::cout << "planet rotation: " << failures << " failures\n";
   return failures == 0 ? 0 : 1;
 }

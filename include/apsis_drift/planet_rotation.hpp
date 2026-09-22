@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <expected>
 
+#include "apsis_drift/physical_local_system.hpp"
 #include "apsis_drift/rigid_body.hpp"
 
 namespace apsis_drift {
@@ -51,6 +52,39 @@ struct PlanetRotationGeometry {
                          const PlanetRotationGeometry&) -> bool = default;
 };
 
+// A distinct owner wrapper: matching numeric system/planet IDs never turns a
+// legacy rotation recipe into a physical-catalog recipe. No implicit unwrap.
+enum class PlanetRotationOwnerFamily : std::uint8_t {
+  physical_circular = 1,
+};
+inline constexpr std::uint32_t kPhysicalPlanetRotationOwnerVersion{1};
+
+struct PhysicalPlanetRotationRecipe {
+  PlanetRotationOwnerFamily catalog_family{
+      PlanetRotationOwnerFamily::physical_circular};
+  std::uint32_t owner_version{kPhysicalPlanetRotationOwnerVersion};
+  std::uint32_t physical_catalog_generator{
+      kPhysicalLocalSystemGeneratorVersion};
+  std::uint32_t source_catalog_generator{kLocalSystemGeneratorVersion};
+  std::uint32_t ephemeris_version{kAnalyticEphemerisVersion};
+  std::optional<Seed> origin_universe_seed;
+  PlanetRotationRecipe rotation;
+
+  friend auto operator==(const PhysicalPlanetRotationRecipe&,
+                         const PhysicalPlanetRotationRecipe&) -> bool = default;
+};
+
+struct PhysicalPlanetRotationGeometry {
+  PhysicalPlanetRotationRecipe recipe;
+  // Reused numerical payload, not an independently legacy-owned result. Keep
+  // the outer recipe with it; no native flight-frame or save migration implied.
+  PlanetRotationGeometry geometry;
+
+  friend auto operator==(const PhysicalPlanetRotationGeometry&,
+                         const PhysicalPlanetRotationGeometry&)
+      -> bool = default;
+};
+
 enum class PlanetRotationError : std::uint8_t {
   unsupported_version,
   invalid_world_context,
@@ -78,5 +112,16 @@ enum class PlanetRotationError : std::uint8_t {
     const LocalSystemDescriptor& system, const PlanetRotationRecipe& recipe,
     SimulationTick tick, PlanetFixedPositionMetres observer = {})
     -> std::expected<PlanetRotationGeometry, PlanetRotationError>;
+
+[[nodiscard]] auto generate_planet_rotation_recipe(
+    const PhysicalLocalSystem& system, PlanetId planet,
+    std::uint32_t version = kPlanetRotationGeneratorVersion)
+    -> std::expected<PhysicalPlanetRotationRecipe, PlanetRotationError>;
+
+[[nodiscard]] auto resolve_planet_rotation(
+    const PhysicalLocalSystem& system,
+    const PhysicalPlanetRotationRecipe& recipe, SimulationTick tick,
+    PlanetFixedPositionMetres observer = {})
+    -> std::expected<PhysicalPlanetRotationGeometry, PlanetRotationError>;
 
 } // namespace apsis_drift

@@ -97,8 +97,43 @@ the generated orbital radii. The star descriptor has no mass. Those legacy
 orbits are preserved here; therefore this is internally coherent geometry over
 the current catalog, **not** a claim of realistic astronomical years or a
 guaranteed 6–72-hour apparent solar-day range. No independent accelerated light
-clock is introduced. Future orbital realism requires its own versioned catalog
-decision rather than silently changing these ephemerides.
+clock is introduced. The separately selected
+[physical circular catalog](PHYSICAL_LOCAL_SYSTEM.md) supplies physical orbital
+periods for new native universes without changing these legacy ephemerides.
+
+## Explicit physical-catalog adapter
+
+The `PhysicalLocalSystem` overloads return a distinct
+`PhysicalPlanetRotationRecipe` and `PhysicalPlanetRotationGeometry`. The recipe
+retains a physical-family discriminator, owner-format version, physical catalog,
+source catalog and ephemeris versions, optional origin-universe seed, and the
+complete existing spin recipe. Resolution validates the complete physical world
+context and rederives its recipe before arithmetic. Matching numeric system and
+planet IDs alone do not authorize substituting a legacy or procedural-home
+context.
+
+The spin stream, period, tilt, phase and pole interpretation are unchanged. For
+corresponding legacy and physical planets at the same tick, orientation and
+angular velocity therefore match exactly. Planet position, velocity and star
+direction instead use the explicitly selected physical ephemeris. A shared
+private numeric helper preserves the legacy quaternion and illumination
+operation order; the public legacy validators are not widened to accept the
+embedded physical catalog.
+
+Retain the physical geometry wrapper alongside its numeric payload. Unwrapping
+the spin recipe does not make the physical catalog valid for legacy frame
+handoffs, terrain contacts or persistence. This adapter alone does not enable
+native startup, change the flight lab's nonrotating frame, migrate saves or
+introduce a second lighting clock.
+
+The physical adapter checks procedural and authored origin catalogs, nonzero
+ticks and near-maximum ticks, independent matrix/star-vector oracles, exact spin
+parity, origin/recipe/context forgeries and observer bounds. Its new corpus
+checksum is `3325105109563507698` under both local compilers; historical rotation
+and rigid-handoff goldens are unchanged. Both full compiler builds, 19 focused
+C++ contracts and 29 isolated native contracts per compiler pass. Those native
+tests establish unchanged consumers, not live adoption of physical rotation.
+Focused pinned lint and independent review pass; full lint remains hosted CI.
 
 ## Illumination
 
