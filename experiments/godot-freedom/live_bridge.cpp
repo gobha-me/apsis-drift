@@ -16,6 +16,7 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/quaternion.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 #include <set>
@@ -25,6 +26,8 @@ namespace apsis_drift::godot_spike {
 // This adapter owns a small experimental flight session, not a second physics
 // implementation. All authoritative changes go through existing C++ APIs.
 struct LiveWorld {
+  const SnapshotWorld world_recipe;
+  const nlohmann::json world_context;
   PlanetDescriptor planet;
   TerrainTileCache cache;
   LocalTangentFrame frame;
@@ -40,11 +43,16 @@ struct LiveWorld {
   std::uint64_t reference_flight_checksum{};
   std::optional<SurfacePracticeStart> surface_start;
 
-  explicit LiveWorld(const Request& request)
-      : planet{generate_planet_descriptor(request.planet_seed)},
-        cache{require(TerrainTileCache::create())}, lod{request.lod},
-        span_metres{request.span_metres},
-        relief_version{request.relief_version}, reference_start{request} {
+  LiveWorld(const Request& request, SnapshotWorld resolved)
+      : world_recipe{std::move(resolved)},
+        world_context(snapshot_world_context(world_recipe)),
+        planet{world_recipe.planet}, cache{require(TerrainTileCache::create())},
+        lod{request.lod}, span_metres{request.span_metres},
+        relief_version{request.relief_version}, reference_start{[&] {
+          auto reference = request;
+          reference.planet_seed = planet.seed;
+          return reference;
+        }()} {
     validate(request);
     auto origin = GeodeticPosition{request.latitude, request.longitude, 0};
     const auto probe = require(planet_fixed_from_geodetic(planet, origin));
@@ -169,6 +177,8 @@ class FreedomBridge : public godot::RefCounted {
   static auto _bind_methods() -> void {
     godot::ClassDB::bind_method(godot::D_METHOD("initialize", "snapshot_json"),
                                 &FreedomBridge::initialize);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_world_lighting"),
+                                &FreedomBridge::get_world_lighting);
     godot::ClassDB::bind_method(
         godot::D_METHOD("advance", "elapsed", "buttons"),
         &FreedomBridge::advance);
@@ -234,7 +244,7 @@ class FreedomBridge : public godot::RefCounted {
     try {
       const auto utf8 = snapshot_json.utf8();
       const auto data = nlohmann::json::parse(utf8.get_data());
-      if (data.at("schema_version") != 1 ||
+      if ((data.at("schema_version") != 1 && data.at("schema_version") != 2) ||
           data.at("terrain_generator_version") !=
               kTerrainTileGeneratorVersion ||
           data.at("seed_derivation_version") != kSeedDerivationVersion ||
@@ -242,20 +252,28 @@ class FreedomBridge : public godot::RefCounted {
         throw std::invalid_argument(
             "unsupported generator or snapshot version");
       Request request;
+      const bool physical = data.at("schema_version") == 2;
+      if (!physical && data.contains("world_context"))
+        throw std::invalid_argument(
+            "standalone snapshot cannot contain world context");
+      if (physical) {
+        const auto universe = data.at("world_context")
+                                  .at("origin_universe_seed")
+                                  .get<std::string>();
+        Seed universe_seed;
+        const auto parsed_universe =
+            std::from_chars(universe.data(), universe.data() + universe.size(),
+                            universe_seed.value);
+        if (parsed_universe.ec != std::errc{} ||
+            parsed_universe.ptr != universe.data() + universe.size())
+          throw std::invalid_argument("invalid physical origin universe seed");
+        request.physical_origin_seed = universe_seed;
+      }
       const auto seed = data.at("planet").at("planet_seed").get<std::string>();
       const auto parsed = std::from_chars(
           seed.data(), seed.data() + seed.size(), request.planet_seed.value);
       if (parsed.ec != std::errc{} || parsed.ptr != seed.data() + seed.size())
         throw std::invalid_argument("invalid planet seed");
-      // Snapshot v1 owns an unchanged standalone procedural planet. Compare
-      // the complete canonical projection, including nested metadata and keys;
-      // a seed alone cannot authorize an authored origin-home variant.
-      const auto canonical_planet =
-          nlohmann::json::parse(planet_descriptor_json(
-              generate_planet_descriptor(request.planet_seed)));
-      if (data.at("planet") != canonical_planet)
-        throw std::invalid_argument(
-            "snapshot planet differs from C++ descriptor");
       const auto numeric = [](const nlohmann::json& value) -> double {
         // get<double>() also accepts JSON booleans; snapshot scalars do not.
         if (!value.is_number())
@@ -282,7 +300,20 @@ class FreedomBridge : public godot::RefCounted {
         throw std::invalid_argument("unsupported experimental relief version");
       request.relief_version = static_cast<unsigned>(relief);
       validate(request);
-      auto candidate = std::make_unique<LiveWorld>(request);
+      auto resolved = resolve_snapshot_world(request);
+      // Both schemas compare the complete descriptor. Schema2 additionally
+      // proves the exact physical origin owner; seed-only aliases cannot pass.
+      const auto canonical_planet =
+          nlohmann::json::parse(planet_descriptor_json(resolved.planet));
+      if (data.at("planet") != canonical_planet)
+        throw std::invalid_argument(
+            "snapshot planet differs from C++ descriptor");
+      if (physical &&
+          data.at("world_context") != snapshot_world_context(resolved))
+        throw std::invalid_argument(
+            "snapshot world context differs from C++ origin recipe");
+      auto candidate =
+          std::make_unique<LiveWorld>(request, std::move(resolved));
       const auto& reference = data.at("replay").at(0);
       if (reference.at("tick") != 0 ||
           reference.at("checksum") !=
@@ -298,6 +329,73 @@ class FreedomBridge : public godot::RefCounted {
     } catch (const std::exception& error) {
       last_error = godot::String{error.what()};
       return false;
+    }
+  }
+
+  auto get_world_lighting() const -> godot::Dictionary {
+    godot::Dictionary result;
+    result["enabled"] = false;
+    try {
+      if (!world) throw std::runtime_error("bridge not initialized");
+      if (!world->world_recipe.physical) return result;
+      const auto& flight = world->flight;
+      // The lab remains nonrotating. Its displayed geodetic position locates
+      // a visual lighting probe, not a canonical rigid-state frame handoff.
+      const auto observer = require(
+          planet_fixed_from_geodetic(world->planet, flight.pose.position));
+      const auto lighting = require(resolve_planet_rotation(
+          *world->world_recipe.physical, *world->world_recipe.rotation,
+          flight.tick, observer));
+      const auto& geometry = lighting.geometry;
+      const auto view = stream ? require(make_local_tangent_frame(
+                                     world->planet, flight.pose.position))
+                               : world->frame;
+      const auto toward_star = flight_lab::vec(geometry.observer_to_star_fixed);
+      const auto radial =
+          flight_lab::unit({observer.x, observer.y, observer.z});
+      const auto direction = godot::Vector3(
+          flight_lab::dot(toward_star, flight_lab::vec(view.east)),
+          flight_lab::dot(toward_star, flight_lab::vec(view.up)),
+          -flight_lab::dot(toward_star, flight_lab::vec(view.north)));
+      godot::Basis local_to_fixed;
+      local_to_fixed.set_column(
+          0, godot::Vector3(view.east.x, view.east.y, view.east.z));
+      local_to_fixed.set_column(
+          1, godot::Vector3(view.up.x, view.up.y, view.up.z));
+      local_to_fixed.set_column(
+          2, godot::Vector3(-view.north.x, -view.north.y, -view.north.z));
+      const auto& q = geometry.fixed_to_system;
+      const godot::Basis fixed_to_system{godot::Quaternion(q.x, q.y, q.z, q.w)};
+      const auto& star = world->world_recipe.physical->catalog.star;
+      result["enabled"] = true;
+      result["tick"] = static_cast<std::int64_t>(flight.tick);
+      result["direction"] = direction;
+      result["direction_system"] =
+          godot::Vector3(geometry.observer_to_star_system.x,
+                         geometry.observer_to_star_system.y,
+                         geometry.observer_to_star_system.z);
+      result["local_to_system"] = fixed_to_system * local_to_fixed;
+      result["solar_elevation_sine"] = flight_lab::dot(radial, toward_star);
+      result["rotation_period_ticks"] =
+          static_cast<std::int64_t>(lighting.recipe.rotation.period_ticks);
+      result["star_color"] =
+          godot::Color(star.color.red / 255.0f, star.color.green / 255.0f,
+                       star.color.blue / 255.0f, 1);
+      result["star_radius_metres"] =
+          static_cast<double>(star.radius_kilometres) * 1000.0;
+      result["star_distance_metres"] = geometry.observer_star_distance_metres;
+      result["star_angular_radius_radians"] = std::asin(
+          std::min(1.0, static_cast<double>(star.radius_kilometres) * 1000.0 /
+                            geometry.observer_star_distance_metres));
+      result["world_context_json"] =
+          godot::String(world->world_context.dump().c_str());
+      result["model"] = "physical-circular-rotation-1-presentation";
+      result["probe_frame"] = "visual_geodetic";
+      return result;
+    } catch (const std::exception& error) {
+      result["enabled"] = false;
+      result["error"] = godot::String(error.what());
+      return result;
     }
   }
 

@@ -79,10 +79,12 @@ no new action bindings were added. Restraint refinements remain a separate study
 The [physical orbital catalog](PHYSICAL_LOCAL_SYSTEM.md),
 [rotation/star geometry provider](PLANET_ROTATION.md) and
 [rigid-frame handoffs](RIGID_FRAME_HANDOFF.md) are tested C++ foundations, not
-yet replacement gameplay physics. Catalog-backed native startup, saved recipe
-selection, coherent rotating terrain/ship/light presentation and the remaining
-physical landing loop are still required. Do not relabel the nonrotating lab
-or its standalone seed-42 fixture as a completed persistent universe.
+yet replacement gameplay physics. The opt-in
+[physical-home native study](NATIVE_PHYSICAL_HOME.md) adds catalog-owned startup
+and same-tick star lighting while retaining nonrotating flight. Persistent saved
+recipe selection, coherent rotating terrain/ship/light presentation and the
+remaining physical landing loop are still required. Do not relabel this lab
+or its preserved standalone seed-42 fixture as a completed persistent universe.
 
 [Freedom milestone](https://github.com/gobha-me/apsis-drift/milestone/10) and
 [tracking epic #243](https://github.com/gobha-me/apsis-drift/issues/243) replace

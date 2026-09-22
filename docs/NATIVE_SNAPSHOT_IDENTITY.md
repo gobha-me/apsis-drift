@@ -22,32 +22,16 @@ fresh context-scoped caches. This check does not add that initialization path,
 restore a career save, validate every presentation buffer against regenerated
 terrain, or migrate the nonrotating flight lab to a canonical rotating frame.
 
-## Next explicit bootstrap boundary
+## Explicit physical-home bootstrap
 
-The next native path must be opt-in and separately versioned. Its first bounded
-target is the physical origin universe's authored home planet, not arbitrary
-caller-supplied descriptors or a restored career. Its recipe must retain the
-physical catalog family/version, source catalog and ephemeris versions,
-origin-universe seed, exact selected planet identity and rotation-owner/spin
-versions. Resolve those through C++ before allocating terrain or replacing the
-current session. A JSON seed or ID alone is insufficient ownership evidence.
+The separate [schema2 physical-home study](NATIVE_PHYSICAL_HOME.md) now resolves
+the authored home through its complete C++ universe/catalog/rotation owner.
+It shares mesh/replay construction, replaces terrain caches transactionally,
+and supplies same-tick star geometry to native presentation. Snapshot-v1 bytes
+and defaults remain unchanged; injecting `world_context` into schema1 is
+explicitly refused. A JSON seed or ID alone is not ownership evidence.
 
-The exporter and live bridge should share descriptor resolution and the existing
-mesh/replay construction. A successfully constructed replacement receives fresh
-terrain/stream caches; failed validation leaves the running session and caches
-intact. Reset uses the retained selected recipe, not a default standalone seed.
-Snapshot-v1 exports, defaults and refusals remain unchanged.
-
-Presentation must query one authoritative tick and star vector for direct light,
-sky and ambient illumination together. During the current flight-lab phase, a
-geodetic lighting probe is an explicitly visual approximation over the lab's
-planet-centred nonrotating motion; it is not permission to label that state
-canonical `planet_fixed` or claim surface/atmosphere co-rotation. Actual rotating
-6DOF integration remains a separate requirement.
-
-Qualification must include malformed owner/version refusal, authored-home versus
-same-ID procedural substitution, reset ownership, failed replacement after live
-flight/streaming, unchanged flight state after lighting queries, both compiler
-contracts, and native daylight/twilight/night views. Diagnostic fixed-epoch
-views can establish lighting without adding a gameplay time-acceleration mode.
-This section records the next implementation boundary, not completed behavior.
+The lab's geodetic lighting probe remains an explicit visual approximation over
+planet-centred nonrotating motion. This does not relabel its state canonical
+`planet_fixed`, add surface/atmosphere co-rotation, restore a career, or complete
+rotating 6DOF integration.

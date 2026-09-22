@@ -23,6 +23,11 @@ var assets_path := ""
 var last_frame_usec := 0
 var scene_environment: Environment
 var sun_light: DirectionalLight3D
+var near_sun_light: DirectionalLight3D
+var fill_light: DirectionalLight3D
+var physical_lighting := false
+var lighting_sample: Dictionary = {}
+const PlanetLighting = preload("res://planet_lighting.gd")
 var render_size := Vector2i.ZERO
 var live_bridge: Variant = null
 var live_paused := false
@@ -78,8 +83,12 @@ func finite_number(value: Variant) -> bool:
 func valid_snapshot(value: Variant) -> bool:
 	if not value is Dictionary:
 		return false
-	if value.get("schema_version") != 1 or value.get("terrain_generator_version") != 1:
+	if not finite_number(value.get("schema_version")) or (value.schema_version != 1 and value.schema_version != 2) or value.get("terrain_generator_version") != 1:
 		return false
+	if value.schema_version == 2:
+		# Shape only; C++ validates the complete canonical owner and descriptor.
+		if not value.get("world_context") is Dictionary:
+			return false
 	if value.get("seed_derivation_version") != 1:
 		return false
 	var relief: Variant = value.get("experimental_relief_version", 0)
@@ -161,7 +170,10 @@ func _ready() -> void:
 		fail("Invalid snapshot schema, dimensions, identity, buffers or replay")
 		return
 	data = decoded
+	physical_lighting = data.schema_version == 2
 	if options.has("--validate-only"):
+		if physical_lighting and not initialize_live_bridge():
+			return
 		print("Godot snapshot consumer validation passed")
 		get_tree().quit()
 		return
@@ -175,15 +187,11 @@ func _ready() -> void:
 	if options.get("--flight-model", "legacy") not in ["legacy", "thrust"]:
 		fail("Flight model must be legacy or thrust")
 		return
+	if physical_lighting and (not streaming_requested or options.get("--flight-model", "legacy") != "thrust"):
+		fail("Physical-home presentation requires --stream=true and --flight-model=thrust; legacy startup is unchanged")
+		return
 	if options.get("--live", "false") == "true" or streaming_requested:
-		if not ClassDB.class_exists("FreedomBridge"):
-			GDExtensionManager.load_extension("res://bin/freedom.gdextension")
-		if not ClassDB.class_exists("FreedomBridge"):
-			fail("Live adapter missing; build with APSIS_DRIFT_GODOT_LIVE=ON")
-			return
-		live_bridge = ClassDB.instantiate("FreedomBridge")
-		if not live_bridge.initialize(snapshot_text):
-			fail("Live C++ initialization failed: " + str(live_bridge.get_last_error()))
+		if not initialize_live_bridge():
 			return
 	if options.get("--flight-model", "legacy") == "thrust":
 		if live_bridge == null or options.get("--controls", "true") != "true" or options.has("--capture"):
@@ -238,6 +246,9 @@ func _ready() -> void:
 		pilot_cockpit.add_child(flight_displays)
 		navigation_sky = preload("res://navigation_sky.gd").material(live_bridge.get_sky_catalog(), Color(data.planet.palette.atmosphere).lightened(0.22), float(data.planet.atmosphere.pressure_millibars))
 		scene_environment.sky.sky_material = navigation_sky
+		if physical_lighting:
+			scene_environment.sky.radiance_size = Sky.RADIANCE_SIZE_256
+			scene_environment.sky.process_mode = Sky.PROCESS_MODE_REALTIME
 		world_view = preload("res://world_view.gd").new()
 		add_child(world_view)
 		world_view.install(self)
@@ -621,19 +632,66 @@ func build_environment() -> void:
 	sun.rotation_degrees = Vector3(-24, -40, 0)
 	sun.light_color = Color("ffe2bd")
 	sun.light_energy = 1.8
-	sun.light_cull_mask = 3
+	sun.light_cull_mask = 2 if physical_lighting else 3
 	sun.layers = 3
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	sun.directional_shadow_max_distance = 18000
 	add_child(sun)
+	if physical_lighting:
+		near_sun_light = DirectionalLight3D.new()
+		near_sun_light.light_cull_mask = 1
+		near_sun_light.layers = 1
+		near_sun_light.shadow_enabled = true
+		near_sun_light.directional_shadow_max_distance = 300
+		add_child(near_sun_light)
 	var fill := DirectionalLight3D.new()
+	fill_light = fill
 	fill.rotation_degrees = Vector3(-35, 140, 0)
 	fill.light_color = Color("779bcc")
-	fill.light_energy = 0.35
+	fill.light_energy = 0.0 if physical_lighting else 0.35
 	fill.light_cull_mask = 3
 	fill.layers = 3
 	add_child(fill)
+
+
+func initialize_live_bridge() -> bool:
+	if not ClassDB.class_exists("FreedomBridge"):
+		GDExtensionManager.load_extension("res://bin/freedom.gdextension")
+	if not ClassDB.class_exists("FreedomBridge"):
+		fail("Live adapter missing; build with APSIS_DRIFT_GODOT_LIVE=ON")
+		return false
+	live_bridge = ClassDB.instantiate("FreedomBridge")
+	if not live_bridge.initialize(snapshot_text):
+		fail("Live C++ initialization failed: " + str(live_bridge.get_last_error()))
+		return false
+	return true
+
+
+func refresh_physical_lighting(state: Dictionary) -> bool:
+	if not physical_lighting:
+		return true
+	lighting_sample = live_bridge.get_world_lighting()
+	var display := PlanetLighting.parameters(lighting_sample, state.planet_radius, state.altitude, float(data.planet.atmosphere.pressure_millibars))
+	if display.is_empty() or lighting_sample.get("tick") != state.tick:
+		fail("Physical world lighting refused or did not match the authoritative flight tick")
+		return false
+	sun_light.basis = display.sun_basis
+	sun_light.light_color = lighting_sample.star_color
+	sun_light.light_energy = 1.8
+	near_sun_light.basis = display.sun_basis
+	near_sun_light.light_color = lighting_sample.star_color
+	near_sun_light.light_energy = 1.8 * display.near_sun_visibility
+	fill_light.light_energy = 0.0
+	navigation_sky.set_shader_parameter("physical_lighting", true)
+	navigation_sky.set_shader_parameter("sun_direction", lighting_sample.direction)
+	navigation_sky.set_shader_parameter("sun_color", lighting_sample.star_color)
+	navigation_sky.set_shader_parameter("sun_angular_radius", lighting_sample.star_angular_radius_radians)
+	navigation_sky.set_shader_parameter("view_to_inertial", lighting_sample.local_to_system)
+	scene_environment.ambient_light_energy = display.ambient
+	scene_environment.fog_light_color = display.fog_color
+	scene_environment.fog_light_energy = display.fog_energy
+	return true
 
 
 func build_terrain() -> void:
@@ -1036,6 +1094,8 @@ func _process(delta: float) -> void:
 			" / PREPARING PLANET" if not planet_stream.is_ready else ""]
 	if live_presentation:
 		var view_state: Dictionary = live_bridge.get_state()
+		if not refresh_physical_lighting(view_state):
+			return
 		world_view.refresh(self, view_state.altitude, view_state.planet_radius)
 		debug_backdrop.visible = debug_visible
 		label.visible = debug_visible or not pilot_view
@@ -1043,6 +1103,8 @@ func _process(delta: float) -> void:
 			var state: Dictionary = live_bridge.get_state()
 			var status: Dictionary = current_orbit_status if not current_orbit_status.is_empty() else preload("res://flight_status.gd").describe(state)
 			label.text = "%s  |  %s\nALT %s  |  GROUND CLEARANCE %s  |  %.0f m/s\n%s  |  VERTICAL %+.0f m/s" % [data.planet.display_name.to_upper(), status.environment, preload("res://flight_status.gd").distance(state.altitude), preload("res://flight_status.gd").distance(state.clearance), state.speed, status.trajectory, state.climb_rate]
+			if physical_lighting:
+				label.text += "\nPHYSICAL HOME / LIGHTING STUDY — NONROTATING FLIGHT LAB"
 			caption.text = "" if pilot_view else "X / Square: cockpit · Hold L3: orbit camera · D-pad up / G: guidance · Start: controls"
 			if state.floor_guard:
 				caption.text = "TEST FLOOR GUARD — COLLISION / LANDING NOT IMPLEMENTED"

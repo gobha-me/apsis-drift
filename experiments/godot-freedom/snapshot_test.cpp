@@ -146,6 +146,75 @@ auto main() -> int {
     request.relief_version = 0;
     check(snapshot(request) == data,
           "opting out of relief changed baseline snapshot");
+    check(data.at("schema_version") == 1 && !data.contains("world_context"),
+          "standalone snapshot silently gained physical ownership");
+    for (const auto universe :
+         {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+      Request physical_request;
+      physical_request.samples = 3;
+      physical_request.span_metres = 1000;
+      physical_request.physical_origin_seed = universe;
+      const auto world = resolve_snapshot_world(physical_request);
+      const auto expected_system =
+          require(generate_physical_origin_system(universe));
+      const auto& home =
+          expected_system.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+      check(world.planet == home && world.physical == expected_system,
+            "physical snapshot did not resolve exact authored origin home");
+      const auto physical = snapshot(physical_request);
+      check(physical == snapshot(physical_request) &&
+                physical.at("schema_version") == 2,
+            "physical snapshot not deterministic or separately versioned");
+      check(physical.at("world_context") == snapshot_world_context(world) &&
+                physical.at("planet") ==
+                    nlohmann::json::parse(planet_descriptor_json(home)),
+            "physical context or descriptor projection differs from C++ owner");
+      check(physical.at("world_context").at("origin_universe_seed") ==
+                    std::to_string(universe.value) &&
+                physical.at("world_context").at("family") ==
+                    "physical_circular" &&
+                physical.at("world_context")
+                    .at("rotation")
+                    .at("period_ticks")
+                    .is_string(),
+            "physical world provenance lost family or 64-bit precision");
+      auto physical_cache = require(TerrainTileCache::create());
+      const auto location = require(planet_fixed_from_geodetic(
+          home, {physical_request.latitude, physical_request.longitude, 0}));
+      const auto surface = require(sample_planet_surface(
+          home, location, physical_request.lod, physical_cache));
+      check(physical.at("frame").at("altitude_metres") ==
+                surface.elevation_metres,
+            "physical snapshot does not use authored-home terrain");
+      for (const auto& coordinate : physical.at("vertices").at(4))
+        check(std::abs(coordinate.get<double>()) < 1e-6,
+              "physical local origin changed ENU convention");
+      check(physical.at("replay").size() == 301 &&
+                physical.at("replay").front().at("tick") == 0 &&
+                physical.at("replay").back().at("tick") == 1200,
+            "physical snapshot broke shared replay shape");
+      physical_request.latitude = -.7;
+      physical_request.longitude = -2.4;
+      const auto diagnostic = snapshot(physical_request);
+      check(diagnostic.at("frame").at("latitude_radians") == -.7 &&
+                diagnostic.at("frame").at("longitude_radians") == -2.4 &&
+                diagnostic.at("world_context") == physical.at("world_context"),
+            "diagnostic viewpoint changed physical world owner");
+      if (universe == Seed{42}) {
+        check(
+            world.planet != generate_planet_descriptor(home.seed),
+            "authored-home alias fixture unexpectedly identical to standalone");
+        auto forged = resolve_snapshot_world(physical_request);
+        forged.rotation->owner_version = 0;
+        bool refused = false;
+        try {
+          (void)snapshot_world_context(forged);
+        } catch (const std::invalid_argument&) {
+          refused = true;
+        }
+        check(refused, "forged physical wrapper projected as canonical owner");
+      }
+    }
     std::cout << "Godot snapshot boundary, identity, terrain and replay "
                  "contracts passed\n";
   } catch (const std::exception& error) {
