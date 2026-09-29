@@ -211,7 +211,7 @@ struct CreatedTemporary {
 }
 
 [[nodiscard]] auto write_atomically(
-    const std::filesystem::path& path, const SaveDocument& document,
+    const std::filesystem::path& path, std::string_view encoded,
     detail::AtomicSaveTestInterruption interruption)
     -> std::expected<void, SaveFileError> {
   if (!valid_destination(path)) {
@@ -220,20 +220,12 @@ struct CreatedTemporary {
         "save path must name a file inside an existing directory")};
   }
 
-  const auto encoded = encode_save_document_json(document);
-  if (!encoded) {
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "authoritative state cannot be encoded in the current save format",
-        encoded.error()}};
-  }
-
   auto created = create_temporary(path);
   if (!created) return std::unexpected{created.error()};
   auto temporary = std::move(created->file);
   auto descriptor = std::move(created->descriptor);
 
-  if (auto written = write_all(descriptor.get(), *encoded, path); !written) {
+  if (auto written = write_all(descriptor.get(), encoded, path); !written) {
     return written;
   }
   if (::fsync(descriptor.get()) < 0) {
@@ -306,8 +298,10 @@ auto make_legacy_signal_run_document(Seed universe_seed) -> SaveDocument {
   };
 }
 
-auto load_save_file(const std::filesystem::path& path)
-    -> std::expected<SaveDocument, SaveFileError> {
+namespace {
+
+[[nodiscard]] auto read_save_bytes(const std::filesystem::path& path)
+    -> std::expected<std::string, SaveFileError> {
   if (!valid_destination(path)) {
     return std::unexpected{file_failure(SaveFileErrorCode::invalid_path, path,
                                         "load path must name a save file")};
@@ -357,7 +351,16 @@ auto load_save_file(const std::filesystem::path& path)
                                  kMaximumSaveDocumentBytes))};
   }
 
-  auto decoded = decode_save_document_json(contents);
+  return contents;
+}
+
+} // namespace
+
+auto load_save_file(const std::filesystem::path& path)
+    -> std::expected<SaveDocument, SaveFileError> {
+  auto contents = read_save_bytes(path);
+  if (!contents) return std::unexpected{contents.error()};
+  auto decoded = decode_save_document_json(*contents);
   if (!decoded) {
     return std::unexpected{
         SaveFileError{SaveFileErrorCode::invalid_document, path,
@@ -367,10 +370,52 @@ auto load_save_file(const std::filesystem::path& path)
   return *decoded;
 }
 
+auto load_native_save_file(const std::filesystem::path& path)
+    -> std::expected<NativeSaveDocument, SaveFileError> {
+  auto contents = read_save_bytes(path);
+  if (!contents) return std::unexpected{contents.error()};
+  auto legacy = decode_save_document_json(*contents);
+  if (legacy) return NativeSaveDocument{std::move(*legacy)};
+  if (legacy.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "save file is malformed or incompatible", legacy.error()}};
+  auto freedom = decode_freedom_save_document_json(*contents);
+  if (freedom) return NativeSaveDocument{std::move(*freedom)};
+  return std::unexpected{
+      SaveFileError{SaveFileErrorCode::invalid_document, path,
+                    "save file is malformed or incompatible", freedom.error()}};
+}
+
 auto write_save_file_atomically(const std::filesystem::path& path,
                                 const SaveDocument& document)
     -> std::expected<void, SaveFileError> {
-  return write_atomically(path, document,
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_save_document_json(document);
+  if (!encoded)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "authoritative state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
+}
+
+auto write_freedom_save_file_atomically(const std::filesystem::path& path,
+                                        const FreedomSaveDocument& document)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_freedom_save_document_json(document);
+  if (!encoded)
+    return std::unexpected{
+        SaveFileError{SaveFileErrorCode::invalid_document, path,
+                      "Freedom state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded,
                           detail::AtomicSaveTestInterruption::none);
 }
 
@@ -390,7 +435,16 @@ auto write_save_file_atomically_for_test(
     const std::filesystem::path& path, const SaveDocument& document,
     AtomicSaveTestInterruption interruption)
     -> std::expected<void, SaveFileError> {
-  return write_atomically(path, document, interruption);
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_save_document_json(document);
+  if (!encoded)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "authoritative state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded, interruption);
 }
 
 } // namespace detail

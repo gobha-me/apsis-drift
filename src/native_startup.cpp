@@ -33,13 +33,35 @@ namespace {
   auto home = generate_origin_home_planet(system_seed);
   if (home.id != document.recipe.home_planet)
     return std::unexpected{"Save home planet does not match its C++ recipe"};
-  return NativeStartup{std::move(document), std::move(home),
-                       std::move(source_save)};
+  return NativeStartup{NativeStartup::Mode::legacy_career, std::move(document),
+                       std::move(home), std::move(source_save)};
+}
+
+[[nodiscard]] auto select_document(
+    FreedomSaveDocument document,
+    std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (const auto valid = validate_freedom_save_document(document); !valid)
+    return std::unexpected{"Freedom save rejected: " + valid.error().path +
+                           ": " + valid.error().detail};
+  const auto system_seed = derive_seed(
+      document.recipe.universe_seed, SeedDomain::system, kOriginSystemOrdinal);
+  auto home = generate_origin_home_planet(system_seed);
+  if (home.id != document.recipe.home_planet)
+    return std::unexpected{"Freedom home planet does not match its C++ recipe"};
+  return NativeStartup{NativeStartup::Mode::freedom, std::move(document),
+                       std::move(home), std::move(source_save)};
 }
 
 } // namespace
 
 auto native_new_game(Seed universe_seed)
+    -> std::expected<NativeStartup, std::string> {
+  return select_document(make_freedom_new_game_document(universe_seed),
+                         std::nullopt);
+}
+
+auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_new_game_document(universe_seed), std::nullopt);
 }
@@ -48,9 +70,13 @@ auto native_continue(const std::filesystem::path& save_path)
     -> std::expected<NativeStartup, std::string> {
   if (save_path.empty())
     return std::unexpected{"Continue requires a selected save path"};
-  auto loaded = load_save_file(save_path);
+  auto loaded = load_native_save_file(save_path);
   if (!loaded) return std::unexpected{save_file_error_message(loaded.error())};
-  return select_document(std::move(*loaded), save_path);
+  return std::visit(
+      [&](auto& document) {
+        return select_document(std::move(document), save_path);
+      },
+      *loaded);
 }
 
 } // namespace apsis_drift

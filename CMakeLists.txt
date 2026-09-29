@@ -140,6 +140,7 @@ add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
   src/craft_frame.cpp
+  src/freedom_save.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
