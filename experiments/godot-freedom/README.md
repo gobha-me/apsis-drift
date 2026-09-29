@@ -166,11 +166,34 @@ Invalid inputs return `false` with `get_last_error()` and leave the prior sessio
 and source save unchanged. The existing `initialize(snapshot_json)` remains the
 study fixture path; a successful start replaces the prior session.
 
-This boundary does not create a Godot station scene or surface-flight state,
-advance the saved clock, or make New Game/Continue an ordinary playable launch
-yet. That integration remains in [#291](https://github.com/gobha-me/apsis-drift/issues/291).
-Hosted GCC and Clang native-core jobs compile the live extension; the isolated
-Godot runtime contract below remains an explicit local check.
+The separate native start shell below presents the selected docked state. It
+does not create a station environment or surface-flight state, advance the
+saved clock, or launch playable flight. That integration remains in
+[#291](https://github.com/gobha-me/apsis-drift/issues/291). Hosted GCC and
+Clang native-core jobs compile the live extension; the isolated Godot runtime
+contract below remains an explicit local check.
+
+## Docked native start shell
+
+The separate native scene accepts exactly one explicit start selection:
+
+```sh
+GODOT_BIN=/path/to/godot tools/run_godot_native.sh --new-game=42
+GODOT_BIN=/path/to/godot tools/run_godot_native.sh --continue="$PWD/saves/freedom.json"
+```
+
+The launcher configures a TermForge-free `build-native` and builds the C++
+bridge before opening the Godot scene. New Game uses the selected seed; Continue
+loads the selected v17 Freedom save without writing to it. The screen shows the
+C++ universe, system, station, craft, saved tick and discovery count. It is a
+docked-state shell with a Quit button, not flight or station exploration. The
+snapshot study remains available through `tools/run_godot_study.sh`.
+
+For a headless selection check, add `--headless-validate`. It exits zero and
+prints the selected IDs and history counts only after the C++ bridge succeeds;
+invalid or ambiguous selections exit nonzero. Continue requires an absolute
+path. The native runtime contract below tests the shell with new, progressed,
+legacy and corrupt save fixtures.
 
 ## Verify
 
@@ -183,7 +206,7 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 
 This Linux runner stages the selected build's exporter and bridge, copies the
 test project, generates atmospheric/airless and C++ saved-start fixtures, and
-runs 33 explicitly listed contracts headlessly with Dummy audio. Each run gets
+runs 34 explicitly listed contracts headlessly with Dummy audio. Each run gets
 a fresh retained directory under `build-godot`, isolated preferences/cache,
 per-test logs and a JSON report with source/binary hashes. It does not build,
 download content, import the editor, launch a visible window or use private
