@@ -195,6 +195,13 @@ invalid or ambiguous selections exit nonzero. Continue requires an absolute
 path. The native runtime contract below tests the shell with new, progressed,
 legacy and corrupt save fixtures.
 
+Hosted CI downloads the pinned official Godot 4.7.2 Linux archive, verifies
+its SHA-256, builds the TermForge-free bridge, and runs the `freedom_start` and
+`native_shell` headless contracts. It retains the runner report and process
+logs as a short-lived CI artifact, including on failure. This runtime check
+does not run the editor import path tracked by
+[#276](https://github.com/gobha-me/apsis-drift/issues/276).
+
 ## Verify
 
 For the native GDScript contracts, first finish a build with both
