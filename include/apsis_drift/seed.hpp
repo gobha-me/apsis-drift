@@ -29,6 +29,7 @@ enum class SeedDomain : std::uint64_t {
   mission = 10,
   jump_alignment = 11,
   navigation = 12,
+  starter_craft = 13,
 };
 
 // Derives one child seed without consuming or exposing mutable random state.

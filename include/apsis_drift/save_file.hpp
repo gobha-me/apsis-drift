@@ -5,7 +5,9 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <variant>
 
+#include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/save_schema.hpp"
 
 namespace apsis_drift {
@@ -43,6 +45,8 @@ struct SaveFileError {
       -> bool = default;
 };
 
+using NativeSaveDocument = std::variant<FreedomSaveDocument, SaveDocument>;
+
 [[nodiscard]] auto make_new_game_document(
     Seed universe_seed,
     NewGameOnboardingChoice onboarding = NewGameOnboardingChoice::guided)
@@ -54,9 +58,14 @@ struct SaveFileError {
 
 [[nodiscard]] auto load_save_file(const std::filesystem::path& path)
     -> std::expected<SaveDocument, SaveFileError>;
+[[nodiscard]] auto load_native_save_file(const std::filesystem::path& path)
+    -> std::expected<NativeSaveDocument, SaveFileError>;
 
 [[nodiscard]] auto write_save_file_atomically(const std::filesystem::path& path,
                                               const SaveDocument& document)
+    -> std::expected<void, SaveFileError>;
+[[nodiscard]] auto write_freedom_save_file_atomically(
+    const std::filesystem::path& path, const FreedomSaveDocument& document)
     -> std::expected<void, SaveFileError>;
 
 [[nodiscard]] auto save_file_error_message(const SaveFileError& error)
