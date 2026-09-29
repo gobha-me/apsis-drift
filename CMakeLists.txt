@@ -160,6 +160,7 @@ add_library(apsis_drift_lib STATIC
   src/menu.cpp
   src/midi_spike.cpp
   src/mission_board.cpp
+  src/native_startup.cpp
   src/onboarding.cpp
   src/onboarding_acceptance.cpp
   src/orbital.cpp
@@ -268,6 +269,11 @@ if (APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-native-startup-tests test/native_startup_test.cpp)
+  target_link_libraries(apsis-drift-native-startup-tests PRIVATE apsis-drift::lib)
+  target_compile_options(apsis-drift-native-startup-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME native-startup-contract COMMAND apsis-drift-native-startup-tests)
   add_executable(apsis-drift-tests test/test.cpp)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
   target_include_directories(apsis-drift-tests
