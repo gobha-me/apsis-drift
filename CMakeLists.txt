@@ -14,6 +14,7 @@ configure_file(
 )
 
 option(APSIS_DRIFT_TESTS "Build the Apsis Drift tests" ON)
+option(APSIS_DRIFT_TERMINAL "Build the TermForge terminal frontend" ON)
 option(APSIS_DRIFT_RTAUDIO "Build the RtAudio output backend" ON)
 option(APSIS_DRIFT_MIDI_SPIKE
        "Build the isolated deterministic MIDI score research spike" OFF)
@@ -31,6 +32,7 @@ set(APSIS_DRIFT_TERMFORGE_GIT_TAG
     "v0.57.23"
     CACHE STRING "Pinned TermForge revision used by FetchContent")
 
+if (APSIS_DRIFT_TERMINAL)
 find_package(termforge 0.57.23 CONFIG QUIET)
 if (NOT TARGET termforge::lib)
   set(termforge_TESTS OFF CACHE BOOL "" FORCE)
@@ -84,6 +86,7 @@ if (NOT TARGET termforge::lib)
     FetchContent_MakeAvailable(termforge)
   endif ()
 endif ()
+endif ()
 
 find_package(nlohmann_json 3.12.0 CONFIG QUIET)
 if (NOT TARGET nlohmann_json::nlohmann_json)
@@ -97,7 +100,7 @@ if (NOT TARGET nlohmann_json::nlohmann_json)
   FetchContent_MakeAvailable(nlohmann_json)
 endif ()
 
-if (APSIS_DRIFT_RTAUDIO)
+if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_RTAUDIO)
   set(RTAUDIO_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
   set(RTAUDIO_BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
   set(RTAUDIO_BUILD_TESTING OFF CACHE BOOL "" FORCE)
@@ -123,6 +126,7 @@ if (APSIS_DRIFT_RTAUDIO)
   FetchContent_MakeAvailable(rtaudio)
 endif ()
 
+if (APSIS_DRIFT_TERMINAL)
 FetchContent_Declare(tinysoundfont
   GIT_REPOSITORY https://github.com/schellingb/TinySoundFont.git
   GIT_TAG 853a0a171759f1ddba0de1442133a75912bbeffa
@@ -130,14 +134,10 @@ FetchContent_Declare(tinysoundfont
   EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(tinysoundfont)
+endif ()
 
-add_library(apsis_drift_lib STATIC
-  src/audio.cpp
-  src/audio_callback.cpp
-  src/audio_pack.cpp
-  src/benchmark.cpp
+add_library(apsis_drift_core STATIC
   src/celestial.cpp
-  src/cockpit.cpp
   src/coordinates.cpp
   src/craft_frame.cpp
   src/rigid_body.cpp
@@ -146,60 +146,81 @@ add_library(apsis_drift_lib STATIC
   src/physical_local_system.cpp
   src/vacuum_dynamics.cpp
   src/touchdown.cpp
-  src/flight_deck_acceptance.cpp
-  src/flight_input.cpp
   src/intersystem_contract.cpp
-  src/intersystem_contract_acceptance.cpp
   src/intersystem_jump.cpp
-  src/intersystem_jump_acceptance.cpp
   src/intersystem_planetfall.cpp
-  src/intersystem_planetfall_acceptance.cpp
-  src/intersystem_return_acceptance.cpp
-  src/landscape.cpp
   src/local_system.cpp
-  src/menu.cpp
-  src/midi_spike.cpp
   src/mission_board.cpp
   src/native_startup.cpp
   src/onboarding.cpp
-  src/onboarding_acceptance.cpp
-  src/orbital.cpp
   src/origin_station.cpp
   src/origin_return.cpp
   src/origin_system_contract.cpp
-  src/origin_system_contract_acceptance.cpp
   src/planet.cpp
-  src/planetfall_acceptance.cpp
   src/planetary_flight.cpp
-  src/planetary_presentation.cpp
   src/profile_catalog.cpp
   src/render_profile.cpp
   src/save_file.cpp
   src/save_schema.cpp
   src/seed.cpp
   src/signal_collection.cpp
-  src/signal_navigation_acceptance.cpp
   src/signal_run.cpp
-  src/signal_run_acceptance.cpp
-  src/signal_input.cpp
   src/signal_scanner.cpp
-  src/simulation.cpp
+  src/simulation_clock.cpp
   src/surface_signals.cpp
   src/system_flight.cpp
-  src/system_flight_acceptance.cpp
-  src/system_rendering.cpp
   src/terrain_tiles.cpp
-  src/title.cpp
   src/universe_navigation.cpp
   src/universe_navigation_acceptance.cpp
   src/world_delta_journal.cpp
 )
-add_library(apsis-drift::lib ALIAS apsis_drift_lib)
+add_library(apsis-drift::core ALIAS apsis_drift_core)
+
+target_include_directories(apsis_drift_core
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated"
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_compile_features(apsis_drift_core PUBLIC cxx_std_23)
+target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
 set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
+
+if (APSIS_DRIFT_TERMINAL)
+add_library(apsis_drift_lib STATIC
+  src/audio.cpp
+  src/audio_callback.cpp
+  src/audio_pack.cpp
+  src/benchmark.cpp
+  src/cockpit.cpp
+  src/flight_deck_acceptance.cpp
+  src/flight_input.cpp
+  src/intersystem_contract_acceptance.cpp
+  src/intersystem_jump_acceptance.cpp
+  src/intersystem_jump_render.cpp
+  src/intersystem_planetfall_acceptance.cpp
+  src/intersystem_return_acceptance.cpp
+  src/landscape.cpp
+  src/menu.cpp
+  src/midi_spike.cpp
+  src/onboarding_acceptance.cpp
+  src/orbital.cpp
+  src/origin_system_contract_acceptance.cpp
+  src/planetfall_acceptance.cpp
+  src/planetary_presentation.cpp
+  src/signal_navigation_acceptance.cpp
+  src/signal_run_acceptance.cpp
+  src/signal_input.cpp
+  src/simulation.cpp
+  src/system_flight_acceptance.cpp
+  src/system_rendering.cpp
+  src/title.cpp
+)
+add_library(apsis-drift::lib ALIAS apsis_drift_lib)
 
 target_include_directories(apsis_drift_lib
   PUBLIC
@@ -211,7 +232,7 @@ target_include_directories(apsis_drift_lib
 )
 target_compile_features(apsis_drift_lib PUBLIC cxx_std_23)
 target_link_libraries(apsis_drift_lib
-  PUBLIC termforge::lib
+  PUBLIC apsis-drift::core termforge::lib
   PRIVATE nlohmann_json::nlohmann_json
 )
 if (APSIS_DRIFT_RTAUDIO)
@@ -225,10 +246,11 @@ add_executable(apsis-drift
   src/main.cpp
 )
 target_link_libraries(apsis-drift PRIVATE apsis-drift::lib)
+endif ()
 
 if (APSIS_DRIFT_GODOT_SPIKE)
   if (APSIS_DRIFT_GODOT_LIVE)
-    set_target_properties(apsis_drift_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(apsis_drift_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
   endif ()
   add_subdirectory(experiments/godot-freedom)
 endif ()
@@ -248,7 +270,7 @@ add_executable(apsis-drift-asset-validator
 target_link_libraries(apsis-drift-asset-validator
   PRIVATE apsis_drift_asset_manifest)
 
-if (APSIS_DRIFT_MIDI_SPIKE)
+if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
   add_executable(apsis-drift-midi-spike
     src/midi_spike_main.cpp
   )
@@ -270,10 +292,60 @@ endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-native-startup-tests test/native_startup_test.cpp)
-  target_link_libraries(apsis-drift-native-startup-tests PRIVATE apsis-drift::lib)
+  target_link_libraries(apsis-drift-native-startup-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-native-startup-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME native-startup-contract COMMAND apsis-drift-native-startup-tests)
+  add_executable(apsis-drift-craft-frame-tests test/craft_frame_test.cpp)
+  target_link_libraries(apsis-drift-craft-frame-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-craft-frame-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME craft-frame-contract COMMAND apsis-drift-craft-frame-tests)
+  add_executable(apsis-drift-rigid-body-tests test/rigid_body_test.cpp)
+  target_link_libraries(apsis-drift-rigid-body-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-rigid-body-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME rigid-body-contract COMMAND apsis-drift-rigid-body-tests)
+  add_executable(apsis-drift-rigid-frame-handoff-tests test/rigid_frame_handoff_test.cpp)
+  target_link_libraries(apsis-drift-rigid-frame-handoff-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-rigid-frame-handoff-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME rigid-frame-handoff-contract COMMAND apsis-drift-rigid-frame-handoff-tests)
+  set_tests_properties(rigid-frame-handoff-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-planet-rotation-tests test/planet_rotation_test.cpp)
+  target_link_libraries(apsis-drift-planet-rotation-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-planet-rotation-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME planet-rotation-contract COMMAND apsis-drift-planet-rotation-tests)
+  set_tests_properties(planet-rotation-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-physical-local-system-tests test/physical_local_system_test.cpp)
+  target_link_libraries(apsis-drift-physical-local-system-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-physical-local-system-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME physical-local-system-contract COMMAND apsis-drift-physical-local-system-tests)
+  set_tests_properties(physical-local-system-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-vacuum-dynamics-tests test/vacuum_dynamics_test.cpp)
+  target_link_libraries(apsis-drift-vacuum-dynamics-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-vacuum-dynamics-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME vacuum-dynamics-contract COMMAND apsis-drift-vacuum-dynamics-tests)
+  set_tests_properties(vacuum-dynamics-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
+  target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-touchdown-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME touchdown-envelope-contract COMMAND apsis-drift-touchdown-tests)
+  set_tests_properties(touchdown-envelope-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-rotation-coast-tests
+    experiments/godot-freedom/rotation_coast_test.cpp)
+  target_link_libraries(apsis-drift-rotation-coast-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-rotation-coast-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME godot-rotation-coast-contract COMMAND apsis-drift-rotation-coast-tests)
+  set_tests_properties(godot-rotation-coast-contract PROPERTIES TIMEOUT 90)
+endif ()
+
+if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
   add_executable(apsis-drift-tests test/test.cpp)
   target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
   target_include_directories(apsis-drift-tests
@@ -291,53 +363,6 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     COMMAND apsis-drift-asset-validator
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
-  add_executable(apsis-drift-craft-frame-tests test/craft_frame_test.cpp)
-  target_link_libraries(apsis-drift-craft-frame-tests PRIVATE apsis-drift::lib nlohmann_json::nlohmann_json)
-  target_compile_options(apsis-drift-craft-frame-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-  add_test(NAME craft-frame-contract COMMAND apsis-drift-craft-frame-tests)
-  add_executable(apsis-drift-rigid-body-tests test/rigid_body_test.cpp)
-  target_link_libraries(apsis-drift-rigid-body-tests PRIVATE apsis-drift::lib nlohmann_json::nlohmann_json)
-  target_compile_options(apsis-drift-rigid-body-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-  add_test(NAME rigid-body-contract COMMAND apsis-drift-rigid-body-tests)
-  add_executable(apsis-drift-rigid-frame-handoff-tests test/rigid_frame_handoff_test.cpp)
-  target_link_libraries(apsis-drift-rigid-frame-handoff-tests PRIVATE apsis-drift::lib)
-  target_compile_options(apsis-drift-rigid-frame-handoff-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
-  add_test(NAME rigid-frame-handoff-contract COMMAND apsis-drift-rigid-frame-handoff-tests)
-  set_tests_properties(rigid-frame-handoff-contract PROPERTIES TIMEOUT 90)
-  add_executable(apsis-drift-planet-rotation-tests test/planet_rotation_test.cpp)
-  target_link_libraries(apsis-drift-planet-rotation-tests PRIVATE apsis-drift::lib)
-  target_compile_options(apsis-drift-planet-rotation-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
-  add_test(NAME planet-rotation-contract COMMAND apsis-drift-planet-rotation-tests)
-  set_tests_properties(planet-rotation-contract PROPERTIES TIMEOUT 90)
-  add_executable(apsis-drift-physical-local-system-tests test/physical_local_system_test.cpp)
-  target_link_libraries(apsis-drift-physical-local-system-tests PRIVATE apsis-drift::lib)
-  target_compile_options(apsis-drift-physical-local-system-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
-  add_test(NAME physical-local-system-contract COMMAND apsis-drift-physical-local-system-tests)
-  set_tests_properties(physical-local-system-contract PROPERTIES TIMEOUT 90)
-  add_executable(apsis-drift-vacuum-dynamics-tests test/vacuum_dynamics_test.cpp)
-  target_link_libraries(apsis-drift-vacuum-dynamics-tests PRIVATE apsis-drift::lib)
-  target_compile_options(apsis-drift-vacuum-dynamics-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-  add_test(NAME vacuum-dynamics-contract COMMAND apsis-drift-vacuum-dynamics-tests)
-  set_tests_properties(vacuum-dynamics-contract PROPERTIES TIMEOUT 90)
-  add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
-  target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::lib)
-  target_compile_options(apsis-drift-touchdown-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-  add_test(NAME touchdown-envelope-contract COMMAND apsis-drift-touchdown-tests)
-  set_tests_properties(touchdown-envelope-contract PROPERTIES TIMEOUT 90)
-  add_executable(apsis-drift-rotation-coast-tests
-    experiments/godot-freedom/rotation_coast_test.cpp)
-  target_link_libraries(apsis-drift-rotation-coast-tests PRIVATE apsis-drift::lib)
-  target_compile_options(apsis-drift-rotation-coast-tests PRIVATE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
-  add_test(NAME godot-rotation-coast-contract COMMAND apsis-drift-rotation-coast-tests)
-  set_tests_properties(godot-rotation-coast-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE

@@ -1,4 +1,5 @@
 #include "apsis_drift/intersystem_return_acceptance.hpp"
+#include "apsis_drift/landscape.hpp"
 
 #include <format>
 #include <limits>

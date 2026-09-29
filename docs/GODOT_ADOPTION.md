@@ -27,6 +27,23 @@ MIDI and procedural audio remain assets, not discarded prototypes. The preview
 film uses an offline render of the current C++ music system; it does not by
 itself demonstrate live Godot audio integration.
 
+## Build boundary
+
+`apsis-drift::core` holds authoritative world, flight and save code used by the
+native bridge and headless contracts. It does not include or link TermForge.
+`apsis-drift::lib` adds the retained terminal presentation, input, audio and
+legacy raster path. To build and test the native/headless targets without
+finding or fetching TermForge:
+
+```sh
+cmake -S . -B build-core -DAPSIS_DRIFT_TERMINAL=OFF \
+  -DAPSIS_DRIFT_RTAUDIO=OFF -DAPSIS_DRIFT_GODOT_SPIKE=ON
+cmake --build build-core --parallel
+ctest --test-dir build-core --output-on-failure
+```
+
+The default build still includes the terminal application and its benchmarks.
+
 ## What remains to qualify
 
 Long-duration circumnavigation and streaming under flight load, LOD transitions,

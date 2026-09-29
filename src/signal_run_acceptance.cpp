@@ -1,4 +1,5 @@
 #include "apsis_drift/signal_run_acceptance.hpp"
+#include "apsis_drift/landscape.hpp"
 
 #include <array>
 #include <cmath>

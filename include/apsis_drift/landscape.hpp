@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "apsis_drift/render_profile.hpp"
+#include "apsis_drift/simulation.hpp"
 #include "termforge/core/types.hpp"
 
 namespace apsis_drift {
@@ -52,14 +53,6 @@ class Terrain {
   int m_size{};
   std::vector<std::uint8_t> m_heights;
   std::vector<termforge::Pixel> m_colors;
-};
-
-struct Camera {
-  float x{180.0F};
-  float y{240.0F};
-  float height{135.0F};
-  float yaw{0.35F};
-  float pitch{};
 };
 
 struct ProjectedDirection {

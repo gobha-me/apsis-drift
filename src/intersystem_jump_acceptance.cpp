@@ -1,4 +1,6 @@
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
+#include "apsis_drift/intersystem_jump_render.hpp"
+#include "apsis_drift/landscape.hpp"
 
 #include <cmath>
 #include <format>
