@@ -4,8 +4,13 @@
 #include "surface_start.hpp"
 #include "thrust_flight.hpp"
 
+#include "apsis_drift/native_startup.hpp"
+
 #include <charconv>
+#include <filesystem>
 #include <memory>
+#include <stdexcept>
+#include <string>
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -169,14 +174,36 @@ struct LiveWorld {
 class FreedomBridge : public godot::RefCounted {
   GDCLASS(FreedomBridge, godot::RefCounted)
   std::unique_ptr<LiveWorld> world;
+  std::unique_ptr<NativeFreedomStationStart> native_start;
   godot::String last_error;
   std::unique_ptr<PlanetStream> stream;
   std::set<StreamKey> exported;
+
+  auto commit_freedom_start(NativeStartup selected) -> bool {
+    auto prepared = prepare_native_freedom_station_start(std::move(selected));
+    if (!prepared) throw std::runtime_error(prepared.error());
+    auto candidate =
+        std::make_unique<NativeFreedomStationStart>(std::move(*prepared));
+    stream.reset();
+    exported.clear();
+    world.reset();
+    native_start = std::move(candidate);
+    last_error = godot::String{};
+    return true;
+  }
 
  protected:
   static auto _bind_methods() -> void {
     godot::ClassDB::bind_method(godot::D_METHOD("initialize", "snapshot_json"),
                                 &FreedomBridge::initialize);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("initialize_freedom_new_game", "universe_seed"),
+        &FreedomBridge::initialize_freedom_new_game);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("initialize_freedom_continue", "save_path"),
+        &FreedomBridge::initialize_freedom_continue);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
+                                &FreedomBridge::get_freedom_start);
     godot::ClassDB::bind_method(godot::D_METHOD("get_world_lighting"),
                                 &FreedomBridge::get_world_lighting);
     godot::ClassDB::bind_method(
@@ -222,6 +249,97 @@ class FreedomBridge : public godot::RefCounted {
   }
 
  public:
+  auto initialize_freedom_new_game(const godot::String& universe_seed) -> bool {
+    try {
+      const auto utf8 = universe_seed.utf8();
+      const std::string digits{utf8.get_data(),
+                               static_cast<std::size_t>(utf8.length())};
+      if (digits.empty() || digits.size() > 20 ||
+          (digits.size() > 1 && digits.front() == '0'))
+        throw std::invalid_argument(
+            "New Game requires a canonical decimal seed");
+      Seed seed;
+      const auto parsed = std::from_chars(
+          digits.data(), digits.data() + digits.size(), seed.value);
+      if (parsed.ec != std::errc{} ||
+          parsed.ptr != digits.data() + digits.size())
+        throw std::invalid_argument("New Game seed is malformed or overflows");
+      auto selected = native_new_game(seed);
+      if (!selected) throw std::runtime_error(selected.error());
+      return commit_freedom_start(std::move(*selected));
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto initialize_freedom_continue(const godot::String& save_path) -> bool {
+    try {
+      const auto utf8 = save_path.utf8();
+      const std::string bytes{utf8.get_data(),
+                              static_cast<std::size_t>(utf8.length())};
+      if (bytes.empty() || bytes.size() > 4'096 ||
+          bytes.find('\0') != std::string::npos)
+        throw std::invalid_argument("Continue requires a bounded save path");
+      const std::filesystem::path path{bytes};
+      if (!path.is_absolute())
+        throw std::invalid_argument("Continue requires an absolute save path");
+      auto selected = native_continue(path);
+      if (!selected) throw std::runtime_error(selected.error());
+      return commit_freedom_start(std::move(*selected));
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto get_freedom_start() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!native_start) return result;
+    const auto& start = *native_start;
+    const auto& save = std::get<FreedomSaveDocument>(start.selected.document);
+    const auto coordinates = [](const auto& value) {
+      godot::PackedFloat64Array array;
+      array.append(value.x);
+      array.append(value.y);
+      array.append(value.z);
+      return array;
+    };
+    result["mode"] = "freedom";
+    result["universe_seed"] =
+        godot::String{std::to_string(save.recipe.universe_seed.value).c_str()};
+    result["system_seed"] =
+        godot::String{std::to_string(start.system.catalog.seed.value).c_str()};
+    result["system_id"] =
+        godot::String{std::to_string(start.system.catalog.id.value).c_str()};
+    result["home_planet_id"] =
+        godot::String{std::to_string(start.host.planet.value).c_str()};
+    result["station_id"] =
+        godot::String{std::to_string(start.station.id.value).c_str()};
+    result["craft_id"] =
+        godot::String{std::to_string(save.state.craft.value).c_str()};
+    result["tick"] = godot::String{std::to_string(save.state.tick).c_str()};
+    result["cycle_tick"] =
+        godot::String{std::to_string(start.ephemeris.cycle_tick).c_str()};
+    result["continued"] = start.selected.source_save.has_value();
+    result["discovery_count"] =
+        static_cast<std::int64_t>(save.state.discoveries.size());
+    result["world_delta_count"] =
+        static_cast<std::int64_t>(save.state.world_deltas.size());
+    result["host_position_metres"] = coordinates(start.host.position);
+    result["host_velocity_metres_per_second"] =
+        coordinates(start.host.velocity);
+    result["station_position_metres"] = coordinates(start.ephemeris.position);
+    result["station_velocity_metres_per_second"] =
+        coordinates(start.ephemeris.velocity);
+    result["station_relative_position_metres"] =
+        coordinates(start.ephemeris.host_relative_position);
+    result["station_relative_velocity_metres_per_second"] =
+        coordinates(start.ephemeris.host_relative_velocity);
+    result["station_phase_radians"] = start.ephemeris.phase_radians;
+    return result;
+  }
+
   auto get_sky_catalog() const -> godot::Array {
     godot::Array result;
     if (!world) return result;
@@ -323,6 +441,7 @@ class FreedomBridge : public godot::RefCounted {
             "snapshot initial state differs from live C++ state");
       stream.reset();
       exported.clear();
+      native_start.reset();
       world = std::move(candidate);
       last_error = godot::String{};
       return true;

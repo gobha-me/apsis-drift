@@ -43,6 +43,7 @@ TESTS = {
     "ship_audio_playback": "none",
     "live": "snapshot",
     "physical_world": "physical_snapshots",
+    "freedom_start": "freedom_saves",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",
@@ -128,12 +129,16 @@ def main(argv=None):
     engine = args.godot.resolve()
     exporter = build / "apsis-drift-godot-snapshot"
     bridge = build / "bin/libapsis_freedom_bridge.so"
+    start_fixture = build / "apsis-drift-freedom-start-fixture"
     for path in (engine, exporter):
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable: {path}")
     if not bridge.is_file():
         parser.error(f"missing native bridge: {bridge}; build GODOT_LIVE first")
     selected = list(dict.fromkeys(args.test or TESTS))
+    if any(TESTS[name] == "freedom_saves" for name in selected):
+        if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
+            parser.error(f"missing C++ save fixture: {start_fixture}")
     def prepare_physical_fixtures():
         for seed in (42, 43):
             path = work / f"physical-{seed}.json"
@@ -185,6 +190,9 @@ def main(argv=None):
     # binary halfway through this run. The caller must finish building first.
     shutil.copy2(exporter, work / exporter.name)
     exporter = work / exporter.name
+    if any(TESTS[name] == "freedom_saves" for name in selected):
+        shutil.copy2(start_fixture, work / start_fixture.name)
+        start_fixture = work / start_fixture.name
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -221,6 +229,24 @@ def main(argv=None):
     if any(TESTS[name] == "physical_snapshots" for name in selected):
         if prepare_physical_fixtures() != 0:
             return 1
+    if any(TESTS[name] == "freedom_saves" for name in selected):
+        for filename, tick, mode in (("freedom-0.json", "0", "freedom"),
+                                     ("freedom-25.json", "25", "freedom"),
+                                     ("career.json", "0", "career")):
+            path = work / filename
+            log = work / f"{filename}.log"
+            code, timed_out, _ = run_logged(
+                [str(start_fixture), str(path), "42", tick, mode],
+                log, env, args.timeout)
+            report["setup"].append({"save": filename, "returncode": code,
+                                    "timed_out": timed_out})
+            save()
+            if code != 0 or timed_out:
+                print(f"FAIL C++ save fixture {filename}: {log}", flush=True)
+                return 1
+            report["setup"][-1]["save_sha256"] = sha256(path)
+            save()
+        (work / "corrupt.json").write_text("{broken json\n")
     for name in selected:
         arguments = []
         if TESTS[name] == "snapshot":
@@ -232,6 +258,10 @@ def main(argv=None):
         elif TESTS[name] == "physical_snapshots":
             arguments = [str(work / path) for path in
                          ("snapshot-42.json", "physical-42.json", "physical-43.json", "procedural-home-42.json")]
+        elif TESTS[name] == "freedom_saves":
+            arguments = [str(work / path) for path in
+                         ("freedom-0.json", "freedom-25.json", "career.json",
+                          "corrupt.json", "snapshot-42.json")]
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
                    "--path", str(project), "--script", f"res://{name}_test.gd",

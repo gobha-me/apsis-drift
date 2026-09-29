@@ -133,8 +133,9 @@ jobs:
           -DAPSIS_DRIFT_TERMINAL=OFF
           -DAPSIS_DRIFT_RTAUDIO=OFF
           -DAPSIS_DRIFT_GODOT_SPIKE=ON
+          -DAPSIS_DRIFT_GODOT_LIVE=ON
 
-      - name: Build native and headless targets
+      - name: Build native core, live Godot bridge and headless targets
         run: cmake --build build-core --parallel
 
       - name: Test native and headless targets

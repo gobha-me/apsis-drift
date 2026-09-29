@@ -79,4 +79,34 @@ auto native_continue(const std::filesystem::path& save_path)
       *loaded);
 }
 
+auto prepare_native_freedom_station_start(NativeStartup selected)
+    -> std::expected<NativeFreedomStationStart, std::string> {
+  if (selected.mode != NativeStartup::Mode::freedom ||
+      !std::holds_alternative<FreedomSaveDocument>(selected.document))
+    return std::unexpected{"Station bootstrap requires a Freedom save"};
+  const auto& save = std::get<FreedomSaveDocument>(selected.document);
+  if (const auto valid = validate_freedom_save_document(save); !valid)
+    return std::unexpected{"Freedom save rejected: " + valid.error().path +
+                           ": " + valid.error().detail};
+  auto system = generate_physical_origin_system(save.recipe.universe_seed);
+  if (!system)
+    return std::unexpected{"Physical origin catalog rejected the saved seed"};
+  const auto& home =
+      system->catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  if (selected.home_planet != home || save.recipe.home_planet != home.id)
+    return std::unexpected{"Saved home planet differs from physical origin"};
+  auto station = generate_origin_station(save.recipe.universe_seed);
+  if (save.state.station != station.id)
+    return std::unexpected{"Saved station differs from origin recipe"};
+  const EphemerisQueryTime time{save.state.tick, 0.0};
+  auto host = resolve_planet_ephemeris(*system, home.id, time);
+  if (!host)
+    return std::unexpected{"Physical home ephemeris rejected saved clock"};
+  auto ephemeris = resolve_origin_station_ephemeris(*system, station, time);
+  if (!ephemeris)
+    return std::unexpected{"Physical station ephemeris rejected saved clock"};
+  return NativeFreedomStationStart{std::move(selected), std::move(*system),
+                                   std::move(station), *host, *ephemeris};
+}
+
 } // namespace apsis_drift

@@ -51,6 +51,16 @@ auto main() -> int {
     check(created->home_planet.id == freedom.recipe.home_planet,
           "New Game selected a different planet");
     check(!created->source_save, "New Game invented a source save");
+    const auto created_station = prepare_native_freedom_station_start(*created);
+    check(created_station.has_value(),
+          "New Game could not resolve its physical station");
+    check(created_station->selected.document == created->document &&
+              created_station->ephemeris.station == freedom.state.station &&
+              created_station->ephemeris.host_planet ==
+                  freedom.recipe.home_planet &&
+              created_station->host.planet == freedom.recipe.home_planet &&
+              created_station->ephemeris.cycle_tick == 0,
+          "New Game station bootstrap changed saved identity or clock");
 
     const auto directory =
         std::filesystem::temp_directory_path() /
@@ -68,6 +78,13 @@ auto main() -> int {
           "Continue changed authoritative saved state");
     check(continued->source_save == save, "Continue lost selected path");
     check(contents(save) == original, "Continue modified its source save");
+    const auto continued_station =
+        prepare_native_freedom_station_start(*continued);
+    check(continued_station &&
+              continued_station->ephemeris == created_station->ephemeris &&
+              continued_station->system == created_station->system &&
+              continued_station->selected.source_save == save,
+          "Continue did not resolve the same physical station as New Game");
 
     auto progressed = freedom;
     progressed.state.tick = 25;
@@ -76,11 +93,24 @@ auto main() -> int {
         {"signal:77", SaveWorldDeltaKind::discovered, 9});
     check(write_freedom_save_file_atomically(save, progressed).has_value(),
           "could not write progressed Freedom save");
+    const auto progressed_bytes = contents(save);
     auto progressed_continue = native_continue(save);
     check(progressed_continue &&
               std::get<FreedomSaveDocument>(progressed_continue->document) ==
                   progressed,
           "Freedom clock or history failed roundtrip");
+    const auto progressed_station =
+        prepare_native_freedom_station_start(*progressed_continue);
+    check(progressed_station &&
+              progressed_station->selected.document ==
+                  progressed_continue->document &&
+              progressed_station->ephemeris.position !=
+                  created_station->ephemeris.position &&
+              progressed_station->ephemeris.cycle_tick == 25 &&
+              progressed_station->host.cycle_tick !=
+                  created_station->host.cycle_tick &&
+              contents(save) == progressed_bytes,
+          "Continue discarded the saved clock or mutable history");
 
     const auto encoded = contents(save);
     auto invalid_write = progressed;
@@ -132,6 +162,13 @@ auto main() -> int {
               legacy_continued->mode == NativeStartup::Mode::legacy_career &&
               std::get<SaveDocument>(legacy_continued->document) == career,
           "legacy career Continue changed mode or state");
+    check(!prepare_native_freedom_station_start(*legacy_continued),
+          "legacy career save was accepted as a Freedom station start");
+    NativeStartup forged_home{created->mode, created->document,
+                              generate_planet_descriptor(Seed{99}),
+                              created->source_save};
+    check(!prepare_native_freedom_station_start(std::move(forged_home)),
+          "forged home descriptor was accepted by station bootstrap");
 
     auto skip = make_new_game_document(seed, NewGameOnboardingChoice::skip);
     check(skip.state.first_objective == FirstObjectiveStatus::offered &&
