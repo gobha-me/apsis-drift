@@ -3,6 +3,7 @@ import argparse
 import importlib.util
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,16 @@ spec.loader.exec_module(runner)
 
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_native_launcher_rejects_ambiguous_or_relative_selection(self):
+        launcher = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
+        for arguments in ((), ("--headless-validate",), ("--new-game=",),
+                          ("--continue=relative.json",),
+                          ("--new-game=42", "--continue=/tmp/freedom.json"),
+                          ("--new-game=42", "--headless-validate", "--headless-validate")):
+            result = subprocess.run(["bash", str(launcher), *arguments],
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 2, arguments)
+
     def test_exit_and_markers(self):
         self.assertEqual(runner.verdict("input", 0, False, "Player input: 0 failures"), "pass")
         for code in (-6, -11, 1, 124, 134):

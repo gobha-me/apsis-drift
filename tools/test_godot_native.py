@@ -44,6 +44,7 @@ TESTS = {
     "live": "snapshot",
     "physical_world": "physical_snapshots",
     "freedom_start": "freedom_saves",
+    "native_shell": "freedom_saves",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",
@@ -173,7 +174,11 @@ def main(argv=None):
 
     # Preflight every source before creating output or running a subprocess.
     for name in selected:
-        if not (source / f"{name}_test.gd").is_file():
+        if name == "native_shell":
+            if not all((source / path).is_file() for path in
+                       ("native_start_shell.tscn", "native_start_shell.gd")):
+                parser.error("missing native start shell scene or script")
+        elif not (source / f"{name}_test.gd").is_file():
             parser.error(f"missing test source: {name}")
     args.output_parent.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="native-contracts-",
@@ -248,6 +253,79 @@ def main(argv=None):
             save()
         (work / "corrupt.json").write_text("{broken json\n")
     for name in selected:
+        if name == "native_shell":
+            cases = (
+                ("new", ["--new-game=42", "--validate-only"],
+                 "seed=42 tick=0", True),
+                ("view", ["--new-game=42"], "seed=42 tick=0", True),
+                ("continue_zero", [f"--continue={work / 'freedom-0.json'}",
+                                   "--validate-only"], "seed=42 tick=0", True),
+                ("continue_progressed", [f"--continue={work / 'freedom-25.json'}",
+                                        "--validate-only"],
+                 "seed=42 tick=25", True),
+                ("missing", ["--validate-only"], "", False),
+                ("ambiguous", ["--new-game=42", f"--continue={work / 'freedom-0.json'}",
+                               "--validate-only"], "", False),
+                ("bad_seed", ["--new-game=01", "--validate-only"], "", False),
+                ("career", [f"--continue={work / 'career.json'}",
+                            "--validate-only"], "", False),
+                ("corrupt", [f"--continue={work / 'corrupt.json'}",
+                             "--validate-only"], "", False),
+            )
+            source_hashes = {path.name: sha256(path) for path in
+                             (work / "freedom-0.json", work / "freedom-25.json",
+                              work / "career.json", work / "corrupt.json")}
+            case_reports = []
+            selected_views = {}
+            for label, arguments, expected, accepted in cases:
+                log = work / f"native_shell-{label}.log"
+                command = [str(engine), "--headless", "--audio-driver", "Dummy",
+                           "--path", str(project), "--scene",
+                           "res://native_start_shell.tscn"]
+                if label == "view":
+                    command += ["--quit-after", "2"]
+                command += ["--", *arguments]
+                code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
+                output = log.read_text(errors="replace")
+                if accepted:
+                    marker = re.search(
+                        r"Freedom native shell (?:validated|opened): seed=(\d+) tick=(\d+) "
+                        r"system=(\d+) planet=(\d+) station=(\d+) craft=(\d+) "
+                        r"discoveries=(\d+) deltas=(\d+)", output)
+                    if marker:
+                        selected_views[label] = marker.groups()
+                good = (not timed_out and code == 0 and
+                        ("Freedom native shell validated: " in output or
+                         "Freedom native shell opened: " in output) and
+                        expected in output and marker is not None and
+                        not ERROR.search(output)) if accepted else (
+                        not timed_out and code != 0 and
+                        "Native start rejected:" in output)
+                case_reports.append({"case": label, "pass": good, "returncode": code,
+                                     "seconds": elapsed, "log": log.name})
+            unchanged = all(sha256(work / filename) == digest for filename, digest
+                            in source_hashes.items())
+            new_view = selected_views.get("new")
+            identity_matches = bool(new_view) and all(
+                selected_views.get(label) and
+                tuple(selected_views[label][index] for index in (0, 2, 3, 4, 5)) ==
+                tuple(new_view[index] for index in (0, 2, 3, 4, 5))
+                for label in ("view", "continue_zero", "continue_progressed"))
+            history_matches = (bool(new_view) and new_view[1] == "0" and
+                               selected_views.get("continue_zero", (None,) * 8)[1] == "0" and
+                               selected_views.get("continue_progressed", (None,) * 8)[1] == "25" and
+                               selected_views.get("continue_progressed", (None,) * 8)[6:] ==
+                               ("1", "1"))
+            status = "pass" if (all(case["pass"] for case in case_reports) and
+                                unchanged and identity_matches and history_matches) else "fail"
+            report["tests"].append({"name": name, "status": status,
+                                    "cases": case_reports,
+                                    "source_saves_unchanged": unchanged,
+                                    "identity_matches": identity_matches,
+                                    "history_matches": history_matches})
+            save()
+            print(f"{status.upper()} {name} ({len(cases)} launch cases)", flush=True)
+            continue
         arguments = []
         if TESTS[name] == "snapshot":
             arguments = [str(work / "snapshot-42.json")]
