@@ -65,4 +65,11 @@ enum class PhysicalLocalSystemError : std::uint8_t {
                                             EphemerisQueryTime time)
     -> std::expected<PlanetEphemeris, PhysicalLocalSystemError>;
 
+// The saved station orbit is unchanged. Its host position and velocity come
+// from the selected physical origin catalog at the same authoritative tick.
+[[nodiscard]] auto resolve_origin_station_ephemeris(
+    const PhysicalLocalSystem& system, const OriginStationDescriptor& station,
+    EphemerisQueryTime time)
+    -> std::expected<OriginStationEphemeris, PhysicalLocalSystemError>;
+
 } // namespace apsis_drift

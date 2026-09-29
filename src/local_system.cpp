@@ -401,7 +401,21 @@ auto resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
   const auto host =
       resolve_planet_ephemeris(system, station.orbit.host_planet, time);
   if (!host) return std::unexpected{host.error()};
+  return detail::resolve_validated_station_orbit(station, *host, time);
+}
 
+auto detail::resolve_validated_station_orbit(
+    const OriginStationDescriptor& station, const PlanetEphemeris& host,
+    EphemerisQueryTime time)
+    -> std::expected<OriginStationEphemeris, LocalSystemError> {
+  if (station.orbit.period_ticks == 0 || station.orbit.radius_kilometres == 0 ||
+      station.orbit.host_planet != host.planet ||
+      !finite(time.sub_tick_fraction) || time.sub_tick_fraction < 0.0 ||
+      time.sub_tick_fraction >= 1.0 || !finite(host.position.x) ||
+      !finite(host.position.y) || !finite(host.position.z) ||
+      !finite(host.velocity.x) || !finite(host.velocity.y) ||
+      !finite(host.velocity.z))
+    return std::unexpected{LocalSystemError::invalid_orbit};
   const auto cycle_tick = time.tick % station.orbit.period_ticks;
   constexpr double turn_scale{1.0 / 4'294'967'296.0};
   const double epoch_turns =
@@ -442,13 +456,13 @@ auto resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
   const double relative_vz =
       radius * radians_per_second * cos_phase * sin_inclination;
   const SystemPositionMetres position{
-      quantized_position(host->position.x + relative_x),
-      quantized_position(host->position.y + relative_y),
-      quantized_position(host->position.z + relative_z)};
+      quantized_position(host.position.x + relative_x),
+      quantized_position(host.position.y + relative_y),
+      quantized_position(host.position.z + relative_z)};
   const SystemVelocityMetresPerSecond velocity{
-      quantized_velocity(host->velocity.x + relative_vx),
-      quantized_velocity(host->velocity.y + relative_vy),
-      quantized_velocity(host->velocity.z + relative_vz)};
+      quantized_velocity(host.velocity.x + relative_vx),
+      quantized_velocity(host.velocity.y + relative_vy),
+      quantized_velocity(host.velocity.z + relative_vz)};
   if (!finite(phase) || !finite(position.x) || !finite(position.y) ||
       !finite(position.z) || !finite(velocity.x) || !finite(velocity.y) ||
       !finite(velocity.z)) {

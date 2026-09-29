@@ -136,4 +136,35 @@ auto resolve_planet_ephemeris(const PhysicalLocalSystem& system,
     return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
   return *result;
 }
+
+auto resolve_origin_station_ephemeris(const PhysicalLocalSystem& system,
+                                      const OriginStationDescriptor& station,
+                                      EphemerisQueryTime time)
+    -> std::expected<OriginStationEphemeris, PhysicalLocalSystemError> {
+  if (!std::isfinite(time.sub_tick_fraction) || time.sub_tick_fraction < 0 ||
+      time.sub_tick_fraction >= 1)
+    return std::unexpected{PhysicalLocalSystemError::non_finite_time};
+  if (time.tick == std::numeric_limits<SimulationTick>::max())
+    return std::unexpected{PhysicalLocalSystemError::invalid_tick};
+  if (const auto valid = validate_local_system(system); !valid)
+    return std::unexpected{valid.error()};
+  if (!system.origin_universe_seed ||
+      station.universe_seed != *system.origin_universe_seed ||
+      station.home_system_seed != system.catalog.seed ||
+      station != generate_origin_station(*system.origin_universe_seed) ||
+      station.orbit.host_planet !=
+          system.catalog.planets[kOriginHomePlanetOrdinal].descriptor.id)
+    return std::unexpected{PhysicalLocalSystemError::invalid_context};
+  // Catalog ownership is already checked above. Reuse the exact physical
+  // planet orbit geometry without regenerating the catalog a second time.
+  const auto host = detail::resolve_validated_circular_orbit(
+      system.catalog.planets[kOriginHomePlanetOrdinal].orbit, time);
+  if (!host)
+    return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
+  const auto resolved =
+      detail::resolve_validated_station_orbit(station, *host, time);
+  if (!resolved)
+    return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
+  return *resolved;
+}
 } // namespace apsis_drift
