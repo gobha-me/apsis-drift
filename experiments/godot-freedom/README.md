@@ -143,14 +143,34 @@ newly generated universe or the mission-selected home planet.
   subsequently rejected synthesis experiment; it is not the current sound
   direction or an automatic fallback for missing recordings.
 - There is no water surface, collision, landing, walking, docking,
-  jump control, save/load bridge, HDR or SteamOS validation. Controller mapping
-  exists as an initial tested-with-synthetic-input implementation, not hardware qualification.
+  jump control, playable save-backed launch, save-writing bridge, HDR or SteamOS
+  validation. Controller mapping exists as an initial synthetic-input
+  implementation, not hardware qualification.
   Streaming is experimental and opt-in; see study 04 for its measured limits.
 
 The exporter rejects non-finite coordinates, samples outside 2..513, spans
 outside 64..262144 metres and LOD above 10 (to bound pinned tile memory).
 The consumer checks schema, dimensions, buffers, finite values, replay ticks and
 string identities before allocation. Files above 96 MiB are rejected.
+
+## Freedom station bootstrap boundary
+
+The live `FreedomBridge` now has separate `initialize_freedom_new_game(seed)`
+and `initialize_freedom_continue(absolute_save_path)` methods. The seed is a
+canonical unsigned decimal string; Continue loads a selected v17 Freedom save
+through C++. A successful selection exposes `get_freedom_start()`: decimal-string
+universe, system, planet, station and craft identities, the saved tick, history
+counts, and C++ resolved physical host/station positions and velocities in
+`PackedFloat64Array` metre units. The bridge retains the selected save in C++.
+Invalid inputs return `false` with `get_last_error()` and leave the prior session
+and source save unchanged. The existing `initialize(snapshot_json)` remains the
+study fixture path; a successful start replaces the prior session.
+
+This boundary does not create a Godot station scene or surface-flight state,
+advance the saved clock, or make New Game/Continue an ordinary playable launch
+yet. That integration remains in [#291](https://github.com/gobha-me/apsis-drift/issues/291).
+Hosted GCC and Clang native-core jobs compile the live extension; the isolated
+Godot runtime contract below remains an explicit local check.
 
 ## Verify
 
@@ -162,12 +182,13 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 ```
 
 This Linux runner stages the selected build's exporter and bridge, copies the
-test project, generates atmospheric/airless fixtures, and runs 29 explicitly
-listed contracts headlessly with Dummy audio. Each run gets a fresh retained
-directory under `build-godot`, isolated preferences/cache, per-test logs and a
-JSON report with source/binary hashes. It does not build, download content,
-import the editor, launch a visible window or use private recordings. Finish
-building before starting it; it does not synchronize with concurrent builds.
+test project, generates atmospheric/airless and C++ saved-start fixtures, and
+runs 33 explicitly listed contracts headlessly with Dummy audio. Each run gets
+a fresh retained directory under `build-godot`, isolated preferences/cache,
+per-test logs and a JSON report with source/binary hashes. It does not build,
+download content, import the editor, launch a visible window or use private
+recordings. Finish building before starting it; the runner does not synchronize
+with concurrent builds.
 
 Nonzero/crash exits, deadlines, engine/script errors, leaked resources and
 missing completion markers fail the run. A zero process exit alone is not a

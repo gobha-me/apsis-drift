@@ -6,6 +6,7 @@
 #include <string>
 
 #include "apsis_drift/origin_station.hpp"
+#include "apsis_drift/physical_local_system.hpp"
 #include "apsis_drift/save_file.hpp"
 
 namespace apsis_drift {
@@ -26,5 +27,18 @@ struct NativeStartup {
 
 [[nodiscard]] auto native_continue(const std::filesystem::path& save_path)
     -> std::expected<NativeStartup, std::string>;
+
+// A selected Freedom save at the station, resolved against the physical home
+// catalog at its saved clock. This is presentation input, not a flight spawn.
+struct NativeFreedomStationStart {
+  NativeStartup selected;
+  PhysicalLocalSystem system;
+  OriginStationDescriptor station;
+  PlanetEphemeris host;
+  OriginStationEphemeris ephemeris;
+};
+
+[[nodiscard]] auto prepare_native_freedom_station_start(NativeStartup selected)
+    -> std::expected<NativeFreedomStationStart, std::string>;
 
 } // namespace apsis_drift

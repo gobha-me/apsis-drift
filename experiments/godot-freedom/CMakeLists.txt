@@ -5,6 +5,10 @@ target_compile_options(apsis-drift-godot-snapshot PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-freedom-start-fixture freedom_start_fixture.cpp)
+  target_link_libraries(apsis-drift-freedom-start-fixture PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-freedom-start-fixture PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_executable(apsis-drift-orbit-assist-tests orbit_assist_test.cpp)
   target_link_libraries(apsis-drift-orbit-assist-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-orbit-assist-tests PRIVATE
