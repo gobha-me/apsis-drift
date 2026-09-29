@@ -1,46 +1,46 @@
 add_executable(apsis-drift-godot-snapshot snapshot_main.cpp)
 target_link_libraries(apsis-drift-godot-snapshot PRIVATE
-  apsis-drift::lib nlohmann_json::nlohmann_json)
+  apsis-drift::core nlohmann_json::nlohmann_json)
 target_compile_options(apsis-drift-godot-snapshot PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-orbit-assist-tests orbit_assist_test.cpp)
-  target_link_libraries(apsis-drift-orbit-assist-tests PRIVATE apsis-drift::lib)
+  target_link_libraries(apsis-drift-orbit-assist-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-orbit-assist-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-orbit-assist-contract COMMAND apsis-drift-orbit-assist-tests)
   set_tests_properties(godot-orbit-assist-contract PROPERTIES TIMEOUT 60)
   add_executable(apsis-drift-flight-guidance-tests flight_guidance_test.cpp)
-  target_link_libraries(apsis-drift-flight-guidance-tests PRIVATE apsis-drift::lib)
+  target_link_libraries(apsis-drift-flight-guidance-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-flight-guidance-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-flight-guidance-contract COMMAND apsis-drift-flight-guidance-tests)
   set_tests_properties(godot-flight-guidance-contract PROPERTIES TIMEOUT 30)
   add_executable(apsis-drift-surface-start-tests surface_start_test.cpp)
-  target_link_libraries(apsis-drift-surface-start-tests PRIVATE apsis-drift::lib nlohmann_json::nlohmann_json)
+  target_link_libraries(apsis-drift-surface-start-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-surface-start-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-surface-start-contract COMMAND apsis-drift-surface-start-tests)
   set_tests_properties(godot-surface-start-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-flight-journey-tests flight_journey_test.cpp)
-  target_link_libraries(apsis-drift-flight-journey-tests PRIVATE apsis-drift::lib)
+  target_link_libraries(apsis-drift-flight-journey-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-flight-journey-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-flight-journey-contract COMMAND apsis-drift-flight-journey-tests)
   add_executable(apsis-drift-thrust-flight-tests thrust_flight_test.cpp)
-  target_link_libraries(apsis-drift-thrust-flight-tests PRIVATE apsis-drift::lib)
+  target_link_libraries(apsis-drift-thrust-flight-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-thrust-flight-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-thrust-flight-contract COMMAND apsis-drift-thrust-flight-tests)
   add_executable(apsis-drift-analog-input-tests analog_test.cpp)
-  target_link_libraries(apsis-drift-analog-input-tests PRIVATE apsis-drift::lib)
+  target_link_libraries(apsis-drift-analog-input-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-analog-input-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-analog-input-contract COMMAND apsis-drift-analog-input-tests)
   add_executable(apsis-drift-godot-snapshot-tests snapshot_test.cpp)
   target_link_libraries(apsis-drift-godot-snapshot-tests PRIVATE
-    apsis-drift::lib nlohmann_json::nlohmann_json)
+    apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-godot-snapshot-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME godot-snapshot-contract COMMAND apsis-drift-godot-snapshot-tests)
@@ -55,7 +55,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-contact-surface-tests
     contact_surface.cpp contact_surface_test.cpp)
   target_link_libraries(apsis-drift-contact-surface-tests PRIVATE
-    apsis-drift::lib nlohmann_json::nlohmann_json Threads::Threads)
+    apsis-drift::core nlohmann_json::nlohmann_json Threads::Threads)
   target_compile_options(apsis-drift-contact-surface-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME godot-contact-surface-contract COMMAND apsis-drift-contact-surface-tests)
@@ -63,13 +63,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-contact-patch-tests
     contact_surface.cpp contact_patch.cpp contact_patch_test.cpp)
   target_link_libraries(apsis-drift-contact-patch-tests PRIVATE
-    apsis-drift::lib nlohmann_json::nlohmann_json Threads::Threads)
+    apsis-drift::core nlohmann_json::nlohmann_json Threads::Threads)
   target_compile_options(apsis-drift-contact-patch-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME godot-contact-patch-contract COMMAND apsis-drift-contact-patch-tests)
   set_tests_properties(godot-contact-patch-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-planet-stream-tests streaming_test.cpp)
-  target_link_libraries(apsis-drift-planet-stream-tests PRIVATE apsis-drift::lib
+  target_link_libraries(apsis-drift-planet-stream-tests PRIVATE apsis-drift::core
     nlohmann_json::nlohmann_json Threads::Threads)
   target_compile_options(apsis-drift-planet-stream-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
@@ -91,7 +91,7 @@ if (APSIS_DRIFT_GODOT_LIVE)
   add_library(apsis_freedom_bridge SHARED live_bridge.cpp)
   find_package(Threads REQUIRED)
   target_link_libraries(apsis_freedom_bridge PRIVATE
-    apsis-drift::lib godot::cpp nlohmann_json::nlohmann_json Threads::Threads)
+    apsis-drift::core godot::cpp nlohmann_json::nlohmann_json Threads::Threads)
   target_compile_options(apsis_freedom_bridge PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic>)
   set_target_properties(apsis_freedom_bridge PROPERTIES

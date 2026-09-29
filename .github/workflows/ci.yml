@@ -100,3 +100,42 @@ jobs:
 
       - name: Headless benchmark smoke test
         run: ./build/apsis-drift --benchmark 3
+
+  native-core:
+    name: ${{ matrix.name }} / native core
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 13
+            cxx: g++
+          - name: Clang 20
+            cxx: clang++-20
+            clang: "20"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Clang
+        if: matrix.clang
+        env:
+          CLANG_VERSION: ${{ matrix.clang }}
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh "$CLANG_VERSION"
+
+      - name: Configure without TermForge
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: >-
+          cmake -S . -B build-core -DCMAKE_BUILD_TYPE=Release
+          -DAPSIS_DRIFT_TERMINAL=OFF
+          -DAPSIS_DRIFT_RTAUDIO=OFF
+          -DAPSIS_DRIFT_GODOT_SPIKE=ON
+
+      - name: Build native and headless targets
+        run: cmake --build build-core --parallel
+
+      - name: Test native and headless targets
+        run: ctest --test-dir build-core --output-on-failure

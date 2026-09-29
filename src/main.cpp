@@ -33,6 +33,7 @@
 #include "apsis_drift/intersystem_contract_acceptance.hpp"
 #include "apsis_drift/intersystem_jump.hpp"
 #include "apsis_drift/intersystem_jump_acceptance.hpp"
+#include "apsis_drift/intersystem_jump_render.hpp"
 #include "apsis_drift/intersystem_planetfall.hpp"
 #include "apsis_drift/intersystem_planetfall_acceptance.hpp"
 #include "apsis_drift/intersystem_return_acceptance.hpp"

@@ -5,9 +5,17 @@
 #include <expected>
 #include <span>
 
-#include "apsis_drift/landscape.hpp"
-
 namespace apsis_drift {
+
+class Terrain;
+
+struct Camera {
+  float x{180.0F};
+  float y{240.0F};
+  float height{135.0F};
+  float yaw{0.35F};
+  float pitch{};
+};
 
 using SimulationSeconds = std::chrono::duration<double>;
 using SimulationTick = std::uint64_t;

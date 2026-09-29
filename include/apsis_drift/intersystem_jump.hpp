@@ -8,7 +8,6 @@
 
 #include "apsis_drift/intersystem_contract.hpp"
 #include "apsis_drift/local_system.hpp"
-#include "termforge/core/types.hpp"
 
 namespace apsis_drift {
 
@@ -121,10 +120,5 @@ struct OriginStationFlightState;
 
 [[nodiscard]] auto intersystem_arrival_checksum(
     const IntersystemContractState& contract) noexcept -> std::uint64_t;
-
-[[nodiscard]] auto render_intersystem_jump(
-    const IntersystemJumpSnapshot& snapshot, int width, int height,
-    std::span<termforge::Pixel> destination)
-    -> std::expected<void, IntersystemJumpError>;
 
 } // namespace apsis_drift
