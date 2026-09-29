@@ -99,12 +99,17 @@ The opt-in [native physical-home study](NATIVE_PHYSICAL_HOME.md) implements a
 separate schema2 bootstrap and visual lighting consumer with those ownership
 checks. It does not alter the default demo or migrate flight to rotating frames.
 
-Origin-station relative orbits remain their separately authored legacy
-90–120-minute recipe. This provider has no physical station overload. A later
-station recipe can derive its period from host gravity/radius without silently
-rewriting legacy station identity. Mission-free starter resources, chart
-grants, station spawning and saved new-universe workflows also remain their
-existing issue owners.
+The physical origin-station ephemeris overload accepts only a validated
+physical origin catalog and its exact generated station. It resolves the host
+planet with the physical period at the requested tick, then composes the
+unchanged 90–120-minute authored station-relative orbit and velocity in C++.
+The legacy station resolver shares that relative geometry without changing
+its historical host orbit or result. The returned position, velocity, cycle
+tick and phase are authoritative inputs for a native docked-station view;
+Godot need not derive another orbit. This is not a new physically calibrated
+station-period recipe, docking/capture model, saved flight state or playable
+station spawn. Mission-free starter resources and chart grants remain with
+their existing issue owners.
 
 Tests cover every wrapper version, ownership and physical fields; authored
 home preservation; both mass endpoints; independent long-double period and
@@ -112,3 +117,5 @@ orbit-basis oracles; circular radius/tangency/GM residuals with quantization
 budgets; period wrap and near-maximum ticks; malformed inputs; legacy rejection
 and stream noninterference. Existing catalog, station, rotation and frame
 handoff goldens remain separate unchanged regression gates.
+The physical station contract adds identity/host composition, radius/speed,
+refusal and exact geometry-hash checks under GCC and Clang.

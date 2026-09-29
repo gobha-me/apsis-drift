@@ -214,6 +214,128 @@ auto corpus() -> void {
         "Physical-family-v1 geometry golden changed");
 }
 
+auto station_contract() -> void {
+  std::uint64_t station_hash{14'695'981'039'346'656'037ULL};
+  bool physical_host_changed_station{};
+  for (const auto seed :
+       std::array{Seed{0}, Seed{1}, Seed{42},
+                  Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const auto physical = required(generate_physical_origin_system(seed));
+    const auto legacy = generate_origin_system(seed);
+    const auto station = generate_origin_station(seed);
+    for (const auto tick : std::array<SimulationTick, 5>{
+             0, 1, 1234567, station.orbit.period_ticks,
+             std::numeric_limits<SimulationTick>::max() - 1}) {
+      const EphemerisQueryTime time{tick, 0};
+      const auto resolved =
+          required(resolve_origin_station_ephemeris(physical, station, time));
+      const auto host = required(
+          resolve_planet_ephemeris(physical, station.orbit.host_planet, time));
+      const auto old =
+          required(resolve_origin_station_ephemeris(legacy, station, time));
+      check(resolved.station == station.id &&
+                resolved.host_planet == station.orbit.host_planet &&
+                resolved.cycle_tick == tick % station.orbit.period_ticks,
+            "Physical station identity or cycle tick changed");
+      check(resolved.host_relative_position == old.host_relative_position &&
+                resolved.host_relative_velocity == old.host_relative_velocity &&
+                resolved.phase_radians == old.phase_radians,
+            "Station-relative orbit differs from legacy station recipe");
+      physical_host_changed_station |= resolved.position != old.position ||
+                                       resolved.velocity != old.velocity;
+      for (const auto [system, host_axis, relative, allowance] :
+           std::array<std::array<double, 4>, 6>{
+               {{resolved.position.x, host.position.x,
+                 resolved.host_relative_position.x, 1.0},
+                {resolved.position.y, host.position.y,
+                 resolved.host_relative_position.y, 1.0},
+                {resolved.position.z, host.position.z,
+                 resolved.host_relative_position.z, 1.0},
+                {resolved.velocity.x, host.velocity.x,
+                 resolved.host_relative_velocity.x, .001001},
+                {resolved.velocity.y, host.velocity.y,
+                 resolved.host_relative_velocity.y, .001001},
+                {resolved.velocity.z, host.velocity.z,
+                 resolved.host_relative_velocity.z, .001001}}})
+        check(std::abs(system - host_axis - relative) <= allowance,
+              "Physical station is not host plus relative orbit");
+      const auto& position = resolved.host_relative_position;
+      const auto& velocity = resolved.host_relative_velocity;
+      const double radius =
+          static_cast<double>(station.orbit.radius_kilometres) * 1'000.0;
+      const double speed = radius * 2.0 * std::numbers::pi_v<double> *
+                           kSimulationHz / station.orbit.period_ticks;
+      check(std::abs(std::hypot(position.x, position.y, position.z) - radius) <=
+                    1.0 &&
+                std::abs(std::hypot(velocity.x, velocity.y, velocity.z) -
+                         speed) <= .001,
+            "Station-relative orbit violates radius or speed");
+      hash_word(station_hash, seed.value);
+      hash_word(station_hash, tick);
+      hash_word(station_hash, resolved.station.value);
+      hash_word(station_hash, resolved.host_planet.value);
+      hash_word(station_hash, resolved.cycle_tick);
+      for (const double value :
+           {resolved.phase_radians, resolved.position.x, resolved.position.y,
+            resolved.position.z, resolved.velocity.x, resolved.velocity.y,
+            resolved.velocity.z})
+        hash_word(station_hash, std::bit_cast<std::uint64_t>(value));
+    }
+    const EphemerisQueryTime fractional{123, .5};
+    const auto interpolated = required(
+        resolve_origin_station_ephemeris(physical, station, fractional));
+    const auto legacy_interpolated =
+        required(resolve_origin_station_ephemeris(legacy, station, fractional));
+    check(interpolated.host_relative_position ==
+                  legacy_interpolated.host_relative_position &&
+              interpolated.host_relative_velocity ==
+                  legacy_interpolated.host_relative_velocity &&
+              interpolated.phase_radians == legacy_interpolated.phase_radians,
+          "Sub-tick station presentation changed the relative orbit");
+    check(physical == required(generate_physical_origin_system(seed)),
+          "Station query mutated physical catalog");
+  }
+  check(physical_host_changed_station,
+        "Physical station silently used the legacy host orbit");
+  std::cout << "Physical station geometry hash " << station_hash << '\n';
+  check(station_hash == 3'150'982'587'067'571'851ULL,
+        "Physical station geometry golden changed");
+
+  const auto physical = required(generate_physical_origin_system(Seed{42}));
+  const auto station = generate_origin_station(Seed{42});
+  const auto reject = [&](const PhysicalLocalSystem& system,
+                          const OriginStationDescriptor& target,
+                          EphemerisQueryTime time, Error expected) {
+    check(error_is(resolve_origin_station_ephemeris(system, target, time),
+                   expected),
+          "Invalid physical station query was accepted");
+  };
+  auto procedural = required(generate_physical_local_system(Seed{42}));
+  reject(procedural, station, {0, 0}, Error::invalid_context);
+  auto forged = physical;
+  ++forged.catalog.planets.front().orbit.period_ticks;
+  reject(forged, station, {0, 0}, Error::invalid_context);
+  ++forged.generator_version;
+  reject(forged, station, {0, 0}, Error::unsupported_version);
+  const auto other_station = generate_origin_station(Seed{43});
+  reject(physical, other_station, {0, 0}, Error::invalid_context);
+  auto wrong_host_orbit = station.orbit;
+  ++wrong_host_orbit.host_planet.value;
+  const OriginStationDescriptor wrong_host{
+      station.universe_seed, station.home_system_seed, station.station_seed,
+      station.id, wrong_host_orbit};
+  reject(physical, wrong_host, {0, 0}, Error::invalid_context);
+  for (const double fraction :
+       {-1.0, 1.0, std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::quiet_NaN()})
+    reject(physical, station, {0, fraction}, Error::non_finite_time);
+  reject(physical, station, {std::numeric_limits<SimulationTick>::max(), 0},
+         Error::invalid_tick);
+  check(physical == required(generate_physical_origin_system(Seed{42})) &&
+            station == generate_origin_station(Seed{42}),
+        "Rejected station query mutated its inputs");
+}
+
 auto malformed() -> void {
   const auto original = required(generate_physical_origin_system(Seed{42}));
   const auto planet = original.catalog.planets.front().descriptor.id;
@@ -322,6 +444,7 @@ auto main() -> int {
   malformed();
   mass_boundaries();
   corpus();
+  station_contract();
   std::cout << "Physical local-system contracts: " << failures << " failures\n";
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
