@@ -80,22 +80,33 @@ auto validate_orbit_hold_request(const RigidBodyWorldContext& context,
     return std::unexpected{OrbitHoldError{Code::invalid_target, {}, {}}};
   return {};
 }
-auto advance_orbit_hold_dynamics(
-    const RigidBodyWorldContext& context, RigidBodyState& state,
+auto evaluate_orbit_hold_correction(
+    const RigidBodyWorldContext& context, const RigidBodyState& state,
     const VacuumIntent& intent, const PhysicalPlanetRotationRecipe& rotation,
     OrbitalTelemetryRecipe policy, OrbitHoldRequest request,
-    CentralBodyDynamicsRecipe dynamics, SimulationSeconds step)
-    -> std::expected<OrbitHoldResult, OrbitHoldError> {
+    CentralBodyDynamicsRecipe dynamics)
+    -> std::expected<OrbitHoldCorrection, OrbitHoldError> {
   using Code = OrbitHoldErrorCode;
   const auto valid = validate_orbit_hold_request(context, state, rotation,
                                                  policy, request, dynamics);
   if (!valid) return std::unexpected{valid.error()};
+  for (const auto channel :
+       {intent.positive_translation, intent.negative_translation,
+        intent.positive_rotation, intent.negative_rotation})
+    if (!finite(channel) || channel.x < 0 || channel.x > 1 || channel.y < 0 ||
+        channel.y > 1 || channel.z < 0 || channel.z > 1)
+      return std::unexpected{OrbitHoldError{
+          Code::dynamics_failure,
+          {},
+          CentralBodyError{CentralBodyErrorCode::dynamics_failure,
+                           VacuumDynamicsError::invalid_intent}}};
   const auto gravity = evaluate_central_body_gravity(context, state, dynamics);
   if (!gravity)
     return std::unexpected{
         OrbitHoldError{Code::dynamics_failure, {}, gravity.error()}};
-  auto commands = intent;
-  OrbitHoldResult result;
+  OrbitHoldCorrection result;
+  result.commands = intent;
+  auto& commands = result.commands;
   if (request.target) {
     if (!intent.assistance)
       result.status = OrbitHoldStatus::paused_advanced;
@@ -172,6 +183,26 @@ auto advance_orbit_hold_dynamics(
       }
     }
   }
+  return result;
+}
+
+auto advance_orbit_hold_dynamics(
+    const RigidBodyWorldContext& context, RigidBodyState& state,
+    const VacuumIntent& intent, const PhysicalPlanetRotationRecipe& rotation,
+    OrbitalTelemetryRecipe policy, OrbitHoldRequest request,
+    CentralBodyDynamicsRecipe dynamics, SimulationSeconds step)
+    -> std::expected<OrbitHoldResult, OrbitHoldError> {
+  using Code = OrbitHoldErrorCode;
+  const auto correction = evaluate_orbit_hold_correction(
+      context, state, intent, rotation, policy, request, dynamics);
+  if (!correction) return std::unexpected{correction.error()};
+  OrbitHoldResult result;
+  result.status = correction->status;
+  result.requested_correction_metres_per_second_squared =
+      correction->requested_correction_metres_per_second_squared;
+  result.requested_force_body_newtons =
+      correction->requested_force_body_newtons;
+  const auto& commands = correction->commands;
   auto candidate = state;
   const auto actuation = advance_central_body_dynamics(
       context, candidate, commands, dynamics, step);

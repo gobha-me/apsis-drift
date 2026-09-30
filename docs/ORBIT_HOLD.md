@@ -2,8 +2,10 @@
 
 2026-09-30, #325, controller version 1. This is an optional C++ control layer
 over [canonical central-body dynamics](CENTRAL_BODY_DYNAMICS.md) and the shared
-[orbital observation](ORBITAL_TELEMETRY.md). It has no live consumer or gameplay
-save migration yet. Ordinary assisted neutral spaceflight continues to coast;
+[orbital observation](ORBITAL_TELEMETRY.md). The
+[saved C++ flight session](NATIVE_FLIGHT_SESSION.md) consumes its pure correction
+plan; live Godot controls remain separate work. Ordinary assisted neutral
+spaceflight continues to coast;
 hold acts only when the caller supplies an explicit target.
 
 ## Target and observable operating state
@@ -12,8 +14,8 @@ hold acts only when the caller supplies an explicit target.
 radius and unit plane normal on that body's nonrotating axes. The normal's sign
 selects the orbital direction. The provider never infers a plane from a camera,
 invented heading or zero angular momentum. An empty optional target disables
-hold. A future saved session must retain the request/version, target, selected
-gravity and physical rotation, space-boundary policy and runtime assistance.
+hold. Format18 retains the request/version, target, selected gravity and physical
+rotation and runtime assistance; qualified atmosphere derives its space boundary.
 There is no hidden integral, filter history, rail state or captured velocity.
 
 The target must name the state's qualified planet, lie above the supplied space
@@ -135,5 +137,6 @@ in #238/#291/#245. This bounded controller alone
 does not complete the Freedom journey or adopt the old unsaved lab as a save.
 
 [Canonical atmospheric flight](ATMOSPHERIC_FLIGHT.md) now composes rotating air
-and aerodynamic forces through the same gravity/kernel. Live flight adoption
-and gameplay persistence remain separate work.
+and aerodynamic forces through the same gravity/kernel. Live Godot flight
+adoption remains separate work; the saved C++ session always composes the
+correction through that atmospheric kernel, including crossing ticks.

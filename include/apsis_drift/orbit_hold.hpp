@@ -57,6 +57,20 @@ struct OrbitHoldResult {
   bool orbit_established{};
 };
 
+struct OrbitHoldCorrection {
+  OrbitHoldStatus status{OrbitHoldStatus::disabled};
+  VacuumIntent commands;
+  RigidVector3 requested_correction_metres_per_second_squared;
+  RigidVector3 requested_force_body_newtons;
+};
+// Pure allocation plan for composition into the shared atmospheric kernel.
+// It neither advances state nor chooses a different integrator at an air edge.
+[[nodiscard]] auto evaluate_orbit_hold_correction(
+    const RigidBodyWorldContext&, const RigidBodyState&, const VacuumIntent&,
+    const PhysicalPlanetRotationRecipe&, OrbitalTelemetryRecipe,
+    OrbitHoldRequest, CentralBodyDynamicsRecipe = {})
+    -> std::expected<OrbitHoldCorrection, OrbitHoldError>;
+
 // Pure qualification for persisted targets; does not advance a candidate just
 // to validate its selection or invent a hold target from the flight state.
 [[nodiscard]] auto validate_orbit_hold_request(
