@@ -207,6 +207,8 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_freedom_start);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_geometry"),
                                 &FreedomBridge::get_freedom_station_geometry);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_wayfarer_frame"),
+                                &FreedomBridge::get_wayfarer_frame);
     godot::ClassDB::bind_method(godot::D_METHOD("save_freedom_as", "save_path"),
                                 &FreedomBridge::save_freedom_as);
     godot::ClassDB::bind_method(godot::D_METHOD("get_world_lighting"),
@@ -364,6 +366,11 @@ class FreedomBridge : public godot::RefCounted {
         coordinates(start.ephemeris.host_relative_velocity);
     result["station_phase_radians"] = start.ephemeris.phase_radians;
     return result;
+  }
+
+  auto get_wayfarer_frame() const -> godot::String {
+    const auto diagnostic = craft_frame_diagnostic_json(wayfarer_frame());
+    return diagnostic ? godot::String{diagnostic->c_str()} : godot::String{};
   }
 
   auto get_freedom_station_geometry() const -> godot::Dictionary {

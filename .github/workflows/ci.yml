@@ -182,7 +182,7 @@ jobs:
           --build-dir build-native
           --output-parent build-native-contracts
           --test freedom_start --test native_shell --test native_save
-          --test native_asset_import --test native_station_view
+          --test native_asset_import --test native_station_view --test wayfarer_frame
           --test recorded_audio_shutdown
 
       - name: Retain native runtime logs and report

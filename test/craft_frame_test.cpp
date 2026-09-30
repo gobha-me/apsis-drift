@@ -81,7 +81,7 @@ auto identity_contract() -> void {
         "recipe reconstructs the exact immutable descriptor");
   check_error(resolve_craft_frame({CraftFrameId{0}, frame.recipe.version}),
               CraftFrameError::unknown_id, "zero frame ID is not registered");
-  check_error(resolve_craft_frame({CraftFrameId{2}, frame.recipe.version}),
+  check_error(resolve_craft_frame({CraftFrameId{3}, frame.recipe.version}),
               CraftFrameError::unknown_id, "future frame ID is not registered");
   check_error(resolve_craft_frame(
                   {CraftFrameId{std::numeric_limits<std::uint64_t>::max()},
@@ -456,7 +456,7 @@ auto recipe_contract() -> void {
                 "short and oversized decode spans reject");
   }
   for (const auto bad : {CraftFrameRecipe{CraftFrameId{0}, 1},
-                         CraftFrameRecipe{CraftFrameId{2}, 1},
+                         CraftFrameRecipe{CraftFrameId{3}, 1},
                          CraftFrameRecipe{kStarterShuttleFrameId, 0},
                          CraftFrameRecipe{kStarterShuttleFrameId, 2}}) {
     encoded.fill(std::byte{0xA5});

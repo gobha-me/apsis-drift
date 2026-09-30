@@ -17,6 +17,8 @@ struct CraftFrameId {
 };
 inline constexpr CraftFrameId kStarterShuttleFrameId{1};
 inline constexpr std::uint32_t kStarterShuttleFrameVersion{1};
+inline constexpr CraftFrameId kWayfarerFrameId{2};
+inline constexpr std::uint32_t kWayfarerFrameVersion{1};
 inline constexpr std::uint32_t kCraftFrameRecipeFormat{1};
 inline constexpr std::size_t kCraftFrameRecipeBytes{16};
 
@@ -108,6 +110,7 @@ enum class CraftFrameError : std::uint8_t {
     -> std::expected<void, CraftFrameError>;
 [[nodiscard]] auto starter_shuttle_frame() noexcept
     -> const CraftFrameDescriptor&;
+[[nodiscard]] auto wayfarer_frame() noexcept -> const CraftFrameDescriptor&;
 [[nodiscard]] auto resolve_craft_frame(CraftFrameRecipe) noexcept
     -> std::expected<CraftFrameDescriptor, CraftFrameError>;
 [[nodiscard]] auto craft_frame_checksum(const CraftFrameDescriptor&) noexcept
