@@ -114,7 +114,15 @@ func run() -> void:
 		check(study.live_paused and not audio.diagnostics().playback_running, "Input/focus revived flight or sound")
 		check(audio.get_child_count() == 0 and audio._players.is_empty() and audio._streams.is_empty(), "Shutdown recreated native nodes or stream ownership")
 		check(audio.diagnostics().targets == Vector3.ZERO and audio.diagnostics().gains == Vector3.ZERO, "Shutdown settings revived audible gain")
-		await create_timer(0.60, true, false, true).timeout
+		# SceneTree timers accumulate frame delta, not monotonic wall time.
+		# Accelerate that clock deliberately: real backend retirement and the
+		# production 0.5-second wall deadline must still complete before checks.
+		var previous_time_scale := Engine.time_scale
+		Engine.time_scale = 8.0
+		var observation_deadline_usec := requested_at_usec + 600000
+		while Time.get_ticks_usec() < observation_deadline_usec:
+			await process_frame
+		Engine.time_scale = previous_time_scale
 		check(study.finished == 1, "Repeated quit or unfinished drain")
 		if route == "blocked-retirement":
 			var elapsed := float(study.finished_at_usec - requested_at_usec) / 1000000.0

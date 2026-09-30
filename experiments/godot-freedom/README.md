@@ -248,7 +248,10 @@ with concurrent builds.
 Nonzero/crash exits, deadlines, engine/script errors, leaked resources and
 missing completion markers fail the run. A zero process exit alone is not a
 pass. The shutdown contract's deliberately exercised drain-deadline warning
-remains expected. `--test NAME` selects a subset (repeatable); `--timeout` sets
+remains expected. Shutdown observations use monotonic wall time, matching the
+production deadline, and exercise accelerated scene time with the real Dummy
+backend. Hosted runtime CI includes that shutdown contract alongside saved
+start/shell/Save As checks. `--test NAME` selects a subset (repeatable); `--timeout` sets
 the per-process deadline within 1–600 seconds. Reports identify the selected
 subset, not a full-suite pass. `python3 test/native_runner_test.py` tests runner
 failure handling without Godot and runs in hosted CI.
