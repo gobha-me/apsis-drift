@@ -1,5 +1,11 @@
 # Origin Station and Tutorial Home
 
+The native exterior/port consumer uses the explicit
+[version1 physical geometry contract](ORIGIN_STATION_GEOMETRY.md). Its queries
+preserve this station's generated identity and orbit. The owner's 2026-09-30
+Freedom amendment adds bounded station walking/boarding; retained onboarding
+mission behavior below remains historical compatibility evidence.
+
 Origin Station version 2 gives every fresh universe one deterministic,
 tutorial-safe home planet and one analytic station orbit without making either
 the physical or procedural center of unrelated content. It is a bounded first

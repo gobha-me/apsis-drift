@@ -159,6 +159,7 @@ add_library(apsis_drift_core STATIC
   src/native_flight_session.cpp
   src/onboarding.cpp
   src/origin_station.cpp
+  src/station_geometry.cpp
   src/origin_return.cpp
   src/origin_system_contract.cpp
   src/planet.cpp
@@ -313,6 +314,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME native-flight-session-contract COMMAND apsis-drift-native-flight-session-tests)
   set_tests_properties(native-flight-session-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-station-geometry-tests test/station_geometry_test.cpp)
+  target_link_libraries(apsis-drift-station-geometry-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-station-geometry-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME station-geometry-contract COMMAND apsis-drift-station-geometry-tests)
   add_executable(apsis-drift-craft-frame-tests test/craft_frame_test.cpp)
   target_link_libraries(apsis-drift-craft-frame-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-craft-frame-tests PRIVATE
