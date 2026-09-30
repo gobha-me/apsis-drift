@@ -125,6 +125,10 @@ Clang builds.
 The separate [orbital observation provider](ORBITAL_TELEMETRY.md) in #323 adds
 orbital/surface motion measurements, classification and synchronous fixtures
 without controlling flight. [Explicit bounded `ORBIT HOLD`](ORBIT_HOLD.md) in
-#325 composes optional correction through actual thrusters. Atmospheric
-consumption of this gravity law, actual flight saves and native presentation
-remain follow-ups in #238/#291. These foundations do not close those parents.
+#325 composes optional correction through actual thrusters. Actual flight saves
+and native presentation remain follow-ups in #238/#291. These foundations do
+not close those parents.
+
+[Canonical atmospheric flight](ATMOSPHERIC_FLIGHT.md) now composes rotating air
+and aerodynamic forces through the same gravity/kernel. Live flight adoption
+and gameplay persistence remain separate work.

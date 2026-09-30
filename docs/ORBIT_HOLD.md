@@ -130,6 +130,10 @@ correction, impulses and observations. The new explicit hold-v1 replay checksum
 is **11305337061246386878**, agreed by GCC and Clang. Earlier central-body,
 vacuum, attitude and rigid projection goldens are unchanged.
 
-Atmospheric composition, actual native flight saves/controls, physical contact
-and landing remain work in #238/#201/#291/#245. This bounded controller alone
+Actual native flight saves/controls, physical contact and landing remain work
+in #238/#291/#245. This bounded controller alone
 does not complete the Freedom journey or adopt the old unsaved lab as a save.
+
+[Canonical atmospheric flight](ATMOSPHERIC_FLIGHT.md) now composes rotating air
+and aerodynamic forces through the same gravity/kernel. Live flight adoption
+and gameplay persistence remain separate work.
