@@ -14,6 +14,7 @@ namespace apsis_drift {
 
 inline constexpr std::uint32_t kRigidBodyStateVersion{1};
 inline constexpr std::uint32_t kPhysicalRigidBodyStateVersion{2};
+inline constexpr std::uint32_t kPlanetRelativeRigidBodyStateVersion{3};
 inline constexpr std::uint32_t kPhysicalRigidBodyOwnerVersion{1};
 inline constexpr std::size_t kMaximumRigidBodyDocumentBytes{4096};
 inline constexpr double kRigidBodyMaximumPositionMetres{1.0e15};
@@ -43,6 +44,9 @@ enum class RigidFrameKind : std::uint8_t {
   planet_fixed = 2,
   // Translated with the named station; axes remain system-inertial aligned.
   station_relative_inertial = 3,
+  // Physical catalog only: translated with the named planet, system-aligned
+  // nonrotating axes. Force composition must account for the moving origin.
+  planet_relative_inertial = 4,
 };
 
 struct RigidCoordinateFrame {
@@ -135,7 +139,8 @@ enum class RigidBodyError : std::uint8_t {
     -> std::expected<std::uint64_t, RigidBodyError>;
 
 // Separate native projection, NOT legacy save16 or Freedom save17.
-// Legacy contexts retain v1 exactly; physical contexts use owner-qualified v2.
+// Legacy contexts retain v1 exactly; physical contexts use owner-qualified v2
+// for existing frames and distinct v3 for planet-relative nonrotating state.
 // Strict bounded JSON; all doubles and 64-bit IDs/ticks are canonical decimal
 // strings. Decode validates without normalization or mutation of live state.
 [[nodiscard]] auto encode_rigid_body_state_json(

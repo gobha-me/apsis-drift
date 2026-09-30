@@ -114,6 +114,10 @@ auto validate_frame(const RigidBodyWorldContext& context,
       if (frame.planet || frame.station)
         return std::unexpected{RigidBodyError::invalid_coordinate_frame};
       return {};
+    case RigidFrameKind::planet_relative_inertial:
+      if (physical == nullptr)
+        return std::unexpected{RigidBodyError::invalid_coordinate_frame};
+      [[fallthrough]];
     case RigidFrameKind::planet_fixed:
       if (!frame.planet || frame.station)
         return std::unexpected{RigidBodyError::invalid_coordinate_frame};
@@ -168,8 +172,15 @@ auto frame_kind_name(RigidFrameKind kind) -> std::string_view {
     case RigidFrameKind::planet_fixed: return "planet_fixed";
     case RigidFrameKind::station_relative_inertial:
       return "station_relative_inertial";
+    case RigidFrameKind::planet_relative_inertial:
+      return "planet_relative_inertial";
   }
   throw RigidBodyError::invalid_coordinate_frame;
+}
+auto physical_projection_version(RigidFrameKind kind) -> std::uint32_t {
+  return kind == RigidFrameKind::planet_relative_inertial
+             ? kPlanetRelativeRigidBodyStateVersion
+             : kPhysicalRigidBodyStateVersion;
 }
 auto require_keys(const Json& object,
                   std::initializer_list<std::string_view> keys) -> void {
@@ -344,7 +355,10 @@ auto rigid_body_state_checksum(const RigidBodyWorldContext& context,
   };
   const auto* physical = context.physical_owner();
   const std::string_view domain =
-      physical ? "apsis-physical-rigid-body-v2" : "apsis-rigid-body-v1";
+      physical ? (state.frame.kind == RigidFrameKind::planet_relative_inertial
+                      ? "apsis-physical-rigid-body-v3"
+                      : "apsis-physical-rigid-body-v2")
+               : "apsis-rigid-body-v1";
   for (const char c : domain)
     integer(static_cast<unsigned char>(c), 1);
   if (physical) {
@@ -396,8 +410,8 @@ auto encode_rigid_body_state_json(const RigidBodyWorldContext& context,
     const auto* physical = context.physical_owner();
     Json result{
         {"format", format_name},
-        {"version",
-         physical ? kPhysicalRigidBodyStateVersion : kRigidBodyStateVersion},
+        {"version", physical ? physical_projection_version(state.frame.kind)
+                             : kRigidBodyStateVersion},
         {"craft",
          {{"id", std::to_string(state.craft.id.value)},
           {"version", state.craft.version}}},
@@ -457,7 +471,9 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
       if (!data.contains("format") || !data.contains("version"))
         throw RigidBodyError::missing_field;
       if (text(data.at("format")) != format_name ||
-          read_version(data.at("version")) != kPhysicalRigidBodyStateVersion)
+          (read_version(data.at("version")) != kPhysicalRigidBodyStateVersion &&
+           read_version(data.at("version")) !=
+               kPlanetRelativeRigidBodyStateVersion))
         throw RigidBodyError::unsupported_version;
       require_keys(data, {"format", "version", "craft", "frame", "tick",
                           "position_metres", "orientation_wxyz",
@@ -488,8 +504,16 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
       candidate.frame.kind = RigidFrameKind::planet_fixed;
     else if (kind == "station_relative_inertial")
       candidate.frame.kind = RigidFrameKind::station_relative_inertial;
+    else if (physical &&
+             read_version(data.at("version")) ==
+                 kPlanetRelativeRigidBodyStateVersion &&
+             kind == "planet_relative_inertial")
+      candidate.frame.kind = RigidFrameKind::planet_relative_inertial;
     else
       throw RigidBodyError::invalid_coordinate_frame;
+    if (physical && read_version(data.at("version")) !=
+                        physical_projection_version(candidate.frame.kind))
+      throw RigidBodyError::unsupported_version;
     candidate.frame.system = SystemId{read_u64(frame.at("system"))};
     if (!frame.at("planet").is_null())
       candidate.frame.planet = PlanetId{read_u64(frame.at("planet"))};

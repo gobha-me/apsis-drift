@@ -31,6 +31,7 @@ existing system validator checks the supplied system before owner IDs resolve.
 | `system_inertial` | Existing system; planet/station absent | Existing system barycentric, right-handed inertial axes |
 | `planet_fixed` | Existing system and one planet belonging to it; station absent | Existing planet-centered, rotating +Z north, +X zero longitude, +Y east axes |
 | `station_relative_inertial` | Existing origin system and its named origin station; planet absent | Origin translated with station; axes remain system-inertial aligned, not station-body axes |
+| `planet_relative_inertial` | Explicit physical catalog and a named planet belonging to it; station absent | Origin translated with planet; axes remain system-inertial aligned, nonrotating |
 
 Station resolution also compares the supplied station with the canonical
 descriptor generated from its universe seed, checks its system seed and origin
@@ -229,6 +230,39 @@ integrator or physical qualification of terrain contact. The saved native start
 remains docked. A rotating handoff still requires its explicitly retained
 `PhysicalPlanetRotationRecipe`; the standalone state document does not silently
 infer a rotation interpretation for an old saved frame.
+
+## Planet-relative nonrotating projection (2026-09-30, #319)
+
+`planet_relative_inertial` is frame kind 4 and requires the explicit physical
+catalog owner. Position and velocity are relative to its named planet's final
+same-tick physical ephemeris; attitude maps body axes into system-aligned
+nonrotating axes. Body angular velocity is relative to those axes. A legacy
+catalog cannot validate or project this frame even if numeric planet IDs match.
+
+Only this new frame uses standalone **projection version 3**. It has the same
+bounded canonical field structure and physical `owner` object as v2, with
+`"version":3`, `"kind":"planet_relative_inertial"` and a required planet ID.
+The checksum changes its domain to `apsis-physical-rigid-body-v3`; its owner and
+state field encoding otherwise follows the v2 recipe, including frame-kind byte
+4 and the selected planet ID. No new numerical normalization is introduced.
+Version 2 refuses the new kind; version 3 refuses relabeling any existing frame.
+Existing legacy v1 and physical v2 output/checksum goldens remain unchanged.
+Handoffs into system/fixed coordinates therefore encode their existing v2
+projection, while the named nonrotating representation encodes v3 explicitly.
+
+The axes do not rotate, but **the ephemeris-following origin accelerates**.
+This coordinate boundary does not authorize the system-inertial force-free
+vacuum provider in that frame; it continues to refuse it. #238 must explicitly
+qualify its bounded central-body force approximation before advancing local
+planetary state. Gravity, atmospheric composition, contact, physical launch
+and gameplay saves are separate work. Freedom save17 remains docked-only.
+
+`planet-relative-contract` covers origin and procedural catalogs at ordinary,
+wrap and near-maximum ticks, independently computed v3 projection/checksum
+goldens, ephemeris translation and matrix rotation oracles, local-scale
+roundtrip limits, exact hydration/next-handoff continuation and refusal of
+wrong family/body/recipe/frame/version/clocks, malformed input and unsafe
+results. Existing state, station, rotating and coasting goldens remain gates.
 
 ## Verification and next consumers
 
