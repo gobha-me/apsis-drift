@@ -1,4 +1,5 @@
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -29,7 +30,7 @@ auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
   if (argc != 5) {
     std::cerr << "usage: freedom-start-fixture ABSOLUTE_PATH SEED TICK "
-                 "freedom|career\n";
+                 "freedom|flight|career\n";
     return 2;
   }
   const auto path = std::filesystem::path{argv[1]};
@@ -50,6 +51,35 @@ auto main(int argc, char** argv) -> int {
           {"signal:77", SaveWorldDeltaKind::discovered, 9});
     }
     const auto written = write_freedom_save_file_atomically(path, save);
+    if (!written) {
+      std::cerr << save_file_error_message(written.error()) << '\n';
+      return 1;
+    }
+  } else if (mode == "flight") {
+    auto origin = make_freedom_new_game_document(Seed{*seed});
+    origin.state.tick = *tick;
+    const auto system = generate_physical_origin_system(Seed{*seed});
+    if (!system) return 1;
+    const auto& planet =
+        system->catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+    RigidBodyState state;
+    state.tick = *tick;
+    state.frame = {RigidFrameKind::planet_relative_inertial,
+                   system->catalog.id,
+                   planet.id,
+                   {}};
+    state.position_metres = {planet.radius.value * 1000.0 + 500000, 0, 0};
+    const auto gravity =
+        evaluate_central_body_gravity(RigidBodyWorldContext{*system}, state);
+    if (!gravity) return 1;
+    state.linear_velocity_metres_per_second = {
+        0,
+        std::sqrt(
+            gravity->gravitational_parameter_metres_cubed_per_second_squared /
+            state.position_metres.x),
+        0};
+    const auto written =
+        write_freedom_flight_file_atomically(path, {origin, state, {}});
     if (!written) {
       std::cerr << save_file_error_message(written.error()) << '\n';
       return 1;

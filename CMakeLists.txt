@@ -141,6 +141,7 @@ add_library(apsis_drift_core STATIC
   src/coordinates.cpp
   src/craft_frame.cpp
   src/freedom_save.cpp
+  src/freedom_flight_save.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -299,6 +300,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-native-startup-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME native-startup-contract COMMAND apsis-drift-native-startup-tests)
+  add_executable(apsis-drift-freedom-flight-save-tests test/freedom_flight_save_test.cpp)
+  target_link_libraries(apsis-drift-freedom-flight-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-flight-save-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME freedom-flight-save-contract COMMAND apsis-drift-freedom-flight-save-tests)
+  set_tests_properties(freedom-flight-save-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-craft-frame-tests test/craft_frame_test.cpp)
   target_link_libraries(apsis-drift-craft-frame-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-craft-frame-tests PRIVATE

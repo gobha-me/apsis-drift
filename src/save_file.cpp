@@ -374,6 +374,12 @@ auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError> {
   auto contents = read_save_bytes(path);
   if (!contents) return std::unexpected{contents.error()};
+  auto flight = decode_freedom_flight_document_json(*contents);
+  if (flight) return NativeSaveDocument{std::move(*flight)};
+  if (flight.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "save file is malformed or incompatible", flight.error()}};
   auto legacy = decode_save_document_json(*contents);
   if (legacy) return NativeSaveDocument{std::move(*legacy)};
   if (legacy.error().code != SaveSchemaErrorCode::unsupported_format_version)
@@ -415,6 +421,23 @@ auto write_freedom_save_file_atomically(const std::filesystem::path& path,
     return std::unexpected{
         SaveFileError{SaveFileErrorCode::invalid_document, path,
                       "Freedom state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
+}
+
+auto write_freedom_flight_file_atomically(
+    const std::filesystem::path& path,
+    const FreedomFlightSaveDocument& document)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_freedom_flight_document_json(document);
+  if (!encoded)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "Freedom flight state cannot be encoded", encoded.error()}};
   return write_atomically(path, *encoded,
                           detail::AtomicSaveTestInterruption::none);
 }

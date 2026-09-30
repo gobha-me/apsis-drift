@@ -22,6 +22,8 @@ struct OrbitHoldRequest {
   // Empty means disabled. A future session retains target, recipe/policy and
   // runtime assistance explicitly; no hidden controller history exists here.
   std::optional<OrbitHoldTarget> target;
+  friend auto operator==(const OrbitHoldRequest&, const OrbitHoldRequest&)
+      -> bool = default;
 };
 enum class OrbitHoldStatus : std::uint8_t {
   disabled,
@@ -54,6 +56,14 @@ struct OrbitHoldResult {
   OrbitalTelemetry observation_after;
   bool orbit_established{};
 };
+
+// Pure qualification for persisted targets; does not advance a candidate just
+// to validate its selection or invent a hold target from the flight state.
+[[nodiscard]] auto validate_orbit_hold_request(
+    const RigidBodyWorldContext&, const RigidBodyState&,
+    const PhysicalPlanetRotationRecipe&, OrbitalTelemetryRecipe,
+    OrbitHoldRequest, CentralBodyDynamicsRecipe = {})
+    -> std::expected<void, OrbitHoldError>;
 
 // Explicit optional hold through actual capped directional actuators and the
 // existing central-body RK4 kernel. Advanced/manual translation pause hold;
