@@ -109,4 +109,23 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
                                    std::move(station), *host, *ephemeris};
 }
 
+auto native_save_freedom(const NativeStartup& selected,
+                         const std::filesystem::path& destination)
+    -> std::expected<void, std::string> {
+  const auto& bytes = destination.native();
+  if (bytes.empty() || bytes.size() > 4'096 ||
+      bytes.find('\0') != std::string::npos || !destination.is_absolute())
+    return std::unexpected{"Save As requires a bounded absolute save path"};
+  // Revalidate the authoritative recipe/state before any filesystem mutation.
+  if (const auto prepared = prepare_native_freedom_station_start(selected);
+      !prepared)
+    return std::unexpected{prepared.error()};
+  const auto& document = std::get<FreedomSaveDocument>(selected.document);
+  if (const auto written =
+          write_freedom_save_file_atomically(destination, document);
+      !written)
+    return std::unexpected{save_file_error_message(written.error())};
+  return {};
+}
+
 } // namespace apsis_drift

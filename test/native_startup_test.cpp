@@ -86,6 +86,21 @@ auto main() -> int {
               continued_station->selected.source_save == save,
           "Continue did not resolve the same physical station as New Game");
 
+    const auto copy_path = directory / "native-copy.json";
+    check(native_save_freedom(*created, copy_path).has_value() &&
+              load_native_save_file(copy_path) ==
+                  std::expected<NativeSaveDocument, SaveFileError>{
+                      created->document} &&
+              !created->source_save && contents(save) == original,
+          "native New Game Save As changed state or failed to persist");
+    const auto saved_new_game = native_continue(copy_path);
+    check(saved_new_game.has_value(), "native Save As failed selection reload");
+    const auto saved_station =
+        prepare_native_freedom_station_start(*saved_new_game);
+    check(saved_station &&
+              saved_station->ephemeris == created_station->ephemeris,
+          "native Save As failed physical station reload");
+
     auto progressed = freedom;
     progressed.state.tick = 25;
     progressed.state.discoveries.push_back({SurfaceSignalId{77}, 8});
@@ -113,6 +128,48 @@ auto main() -> int {
           "Continue discarded the saved clock or mutable history");
 
     const auto encoded = contents(save);
+    const auto unicode_path = directory / "native-copy-é.json";
+    check(native_save_freedom(*progressed_continue, unicode_path).has_value(),
+          "native Save As failed UTF-8 destination");
+    const auto unicode_continue = native_continue(unicode_path);
+    check(unicode_continue &&
+              unicode_continue->document == progressed_continue->document &&
+              contents(save) == encoded &&
+              progressed_continue->source_save == save,
+          "native Save As lost UTF-8 path, history, clock or selected source");
+    check(native_save_freedom(*progressed_continue, copy_path).has_value(),
+          "explicit native replacement failed");
+    const auto copied_continue = native_continue(copy_path);
+    check(copied_continue &&
+              copied_continue->document == progressed_continue->document,
+          "explicit native replacement did not preserve progressed state");
+    const auto copied_bytes = contents(copy_path);
+    const auto refuse_save = [&](const NativeStartup& selection,
+                                 const std::filesystem::path& destination) {
+      const auto refused = native_save_freedom(selection, destination);
+      check(!refused && !refused.error().empty() &&
+                contents(copy_path) == copied_bytes &&
+                contents(save) == encoded,
+            "native save refusal changed a source or lacked a diagnostic");
+    };
+    for (const auto& destination :
+         {std::filesystem::path{}, std::filesystem::path{"relative.json"},
+          directory / "missing-parent" / "save.json", directory,
+          std::filesystem::path{"/"},
+          std::filesystem::path{"/" + std::string(4'096, 'x')},
+          std::filesystem::path{copy_path.string() + std::string(1, '\0') +
+                                "suffix"}})
+      refuse_save(*progressed_continue, destination);
+    auto mismatched_selection = *progressed_continue;
+    mismatched_selection.mode = NativeStartup::Mode::legacy_career;
+    refuse_save(mismatched_selection, copy_path);
+    auto invalid_selection = *progressed_continue;
+    std::get<FreedomSaveDocument>(invalid_selection.document).state.tick =
+        std::numeric_limits<SimulationTick>::max();
+    refuse_save(invalid_selection, copy_path);
+    for (const auto& entry : std::filesystem::directory_iterator{directory})
+      check(entry.path().filename().string().find(".tmp.") == std::string::npos,
+            "failed native Save As left a temporary save behind");
     auto invalid_write = progressed;
     invalid_write.state.tick = std::numeric_limits<SimulationTick>::max();
     check(!write_freedom_save_file_atomically(save, invalid_write) &&
@@ -164,9 +221,11 @@ auto main() -> int {
           "legacy career Continue changed mode or state");
     check(!prepare_native_freedom_station_start(*legacy_continued),
           "legacy career save was accepted as a Freedom station start");
+    refuse_save(*legacy_continued, copy_path);
     NativeStartup forged_home{created->mode, created->document,
                               generate_planet_descriptor(Seed{99}),
                               created->source_save};
+    refuse_save(forged_home, copy_path);
     check(!prepare_native_freedom_station_start(std::move(forged_home)),
           "forged home descriptor was accepted by station bootstrap");
 

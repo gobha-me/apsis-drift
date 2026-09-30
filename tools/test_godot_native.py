@@ -45,6 +45,7 @@ TESTS = {
     "physical_world": "physical_snapshots",
     "freedom_start": "freedom_saves",
     "native_shell": "freedom_saves",
+    "native_save": "freedom_saves",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",

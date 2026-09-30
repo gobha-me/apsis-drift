@@ -41,4 +41,11 @@ struct NativeFreedomStationStart {
 [[nodiscard]] auto prepare_native_freedom_station_start(NativeStartup selected)
     -> std::expected<NativeFreedomStationStart, std::string>;
 
+// Explicit Save As of a supported station selection. Does not change the
+// selected source, clock or state. Destination must be bounded and absolute;
+// replacement/durability use the existing C++ atomic save owner.
+[[nodiscard]] auto native_save_freedom(const NativeStartup& selected,
+                                       const std::filesystem::path& destination)
+    -> std::expected<void, std::string>;
+
 } // namespace apsis_drift

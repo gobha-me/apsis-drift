@@ -143,7 +143,7 @@ newly generated universe or the mission-selected home planet.
   subsequently rejected synthesis experiment; it is not the current sound
   direction or an automatic fallback for missing recordings.
 - There is no water surface, collision, landing, walking, docking,
-  jump control, playable save-backed launch, save-writing bridge, HDR or SteamOS
+  jump control, playable save-backed flight, HDR or SteamOS
   validation. Controller mapping exists as an initial synthetic-input
   implementation, not hardware qualification.
   Streaming is experimental and opt-in; see study 04 for its measured limits.
@@ -172,7 +172,7 @@ does not create a walkable station or surface-flight state, advance the
 saved clock, or launch playable flight. That integration remains in
 [#291](https://github.com/gobha-me/apsis-drift/issues/291). Hosted GCC and
 Clang native-core jobs compile the live extension; the isolated Godot runtime
-contract below remains an explicit local check.
+contracts for selected starts, the shell and saving also run in hosted CI.
 
 ## Docked native start shell
 
@@ -187,8 +187,20 @@ The launcher configures a TermForge-free `build-native` and builds the C++
 bridge before opening the Godot scene. New Game uses the selected seed; Continue
 loads the selected v17 Freedom save without writing to it. The screen shows the
 C++ universe, system, station, craft, saved tick and discovery count. It is a
-docked-state shell with a Quit button, not flight or station exploration. The
+docked-state shell with Save As and Quit buttons, not flight or station exploration. The
 snapshot study remains available through `tools/run_godot_study.sh`.
+
+**Save As** opens a filesystem chooser with `.json` save files and confirmation
+before replacing an existing file. It calls `save_freedom_as(absolute_path)` in
+the bridge, which delegates the selected document to C++ `native_save_freedom`
+and the existing v17 atomic writer. New Game saves can then be selected with
+Continue; saved clocks, discoveries, world deltas and physical station geometry
+survive unchanged. Saving keeps the current selection and its original source
+identity intact. Cancellation does nothing, and failures appear in the view
+so another destination can be chosen. The writer preserves its existing
+durability diagnostics, including the case where replacement succeeded but
+directory synchronization failed. No save is written on launch or quit, and
+the unsaved study-flight session cannot use this operation.
 
 The shell's station-local 3D view places a provisional station pose marker at
 the origin and a plain host-planet silhouette from C++ relative ephemeris and
@@ -206,8 +218,11 @@ path. The native runtime contract below tests the shell with new, progressed,
 legacy and corrupt save fixtures.
 
 Hosted CI downloads the pinned official Godot 4.7.2 Linux archive, verifies
-its SHA-256, builds the TermForge-free bridge, and runs the `freedom_start` and
-`native_shell` headless contracts. It retains the runner report and process
+its SHA-256, builds the TermForge-free bridge, and runs the `freedom_start`,
+`native_shell` and `native_save` headless contracts. The saving contract compares
+real bridge-written bytes against C++ fixtures, reloads the selected station,
+and exercises the shell's actual button/dialog callbacks in isolated files.
+It retains the runner report and process
 logs as a short-lived CI artifact, including on failure. This runtime check
 does not run the editor import path tracked by
 [#276](https://github.com/gobha-me/apsis-drift/issues/276).
@@ -223,7 +238,7 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 
 This Linux runner stages the selected build's exporter and bridge, copies the
 test project, generates atmospheric/airless and C++ saved-start fixtures, and
-runs 34 explicitly listed contracts headlessly with Dummy audio. Each run gets
+runs 35 explicitly listed contracts headlessly with Dummy audio. Each run gets
 a fresh retained directory under `build-godot`, isolated preferences/cache,
 per-test logs and a JSON report with source/binary hashes. It does not build,
 download content, import the editor, launch a visible window or use private
