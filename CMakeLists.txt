@@ -145,6 +145,7 @@ add_library(apsis_drift_core STATIC
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
   src/physical_local_system.cpp
+  src/orbital_telemetry.cpp
   src/vacuum_dynamics.cpp
   src/touchdown.cpp
   src/intersystem_contract.cpp
@@ -355,6 +356,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME central-body-dynamics-contract COMMAND apsis-drift-central-body-tests)
   set_tests_properties(central-body-dynamics-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-orbital-telemetry-tests test/orbital_telemetry_test.cpp)
+  target_link_libraries(apsis-drift-orbital-telemetry-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-orbital-telemetry-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME orbital-telemetry-contract COMMAND apsis-drift-orbital-telemetry-tests)
+  set_tests_properties(orbital-telemetry-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
   target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-touchdown-tests PRIVATE

@@ -122,7 +122,8 @@ standalone v3 state with the same recipe and subsequent inputs, then require
 exact state bits, actuation and checksums at every continuation tick in GCC and
 Clang builds.
 
-Orbital speed/classification, rotating-surface telemetry, synchronous fixtures,
-explicit bounded `ORBIT HOLD`, atmospheric consumption of this gravity law,
-actual flight saves and native presentation remain follow-ups in #238/#291.
-Coordinate and force qualification alone do not close those parents.
+The separate [orbital observation provider](ORBITAL_TELEMETRY.md) in #323 adds
+orbital/surface motion measurements, classification and synchronous fixtures
+without controlling flight. Explicit bounded `ORBIT HOLD`, atmospheric
+consumption of this gravity law, actual flight saves and native presentation
+remain follow-ups in #238/#291. These foundations do not close those parents.
