@@ -29,13 +29,15 @@ struct RigidFrameHandoffError {
   std::optional<RigidBodyError> state_error;
   std::optional<LocalSystemError> ephemeris_error;
   std::optional<PlanetRotationError> rotation_error{};
+  std::optional<PhysicalLocalSystemError> physical_ephemeris_error{};
   friend auto operator==(const RigidFrameHandoffError&,
                          const RigidFrameHandoffError&) -> bool = default;
 };
 
 // Pure same-tick coordinate change, not a simulation step, dock/launch event or
 // force provider. Supports system_inertial <-> station_relative_inertial using
-// the authoritative origin station ephemeris. Their axes are identical: craft,
+// the explicitly selected catalog family's origin station ephemeris.
+// Their axes are identical: craft,
 // tick, quaternion and body angular velocity retain every bit. A validated
 // same-frame request is an exact identity, including planet_fixed. All other
 // planet-fixed transitions remain unsupported by this original overload.
@@ -57,6 +59,14 @@ struct RigidFrameHandoffError {
     const RigidBodyWorldContext& context, const RigidBodyState& source,
     const RigidFrameHandoffRequest& request,
     const PlanetRotationRecipe& rotation_recipe)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError>;
+
+// Same numerical transform, explicitly owned by the physical catalog family.
+// A legacy recipe/context cannot be substituted, even with matching IDs.
+[[nodiscard]] auto reframe_rigid_body(
+    const RigidBodyWorldContext& context, const RigidBodyState& source,
+    const RigidFrameHandoffRequest& request,
+    const PhysicalPlanetRotationRecipe& rotation_recipe)
     -> std::expected<RigidBodyState, RigidFrameHandoffError>;
 
 } // namespace apsis_drift

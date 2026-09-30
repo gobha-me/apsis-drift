@@ -1,5 +1,7 @@
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
+#include <type_traits>
+
 namespace apsis_drift {
 namespace {
 auto add(RigidVector3 a, RigidVector3 b) -> RigidVector3 {
@@ -60,11 +62,24 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
   // Successful station frame validation above proves this pointer exists and
   // matches the named canonical origin station. Use the final system-space
   // station p/v, not separately rounded host + host-relative components.
-  const auto station = resolve_origin_station_ephemeris(
-      context.system, *context.station, {source.tick, 0.0});
-  if (!station)
-    return std::unexpected{
-        RigidFrameHandoffError{Code::ephemeris_failure, {}, station.error()}};
+  const auto station =
+      [&]() -> std::expected<OriginStationEphemeris, RigidFrameHandoffError> {
+    if (const auto* physical = context.physical_owner()) {
+      const auto resolved = resolve_origin_station_ephemeris(
+          *physical, *context.station, {source.tick, 0.0});
+      if (!resolved)
+        return std::unexpected{RigidFrameHandoffError{
+            Code::ephemeris_failure, {}, {}, {}, resolved.error()}};
+      return *resolved;
+    }
+    const auto resolved = resolve_origin_station_ephemeris(
+        context.system, *context.station, {source.tick, 0.0});
+    if (!resolved)
+      return std::unexpected{RigidFrameHandoffError{
+          Code::ephemeris_failure, {}, resolved.error()}};
+    return *resolved;
+  }();
+  if (!station) return std::unexpected{station.error()};
   const auto transform = [to_system](double value, double origin) {
     return to_system ? value + origin : value - origin;
   };
@@ -88,10 +103,12 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
   return *result;
 }
 
-auto reframe_rigid_body(const RigidBodyWorldContext& context,
-                        const RigidBodyState& source,
-                        const RigidFrameHandoffRequest& request,
-                        const PlanetRotationRecipe& rotation_recipe)
+namespace {
+template <typename Recipe>
+auto reframe_rotating(const RigidBodyWorldContext& context,
+                      const RigidBodyState& source,
+                      const RigidFrameHandoffRequest& request,
+                      const Recipe& rotation_recipe)
     -> std::expected<RigidBodyState, RigidFrameHandoffError> {
   using Code = RigidFrameHandoffErrorCode;
   if (const auto valid = validate_rigid_body_state(context, source); !valid)
@@ -118,14 +135,34 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
         RigidFrameHandoffError{Code::unsupported_frame_pair, {}, {}}};
   const auto planet =
       to_fixed ? request.destination.planet : source.frame.planet;
-  if (planet != rotation_recipe.planet)
+  const auto recipe_planet = [&] {
+    if constexpr (std::is_same_v<Recipe, PhysicalPlanetRotationRecipe>)
+      return rotation_recipe.rotation.planet;
+    else
+      return rotation_recipe.planet;
+  }();
+  if (planet != recipe_planet)
     return std::unexpected{
         RigidFrameHandoffError{Code::invalid_rotation_recipe,
                                {},
                                {},
                                PlanetRotationError::owner_mismatch}};
   const auto geometry =
-      resolve_planet_rotation(context.system, rotation_recipe, source.tick);
+      [&]() -> std::expected<PlanetRotationGeometry, PlanetRotationError> {
+    if constexpr (std::is_same_v<Recipe, PhysicalPlanetRotationRecipe>) {
+      if (!context.physical_owner())
+        return std::unexpected{PlanetRotationError::owner_mismatch};
+      const auto resolved = resolve_planet_rotation(
+          *context.physical_owner(), rotation_recipe, source.tick);
+      if (!resolved) return std::unexpected{resolved.error()};
+      return resolved->geometry;
+    } else {
+      if (context.physical_owner())
+        return std::unexpected{PlanetRotationError::owner_mismatch};
+      return resolve_planet_rotation(context.system, rotation_recipe,
+                                     source.tick);
+    }
+  }();
   if (!geometry)
     return std::unexpected{RigidFrameHandoffError{
         Code::invalid_rotation_recipe, {}, {}, geometry.error()}};
@@ -176,6 +213,24 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
     return std::unexpected{
         RigidFrameHandoffError{Code::invalid_result, result.error(), {}}};
   return *result;
+}
+
+} // namespace
+
+auto reframe_rigid_body(const RigidBodyWorldContext& context,
+                        const RigidBodyState& source,
+                        const RigidFrameHandoffRequest& request,
+                        const PlanetRotationRecipe& rotation_recipe)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError> {
+  return reframe_rotating(context, source, request, rotation_recipe);
+}
+
+auto reframe_rigid_body(const RigidBodyWorldContext& context,
+                        const RigidBodyState& source,
+                        const RigidFrameHandoffRequest& request,
+                        const PhysicalPlanetRotationRecipe& rotation_recipe)
+    -> std::expected<RigidBodyState, RigidFrameHandoffError> {
+  return reframe_rotating(context, source, request, rotation_recipe);
 }
 
 } // namespace apsis_drift

@@ -97,7 +97,15 @@ auto station_matches(const OriginStationDescriptor& actual,
 auto validate_frame(const RigidBodyWorldContext& context,
                     const RigidCoordinateFrame& frame)
     -> std::expected<void, RigidBodyError> {
-  if (!validate_local_system(context.system))
+  const auto* physical = context.physical_owner();
+  if (physical ? !validate_local_system(*physical)
+               : !validate_local_system(context.system))
+    return std::unexpected{RigidBodyError::invalid_world_context};
+  if (physical && context.station != nullptr &&
+      (physical->origin_universe_seed != context.station->universe_seed ||
+       context.station->home_system_seed != context.system.seed ||
+       !station_matches(*context.station, generate_origin_station(
+                                              context.station->universe_seed))))
     return std::unexpected{RigidBodyError::invalid_world_context};
   if (frame.system != context.system.id)
     return std::unexpected{RigidBodyError::unknown_system};
@@ -121,6 +129,8 @@ auto validate_frame(const RigidBodyWorldContext& context,
         return std::unexpected{RigidBodyError::unknown_station};
       if (context.system.kind != LocalSystemKind::origin_home ||
           context.station->home_system_seed != context.system.seed ||
+          (physical &&
+           physical->origin_universe_seed != context.station->universe_seed) ||
           !station_matches(
               *context.station,
               generate_origin_station(context.station->universe_seed)) ||
@@ -225,6 +235,44 @@ auto read_vector(const Json& values) -> RigidVector3 {
 auto vector_json(RigidVector3 vector) -> Json {
   return Json::array({decimal(vector.x), decimal(vector.y), decimal(vector.z)});
 }
+auto physical_owner_json(const PhysicalLocalSystem& owner) -> Json {
+  return {{"family", kPhysicalLocalSystemRecipeFamily},
+          {"version", kPhysicalRigidBodyOwnerVersion},
+          {"generator", owner.generator_version},
+          {"source_catalog_generator", owner.source_catalog_generator},
+          {"ephemeris_version", owner.ephemeris_version},
+          {"system_seed", std::to_string(owner.catalog.seed.value)},
+          {"catalog_kind", owner.catalog.kind == LocalSystemKind::origin_home
+                               ? "origin_home"
+                               : "procedural"},
+          {"origin_universe_seed",
+           owner.origin_universe_seed
+               ? Json(std::to_string(owner.origin_universe_seed->value))
+               : Json(nullptr)}};
+}
+auto validate_physical_owner_json(const Json& data,
+                                  const PhysicalLocalSystem& owner) -> void {
+  require_keys(data, {"family", "version", "generator",
+                      "source_catalog_generator", "ephemeris_version",
+                      "system_seed", "catalog_kind", "origin_universe_seed"});
+  if (read_version(data.at("version")) != kPhysicalRigidBodyOwnerVersion ||
+      read_version(data.at("generator")) != owner.generator_version ||
+      read_version(data.at("source_catalog_generator")) !=
+          owner.source_catalog_generator ||
+      read_version(data.at("ephemeris_version")) != owner.ephemeris_version)
+    throw RigidBodyError::unsupported_version;
+  const std::optional<Seed> universe =
+      data.at("origin_universe_seed").is_null()
+          ? std::nullopt
+          : std::optional{Seed{read_u64(data.at("origin_universe_seed"))}};
+  if (text(data.at("family")) != kPhysicalLocalSystemRecipeFamily ||
+      read_u64(data.at("system_seed")) != owner.catalog.seed.value ||
+      text(data.at("catalog_kind")) !=
+          (owner.catalog.kind == LocalSystemKind::origin_home ? "origin_home"
+                                                              : "procedural") ||
+      universe != owner.origin_universe_seed)
+    throw RigidBodyError::owner_mismatch;
+}
 } // namespace
 
 auto normalize_rigid_orientation(RigidOrientation orientation)
@@ -294,8 +342,25 @@ auto rigid_body_state_checksum(const RigidBodyWorldContext& context,
       value >>= 8U;
     }
   };
-  for (const char c : std::string_view{"apsis-rigid-body-v1"})
+  const auto* physical = context.physical_owner();
+  const std::string_view domain =
+      physical ? "apsis-physical-rigid-body-v2" : "apsis-rigid-body-v1";
+  for (const char c : domain)
     integer(static_cast<unsigned char>(c), 1);
+  if (physical) {
+    integer(1, 1); // physical_circular family, distinct from legacy v1.
+    integer(kPhysicalRigidBodyOwnerVersion, 4);
+    integer(physical->generator_version, 4);
+    integer(physical->source_catalog_generator, 4);
+    integer(physical->ephemeris_version, 4);
+    integer(physical->catalog.seed.value, 8);
+    integer(static_cast<std::uint8_t>(physical->catalog.kind), 1);
+    integer(physical->origin_universe_seed.has_value() ? 1U : 0U, 1);
+    integer(physical->origin_universe_seed
+                ? physical->origin_universe_seed->value
+                : 0U,
+            8);
+  }
   integer(state.craft.id.value, 8);
   integer(state.craft.version, 4);
   integer(static_cast<std::uint8_t>(state.frame.kind), 1);
@@ -328,9 +393,11 @@ auto encode_rigid_body_state_json(const RigidBodyWorldContext& context,
     const Json station = state.frame.station
                              ? Json(std::to_string(state.frame.station->value))
                              : Json(nullptr);
-    const Json result{
+    const auto* physical = context.physical_owner();
+    Json result{
         {"format", format_name},
-        {"version", kRigidBodyStateVersion},
+        {"version",
+         physical ? kPhysicalRigidBodyStateVersion : kRigidBodyStateVersion},
         {"craft",
          {{"id", std::to_string(state.craft.id.value)},
           {"version", state.craft.version}}},
@@ -349,6 +416,7 @@ auto encode_rigid_body_state_json(const RigidBodyWorldContext& context,
          vector_json(state.linear_velocity_metres_per_second)},
         {"angular_velocity_radians_per_second",
          vector_json(state.angular_velocity_radians_per_second)}};
+    if (physical) result["owner"] = physical_owner_json(*physical);
     auto encoded = result.dump();
     if (encoded.size() > kMaximumRigidBodyDocumentBytes)
       return std::unexpected{RigidBodyError::document_too_large};
@@ -383,13 +451,29 @@ auto decode_rigid_body_state_json(const RigidBodyWorldContext& context,
           return true;
         };
     const Json data = Json::parse(document, callback);
-    require_keys(data, {"format", "version", "craft", "frame", "tick",
-                        "position_metres", "orientation_wxyz",
-                        "linear_velocity_metres_per_second",
-                        "angular_velocity_radians_per_second"});
-    if (text(data.at("format")) != format_name ||
-        read_version(data.at("version")) != kRigidBodyStateVersion)
-      throw RigidBodyError::unsupported_version;
+    const auto* physical = context.physical_owner();
+    if (physical) {
+      if (!data.is_object()) throw RigidBodyError::invalid_type;
+      if (!data.contains("format") || !data.contains("version"))
+        throw RigidBodyError::missing_field;
+      if (text(data.at("format")) != format_name ||
+          read_version(data.at("version")) != kPhysicalRigidBodyStateVersion)
+        throw RigidBodyError::unsupported_version;
+      require_keys(data, {"format", "version", "craft", "frame", "tick",
+                          "position_metres", "orientation_wxyz",
+                          "linear_velocity_metres_per_second",
+                          "angular_velocity_radians_per_second", "owner"});
+      validate_physical_owner_json(data.at("owner"), *physical);
+    } else {
+      // Keep legacy v1 structural validation and error ordering unchanged.
+      require_keys(data, {"format", "version", "craft", "frame", "tick",
+                          "position_metres", "orientation_wxyz",
+                          "linear_velocity_metres_per_second",
+                          "angular_velocity_radians_per_second"});
+      if (text(data.at("format")) != format_name ||
+          read_version(data.at("version")) != kRigidBodyStateVersion)
+        throw RigidBodyError::unsupported_version;
+    }
     const auto& craft = data.at("craft");
     require_keys(craft, {"id", "version"});
     const auto& frame = data.at("frame");
