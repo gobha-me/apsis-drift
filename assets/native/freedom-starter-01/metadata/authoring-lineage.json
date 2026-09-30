@@ -1,0 +1,3113 @@
+{
+  "schema": "apsis.archived-authoring-lineage/1",
+  "scope": "Historical source records; original file paths are evidence, not runtime dependencies",
+  "registry_sha256": "c53ef7408f898d883149350bd74242554ae1e670b6b1bfc8ec60a8fd09fb433a",
+  "compression": "XZ preset6; split into ordered 32 MiB chunks; exact decoded GLB bytes",
+  "licenses": [
+    {
+      "name": "FIRST_LIGHT_GENERATED_OUTPUT.md",
+      "authoring_sha256": "d8b8267bca31705f67e97e64f22c555697c2dd9732762788ca261b19f4cb64c4",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "FREEDOM_PREVIEW_01.md",
+      "authoring_sha256": "8af2d29fad1576d6b5d9d65f5c2d337ad179819d95b1bfbbb8540abaa51d65c3",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "HOPPER_GENERATED_CONCEPTS.md",
+      "authoring_sha256": "e38e418647f8980f2eb8a1aa7a67645595e646c111fbcb2caf3f019c07b84d97",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "HOPPER_MESHY_TRIAL.md",
+      "authoring_sha256": "b4a619c8535bcc86abacd90308706eb242c97617b836531f666ceea3e6bd65f9",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "MESHY_QUALIFICATION_OUTPUT.md",
+      "authoring_sha256": "8a3fe31808f89c52b65d5310a4d278d8b998c9176e6663025076a0e8e9c47783",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "SABLE_COURIER.md",
+      "authoring_sha256": "76dc2428d3864e0bac87290550ea19f3631dc1e5cdd64a79e0445be2bc59b9b1",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "SABLE_HOPPER_01.md",
+      "authoring_sha256": "d307db98a4911a960fd5168a1fb75164898ebc4d4fbac040c3b69153836ab409",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "STATION_HUMAN_REFERENCE.md",
+      "authoring_sha256": "2b4d12bf4afbddc6602a5f44532c4f053dde242fc2664f398e65d4e7f5043e89",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    },
+    {
+      "name": "STATION_KIT_01.md",
+      "authoring_sha256": "ad44f64dea9307ae33bc4285a207a532ff849cc3c4c77fd618b2c7adc7cf678b",
+      "packaging_edit": "BSD link points to adjacent LICENSE.md"
+    }
+  ],
+  "assets": [
+    {
+      "id": "visual/hopper-airlock-study-01",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_airlock_study.py",
+        "assets/visual/hopper-airlock-study-01.blend",
+        "assets/visual/hopper-airlock-study-01-checks.json",
+        "docs/media/hopper-airlock-study-01/assembly.png",
+        "docs/media/hopper-airlock-study-01/airlock.png",
+        "docs/media/hopper-airlock-study-01/passage.png",
+        "docs/media/hopper-airlock-study-01/services.png",
+        "docs/media/hopper-airlock-study-01/separated.png",
+        "docs/media/hopper-airlock-study-01/airlock-motion.mp4"
+      ],
+      "purpose": "Editable shared Ox/Fox airlock and detachable cockpit interface packaging, explicit service routes and local survival envelopes; actual Blender review renders and authored motion, not a qualified escape system",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original Blender geometry built from repository-authored seat/core helpers without loading existing Blender masters or parallel character files. Revised I-section chassis, nested pressure enclosure, telescoping door leaves, split structural joint, service disconnects, racks and survival-equipment allowances. Native materials and built-in font. Cycles stills with explicit inspection cutaways; 141-frame Workbench sequence encoded to H.264 at 12 fps. Accepted paired concept is a non-embedded appearance reference. No runtime simulation or RNG changes.",
+        "derived_inputs": [
+          "visual/hopper-seat-study-01",
+          "visual/hopper-core-frame-01"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-clean-08-input",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-clean-08-prepared.blend",
+        "assets/visual/hopper-clean-08-input.glb",
+        "assets/visual/hopper-clean-08-input-checks.json"
+      ],
+      "purpose": "UV-prepared retained Wayfarer assembly and disposable exterior texture proxy",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-07"
+        ],
+        "transformation": "Reserve existing generated UV atlas beside isolated authored panel islands; export reduced proxy only; retain original full-detail mesh, modifiers and animation in prepared assembly",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_hopper_clean08.py"
+        ],
+        "date": "2026-09-25"
+      }
+    },
+    {
+      "id": "visual/hopper-clean-08-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/hopper-clean-08-raw.glb",
+        "assets/visual/hopper-clean-08-ledger.json"
+      ],
+      "purpose": "Untouched clean-finish retexture trial and task ledger; returned geometry is not the ship master",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Retexture API local model data URI; MCP status/download",
+        "model": "meshy-7",
+        "model_version": "Provider alias; underlying model build not disclosed",
+        "prompt": "{\"input\": \"visual/hopper-clean-08-input\", \"settings\": {\"ai_model\": \"meshy-7\", \"enable_original_uv\": true, \"enable_pbr\": true, \"texture_resolution\": \"8k\", \"target_formats\": [\"glb\"], \"text_style_prompt\": \"Factory-new civilian exploration spacecraft, premium believable manufactured finish. Satin warm ivory painted metal upper hull and engine cowls, graphite ceramic thermal protection on the underside, clean titanium around exhaust outlets. Precise narrow panel joints, flush fasteners, restrained amber service accents. Consistent finish from nose to rear covers. Fine material grain, realistic restrained metal reflectivity. No dirt, rust, scratches, chipped paint, scorch, damage, camouflage, large graphics, lettering or baked lighting. Preserve all modeled construction detail.\"}}",
+        "generation_date": "2026-09-25",
+        "source_output": "Task 01a0d914-fe89-75c5-92fc-75e86fc5d4ca; 15 credits; SHA-256 db927eafb98189ac0c482e5c344fd90ff7db5db30fa50c51b7070960d8740129",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/hopper-cockpit-study-02",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_cockpit_study.py",
+        "assets/visual/hopper-cockpit-study-02.blend",
+        "assets/visual/hopper-cockpit-study-02-checks.json",
+        "docs/media/hopper-cockpit-study-02/canopy.png",
+        "docs/media/hopper-cockpit-study-02/boarding.png",
+        "docs/media/hopper-cockpit-study-02/flight-cutaway.png",
+        "docs/media/hopper-cockpit-study-02/pack-rack.png",
+        "docs/media/hopper-cockpit-study-02/separated.png",
+        "docs/media/hopper-cockpit-study-02/eye-tall-low.png",
+        "docs/media/hopper-cockpit-study-02/eye-tall-high.png",
+        "docs/media/hopper-cockpit-study-02/eye-compact-raised.png",
+        "docs/media/hopper-cockpit-study-02/seat-transfer.mp4",
+        "docs/media/hopper-cockpit-study-02/eye-glazing-material.png"
+      ],
+      "purpose": "Editable shared Ox/Fox six-pane curved cockpit, lowered well and revised occupied seat transfer with retained airlock/separation assembly and an EVA-pack cradle; layout and motion study, not qualified flight or escape hardware; pane topology superseded by visual/hopper-cockpit-study-03",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original Blender mesh/curve geometry rebuilt from repository-authored airlock, seat and core helpers. Continuous I-section canopy sweeps, six separate curved glazing panels, gaskets, rounded local chin, lowered well, longer seat transfer, adjusted services and removable EVA-pack envelope. Native materials and built-in font. Cycles review images with documented cutaways and Workbench motion encoded as H.264, 121 frames at 12 fps. No existing Blender master, parallel character, texture or reference-image pixels loaded. Concept board is a non-embedded appearance reference. No runtime simulation or RNG changes. Three eye-aperture views hide glazing for geometry inspection; a separate eye material render retains glazing and its unresolved studio reflections.",
+        "derived_inputs": [
+          "visual/hopper-airlock-study-01",
+          "visual/hopper-seat-study-01"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-common-core-05",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_common_core05.py",
+        "assets/visual/hopper-common-core-05.blend",
+        "assets/visual/hopper-common-core-05-checks.json",
+        "docs/media/hopper-common-core-05/common-core.png",
+        "docs/media/hopper-common-core-05/structure.png",
+        "docs/media/hopper-common-core-05/section.png",
+        "docs/media/hopper-common-core-05/service-open.png",
+        "docs/media/hopper-common-core-05/cassette-out.png",
+        "docs/media/hopper-common-core-05/service-access.mp4"
+      ],
+      "purpose": "Editable shared Hopper core with bounded central-body curvature, common variant receivers and an animated cabin-access service well whose pressure tray remains stationary; no Ox/Fox outer bodies or cockpit glazing",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry rebuilt through repository structure-envelope 04, cockpit, airlock, seat and core helpers. Continuous curved secondary rings, shared roof/side/belly fitting panels, limited variant receiver pads and links. Local sealed pressure-tray layout beneath a lifting cargo deck cover, supported power/data modules, separate branches beneath primary keels and a blind-mate cassette dock. Authored 81-frame cover-opening and cassette-extraction motion. Native materials and built-in-font equipment/access markings; no prior master, external character or reference-image pixels loaded. Five Cycles review stills with documented cutaways and Workbench motion encoded as H.264 at 12 fps. Concept board consulted as a non-embedded proportion reference. No runtime or RNG changes.",
+        "derived_inputs": [
+          "visual/hopper-structure-envelope-04"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-core-frame-01",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_core_frame.py",
+        "assets/visual/hopper-core-frame-01.blend",
+        "assets/visual/hopper-core-frame-01-checks.json",
+        "docs/media/hopper-core-frame-01/assembly.png",
+        "docs/media/hopper-core-frame-01/rear.png",
+        "docs/media/hopper-core-frame-01/side.png",
+        "docs/media/hopper-core-frame-01/keel-detail.png"
+      ],
+      "purpose": "Original editable shared Ox/Fox rear-to-nose core frame with I-section structure, standing-clearance gauge, explicit utility routing and candidate dual-use coolant members; layout proposal, not structural or flight qualification",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-22",
+        "construction": "Original Blender 5.2 mesh construction from a factory-startup scene using repository-authored primitive helpers from build_hopper_study.py. Continuous open I profiles, planned sleeved web bores, hollow conduit profiles, representative mounting joints and original abstract height gauge. Cycles renders of the same assembly, Blender built-in font and materials. No external models, textures, character-session files or reference image pixels are embedded. Generated paired concept informs general proportions only. Object metadata distinguishes fluid-carrying structure from supported pipes; no world RNG or runtime flight state consumed.",
+        "derived_inputs": [
+          "visual/hopper-study-01"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-craft-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-01.blend",
+        "assets/visual/hopper-craft-01-checks.json",
+        "assets/visual/hopper-craft-01-assembly-checks.json",
+        "assets/visual/hopper-craft-01-pilot-checks.json",
+        "assets/visual/hopper-craft-01-docking-checks.json"
+      ],
+      "purpose": "Wayfarer working unique Hopper: high-poly single-aft-airlock craft and saved assembly checks",
+      "edits": [
+        "Retained Meshy nose/shoulders and surviving source UVs; local functional hull cuts",
+        "Integrated original-scale engines and adjustable seat, authored cabin, aft airlock, docking hatch, protected gear and six-pane canopy",
+        "Added offline mechanism animation and illustrative interior sensor projection"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship exterior and life-support cassette with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-meshy-pack-01",
+          "visual/hopper-engine-01",
+          "visual/hopper-ships-11",
+          "visual/meshy-qualification-ship-01"
+        ],
+        "transformation": "Local source geometry excision and part separation; original-scale component assembly; authored cabin/systems/interfaces; sampled mechanisms and independent installed-clearance checks. No API generation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft01.py",
+          "tools/asset_history/check_hopper_craft01.py",
+          "tools/asset_history/check_hopper_craft_pilot01.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-02",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-02.blend",
+        "assets/visual/hopper-craft-02-checks.json",
+        "assets/visual/hopper-craft-02-review-checks.json",
+        "assets/visual/hopper-craft-02-shield-checks.json",
+        "assets/visual/hopper-craft-02-assembly-checks.json",
+        "assets/visual/hopper-craft-02-docking-checks.json"
+      ],
+      "purpose": "Wayfarer detailed five-pass owner review before runtime conversion: cockpit, cabin finish, interfaces, shields/service and escape cockpit",
+      "edits": [
+        "Three readable instrument displays and preview states; lined sills and cockpit lighting",
+        "Cabin material grain, deck/service details and hinged distribution cover",
+        "Precise narrow nose partition and paired normally-open emergency closures",
+        "Continuous guide-to-spool blast blankets and reaction-core service sequence",
+        "Independent nose reserve air, battery, beacon and stowed recovery pack; staged service release and separation",
+        "Independent pod side pressure liners between tub and canopy; installed engine-child transform preservation audit"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship exterior and life-support cassette with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-01"
+        ],
+        "transformation": "Local Blender geometry, retained source UVs and unchanged-size library components, native animation and scoped saved-file checks. Original master preserved. No API generation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft02.py",
+          "tools/asset_history/check_hopper_craft02.py",
+          "tools/asset_history/check_hopper_shields02.py",
+          "tools/asset_history/check_hopper_craft02_inherited.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-03",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-03.blend",
+        "assets/visual/hopper-craft-03-checks.json",
+        "assets/visual/hopper-craft-03-shield-checks.json",
+        "assets/visual/hopper-craft-03-cockpit-checks.json",
+        "assets/visual/hopper-craft-03-review-checks.json"
+      ],
+      "purpose": "Wayfarer owner review: concealed blast covers and actual-eye widescreen/TV instrument layout",
+      "edits": [
+        "Remove exposed shield coils and cassettes; shallow brow-fed smooth armor with intentionally abstracted storage",
+        "Move physical display rack 22 cm forward, raise screens and bring side screens inward",
+        "Larger default flight values, actual-eye 16:9 and 16:10 framing and TV focus comparison"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship exterior and life-support cassette with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-02"
+        ],
+        "transformation": "Localized Blender refinement from frozen review 02; no API generation or runtime conversion.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft03.py",
+          "tools/asset_history/hopper_cockpit03.py",
+          "tools/asset_history/review_hopper_craft03.py",
+          "tools/asset_history/review_hopper_cockpit03.py",
+          "tools/asset_history/check_hopper_craft03_fit.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-04",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-04.blend",
+        "assets/visual/hopper-craft-04-assembly-checks.json",
+        "assets/visual/hopper-craft-04-cockpit-checks.json",
+        "assets/visual/hopper-craft-04-delivery-checks.json",
+        "assets/visual/hopper-craft-04-docking-checks.json",
+        "assets/visual/hopper-craft-04-review-checks.json",
+        "assets/visual/hopper-craft-04-shield-checks.json",
+        "assets/visual/hopper-craft-04-checks.json"
+      ],
+      "purpose": "Wayfarer review: paired rebuilt engine cartridges, service hoods and optical polish",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-03",
+          "visual/hopper-engine-02"
+        ],
+        "transformation": "Install identical unit-scale cartridges; divide fixed lower VTOL and removable engine; fit service wells, upper hoods, insulated liners and split nozzle surrounds; clear canopy backing",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft04.py",
+          "tools/asset_history/hopper_polish04.py",
+          "tools/asset_history/check_hopper_craft04.py",
+          "tools/asset_history/check_hopper_craft04_inherited.py",
+          "tools/asset_history/render_hopper_craft04.py",
+          "tools/asset_history/verify_hopper04_delivery.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-05",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-05.blend",
+        "assets/visual/hopper-craft-05-checks.json"
+      ],
+      "purpose": "High-detail UV binding and rear landing-bay/chassis fit repair after native playtests",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-04"
+        ],
+        "transformation": "Preserve texture coordinates while normalizing UV-layer names; refit rear fairing roots against current stationary shell; dense root sampling, formed mounting flanges and explicit paint/thermal material zones; retain mechanism openings",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft05.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-06",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-06.blend",
+        "assets/visual/hopper-craft-06-checks.json"
+      ],
+      "purpose": "Belly-stowed outward-splaying rear landing gear and reduced VTOL outlet projection",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-05"
+        ],
+        "transformation": "Replace hanging rear housings with shallow belly bays, staged doors/fold/extension and rounded aft undertrays; shorten lower VTOL ducts while retaining aperture and engine size; preserve cockpit and mapped materials",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft06.py",
+          "tools/asset_history/hopper_belly_gear06.py"
+        ],
+        "date": "2026-09-25"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-07",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-07.blend",
+        "assets/visual/hopper-craft-07-checks.json",
+        "assets/visual/hopper-craft-07-independent-checks.json"
+      ],
+      "purpose": "Bounded aft panel finish and mirrored-normal correction, preserving Wayfarer geometry and gear motion",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-06",
+          "visual/hopper-craft-07-finishes"
+        ],
+        "transformation": "Apply baked authored paint/thermal panel finishes; reverse starboard undertray winding with compensated solidify offset. Preserve mesh positions, gear motion, engines and cockpit.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft07.py",
+          "tools/asset_history/check_hopper_craft07.py"
+        ],
+        "date": "2026-09-25"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-07-finishes",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "assets/visual/hopper-craft-07-painted-alloy-base-color.png",
+        "assets/visual/hopper-craft-07-painted-alloy-roughness.png",
+        "assets/visual/hopper-craft-07-thermal-panel-base-color.png",
+        "assets/visual/hopper-craft-07-thermal-panel-roughness.png"
+      ],
+      "purpose": "Original baked painted-alloy and thermal base-color/roughness maps for Wayfarer aft covers",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-25",
+        "construction": "Original deterministic Blender shader nodes baked to four 1024-square maps by tools/asset_history/build_hopper_craft07.py; no external texture inputs",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "visual/hopper-craft-08",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-08.blend",
+        "assets/visual/hopper-clean-08-return-checks.json",
+        "assets/visual/hopper-clean-08-integration.json",
+        "assets/visual/hopper-clean-08-verification.json"
+      ],
+      "purpose": "Factory-new exterior finish candidate on preserved full-detail Wayfarer geometry and animation",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-clean-08-input",
+          "visual/hopper-clean-08-raw"
+        ],
+        "transformation": "Verified material-only return on nine retained generated skin sections. Keep twelve authored covers with their original Craft07 finish and UVs after whole-atlas native review. Local satin coat tuning; preserve original geometry, hierarchy, modifiers and animation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/check_hopper_clean08_return.py",
+          "tools/asset_history/integrate_hopper_clean08.py",
+          "tools/asset_history/verify_hopper_clean08.py"
+        ],
+        "date": "2026-09-25"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-09",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-craft-09.blend",
+        "assets/visual/hopper-craft-09-checks.json",
+        "assets/visual/hopper-craft-09-independent-checks.json"
+      ],
+      "purpose": "Factory appearance pass with swept aft cradles, rounded belly surround corners, matched covers and corrected nozzle-cowl release clearance",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-08",
+          "visual/hopper-craft-09-finishes"
+        ],
+        "transformation": "Change four local fairings and twelve authored cover materials; retain all other authored meshes, hierarchy, engine size, canopy, seat and sampled animation. Preserve Craft08.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_craft09.py",
+          "tools/asset_history/check_hopper_craft09.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/hopper-craft-09-finishes",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "assets/visual/hopper-craft-09-painted-alloy-base-color.png",
+        "assets/visual/hopper-craft-09-painted-alloy-roughness.png",
+        "assets/visual/hopper-craft-09-thermal-panel-base-color.png",
+        "assets/visual/hopper-craft-09-thermal-panel-roughness.png"
+      ],
+      "purpose": "Matched clean painted-alloy and thermal finishes for twelve authored Wayfarer covers",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-28",
+        "construction": "Original Craft07 procedural panel pattern rebaked by tools/asset_history/build_hopper_craft09.py, with restrained grain, satin response and coating palette sampled from adjacent Craft08 hull paint",
+        "derived_inputs": [
+          "visual/hopper-craft-07-finishes",
+          "visual/hopper-craft-08"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-engine-01",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_engine01.py",
+        "tools/asset_history/hopper_engine_service_detail.py",
+        "assets/visual/hopper-engine-01.blend",
+        "assets/visual/hopper-engine-01-checks.json",
+        "assets/visual/hopper-engine-01-interface.json",
+        "docs/media/hopper-engine-01/assembly.png",
+        "docs/media/hopper-engine-01/forward.png",
+        "docs/media/hopper-engine-01/aft-nozzle.png",
+        "docs/media/hopper-engine-01/vtol.png",
+        "docs/media/hopper-engine-01/flow-cutaway.png",
+        "docs/media/hopper-engine-01/service.png",
+        "docs/media/hopper-engine-01/transition.mp4"
+      ],
+      "purpose": "Complete editable Hopper propulsion library assembly: hollow hot path, coordinated metering gates, sliding VTOL covers, bounded trim vanes, carrier frame and connected service detail; same scale-1 machinery for Ox and Fox",
+      "edits": [
+        "Independent mechanism, packaging and service reviews; corrected chamber outlet, moving drive clearances and routed connections before final rendering",
+        "Native render-only half-section preserves full geometry in the marked asset collection"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry, procedural materials and keyed mechanism animation authored by build_hopper_engine01.py and hopper_engine_service_detail.py using existing repository primitive helpers; Blender 5.2.2 LTS CPU Cycles stills and Workbench motion, encoded with FFmpeg. Existing paired concept consulted for proportions; no concept pixels, external textures or third-party meshes embedded.",
+        "derived_inputs": [
+          "visual/hopper-study-01",
+          "visual/hopper-core-frame-01",
+          "visual/hopper-seat-study-01"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-engine-02",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-engine-02-source.blend",
+        "assets/visual/hopper-engine-02-source-checks.json",
+        "assets/visual/hopper-engine-02.blend",
+        "assets/visual/hopper-engine-02-checks.json",
+        "assets/visual/hopper-engine-02-baseline.json"
+      ],
+      "purpose": "High-detail removable propulsion cartridge and measured source study",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-engine-02-meshy",
+          "visual/hopper-engine-01",
+          "visual/hopper-craft-03"
+        ],
+        "transformation": "Uniform source normalization; open measured duct and retained square nozzle; sealed front, mounting skids, lifting bridges and service interfaces",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/probe_hopper_engine02.py",
+          "tools/asset_history/inspect_hopper_engine02_source.py",
+          "tools/asset_history/build_hopper_engine02.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-engine-02-meshy",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/hopper-engine-02-meshy.glb",
+        "assets/visual/hopper-engine-02-ledger.json",
+        "assets/visual/hopper-engine-02-meshy-base-color.png",
+        "assets/visual/hopper-engine-02-meshy-metallic.png",
+        "assets/visual/hopper-engine-02-meshy-normal.png",
+        "assets/visual/hopper-engine-02-meshy-roughness.png"
+      ],
+      "purpose": "Unchanged high-detail engine source, PBR maps and paid generation ledger",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "meshy_image_to_3d",
+        "model": "meshy-7",
+        "model_version": "Provider alias; underlying build not disclosed",
+        "prompt": "{\"input\": \"visual/hopper-engine-02-reference\", \"parameters\": {\"ultra_mode\": true, \"should_remesh\": false, \"should_texture\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"]}}",
+        "generation_date": "2026-09-24",
+        "source_output": "Task 01a0d486-b113-7310-acf8-fc8efedcd69e; SHA-256 f319dae705c42398955eaa40d4398e321e79cbb5b0e312d370d7e83dec2939df",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/hopper-front-gear-06",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_front_gear06.py",
+        "assets/visual/hopper-front-gear-06.blend",
+        "assets/visual/hopper-front-gear-06-checks.json",
+        "docs/media/hopper-front-gear-06/assembly.png",
+        "docs/media/hopper-front-gear-06/stowed.png",
+        "docs/media/hopper-front-gear-06/deployed.png",
+        "docs/media/hopper-front-gear-06/belly.png",
+        "docs/media/hopper-front-gear-06/gear-cycle.mp4"
+      ],
+      "purpose": "Shared retracting front landing-gear packaging under the Hopper airlock, local curved deeper belly, keel-mounted cradle and external bay doors; editable master and motion review",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Native Blender geometry and materials, derived by opening repository common-core 05 master and saving a separate study. Local fitting fairing, exterior bay liners, reinforced mounting proposal, oleo leg, levelled foot, telescoping retraction actuator and two sequenced doors. Baked deployment and reverse retraction, four Cycles stills and Workbench motion encoded to H.264. No external models or image pixels imported. Shared Ox/Fox concept consulted as proportion reference. No runtime changes.",
+        "derived_inputs": [
+          "visual/hopper-common-core-05"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-gear-detail-07",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_gear_detail07.py",
+        "assets/visual/hopper-gear-detail-07.blend",
+        "assets/visual/hopper-gear-detail-07-checks.json",
+        "docs/media/hopper-gear-detail-07/fox-stance.png",
+        "docs/media/hopper-gear-detail-07/ox-stance.png",
+        "docs/media/hopper-gear-detail-07/lock-detail.png",
+        "docs/media/hopper-gear-detail-07/lock-cutaway.png",
+        "docs/media/hopper-gear-detail-07/mount-detail.png",
+        "docs/media/hopper-gear-detail-07/stance-plan.png",
+        "docs/media/hopper-gear-detail-07/lock-cycle.mp4"
+      ],
+      "purpose": "Editable shared front landing-gear positive lock and sealed mounting detail, with separate Fox/Ox rear stowage and footprint reservations; animated pin interlock study",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Native Blender geometry derived from saved front-gear 06. Machined two-position locking plate, sliding pin and service cassette, revised four reinforced pressure-floor penetrations with seals and collars, alternative rear bay/foot guides and illustrative projected balance region. Baked 216-frame sequenced lock, door and gear motion. Six Cycles stills and a Workbench cutaway motion preview encoded as H.264. Built-in font markings. No external models or reference image pixels imported; paired concept consulted for design continuity. No runtime changes.",
+        "derived_inputs": [
+          "visual/hopper-front-gear-06"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-meshy-ox-01",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/hopper-meshy-ox-01.glb",
+        "assets/visual/hopper-meshy-ox-01-generation.json"
+      ],
+      "purpose": "Frozen high-detail Meshy Ox exterior and generation receipt for evaluation; not an accepted operational ship",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; exterior generated by Meshy 7 from an OpenAI-generated Hopper reference"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Official @meshy-ai/meshy-mcp-server 0.5.2 image-to-3d",
+        "model": "meshy-7",
+        "model_version": "Provider API alias meshy-7; underlying build not disclosed",
+        "prompt": "{\"input\": \"visual/hopper-meshy-ox-01-input\", \"parameters\": {\"file_path\": \"assets/visual/hopper-meshy-ox-01-input.png\", \"ai_model\": \"meshy-7\", \"model_type\": \"standard\", \"ultra_mode\": true, \"should_remesh\": false, \"should_texture\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"multi_view_thumbnails\": true, \"auto_size\": false, \"texture_prompt\": \"Believable industrial explorer spacecraft. Warm ivory ceramic-coated metal upper hull, charcoal thermal protection on belly and nose, dark glossy cockpit glass, precise machined steel mechanisms, restrained amber service markings, fine deliberate panel seams and subtle wear. Preserve reference layout and markings. No painted background or ground shadow.\", \"response_format\": \"json\"}}",
+        "generation_date": "2026-09-24",
+        "source_output": "Task 01a0d33f-eb59-74ec-8e96-71824b311088; unchanged GLB SHA-256 c536dd0b4163936a4abeb857f952d29ecf9a21292d9a8dd3128df7a9a484d3db",
+        "seed": {
+          "unavailable": "Meshy did not expose a generation seed"
+        }
+      }
+    },
+    {
+      "id": "visual/hopper-meshy-pack-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-meshy-pack-01.blend",
+        "assets/visual/hopper-meshy-pack-01-checks.json"
+      ],
+      "purpose": "Meshy-first Ox packaging candidate preserving generated shape with full-size machinery and provisional interior volumes",
+      "edits": [
+        "Uniformly increased exterior size by 20%; geometry and UVs unchanged",
+        "Added full-size engine pair, retained seat/human fit reference, and explicit cargo/airlock reservations"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; exterior generated by Meshy 7 from an OpenAI-generated Hopper reference"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-meshy-trial-01",
+          "visual/hopper-engine-01",
+          "visual/hopper-ships-11"
+        ],
+        "transformation": "Preserve exterior geometry and UVs. Uniform hull scaling; local full-size component placement and vertical-envelope diagnostics. Shader-only half section for review.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_hopper_meshy_pack01.py",
+          "tools/asset_history/check_hopper_meshy_pack01.py"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-meshy-trial-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-meshy-ox-01.blend",
+        "assets/visual/hopper-meshy-ox-01-checks.json"
+      ],
+      "purpose": "Editable Blender Meshy trial and matched measured-Ox review captures",
+      "edits": [
+        "Imported frozen GLB, rotated -90 degrees about Z and uniformly scaled to 10.69m overall length",
+        "Aligned nose and lowest envelope for comparison without claiming a cabin-floor fit",
+        "Packed imported textures and rendered textured/clay views",
+        "Rendered preserved Ox11 at matching camera, scale and lighting without resaving the source"
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; exterior generated by Meshy 7 from an OpenAI-generated Hopper reference"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-meshy-ox-01",
+          "visual/hopper-ships-11"
+        ],
+        "transformation": "tools/asset_history/build_hopper_meshy_trial01.py and tools/asset_history/render_hopper_meshy_comparison01.py; standalone exterior study and same-scale measured reference",
+        "tooling": [
+          "Blender 5.2.2 LTS / Cycles",
+          "Python / NumPy"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/hopper-seat-study-01",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_seat_study.py",
+        "assets/visual/hopper-seat-study-01.blend",
+        "assets/visual/hopper-seat-study-01-checks.json",
+        "docs/media/hopper-seat-study-01/seat-flight.png",
+        "docs/media/hopper-seat-study-01/seat-boarding.png",
+        "docs/media/hopper-seat-study-01/seat-mechanism.png",
+        "docs/media/hopper-seat-study-01/occupied-plan.png",
+        "docs/media/hopper-seat-study-01/eye-tall-low.png",
+        "docs/media/hopper-seat-study-01/eye-tall-high.png",
+        "docs/media/hopper-seat-study-01/eye-compact-raised.png",
+        "docs/media/hopper-seat-study-01/seat-motion.mp4"
+      ],
+      "purpose": "Editable shared Ox/Fox pilot-seat mechanism, occupied proxy sweeps and explicit aperture/pod-reservation sightline study; actual Blender review renders and animation, not final character fit or structural qualification",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-22",
+        "construction": "Original Blender 5.2 geometry and baked object/curve-point motion using repository-authored core-frame and primitive helpers. Contoured seat shells, cushions, flat restraint webbing, carriage, swivel, lift, controls, pedal adjustments and original fixed-limb fit proxies. No parallel-session character assets, external models, image pixels or textures loaded. Blender built-in font and native materials. Cycles review stills; eye views include diagnostic opaque-boundary masks. Workbench motion frames encoded with FFmpeg as H.264, 121 frames at 12 fps. Paired concept art is a non-embedded appearance reference. No runtime flight state or simulation RNG used.",
+        "derived_inputs": [
+          "visual/hopper-core-frame-01"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-ships-08",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_ships08.py",
+        "tools/asset_history/hopper_ship_body_detail.py",
+        "tools/asset_history/hopper_ship_services.py",
+        "tools/asset_history/hopper_ship_mechanisms.py",
+        "tools/asset_history/hopper_ship_engine_checks.py",
+        "tools/asset_history/hopper_ship_motion_checks.py",
+        "tools/asset_history/check_hopper_ships08.py",
+        "assets/visual/hopper-ships-08.blend",
+        "assets/visual/hopper-ships-08-checks.json",
+        "docs/media/hopper-ships-08/fox.png",
+        "docs/media/hopper-ships-08/fox-boarding.png",
+        "docs/media/hopper-ships-08/ox.png",
+        "docs/media/hopper-ships-08/structure.png",
+        "docs/media/hopper-ships-08/installation.png",
+        "docs/media/hopper-ships-08/belly.png",
+        "docs/media/hopper-ships-08/maintenance.png",
+        "docs/media/hopper-ships-08/cycle.mp4"
+      ],
+      "purpose": "First editable Fox/Ox ship assembly with shared scale-1 engines, variant cradles and utilities, rounded removable wrapping, folding rear gear and cargo ramp, and a shared future jump-drive belly reservation",
+      "edits": [
+        "Independent body, services and mechanism integration reviews; actual motion and engine-removal geometry checked before final review renders",
+        "Prior engine and common-core masters preserved; source hashes recorded in checks"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry, material shaders and keyed mechanisms authored by build_hopper_ships08.py and its documented body/services/mechanism helpers. Preserved repository core and engine geometry appended locally; Blender 5.2.2 LTS Cycles stills and Workbench animation encoded with FFmpeg. Paired concept consulted for shape; no concept pixels, third-party meshes or external textures embedded.",
+        "derived_inputs": [
+          "visual/hopper-engine-01",
+          "visual/hopper-gear-detail-07"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-ships-09",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_ships09.py",
+        "tools/asset_history/check_hopper_ships09.py",
+        "tools/asset_history/hopper_fox09.py",
+        "tools/asset_history/hopper_ox09.py",
+        "tools/asset_history/hopper_ship_services09.py",
+        "tools/asset_history/hopper_ship_mechanisms09.py",
+        "tools/asset_history/hopper_ship_motion_checks09.py",
+        "tools/asset_history/hopper_ship_engine_checks09.py",
+        "tools/asset_history/hopper_ship_static_checks09.py",
+        "assets/visual/hopper-ships-09.blend",
+        "assets/visual/hopper-ships-09-checks.json",
+        "docs/media/hopper-ships-09/fox.png",
+        "docs/media/hopper-ships-09/ox.png",
+        "docs/media/hopper-ships-09/fox-boarding.png",
+        "docs/media/hopper-ships-09/ox-boarding.png",
+        "docs/media/hopper-ships-09/pair-top.png",
+        "docs/media/hopper-ships-09/pair-rear.png",
+        "docs/media/hopper-ships-09/pair-front.png",
+        "docs/media/hopper-ships-09/structure.png",
+        "docs/media/hopper-ships-09/ox-bays.png",
+        "docs/media/hopper-ships-09/installation.png",
+        "docs/media/hopper-ships-09/belly.png",
+        "docs/media/hopper-ships-09/maintenance.png",
+        "docs/media/hopper-ships-09/cycle.mp4"
+      ],
+      "purpose": "Revised paired Hopper master: substantial swept Fox wings, wider hollow Ox equipment annexes, curved shoulders, exact unchanged library engines, and fair matched-scale comparison renders",
+      "edits": [
+        "Independent Fox, Ox and integration agents iterated native silhouettes and actual clearances",
+        "Moved Ox supports below annex deck and services to outer wall; removed overlapping fitting roof strips; completed a fitting roof around the retained dorsal collar",
+        "Expanded Fox wings after reviewing the first trial; native comparison scenes retain identical camera and metre scale"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry, procedural material shaders, assembly and keyed mechanisms from documented Python builders. Blender 5.2.2 LTS Cycles reviews and Workbench animation encoded with FFmpeg. Paired concept consulted for visual direction; no concept pixels, external textures or third-party meshes embedded. Source-path PNG metadata removed without changing encoded pixel data.",
+        "derived_inputs": [
+          "visual/hopper-engine-01",
+          "visual/hopper-gear-detail-07",
+          "visual/hopper-ships-08"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-ships-10",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_ships10.py",
+        "tools/asset_history/check_hopper_ships10.py",
+        "tools/asset_history/hopper_fox10.py",
+        "tools/asset_history/hopper_ox10.py",
+        "tools/asset_history/hopper_cabin_fit10.py",
+        "tools/asset_history/hopper_ship_static_checks10.py",
+        "tools/asset_history/hopper_ship_motion_checks10.py",
+        "tools/asset_history/hopper_symmetry10.py",
+        "tools/asset_history/hopper_canopy10_interfaces.py",
+        "tools/asset_history/hopper_canopy10.py",
+        "tools/asset_history/hopper_ship_equipment10.py",
+        "tools/asset_history/hopper_ship_finish10.py",
+        "tools/asset_history/hopper_ox_cabin_equipment10.py",
+        "assets/visual/hopper-ships-10.blend",
+        "assets/visual/hopper-ships-10-checks.json",
+        "docs/media/hopper-ships-10/fox.png",
+        "docs/media/hopper-ships-10/ox.png",
+        "docs/media/hopper-ships-10/fox-boarding.png",
+        "docs/media/hopper-ships-10/ox-boarding.png",
+        "docs/media/hopper-ships-10/structure.png",
+        "docs/media/hopper-ships-10/ox-bays.png",
+        "docs/media/hopper-ships-10/ox-room.png",
+        "docs/media/hopper-ships-10/ox-seat-fit.png",
+        "docs/media/hopper-ships-10/installation.png",
+        "docs/media/hopper-ships-10/belly.png",
+        "docs/media/hopper-ships-10/maintenance.png",
+        "docs/media/hopper-ships-10/pair-top.png",
+        "docs/media/hopper-ships-10/pair-rear.png",
+        "docs/media/hopper-ships-10/pair-front.png",
+        "docs/media/hopper-ships-10/cycle.mp4",
+        "docs/media/hopper-ships-10/cockpit.png",
+        "docs/media/hopper-ships-10/pilot-eye.png"
+      ],
+      "purpose": "Configurable expanded Ox pressure cabin and wingless Fox, with unchanged library engines, wall-mounted cabin services, common canopy closure, auxiliary solar arrays, interchangeable tool interfaces and procedural thermal/paint finishes",
+      "edits": [
+        "Replaced external Ox locker interpretation with a connected wide pressure-room layout and variant-specific load paths",
+        "Removed Fox wings and shaped intentional cargo-to-engine channels; gave Ox a convex outer engine flank without scaling engines",
+        "Relocated cabin systems, modeled service penetrations, and added optional removable seating with separate fit mannequins",
+        "Checked evaluated bilateral geometry and corrected closed-mesh face orientation before matched-scale reviews",
+        "Rotated Ox distribution and life-support racks against forward bulkhead while retaining sealed floor/roof feedthroughs",
+        "Added original procedural upper-body paint and ceramic belly materials, auxiliary photovoltaic cassettes and capped universal tool interfaces",
+        "Closed six outer-envelope cockpit panes with perimeter seals/carriers and guarded named frame/glass interfaces; restored closed dorsal hatch"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry, procedural shaders, assembly, optional seating/mannequin fit fixtures and keyed mechanisms from documented Python builders. Blender 5.2.2 LTS native rendering and Workbench animation encoded with FFmpeg. No third-party meshes or external textures embedded. Concept consulted for form; its pixels are not embedded. Source-path PNG metadata removed without changing encoded pixel data.",
+        "derived_inputs": [
+          "visual/hopper-engine-01",
+          "visual/hopper-gear-detail-07",
+          "visual/hopper-ships-09"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-ships-11",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_ships11.py",
+        "tools/asset_history/check_hopper_ships11.py",
+        "tools/asset_history/hopper_underbody11.py",
+        "tools/asset_history/hopper_underbody_aft11.py",
+        "assets/visual/hopper-ships-11.blend",
+        "assets/visual/hopper-ships-11-checks.json",
+        "docs/media/hopper-ships-11/fox-belly.png",
+        "docs/media/hopper-ships-11/ox-belly.png",
+        "docs/media/hopper-ships-11/fox-stowed.png",
+        "docs/media/hopper-ships-11/ox-stowed.png",
+        "docs/media/hopper-ships-11/cycle.mp4"
+      ],
+      "purpose": "Removable outboard underside protection around the shared Hopper gear and engine installations, retaining cabin space and original engine scale",
+      "edits": [
+        "Added lower panels enclosing exposed outboard structure and services",
+        "Replaced only affected outer strips of central belly fairing in the derivative",
+        "Reserved full rear gear movement and recessed original VTOL shutters above separate thermal liners",
+        "Added aft pod chins and rear under-floor closures without covering exhaust mouths",
+        "Continued thermal material across original moving rear gear doors"
+      ],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry and reused original procedural finish. Native Blender review rendering; Workbench sampled mechanism review encoded using FFmpeg. No external meshes or textures embedded. Preserves earlier source masters.",
+        "derived_inputs": [
+          "visual/hopper-ships-10",
+          "visual/hopper-engine-01",
+          "visual/hopper-gear-detail-07"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-structure-envelope-04",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_structure_envelope04.py",
+        "assets/visual/hopper-structure-envelope-04.blend",
+        "assets/visual/hopper-structure-envelope-04-checks.json",
+        "docs/media/hopper-structure-envelope-04/structure.png",
+        "docs/media/hopper-structure-envelope-04/core-jacket.png",
+        "docs/media/hopper-structure-envelope-04/cockpit-datums.png"
+      ],
+      "purpose": "Inner structure and independent outer-body attachment envelope for the common Hopper core, with removable unthickened core fitting jacket; cockpit glazing and local shell paused pending outer-body fit",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-23",
+        "construction": "Original native Blender geometry rebuilt from repository cockpit, airlock, seat and core helpers. Removes prior cockpit glass, canopy frame and chin skin. Adds independently dimensioned outer secondary rings, explicit inner-frame standoffs, longitudinal members, lower-bay diagonals, capsule lower cradle and outer attachment ring. Orange polylines are outer-body surface datums, not window boundaries. Optional unthickened core jacket demonstrates the outer box, with dorsal docking region open; hidden by default in the saved master. Retains original dimensional occupant and seat/system fixtures. Three Cycles stills use documented inspection visibility. No old master, character or reference-image pixels loaded. No runtime or RNG changes.",
+        "derived_inputs": [
+          "visual/hopper-cockpit-study-02",
+          "visual/hopper-airlock-study-01"
+        ]
+      }
+    },
+    {
+      "id": "visual/hopper-study-01",
+      "media_type": "visual",
+      "source_kind": "code-authored",
+      "files": [
+        "tools/asset_history/build_hopper_study.py",
+        "tools/asset_history/compose_hopper_review.py",
+        "assets/visual/hopper-study-01.blend",
+        "assets/visual/hopper-study-01-geometry.json",
+        "assets/visual/hopper-study-01-references.json",
+        "docs/media/hopper-study-01/exterior.png",
+        "docs/media/hopper-study-01/rear.png",
+        "docs/media/hopper-study-01/cutaway.png",
+        "docs/media/hopper-study-01/frame.png",
+        "docs/media/hopper-study-01/side.png",
+        "docs/media/hopper-study-01/top.png",
+        "docs/media/hopper-study-01/front.png",
+        "docs/media/hopper-study-01/underside.png",
+        "docs/media/hopper-study-01/cockpit.png",
+        "docs/media/hopper-study-01/review-board.png",
+        "docs/media/hopper-study-01/orthographic-board.png"
+      ],
+      "purpose": "Fresh editable Hopper packaging study with flexible cargo space, three jump-storage envelopes, structural landing pads, and pilot-eye/orthographic inspection; no runtime replacement or flight qualification",
+      "edits": [],
+      "license": {
+        "expression": "BSD-3-Clause",
+        "terms": "LICENSE.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors"
+      },
+      "code_authored": {
+        "author": "Apsis Drift contributors",
+        "date": "2026-09-22",
+        "construction": "Original Blender 5.2 procedural geometry and materials from the owner functional brief, rendered in Cycles; Pillow inspection-board layout. Blender built-in font and DejaVu Sans labels. Owner-supplied concept boards reviewed as nonbinding references, recorded separately by filename/hash; no source-image pixels, external meshes/textures, or old ship geometry incorporated. No world RNG consumed.",
+        "derived_inputs": []
+      }
+    },
+    {
+      "id": "visual/hopper-wayfarer-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/hopper-wayfarer-01.glb",
+        "assets/visual/hopper-wayfarer-01.json",
+        "assets/visual/hopper-wayfarer-01-export-checks.json",
+        "assets/visual/hopper-wayfarer-01-godot-checks.json"
+      ],
+      "purpose": "First Wayfarer native flight derivative and versioned measured presentation contract",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Hopper-Meshy-Output",
+        "terms": "docs/licenses/HOPPER_MESHY_TRIAL.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; Meshy-generated ship and engine surfaces with original authored functional components"
+      },
+      "derived": {
+        "parents": [
+          "visual/hopper-craft-09"
+        ],
+        "transformation": "Derive Craft09 local fairing/finish pass, retaining Craft08 hull atlas and explicit 4K hull color limit; preserve accepted eye/seat, gear animation and engine dimensions.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/export_hopper_runtime01.py",
+          "Godot 4.7.2",
+          "experiments/godot-freedom/hopper_asset_test.gd",
+          "tools/check_hopper_gltf.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/meshy-qualification-ship-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/meshy-qualification-ship-01-checks.json",
+        "assets/visual/meshy-qualification-ship-01-preview-checks.json",
+        "assets/visual/meshy-qualification-ship-01-runtime.glb",
+        "assets/visual/meshy-qualification-ship-01.blend"
+      ],
+      "purpose": "Editable ship qualification fixture, local checks and isolated export study; not finished runtime art",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Meshy-Qualification-Output",
+        "terms": "docs/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI reference images and Meshy 7 generated components, with authored Blender fixtures"
+      },
+      "derived": {
+        "parents": [
+          "visual/meshy-qualification-ship-01-source"
+        ],
+        "transformation": "Uniform normalization, authored installation/fit fixtures, preserved high-detail source, local motion/clearance checks and isolated export. See docs/asset_history/MESHY_QUALIFICATION_01.md and component review.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "Original Blender Python qualification builders"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/meshy-qualification-ship-01-source",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/meshy-qualification-ship-01-raw.glb",
+        "assets/visual/meshy-qualification-ship-01-textured.glb"
+      ],
+      "purpose": "Frozen Meshy high-detail geometry and selected textured result for ship qualification",
+      "edits": [
+        "A separate 10-credit retexture task follows the selected 25-credit geometry task; both original downloads preserved."
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Meshy-Qualification-Output",
+        "terms": "docs/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI reference images and Meshy 7 generated components, with authored Blender fixtures"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Official @meshy-ai/meshy-mcp-server 0.5.2 image-to-3d and retexture",
+        "model": "meshy-7",
+        "model_version": "Pinned provider alias; underlying build not disclosed",
+        "prompt": "{\"reference_asset\": \"visual/meshy-qualification-ship-01-input\", \"calls\": [{\"file_path\": \"assets/visual/meshy-qualification-ship-01-input.png\", \"ai_model\": \"meshy-7\", \"model_type\": \"standard\", \"ultra_mode\": true, \"should_remesh\": false, \"should_texture\": false, \"target_formats\": [\"glb\"], \"response_format\": \"json\"}, {\"input_task_id\": \"01a0d35d-4ca2-711d-98c6-a06da6278118\", \"ai_model\": \"meshy-7\", \"enable_original_uv\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"text_style_prompt\": \"Industrial spacecraft life-support scrubber cassette. Warm ivory ceramic coated corner columns and shell, graphite front metal frame, two brushed steel cylindrical filter drums with woven mesh, dark honeycomb intake grilles, amber release handles on right of drums, tiny amber status lights. Fine machined hardware, subtle edge wear, no rust, no text, no logos. Physically based materials, neutral base color without painted shadows.\", \"response_format\": \"json\"}]}",
+        "generation_date": "2026-09-24",
+        "source_output": "image-to-3d task 01a0d35d-4ca2-711d-98c6-a06da6278118; retexture task 01a0d363-302b-7488-a36e-77bd9cebb39c; meshy-qualification-ship-01-raw.glb SHA-256 bb4bee74c84e43901ae571541050af4a847d192dc8590ca65117a77feabb98a2; meshy-qualification-ship-01-textured.glb SHA-256 3baefa65b59f072c4bfee564478ae594439ef65e5eead8eb6493782daab2e2de",
+        "seed": {
+          "unavailable": "Provider did not expose a random seed"
+        }
+      }
+    },
+    {
+      "id": "visual/meshy-qualification-station-01",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/meshy-qualification-station-01-checks.json",
+        "assets/visual/meshy-qualification-station-01-inspection.json",
+        "assets/visual/meshy-qualification-station-01-module.glb",
+        "assets/visual/meshy-qualification-station-01.blend"
+      ],
+      "purpose": "Editable station qualification fixture, local checks and isolated export study; not finished runtime art",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Meshy-Qualification-Output",
+        "terms": "docs/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI reference images and Meshy 7 generated components, with authored Blender fixtures"
+      },
+      "derived": {
+        "parents": [
+          "visual/meshy-qualification-station-01-source"
+        ],
+        "transformation": "Uniform normalization, authored installation/fit fixtures, preserved high-detail source, local motion/clearance checks and isolated export. See docs/asset_history/MESHY_QUALIFICATION_01.md and component review.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "Original Blender Python qualification builders"
+        ],
+        "date": "2026-09-24"
+      }
+    },
+    {
+      "id": "visual/meshy-qualification-station-01-source",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/meshy-qualification-station-01-raw.glb",
+        "assets/visual/meshy-qualification-station-01-textured.glb"
+      ],
+      "purpose": "Frozen Meshy high-detail geometry and selected textured result for station qualification",
+      "edits": [
+        "A separate 10-credit retexture task follows the selected 25-credit geometry task; both original downloads preserved."
+      ],
+      "license": {
+        "expression": "LicenseRef-Apsis-Meshy-Qualification-Output",
+        "terms": "docs/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI reference images and Meshy 7 generated components, with authored Blender fixtures"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Official @meshy-ai/meshy-mcp-server 0.5.2 image-to-3d and retexture",
+        "model": "meshy-7",
+        "model_version": "Pinned provider alias; underlying build not disclosed",
+        "prompt": "{\"reference_asset\": \"visual/meshy-qualification-station-01-input\", \"calls\": [{\"file_path\": \"assets/visual/meshy-qualification-station-01-input.png\", \"ai_model\": \"meshy-7\", \"model_type\": \"standard\", \"ultra_mode\": true, \"should_remesh\": false, \"should_texture\": false, \"target_formats\": [\"glb\"], \"response_format\": \"json\"}, {\"input_task_id\": \"01a0d35d-522e-76f4-b063-d74cf0fb93a3\", \"ai_model\": \"meshy-7\", \"enable_original_uv\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"text_style_prompt\": \"Premium civilian station service wall. Warm ivory ceramic painted aluminum frame, petrol blue central maintenance cover, graphite lower ventilation grille, narrow warm white light strip at left edge, amber keyed latches, small recessed status screen. Restrained realistic wear at edges, machined seams, no text or logos. Even physically based materials without painted cast shadows.\", \"response_format\": \"json\"}]}",
+        "generation_date": "2026-09-24",
+        "source_output": "image-to-3d task 01a0d35d-522e-76f4-b063-d74cf0fb93a3; retexture task 01a0d361-a8a0-764d-8861-4bd550bc13d5; meshy-qualification-station-01-raw.glb SHA-256 ddc4668f9274865a50607081454e1a3b706b5696f862246c20522b516243ca2d; meshy-qualification-station-01-textured.glb SHA-256 4b967f7592278a159313b77771bf3ebbfddbfeea47088f1e0f7538f02a195439",
+        "seed": {
+          "unavailable": "Provider did not expose a random seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-docking-lock-09",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-docking-lock-09.blend",
+        "assets/visual/station-docking-lock-09-interface.json"
+      ],
+      "purpose": "Reusable B-family docking lock with roof-collar adapter, isolation shutter, floor hatch, ladder and guard gate",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-08"
+        ],
+        "transformation": "Author a measured compact lock with the existing B connector profile and a linked copy of kit07 isolation-door geometry. Design adapter against original Craft09 docking dimensions. No provider generation or decimation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit09.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-finish-13-hangar-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-finish-13-hangar-raw.glb",
+        "assets/visual/station-finish-13-hangar-preview.png"
+      ],
+      "purpose": "Immutable texture-only return for existing station hangar",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 retexture",
+        "model": "Meshy retexture service",
+        "model_version": "Underlying build not disclosed",
+        "prompt": "{\"input_task_id\": \"01a0e92e-f23e-71e0-afa6-73d55d0bc02e\", \"text_style_prompt\": \"Factory-new mildly futuristic orbital station, matching an ivory and graphite exploration spacecraft. Cool warm-white satin painted alloy upper hull, graphite gray lower structural keel, titanium exposed ribs, deliberate dark recessed panel seams, sparse amber caution stripes at service interfaces. Broad calm curved panels, subtle fine manufacturing detail. Physically based painted metal, no rust, no grime, no battle wear, no brown clay, no baked shadows, no logos or lettering. Preserve all existing shape; texture only.\", \"enable_original_uv\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"remove_lighting\": true, \"target_formats\": [\"glb\"]}",
+        "generation_date": "2026-09-29",
+        "source_output": "Task 01a0ecfa-c285-748a-a71c-a4f2012acd58; parent 01a0e92e-f23e-71e0-afa6-73d55d0bc02e; 10 credits; SHA-256 40a0e57ae45fb76a9705657cf9ecae769b990a57885585a14c73e3063f64b0f7",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-finish-13-hub-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-finish-13-hub-raw.glb",
+        "assets/visual/station-finish-13-hub-preview.png"
+      ],
+      "purpose": "Immutable texture-only return for existing station hub",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 retexture",
+        "model": "Meshy retexture service",
+        "model_version": "Underlying build not disclosed",
+        "prompt": "{\"input_task_id\": \"01a0e8d6-be3e-71db-9fd1-3316604328ca\", \"text_style_prompt\": \"Factory-new mildly futuristic orbital station, matching an ivory and graphite exploration spacecraft. Cool warm-white satin painted alloy upper hull, graphite gray lower structural keel, titanium exposed ribs, deliberate dark recessed panel seams, sparse amber caution stripes at service interfaces. Broad calm curved panels, subtle fine manufacturing detail. Physically based painted metal, no rust, no grime, no battle wear, no brown clay, no baked shadows, no logos or lettering. Preserve all existing shape; texture only.\", \"enable_original_uv\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"remove_lighting\": true, \"target_formats\": [\"glb\"]}",
+        "generation_date": "2026-09-29",
+        "source_output": "Task 01a0ecfa-8a41-7426-9c3e-15e43a3f5478; parent 01a0e8d6-be3e-71db-9fd1-3316604328ca; 10 credits; SHA-256 1727c9aba8080ad37eab26ba24c7e47c68a12ee09baf2543460570a5751eb21b",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-01-pod-b",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-01-pod-b.glb",
+        "assets/visual/station-kit-01-pod-b.json"
+      ],
+      "purpose": "Normalized high-detail station pod study and provisional interface descriptor; not runtime-qualified",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-01-pod-b-raw"
+        ],
+        "transformation": "Rigid rotation and one uniform scale to 12 m longitudinal length; neutral clay material; retained topology. Interfaces and floor datum are provisional, not fitted openings.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit01.py",
+          "tools/asset_history/check_station_kit01.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-01-pod-b-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-01-pod-b-raw.glb"
+      ],
+      "purpose": "Untouched high-detail geometry-only Meshy habitat pod candidate; no usable interior claimed",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy MCP image-to-3D",
+        "model": "meshy-7",
+        "model_version": "Legacy alias; underlying provider build not exposed in receipt",
+        "prompt": "{\"reference\": \"visual/station-kit-01-pod-b-input\", \"settings\": {\"ai_model\": \"meshy-7\", \"ultra_mode\": true, \"model_type\": \"standard\", \"should_texture\": false, \"should_remesh\": false, \"target_formats\": [\"glb\"], \"symmetry_mode\": \"auto\", \"response_format\": \"json\", \"file_path\": \"assets/visual/station-kit-01-pod-b-input.png\"}}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e832-8017-7476-bc38-3ef93f8f776f; 25 credits; SHA-256 9b0f93fe5d4e18d0587ce40d111d4acc163ad48cc9eb760c38c983620a0a4ee4",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-02-hub",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-02-hub.blend",
+        "assets/visual/station-kit-02-hub.glb",
+        "assets/visual/station-kit-02-hub.json",
+        "assets/visual/station-kit-02-hub-checks.json",
+        "assets/visual/station-kit-02-hub-independent-checks.json",
+        "assets/visual/station-kit-02-ledger.json"
+      ],
+      "purpose": "Uniformly normalized hub plus two linked fitted-pod comparisons exposing interface mismatches",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-02-hub-raw",
+          "visual/station-kit-02-pod-b"
+        ],
+        "transformation": "Uniform 15 m hub normalization, measured actual offset necks, two linked B copies stopped short of hub for comparison; no shell cleanup or accepted pressure enclosure.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_hub02.py",
+          "tools/asset_history/check_station_hub02.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-02-hub-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-02-hub-raw.glb",
+        "assets/visual/station-kit-02-hub-preview.png"
+      ],
+      "purpose": "Immutable Meshy geometry and provider thumbnail for the four-branch hub candidate",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 image-to-3d",
+        "model": "standard generation",
+        "model_version": "Underlying build not exposed; server reports 2k geometry resolution and ultra_mode true",
+        "prompt": "{\"model_type\": \"standard\", \"ultra_mode\": true, \"should_texture\": false, \"target_formats\": [\"glb\"], \"image_url\": \"assets/visual/station-kit-02-hub-input.png\"}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e8d6-be3e-71db-9fd1-3316604328ca; 25 credits; SHA-256 2c133d3a593b2dd2665fe2c11b35c2f6c17c3ba9a67db178e2dbc6e23cb352b7",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-02-pod-b",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-02.blend",
+        "assets/visual/station-kit-02-pod-b.glb",
+        "assets/visual/station-kit-02-pod-b.json",
+        "assets/visual/station-kit-02-checks.json",
+        "assets/visual/station-kit-02-independent-checks.json"
+      ],
+      "purpose": "Measured B pod derivative with open end connections, separate pressure liner and level floor",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-01-pod-b"
+        ],
+        "transformation": "Retain unstretched generated midbody; replace fused raised-sill ends with curved shoulders and dimensioned mating interfaces, add separate inner liner/deck and basic scale cues; verify geometric passage and wall-layer fit. No runtime admission.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit02.py",
+          "tools/asset_history/check_station_kit02.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-03",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-03.blend",
+        "assets/visual/station-kit-03-checks.json",
+        "assets/visual/station-kit-03-independent-checks.json"
+      ],
+      "purpose": "Full-detail connected station prototype with fitted hub, two linked B pods, animated doors and reused service cassettes",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-02-hub",
+          "visual/station-kit-02-pod-b",
+          "visual/meshy-qualification-station-01"
+        ],
+        "transformation": "Retain detailed generated shell; lower hub 0.55 m and cut occupied/passage/door-pocket volumes; author separate enclosure, floor panels, hollow door housings and animation. Join two unchanged linked pods and reuse four full-detail service cassettes with neutral material override. No decimation, LOD or runtime changes.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit03.py",
+          "tools/asset_history/check_station_kit03.py",
+          "tools/asset_history/render_station_kit03.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-04",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-04.blend",
+        "assets/visual/station-kit-04-checks.json",
+        "assets/visual/station-kit-04-independent-checks.json",
+        "assets/visual/station-kit-04-arrival.json",
+        "assets/visual/station-kit-04-arrival-checks.json",
+        "assets/visual/station-kit-04-ledger.json"
+      ],
+      "purpose": "Modular station continuation with coplanar interlocking doors, linked arrival connector and full-detail Wayfarer boarding fit",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-03",
+          "visual/station-kit-04-hangar-raw",
+          "visual/hopper-craft-09"
+        ],
+        "transformation": "Preserve kit03 source; replace door leaves with one shared tongue/groove profile and staged seating animation. Add unchanged linked B connector, uniformly fitted hangar shell with occupied/passage cuts, authored interior and static full-detail Wayfarer boarding reference. No decimation or runtime changes.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_wayfarer04.py",
+          "tools/asset_history/build_station_kit04.py",
+          "tools/asset_history/check_station_kit04.py",
+          "tools/asset_history/check_station_arrival04.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-04-hangar-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-04-hangar-raw.glb"
+      ],
+      "purpose": "Immutable single Meshy hangar geometry candidate",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 image-to-3d",
+        "model": "standard generation",
+        "model_version": "Underlying build not exposed; requested standard generation with ultra_mode true",
+        "prompt": "{\"model_type\": \"standard\", \"ultra_mode\": true, \"should_texture\": false, \"target_formats\": [\"glb\"], \"image_url\": \"assets/visual/station-kit-04-hangar-input.png\"}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e92e-f23e-71e0-afa6-73d55d0bc02e; 25 credits; SHA-256 019c48c341316b1f330e4ed9444d904705f21cff967cfa1c7b77c03da7de2cbc",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-05",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-05.blend",
+        "assets/visual/station-kit-05-checks.json",
+        "assets/visual/station-kit-05-independent-checks.json",
+        "assets/visual/station-kit-05-ledger.json"
+      ],
+      "purpose": "Detailed connected workshop, commons, arrival gallery and reusable isolation-door assemblies",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-04",
+          "visual/station-kit-05-workbench",
+          "visual/station-kit-05-bench"
+        ],
+        "transformation": "Preserve previous station and Wayfarer sources. Install shared full-detail textured furniture, authored cabinetry and lights, blank unused ports, add retracting lock bolts and seal carriers to common doors and install fifth isolation door ahead of bay rear wall. No runtime changes or decimation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit05.py",
+          "tools/asset_history/check_station_kit05.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-05-bench",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-05-bench.blend",
+        "assets/visual/station-kit-05-bench.json"
+      ],
+      "purpose": "Reusable uniformly normalized textured bench with preserved detailed geometry",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-05-bench-raw"
+        ],
+        "transformation": "Rigid alignment and uniform metre normalization; floor Z0, back Y0, forward -Y. Retain source detail, UVs and packed PBR maps. No decimation. Mounting bases are separate station installation geometry.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_fittings05.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-05-bench-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-05-bench-raw.glb",
+        "assets/visual/station-kit-05-bench-preview.png"
+      ],
+      "purpose": "Immutable Meshy textured bench output and provider preview",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 image-to-3d",
+        "model": "standard generation",
+        "model_version": "Underlying build undisclosed; requested standard Ultra geometry and 4K PBR textures",
+        "prompt": "{\"model_type\": \"standard\", \"ultra_mode\": true, \"should_texture\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"image_url\": \"assets/visual/station-kit-05-bench-input.png\"}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e94c-985b-768d-8169-552784b7f924; 35 credits; SHA-256 82d23487e41be8a7614be05c33e1da2c7b89fa601b508fa0a2b5bc675202f231",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-05-workbench",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-05-workbench.blend",
+        "assets/visual/station-kit-05-workbench.json"
+      ],
+      "purpose": "Reusable uniformly normalized textured workbench with preserved detailed geometry",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-05-workbench-raw"
+        ],
+        "transformation": "Rigid alignment and uniform metre normalization; floor Z0, back Y0, forward -Y. Retain source detail, UVs and packed PBR maps. No decimation. Mounting bases are separate station installation geometry.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_fittings05.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-05-workbench-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-05-workbench-raw.glb",
+        "assets/visual/station-kit-05-workbench-preview.png"
+      ],
+      "purpose": "Immutable Meshy textured workbench output and provider preview",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 image-to-3d",
+        "model": "standard generation",
+        "model_version": "Underlying build undisclosed; requested standard Ultra geometry and 4K PBR textures",
+        "prompt": "{\"model_type\": \"standard\", \"ultra_mode\": true, \"should_texture\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"image_url\": \"assets/visual/station-kit-05-workbench-input.png\"}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e94b-de78-73ae-9dcb-e535e4136ee2; 35 credits; SHA-256 df28b3876866451241d54f382469072cc9bedbb42d16f2ac32fa1eb4b12e4c7e",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-06",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-06.blend",
+        "assets/visual/station-kit-06-checks.json",
+        "assets/visual/station-kit-06-independent-checks.json",
+        "assets/visual/station-kit-06-inherited-checks.json",
+        "assets/visual/station-kit-06-ledger.json"
+      ],
+      "purpose": "Measured full-detail hangar closure, fitted shell surround and illuminated arrival passage",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-05"
+        ],
+        "transformation": "Retain selected station and full-detail Wayfarer. Author eight shared interlocking hangar leaves with distinct storage tracks, overhead pocket, fitted perimeter skirt, locking pins, seals and local service fittings. Add passage luminaires. Preserve previous source files; no decimation or runtime admission.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit06.py",
+          "tools/asset_history/check_station_kit06.py",
+          "tools/asset_history/check_station_kit05.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-07",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-07.blend",
+        "assets/visual/station-kit-07-checks.json",
+        "assets/visual/station-kit-07-independent-checks.json",
+        "assets/visual/station-kit-07-inherited-checks.json",
+        "assets/visual/station-kit-07-ledger.json"
+      ],
+      "purpose": "Common-track station shutters: overhead feed, shared vertical descent, reduced jamb hardware",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-06"
+        ],
+        "transformation": "Preserve kit06. Retain shell, panels, apertures, locks and seals; move horizontal transfer entirely into the overhead magazines for eight hangar and twenty personnel leaves. Replace hangar rail bank with one guide pair, fit storage slot zero and align personnel guides. No new provider output, runtime changes or optimization.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit07.py",
+          "tools/asset_history/check_station_kit06.py",
+          "tools/asset_history/check_station_kit05.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-08",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-08.blend",
+        "assets/visual/station-kit-08-checks.json",
+        "assets/visual/station-kit-08-independent-checks.json",
+        "assets/visual/station-kit-08-inherited-checks.json",
+        "assets/visual/station-kit-08-ledger.json"
+      ],
+      "purpose": "Connected three-berth crew pod with shared washroom, reusable fittings and sliding privacy door",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-07",
+          "visual/station-kit-08-berth",
+          "visual/station-kit-08-toilet"
+        ],
+        "transformation": "Attach a fourth shared B-family pod at the north socket. Install linked berths, lockers, sanitary fixtures, lighting and a sliding privacy partition. Preserve prior rooms, all pressure doors and the Wayfarer. No runtime admission or decimation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit08.py",
+          "tools/asset_history/check_station_kit08.py",
+          "tools/asset_history/check_station_kit05.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-08-berth",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-08-berth.blend",
+        "assets/visual/station-kit-08-berth.json"
+      ],
+      "purpose": "Reusable uniformly normalized full-detail textured berth",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-08-berth-raw"
+        ],
+        "transformation": "Uniform metre normalization, floor Z0, back Y0, front -Y verified in isolated review. Preserve all geometry, UVs and packed textures; no decimation. Berth mounting base is separate installation geometry.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_fittings08.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-08-berth-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-08-berth-raw.glb",
+        "assets/visual/station-kit-08-berth-preview.png"
+      ],
+      "purpose": "Immutable Meshy textured berth output and provider preview",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 image-to-3d",
+        "model": "standard generation",
+        "model_version": "Underlying build undisclosed; requested standard Ultra geometry and 4K PBR textures",
+        "prompt": "{\"model_type\": \"standard\", \"ultra_mode\": true, \"should_texture\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"image_url\": \"assets/visual/station-kit-08-berth-input.png\"}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e9ba-5ea9-7696-9ed2-b8bffb46d6c1; 35 credits; SHA-256 d465b45a4e93f605343df526c96848bbda4d5063a3fa4adf6c30afee759353de",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-08-toilet",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-08-toilet.blend",
+        "assets/visual/station-kit-08-toilet.json"
+      ],
+      "purpose": "Reusable uniformly normalized full-detail textured toilet",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-08-toilet-raw"
+        ],
+        "transformation": "Uniform metre normalization, floor Z0, back Y0, front -Y verified in isolated review. Preserve all geometry, UVs and packed textures; no decimation. Berth mounting base is separate installation geometry.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_fittings08.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-08-toilet-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-kit-08-toilet-raw.glb",
+        "assets/visual/station-kit-08-toilet-preview.png"
+      ],
+      "purpose": "Immutable Meshy textured toilet output and provider preview",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 image-to-3d",
+        "model": "standard generation",
+        "model_version": "Underlying build undisclosed; requested standard Ultra geometry and 4K PBR textures",
+        "prompt": "{\"model_type\": \"standard\", \"ultra_mode\": true, \"should_texture\": true, \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"target_formats\": [\"glb\"], \"image_url\": \"assets/visual/station-kit-08-toilet-input.png\"}",
+        "generation_date": "2026-09-28",
+        "source_output": "Task 01a0e9ba-92b9-7479-8a21-0d1452559493; 35 credits; SHA-256 cf9e5b1f8d28bb82d742090d593e7215a7d4cea93075954c9a3bbd50cbbb3be1",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-kit-09",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-09.blend",
+        "assets/visual/station-kit-09-checks.json",
+        "assets/visual/station-kit-09-independent-checks.json",
+        "assets/visual/station-kit-09-inherited-checks.json",
+        "assets/visual/station-kit-09-wayfarer-docking-checks.json",
+        "assets/visual/station-kit-09-ledger.json"
+      ],
+      "purpose": "Two outboard Wayfarer-compatible dock fixtures plus the existing single hangar",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-08",
+          "visual/station-docking-lock-09",
+          "visual/hopper-craft-09"
+        ],
+        "transformation": "Install two linked docking locks at unused workshop/commons ends. Include two full-detail static Wayfarer fixtures using roof-open frame180 and gear-stowed frame120. Preserve original ship and station sources. Validate simultaneous occupancy, approach, transfer route and mechanism clearance.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_wayfarer09.py",
+          "tools/asset_history/build_station_kit09.py",
+          "tools/asset_history/check_station_kit09.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-10",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-10.blend",
+        "assets/visual/station-kit-10-checks.json",
+        "assets/visual/station-kit-10-independent-checks.json",
+        "assets/visual/station-kit-10-roof-checks.json",
+        "assets/visual/station-kit-10-rooms-checks.json",
+        "assets/visual/station-kit-10-crew-checks.json",
+        "assets/visual/station-kit-10-libraries.json",
+        "assets/visual/station-kit-10-library-checks.json",
+        "assets/visual/station-kit-10-ledger.json"
+      ],
+      "purpose": "Attachment cleanup, external maintenance-bay collar and provisional loaded freighter clearance study",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-09"
+        ],
+        "transformation": "Add measured supports, move service bench onto flat deck, extend existing bay surround and add a separately switchable primitive loaded freighter reference. Preserve source station and ship, full detail and existing motion. No paid generation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit10.py",
+          "tools/asset_history/check_station_kit10.py"
+        ],
+        "date": "2026-09-28"
+      }
+    },
+    {
+      "id": "visual/station-kit-11",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-11.blend",
+        "assets/visual/station-kit-11-build.json",
+        "assets/visual/station-kit-11-checks.json",
+        "assets/visual/station-kit-11-inherited-checks.json",
+        "assets/visual/station-kit-11-libraries.json",
+        "assets/visual/station-kit-11-library-checks.json",
+        "assets/visual/station-kit-11-ledger.json"
+      ],
+      "purpose": "Bay magnetic retention and retracting service couplers with measured dorsal thermal rack",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-10"
+        ],
+        "transformation": "Replace six primitive capture housings with detailed face-retention cartridges; add retractable power/data services and fitted thermal rack. Generated machinery stays in separate study libraries.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit11.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-12",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-12.blend",
+        "assets/visual/station-kit-12-build.json",
+        "assets/visual/station-kit-12-checks.json",
+        "assets/visual/station-kit-12-inherited-checks.json",
+        "assets/visual/station-kit-12-libraries.json",
+        "assets/visual/station-kit-12-library-checks.json",
+        "assets/visual/station-kit-12-ledger.json"
+      ],
+      "purpose": "Installed selected cassette, fitted isolators, independent coolant headers and animated maintenance removal",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-11",
+          "visual/station-utility-12-a"
+        ],
+        "transformation": "Install selected textured cassette A on measured foot saddles; add isolation valves, dry-break collars, flexible links, separate supply/return headers, service shelf and staged removal animation. Preserve parent ship/station and detailed source geometry.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit12.py",
+          "tools/asset_history/check_station_kit12.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-13",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-13.blend",
+        "assets/visual/station-kit-13-build.json",
+        "assets/visual/station-kit-13-checks.json",
+        "assets/visual/station-kit-13-inherited-checks.json",
+        "assets/visual/station-kit-13-roof-docking-checks.json",
+        "assets/visual/station-kit-13-libraries.json",
+        "assets/visual/station-kit-13-library-checks.json",
+        "assets/visual/station-kit-13-ledger.json",
+        "assets/visual/station-finish-13-checks.json"
+      ],
+      "purpose": "Solar carrier, buffered power packaging, communications, fitted service receivers and PBR shell finish",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-12",
+          "visual/station-finish-13-hub-raw",
+          "visual/station-finish-13-hangar-raw"
+        ],
+        "transformation": "Preserve all parent mesh topology/positions and transforms; project returned UVs onto existing exterior faces after undoing provider normalization. Add separate solar banks, braced carrier, power drawers, articulated dish, roof feedthroughs and measured receiver contacts.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit13.py",
+          "tools/asset_history/check_station_kit13.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-15",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-15-build.json",
+        "assets/visual/station-kit-15-checks.json",
+        "assets/visual/station-kit-15-inherited-checks.json",
+        "assets/visual/station-kit-15-ledger.json",
+        "assets/visual/station-kit-15-roof-checks.json",
+        "assets/visual/station-kit-15.blend"
+      ],
+      "purpose": "Detailed flat-station receiving/stores annex, independent staff passage, cargo shutters and full-size engine transfer demonstration",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-13",
+          "visual/hopper-engine-02"
+        ],
+        "transformation": "Preserve parent source and ship dimensions. Cut local hull/liner apertures; add separate manufactured annex, supporting floor and frames, cargo/staff doors and storage. Reuse unscaled complete engine meshes on cart and spare cradle.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit15.py",
+          "tools/asset_history/check_station_kit15.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-16",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-16-build.json",
+        "assets/visual/station-kit-16-cargo-checks.json",
+        "assets/visual/station-kit-16-checks.json",
+        "assets/visual/station-kit-16-inherited-checks.json",
+        "assets/visual/station-kit-16-ledger.json",
+        "assets/visual/station-kit-16-lift-checks.json",
+        "assets/visual/station-kit-16-roof-checks.json",
+        "assets/visual/station-kit-16.blend"
+      ],
+      "purpose": "Detailed station plant with accessible service cassettes and overhead handling of an unscaled loose engine",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-15"
+        ],
+        "transformation": "Preserve source and occupied ship geometry. Add rounded plant enclosure, staff aperture, hatch, equipment, service routes and mounted crane. Animate loose engine pickup in clear bay staging area.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit16.py",
+          "tools/asset_history/check_station_kit16.py",
+          "tools/asset_history/check_station_lift16.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-17",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-17-build.json",
+        "assets/visual/station-kit-17-cargo-checks.json",
+        "assets/visual/station-kit-17-checks.json",
+        "assets/visual/station-kit-17-crew-checks.json",
+        "assets/visual/station-kit-17-ledger.json",
+        "assets/visual/station-kit-17-roof-checks.json",
+        "assets/visual/station-kit-17.blend"
+      ],
+      "purpose": "Station daily living fitout with resident/crew privacy, commons facilities and temporary guest sleeping accommodation",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-16"
+        ],
+        "transformation": "Reuse original rooms and generated furniture; replace solid pantry placeholder with shelves and moving doors; add local meal facilities, folding tables/cot, privacy shades and stock labels. Preserve parent source.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit17.py",
+          "tools/asset_history/check_station_kit17.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-18",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-18-build.json",
+        "assets/visual/station-kit-18-cargo-checks.json",
+        "assets/visual/station-kit-18-checks.json",
+        "assets/visual/station-kit-18-crew-checks.json",
+        "assets/visual/station-kit-18-engine-service-audit.json",
+        "assets/visual/station-kit-18-freight-checks.json",
+        "assets/visual/station-kit-18-ledger.json",
+        "assets/visual/station-kit-18-libraries.json",
+        "assets/visual/station-kit-18-lift-checks.json",
+        "assets/visual/station-kit-18-living-checks.json",
+        "assets/visual/station-kit-18-plant-checks.json",
+        "assets/visual/station-kit-18-roof-checks.json",
+        "assets/visual/station-kit-18-walkthrough-checks.json",
+        "assets/visual/station-kit-18.blend"
+      ],
+      "purpose": "Station supported cargo receiving, person-sized route corrections and preserved maintenance/service validation",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-17"
+        ],
+        "transformation": "Add matching cargo capsule and receiving adapter; reuse six-leaf shutters and unscaled engine cart. Correct gallery cutter artifact and receiving lighting. Audit source cowl motion without changing Wayfarer.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit18.py",
+          "tools/asset_history/check_station_kit18.py",
+          "tools/asset_history/check_station_walkthrough18.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-kit-19",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-kit-19-build.json",
+        "assets/visual/station-kit-19-checks.json",
+        "assets/visual/station-kit-19-mechanism-checks.json",
+        "assets/visual/station-kit-19-walkthrough-checks.json",
+        "assets/visual/station-kit-19.blend"
+      ],
+      "purpose": "Separate starboard engine-service authoring setup with passing sampled removal/refit, mechanism and access checks",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-18",
+          "visual/hopper-craft-09"
+        ],
+        "transformation": "Separate maintenance setup with supported cowl handling, service disconnection, original-size engine removal/refit and fitted offset cart saddles. Corrected parenting transforms, raised rail stops and cleared aft thermal jackets. Source Wayfarer and station18 unchanged; no replacement swap or port-side proof.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/build_station_kit19.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-maintenance",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-maintenance.blend",
+        "assets/visual/station-maintenance-build.json",
+        "assets/visual/station-maintenance-checks.json",
+        "assets/visual/station-maintenance-access-checks.json"
+      ],
+      "purpose": "Full-detail station operating setup: distinct compatible starboard replacement from a pre-positioned spare cart, with passing sampled geometry and access checks",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-kit-19"
+        ],
+        "transformation": "Instance the compatible cartridge and fitted cart at original scale, retain the removed engine, retime the shared crane/cover/service sequence, and validate the two-cart replacement operation. Move the bay workbench and rack 2.05 m toward the actual liner, connect four wall brackets, and reserve standing access. Receiving-to-stage transport and port-side servicing remain open.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/build_station_maintenance.py",
+          "tools/check_station_maintenance.py",
+          "tools/check_station.py --profile replacement"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-reference",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-reference.blend",
+        "assets/visual/station-reference.json",
+        "assets/visual/station-reference-build.json",
+        "assets/visual/station-reference-checks.json",
+        "assets/visual/station-reference-access-checks.json",
+        "assets/visual/station-reference-exchange-checks.json",
+        "assets/visual/station-reference-delivery.json",
+        "assets/visual/station-reference.glb",
+        "assets/visual/station-reference-presentation.json",
+        "assets/visual/station-reference-godot-checks.json",
+        "assets/visual/station-reference-godot-walk-checks.json"
+      ],
+      "purpose": "Current full-detail occupied outpost, service connections and local-control access with provisional operating assumptions",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-return"
+        ],
+        "transformation": "Freeze the completed cart-return state. Add separately supported air/return/water/waste/power services, bay/stores/dock branches, individual berth and emergency air feeds, process loop with disconnects, curved bay liner and reachable controls. Validate required connections and actual geometry, replay room/door motion and engine exchange. Export full station-owned detail for an isolated Godot viewer; visiting fixtures are omitted explicitly. No gameplay admission or new paid generation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/build_station_reference.py",
+          "tools/check_station.py --profile current",
+          "tools/export_station_modules.py -- --station",
+          "Godot 4.7.2",
+          "tools/review_station.py"
+        ],
+        "date": "2026-09-30"
+      }
+    },
+    {
+      "id": "visual/station-return",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-return.blend",
+        "assets/visual/station-return-build.json",
+        "assets/visual/station-return-checks.json",
+        "assets/visual/station-return-access-checks.json"
+      ],
+      "purpose": "Full-detail post-exchange return of the empty cart and removed engine to separate stores parking positions; sampled geometry and final human access checked",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-maintenance",
+          "visual/station-staging"
+        ],
+        "transformation": "Freeze the completed exchange, preserve both engine identities and reuse corrected C3 geometry from staging. Move the empty cart out first, then advance the loaded cart clear of the nose before turning and returning it to inspection parking in stores. Add parking marks and labels; retain existing supplies and stock. No unloaded repair or off-station return is implied.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/build_station_maintenance.py --return-to-stores",
+          "tools/check_station.py --profile return"
+        ],
+        "date": "2026-09-30"
+      }
+    },
+    {
+      "id": "visual/station-staging",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-staging.blend",
+        "assets/visual/station-staging-build.json",
+        "assets/visual/station-staging-checks.json",
+        "assets/visual/station-staging-access-checks.json"
+      ],
+      "purpose": "Full-detail stores-to-bay loaded spare transfer, turn and parking at the maintenance exchange datum; sampled geometry and final access checked",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-maintenance"
+        ],
+        "transformation": "Freeze the exchange at ready, attach its compatible spare rigidly to the fitted cart, animate stores-to-bay travel and a 90-degree turn at original scale, then close C3. Extend the C3 magazine 50 mm and recess its bottom seal 9 mm with a 3 mm matching leaf lip. Receiving boundaries remain closed; no receiving handoff or removed-engine return is qualified.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/build_station_maintenance.py --staging",
+          "tools/check_station.py --profile staging"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-utility-11-a",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-utility-11-a.blend",
+        "assets/visual/station-utility-11-a-checks.json"
+      ],
+      "purpose": "Uniformly normalized unselected high-detail thermal machinery study",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-utility-11-a-raw"
+        ],
+        "transformation": "Uniformly scale to 3m width, rigid long-axis alignment and floor datum Z0; preserve geometry and UVs; use neutral review material. No decimation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_utility11.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-utility-11-a-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-utility-11-a-raw.glb",
+        "assets/visual/station-utility-11-a-preview.png"
+      ],
+      "purpose": "Immutable Meshy geometry candidate and provider preview for station thermal machinery",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 text-to-3d",
+        "model": "Meshy 6",
+        "model_version": "Requested meshy-6; underlying build undisclosed",
+        "prompt": "{\"mode\": \"preview\", \"ai_model\": \"meshy-6\", \"prompt\": \"One modular spacecraft thermal management machinery cassette, wide low rectangular skid with strongly rounded white alloy perimeter shoulders. Two recessed pump housings, coolant manifold, tidy armored pipes and inset maintenance panels visible on the upper face. Clean factory manufactured mildly futuristic industrial design matching an ivory space station, purposeful dark recesses. Flat mounting underside, four substantial mounting feet, lifting eyes. Approximate proportions width 3m depth 2m height 1m. No room, no platform outside footprint, no wires trailing away, no text, no solar wings.\", \"should_remesh\": false, \"target_formats\": [\"glb\"]}",
+        "generation_date": "2026-09-29",
+        "source_output": "Task 01a0ecc0-762b-73e0-9727-2689b891b9d3; 20 credits; SHA-256 15b2eea8a976778d243581060e59cd3f0367c4cebe48abaabd9e2609216ea1a1",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    },
+    {
+      "id": "visual/station-utility-12-a",
+      "media_type": "visual",
+      "source_kind": "derived",
+      "files": [
+        "assets/visual/station-utility-12-a.blend",
+        "assets/visual/station-utility-12-a-checks.json"
+      ],
+      "purpose": "Selected full-detail thermal cassette with packed PBR textures and measured sockets/feet",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "derived": {
+        "parents": [
+          "visual/station-utility-12-a-raw",
+          "visual/station-utility-11-a"
+        ],
+        "transformation": "Normalize to selected 3m width and floor datum. Verify bidirectional sampled shape preservation; retain generated geometry, UVs and packed PBR maps. No decimation.",
+        "tooling": [
+          "Blender 5.2.2 LTS",
+          "tools/asset_history/prepare_station_utility12.py"
+        ],
+        "date": "2026-09-29"
+      }
+    },
+    {
+      "id": "visual/station-utility-12-a-raw",
+      "media_type": "visual",
+      "source_kind": "generated",
+      "files": [
+        "assets/visual/station-utility-12-a-raw.glb",
+        "assets/visual/station-utility-12-a-preview.png"
+      ],
+      "purpose": "Immutable texture refinement of owner-selected station machinery A",
+      "edits": [],
+      "license": {
+        "expression": "LicenseRef-Apsis-Station-Kit-Output",
+        "terms": "docs/licenses/STATION_KIT_01.md",
+        "permitted_uses": [
+          "source",
+          "documentation",
+          "runtime"
+        ],
+        "redistribution": "allowed",
+        "derivatives": "allowed",
+        "attribution": "Apsis Drift contributors; original OpenAI references, Meshy-generated pod geometry and authored Blender layout studies"
+      },
+      "generated": {
+        "provider": "Meshy",
+        "tool": "Meshy CLI 0.4.0 text-to-3d refine",
+        "model": "Meshy 6",
+        "model_version": "Requested meshy-6; underlying build undisclosed",
+        "prompt": "{\"mode\": \"refine\", \"preview_task_id\": \"01a0ecc0-762b-73e0-9727-2689b891b9d3\", \"enable_pbr\": true, \"texture_resolution\": \"4k\", \"remove_lighting\": true, \"target_formats\": [\"glb\"], \"texture_prompt\": \"Factory-new spacecraft thermal management cassette. Satin warm ivory painted alloy protective panels, graphite dark blue recessed housings, brushed titanium plumbing and fasteners, restrained amber identification bands and cyan status indicators. Clean precision industrial finish, no rust, dirt, scratches, oil stains or battle damage. Metal pipes are unpainted satin metal, not brown. Panel paint is dielectric, pipes metallic. Keep coherent subtle surface grain, no decorative symbols, no baked shadows, no large text. Matches a mildly futuristic ivory space station.\"}",
+        "generation_date": "2026-09-29",
+        "source_output": "Task 01a0ecd4-1571-7570-9075-e27c358d193a; parent preview 01a0ecc0-762b-73e0-9727-2689b891b9d3; 10 credits; SHA-256 5f0d67ac68f8b01f3fe01041108b3a67b84862ea7eec37b4cd3a7d03b70ef07b",
+        "seed": {
+          "unavailable": "Provider did not expose a seed"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "bounds_size_m": [
+    8.0789852142334,
+    4.21329259872437,
+    12.8290281295776
+  ],
+  "failures": 0,
+  "material_surfaces": 119,
+  "mesh_instances": 34,
+  "model_sha256": "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8",
+  "pass": true,
+  "scope": "Headless native import, finite buffers/index bounds, invalid contract rejection, measured anchors and sampled gear presentation; no GPU/physics certification.",
+  "triangles": 728738
+}

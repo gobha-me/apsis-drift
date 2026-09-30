@@ -1,0 +1,220 @@
+{
+  "schema": "apsis.native-starter-assets/1",
+  "package_id": "freedom-starter-01",
+  "files": [
+    {
+      "path": "licenses/FIRST_LIGHT_GENERATED_OUTPUT.md",
+      "bytes": 1695,
+      "sha256": "d8b8267bca31705f67e97e64f22c555697c2dd9732762788ca261b19f4cb64c4"
+    },
+    {
+      "path": "licenses/FREEDOM_PREVIEW_01.md",
+      "bytes": 1222,
+      "sha256": "3df67efc6d4b9e843cff7b3bdf5a36cb531a4bc9c6ee74ac813ae87523dcaaed"
+    },
+    {
+      "path": "licenses/HOPPER_GENERATED_CONCEPTS.md",
+      "bytes": 1783,
+      "sha256": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879"
+    },
+    {
+      "path": "licenses/HOPPER_MESHY_TRIAL.md",
+      "bytes": 3084,
+      "sha256": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad"
+    },
+    {
+      "path": "licenses/LICENSE.md",
+      "bytes": 1521,
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "licenses/MESHY_QUALIFICATION_OUTPUT.md",
+      "bytes": 1762,
+      "sha256": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225"
+    },
+    {
+      "path": "licenses/SABLE_COURIER.md",
+      "bytes": 2999,
+      "sha256": "64aa837231652046df339bc404c4008c37495ce6af1fecd8483efe874d1e2929"
+    },
+    {
+      "path": "licenses/SABLE_HOPPER_01.md",
+      "bytes": 1152,
+      "sha256": "94a7e2f02ca1be46cc2b96c4f427661b0ad167e5ffef9b2b4d34110c0618c1ea"
+    },
+    {
+      "path": "licenses/STATION_HUMAN_REFERENCE.md",
+      "bytes": 2180,
+      "sha256": "53525ad80b640d3766a0ca0bc7ed630d7d7d01fc1f1798c9ccb87e5b55a77f49"
+    },
+    {
+      "path": "licenses/STATION_KIT_01.md",
+      "bytes": 11622,
+      "sha256": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+    },
+    {
+      "path": "metadata/authoring-lineage.json",
+      "bytes": 145956,
+      "sha256": "a7260aca7cb986fdf9934929d5e541164588e7e2c92cfb744df34f5effc189c6"
+    },
+    {
+      "path": "metadata/hopper-wayfarer-01-export-checks.json",
+      "bytes": 3916,
+      "sha256": "212d1ae46b1c698636fb3b1e8cf5538520ace0e979e09511e377252ba1067c76"
+    },
+    {
+      "path": "metadata/hopper-wayfarer-01-godot-checks.json",
+      "bytes": 460,
+      "sha256": "81bc4cdaee12d625d888b77f072c390066964b01bcf1b6eba1ace6d8791c12aa"
+    },
+    {
+      "path": "metadata/hopper-wayfarer-01.json",
+      "bytes": 251161,
+      "sha256": "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
+    },
+    {
+      "path": "metadata/station-reference-godot-checks.json",
+      "bytes": 677,
+      "sha256": "127cc6f4a566a46390ef026b3820e9b8cb2bc7175d1c3b27a35554d5f3a63e45"
+    },
+    {
+      "path": "metadata/station-reference-godot-walk-checks.json",
+      "bytes": 1038,
+      "sha256": "6f59559d0786f3494e4642daa57d13f079e432592528a89b169f7a3e6c90e2e1"
+    },
+    {
+      "path": "metadata/station-reference-presentation.json",
+      "bytes": 296172,
+      "sha256": "b68e945943dcef33b28b90ab31308753cd46b28cd94098524d33993e98f53919"
+    },
+    {
+      "path": "metadata/station-reference.json",
+      "bytes": 3905,
+      "sha256": "bae3d1bda5783b595826364b50bdde03b930536b459fb13138628adbbae0228a"
+    },
+    {
+      "path": "payloads/station-00.xz-part",
+      "bytes": 33554432,
+      "sha256": "16fde93b077bc251ee6c7e18a5b26349b8739e6b49e332d0eef69f745015a4e2"
+    },
+    {
+      "path": "payloads/station-01.xz-part",
+      "bytes": 33554432,
+      "sha256": "49cfb73accab51040d31d98ccc8b10bc2bdf4d7848b19171a4549f45f4757ca0"
+    },
+    {
+      "path": "payloads/station-02.xz-part",
+      "bytes": 33554432,
+      "sha256": "63d367ad790fa2ee6c46f2c1cb2fe56980d8e21e6bd0eb1132d095f567244e5a"
+    },
+    {
+      "path": "payloads/station-03.xz-part",
+      "bytes": 33554432,
+      "sha256": "465a48bf716731b8db88e611128f08d3b8fc253ff249c167d4822f0de0849cc3"
+    },
+    {
+      "path": "payloads/station-04.xz-part",
+      "bytes": 33554432,
+      "sha256": "72a74cb29ec6f81a22c35496e50cb9f85c4e30fa9fa5f7397cf87d7db9f745a3"
+    },
+    {
+      "path": "payloads/station-05.xz-part",
+      "bytes": 33554432,
+      "sha256": "201b4ae0750b35e3a4cad122d63f16a5e62e892dd1edba663169fcd3c6e9d47d"
+    },
+    {
+      "path": "payloads/station-06.xz-part",
+      "bytes": 33554432,
+      "sha256": "b07cb21fe2fd7b2f6181a194806b97844c7a79292d4c5ff989b9def406ce408b"
+    },
+    {
+      "path": "payloads/station-07.xz-part",
+      "bytes": 33554432,
+      "sha256": "216d746d2395e8891372df178ec91917065424e154d009536eef730363f8ddce"
+    },
+    {
+      "path": "payloads/station-08.xz-part",
+      "bytes": 33554432,
+      "sha256": "492228649efccb7c9feedc99c787b7bc95c6533c412797abdf59fabe222526e8"
+    },
+    {
+      "path": "payloads/station-09.xz-part",
+      "bytes": 24901952,
+      "sha256": "9e615be97b23bca9d7639c6ab87160228be4085ae5a90b3aa41accb8e6117349"
+    },
+    {
+      "path": "payloads/wayfarer-00.xz-part",
+      "bytes": 20499544,
+      "sha256": "b6b0cca0d92cdddadb1023b7ed8725fb5d80abeba4b34a0fbd1d6cbde5f2bce3"
+    }
+  ],
+  "models": [
+    {
+      "id": "station",
+      "output": "station-reference.glb",
+      "bytes": 513069840,
+      "sha256": "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80",
+      "source_sha256": "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6",
+      "license": "LicenseRef-Apsis-Station-Kit-Output",
+      "chunks": [
+        "payloads/station-00.xz-part",
+        "payloads/station-01.xz-part",
+        "payloads/station-02.xz-part",
+        "payloads/station-03.xz-part",
+        "payloads/station-04.xz-part",
+        "payloads/station-05.xz-part",
+        "payloads/station-06.xz-part",
+        "payloads/station-07.xz-part",
+        "payloads/station-08.xz-part",
+        "payloads/station-09.xz-part"
+      ],
+      "receipt": "metadata/station-reference-godot-checks.json"
+    },
+    {
+      "id": "wayfarer",
+      "output": "hopper-wayfarer-01.glb",
+      "bytes": 40586888,
+      "sha256": "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8",
+      "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+      "license": "LicenseRef-Apsis-Hopper-Meshy-Output",
+      "chunks": [
+        "payloads/wayfarer-00.xz-part"
+      ],
+      "receipt": "metadata/hopper-wayfarer-01-export-checks.json"
+    }
+  ],
+  "metadata": [
+    {
+      "path": "metadata/station-reference-presentation.json",
+      "output": "station-reference-presentation.json"
+    },
+    {
+      "path": "metadata/station-reference.json",
+      "output": "station-reference.json"
+    },
+    {
+      "path": "metadata/station-reference-godot-checks.json",
+      "output": "station-reference-godot-checks.json"
+    },
+    {
+      "path": "metadata/station-reference-godot-walk-checks.json",
+      "output": "station-reference-godot-walk-checks.json"
+    },
+    {
+      "path": "metadata/hopper-wayfarer-01.json",
+      "output": "hopper-wayfarer-01.json"
+    },
+    {
+      "path": "metadata/hopper-wayfarer-01-export-checks.json",
+      "output": "hopper-wayfarer-01-export-checks.json"
+    },
+    {
+      "path": "metadata/hopper-wayfarer-01-godot-checks.json",
+      "output": "hopper-wayfarer-01-godot-checks.json"
+    },
+    {
+      "path": "metadata/authoring-lineage.json",
+      "output": "authoring-lineage.json"
+    }
+  ]
+}

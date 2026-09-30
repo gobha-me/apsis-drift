@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "asset_id": "station/reference-outpost",
+  "status": "authoring-reference; provisional operating assumptions, not authoritative game state",
+  "source": "assets/visual/station-reference.blend",
+  "source_sha256": "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6",
+  "units": {
+    "distance": "metres",
+    "power": "kW",
+    "energy": "kWh",
+    "water": "litres",
+    "time": "simulation hours or days; never wall-clock offline depletion"
+  },
+  "coordinates": {
+    "up": "+Z",
+    "hub_floor_origin": [
+      0.97,
+      0.978,
+      0
+    ],
+    "forward_bay_outward": "-Y"
+  },
+  "occupancy": {
+    "staff": 2,
+    "resident_pilots": 1,
+    "temporary_guests": 1,
+    "permanent_berths": 3,
+    "temporary_cots": 1
+  },
+  "berths": {
+    "internal_wayfarer_bays": 1,
+    "roof_docks": [
+      "D1",
+      "D2"
+    ],
+    "simultaneous_major_repairs": 1,
+    "main_bay_mode": "internal ship OR external freight transfer"
+  },
+  "supplies": {
+    "food_person_days": 120,
+    "planned_delivery_interval_sim_days": 21,
+    "potable_buffer_l": 1000,
+    "reclaim_buffer_l": 1000,
+    "net_makeup_water_l_per_person_day": 4,
+    "local_air_reserve_person_hours": 24,
+    "reserve_condition": "Sealed, isolated occupied room; a hull breach or failed circulation changes the outcome. Not an EVA duration."
+  },
+  "power": {
+    "solar_nameplate_kw_at_reference_flux": 64,
+    "reference_flux_multiplier": 1.0,
+    "hotel_load_kw": 18,
+    "essential_load_kw": 6,
+    "workshop_peak_additional_kw": 96,
+    "buffer_capacity_kwh": 400,
+    "protected_reserve_fraction": 0.2,
+    "policy": "Variable stellar flux, orientation and damage reduce generation. Shed workshop loads before protected life-support reserve. No repair or drive activation gates implemented."
+  },
+  "thermal": {
+    "nominal_rejection_kw": 96,
+    "policy": "Provisional game rating at a reference thermal condition; radiator temperature, shadow and damage require later simulation tuning."
+  },
+  "derived_at_three_residents": {
+    "food_endurance_sim_days": 40,
+    "food_margin_after_scheduled_delivery_sim_days": 19,
+    "water_makeup_endurance_sim_days": 83.333333,
+    "isolated_local_air_reserve_sim_hours": 8,
+    "hotel_buffer_hours_excluding_protected_reserve": 17.777778,
+    "essential_hours_from_protected_reserve_only": 13.333333
+  },
+  "service_scope": {
+    "connected_in_current_geometry": [
+      "plant to gallery, hub, commons, workshop and habitation",
+      "galley faucet and drain",
+      "washroom wet-service plinth",
+      "solar sealed feedthrough to plant power bus",
+      "plant process-heat loop to exterior thermal cassette",
+      "three local service-control panels"
+    ],
+    "not_yet_complete": [
+      "bay, stores and dock branch feeds",
+      "individual berth air outlets and emergency bottle changeover",
+      "internal circuitry and fluid passages inside equipment",
+      "pressure-wall machining beyond the abstracted sealed fittings",
+      "process-loop disconnects and thermal cassette-removal choreography with these new lines"
+    ]
+  },
+  "mechanism_sources": {
+    "receiving_and_room_mechanisms": "assets/visual/station-kit-18.blend",
+    "engine_exchange": "assets/visual/station-maintenance.blend",
+    "spare_delivery": "assets/visual/station-staging.blend",
+    "cart_return": "assets/visual/station-return.blend"
+  },
+  "limits": [
+    "Proposed tuneable fictional ratings; not inferred from mesh volume, flow analysis or structural calculations.",
+    "Character animation, runtime atmosphere/power/pressure/economy and procedural station generation are not implemented here.",
+    "The current reference is a single occupied state; source mechanism clips still require independent normalized packaging.",
+    "The code session must keep simulation and persistent state application-owned in C++; Godot consumes that state."
+  ]
+}

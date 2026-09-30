@@ -1,0 +1,178 @@
+{
+  "pass": true,
+  "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+  "model_sha256": "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8",
+  "source_objects": 1746,
+  "texture_bindings": {
+    "valid_texture_bindings": 19
+  },
+  "pilot_eye_from_seat_rig_godot_m": [
+    0.0,
+    1.3650000095367432,
+    -2.490000009536743
+  ],
+  "seat_adjustment_m": {
+    "up": 0.18,
+    "forward": 0.08
+  },
+  "source_evaluated_triangles": 5377322,
+  "runtime_triangles": 728738,
+  "vertices": 512729,
+  "mesh_batches": 34,
+  "gear_motion_groups": 30,
+  "texture_reductions": [
+    {
+      "image": "Image_0.001",
+      "source_size": [
+        4096,
+        4096
+      ],
+      "runtime_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "image": "Image_0.002",
+      "source_size": [
+        4096,
+        4096
+      ],
+      "runtime_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "image": "Image_0.003",
+      "source_size": [
+        8192,
+        8192
+      ],
+      "runtime_size": [
+        4096,
+        4096
+      ]
+    },
+    {
+      "image": "Image_1.003",
+      "source_size": [
+        4096,
+        4096
+      ],
+      "runtime_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "image": "Image_2.001",
+      "source_size": [
+        4096,
+        4096
+      ],
+      "runtime_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "image": "Image_2.002",
+      "source_size": [
+        4096,
+        4096
+      ],
+      "runtime_size": [
+        2048,
+        2048
+      ]
+    },
+    {
+      "image": "Image_2.003",
+      "source_size": [
+        4096,
+        4096
+      ],
+      "runtime_size": [
+        2048,
+        2048
+      ]
+    }
+  ],
+  "bounds_blender_m": [
+    [
+      -4.039039611816406,
+      -7.619999885559082,
+      -1.258792519569397
+    ],
+    [
+      4.03994607925415,
+      5.209029197692871,
+      2.9544999599456787
+    ]
+  ],
+  "file_bytes": 40586888,
+  "reductions": [
+    {
+      "source": "CRAFT | main pressure-shell exterior",
+      "before_triangles": 346923,
+      "target_triangles": 83261
+    },
+    {
+      "source": "CRAFT | port removable engine cowl",
+      "before_triangles": 68068,
+      "target_triangles": 16336
+    },
+    {
+      "source": "CRAFT | starboard removable engine cowl",
+      "before_triangles": 71934,
+      "target_triangles": 17264
+    },
+    {
+      "source": "WF02 | detachable nose skin",
+      "before_triangles": 306849,
+      "target_triangles": 35000
+    },
+    {
+      "source": "WF02 | retained port forward shoulder",
+      "before_triangles": 53856,
+      "target_triangles": 12925
+    },
+    {
+      "source": "WF02 | retained starboard forward shoulder",
+      "before_triangles": 52091,
+      "target_triangles": 12501
+    },
+    {
+      "source": "WF02 | retained nose joint backing",
+      "before_triangles": 5187,
+      "target_triangles": 3000
+    },
+    {
+      "source": "WF04 | port fixed lower pod skirt",
+      "before_triangles": 61771,
+      "target_triangles": 14825
+    },
+    {
+      "source": "WF04 | starboard fixed lower pod skirt",
+      "before_triangles": 63561,
+      "target_triangles": 15254
+    },
+    {
+      "source": "CABIN LSC | LSC01 | retained generated housing and filter surface.002",
+      "before_triangles": 81374,
+      "target_triangles": 19529
+    },
+    {
+      "source": "ENGINE04 -1 | HPE02 | generated reaction and heat-exchanger jacket",
+      "before_triangles": 1938430,
+      "target_triangles": 55000
+    },
+    {
+      "source": "ENGINE04 1 | HPE02 | generated reaction and heat-exchanger jacket",
+      "before_triangles": 1938430,
+      "target_triangles": 55000
+    }
+  ],
+  "scope": "Separate UV-preserving flight derivative. No studio, fit dummy, baked instrument telemetry or fake sensor panorama. Gear motion is an inspection adapter; no physics, pressure or runtime damage changes."
+}

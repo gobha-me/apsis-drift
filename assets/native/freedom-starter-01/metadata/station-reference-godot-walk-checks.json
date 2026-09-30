@@ -1,0 +1,47 @@
+{
+  "bounds_position_m": [
+    -40.8400001525879,
+    -1.61549949645996,
+    -28.6999988555908
+  ],
+  "bounds_size_m": [
+    64.5987091064453,
+    14.5965118408203,
+    85.805793762207
+  ],
+  "collision_probe_results": [
+    {
+      "supported": true,
+      "view": "hub"
+    },
+    {
+      "supported": true,
+      "view": "habitation"
+    },
+    {
+      "supported": true,
+      "view": "commons"
+    },
+    {
+      "supported": true,
+      "view": "workshop"
+    },
+    {
+      "supported": true,
+      "view": "bay"
+    },
+    {
+      "wall_obstruction_detected": true
+    }
+  ],
+  "failures": [],
+  "glb_sha256": "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80",
+  "godot_version": "4.7.2-stable (official)",
+  "mesh_instances": 5009,
+  "pass": true,
+  "scope": "Full-detail station import and buffer validation; isolated asset review, no game integration.",
+  "source_sha256": "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6",
+  "surfaces": 5056,
+  "triangles": 13687924,
+  "vertices": 9510065
+}
