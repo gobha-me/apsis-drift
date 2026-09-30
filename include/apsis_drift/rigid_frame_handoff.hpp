@@ -37,6 +37,7 @@ struct RigidFrameHandoffError {
 // Pure same-tick coordinate change, not a simulation step, dock/launch event or
 // force provider. Supports system_inertial <-> station_relative_inertial using
 // the explicitly selected catalog family's origin station ephemeris.
+// Physical contexts also support system <-> named planet_relative_inertial.
 // Their axes are identical: craft,
 // tick, quaternion and body angular velocity retain every bit. A validated
 // same-frame request is an exact identity, including planet_fixed. All other
@@ -62,7 +63,8 @@ struct RigidFrameHandoffError {
     -> std::expected<RigidBodyState, RigidFrameHandoffError>;
 
 // Same numerical transform, explicitly owned by the physical catalog family.
-// A legacy recipe/context cannot be substituted, even with matching IDs.
+// Also supports same-planet fixed <-> planet_relative_inertial without adding
+// host translation. A legacy recipe/context cannot be substituted.
 [[nodiscard]] auto reframe_rigid_body(
     const RigidBodyWorldContext& context, const RigidBodyState& source,
     const RigidFrameHandoffRequest& request,

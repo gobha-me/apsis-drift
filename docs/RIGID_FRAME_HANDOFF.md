@@ -174,6 +174,41 @@ and rotating handoffs resume bit-identically after physical v2 JSON hydration
 with the same retained context/rotation recipe. Historical legacy JSON and
 handoff corpus goldens remain unchanged regression gates.
 
+## Named nonrotating planet boundary (2026-09-30, #319)
+
+The physical-only `planet_relative_inertial` frame stores planet-relative p/v
+with nonrotating, system-aligned axes and an explicit planet owner. The original
+three-argument API now also supports physical system ↔ this named frame. Use
+that planet's final C++ physical ephemeris once: relative → system adds planet
+p/v, and system → relative subtracts it. Craft, tick, quaternion and body spin
+keep their exact bits. Planet-centre co-motion cancels exactly. Position/velocity
+roundtrip tolerance uses the same `4*eps*max(1,original,origin_offset)` component
+budget as station translation. Direct station/planet-relative and cross-planet
+shortcuts remain unsupported; a canonical same-frame identity remains exact.
+
+The physical rotation-recipe overload also supports **same-planet** fixed ↔
+nonrotating relative frames. It uses the existing rotation kernel with origin
+position/velocity zero: rotate local radius/velocity, add/subtract `Omega × r`,
+compose/normalize candidate attitude once, and resolve the frame-spin correction
+in body axes. It never adds planet system translation to this pair. Relative
+roundtrip precision therefore uses the existing rotation bounds with `P=V=0`,
+scaling against local radius/velocity rather than cancellation at a system
+origin. Source/hydration are untouched. System/fixed transforms retain their
+original translation and arithmetic.
+
+A physical recipe is required for the rotating pair; wrong family/body/version,
+cross-planet pairs or an ignored-recipe nonrotating identity refuse. Use the
+three-argument API for nonrotating identity/translation. Standalone JSON
+explicitly uses [v3 for the new frame](RIGID_BODY_STATE.md#planet-relative-nonrotating-projection-2026-09-30-319)
+and preserves v1/v2 for existing meanings. Exact next-handoff continuation is
+qualified with the same caller-retained world/rotation recipe.
+
+Neither translating coordinates nor their `inertial` axes label supplies a
+force integrator for the moving origin. The force-free vacuum provider still
+refuses this frame. A later central-body approximation must specify that motion
+before saved planetary flight is adopted. There is no launch/dock/contact gate,
+gravity call, implicit local tangent anchor or renderer-derived origin here.
+
 ## Remaining integration
 
 The native lab is still planet-centred **nonrotating**, not `planet_fixed`.

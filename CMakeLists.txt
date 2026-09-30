@@ -319,6 +319,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME physical-rigid-contract COMMAND apsis-drift-physical-rigid-tests)
   set_tests_properties(physical-rigid-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-planet-relative-tests test/planet_relative_test.cpp)
+  target_link_libraries(apsis-drift-planet-relative-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-planet-relative-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME planet-relative-contract COMMAND apsis-drift-planet-relative-tests)
+  set_tests_properties(planet-relative-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-planet-rotation-tests test/planet_rotation_test.cpp)
   target_link_libraries(apsis-drift-planet-rotation-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-planet-rotation-tests PRIVATE

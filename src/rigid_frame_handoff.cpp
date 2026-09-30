@@ -49,51 +49,73 @@ auto reframe_rigid_body(const RigidBodyWorldContext& context,
         RigidFrameHandoffError{Code::invalid_destination, valid.error(), {}}};
   if (source.frame == request.destination) return source;
 
+  const auto relative_kind = [](RigidFrameKind kind) {
+    return kind == RigidFrameKind::station_relative_inertial ||
+           kind == RigidFrameKind::planet_relative_inertial;
+  };
   const bool to_system =
-      source.frame.kind == RigidFrameKind::station_relative_inertial &&
+      relative_kind(source.frame.kind) &&
       request.destination.kind == RigidFrameKind::system_inertial;
-  const bool to_station =
+  const bool to_relative =
       source.frame.kind == RigidFrameKind::system_inertial &&
-      request.destination.kind == RigidFrameKind::station_relative_inertial;
-  if (!to_system && !to_station)
+      relative_kind(request.destination.kind);
+  if (!to_system && !to_relative)
     return std::unexpected{
         RigidFrameHandoffError{Code::unsupported_frame_pair, {}, {}}};
 
-  // Successful station frame validation above proves this pointer exists and
-  // matches the named canonical origin station. Use the final system-space
-  // station p/v, not separately rounded host + host-relative components.
-  const auto station =
-      [&]() -> std::expected<OriginStationEphemeris, RigidFrameHandoffError> {
-    if (const auto* physical = context.physical_owner()) {
+  // Use the final selected C++ ephemeris once. Axes are system-aligned;
+  // translation never reconstructs or renormalizes attitude/body spin.
+  struct Origin {
+    SystemPositionMetres position;
+    SystemVelocityMetresPerSecond velocity;
+  };
+  const auto& relative = to_system ? source.frame : request.destination;
+  const auto origin = [&]() -> std::expected<Origin, RigidFrameHandoffError> {
+    if (relative.kind == RigidFrameKind::station_relative_inertial) {
+      // Frame validation proves the canonical station pointer exists.
+      if (const auto* physical = context.physical_owner()) {
+        const auto resolved = resolve_origin_station_ephemeris(
+            *physical, *context.station, {source.tick, 0.0});
+        if (!resolved)
+          return std::unexpected{RigidFrameHandoffError{
+              Code::ephemeris_failure, {}, {}, {}, resolved.error()}};
+        return Origin{resolved->position, resolved->velocity};
+      }
       const auto resolved = resolve_origin_station_ephemeris(
-          *physical, *context.station, {source.tick, 0.0});
+          context.system, *context.station, {source.tick, 0.0});
       if (!resolved)
         return std::unexpected{RigidFrameHandoffError{
-            Code::ephemeris_failure, {}, {}, {}, resolved.error()}};
-      return *resolved;
+            Code::ephemeris_failure, {}, resolved.error()}};
+      return Origin{resolved->position, resolved->velocity};
     }
-    const auto resolved = resolve_origin_station_ephemeris(
-        context.system, *context.station, {source.tick, 0.0});
+    const auto* physical = context.physical_owner();
+    if (physical == nullptr)
+      return std::unexpected{
+          RigidFrameHandoffError{Code::ephemeris_failure,
+                                 {},
+                                 {},
+                                 {},
+                                 PhysicalLocalSystemError::invalid_context}};
+    const auto resolved = resolve_planet_ephemeris(*physical, *relative.planet,
+                                                   {source.tick, 0.0});
     if (!resolved)
       return std::unexpected{RigidFrameHandoffError{
-          Code::ephemeris_failure, {}, resolved.error()}};
-    return *resolved;
+          Code::ephemeris_failure, {}, {}, {}, resolved.error()}};
+    return Origin{resolved->position, resolved->velocity};
   }();
-  if (!station) return std::unexpected{station.error()};
+  if (!origin) return std::unexpected{origin.error()};
   const auto transform = [to_system](double value, double origin) {
     return to_system ? value + origin : value - origin;
   };
   candidate.position_metres = {
-      transform(source.position_metres.x, station->position.x),
-      transform(source.position_metres.y, station->position.y),
-      transform(source.position_metres.z, station->position.z)};
+      transform(source.position_metres.x, origin->position.x),
+      transform(source.position_metres.y, origin->position.y),
+      transform(source.position_metres.z, origin->position.z)};
   candidate.linear_velocity_metres_per_second = {
-      transform(source.linear_velocity_metres_per_second.x,
-                station->velocity.x),
-      transform(source.linear_velocity_metres_per_second.y,
-                station->velocity.y),
+      transform(source.linear_velocity_metres_per_second.x, origin->velocity.x),
+      transform(source.linear_velocity_metres_per_second.y, origin->velocity.y),
       transform(source.linear_velocity_metres_per_second.z,
-                station->velocity.z)};
+                origin->velocity.z)};
   // Only the completed candidate is canonicalized (signed zeros); source q is
   // already canonical and is never renormalized or reconstructed from heading.
   const auto result = canonicalize_rigid_body_state(context, candidate);
@@ -122,12 +144,20 @@ auto reframe_rotating(const RigidBodyWorldContext& context,
     return std::unexpected{
         RigidFrameHandoffError{Code::invalid_destination, valid.error(), {}}};
 
+  const bool relative_pair =
+      (source.frame.kind == RigidFrameKind::planet_fixed &&
+       request.destination.kind == RigidFrameKind::planet_relative_inertial) ||
+      (source.frame.kind == RigidFrameKind::planet_relative_inertial &&
+       request.destination.kind == RigidFrameKind::planet_fixed);
+  const bool same_planet = source.frame.planet == request.destination.planet;
   const bool to_system =
       source.frame.kind == RigidFrameKind::planet_fixed &&
-      request.destination.kind == RigidFrameKind::system_inertial;
+      (request.destination.kind == RigidFrameKind::system_inertial ||
+       (relative_pair && same_planet));
   const bool to_fixed =
-      source.frame.kind == RigidFrameKind::system_inertial &&
-      request.destination.kind == RigidFrameKind::planet_fixed;
+      request.destination.kind == RigidFrameKind::planet_fixed &&
+      (source.frame.kind == RigidFrameKind::system_inertial ||
+       (relative_pair && same_planet));
   const bool identity = source.frame.kind == RigidFrameKind::planet_fixed &&
                         source.frame == request.destination;
   if (!to_system && !to_fixed && !identity)
@@ -170,12 +200,16 @@ auto reframe_rotating(const RigidBodyWorldContext& context,
 
   const auto rotation = geometry->fixed_to_system;
   const auto inverse = conjugate(rotation);
-  const RigidVector3 origin{geometry->planet_position.x,
-                            geometry->planet_position.y,
-                            geometry->planet_position.z};
-  const RigidVector3 velocity{geometry->planet_velocity.x,
-                              geometry->planet_velocity.y,
-                              geometry->planet_velocity.z};
+  const RigidVector3 origin = relative_pair
+                                  ? RigidVector3{}
+                                  : RigidVector3{geometry->planet_position.x,
+                                                 geometry->planet_position.y,
+                                                 geometry->planet_position.z};
+  const RigidVector3 velocity = relative_pair
+                                    ? RigidVector3{}
+                                    : RigidVector3{geometry->planet_velocity.x,
+                                                   geometry->planet_velocity.y,
+                                                   geometry->planet_velocity.z};
   const RigidVector3 omega{geometry->angular_velocity_radians_per_second.x,
                            geometry->angular_velocity_radians_per_second.y,
                            geometry->angular_velocity_radians_per_second.z};
