@@ -3,6 +3,7 @@ extends Control
 
 const StationView = preload("res://native_station_view.gd")
 const HostSky = preload("res://native_host_sky.gdshader")
+const FlightView = preload("res://native_flight_view.gd")
 
 var bridge: Variant = null
 var selected: Dictionary = {}
@@ -143,6 +144,23 @@ func _ready() -> void:
 	var accepted: bool = bridge.initialize_freedom_new_game(options.value) if options.mode == "new_game" else bridge.initialize_freedom_continue(options.value)
 	if not accepted:
 		fail(str(bridge.get_last_error()))
+		return
+	var flight: Dictionary = bridge.get_freedom_flight_state()
+	if not flight.is_empty():
+		if not FlightView.valid_state(flight):
+			fail("C++ bridge returned an invalid saved-flight view")
+			return
+		if options.get("validate_only", false):
+			print("Freedom native flight shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
+			get_tree().quit(0)
+			return
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var view := FlightView.new()
+		add_child(view)
+		if not view.initialize(bridge, options.get("assets", "")):
+			fail(view.error)
+			return
+		print("Freedom native flight shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
 		return
 	selected = bridge.get_freedom_start()
 	if not valid_start(selected):

@@ -1,4 +1,5 @@
 #include "flight_guidance.hpp"
+#include "saved_flight.hpp"
 #include "snapshot.hpp"
 #include "streaming.hpp"
 #include "surface_start.hpp"
@@ -176,11 +177,26 @@ class FreedomBridge : public godot::RefCounted {
   GDCLASS(FreedomBridge, godot::RefCounted)
   std::unique_ptr<LiveWorld> world;
   std::unique_ptr<NativeFreedomStationStart> native_start;
+  std::unique_ptr<SavedFlightWorld> saved_flight;
   godot::String last_error;
   std::unique_ptr<PlanetStream> stream;
   std::set<StreamKey> exported;
 
   auto commit_freedom_start(NativeStartup selected) -> bool {
+    if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document)) {
+      auto opened = NativeFreedomFlightSession::open(std::move(selected));
+      if (!opened) throw std::runtime_error(opened.error());
+      (void)project_saved_flight(*opened);
+      auto candidate = std::make_unique<SavedFlightWorld>(
+          SavedFlightWorld{std::move(*opened), {}, {}, 0});
+      stream.reset();
+      exported.clear();
+      world.reset();
+      native_start.reset();
+      saved_flight = std::move(candidate);
+      last_error = godot::String{};
+      return true;
+    }
     auto prepared = prepare_native_freedom_station_start(std::move(selected));
     if (!prepared) throw std::runtime_error(prepared.error());
     auto candidate =
@@ -188,6 +204,7 @@ class FreedomBridge : public godot::RefCounted {
     stream.reset();
     exported.clear();
     world.reset();
+    saved_flight.reset();
     native_start = std::move(candidate);
     last_error = godot::String{};
     return true;
@@ -205,6 +222,15 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::initialize_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
                                 &FreedomBridge::get_freedom_start);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
+                                &FreedomBridge::get_freedom_flight_state);
+    godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_flight",
+                                                "elapsed", "fractions",
+                                                "paused"),
+                                &FreedomBridge::advance_freedom_flight);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("set_freedom_assistance", "enabled"),
+        &FreedomBridge::set_freedom_assistance);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_geometry"),
                                 &FreedomBridge::get_freedom_station_geometry);
     godot::ClassDB::bind_method(godot::D_METHOD("get_wayfarer_frame"),
@@ -302,14 +328,17 @@ class FreedomBridge : public godot::RefCounted {
 
   auto save_freedom_as(const godot::String& save_path) -> bool {
     try {
-      if (!native_start)
+      if (!native_start && !saved_flight)
         throw std::invalid_argument(
-            "Save As requires a selected Freedom station session");
+            "Save As requires a selected Freedom session");
       const auto utf8 = save_path.utf8();
       const std::string bytes{utf8.get_data(),
                               static_cast<std::size_t>(utf8.length())};
-      const auto saved = native_save_freedom(native_start->selected,
-                                             std::filesystem::path{bytes});
+      const auto saved =
+          saved_flight
+              ? saved_flight->session.save_as(std::filesystem::path{bytes})
+              : native_save_freedom(native_start->selected,
+                                    std::filesystem::path{bytes});
       if (!saved) throw std::runtime_error(saved.error());
       last_error = godot::String{};
       return true;
@@ -365,6 +394,144 @@ class FreedomBridge : public godot::RefCounted {
     result["station_relative_velocity_metres_per_second"] =
         coordinates(start.ephemeris.host_relative_velocity);
     result["station_phase_radians"] = start.ephemeris.phase_radians;
+    return result;
+  }
+
+  auto advance_freedom_flight(double elapsed,
+                              godot::PackedFloat64Array fractions, bool paused)
+      -> bool {
+    try {
+      if (!saved_flight)
+        throw std::invalid_argument("Continue a physical flight save first");
+      saved_flight->advance(
+          elapsed,
+          {fractions.ptr(), static_cast<std::size_t>(fractions.size())},
+          paused);
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto set_freedom_assistance(bool enabled) -> bool {
+    if (!saved_flight) {
+      last_error = "Continue a physical flight save first";
+      return false;
+    }
+    saved_flight->session.set_assistance(enabled);
+    last_error = godot::String{};
+    return true;
+  }
+
+  auto get_freedom_flight_state() -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight) return result;
+    try {
+      const auto& session = saved_flight->session;
+      const auto& document = session.document();
+      const auto& body = document.flight;
+      const auto view = project_saved_flight(session);
+      const auto observed = require(session.observe());
+      const auto coordinates = [](const auto& value) {
+        godot::PackedFloat64Array array;
+        for (double v : {value.x, value.y, value.z})
+          array.append(v);
+        return array;
+      };
+      const auto local_vector = [](LocalPositionMetres value) {
+        return godot::Vector3(value.east, value.up, -value.north);
+      };
+      const auto decimal = [](std::uint64_t v) {
+        return godot::String{std::to_string(v).c_str()};
+      };
+      godot::Basis basis;
+      godot::Basis station_basis;
+      for (int i = 0; i < 3; ++i) {
+        basis.set_column(
+            i, local_vector(view.body_axes[static_cast<std::size_t>(i)]));
+        station_basis.set_column(
+            i, local_vector(view.system_axes[static_cast<std::size_t>(i)]));
+      }
+      result["mode"] = "freedom_flight";
+      result["universe_seed"] =
+          decimal(document.origin.recipe.universe_seed.value);
+      result["system_id"] = decimal(session.system().catalog.id.value);
+      result["planet_id"] = decimal(body.frame.planet->value);
+      result["station_id"] = decimal(view.station.id.value);
+      result["craft_id"] = decimal(document.origin.state.craft.value);
+      result["frame_id"] = decimal(body.craft.id.value);
+      result["frame_version"] = static_cast<std::int64_t>(body.craft.version);
+      result["tick"] = decimal(body.tick);
+      result["checksum"] = decimal(require(rigid_body_state_checksum(
+          RigidBodyWorldContext{session.system()}, body)));
+      result["continued"] = session.source_save().has_value();
+      result["position_metres"] = coordinates(body.position_metres);
+      result["velocity_metres_per_second"] =
+          coordinates(body.linear_velocity_metres_per_second);
+      godot::PackedFloat64Array orientation;
+      for (double v : {body.orientation.w, body.orientation.x,
+                       body.orientation.y, body.orientation.z})
+        orientation.append(v);
+      result["orientation_wxyz"] = orientation;
+      result["angular_velocity_body"] =
+          coordinates(body.angular_velocity_radians_per_second);
+      result["body_basis"] = basis;
+      result["station_position"] = local_vector(view.station_position);
+      result["station_basis"] = station_basis;
+      result["latitude"] = view.pose.latitude_radians;
+      result["longitude"] = view.pose.longitude_radians;
+      result["altitude"] = view.pose.altitude_metres;
+      result["planet_radius"] = view.planet.radius.value * 1000.0;
+      result["atmosphere_edge"] =
+          observed.atmosphere.space_boundary_altitude_metres;
+      result["air_density"] = observed.atmosphere.density_kg_per_cubic_metre;
+      result["dynamic_pressure"] = observed.atmosphere.dynamic_pressure_pascals;
+      result["inertial_speed"] =
+          observed.orbit.inertial_speed_metres_per_second;
+      result["surface_speed"] =
+          observed.orbit.surface_relative_speed_metres_per_second;
+      result["radial_rate"] = observed.orbit.radial_rate_metres_per_second;
+      result["periapsis_radius"] = observed.orbit.periapsis_radius_metres;
+      result["apoapsis_radius"] =
+          observed.orbit.apoapsis_radius_metres
+              ? godot::Variant{*observed.orbit.apoapsis_radius_metres}
+              : godot::Variant{};
+      result["assistance"] = document.model.assistance;
+      result["hold_enabled"] = document.model.hold.target.has_value();
+      result["dropped_seconds"] = saved_flight->dropped_seconds;
+      const auto force =
+          saved_flight->last_step
+              ? saved_flight->last_step->actuation.central.propulsion
+              : VacuumActuation{};
+      result["positive_force_body"] = coordinates(force.positive_force_newtons);
+      result["negative_force_body"] = coordinates(force.negative_force_newtons);
+      result["positive_torque_body"] =
+          coordinates(force.positive_torque_newton_metres);
+      result["negative_torque_body"] =
+          coordinates(force.negative_torque_newton_metres);
+      result["applied_force_body"] = coordinates(force.applied_force_newtons);
+      const auto frame = require(resolve_craft_frame(body.craft));
+      godot::PackedFloat64Array positive_ratings, negative_ratings;
+      for (const auto v : frame.properties.positive_force_newtons)
+        positive_ratings.append(v);
+      for (const auto v : frame.properties.negative_force_newtons)
+        negative_ratings.append(v);
+      result["positive_force_ratings"] = positive_ratings;
+      result["negative_force_ratings"] = negative_ratings;
+      const auto& star = view.rotation.geometry.observer_to_star_fixed;
+      const auto& tangent = view.tangent;
+      result["star_direction"] = godot::Vector3(
+          star.x * tangent.east.x + star.y * tangent.east.y +
+              star.z * tangent.east.z,
+          star.x * tangent.up.x + star.y * tangent.up.y + star.z * tangent.up.z,
+          -(star.x * tangent.north.x + star.y * tangent.north.y +
+            star.z * tangent.north.z));
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      result.clear();
+    }
     return result;
   }
 
@@ -508,6 +675,7 @@ class FreedomBridge : public godot::RefCounted {
       stream.reset();
       exported.clear();
       native_start.reset();
+      saved_flight.reset();
       world = std::move(candidate);
       last_error = godot::String{};
       return true;
@@ -922,9 +1090,14 @@ class FreedomBridge : public godot::RefCounted {
 
   auto enable_streaming() -> bool {
     try {
-      if (!world) throw std::runtime_error("initialize C++ world first");
-      stream = std::make_unique<PlanetStream>(world->planet, world->lod,
-                                              world->relief_version);
+      if (!world && !saved_flight)
+        throw std::runtime_error("initialize C++ world first");
+      stream =
+          saved_flight
+              ? std::make_unique<PlanetStream>(
+                    project_saved_flight(saved_flight->session).planet, 8, 0)
+              : std::make_unique<PlanetStream>(world->planet, world->lod,
+                                               world->relief_version);
       exported.clear();
       last_error = godot::String{};
       return true;
@@ -937,8 +1110,10 @@ class FreedomBridge : public godot::RefCounted {
   auto request_stream(godot::Vector3 observer) -> bool {
     try {
       if (!stream) throw std::runtime_error("streaming is not enabled");
-      const auto frame = require(
-          make_local_tangent_frame(world->planet, world->flight.pose.position));
+      const auto frame =
+          saved_flight ? project_saved_flight(saved_flight->session).tangent
+                       : require(make_local_tangent_frame(
+                             world->planet, world->flight.pose.position));
       const auto fixed = require(planet_fixed_from_local(
           frame, {observer.x, -observer.z, observer.y}));
       stream->request(fixed);
@@ -1018,8 +1193,10 @@ class FreedomBridge : public godot::RefCounted {
       for (std::int64_t i = 0; i < anchors.size(); ++i)
         if (!std::isfinite(anchors[i]) || std::abs(anchors[i]) > 1.0e10)
           throw std::invalid_argument("invalid tile anchor coordinate");
-      const auto frame = require(
-          make_local_tangent_frame(world->planet, world->flight.pose.position));
+      const auto frame =
+          saved_flight ? project_saved_flight(saved_flight->session).tangent
+                       : require(make_local_tangent_frame(
+                             world->planet, world->flight.pose.position));
       godot::Basis basis;
       basis.set_column(0, {static_cast<float>(frame.east.x),
                            static_cast<float>(frame.up.x),

@@ -167,14 +167,14 @@ Invalid inputs return `false` with `get_last_error()` and leave the prior sessio
 and source save unchanged. The existing `initialize(snapshot_json)` remains the
 study fixture path; a successful start replaces the prior session.
 
-The separate native start shell below presents the selected docked state. It
-does not create a walkable station or surface-flight state, advance the
-saved clock, or launch playable flight. That integration remains in
+The separate native start shell below presents selected docked state or resumes
+the selected physical flight save. It does not create a walkable station or
+implement boarding, sitting, docked release or surface contact. The composed journey remains in
 [#291](https://github.com/gobha-me/apsis-drift/issues/291). Hosted GCC and
 Clang native-core jobs compile the live extension; the isolated Godot runtime
 contracts for selected starts, the shell and saving also run in hosted CI.
 
-## Docked native start shell
+## Ordinary native start and saved flight
 
 The separate native scene accepts exactly one explicit start selection:
 
@@ -185,9 +185,14 @@ GODOT_BIN=/path/to/godot tools/run_godot_native.sh --continue="$PWD/saves/freedo
 
 The launcher configures a TermForge-free `build-native` and builds the C++
 bridge before opening the Godot scene. New Game uses the selected seed; Continue
-loads the selected v17 Freedom save without writing to it. The screen shows the
+loads selected v17 station or v18 physical-flight saves without writing to them.
+The station screen shows the
 C++ universe, system, station, craft, saved tick and discovery count. It is a
-docked-state shell with Save As and Quit buttons, not flight or station exploration. The
+docked-state inspection shell with Save As and Quit buttons. A flight save opens
+the [ordinary saved-flight view](../../docs/SAVED_NATIVE_FLIGHT.md), initially
+paused, with C++ control commands, terrain streaming, actual Wayfarer presentation
+and applied-force main exhaust. Station exploration and physical departure remain
+in development. The
 snapshot study remains available through `tools/run_godot_study.sh`.
 
 **Save As** opens a filesystem chooser with `.json` save files and confirmation
@@ -202,14 +207,12 @@ durability diagnostics, including the case where replacement succeeded but
 directory synchronization failed. No save is written on launch or quit, and
 the unsaved study-flight session cannot use this operation.
 
-The shell's station-local 3D view places a provisional station pose marker at
-the origin and a plain host-planet silhouette from C++ relative ephemeris and
-radius. The distant host uses a bounded display scale to keep the camera
-frustum renderable; its direction and radius-to-distance ratio still come from
-C++. The station marker is enlarged for visibility. Godot chooses only the
-camera and presentation materials. This view
-does not use or replace the active station/Wayfarer art, and the saved clock
-does not advance while it is open. The marker is not docking geometry.
+The shell's [station-local 3D view](../../docs/NATIVE_STATION_VIEW.md) imports
+the selected station at physical metre scale, with C++-registered D1/D2 markers
+and a host silhouette using the authoritative angular size/direction. The
+saved station clock remains frozen. The ordinary flight consumer advances the
+selected saved clock only through C++ and uses the selected rotating planet
+and same-tick lighting; camera/UI choices have no simulation authority.
 
 For a headless selection check, add `--headless-validate`. It exits zero and
 prints the selected IDs and history counts only after the C++ bridge succeeds;
@@ -219,9 +222,13 @@ legacy and corrupt save fixtures.
 
 Hosted CI downloads the pinned official Godot 4.7.2 Linux archive, verifies
 its SHA-256, builds the TermForge-free bridge, and runs the `freedom_start`,
-`native_shell` and `native_save` headless contracts. The saving contract compares
+`native_shell`, `native_save` and `saved_flight` headless contracts, alongside
+the admitted asset/frame/station checks. The saving contract compares
 real bridge-written bytes against C++ fixtures, reloads the selected station,
 and exercises the shell's actual button/dialog callbacks in isolated files.
+The flight contract compares actual native commands and a mid-trace reload
+against independently written C++ save bytes, checks presentation cadence and
+invalid buffers, and inspects actual imported craft/exhaust semantics.
 It retains the runner report and process
 logs as a short-lived CI artifact, including on failure. This runtime check
 does not run the editor import path tracked by
@@ -238,7 +245,7 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 
 This Linux runner stages the selected build's exporter and bridge, copies the
 test project, generates atmospheric/airless and C++ saved-start fixtures, and
-runs 35 explicitly listed contracts headlessly with Dummy audio. Each run gets
+runs 39 explicitly listed contracts headlessly with Dummy audio. Each run gets
 a fresh retained directory under `build-godot`, isolated preferences/cache,
 per-test logs and a JSON report with source/binary hashes. It does not build,
 download content, import the editor, launch a visible window or use private

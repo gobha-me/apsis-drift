@@ -49,6 +49,7 @@ TESTS = {
     "native_asset_import": "native_assets",
     "native_station_view": "native_assets",
     "wayfarer_frame": "native_assets",
+    "saved_flight": "freedom_saves",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",
@@ -221,7 +222,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] == "native_assets" or name in ("native_shell", "native_save") for name in selected):
+    if any(TESTS[name] == "native_assets" or name in ("native_shell", "native_save", "saved_flight") for name in selected):
         package = repo / "assets/native/freedom-starter-01"
         preparer = work / "prepare_native_assets.py"
         shutil.copy2(repo / "tools/prepare_native_assets.py", preparer)
@@ -260,7 +261,10 @@ def main(argv=None):
         for filename, tick, mode in (("freedom-0.json", "0", "freedom"),
                                      ("freedom-25.json", "25", "freedom"),
                                      ("career.json", "0", "career"),
-                                     ("flight-18.json", "25", "flight")):
+                                     ("flight-18.json", "25", "flight"),
+                                     ("wayfarer-flight.json", "25", "wayfarer-flight"),
+                                     ("flight-trace.json", "25", "flight-trace"),
+                                     ("flight-overflow.json", "18446744073709551613", "wayfarer-flight")):
             path = work / filename
             log = work / f"{filename}.log"
             code, timed_out, _ = run_logged(
@@ -278,8 +282,6 @@ def main(argv=None):
     for name in selected:
         if name == "native_shell":
             cases = (
-                ("unsupported_flight", [f"--continue={work / 'flight-18.json'}",
-                                        "--validate-only"], "", False),
                 ("new", ["--new-game=42", "--validate-only"],
                  "seed=42 tick=0", True),
                 ("view", ["--new-game=42", f"--assets={work / 'native-assets'}"], "seed=42 tick=0", True),
@@ -379,6 +381,29 @@ def main(argv=None):
             save()
             print(f"{status.upper()} {name} ({len(cases)} launch cases)", flush=True)
             continue
+        if name == "saved_flight":
+            case_reports = []
+            for label, extra, accepted in (
+                    ("legacy_validate", [f"--continue={work / 'flight-18.json'}", "--validate-only"], True),
+                    ("wayfarer_validate", [f"--continue={work / 'wayfarer-flight.json'}", "--validate-only"], True),
+                    ("wayfarer_view", [f"--continue={work / 'wayfarer-flight.json'}", f"--assets={work / 'native-assets'}"], True),
+                    ("flight_missing_assets", [f"--continue={work / 'wayfarer-flight.json'}"], False)):
+                log = work / f"saved_flight-{label}.log"
+                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://native_start_shell.tscn"]
+                if label == "wayfarer_view":
+                    command += ["--quit-after", "3"]
+                command += ["--", *extra]
+                code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
+                output = log.read_text(errors="replace")
+                good = (not timed_out and code == 0 and "Freedom native flight shell " in output and "seed=42 tick=25" in output and not ERROR.search(output)) if accepted else (not timed_out and code != 0 and "Native start rejected:" in output)
+                case_reports.append({"case": label, "pass": good, "returncode": code, "seconds": elapsed, "log": log.name})
+            report["setup"].append({"family": "saved_flight_launch", "cases": case_reports})
+            save()
+            if not all(case["pass"] for case in case_reports):
+                report["tests"].append({"name": name, "status": "launch_failed", "cases": case_reports})
+                save()
+                print(f"FAIL {name} launch cases", flush=True)
+                continue
         arguments = []
         if TESTS[name] == "snapshot":
             arguments = [str(work / "snapshot-42.json")]
@@ -399,6 +424,8 @@ def main(argv=None):
             arguments.append(str(work / "native-assets"))
         if name == "freedom_start":
             arguments.append(str(work / "flight-18.json"))
+        if name == "saved_flight":
+            arguments = [str(work / path) for path in ("wayfarer-flight.json", "flight-trace.json", "corrupt.json", "freedom-0.json", "native-assets", "flight-overflow.json")]
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
                    "--path", str(project), "--script", f"res://{name}_test.gd",

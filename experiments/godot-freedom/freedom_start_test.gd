@@ -99,8 +99,11 @@ func _initialize() -> void:
 		reject_seed(bridge, bad_seed, progressed)
 	for bad_path in ["", "relative.json", args[2], args[3], args[0] + ".missing"]:
 		reject_path(bridge, bad_path, progressed)
-	reject_path(bridge, args[5], progressed)
-	check("flight save" in str(bridge.get_last_error()), "Unsupported flight lacks explicit diagnostic")
+	check(bridge.initialize_freedom_continue(args[5]), "Supported saved flight refused")
+	var flight: Dictionary = bridge.get_freedom_flight_state()
+	check(flight.mode == "freedom_flight" and flight.tick == "25" and bridge.get_freedom_start().is_empty() and bridge.get_state().is_empty(), "Flight owner did not replace station without a study spawn")
+	check(not bridge.initialize_freedom_continue(args[3]) and bridge.get_freedom_flight_state() == flight, "Corrupt Continue changed saved flight")
+	check(bridge.initialize_freedom_continue(args[1]) and bridge.get_freedom_flight_state().is_empty(), "Station Continue failed to replace saved flight")
 	reject_path(bridge, "/" + "x".repeat(4097), progressed)
 	check(not bridge.initialize("{broken snapshot"), "Malformed study snapshot accepted")
 	check(bridge.get_freedom_start() == progressed, "Rejected snapshot destroyed native station start")
@@ -116,6 +119,6 @@ func _initialize() -> void:
 	check(bridge.get_state().is_empty() and bridge.get_freedom_start() == fresh, "Native start did not replace fixture session")
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == source_bytes[i], "Start or refusal modified source save")
-	check(FileAccess.get_file_as_bytes(args[5]) == flight_bytes, "Flight refusal modified source save")
+	check(FileAccess.get_file_as_bytes(args[5]) == flight_bytes, "Flight Continue modified source save")
 	print("Freedom station bootstrap: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

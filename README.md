@@ -25,26 +25,32 @@ tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
 Select exactly one mode. New Game accepts the full unsigned 64-bit seed range,
-including zero. Continue accepts supported Freedom save17 files and refuses
+including zero. Continue accepts supported Freedom save17 station and save18
+physical-flight files and refuses
 missing, corrupt, legacy-career or unsupported saves without rewriting them or
 substituting a study universe. The C++ bridge resolves the selected physical
 origin station, host planet and saved clock.
 
-The current ordinary start is **docked-only, with a frozen clock**. It shows the
+New Game currently opens **docked-only, with a frozen clock**. It shows the
 selected station at physical metre scale with C++-registered D1/D2 port markers,
 a host silhouette and **Save As**
 through the C++ atomic save writer. Choose a path, confirm any overwrite, then
-use that absolute path with Continue. Quit does not autosave. Undocking, saved
-flight, landing and walking remain implementation work; this is not a completed
-Freedom play loop. Validate selection without opening a window by adding
+use that absolute path with Continue. A selected flight save opens the
+[saved native flight view](docs/SAVED_NATIVE_FLIGHT.md), paused initially, with
+C++ controls, rotating terrain, the Wayfarer and animated main exhaust from
+actual propulsion. Resume with Escape or the on-screen button; the view lists
+its keyboard controls. Flight Save As uses the C++ atomic save18 writer.
+Quit does not autosave. Station walking, boarding, sitting, docked release and
+planetary contact remain integration work; this is not a completed Freedom
+play loop or the owner's minimum playable handoff. Validate selection without opening a window by adding
 `--headless-validate` to either command.
 
 The selected station and Wayfarer exports have a
 [source-bound native asset package](docs/NATIVE_STARTER_ASSETS.md), with portable
 preparation and actual Godot import checks. The ordinary launcher prepares this
 package before opening the [station inspection view](docs/NATIVE_STATION_VIEW.md).
-Its walking and flight consumers remain
-under development; package admission alone does not complete the flight loop.
+Station walking and the composed flight journey remain under development;
+package admission alone does not complete the flight loop.
 
 ## Native studies and flight playtests
 

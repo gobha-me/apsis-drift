@@ -7,6 +7,7 @@
 #include <optional>
 #include <string_view>
 
+#include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/save_file.hpp"
 
 namespace {
@@ -30,7 +31,7 @@ auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
   if (argc != 5) {
     std::cerr << "usage: freedom-start-fixture ABSOLUTE_PATH SEED TICK "
-                 "freedom|flight|career\n";
+                 "freedom|flight|wayfarer-flight|flight-trace|career\n";
     return 2;
   }
   const auto path = std::filesystem::path{argv[1]};
@@ -55,7 +56,8 @@ auto main(int argc, char** argv) -> int {
       std::cerr << save_file_error_message(written.error()) << '\n';
       return 1;
     }
-  } else if (mode == "flight") {
+  } else if (mode == "flight" || mode == "wayfarer-flight" ||
+             mode == "flight-trace") {
     auto origin = make_freedom_new_game_document(Seed{*seed});
     origin.state.tick = *tick;
     const auto system = generate_physical_origin_system(Seed{*seed});
@@ -63,6 +65,7 @@ auto main(int argc, char** argv) -> int {
     const auto& planet =
         system->catalog.planets[kOriginHomePlanetOrdinal].descriptor;
     RigidBodyState state;
+    if (mode != "flight") state.craft = wayfarer_frame().recipe;
     state.tick = *tick;
     state.frame = {RigidFrameKind::planet_relative_inertial,
                    system->catalog.id,
@@ -78,8 +81,22 @@ auto main(int argc, char** argv) -> int {
             gravity->gravitational_parameter_metres_cubed_per_second_squared /
             state.position_metres.x),
         0};
-    const auto written =
-        write_freedom_flight_file_atomically(path, {origin, state, {}});
+    FreedomFlightSaveDocument document{origin, state, {}};
+    if (mode == "flight-trace") {
+      auto session = NativeFreedomFlightSession::open(
+          {NativeStartup::Mode::freedom, document, planet, {}});
+      if (!session) return 1;
+      NativeFlightControls controls;
+      controls.negative_translation.y = .1;
+      controls.negative_translation.z = .25;
+      controls.positive_rotation.y = .05;
+      for (int n = 0; n < 120; ++n) {
+        if (n == 60) session->set_assistance(false);
+        if (!session->advance(controls)) return 1;
+      }
+      document = session->document();
+    }
+    const auto written = write_freedom_flight_file_atomically(path, document);
     if (!written) {
       std::cerr << save_file_error_message(written.error()) << '\n';
       return 1;
