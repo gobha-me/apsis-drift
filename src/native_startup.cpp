@@ -55,6 +55,22 @@ namespace {
 
 } // namespace
 
+namespace {
+auto select_document(FreedomFlightSaveDocument document,
+                     std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  const auto hydrated = hydrate_freedom_flight_document(document);
+  if (!hydrated)
+    return std::unexpected{
+        "Freedom flight save rejected: " + hydrated.error().path + ": " +
+        hydrated.error().detail};
+  auto home =
+      hydrated->system.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  return NativeStartup{NativeStartup::Mode::freedom, std::move(document),
+                       std::move(home), std::move(source_save)};
+}
+} // namespace
+
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_freedom_new_game_document(universe_seed),
@@ -81,6 +97,9 @@ auto native_continue(const std::filesystem::path& save_path)
 
 auto prepare_native_freedom_station_start(NativeStartup selected)
     -> std::expected<NativeFreedomStationStart, std::string> {
+  if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document))
+    return std::unexpected{"The docked native shell cannot present a Freedom "
+                           "flight save yet"};
   if (selected.mode != NativeStartup::Mode::freedom ||
       !std::holds_alternative<FreedomSaveDocument>(selected.document))
     return std::unexpected{"Station bootstrap requires a Freedom save"};

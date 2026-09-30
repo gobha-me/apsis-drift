@@ -7,6 +7,7 @@
 #include <string>
 #include <variant>
 
+#include "apsis_drift/freedom_flight_save.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/save_schema.hpp"
 
@@ -45,7 +46,8 @@ struct SaveFileError {
       -> bool = default;
 };
 
-using NativeSaveDocument = std::variant<FreedomSaveDocument, SaveDocument>;
+using NativeSaveDocument =
+    std::variant<FreedomSaveDocument, SaveDocument, FreedomFlightSaveDocument>;
 
 [[nodiscard]] auto make_new_game_document(
     Seed universe_seed,
@@ -66,6 +68,10 @@ using NativeSaveDocument = std::variant<FreedomSaveDocument, SaveDocument>;
     -> std::expected<void, SaveFileError>;
 [[nodiscard]] auto write_freedom_save_file_atomically(
     const std::filesystem::path& path, const FreedomSaveDocument& document)
+    -> std::expected<void, SaveFileError>;
+[[nodiscard]] auto write_freedom_flight_file_atomically(
+    const std::filesystem::path& path,
+    const FreedomFlightSaveDocument& document)
     -> std::expected<void, SaveFileError>;
 
 [[nodiscard]] auto save_file_error_message(const SaveFileError& error)

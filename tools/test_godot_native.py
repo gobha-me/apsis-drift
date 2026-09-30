@@ -238,7 +238,8 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         for filename, tick, mode in (("freedom-0.json", "0", "freedom"),
                                      ("freedom-25.json", "25", "freedom"),
-                                     ("career.json", "0", "career")):
+                                     ("career.json", "0", "career"),
+                                     ("flight-18.json", "25", "flight")):
             path = work / filename
             log = work / f"{filename}.log"
             code, timed_out, _ = run_logged(
@@ -256,6 +257,8 @@ def main(argv=None):
     for name in selected:
         if name == "native_shell":
             cases = (
+                ("unsupported_flight", [f"--continue={work / 'flight-18.json'}",
+                                        "--validate-only"], "", False),
                 ("new", ["--new-game=42", "--validate-only"],
                  "seed=42 tick=0", True),
                 ("view", ["--new-game=42"], "seed=42 tick=0", True),
@@ -275,7 +278,8 @@ def main(argv=None):
             )
             source_hashes = {path.name: sha256(path) for path in
                              (work / "freedom-0.json", work / "freedom-25.json",
-                              work / "career.json", work / "corrupt.json")}
+                              work / "career.json", work / "corrupt.json",
+                              work / "flight-18.json")}
             case_reports = []
             selected_views = {}
             spatial_views = {}
@@ -366,6 +370,8 @@ def main(argv=None):
             arguments = [str(work / path) for path in
                          ("freedom-0.json", "freedom-25.json", "career.json",
                           "corrupt.json", "snapshot-42.json")]
+        if name == "freedom_start":
+            arguments.append(str(work / "flight-18.json"))
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
                    "--path", str(project), "--script", f"res://{name}_test.gd",

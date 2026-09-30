@@ -57,12 +57,13 @@ auto valid_target(const OrbitHoldTarget& target,
   return true;
 }
 } // namespace
-auto advance_orbit_hold_dynamics(
-    const RigidBodyWorldContext& context, RigidBodyState& state,
-    const VacuumIntent& intent, const PhysicalPlanetRotationRecipe& rotation,
-    OrbitalTelemetryRecipe policy, OrbitHoldRequest request,
-    CentralBodyDynamicsRecipe dynamics, SimulationSeconds step)
-    -> std::expected<OrbitHoldResult, OrbitHoldError> {
+auto validate_orbit_hold_request(const RigidBodyWorldContext& context,
+                                 const RigidBodyState& state,
+                                 const PhysicalPlanetRotationRecipe& rotation,
+                                 OrbitalTelemetryRecipe policy,
+                                 OrbitHoldRequest request,
+                                 CentralBodyDynamicsRecipe dynamics)
+    -> std::expected<void, OrbitHoldError> {
   using Code = OrbitHoldErrorCode;
   if (request.version != kOrbitHoldVersion)
     return std::unexpected{OrbitHoldError{Code::unsupported_version, {}, {}}};
@@ -77,6 +78,22 @@ auto advance_orbit_hold_dynamics(
         OrbitHoldError{Code::dynamics_failure, {}, gravity.error()}};
   if (request.target && !valid_target(*request.target, *gravity, policy))
     return std::unexpected{OrbitHoldError{Code::invalid_target, {}, {}}};
+  return {};
+}
+auto advance_orbit_hold_dynamics(
+    const RigidBodyWorldContext& context, RigidBodyState& state,
+    const VacuumIntent& intent, const PhysicalPlanetRotationRecipe& rotation,
+    OrbitalTelemetryRecipe policy, OrbitHoldRequest request,
+    CentralBodyDynamicsRecipe dynamics, SimulationSeconds step)
+    -> std::expected<OrbitHoldResult, OrbitHoldError> {
+  using Code = OrbitHoldErrorCode;
+  const auto valid = validate_orbit_hold_request(context, state, rotation,
+                                                 policy, request, dynamics);
+  if (!valid) return std::unexpected{valid.error()};
+  const auto gravity = evaluate_central_body_gravity(context, state, dynamics);
+  if (!gravity)
+    return std::unexpected{
+        OrbitHoldError{Code::dynamics_failure, {}, gravity.error()}};
   auto commands = intent;
   OrbitHoldResult result;
   if (request.target) {
