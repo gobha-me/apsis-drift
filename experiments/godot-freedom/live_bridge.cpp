@@ -5,6 +5,7 @@
 #include "thrust_flight.hpp"
 
 #include "apsis_drift/native_startup.hpp"
+#include "apsis_drift/station_geometry.hpp"
 
 #include <charconv>
 #include <filesystem>
@@ -204,6 +205,8 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::initialize_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
                                 &FreedomBridge::get_freedom_start);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_geometry"),
+                                &FreedomBridge::get_freedom_station_geometry);
     godot::ClassDB::bind_method(godot::D_METHOD("save_freedom_as", "save_path"),
                                 &FreedomBridge::save_freedom_as);
     godot::ClassDB::bind_method(godot::D_METHOD("get_world_lighting"),
@@ -360,6 +363,39 @@ class FreedomBridge : public godot::RefCounted {
     result["station_relative_velocity_metres_per_second"] =
         coordinates(start.ephemeris.host_relative_velocity);
     result["station_phase_radians"] = start.ephemeris.phase_radians;
+    return result;
+  }
+
+  auto get_freedom_station_geometry() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!native_start) return result;
+    const auto geometry = origin_station_geometry(native_start->station);
+    if (!geometry) return result;
+    const auto vector = [](RigidVector3 value) {
+      godot::PackedFloat64Array array;
+      array.append(value.x);
+      array.append(value.y);
+      array.append(value.z);
+      return array;
+    };
+    result["version"] = std::int64_t{1};
+    result["station_id"] =
+        godot::String{std::to_string(geometry->station.value).c_str()};
+    result["asset_offset_metres"] = vector(kOriginStationAssetOffsetMetres);
+    result["bounds_minimum_metres"] = vector(geometry->exterior.minimum_metres);
+    result["bounds_maximum_metres"] = vector(geometry->exterior.maximum_metres);
+    godot::Array ports;
+    for (const auto& port : geometry->ports) {
+      godot::Dictionary item;
+      item["ordinal"] = static_cast<std::int64_t>(port.id.ordinal);
+      item["station_id"] = result["station_id"];
+      item["position_metres"] = vector(port.collar_position_metres);
+      item["outward_normal"] = vector(port.outward_normal);
+      item["withdrawal_metres"] = port.withdrawal_metres;
+      item["bore_metres"] = port.clear_bore_metres;
+      ports.append(item);
+    }
+    result["ports"] = ports;
     return result;
   }
 

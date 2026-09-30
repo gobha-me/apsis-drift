@@ -1,13 +1,28 @@
 extends Control
 ## Docked-state presentation from a selected C++ Freedom save or recipe.
 
-const HOST_DISPLAY_SCALE = 0.0001
+const StationView = preload("res://native_station_view.gd")
+const HostSky = preload("res://native_host_sky.gdshader")
 
 var bridge: Variant = null
 var selected: Dictionary = {}
 var save_dialog: FileDialog
 var save_status: Label
 var save_button: Button
+var assets_root := ""
+var station_view: Node3D
+var port_status: Label
+
+
+func _process(_delta: float) -> void:
+	if station_view == null or port_status == null:
+		return
+	var lines := PackedStringArray()
+	for ordinal in [1, 2]:
+		var cue: Dictionary = station_view.port_cue(ordinal)
+		if not cue.is_empty():
+			lines.append("%s  %.1f m%s" % [cue.label, cue.range_metres, " · off screen" if cue.offscreen else ""])
+	port_status.text = "\n".join(lines)
 
 
 func open_save_as() -> void:
@@ -40,6 +55,10 @@ func parse_selection(arguments: PackedStringArray) -> Dictionary:
 			if selection.has("validate_only"):
 				return {}
 			selection["validate_only"] = true
+		elif argument.begins_with("--assets="):
+			if selection.has("assets") or not argument.trim_prefix("--assets=").is_absolute_path():
+				return {}
+			selection["assets"] = argument.trim_prefix("--assets=")
 		elif argument.begins_with("--new-game="):
 			if selection.has("mode"):
 				return {}
@@ -134,12 +153,12 @@ func _ready() -> void:
 		print("Freedom native shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, geometry.radius, geometry.distance, selected.station_phase_radians])
 		get_tree().quit(0)
 		return
+	assets_root = options.get("assets", "")
 	build_view(geometry)
 
 
 func build_view(geometry: Dictionary) -> void:
-	# The host is a distant backdrop. Keep its angular geometry while using a
-	# bounded render-space scale; the station marker is an enlarged pose proxy.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var viewport_frame := SubViewportContainer.new()
 	viewport_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	viewport_frame.stretch = true
@@ -149,63 +168,39 @@ func build_view(geometry: Dictionary) -> void:
 	spatial.own_world_3d = true
 	spatial.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport_frame.add_child(spatial)
-	var stage := Node3D.new()
-	stage.name = "StationLocalPresentation"
-	spatial.add_child(stage)
+	station_view = StationView.new()
+	spatial.add_child(station_view)
+	if not station_view.initialize(selected, bridge.get_freedom_station_geometry(), assets_root):
+		fail(station_view.error)
+		return
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.018, 0.032, 0.065)
+	var sky := Sky.new()
+	var sky_material := ShaderMaterial.new()
+	sky_material.shader = HostSky
+	var relative: PackedFloat64Array = selected.station_relative_position_metres
+	sky_material.set_shader_parameter("host_direction", -Vector3(relative[0], relative[1], relative[2]).normalized())
+	sky_material.set_shader_parameter("radius_ratio", geometry.radius / geometry.distance)
+	sky.sky_material = sky_material
+	environment.sky = sky
+	environment.background_mode = Environment.BG_SKY
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.6, 0.75, 0.95)
 	environment.ambient_light_energy = 0.7
 	world.environment = environment
-	stage.add_child(world)
-	var relative := selected.station_relative_position_metres as PackedFloat64Array
-	var radial := Vector3(relative[0], relative[1], relative[2]).normalized()
-	var reference := Vector3.UP if abs(radial.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT
-	var tangent := radial.cross(reference).normalized()
-	var host := MeshInstance3D.new()
-	host.name = "SelectedHomePlanetProxy"
-	var globe := SphereMesh.new()
-	globe.radius = geometry.radius * HOST_DISPLAY_SCALE
-	globe.height = globe.radius * 2.0
-	globe.radial_segments = 96
-	globe.rings = 48
-	host.mesh = globe
-	host.position = Vector3(-relative[0], -relative[1], -relative[2]) * HOST_DISPLAY_SCALE
-	var host_material := StandardMaterial3D.new()
-	host_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	host_material.albedo_color = Color(0.16, 0.34, 0.58)
-	host.material_override = host_material
-	stage.add_child(host)
-	var station := MeshInstance3D.new()
-	station.name = "ProvisionalStationPoseMarker"
-	var marker := CylinderMesh.new()
-	marker.top_radius = 9.0
-	marker.bottom_radius = 9.0
-	marker.height = 2.0
-	station.mesh = marker
-	var marker_material := StandardMaterial3D.new()
-	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	marker_material.albedo_color = Color(0.78, 0.84, 0.88)
-	station.material_override = marker_material
-	stage.add_child(station)
-	var camera := Camera3D.new()
-	camera.position = radial * 48.0 + tangent * 22.0
-	camera.near = 0.25
-	camera.far = (geometry.distance + geometry.radius) * HOST_DISPLAY_SCALE + 100.0
-	camera.fov = 120.0
-	stage.add_child(camera)
-	camera.look_at(Vector3.ZERO, reference)
-	camera.current = true
+	station_view.add_child(world)
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-40, -30, 0)
+	light.light_energy = 1.5
+	station_view.add_child(light)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 48)
+		margin.add_theme_constant_override("margin_" + side, 16)
 	add_child(margin)
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(590, 0)
+	panel.custom_minimum_size = Vector2(300, 0)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	var panel_style := StyleBoxFlat.new()
@@ -217,22 +212,22 @@ func build_view(geometry: Dictionary) -> void:
 	panel.add_theme_stylebox_override("panel", panel_style)
 	margin.add_child(panel)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 18)
+	column.add_theme_constant_override("separation", 12)
 	panel.add_child(column)
 	var title := Label.new()
 	title.text = "APSIS DRIFT"
-	title.add_theme_font_size_override("font_size", 40)
+	title.add_theme_font_size_override("font_size", 24)
 	column.add_child(title)
 	var location := Label.new()
 	location.text = "Docked at Origin Station"
-	location.add_theme_font_size_override("font_size", 25)
+	location.add_theme_font_size_override("font_size", 20)
 	column.add_child(location)
 	var details := Label.new()
-	details.text = "Universe %s  •  System %s\nStation %s  •  Craft %s\nSimulation tick %s  •  Discoveries %d\nHost clearance %.0f km" % [selected.universe_seed, selected.system_id, selected.station_id, selected.craft_id, selected.tick, selected.discovery_count, geometry.clearance / 1000.0]
-	details.add_theme_font_size_override("font_size", 18)
+	details.text = "Station %s\nHost clearance %.0f km" % [selected.station_id, geometry.clearance / 1000.0]
+	details.add_theme_font_size_override("font_size", 14)
 	column.add_child(details)
 	var note := Label.new()
-	note.text = "Station pose marker and host silhouette are provisional.\nFlight from this save is still in development."
+	note.text = "Right-drag to orbit; scroll to inspect.\nFlight from this save is still in development."
 	column.add_child(note)
 	save_button = Button.new()
 	save_button.text = "Save As…"
@@ -256,5 +251,14 @@ func build_view(geometry: Dictionary) -> void:
 	quit_button.text = "Quit"
 	quit_button.pressed.connect(func() -> void: get_tree().quit(0))
 	column.add_child(quit_button)
+	port_status = Label.new()
+	port_status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	port_status.offset_left = -240
+	port_status.offset_top = -76
+	port_status.offset_right = -16
+	port_status.offset_bottom = -16
+	port_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	port_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(port_status)
 	save_button.grab_focus()
-	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d far=%.1f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, globe.radius / HOST_DISPLAY_SCALE, host.position.length() / HOST_DISPLAY_SCALE, selected.station_phase_radians, camera.far])
+	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d far=%.1f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, geometry.radius, geometry.distance, selected.station_phase_radians, station_view.camera.far])
