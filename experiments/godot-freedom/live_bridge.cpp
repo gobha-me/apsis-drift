@@ -314,6 +314,8 @@ class FreedomBridge : public godot::RefCounted {
         godot::String{std::to_string(start.system.catalog.id.value).c_str()};
     result["home_planet_id"] =
         godot::String{std::to_string(start.host.planet.value).c_str()};
+    result["home_planet_radius_metres"] =
+        static_cast<double>(start.selected.home_planet.radius.value) * 1'000.0;
     result["station_id"] =
         godot::String{std::to_string(start.station.id.value).c_str()};
     result["craft_id"] =

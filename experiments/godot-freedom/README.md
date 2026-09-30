@@ -160,14 +160,15 @@ and `initialize_freedom_continue(absolute_save_path)` methods. The seed is a
 canonical unsigned decimal string; Continue loads a selected v17 Freedom save
 through C++. A successful selection exposes `get_freedom_start()`: decimal-string
 universe, system, planet, station and craft identities, the saved tick, history
-counts, and C++ resolved physical host/station positions and velocities in
-`PackedFloat64Array` metre units. The bridge retains the selected save in C++.
+counts, the C++ home-planet radius, and C++ resolved physical host/station
+positions and velocities in `PackedFloat64Array` metre units. The bridge retains
+the selected save in C++.
 Invalid inputs return `false` with `get_last_error()` and leave the prior session
 and source save unchanged. The existing `initialize(snapshot_json)` remains the
 study fixture path; a successful start replaces the prior session.
 
 The separate native start shell below presents the selected docked state. It
-does not create a station environment or surface-flight state, advance the
+does not create a walkable station or surface-flight state, advance the
 saved clock, or launch playable flight. That integration remains in
 [#291](https://github.com/gobha-me/apsis-drift/issues/291). Hosted GCC and
 Clang native-core jobs compile the live extension; the isolated Godot runtime
@@ -188,6 +189,12 @@ loads the selected v17 Freedom save without writing to it. The screen shows the
 C++ universe, system, station, craft, saved tick and discovery count. It is a
 docked-state shell with a Quit button, not flight or station exploration. The
 snapshot study remains available through `tools/run_godot_study.sh`.
+
+The shell's station-local 3D view places a provisional station pose marker at
+the origin and a plain host-planet silhouette from C++ relative ephemeris and
+radius. Godot chooses only the camera and presentation materials. This view
+does not use or replace the active station/Wayfarer art, and the saved clock
+does not advance while it is open. The marker is not docking geometry.
 
 For a headless selection check, add `--headless-validate`. It exits zero and
 prints the selected IDs and history counts only after the C++ bridge succeeds;
