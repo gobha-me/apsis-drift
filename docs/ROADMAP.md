@@ -123,10 +123,21 @@ Continuous play is an aspiration to playtest, not a demand for real-time empty
 travel. Saving, reloading, renderer quality and frame cadence must not reroll a
 world, refund a committed jump, duplicate a craft or fabricate progress.
 
-No missions, economy, carrier, shipbuilder UI, full large-ship interior or
-walkable station interior is required for this first slice. Existing missions
-and career evidence stay preserved; Freedom gets an explicit new-game baseline
-rather than fake completions or a silent redefinition of old saves.
+### Owner minimum playable handoff — 2026-09-30
+
+Before asking the owner to playtest, ordinary play must start on the station;
+allow walking to the craft, boarding and sitting, takeoff and station exit;
+show animated exhaust from actual applied propulsion; and preserve controllable
+atmospheric exit, flight across terrain and return home in the same world.
+This explicitly adds the bounded station-to-craft traversal to active scope,
+superseding the earlier exclusion of station walking. It is the minimum handoff,
+not a complete 1.0/MVP/beta requirement or an instruction to stop there. See the
+[dated #245 amendment](https://github.com/gobha-me/apsis-drift/issues/245).
+
+Missions, economy, carriers, shipbuilder UI, populated stations and full
+large-ship interiors remain outside this first path. Existing mission/career
+evidence stays preserved; Freedom gets an explicit new-game baseline rather
+than fake completions or a silent redefinition of old saves.
 
 ## Fuzzy horizons: options preserved, not implementation commitments
 

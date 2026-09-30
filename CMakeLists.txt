@@ -156,6 +156,7 @@ add_library(apsis_drift_core STATIC
   src/local_system.cpp
   src/mission_board.cpp
   src/native_startup.cpp
+  src/native_flight_session.cpp
   src/onboarding.cpp
   src/origin_station.cpp
   src/origin_return.cpp
@@ -306,6 +307,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME freedom-flight-save-contract COMMAND apsis-drift-freedom-flight-save-tests)
   set_tests_properties(freedom-flight-save-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-native-flight-session-tests test/native_flight_session_test.cpp)
+  target_link_libraries(apsis-drift-native-flight-session-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-native-flight-session-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME native-flight-session-contract COMMAND apsis-drift-native-flight-session-tests)
+  set_tests_properties(native-flight-session-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-craft-frame-tests test/craft_frame_test.cpp)
   target_link_libraries(apsis-drift-craft-frame-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-craft-frame-tests PRIVATE

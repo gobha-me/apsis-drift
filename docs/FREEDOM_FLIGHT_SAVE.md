@@ -76,7 +76,9 @@ docked craft or replaces flight with a zero-clock fixture.
 
 This codec does not authorize or construct a port release, teleport spawn,
 physical capture, free propulsion, movement gate or mission/economy state.
-Those transitions belong to a later persistent session and docking/contact owner.
+The [mutable C++ flight session](NATIVE_FLIGHT_SESSION.md) consumes this format
+and owns explicit stepping and Save As. Port release, capture and contact still
+require their own transition owners and a live Godot consumer.
 
 ## Qualification
 
