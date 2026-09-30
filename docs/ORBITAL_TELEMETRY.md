@@ -115,5 +115,6 @@ values exactly and leaves the source projection unchanged. Existing state,
 gravity, vacuum, attitude and legacy checksums remain separate regression gates
 under GCC and Clang.
 
-Explicit bounded `ORBIT HOLD`, atmospheric force composition, cockpit adoption
+Explicit bounded [ORBIT HOLD](ORBIT_HOLD.md) consumes this query through a
+separate optional controller. Atmospheric force composition, cockpit adoption
 and actual native flight persistence remain outstanding work in #238/#291.
