@@ -160,6 +160,7 @@ add_library(apsis_drift_core STATIC
   src/onboarding.cpp
   src/origin_station.cpp
   src/station_geometry.cpp
+  src/origin_docking.cpp
   src/origin_return.cpp
   src/origin_system_contract.cpp
   src/planet.cpp
@@ -329,6 +330,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-wayfarer-frame-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Wconversion;-Wshadow>)
   add_test(NAME wayfarer-frame-contract COMMAND apsis-drift-wayfarer-frame-tests)
+  add_executable(apsis-drift-origin-docking-tests test/origin_docking_test.cpp)
+  target_link_libraries(apsis-drift-origin-docking-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-origin-docking-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Wconversion;-Wshadow>)
+  add_test(NAME origin-docking-contract COMMAND apsis-drift-origin-docking-tests)
   add_executable(apsis-drift-rigid-body-tests test/rigid_body_test.cpp)
   target_link_libraries(apsis-drift-rigid-body-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-rigid-body-tests PRIVATE
