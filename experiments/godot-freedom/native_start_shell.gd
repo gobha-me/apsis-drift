@@ -1,6 +1,8 @@
 extends Control
 ## Docked-state presentation from a selected C++ Freedom save or recipe.
 
+const HOST_DISPLAY_SCALE = 0.0001
+
 var bridge: Variant = null
 var selected: Dictionary = {}
 
@@ -45,6 +47,24 @@ func decimal_text(value: Variant) -> bool:
 	return true
 
 
+func dock_geometry(start: Dictionary) -> Dictionary:
+	var radius: Variant = start.get("home_planet_radius_metres")
+	var relative: Variant = start.get("station_relative_position_metres")
+	if not radius is float or not is_finite(radius) or radius < 1000000.0 or radius > 100000000.0:
+		return {}
+	if not relative is PackedFloat64Array or relative.size() != 3:
+		return {}
+	var distance_squared := 0.0
+	for component in relative:
+		if not is_finite(component):
+			return {}
+		distance_squared += component * component
+	var distance := sqrt(distance_squared)
+	if not is_finite(distance) or distance > 1000000000.0 or distance - radius < 10000.0:
+		return {}
+	return {"radius": radius, "distance": distance, "clearance": distance - radius}
+
+
 func valid_start(start: Dictionary) -> bool:
 	if start.get("mode") != "freedom":
 		return false
@@ -58,7 +78,15 @@ func valid_start(start: Dictionary) -> bool:
 		for component in coordinates:
 			if not is_finite(component):
 				return false
-	return start.get("continued") is bool and start.get("discovery_count") is int and start.discovery_count >= 0 and start.get("world_delta_count") is int and start.world_delta_count >= 0 and start.get("station_phase_radians") is float and is_finite(start.station_phase_radians)
+	if not start.get("continued") is bool:
+		return false
+	if not start.get("discovery_count") is int or start.discovery_count < 0:
+		return false
+	if not start.get("world_delta_count") is int or start.world_delta_count < 0:
+		return false
+	if not start.get("station_phase_radians") is float or not is_finite(start.station_phase_radians):
+		return false
+	return not dock_geometry(start).is_empty()
 
 
 func _ready() -> void:
@@ -80,26 +108,96 @@ func _ready() -> void:
 	if not valid_start(selected):
 		fail("C++ bridge returned an invalid docked-state view")
 		return
+	var geometry := dock_geometry(selected)
 	if options.get("validate_only", false):
-		print("Freedom native shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count])
+		print("Freedom native shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, geometry.radius, geometry.distance, selected.station_phase_radians])
 		get_tree().quit(0)
 		return
-	build_view()
+	build_view(geometry)
 
 
-func build_view() -> void:
-	var background := ColorRect.new()
-	background.color = Color(0.025, 0.04, 0.08)
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(background)
+func build_view(geometry: Dictionary) -> void:
+	# The host is a distant backdrop. Keep its angular geometry while using a
+	# bounded render-space scale; the station marker is an enlarged pose proxy.
+	var viewport_frame := SubViewportContainer.new()
+	viewport_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	viewport_frame.stretch = true
+	add_child(viewport_frame)
+	var spatial := SubViewport.new()
+	spatial.size = Vector2i(1280, 720)
+	spatial.own_world_3d = true
+	spatial.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport_frame.add_child(spatial)
+	var stage := Node3D.new()
+	stage.name = "StationLocalPresentation"
+	spatial.add_child(stage)
+	var world := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.018, 0.032, 0.065)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.6, 0.75, 0.95)
+	environment.ambient_light_energy = 0.7
+	world.environment = environment
+	stage.add_child(world)
+	var relative := selected.station_relative_position_metres as PackedFloat64Array
+	var radial := Vector3(relative[0], relative[1], relative[2]).normalized()
+	var reference := Vector3.UP if abs(radial.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT
+	var tangent := radial.cross(reference).normalized()
+	var host := MeshInstance3D.new()
+	host.name = "SelectedHomePlanetProxy"
+	var globe := SphereMesh.new()
+	globe.radius = geometry.radius * HOST_DISPLAY_SCALE
+	globe.height = globe.radius * 2.0
+	globe.radial_segments = 96
+	globe.rings = 48
+	host.mesh = globe
+	host.position = Vector3(-relative[0], -relative[1], -relative[2]) * HOST_DISPLAY_SCALE
+	var host_material := StandardMaterial3D.new()
+	host_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	host_material.albedo_color = Color(0.16, 0.34, 0.58)
+	host.material_override = host_material
+	stage.add_child(host)
+	var station := MeshInstance3D.new()
+	station.name = "ProvisionalStationPoseMarker"
+	var marker := CylinderMesh.new()
+	marker.top_radius = 9.0
+	marker.bottom_radius = 9.0
+	marker.height = 2.0
+	station.mesh = marker
+	var marker_material := StandardMaterial3D.new()
+	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	marker_material.albedo_color = Color(0.78, 0.84, 0.88)
+	station.material_override = marker_material
+	stage.add_child(station)
+	var camera := Camera3D.new()
+	camera.position = radial * 48.0 + tangent * 22.0
+	camera.near = 0.25
+	camera.far = (geometry.distance + geometry.radius) * HOST_DISPLAY_SCALE + 100.0
+	camera.fov = 120.0
+	stage.add_child(camera)
+	camera.look_at(Vector3.ZERO, reference)
+	camera.current = true
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "top", "right", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 48)
 	add_child(margin)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(590, 0)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.01, 0.02, 0.04, 0.84)
+	panel_style.content_margin_left = 24
+	panel_style.content_margin_top = 22
+	panel_style.content_margin_right = 24
+	panel_style.content_margin_bottom = 22
+	panel.add_theme_stylebox_override("panel", panel_style)
+	margin.add_child(panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 18)
-	margin.add_child(column)
+	panel.add_child(column)
 	var title := Label.new()
 	title.text = "APSIS DRIFT"
 	title.add_theme_font_size_override("font_size", 40)
@@ -109,15 +207,15 @@ func build_view() -> void:
 	location.add_theme_font_size_override("font_size", 25)
 	column.add_child(location)
 	var details := Label.new()
-	details.text = "Universe %s  •  System %s\nStation %s  •  Craft %s\nSimulation tick %s  •  Discoveries %d" % [selected.universe_seed, selected.system_id, selected.station_id, selected.craft_id, selected.tick, selected.discovery_count]
+	details.text = "Universe %s  •  System %s\nStation %s  •  Craft %s\nSimulation tick %s  •  Discoveries %d\nHost clearance %.0f km" % [selected.universe_seed, selected.system_id, selected.station_id, selected.craft_id, selected.tick, selected.discovery_count, geometry.clearance / 1000.0]
 	details.add_theme_font_size_override("font_size", 18)
 	column.add_child(details)
 	var note := Label.new()
-	note.text = "Station start is available. Flight from this save is still in development."
+	note.text = "Station pose marker and host silhouette are provisional.\nFlight from this save is still in development."
 	column.add_child(note)
 	var quit_button := Button.new()
 	quit_button.text = "Quit"
 	quit_button.pressed.connect(func() -> void: get_tree().quit(0))
 	column.add_child(quit_button)
 	quit_button.grab_focus()
-	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count])
+	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d far=%.1f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, globe.radius / HOST_DISPLAY_SCALE, host.position.length() / HOST_DISPLAY_SCALE, selected.station_phase_radians, camera.far])

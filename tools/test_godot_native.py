@@ -277,6 +277,7 @@ def main(argv=None):
                               work / "career.json", work / "corrupt.json")}
             case_reports = []
             selected_views = {}
+            spatial_views = {}
             for label, arguments, expected, accepted in cases:
                 log = work / f"native_shell-{label}.log"
                 command = [str(engine), "--headless", "--audio-driver", "Dummy",
@@ -287,6 +288,7 @@ def main(argv=None):
                 command += ["--", *arguments]
                 code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
                 output = log.read_text(errors="replace")
+                view_far = re.search(r"dock_view=3d far=([0-9.]+)", output) if label == "view" else None
                 if accepted:
                     marker = re.search(
                         r"Freedom native shell (?:validated|opened): seed=(\d+) tick=(\d+) "
@@ -294,10 +296,18 @@ def main(argv=None):
                         r"discoveries=(\d+) deltas=(\d+)", output)
                     if marker:
                         selected_views[label] = marker.groups()
+                    spatial = re.search(
+                        r"radius=([0-9.]+) distance=([0-9.]+) "
+                        r"phase=([-0-9.]+)", output)
+                    if spatial:
+                        spatial_views[label] = spatial.groups()
                 good = (not timed_out and code == 0 and
                         ("Freedom native shell validated: " in output or
                          "Freedom native shell opened: " in output) and
                         expected in output and marker is not None and
+                        spatial is not None and
+                        (label != "view" or (view_far is not None and
+                                             0 < float(view_far[1]) < 10000)) and
                         not ERROR.search(output)) if accepted else (
                         not timed_out and code != 0 and
                         "Native start rejected:" in output)
@@ -316,13 +326,28 @@ def main(argv=None):
                                selected_views.get("continue_progressed", (None,) * 8)[1] == "25" and
                                selected_views.get("continue_progressed", (None,) * 8)[6:] ==
                                ("1", "1"))
+            new_spatial = spatial_views.get("new")
+            visible_spatial = spatial_views.get("view")
+            geometry_matches = (bool(new_spatial) and
+                                bool(visible_spatial) and
+                                abs(float(visible_spatial[0]) - float(new_spatial[0])) < 1.0 and
+                                abs(float(visible_spatial[1]) - float(new_spatial[1])) < 1.0 and
+                                visible_spatial[2] == new_spatial[2] and
+                                spatial_views.get("continue_zero") == new_spatial and
+                                bool(spatial_views.get("continue_progressed")) and
+                                spatial_views["continue_progressed"][0] == new_spatial[0] and
+                                abs(float(spatial_views["continue_progressed"][1]) -
+                                    float(new_spatial[1])) < 1.0 and
+                                spatial_views["continue_progressed"][2] != new_spatial[2])
             status = "pass" if (all(case["pass"] for case in case_reports) and
-                                unchanged and identity_matches and history_matches) else "fail"
+                                unchanged and identity_matches and history_matches and
+                                geometry_matches) else "fail"
             report["tests"].append({"name": name, "status": status,
                                     "cases": case_reports,
                                     "source_saves_unchanged": unchanged,
                                     "identity_matches": identity_matches,
-                                    "history_matches": history_matches})
+                                    "history_matches": history_matches,
+                                    "geometry_matches": geometry_matches})
             save()
             print(f"{status.upper()} {name} ({len(cases)} launch cases)", flush=True)
             continue
