@@ -92,8 +92,11 @@ create fresh context-scoped terrain caches. It must not accept a physical
 catalog via legacy snapshot-v1 or a legacy save16 tuple. The
 [physical rotation adapter](PLANET_ROTATION.md#explicit-physical-catalog-adapter)
 retains explicit physical-context ownership for spin and star geometry. Contact
-and rigid-handoff consumers still need their own physical-context boundary;
-seed-only reinterpretation is not a bridge.
+still needs its own physical-context boundary. The
+[physical rigid state and handoff boundary](RIGID_BODY_STATE.md#explicit-physical-ownership-2026-09-30-311)
+now qualifies same-tick station and rotating-planet transforms; seed-only
+reinterpretation is not a bridge. Saved flight and force/contact adoption remain
+separate integration work.
 
 The opt-in [native physical-home study](NATIVE_PHYSICAL_HOME.md) implements a
 separate schema2 bootstrap and visual lighting consumer with those ownership

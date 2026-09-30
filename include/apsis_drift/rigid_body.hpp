@@ -8,11 +8,13 @@
 #include <string_view>
 
 #include "apsis_drift/craft_frame.hpp"
-#include "apsis_drift/local_system.hpp"
+#include "apsis_drift/physical_local_system.hpp"
 
 namespace apsis_drift {
 
 inline constexpr std::uint32_t kRigidBodyStateVersion{1};
+inline constexpr std::uint32_t kPhysicalRigidBodyStateVersion{2};
+inline constexpr std::uint32_t kPhysicalRigidBodyOwnerVersion{1};
 inline constexpr std::size_t kMaximumRigidBodyDocumentBytes{4096};
 inline constexpr double kRigidBodyMaximumPositionMetres{1.0e15};
 inline constexpr double kRigidBodyMaximumVelocityMetresPerSecond{1.0e9};
@@ -55,8 +57,25 @@ struct RigidCoordinateFrame {
 // Uses existing authoritative descriptors to resolve IDs. No alternate world
 // catalog, frame transform or new stable body identity is introduced here.
 struct RigidBodyWorldContext {
+  RigidBodyWorldContext(const LocalSystemDescriptor& catalog,
+                        const OriginStationDescriptor* origin_station = nullptr)
+      : system(catalog), station(origin_station) {}
+  RigidBodyWorldContext(const PhysicalLocalSystem& owner,
+                        const OriginStationDescriptor* origin_station = nullptr)
+      : system(owner.catalog), station(origin_station),
+        physical_owner_(&owner) {}
+
   const LocalSystemDescriptor& system;
   const OriginStationDescriptor* station{};
+
+  // Explicit owner selection; an embedded/copied catalog never opts in.
+  // The caller retains the referenced descriptors for the context's lifetime.
+  [[nodiscard]] auto physical_owner() const -> const PhysicalLocalSystem* {
+    return physical_owner_;
+  }
+
+ private:
+  const PhysicalLocalSystem* physical_owner_{};
 };
 
 struct RigidBodyState {
@@ -92,6 +111,7 @@ enum class RigidBodyError : std::uint8_t {
   invalid_type,
   invalid_decimal,
   unsupported_version,
+  owner_mismatch,
 };
 
 // Explicit provider-side normalization only, never used during save hydration.
@@ -114,7 +134,8 @@ enum class RigidBodyError : std::uint8_t {
     const RigidBodyWorldContext& context, const RigidBodyState& state)
     -> std::expected<std::uint64_t, RigidBodyError>;
 
-// Separate native projection, NOT legacy save format 16 or a saved career.
+// Separate native projection, NOT legacy save16 or Freedom save17.
+// Legacy contexts retain v1 exactly; physical contexts use owner-qualified v2.
 // Strict bounded JSON; all doubles and 64-bit IDs/ticks are canonical decimal
 // strings. Decode validates without normalization or mutation of live state.
 [[nodiscard]] auto encode_rigid_body_state_json(

@@ -140,12 +140,39 @@ These intentionally account for cancellation against the system origin and its
 contribution to rotational-speed error; they do not promise relative accuracy
 for a tiny local displacement. This is not an integrator to call repeatedly.
 
-Existing rigid-state JSON still stores only its original fields. The caller
+Legacy v1 rigid-state JSON still stores only its original fields. The caller
 must retain the **explicitly selected recipe/context alongside it** and use the
 same recipe after hydration. Tests prove bit-identical next-handoff continuation
 under that selection, not automatic historical save interpretation. No rotation
 recipe is inferred from old JSON, and no save-16 migration is added. A future
 persistent native world must bind the rotation version explicitly.
+
+## Physical catalog ownership (2026-09-30, #311)
+
+The [physical rigid context and version-2 projection](RIGID_BODY_STATE.md#explicit-physical-ownership-2026-09-30-311)
+select the catalog family explicitly. The original three-argument station
+handoff dispatches to the physical station ephemeris when that owner is present;
+legacy contexts retain the legacy resolver. The same final p/v arithmetic,
+translation-only axes and bit preservation apply. A physical ephemeris failure
+retains `PhysicalLocalSystemError` in the appended `physical_ephemeris_error`
+field; existing error codes/details keep their meaning.
+
+A distinct four-argument overload takes `PhysicalPlanetRotationRecipe`. It
+resolves physical rotation geometry at the source tick, then uses the same
+numerical transform as the legacy recipe overload. A physical recipe in a
+legacy context, or a legacy recipe in a physical context, refuses, including
+same-planet identity. Matching IDs and unwrapping the nested spin recipe do not
+opt in. The complete recipe owner/version remains validated by the existing
+physical rotation provider before the shared kernel is invoked.
+
+`physical-rigid-contract` compares p/v, attitude and body spin to independent
+matrix calculations using the selected physical C++ geometry. It covers
+procedural and origin catalogs, wrap and near-maximum ticks, station-origin
+cancellation, canonical identity, malformed ownership/clocks/recipes,
+unsupported pairs and legal-source/illegal-result magnitudes. Both translation
+and rotating handoffs resume bit-identically after physical v2 JSON hydration
+with the same retained context/rotation recipe. Historical legacy JSON and
+handoff corpus goldens remain unchanged regression gates.
 
 ## Remaining integration
 

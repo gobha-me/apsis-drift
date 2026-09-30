@@ -166,6 +166,70 @@ meaning, canonicalization, encoding or checksum recipe requires a new native
 version. Existing world seeds/streams, legacy checksums and save fixtures remain
 untouched.
 
+## Explicit physical ownership (2026-09-30, #311)
+
+Construct `RigidBodyWorldContext{physical_system, station_pointer}` to select
+[physical circular catalogs](PHYSICAL_LOCAL_SYSTEM.md). The context references
+the caller-owned `PhysicalLocalSystem`, its embedded catalog and the optional
+station; keep those descriptors alive for every call. Passing only
+`physical_system.catalog` selects the legacy path and refuses. Physical world
+validation rederives the complete catalog and recipe metadata. An attached
+station must be the canonical station of that physical origin universe, even
+when the state is currently system-inertial. Procedural physical systems use a
+null station pointer. Matching numeric IDs never select another catalog family.
+
+All canonical values, numerical limits and hydration rules above are shared.
+The **standalone physical projection is version 2**, with the same compact
+field order as v1 followed by an `owner` object:
+
+```json
+"owner": {
+  "family": "physical_circular",
+  "version": 1,
+  "generator": 1,
+  "source_catalog_generator": 1,
+  "ephemeris_version": 1,
+  "system_seed": "677859337506523986",
+  "catalog_kind": "origin_home",
+  "origin_universe_seed": "42"
+}
+```
+
+This example is the authored seed-42 home; procedural owners use
+`"catalog_kind":"procedural"` and `"origin_universe_seed":null`. Versions are
+unsigned JSON integers; seeds are canonical unsigned decimal strings. Every
+owner field is required and compared against the selected authoritative
+context. Unknown, missing, duplicate, malformed and mismatched owner fields
+refuse. Neither decoding nor encoding constructs a world from these fields.
+Physical v2 documents refuse legacy contexts, and legacy v1 documents refuse
+physical contexts. **Legacy v1 output bytes, checksum and decoding rules are
+unchanged.** `owner_mismatch` is appended to the existing state error enum.
+
+The physical checksum uses the same FNV-1a and little-endian encoding, with this
+prefix before the unchanged craft/frame/tick/thirteen-double payload:
+
+1. ASCII domain `apsis-physical-rigid-body-v2`, without a terminator.
+2. Family u8 (`physical_circular` = 1), owner version u32, physical generator
+   u32, source catalog generator u32 and ephemeris version u32.
+3. System seed u64, catalog kind u8 (`procedural` = 0, `origin_home` = 1),
+   origin-universe-present u8 and origin universe seed u64 (zero if absent).
+
+The domain and owner prefix distinguish physical meaning even where legacy
+system/body IDs coincide. World validation precedes hashing, so forged metadata
+cannot produce an accepted projection/checksum. No padding or pointer is hashed.
+
+`physical-rigid-contract` checks independently calculated v2 JSON/checksum
+goldens, legacy/physical separation, altered owners and attached stations,
+canonical values and limits, bounded malformed documents and exact hydration.
+Physical station and planet handoffs additionally use independent matrix
+oracles across procedural/origin seeds, wrap ticks and the largest valid tick.
+
+This is not a migration of Freedom save17, a flight spawn, adoption of a force
+integrator or physical qualification of terrain contact. The saved native start
+remains docked. A rotating handoff still requires its explicitly retained
+`PhysicalPlanetRotationRecipe`; the standalone state document does not silently
+infer a rotation interpretation for an old saved frame.
+
 ## Verification and next consumers
 
 `rigid-body-contract` is a regular headless CTest, independent of Godot. It must
