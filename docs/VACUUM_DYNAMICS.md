@@ -78,6 +78,55 @@ independent actuators to bill on top of those gross channels; charge each actual
 channel once.
 No fuel unit or torque-to-propellant conversion is invented here.
 
+## Explicit coasting provider selection (2026-09-30, #317)
+
+The original entry point and `kVacuumDynamicsVersion = 1` preserve the historical
+lateral/vertical assistance and its exact replay goldens. The approved native
+coasting amendment requires a distinct selection before saved flight adopts
+this kernel. Pass a `VacuumDynamicsRecipe` as the fourth argument to choose the
+provider version explicitly:
+
+```cpp
+const VacuumDynamicsRecipe recipe{kCoastingVacuumDynamicsVersion}; // v2
+const auto result = advance_vacuum_dynamics(context, state, intent, recipe);
+```
+
+The recipe defaults to version 2 when explicitly constructed. Selecting version
+1 reproduces the original entry point; unknown versions return the appended
+`unsupported_version` error without replacing state. The original overload
+keeps its `SimulationSeconds` fourth argument and fixed-step validation.
+
+With **v2 assistance ON**, only rotation is stabilized. No neutral translation
+axis requests braking, speed hold or gravity compensation. Commanded directional
+forces remain the same physical actuator fractions regardless of assistance.
+Turning assistance OFF retains the same torque-free coasting/commanded-torque
+behavior as v1. A tilted or rotating craft therefore preserves unpowered world
+linear velocity in every direction while bounded torque can stabilize its
+attitude. This is force-free vacuum; gravity must still bend the trajectory when
+a separately qualified force composition supplies it.
+
+Both selections use one coupled RK4 implementation and the same real torque and
+force allocator. Actual positive/negative firing channels and integrated world
+impulses remain observable. Equal opposing physical firings have zero net
+impulse but nonzero gross channels; assistance does not hide their later fuel
+cost or bill an algebraic correction twice.
+
+Future persistent sessions must retain the **selected provider version and
+runtime assistance choice** alongside physical state, separately from legacy
+career penalty profiles. Standalone physical rigid-state v2 JSON still projects
+only its documented state/catalog owner; it does not infer a dynamics recipe.
+Tests hydrate those exact bits with the same explicit recipe and subsequent
+intent trace, then require identical next-state and impulse results. No Freedom
+save17 migration or live lab switch is performed here.
+
+`coasting-vacuum-contract` covers varied attitudes and mixed body spin with
+assistance on/off, independent constant-velocity/constant-force solutions, all
+six manual thrust directions, gross opposing firings, unchanged rotational
+stabilization, explicit v1 compatibility, malformed selection/numerics/intent,
+wrong frames, step/tick/result limits and exact interrupted continuation. The
+existing v1 force, attitude and replay goldens remain separate regression gates
+under GCC and Clang.
+
 ## Integration and angular momentum
 
 The integrator evolves position `p`, velocity `v`, orientation quaternion `q`,

@@ -5,6 +5,15 @@
 namespace apsis_drift {
 
 inline constexpr std::uint32_t kVacuumDynamicsVersion{1};
+inline constexpr std::uint32_t kCoastingVacuumDynamicsVersion{2};
+
+// Retain this selected version alongside state in future persistent sessions.
+// v1 preserves historical lateral assistance; v2 stabilizes rotation only.
+struct VacuumDynamicsRecipe {
+  std::uint32_t version{kCoastingVacuumDynamicsVersion};
+  friend auto operator==(const VacuumDynamicsRecipe&,
+                         const VacuumDynamicsRecipe&) -> bool = default;
+};
 inline constexpr double kVacuumLateralDampingPerSecond{0.65};
 
 // Independent physical actuator fractions, each component in [0,1]. Axes are
@@ -36,7 +45,8 @@ enum class VacuumDynamicsError : std::uint8_t {
   invalid_intent,
   invalid_step,
   tick_overflow,
-  unsafe_arithmetic
+  unsafe_arithmetic,
+  unsupported_version
 };
 
 struct VacuumTorqueActuation {
@@ -73,6 +83,16 @@ struct VacuumAttitudeResult {
 [[nodiscard]] auto advance_vacuum_dynamics(
     const RigidBodyWorldContext& context, RigidBodyState& state,
     const VacuumIntent& intent, SimulationSeconds step = kSimulationStep)
+    -> std::expected<VacuumActuation, VacuumDynamicsError>;
+
+// Explicit provider selection. v2 assistance preserves neutral translation in
+// all directions while retaining the same bounded rotation stabilization.
+// v1 is exactly the original overload; unsupported versions refuse atomically.
+// No external force/gravity compensation or gameplay save migration is added.
+[[nodiscard]] auto advance_vacuum_dynamics(
+    const RigidBodyWorldContext& context, RigidBodyState& state,
+    const VacuumIntent& intent, VacuumDynamicsRecipe recipe,
+    SimulationSeconds step = kSimulationStep)
     -> std::expected<VacuumActuation, VacuumDynamicsError>;
 
 } // namespace apsis_drift
