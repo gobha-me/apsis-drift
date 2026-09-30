@@ -111,7 +111,7 @@ auto invalid() -> void {
   refuses(bad);
   for (auto field : {"physical_catalog", "physical_ephemeris", "rotation_owner",
                      "rotation_generator", "central_body", "atmosphere"})
-    for (auto value :
+    for (const auto& value :
          {Json(99), Json(-1), Json(1.0), Json("1"), Json(nullptr)}) {
       bad = root;
       bad["flight_model"][field] = value;
@@ -139,7 +139,7 @@ auto invalid() -> void {
     bad["flight_model"]["orbit_hold"]["target"]["radius_metres"] = radius;
     refuses(bad);
   }
-  for (auto normal :
+  for (const auto& normal :
        {Json{0, 0, 2}, Json{0, 0}, Json{0, 0, -0.0}, Json{"x", 0, 1}}) {
     bad = held;
     bad["flight_model"]["orbit_hold"]["target"]["plane_normal"] = normal;
@@ -167,7 +167,7 @@ auto invalid() -> void {
                     "angular_velocity_radians_per_second"}) {
     const auto count = root["flight"][name].size();
     for (std::size_t n = 0; n < count; ++n) {
-      for (auto value : {"nan", "inf", "1e999"}) {
+      for (const auto& value : {"nan", "inf", "1e999"}) {
         bad = root;
         bad["flight"][name][n] = value;
         refuses(bad);

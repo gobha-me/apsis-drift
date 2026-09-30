@@ -303,8 +303,7 @@ auto decode_freedom_flight_document_json(std::string_view text)
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.flight",
                 "rigid state/owner projection is malformed or incompatible")};
-  FreedomFlightSaveDocument document{std::move(*decoded), *flight,
-                                     std::move(model)};
+  FreedomFlightSaveDocument document{std::move(*decoded), *flight, model};
   if (auto valid = hydrate_freedom_flight_document(document); !valid)
     return std::unexpected{valid.error()};
   return document;
