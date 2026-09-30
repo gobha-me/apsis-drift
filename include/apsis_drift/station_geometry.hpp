@@ -6,6 +6,8 @@
 #include "apsis_drift/rigid_frame_handoff.hpp"
 
 namespace apsis_drift {
+// Translate the source GLB hub floor to the application station-local origin.
+inline constexpr RigidVector3 kOriginStationAssetOffsetMetres{-.97, 0, .978};
 struct StationBounds {
   RigidVector3 minimum_metres, maximum_metres;
   friend auto operator==(const StationBounds&, const StationBounds&)

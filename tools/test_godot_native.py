@@ -47,6 +47,7 @@ TESTS = {
     "native_shell": "freedom_saves",
     "native_save": "freedom_saves",
     "native_asset_import": "native_assets",
+    "native_station_view": "native_assets",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",
@@ -219,7 +220,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] == "native_assets" for name in selected):
+    if any(TESTS[name] == "native_assets" or name in ("native_shell", "native_save") for name in selected):
         package = repo / "assets/native/freedom-starter-01"
         preparer = work / "prepare_native_assets.py"
         shutil.copy2(repo / "tools/prepare_native_assets.py", preparer)
@@ -280,12 +281,14 @@ def main(argv=None):
                                         "--validate-only"], "", False),
                 ("new", ["--new-game=42", "--validate-only"],
                  "seed=42 tick=0", True),
-                ("view", ["--new-game=42"], "seed=42 tick=0", True),
+                ("view", ["--new-game=42", f"--assets={work / 'native-assets'}"], "seed=42 tick=0", True),
                 ("continue_zero", [f"--continue={work / 'freedom-0.json'}",
                                    "--validate-only"], "seed=42 tick=0", True),
                 ("continue_progressed", [f"--continue={work / 'freedom-25.json'}",
                                         "--validate-only"],
                  "seed=42 tick=25", True),
+                ("missing_assets", ["--new-game=42"], "", False),
+                ("duplicate_assets", ["--new-game=42", f"--assets={work / 'native-assets'}", f"--assets={work / 'native-assets'}"], "", False),
                 ("missing", ["--validate-only"], "", False),
                 ("ambiguous", ["--new-game=42", f"--continue={work / 'freedom-0.json'}",
                                "--validate-only"], "", False),
@@ -391,6 +394,8 @@ def main(argv=None):
                           "corrupt.json", "snapshot-42.json")]
         elif TESTS[name] == "native_assets":
             arguments = [str(work / "native-assets"), str(work / "native-asset-import.json")]
+        if name == "native_save":
+            arguments.append(str(work / "native-assets"))
         if name == "freedom_start":
             arguments.append(str(work / "flight-18.json"))
         log = work / f"{name}.log"

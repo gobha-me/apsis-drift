@@ -27,8 +27,8 @@ func _initialize() -> void:
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 5:
-		push_error("Expected tick-zero, progressed, career, corrupt saves and snapshot")
+	if args.size() != 6:
+		push_error("Expected tick-zero, progressed, career, corrupt saves, snapshot and prepared assets")
 		quit(1)
 		return
 	if not ClassDB.class_exists("FreedomBridge"):
@@ -78,6 +78,7 @@ func run() -> void:
 	root.add_child(shell)
 	shell.bridge = bridge
 	shell.selected = progressed
+	shell.assets_root = args[5]
 	shell.build_view(shell.dock_geometry(progressed))
 	var ui_destination := directory.path_join("native-shell-saved.json")
 	var initial_status: String = shell.save_status.text

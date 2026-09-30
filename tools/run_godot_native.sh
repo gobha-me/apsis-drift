@@ -78,5 +78,9 @@ script_args=("$selection")
 if [[ "$headless_validate" == true ]]; then
     engine_args+=(--headless)
     script_args+=(--validate-only)
+else
+    python3 "${repo_dir}/tools/prepare_native_assets.py" \
+        --output "${native_build}/native-starter-assets"
+    script_args+=("--assets=${native_build}/native-starter-assets")
 fi
 exec "$engine" "${engine_args[@]}" -- "${script_args[@]}"
