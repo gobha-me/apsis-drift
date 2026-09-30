@@ -3,14 +3,46 @@
 [![CI](https://github.com/gobha-me/apsis-drift/actions/workflows/ci.yml/badge.svg)](https://github.com/gobha-me/apsis-drift/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE.md)
 
-A deterministic, procedurally generated spaceflight experiment rendered inside
-a terminal.
+A deterministic, procedurally generated spaceflight game in development.
+**Godot is the primary native presentation engine.** C++23 owns the generated
+universe, simulation, identities and versioned saves; Godot presents that
+application-owned state. The active milestone is
+[Freedom: native exploration before progression](docs/ROADMAP.md), following the
+[Godot ownership split](docs/GODOT_ADOPTION.md).
 
-The existing terminal implementation is retained. The approved next direction
-is [Freedom: native exploration before progression](docs/ROADMAP.md), beginning
-with Godot now [selected for native presentation](docs/GODOT_ADOPTION.md).
-That roadmap describes planned work; the run
-and build instructions below describe the current implementation.
+## Native New Game and Continue
+
+Use an installed Godot 4 executable, or set `GODOT_BIN` to its executable path.
+The currently qualified runtime is Godot 4.7.2. CMake 3.28+, Git and a C++23
+compiler are required. The launcher configures and builds the native C++ bridge
+with TermForge and RtAudio disabled; its first build fetches pinned dependencies.
+See the [native setup guide](experiments/godot-freedom/README.md) for explicit
+build and test commands.
+
+```sh
+tools/run_godot_native.sh --new-game=42
+tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
+```
+
+Select exactly one mode. New Game accepts the full unsigned 64-bit seed range,
+including zero. Continue accepts supported Freedom save17 files and refuses
+missing, corrupt, legacy-career or unsupported saves without rewriting them or
+substituting a study universe. The C++ bridge resolves the selected physical
+origin station, host planet and saved clock.
+
+The current ordinary start is **docked-only, with a frozen clock**. It shows the
+selected station and host in a provisional spatial view and provides **Save As**
+through the C++ atomic save writer. Choose a path, confirm any overwrite, then
+use that absolute path with Continue. Quit does not autosave. Undocking, saved
+flight, landing and walking remain implementation work; this is not a completed
+Freedom play loop. Validate selection without opening a window by adding
+`--headless-validate` to either command.
+
+## Native studies and flight playtests
+
+`tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
+unsaved flight practice. It is separate from ordinary New Game/Continue and
+does not migrate or substitute a player save.
 
 The opt-in [native streaming study](docs/GODOT_STUDY_04.md) now renders a bounded
 spherical terrain cover and whole-planet inspection view from the existing C++
@@ -19,7 +51,7 @@ world. It is an experiment, not yet the playable Freedom milestone.
 For handling playtests, the opt-in [thrust flight lab](docs/THRUST_FLIGHT_LAB_09.md)
 adds full attitude, analog main/retro propulsion, coasting, gravity and drag:
 `tools/run_godot_study.sh --stream=true --relief=true --pilot=true --flight-model=thrust --start-paused=true`.
-Existing simulation/replay physics remain the default; landing is not implemented.
+The study retains its separately versioned simulation; landing is not implemented.
 
 [Flight presentation 10](docs/FLIGHT_PRESENTATION_10.md) adds working cockpit
 instruments, a clean/debug toggle, chase-camera orbit, seeded stars and explicit
@@ -48,7 +80,7 @@ records why the production path uses bounded SMF scheduling and TinySoundFont.
 
 Apsis Drift renders a voxel-space landscape into a TermForge `PixelSurface`,
 defaulting to 640x480. Kitty-capable terminals receive the full pixel image;
-truecolor ANSI terminals receive TermForge's half-block presentation. The game
+truecolor ANSI terminals receive TermForge's half-block presentation. The retained terminal executable
 refuses startup when neither supported presentation is available.
 
 This repository began as a feasibility spike. The renderer is fast enough for
@@ -58,7 +90,7 @@ profile. The dated results and path-specific recommendations are documented in
 [the Flight Deck performance envelope](docs/PERFORMANCE_ENVELOPE_2026-08-15.md).
 The longer-term direction is documented in [docs/CONCEPT.md](docs/CONCEPT.md).
 
-## Build
+## Retained terminal build
 
 Requirements:
 
@@ -139,7 +171,7 @@ A clang-tidy suppression is an exceptional local waiver. It must name exact
 checks and include a same-line explanation; bare, wildcard, unexplained,
 nested, mismatched, and unclosed directives fail `tools/check_nolint.sh`.
 
-## Run
+## Retained terminal run
 
 ```bash
 ./build/apsis-drift
