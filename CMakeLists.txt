@@ -349,6 +349,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME coasting-vacuum-contract COMMAND apsis-drift-coasting-vacuum-tests)
   set_tests_properties(coasting-vacuum-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-central-body-tests test/central_body_dynamics_test.cpp)
+  target_link_libraries(apsis-drift-central-body-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-central-body-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME central-body-dynamics-contract COMMAND apsis-drift-central-body-tests)
+  set_tests_properties(central-body-dynamics-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
   target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-touchdown-tests PRIVATE

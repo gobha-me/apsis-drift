@@ -7,6 +7,11 @@ reviewed controller layout, migrate legacy save format 16, or install new live
 handling. There is no gravity, atmosphere, contact, damage, fuel consumption,
 external-force model, actuator spool, or hidden integration state here.
 
+The separately selected [central-body provider](CENTRAL_BODY_DYNAMICS.md)
+composes generated gravity through this same coupled kernel for qualified
+physical planet-relative state. Existing vacuum entry points still select no
+gravity and retain their original frame/refusal and replay contracts.
+
 The user explicitly selected **rotational as well as translational coasting
 when runtime assistance is off**. This runtime stabilization choice is separate
 from the permanent legacy career penalty profiles described in

@@ -1,5 +1,7 @@
 #include "apsis_drift/vacuum_dynamics.hpp"
 
+#include "apsis_drift/central_body_dynamics.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -159,6 +161,72 @@ auto valid_attitude(Q q, V omega) -> bool {
   return true;
 }
 
+// This is the bounded central-body composition, not a general force registry.
+struct GravityParameters {
+  PlanetId planet;
+  double radius, surface_gravity, mu;
+};
+auto gravity_acceleration(const GravityParameters& gravity, V position)
+    -> std::expected<V, CentralBodyError> {
+  if (!finite(position) ||
+      std::abs(position.x) > kRigidBodyMaximumPositionMetres ||
+      std::abs(position.y) > kRigidBodyMaximumPositionMetres ||
+      std::abs(position.z) > kRigidBodyMaximumPositionMetres)
+    return std::unexpected{
+        CentralBodyError{CentralBodyErrorCode::unsafe_arithmetic, {}}};
+  const double r2 = (position.x * position.x + position.y * position.y) +
+                    position.z * position.z;
+  if (!std::isfinite(r2) ||
+      r2 < kCentralBodyMinimumRadiusMetres * kCentralBodyMinimumRadiusMetres)
+    return std::unexpected{
+        CentralBodyError{CentralBodyErrorCode::invalid_radius, {}}};
+  const auto acceleration = scale(position, -gravity.mu / (r2 * std::sqrt(r2)));
+  if (!finite(acceleration))
+    return std::unexpected{
+        CentralBodyError{CentralBodyErrorCode::unsafe_arithmetic, {}}};
+  return acceleration;
+}
+auto gravity_parameters(const RigidBodyWorldContext& context,
+                        const RigidBodyState& state,
+                        CentralBodyDynamicsRecipe recipe)
+    -> std::expected<GravityParameters, CentralBodyError> {
+  using Code = CentralBodyErrorCode;
+  if (recipe.version != kCentralBodyDynamicsVersion)
+    return std::unexpected{CentralBodyError{Code::unsupported_version, {}}};
+  const auto* physical = context.physical_owner();
+  if (physical == nullptr || !validate_local_system(*physical))
+    return std::unexpected{CentralBodyError{Code::invalid_owner, {}}};
+  if (state.frame.kind != RigidFrameKind::planet_relative_inertial)
+    return std::unexpected{
+        CentralBodyError{Code::unsupported_coordinate_frame, {}}};
+  if (!state.frame.planet)
+    return std::unexpected{CentralBodyError{Code::invalid_body, {}}};
+  const auto planet = find_local_system_planet(*physical, *state.frame.planet);
+  if (!planet) return std::unexpected{CentralBodyError{Code::invalid_body, {}}};
+  if (!validate_rigid_body_state(context, state))
+    return std::unexpected{CentralBodyError{Code::invalid_state, {}}};
+  const auto& descriptor = (*planet)->descriptor;
+  const double radius = static_cast<double>(descriptor.radius.value) * 1000.0;
+  const double surface =
+      static_cast<double>(descriptor.surface_gravity.value) * 9.80665 / 1000.0;
+  const double mu = (surface * radius) * radius;
+  if (!std::isfinite(mu) || mu <= 0)
+    return std::unexpected{CentralBodyError{Code::unsafe_arithmetic, {}}};
+  return GravityParameters{descriptor.id, radius, surface, mu};
+}
+
+auto gravity_sample(const GravityParameters& parameters, V position)
+    -> std::expected<CentralBodyGravity, CentralBodyError> {
+  const auto acceleration = gravity_acceleration(parameters, position);
+  if (!acceleration) return std::unexpected{acceleration.error()};
+  const double distance =
+      std::sqrt((position.x * position.x + position.y * position.y) +
+                position.z * position.z);
+  return CentralBodyGravity{
+      parameters.planet, parameters.radius, parameters.surface_gravity,
+      parameters.mu,     distance,          *acceleration};
+}
+
 struct Integrated {
   V position, velocity;
   Q orientation;
@@ -197,29 +265,65 @@ struct IntegratedResult {
   V position, velocity;
   Q orientation;
   V angular, linear_impulse, angular_impulse;
+  V gravity_impulse, total_linear_impulse;
 };
 auto integrate(const Integrated& initial, V inertia, double mass, V force,
-               V torque, double dt)
+               V torque, double dt, const GravityParameters* gravity = nullptr)
     -> std::expected<IntegratedResult, VacuumDynamicsError> {
   // Shared coupled RK4: full flight must retain these same attitude stages
   // when rotating thrust/torque into its owning frame. The attitude-only
   // caller supplies zero translation and force, not a different integrator.
-  const auto a = derivative(initial, inertia, mass, force, torque);
+  const auto evaluate =
+      [&](const Integrated& value,
+          V& external) -> std::expected<Integrated, VacuumDynamicsError> {
+    auto result = derivative(value, inertia, mass, force, torque);
+    if (gravity != nullptr) {
+      const auto acceleration = gravity_acceleration(*gravity, value.position);
+      if (!acceleration)
+        return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+      external = *acceleration;
+      result.velocity = add(result.velocity, external);
+    }
+    return result;
+  };
+  V ga{}, gb{}, gc{}, gd{};
+  const auto first_derivative = evaluate(initial, ga);
+  if (!first_derivative) return std::unexpected{first_derivative.error()};
+  const auto& a = *first_derivative;
   const auto second = sum(initial, a, dt * .5);
   if (!valid_stage(second))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto b = derivative(second, inertia, mass, force, torque);
+  const auto second_derivative = evaluate(second, gb);
+  if (!second_derivative) return std::unexpected{second_derivative.error()};
+  const auto& b = *second_derivative;
   const auto third = sum(initial, b, dt * .5);
   if (!valid_stage(third))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto c = derivative(third, inertia, mass, force, torque);
+  const auto third_derivative = evaluate(third, gc);
+  if (!third_derivative) return std::unexpected{third_derivative.error()};
+  const auto& c = *third_derivative;
   const auto fourth = sum(initial, c, dt);
   if (!valid_stage(fourth))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto d = derivative(fourth, inertia, mass, force, torque);
+  const auto fourth_derivative = evaluate(fourth, gd);
+  if (!fourth_derivative) return std::unexpected{fourth_derivative.error()};
+  const auto& d = *fourth_derivative;
   const double weight = dt / 6.0;
   const auto impulse = scale(
       weighted(a.velocity, b.velocity, c.velocity, d.velocity), mass * weight);
+  auto propulsion_impulse = impulse;
+  V gravity_impulse{};
+  if (gravity != nullptr) {
+    gravity_impulse = scale(weighted(ga, gb, gc, gd), mass * weight);
+    // Compute actual thruster impulse directly; subtracting gravity from total
+    // would erase small actuator contributions through cancellation.
+    propulsion_impulse = scale(
+        weighted(derivative(initial, inertia, mass, force, torque).velocity,
+                 derivative(second, inertia, mass, force, torque).velocity,
+                 derivative(third, inertia, mass, force, torque).velocity,
+                 derivative(fourth, inertia, mass, force, torque).velocity),
+        mass * weight);
+  }
   const auto angular_impulse =
       scale(weighted(a.angular_momentum, b.angular_momentum, c.angular_momentum,
                      d.angular_momentum),
@@ -228,7 +332,8 @@ auto integrate(const Integrated& initial, V inertia, double mass, V force,
       add(initial.orientation, scale(weighted(a.orientation, b.orientation,
                                               c.orientation, d.orientation),
                                      weight)));
-  if (!next_orientation || !finite(impulse) || !finite(angular_impulse))
+  if (!next_orientation || !finite(impulse) || !finite(propulsion_impulse) ||
+      !finite(gravity_impulse) || !finite(angular_impulse))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
   return IntegratedResult{
       add(initial.position,
@@ -241,8 +346,10 @@ auto integrate(const Integrated& initial, V inertia, double mass, V force,
       divide(rotate(conjugate(*next_orientation),
                     add(initial.angular_momentum, angular_impulse)),
              inertia),
-      impulse,
-      angular_impulse};
+      propulsion_impulse,
+      angular_impulse,
+      gravity_impulse,
+      impulse};
 }
 } // namespace
 
@@ -294,10 +401,11 @@ auto advance_vacuum_attitude(CraftFrameRecipe craft,
 }
 
 namespace {
-auto advance_vacuum_dynamics_impl(const RigidBodyWorldContext& context,
-                                  RigidBodyState& state,
-                                  const VacuumIntent& intent,
-                                  bool lateral_damping, SimulationSeconds step)
+auto advance_vacuum_dynamics_impl(
+    const RigidBodyWorldContext& context, RigidBodyState& state,
+    const VacuumIntent& intent, bool lateral_damping, SimulationSeconds step,
+    const GravityParameters* gravity = nullptr,
+    CentralBodyActuation* central_report = nullptr)
     -> std::expected<VacuumActuation, VacuumDynamicsError> {
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{VacuumDynamicsError::invalid_step};
@@ -309,7 +417,9 @@ auto advance_vacuum_dynamics_impl(const RigidBodyWorldContext& context,
     return std::unexpected{VacuumDynamicsError::invalid_craft_frame};
   if (!validate_rigid_body_state(context, state))
     return std::unexpected{VacuumDynamicsError::invalid_state};
-  if (state.frame.kind != RigidFrameKind::system_inertial)
+  if (state.frame.kind != (gravity == nullptr
+                               ? RigidFrameKind::system_inertial
+                               : RigidFrameKind::planet_relative_inertial))
     return std::unexpected{VacuumDynamicsError::unsupported_coordinate_frame};
   if (!valid_fraction(intent.positive_translation) ||
       !valid_fraction(intent.negative_translation) ||
@@ -371,7 +481,7 @@ auto advance_vacuum_dynamics_impl(const RigidBodyWorldContext& context,
       state.position_metres, state.linear_velocity_metres_per_second,
       state.orientation, rotate(state.orientation, multiply(inertia, angular))};
   const auto integrated =
-      integrate(initial, inertia, mass, force.net, torque.net, dt);
+      integrate(initial, inertia, mass, force.net, torque.net, dt, gravity);
   if (!integrated) return std::unexpected{integrated.error()};
   auto candidate = state;
   candidate.position_metres = integrated->position;
@@ -379,12 +489,21 @@ auto advance_vacuum_dynamics_impl(const RigidBodyWorldContext& context,
   candidate.orientation = integrated->orientation;
   candidate.angular_velocity_radians_per_second = integrated->angular;
   ++candidate.tick;
+  if (gravity != nullptr &&
+      !gravity_acceleration(*gravity, candidate.position_metres))
+    return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
   const auto canonical = canonicalize_rigid_body_state(context, candidate);
   if (!canonical)
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
   report.world_linear_impulse_newton_seconds = integrated->linear_impulse;
   report.world_angular_impulse_newton_metre_seconds =
       integrated->angular_impulse;
+  if (central_report != nullptr) {
+    central_report->gravity_impulse_newton_seconds =
+        integrated->gravity_impulse;
+    central_report->total_linear_impulse_newton_seconds =
+        integrated->total_linear_impulse;
+  }
   state = *canonical;
   return report;
 }
@@ -407,6 +526,37 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
     return std::unexpected{VacuumDynamicsError::unsupported_version};
   return advance_vacuum_dynamics_impl(
       context, state, intent, recipe.version == kVacuumDynamicsVersion, step);
+}
+
+auto evaluate_central_body_gravity(const RigidBodyWorldContext& context,
+                                   const RigidBodyState& state,
+                                   CentralBodyDynamicsRecipe recipe)
+    -> std::expected<CentralBodyGravity, CentralBodyError> {
+  const auto parameters = gravity_parameters(context, state, recipe);
+  if (!parameters) return std::unexpected{parameters.error()};
+  return gravity_sample(*parameters, state.position_metres);
+}
+
+auto advance_central_body_dynamics(const RigidBodyWorldContext& context,
+                                   RigidBodyState& state,
+                                   const VacuumIntent& intent,
+                                   CentralBodyDynamicsRecipe recipe,
+                                   SimulationSeconds step)
+    -> std::expected<CentralBodyActuation, CentralBodyError> {
+  const auto parameters = gravity_parameters(context, state, recipe);
+  if (!parameters) return std::unexpected{parameters.error()};
+  const auto initial_gravity =
+      gravity_sample(*parameters, state.position_metres);
+  if (!initial_gravity) return std::unexpected{initial_gravity.error()};
+  CentralBodyActuation result;
+  result.initial_gravity = *initial_gravity;
+  const auto propulsion = advance_vacuum_dynamics_impl(
+      context, state, intent, false, step, &*parameters, &result);
+  if (!propulsion)
+    return std::unexpected{CentralBodyError{
+        CentralBodyErrorCode::dynamics_failure, propulsion.error()}};
+  result.propulsion = *propulsion;
+  return result;
 }
 
 } // namespace apsis_drift
