@@ -146,6 +146,7 @@ add_library(apsis_drift_core STATIC
   src/planet_rotation.cpp
   src/physical_local_system.cpp
   src/orbital_telemetry.cpp
+  src/orbit_hold.cpp
   src/vacuum_dynamics.cpp
   src/touchdown.cpp
   src/intersystem_contract.cpp
@@ -362,6 +363,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME orbital-telemetry-contract COMMAND apsis-drift-orbital-telemetry-tests)
   set_tests_properties(orbital-telemetry-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-orbit-hold-tests test/orbit_hold_test.cpp)
+  target_link_libraries(apsis-drift-orbit-hold-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-orbit-hold-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME orbit-hold-contract COMMAND apsis-drift-orbit-hold-tests)
+  set_tests_properties(orbit-hold-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
   target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-touchdown-tests PRIVATE
