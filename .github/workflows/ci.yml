@@ -172,13 +172,14 @@ jobs:
           apsis-drift-godot-snapshot
           apsis-drift-freedom-start-fixture
 
-      - name: Check saved-start bridge and native shell in Godot
+      - name: Check saved-start bridge, native shell and audio shutdown in Godot
         run: >-
           python3 tools/test_godot_native.py
           --godot "$PWD/build-godot-ci/Godot_v4.7.2-stable_linux.x86_64"
           --build-dir build-native
           --output-parent build-native-contracts
           --test freedom_start --test native_shell --test native_save
+          --test recorded_audio_shutdown
 
       - name: Retain native runtime logs and report
         if: always()
