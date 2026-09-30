@@ -192,7 +192,10 @@ snapshot study remains available through `tools/run_godot_study.sh`.
 
 The shell's station-local 3D view places a provisional station pose marker at
 the origin and a plain host-planet silhouette from C++ relative ephemeris and
-radius. Godot chooses only the camera and presentation materials. This view
+radius. The distant host uses a bounded display scale to keep the camera
+frustum renderable; its direction and radius-to-distance ratio still come from
+C++. The station marker is enlarged for visibility. Godot chooses only the
+camera and presentation materials. This view
 does not use or replace the active station/Wayfarer art, and the saved clock
 does not advance while it is open. The marker is not docking geometry.
 

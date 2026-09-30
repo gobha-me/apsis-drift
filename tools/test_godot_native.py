@@ -288,6 +288,7 @@ def main(argv=None):
                 command += ["--", *arguments]
                 code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
                 output = log.read_text(errors="replace")
+                view_far = re.search(r"dock_view=3d far=([0-9.]+)", output) if label == "view" else None
                 if accepted:
                     marker = re.search(
                         r"Freedom native shell (?:validated|opened): seed=(\d+) tick=(\d+) "
@@ -305,7 +306,8 @@ def main(argv=None):
                          "Freedom native shell opened: " in output) and
                         expected in output and marker is not None and
                         spatial is not None and
-                        (label != "view" or "dock_view=3d" in output) and
+                        (label != "view" or (view_far is not None and
+                                             0 < float(view_far[1]) < 10000)) and
                         not ERROR.search(output)) if accepted else (
                         not timed_out and code != 0 and
                         "Native start rejected:" in output)
@@ -328,7 +330,7 @@ def main(argv=None):
             visible_spatial = spatial_views.get("view")
             geometry_matches = (bool(new_spatial) and
                                 bool(visible_spatial) and
-                                visible_spatial[0] == new_spatial[0] and
+                                abs(float(visible_spatial[0]) - float(new_spatial[0])) < 1.0 and
                                 abs(float(visible_spatial[1]) - float(new_spatial[1])) < 1.0 and
                                 visible_spatial[2] == new_spatial[2] and
                                 spatial_views.get("continue_zero") == new_spatial and

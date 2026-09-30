@@ -1,6 +1,8 @@
 extends Control
 ## Docked-state presentation from a selected C++ Freedom save or recipe.
 
+const HOST_DISPLAY_SCALE = 0.0001
+
 var bridge: Variant = null
 var selected: Dictionary = {}
 
@@ -115,6 +117,8 @@ func _ready() -> void:
 
 
 func build_view(geometry: Dictionary) -> void:
+	# The host is a distant backdrop. Keep its angular geometry while using a
+	# bounded render-space scale; the station marker is an enlarged pose proxy.
 	var viewport_frame := SubViewportContainer.new()
 	viewport_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	viewport_frame.stretch = true
@@ -143,12 +147,12 @@ func build_view(geometry: Dictionary) -> void:
 	var host := MeshInstance3D.new()
 	host.name = "SelectedHomePlanetProxy"
 	var globe := SphereMesh.new()
-	globe.radius = geometry.radius
-	globe.height = geometry.radius * 2.0
+	globe.radius = geometry.radius * HOST_DISPLAY_SCALE
+	globe.height = globe.radius * 2.0
 	globe.radial_segments = 96
 	globe.rings = 48
 	host.mesh = globe
-	host.position = Vector3(-relative[0], -relative[1], -relative[2])
+	host.position = Vector3(-relative[0], -relative[1], -relative[2]) * HOST_DISPLAY_SCALE
 	var host_material := StandardMaterial3D.new()
 	host_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	host_material.albedo_color = Color(0.16, 0.34, 0.58)
@@ -167,9 +171,10 @@ func build_view(geometry: Dictionary) -> void:
 	station.material_override = marker_material
 	stage.add_child(station)
 	var camera := Camera3D.new()
-	camera.position = radial * 80.0 + tangent * 30.0
+	camera.position = radial * 48.0 + tangent * 22.0
 	camera.near = 0.25
-	camera.far = geometry.distance + geometry.radius + 100000.0
+	camera.far = (geometry.distance + geometry.radius) * HOST_DISPLAY_SCALE + 100.0
+	camera.fov = 120.0
 	stage.add_child(camera)
 	camera.look_at(Vector3.ZERO, reference)
 	camera.current = true
@@ -213,4 +218,4 @@ func build_view(geometry: Dictionary) -> void:
 	quit_button.pressed.connect(func() -> void: get_tree().quit(0))
 	column.add_child(quit_button)
 	quit_button.grab_focus()
-	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, globe.radius, host.position.length(), selected.station_phase_radians])
+	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d far=%.1f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, globe.radius / HOST_DISPLAY_SCALE, host.position.length() / HOST_DISPLAY_SCALE, selected.station_phase_radians, camera.far])
