@@ -1,5 +1,6 @@
 #include "apsis_drift/vacuum_dynamics.hpp"
 
+#include "apsis_drift/atmospheric_flight.hpp"
 #include "apsis_drift/central_body_dynamics.hpp"
 
 #include <algorithm>
@@ -227,6 +228,198 @@ auto gravity_sample(const GravityParameters& parameters, V position)
       parameters.mu,     distance,          *acceleration};
 }
 
+// Fixed bounded atmosphere, not a pluggable force registry. All constants and
+// class scale heights belong to atmospheric-flight version one.
+struct AtmosphereParameters {
+  PlanetId planet;
+  AtmosphereClass classification;
+  double radius, surface_gravity, sea_pressure, sea_density, scale_height, edge;
+  V spin;
+  CraftFrameProperties craft;
+};
+auto atmosphere_parameters(const RigidBodyWorldContext& context,
+                           const RigidBodyState& state,
+                           const PhysicalPlanetRotationRecipe& rotation,
+                           AtmosphericFlightRecipe recipe,
+                           CentralBodyDynamicsRecipe dynamics)
+    -> std::expected<AtmosphereParameters, AtmosphericFlightError> {
+  using Code = AtmosphericFlightErrorCode;
+  if (recipe.version != kAtmosphericFlightVersion)
+    return std::unexpected{
+        AtmosphericFlightError{Code::unsupported_version, {}, {}, {}}};
+  const auto gravity = evaluate_central_body_gravity(context, state, dynamics);
+  if (!gravity)
+    return std::unexpected{
+        AtmosphericFlightError{Code::gravity_failure, gravity.error(), {}, {}}};
+  if (rotation.rotation.planet != gravity->planet)
+    return std::unexpected{AtmosphericFlightError{
+        Code::rotation_failure, {}, PlanetRotationError::owner_mismatch, {}}};
+  const auto geometry =
+      resolve_planet_rotation(*context.physical_owner(), rotation, state.tick);
+  if (!geometry)
+    return std::unexpected{AtmosphericFlightError{
+        Code::rotation_failure, {}, geometry.error(), {}}};
+  const auto planet =
+      find_local_system_planet(*context.physical_owner(), gravity->planet);
+  if (!planet)
+    return std::unexpected{
+        AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+  const auto& descriptor = (*planet)->descriptor;
+  const auto craft = resolve_craft_frame(state.craft);
+  if (!craft ||
+      !supports_operation(craft->properties, CraftOperation::atmosphere))
+    return std::unexpected{
+        AtmosphericFlightError{Code::unsupported_craft, {}, {}, {}}};
+  double height{};
+  const double pressure = descriptor.atmosphere_pressure.value;
+  switch (descriptor.atmosphere_class) {
+    case AtmosphereClass::airless:
+      if (pressure != 0)
+        return std::unexpected{
+            AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+      break;
+    case AtmosphereClass::tenuous: height = 6000; break;
+    case AtmosphereClass::temperate: height = 8500; break;
+    case AtmosphereClass::dense: height = 11000; break;
+    default:
+      return std::unexpected{
+          AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+  }
+  if (height != 0 &&
+      (pressure <= 0 || pressure > AtmospherePressureMillibars::max))
+    return std::unexpected{
+        AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+  const double rho = 1.225 * (pressure / 1013.25);
+  const double edge = height == 0 ? 0 : height * std::log(rho / 1e-6);
+  const auto& omega = geometry->geometry.angular_velocity_radians_per_second;
+  return AtmosphereParameters{
+      gravity->planet,
+      descriptor.atmosphere_class,
+      gravity->reference_radius_metres,
+      gravity->surface_gravity_metres_per_second_squared,
+      pressure,
+      rho,
+      height,
+      edge,
+      {omega.x, omega.y, omega.z},
+      craft->properties};
+}
+auto dot(V a, V b) -> double {
+  return (a.x * b.x + a.y * b.y) + a.z * b.z;
+}
+auto magnitude(V a) -> double {
+  return std::sqrt(dot(a, a));
+}
+auto atmosphere_sample(const AtmosphereParameters& p, V position, V velocity,
+                       Q orientation, V angular, const VacuumIntent& intent)
+    -> std::expected<AtmosphericFlightSample, AtmosphericFlightError> {
+  using Code = AtmosphericFlightErrorCode;
+  if (!finite(position) || !finite(velocity) || !finite(orientation) ||
+      !finite(angular) || !valid_fraction(intent.positive_translation) ||
+      !valid_fraction(intent.negative_translation) ||
+      !valid_fraction(intent.positive_rotation) ||
+      !valid_fraction(intent.negative_rotation))
+    return std::unexpected{
+        AtmosphericFlightError{Code::unsafe_arithmetic, {}, {}, {}}};
+  const double distance = magnitude(position), norm = norm_squared(orientation);
+  if (!std::isfinite(distance) || distance < kCentralBodyMinimumRadiusMetres ||
+      !std::isfinite(norm) || norm < .125 || norm > 8)
+    return std::unexpected{
+        AtmosphericFlightError{Code::unsafe_arithmetic, {}, {}, {}}};
+  AtmosphericFlightSample result;
+  result.planet = p.planet;
+  result.atmosphere_class = p.classification;
+  result.altitude_metres = distance - p.radius;
+  result.space_boundary_altitude_metres = p.edge;
+  if (p.sea_density > 0 && result.altitude_metres < p.edge) {
+    // No interior/compression model: below-surface samples use surface density.
+    const double altitude = std::max(0.0, result.altitude_metres);
+    const double taper =
+        std::clamp((p.edge - altitude) / p.scale_height, 0.0, 1.0);
+    const double profile =
+        std::exp(-altitude / p.scale_height) * taper * taper * (3 - 2 * taper);
+    result.density_kg_per_cubic_metre = p.sea_density * profile;
+    result.pressure_millibars = p.sea_pressure * profile;
+  }
+  const V air = subtract(velocity, cross(p.spin, position));
+  result.air_relative_velocity_metres_per_second = air;
+  result.air_speed_metres_per_second = magnitude(air);
+  result.radial_rate_metres_per_second =
+      dot(velocity, scale(position, 1 / distance));
+  const V body = rotate(conjugate(orientation), air);
+  const double speed = result.air_speed_metres_per_second;
+  const double rho = result.density_kg_per_cubic_metre;
+  result.dynamic_pressure_pascals = .5 * rho * speed * speed;
+  result.angle_of_attack_radians =
+      body.z < 0 ? std::atan2(-body.y, -body.z) : 0;
+  result.within_rated_envelope =
+      result.altitude_metres >= 0 &&
+      p.surface_gravity * 1000 <= p.craft.max_surface_gravity_mm_per_second2 &&
+      result.pressure_millibars <= p.craft.max_pressure_millibars &&
+      speed <= 350 && std::abs(result.angle_of_attack_radians) <= .35;
+  const auto rate_limits = p.craft.max_angular_rate_milliradians_per_second;
+  const std::array rates{angular.x, angular.y, angular.z};
+  for (std::size_t i = 0; i < rates.size(); ++i)
+    result.within_rated_envelope = result.within_rated_envelope &&
+                                   std::abs(rates[i]) * 1000 <= rate_limits[i];
+  result.within_rated_envelope =
+      result.within_rated_envelope && (speed < 1 || body.z < 0);
+  if (rho > 0 && speed > 0) {
+    const V area = scale(vector(p.craft.drag_area_square_mm), 1e-6);
+    result.drag_force_body_newtons =
+        scale(multiply(area, body), -.5 * rho * speed);
+    // Authored bounded lifting-body reference area 16 m^2 and CL slope 2/rad.
+    // Project body-up perpendicular to relative air: lift does zero air work.
+    if (body.z < 0) {
+      const V direction = scale(body, 1 / speed);
+      const V up = subtract(V{0, 1, 0}, scale(direction, direction.y));
+      const double up_length = magnitude(up);
+      if (up_length > 1e-12)
+        result.lift_force_body_newtons = scale(
+            up, result.dynamic_pressure_pascals * 16 *
+                    std::clamp(2 * result.angle_of_attack_radians, -1.0, 1.0) /
+                    up_length);
+      const V weathercock = cross(V{0, 0, -1}, direction);
+      const V limits = scale(vector(p.craft.torque_newton_metres), .25);
+      const double stiffness = result.dynamic_pressure_pascals * 16 * 2;
+      result.passive_torque_body_newton_metres = {
+          std::clamp(weathercock.x * stiffness, -limits.x, limits.x),
+          std::clamp(weathercock.y * stiffness, -limits.y, limits.y), 0};
+    }
+    const double weight = result.dynamic_pressure_pascals /
+                          (result.dynamic_pressure_pascals + 250);
+    const V relative_rate =
+        subtract(angular, rotate(conjugate(orientation), p.spin));
+    result.passive_torque_body_newton_metres = subtract(
+        result.passive_torque_body_newton_metres,
+        scale(multiply(vector(p.craft.principal_inertia_kg_m2), relative_rate),
+              .3 * weight));
+    const auto limits = vector(p.craft.torque_newton_metres);
+    const double authority = result.dynamic_pressure_pascals * 16 * 2 * .1;
+    result.control_authority_fraction = {std::min(authority / limits.x, .35),
+                                         std::min(authority / limits.y, .35),
+                                         std::min(authority / limits.z, .35)};
+    result.control_torque_body_newton_metres = multiply(
+        multiply(subtract(intent.positive_rotation, intent.negative_rotation),
+                 limits),
+        result.control_authority_fraction);
+  }
+  for (double x :
+       {result.altitude_metres, result.density_kg_per_cubic_metre,
+        result.pressure_millibars, speed, result.dynamic_pressure_pascals,
+        result.radial_rate_metres_per_second})
+    if (!std::isfinite(x))
+      return std::unexpected{
+          AtmosphericFlightError{Code::unsafe_arithmetic, {}, {}, {}}};
+  if (!finite(result.drag_force_body_newtons) ||
+      !finite(result.lift_force_body_newtons) ||
+      !finite(result.passive_torque_body_newton_metres) ||
+      !finite(result.control_torque_body_newton_metres))
+    return std::unexpected{
+        AtmosphericFlightError{Code::unsafe_arithmetic, {}, {}, {}}};
+  return result;
+}
+
 struct Integrated {
   V position, velocity;
   Q orientation;
@@ -266,16 +459,19 @@ struct IntegratedResult {
   Q orientation;
   V angular, linear_impulse, angular_impulse;
   V gravity_impulse, total_linear_impulse;
+  V aerodynamic_impulse, aerodynamic_angular_impulse;
 };
 auto integrate(const Integrated& initial, V inertia, double mass, V force,
-               V torque, double dt, const GravityParameters* gravity = nullptr)
+               V torque, double dt, const GravityParameters* gravity = nullptr,
+               const AtmosphereParameters* atmosphere = nullptr,
+               const VacuumIntent* intent = nullptr)
     -> std::expected<IntegratedResult, VacuumDynamicsError> {
   // Shared coupled RK4: full flight must retain these same attitude stages
   // when rotating thrust/torque into its owning frame. The attitude-only
   // caller supplies zero translation and force, not a different integrator.
   const auto evaluate =
-      [&](const Integrated& value,
-          V& external) -> std::expected<Integrated, VacuumDynamicsError> {
+      [&](const Integrated& value, V& external, V& aero_force,
+          V& aero_torque) -> std::expected<Integrated, VacuumDynamicsError> {
     auto result = derivative(value, inertia, mass, force, torque);
     if (gravity != nullptr) {
       const auto acceleration = gravity_acceleration(*gravity, value.position);
@@ -284,28 +480,49 @@ auto integrate(const Integrated& initial, V inertia, double mass, V force,
       external = *acceleration;
       result.velocity = add(result.velocity, external);
     }
+    if (atmosphere != nullptr) {
+      const V angular =
+          divide(rotate(conjugate(value.orientation), value.angular_momentum),
+                 inertia);
+      const auto sample =
+          atmosphere_sample(*atmosphere, value.position, value.velocity,
+                            value.orientation, angular, *intent);
+      if (!sample)
+        return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
+      if (sample->density_kg_per_cubic_metre > 0) {
+        aero_force =
+            rotate(value.orientation, add(sample->drag_force_body_newtons,
+                                          sample->lift_force_body_newtons));
+        aero_torque = rotate(value.orientation,
+                             add(sample->passive_torque_body_newton_metres,
+                                 sample->control_torque_body_newton_metres));
+        result.velocity = add(result.velocity, scale(aero_force, 1.0 / mass));
+        result.angular_momentum = add(result.angular_momentum, aero_torque);
+      }
+    }
     return result;
   };
   V ga{}, gb{}, gc{}, gd{};
-  const auto first_derivative = evaluate(initial, ga);
+  V fa{}, fb{}, fc{}, fd{}, ta{}, tb{}, tc{}, td{};
+  const auto first_derivative = evaluate(initial, ga, fa, ta);
   if (!first_derivative) return std::unexpected{first_derivative.error()};
   const auto& a = *first_derivative;
   const auto second = sum(initial, a, dt * .5);
   if (!valid_stage(second))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto second_derivative = evaluate(second, gb);
+  const auto second_derivative = evaluate(second, gb, fb, tb);
   if (!second_derivative) return std::unexpected{second_derivative.error()};
   const auto& b = *second_derivative;
   const auto third = sum(initial, b, dt * .5);
   if (!valid_stage(third))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto third_derivative = evaluate(third, gc);
+  const auto third_derivative = evaluate(third, gc, fc, tc);
   if (!third_derivative) return std::unexpected{third_derivative.error()};
   const auto& c = *third_derivative;
   const auto fourth = sum(initial, c, dt);
   if (!valid_stage(fourth))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
-  const auto fourth_derivative = evaluate(fourth, gd);
+  const auto fourth_derivative = evaluate(fourth, gd, fd, td);
   if (!fourth_derivative) return std::unexpected{fourth_derivative.error()};
   const auto& d = *fourth_derivative;
   const double weight = dt / 6.0;
@@ -324,16 +541,28 @@ auto integrate(const Integrated& initial, V inertia, double mass, V force,
                  derivative(fourth, inertia, mass, force, torque).velocity),
         mass * weight);
   }
-  const auto angular_impulse =
+  const auto total_angular_impulse =
       scale(weighted(a.angular_momentum, b.angular_momentum, c.angular_momentum,
                      d.angular_momentum),
             weight);
+  const auto aerodynamic_impulse = scale(weighted(fa, fb, fc, fd), weight);
+  const auto aerodynamic_angular_impulse =
+      scale(weighted(ta, tb, tc, td), weight);
+  auto angular_impulse = total_angular_impulse;
+  if (atmosphere != nullptr) {
+    angular_impulse = scale(weighted(rotate(initial.orientation, torque),
+                                     rotate(second.orientation, torque),
+                                     rotate(third.orientation, torque),
+                                     rotate(fourth.orientation, torque)),
+                            weight);
+  }
   const auto next_orientation = normalize_rigid_orientation(
       add(initial.orientation, scale(weighted(a.orientation, b.orientation,
                                               c.orientation, d.orientation),
                                      weight)));
   if (!next_orientation || !finite(impulse) || !finite(propulsion_impulse) ||
-      !finite(gravity_impulse) || !finite(angular_impulse))
+      !finite(gravity_impulse) || !finite(angular_impulse) ||
+      !finite(aerodynamic_impulse) || !finite(aerodynamic_angular_impulse))
     return std::unexpected{VacuumDynamicsError::unsafe_arithmetic};
   return IntegratedResult{
       add(initial.position,
@@ -344,12 +573,14 @@ auto integrate(const Integrated& initial, V inertia, double mass, V force,
                 weight)),
       *next_orientation,
       divide(rotate(conjugate(*next_orientation),
-                    add(initial.angular_momentum, angular_impulse)),
+                    add(initial.angular_momentum, total_angular_impulse)),
              inertia),
       propulsion_impulse,
       angular_impulse,
       gravity_impulse,
-      impulse};
+      impulse,
+      aerodynamic_impulse,
+      aerodynamic_angular_impulse};
 }
 } // namespace
 
@@ -405,7 +636,9 @@ auto advance_vacuum_dynamics_impl(
     const RigidBodyWorldContext& context, RigidBodyState& state,
     const VacuumIntent& intent, bool lateral_damping, SimulationSeconds step,
     const GravityParameters* gravity = nullptr,
-    CentralBodyActuation* central_report = nullptr)
+    CentralBodyActuation* central_report = nullptr,
+    const AtmosphereParameters* atmosphere = nullptr,
+    AtmosphericFlightActuation* atmospheric_report = nullptr)
     -> std::expected<VacuumActuation, VacuumDynamicsError> {
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{VacuumDynamicsError::invalid_step};
@@ -481,7 +714,8 @@ auto advance_vacuum_dynamics_impl(
       state.position_metres, state.linear_velocity_metres_per_second,
       state.orientation, rotate(state.orientation, multiply(inertia, angular))};
   const auto integrated =
-      integrate(initial, inertia, mass, force.net, torque.net, dt, gravity);
+      integrate(initial, inertia, mass, force.net, torque.net, dt, gravity,
+                atmosphere, &intent);
   if (!integrated) return std::unexpected{integrated.error()};
   auto candidate = state;
   candidate.position_metres = integrated->position;
@@ -503,6 +737,12 @@ auto advance_vacuum_dynamics_impl(
         integrated->gravity_impulse;
     central_report->total_linear_impulse_newton_seconds =
         integrated->total_linear_impulse;
+  }
+  if (atmospheric_report != nullptr) {
+    atmospheric_report->aerodynamic_linear_impulse_newton_seconds =
+        integrated->aerodynamic_impulse;
+    atmospheric_report->aerodynamic_angular_impulse_newton_metre_seconds =
+        integrated->aerodynamic_angular_impulse;
   }
   state = *canonical;
   return report;
@@ -557,6 +797,74 @@ auto advance_central_body_dynamics(const RigidBodyWorldContext& context,
         CentralBodyErrorCode::dynamics_failure, propulsion.error()}};
   result.propulsion = *propulsion;
   return result;
+}
+
+auto evaluate_atmospheric_flight(const RigidBodyWorldContext& context,
+                                 const RigidBodyState& state,
+                                 const VacuumIntent& intent,
+                                 const PhysicalPlanetRotationRecipe& rotation,
+                                 AtmosphericFlightRecipe recipe,
+                                 CentralBodyDynamicsRecipe dynamics)
+    -> std::expected<AtmosphericFlightSample, AtmosphericFlightError> {
+  const auto parameters =
+      atmosphere_parameters(context, state, rotation, recipe, dynamics);
+  if (!parameters) return std::unexpected{parameters.error()};
+  return atmosphere_sample(*parameters, state.position_metres,
+                           state.linear_velocity_metres_per_second,
+                           state.orientation,
+                           state.angular_velocity_radians_per_second, intent);
+}
+
+auto advance_atmospheric_flight(const RigidBodyWorldContext& context,
+                                RigidBodyState& state,
+                                const VacuumIntent& intent,
+                                const PhysicalPlanetRotationRecipe& rotation,
+                                AtmosphericFlightRecipe recipe,
+                                CentralBodyDynamicsRecipe dynamics,
+                                SimulationSeconds step)
+    -> std::expected<AtmosphericFlightActuation, AtmosphericFlightError> {
+  using Code = AtmosphericFlightErrorCode;
+  const auto atmosphere =
+      atmosphere_parameters(context, state, rotation, recipe, dynamics);
+  if (!atmosphere) return std::unexpected{atmosphere.error()};
+  const auto gravity = gravity_parameters(context, state, dynamics);
+  if (!gravity)
+    return std::unexpected{
+        AtmosphericFlightError{Code::gravity_failure, gravity.error(), {}, {}}};
+  const auto sample = atmosphere_sample(
+      *atmosphere, state.position_metres,
+      state.linear_velocity_metres_per_second, state.orientation,
+      state.angular_velocity_radians_per_second, intent);
+  if (!sample) return std::unexpected{sample.error()};
+  AtmosphericFlightActuation report;
+  report.initial = *sample;
+  const auto initial_gravity = gravity_sample(*gravity, state.position_metres);
+  if (!initial_gravity)
+    return std::unexpected{AtmosphericFlightError{
+        Code::gravity_failure, initial_gravity.error(), {}, {}}};
+  report.central.initial_gravity = *initial_gravity;
+  auto candidate = state;
+  const auto propulsion = advance_vacuum_dynamics_impl(
+      context, candidate, intent, false, step, &*gravity, &report.central,
+      &*atmosphere, &report);
+  if (!propulsion)
+    return std::unexpected{AtmosphericFlightError{
+        Code::dynamics_failure, {}, {}, propulsion.error()}};
+  report.central.propulsion = *propulsion;
+  const auto after = atmosphere_sample(
+      *atmosphere, candidate.position_metres,
+      candidate.linear_velocity_metres_per_second, candidate.orientation,
+      candidate.angular_velocity_radians_per_second, intent);
+  if (!after) return std::unexpected{after.error()};
+  report.after = *after;
+  const auto observed = evaluate_orbital_telemetry(
+      context, candidate, rotation, {1, atmosphere->edge}, dynamics);
+  if (!observed)
+    return std::unexpected{
+        AtmosphericFlightError{Code::observation_failure, {}, {}, {}}};
+  report.observation_after = *observed;
+  state = candidate;
+  return report;
 }
 
 } // namespace apsis_drift

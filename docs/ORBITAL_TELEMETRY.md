@@ -116,5 +116,9 @@ gravity, vacuum, attitude and legacy checksums remain separate regression gates
 under GCC and Clang.
 
 Explicit bounded [ORBIT HOLD](ORBIT_HOLD.md) consumes this query through a
-separate optional controller. Atmospheric force composition, cockpit adoption
-and actual native flight persistence remain outstanding work in #238/#291.
+separate optional controller. Cockpit adoption and actual native flight
+persistence remain outstanding work in #238/#291.
+
+[Canonical atmospheric flight](ATMOSPHERIC_FLIGHT.md) now composes rotating air
+and aerodynamic forces through the same gravity/kernel. Live flight adoption
+and gameplay persistence remain separate work.

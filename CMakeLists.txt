@@ -369,6 +369,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME orbit-hold-contract COMMAND apsis-drift-orbit-hold-tests)
   set_tests_properties(orbit-hold-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-atmospheric-flight-tests test/atmospheric_flight_test.cpp)
+  target_link_libraries(apsis-drift-atmospheric-flight-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-atmospheric-flight-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME atmospheric-flight-contract COMMAND apsis-drift-atmospheric-flight-tests)
+  set_tests_properties(atmospheric-flight-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-touchdown-tests test/touchdown_test.cpp)
   target_link_libraries(apsis-drift-touchdown-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-touchdown-tests PRIVATE
