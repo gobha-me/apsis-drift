@@ -293,9 +293,11 @@ auto advance_vacuum_attitude(CraftFrameRecipe craft,
        integrated->angular_impulse, assistance, allocation.saturated}};
 }
 
-auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
-                             RigidBodyState& state, const VacuumIntent& intent,
-                             SimulationSeconds step)
+namespace {
+auto advance_vacuum_dynamics_impl(const RigidBodyWorldContext& context,
+                                  RigidBodyState& state,
+                                  const VacuumIntent& intent,
+                                  bool lateral_damping, SimulationSeconds step)
     -> std::expected<VacuumActuation, VacuumDynamicsError> {
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{VacuumDynamicsError::invalid_step};
@@ -330,7 +332,7 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
   report.requested_force_newtons = subtract(positive_force, negative_force);
   auto desired_force = report.requested_force_newtons;
   const auto angular = state.angular_velocity_radians_per_second;
-  if (intent.assistance) {
+  if (intent.assistance && lateral_damping) {
     const auto body_velocity = rotate(conjugate(state.orientation),
                                       state.linear_velocity_metres_per_second);
     if (intent.positive_translation.x == 0 &&
@@ -386,4 +388,25 @@ auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
   state = *canonical;
   return report;
 }
+} // namespace
+
+auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
+                             RigidBodyState& state, const VacuumIntent& intent,
+                             SimulationSeconds step)
+    -> std::expected<VacuumActuation, VacuumDynamicsError> {
+  return advance_vacuum_dynamics_impl(context, state, intent, true, step);
+}
+
+auto advance_vacuum_dynamics(const RigidBodyWorldContext& context,
+                             RigidBodyState& state, const VacuumIntent& intent,
+                             VacuumDynamicsRecipe recipe,
+                             SimulationSeconds step)
+    -> std::expected<VacuumActuation, VacuumDynamicsError> {
+  if (recipe.version != kVacuumDynamicsVersion &&
+      recipe.version != kCoastingVacuumDynamicsVersion)
+    return std::unexpected{VacuumDynamicsError::unsupported_version};
+  return advance_vacuum_dynamics_impl(
+      context, state, intent, recipe.version == kVacuumDynamicsVersion, step);
+}
+
 } // namespace apsis_drift
