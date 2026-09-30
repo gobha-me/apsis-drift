@@ -140,3 +140,53 @@ jobs:
 
       - name: Test native and headless targets
         run: ctest --test-dir build-core --output-on-failure
+
+  native-godot-runtime:
+    name: Godot 4.7.2 / saved Freedom start
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download and verify Godot 4.7.2
+        run: |
+          curl --fail --location --retry 3 \
+            --output godot-linux.zip \
+            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          echo 'cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  godot-linux.zip' | sha256sum --check
+          mkdir build-godot-ci
+          python3 -m zipfile -e godot-linux.zip build-godot-ci
+          chmod +x build-godot-ci/Godot_v4.7.2-stable_linux.x86_64
+
+      - name: Configure native bridge without TermForge
+        run: >-
+          cmake -S . -B build-native -DCMAKE_BUILD_TYPE=Release
+          -DAPSIS_DRIFT_TERMINAL=OFF
+          -DAPSIS_DRIFT_RTAUDIO=OFF
+          -DAPSIS_DRIFT_GODOT_SPIKE=ON
+          -DAPSIS_DRIFT_GODOT_LIVE=ON
+
+      - name: Build bridge and saved-start fixtures
+        run: >-
+          cmake --build build-native --parallel 4
+          --target apsis_freedom_bridge
+          apsis-drift-godot-snapshot
+          apsis-drift-freedom-start-fixture
+
+      - name: Check saved-start bridge and native shell in Godot
+        run: >-
+          python3 tools/test_godot_native.py
+          --godot "$PWD/build-godot-ci/Godot_v4.7.2-stable_linux.x86_64"
+          --build-dir build-native
+          --output-parent build-native-contracts
+          --test freedom_start --test native_shell
+
+      - name: Retain native runtime logs and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-saved-start-contracts
+          path: |
+            build-native-contracts/native-contracts-*/report.json
+            build-native-contracts/native-contracts-*/*.log
+          if-no-files-found: warn
+          retention-days: 7
