@@ -43,6 +43,23 @@ constexpr CraftFrameDescriptor starter{
     {kStarterShuttleFrameId, kStarterShuttleFrameVersion},
     "freedom-shuttle-v1",
     starter_properties};
+// Carry the authored gameplay ratings; only measured hull/support geometry
+// differs. This is a new identity, never an edit to the saved starter frame.
+constexpr auto wayfarer_properties = [] {
+  auto p = starter_properties;
+  p.hull_min_mm = {-4040, -1259, -5210};
+  p.hull_max_mm = {4040, 2955, 7620};
+  // Deployed HopperGear05/16/27 pads; .64 x .52 m soles at -2.080 m.
+  p.supports = {{{{0, -2080, -700}, 320, 260, 300, 160000},
+                 {{-2500, -2080, 5070}, 320, 260, 300, 160000},
+                 {{2500, -2080, 5070}, 320, 260, 300, 160000},
+                 {}}};
+  return p;
+}();
+constexpr CraftFrameDescriptor wayfarer{
+    {kWayfarerFrameId, kWayfarerFrameVersion},
+    "wayfarer-v1",
+    wayfarer_properties};
 
 auto point_valid(const CraftPointMm& point) noexcept -> bool {
   return std::ranges::all_of(point, [](std::int32_t value) {
@@ -228,15 +245,20 @@ auto validate_craft_frame_properties(const CraftFrameProperties& p) noexcept
 auto starter_shuttle_frame() noexcept -> const CraftFrameDescriptor& {
   return starter;
 }
+auto wayfarer_frame() noexcept -> const CraftFrameDescriptor& {
+  return wayfarer;
+}
 auto resolve_craft_frame(CraftFrameRecipe recipe) noexcept
     -> std::expected<CraftFrameDescriptor, CraftFrameError> {
-  if (recipe.id != kStarterShuttleFrameId)
-    return std::unexpected{CraftFrameError::unknown_id};
-  if (recipe.version != kStarterShuttleFrameVersion)
+  const auto* frame = recipe.id == kStarterShuttleFrameId ? &starter
+                      : recipe.id == kWayfarerFrameId     ? &wayfarer
+                                                          : nullptr;
+  if (frame == nullptr) return std::unexpected{CraftFrameError::unknown_id};
+  if (recipe.version != frame->recipe.version)
     return std::unexpected{CraftFrameError::unsupported_version};
-  const auto valid = validate_craft_frame_properties(starter.properties);
+  const auto valid = validate_craft_frame_properties(frame->properties);
   if (!valid) return std::unexpected{valid.error()};
-  return starter;
+  return *frame;
 }
 
 auto craft_frame_checksum(const CraftFrameDescriptor& frame) noexcept

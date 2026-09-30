@@ -48,6 +48,7 @@ TESTS = {
     "native_save": "freedom_saves",
     "native_asset_import": "native_assets",
     "native_station_view": "native_assets",
+    "wayfarer_frame": "native_assets",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",

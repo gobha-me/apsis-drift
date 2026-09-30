@@ -324,6 +324,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-craft-frame-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME craft-frame-contract COMMAND apsis-drift-craft-frame-tests)
+  add_executable(apsis-drift-wayfarer-frame-tests test/wayfarer_frame_test.cpp)
+  target_link_libraries(apsis-drift-wayfarer-frame-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-wayfarer-frame-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Wconversion;-Wshadow>)
+  add_test(NAME wayfarer-frame-contract COMMAND apsis-drift-wayfarer-frame-tests)
   add_executable(apsis-drift-rigid-body-tests test/rigid_body_test.cpp)
   target_link_libraries(apsis-drift-rigid-body-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-rigid-body-tests PRIVATE

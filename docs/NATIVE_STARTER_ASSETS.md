@@ -105,3 +105,8 @@ remain separate native integration checks under #219/#220/#245.
 The optional Game Development Studio vendoring CLI was unavailable in this
 environment. No claim is made that its canonical admission command ran; this
 delivery uses the repository's source/license/hash/import evidence.
+
+The separately selected [Wayfarer physical frame](WAYFARER_PHYSICAL_FRAME.md)
+binds the stowed hull and three deployed foot datums to these source hashes.
+It retains the original frame and default selections; asset admission does not
+select physics ratings or migrate a save.
