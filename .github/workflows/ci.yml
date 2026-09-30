@@ -38,6 +38,9 @@ jobs:
       - name: Check native test-runner failure handling
         run: python3 test/native_runner_test.py
 
+      - name: Check native asset package refusal and atomic preparation
+        run: python3 test/native_asset_package_test.py
+
       - name: Run static analysis
         run: tools/lint.sh
 
@@ -179,6 +182,7 @@ jobs:
           --build-dir build-native
           --output-parent build-native-contracts
           --test freedom_start --test native_shell --test native_save
+          --test native_asset_import
           --test recorded_audio_shutdown
 
       - name: Retain native runtime logs and report

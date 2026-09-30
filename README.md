@@ -38,6 +38,11 @@ flight, landing and walking remain implementation work; this is not a completed
 Freedom play loop. Validate selection without opening a window by adding
 `--headless-validate` to either command.
 
+The selected station and Wayfarer exports have a
+[source-bound native asset package](docs/NATIVE_STARTER_ASSETS.md), with portable
+preparation and actual Godot import checks. Their gameplay consumers remain
+under development; package admission alone does not complete the flight loop.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
