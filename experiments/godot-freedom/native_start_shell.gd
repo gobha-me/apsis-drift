@@ -5,6 +5,27 @@ const HOST_DISPLAY_SCALE = 0.0001
 
 var bridge: Variant = null
 var selected: Dictionary = {}
+var save_dialog: FileDialog
+var save_status: Label
+var save_button: Button
+
+
+func open_save_as() -> void:
+	save_dialog.popup_centered_ratio(0.75)
+
+
+func cancel_save_as() -> void:
+	save_button.grab_focus()
+
+
+func save_selected(path: String) -> void:
+	if bridge.save_freedom_as(path):
+		save_status.text = "Saved to %s" % path
+		save_status.modulate = Color(0.7, 0.95, 0.8)
+	else:
+		save_status.text = "Save failed: %s" % bridge.get_last_error()
+		save_status.modulate = Color(1.0, 0.75, 0.65)
+	save_button.grab_focus()
 
 
 func fail(message: String) -> void:
@@ -213,9 +234,27 @@ func build_view(geometry: Dictionary) -> void:
 	var note := Label.new()
 	note.text = "Station pose marker and host silhouette are provisional.\nFlight from this save is still in development."
 	column.add_child(note)
+	save_button = Button.new()
+	save_button.text = "Save As…"
+	save_button.pressed.connect(open_save_as)
+	column.add_child(save_button)
+	save_status = Label.new()
+	save_status.text = "Choose Save As to keep this session."
+	save_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(save_status)
+	save_dialog = FileDialog.new()
+	save_dialog.title = "Save Apsis Drift session"
+	save_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	save_dialog.filters = PackedStringArray(["*.json ; Apsis Drift saves"])
+	save_dialog.current_dir = OS.get_user_data_dir()
+	save_dialog.current_file = "apsis-drift.json"
+	save_dialog.file_selected.connect(save_selected)
+	save_dialog.canceled.connect(cancel_save_as)
+	add_child(save_dialog)
 	var quit_button := Button.new()
 	quit_button.text = "Quit"
 	quit_button.pressed.connect(func() -> void: get_tree().quit(0))
 	column.add_child(quit_button)
-	quit_button.grab_focus()
+	save_button.grab_focus()
 	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d far=%.1f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, globe.radius / HOST_DISPLAY_SCALE, host.position.length() / HOST_DISPLAY_SCALE, selected.station_phase_radians, camera.far])

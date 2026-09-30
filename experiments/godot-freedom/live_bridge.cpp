@@ -204,6 +204,8 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::initialize_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
                                 &FreedomBridge::get_freedom_start);
+    godot::ClassDB::bind_method(godot::D_METHOD("save_freedom_as", "save_path"),
+                                &FreedomBridge::save_freedom_as);
     godot::ClassDB::bind_method(godot::D_METHOD("get_world_lighting"),
                                 &FreedomBridge::get_world_lighting);
     godot::ClassDB::bind_method(
@@ -287,6 +289,25 @@ class FreedomBridge : public godot::RefCounted {
       auto selected = native_continue(path);
       if (!selected) throw std::runtime_error(selected.error());
       return commit_freedom_start(std::move(*selected));
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto save_freedom_as(const godot::String& save_path) -> bool {
+    try {
+      if (!native_start)
+        throw std::invalid_argument(
+            "Save As requires a selected Freedom station session");
+      const auto utf8 = save_path.utf8();
+      const std::string bytes{utf8.get_data(),
+                              static_cast<std::size_t>(utf8.length())};
+      const auto saved = native_save_freedom(native_start->selected,
+                                             std::filesystem::path{bytes});
+      if (!saved) throw std::runtime_error(saved.error());
+      last_error = godot::String{};
+      return true;
     } catch (const std::exception& error) {
       last_error = godot::String{error.what()};
       return false;
