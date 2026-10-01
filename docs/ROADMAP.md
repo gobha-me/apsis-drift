@@ -138,8 +138,9 @@ The [saved native flight consumer](SAVED_NATIVE_FLIGHT.md) connects format-18
 Continue, C++ fixed-step controls, terrain projection and applied main exhaust.
 The [native port lifecycle](NATIVE_PORT_LIFECYCLE.md) adds physical capture,
 constrained station co-motion, same-tick release and explicit format19 persistence.
-New Game remains station inspection while walking/boarding/seat/departure and
-contact are integrated. This increment does not satisfy the composed handoff.
+Fresh New Game now starts the supported format20 station walk described below.
+Boarding, seating, departure and surface contact are still being integrated;
+the complete owner handoff remains open.
 
 Missions, economy, carriers, shipbuilder UI, populated stations and full
 large-ship interiors remain outside this first path. Existing mission/career

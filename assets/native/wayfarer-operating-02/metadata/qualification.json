@@ -1,0 +1,1778 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "sources": {
+    "station_reference_sha256": "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6",
+    "wayfarer_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+    "station_closure_sha256": "6a12e1e6846be4de6c89ce0c65b154567a8a07818d37bf574de2a319109319b4"
+  },
+  "contact_sha256": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+  "station_closure_sha256": "662287856666bc9f3bffdd6ccda3fce2a2c2b55fd393998f4cf65597c3ffeada",
+  "station_model_sha256": "a02d4b2a14f4459f6b5109768fa102aa214e611d3aa3faf28e573cd557e3a29e",
+  "runtime_station_proof_sha256": "82f53108614036a9d21b1268c1c1012f9aaf7e31d86aa75e9d4afb316978cb8f",
+  "checks": {
+    "contact_buffers": true,
+    "source_unchanged": true,
+    "station_bindings": true,
+    "motion_sweeps": true,
+    "negative_controls": true
+  },
+  "sweeps": [
+    {
+      "owner": "craft",
+      "channel": "roof_transfer",
+      "samples": 41,
+      "method": "Sampled exact source-triangle BVH surface intersection",
+      "unexpected_contacts": [],
+      "intentional_contacts": [
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot -1 -0.2",
+          "object_b": "AFT01 | hatch hinge link -1 -0.2",
+          "samples": 1,
+          "first_progress": 0.0,
+          "last_progress": 0.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot -1 0.2",
+          "object_b": "AFT01 | hatch hinge link -1 0.2",
+          "samples": 1,
+          "first_progress": 0.0,
+          "last_progress": 0.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot 1 -0.2",
+          "object_b": "AFT01 | hatch hinge link 1 -0.2",
+          "samples": 1,
+          "first_progress": 0.0,
+          "last_progress": 0.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot 1 0.2",
+          "object_b": "AFT01 | hatch hinge link 1 0.2",
+          "samples": 1,
+          "first_progress": 0.0,
+          "last_progress": 0.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link -1 -0.2",
+          "object_b": "AFT01 | hatch hinge pin -1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 46
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link -1 0.2",
+          "object_b": "AFT01 | hatch hinge pin -1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 46
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link 1 -0.2",
+          "object_b": "AFT01 | hatch hinge pin 1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 48
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link 1 0.2",
+          "object_b": "AFT01 | hatch hinge pin 1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 48
+        },
+        {
+          "object_a": "AFT01 | ladder pivot arm 0.18",
+          "object_b": "AFT01 | ladder wall bracket 0.18",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 75
+        },
+        {
+          "object_a": "AFT01 | ladder pivot arm 1.36",
+          "object_b": "AFT01 | ladder wall bracket 1.36",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 75
+        },
+        {
+          "object_a": "Fixed swivel housing",
+          "object_b": "Lift outer guide",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 26
+        },
+        {
+          "object_a": "Fixed swivel housing",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 49
+        },
+        {
+          "object_a": "Lift outer guide",
+          "object_b": "Swivel bearing race",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 58
+        },
+        {
+          "object_a": "Rotating swivel plate",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 45
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel detent boss",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 102
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel detent boss.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 100
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 91
+        },
+        {
+          "object_a": "Swivel detent boss",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 77
+        }
+      ]
+    },
+    {
+      "owner": "craft",
+      "channel": "inner_door",
+      "samples": 41,
+      "method": "Sampled exact source-triangle BVH surface intersection",
+      "unexpected_contacts": [],
+      "intentional_contacts": [
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot -1 -0.2",
+          "object_b": "AFT01 | hatch hinge link -1 -0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot -1 0.2",
+          "object_b": "AFT01 | hatch hinge link -1 0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot 1 -0.2",
+          "object_b": "AFT01 | hatch hinge link 1 -0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot 1 0.2",
+          "object_b": "AFT01 | hatch hinge link 1 0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link -1 -0.2",
+          "object_b": "AFT01 | hatch hinge pin -1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 44
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link -1 0.2",
+          "object_b": "AFT01 | hatch hinge pin -1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 42
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link 1 -0.2",
+          "object_b": "AFT01 | hatch hinge pin 1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 44
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link 1 0.2",
+          "object_b": "AFT01 | hatch hinge pin 1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 46
+        },
+        {
+          "object_a": "AFT01 | ladder pivot arm 0.18",
+          "object_b": "AFT01 | ladder wall bracket 0.18",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 73
+        },
+        {
+          "object_a": "AFT01 | ladder pivot arm 1.36",
+          "object_b": "AFT01 | ladder wall bracket 1.36",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 73
+        },
+        {
+          "object_a": "Fixed swivel housing",
+          "object_b": "Lift outer guide",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 26
+        },
+        {
+          "object_a": "Fixed swivel housing",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 49
+        },
+        {
+          "object_a": "Lift outer guide",
+          "object_b": "Swivel bearing race",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 58
+        },
+        {
+          "object_a": "Rotating swivel plate",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 45
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel detent boss",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 102
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel detent boss.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 100
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 91
+        },
+        {
+          "object_a": "Swivel detent boss",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 77
+        }
+      ]
+    },
+    {
+      "owner": "craft",
+      "channel": "seat_boarding",
+      "samples": 41,
+      "method": "Sampled exact source-triangle BVH surface intersection",
+      "unexpected_contacts": [],
+      "intentional_contacts": [
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot -1 -0.2",
+          "object_b": "AFT01 | hatch hinge link -1 -0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot -1 0.2",
+          "object_b": "AFT01 | hatch hinge link -1 0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot 1 -0.2",
+          "object_b": "AFT01 | hatch hinge link 1 -0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge fixed foot 1 0.2",
+          "object_b": "AFT01 | hatch hinge link 1 0.2",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 29
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link -1 -0.2",
+          "object_b": "AFT01 | hatch hinge pin -1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 44
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link -1 0.2",
+          "object_b": "AFT01 | hatch hinge pin -1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 42
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link 1 -0.2",
+          "object_b": "AFT01 | hatch hinge pin 1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 44
+        },
+        {
+          "object_a": "AFT01 | hatch hinge link 1 0.2",
+          "object_b": "AFT01 | hatch hinge pin 1",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 46
+        },
+        {
+          "object_a": "AFT01 | ladder pivot arm 0.18",
+          "object_b": "AFT01 | ladder wall bracket 0.18",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 73
+        },
+        {
+          "object_a": "AFT01 | ladder pivot arm 1.36",
+          "object_b": "AFT01 | ladder wall bracket 1.36",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 73
+        },
+        {
+          "object_a": "Fixed swivel housing",
+          "object_b": "Lift outer guide",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 30
+        },
+        {
+          "object_a": "Fixed swivel housing",
+          "object_b": "Swivel lock pin",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 49
+        },
+        {
+          "object_a": "Lift outer guide",
+          "object_b": "Swivel bearing race",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 60
+        },
+        {
+          "object_a": "Rotating swivel plate",
+          "object_b": "Swivel lock pin",
+          "samples": 25,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 45
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel detent boss",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 102
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel detent boss.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 102
+        },
+        {
+          "object_a": "Swivel bearing race",
+          "object_b": "Swivel lock pin",
+          "samples": 26,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 91
+        },
+        {
+          "object_a": "Swivel detent boss",
+          "object_b": "Swivel lock pin",
+          "samples": 23,
+          "first_progress": 0.0,
+          "last_progress": 0.55,
+          "triangle_pairs_max": 77
+        }
+      ]
+    },
+    {
+      "owner": "station",
+      "channel": "station_closure",
+      "samples": 41,
+      "method": "Sampled authored kit09 source poses acting on reference triangles; exact pair BVH intersection",
+      "unexpected_contacts": [],
+      "intentional_contacts": [
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 144
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 140
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 140
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 140
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 144
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 140
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 140
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 140
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 -1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 1.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 64
+        },
+        {
+          "object_a": "DK09 DOOR | KIT04 | door 04 leaf 2.001",
+          "object_b": "DK09 DOOR | KIT05 | door 04 leaf joint gasket.003",
+          "samples": 30,
+          "first_progress": 0.275,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 6
+        },
+        {
+          "object_a": "DK09 DOOR | KIT04 | door 04 leaf 3.001",
+          "object_b": "DK09 DOOR | KIT05 | door 04 leaf joint gasket.004",
+          "samples": 26,
+          "first_progress": 0.375,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 6
+        },
+        {
+          "object_a": "DK09 DOOR | KIT04 | door 04 leaf 4.001",
+          "object_b": "DK09 DOOR | KIT05 | door 04 leaf joint gasket.005",
+          "samples": 22,
+          "first_progress": 0.47500000000000003,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 6
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.008",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 -1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.009",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.010",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 -1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.011",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.012",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 -1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.013",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.014",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 -1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.015",
+          "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 1.001",
+          "samples": 22,
+          "first_progress": 0.0,
+          "last_progress": 0.525,
+          "triangle_pairs_max": 66
+        },
+        {
+          "object_a": "DK09 | deck hatch retracting gasket.001",
+          "object_b": "DK09 | sliding deck hatch -1.001",
+          "samples": 8,
+          "first_progress": 0.8250000000000001,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 338
+        },
+        {
+          "object_a": "DK09 | deck hatch retracting gasket.001",
+          "object_b": "DK09 | sliding deck hatch 1.001",
+          "samples": 8,
+          "first_progress": 0.8250000000000001,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 342
+        },
+        {
+          "object_a": "DK09 | magnetic retention cartridge.004",
+          "object_b": "DK09 | transfer shaft.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 154
+        },
+        {
+          "object_a": "DK09 | magnetic retention cartridge.005",
+          "object_b": "DK09 | transfer shaft.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 154
+        },
+        {
+          "object_a": "DK09 | magnetic retention cartridge.006",
+          "object_b": "DK09 | transfer shaft.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 154
+        },
+        {
+          "object_a": "DK09 | magnetic retention cartridge.007",
+          "object_b": "DK09 | transfer shaft.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 154
+        },
+        {
+          "object_a": "DK09 | safety gate crossbar.002",
+          "object_b": "KIT10 | gate hinge knuckle",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 36
+        },
+        {
+          "object_a": "DK09 | safety gate crossbar.003",
+          "object_b": "KIT10 | gate hinge knuckle.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 36
+        },
+        {
+          "object_a": "DK09 | safety gate upright.002",
+          "object_b": "KIT10 | gate hinge knuckle",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 36
+        },
+        {
+          "object_a": "DK09 | safety gate upright.002",
+          "object_b": "KIT10 | gate hinge knuckle.001",
+          "samples": 41,
+          "first_progress": 0.0,
+          "last_progress": 1.0,
+          "triangle_pairs_max": 18
+        }
+      ]
+    }
+  ],
+  "exceptions": [
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot -1 -0.2",
+      "object_b": "AFT01 | hatch hinge link -1 -0.2",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        0.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot -1 0.2",
+      "object_b": "AFT01 | hatch hinge link -1 0.2",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        0.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot 1 -0.2",
+      "object_b": "AFT01 | hatch hinge link 1 -0.2",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        0.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot 1 0.2",
+      "object_b": "AFT01 | hatch hinge link 1 0.2",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        0.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link -1 -0.2",
+      "object_b": "AFT01 | hatch hinge pin -1",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link -1 0.2",
+      "object_b": "AFT01 | hatch hinge pin -1",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link 1 -0.2",
+      "object_b": "AFT01 | hatch hinge pin 1",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link 1 0.2",
+      "object_b": "AFT01 | hatch hinge pin 1",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | ladder pivot arm 0.18",
+      "object_b": "AFT01 | ladder wall bracket 0.18",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored ladder pivot arm and wall-bracket bearing joint, not a pressure-wall exception."
+    },
+    {
+      "object_a": "AFT01 | ladder pivot arm 1.36",
+      "object_b": "AFT01 | ladder wall bracket 1.36",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored ladder pivot arm and wall-bracket bearing joint, not a pressure-wall exception."
+    },
+    {
+      "object_a": "Fixed swivel housing",
+      "object_b": "Lift outer guide",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Fixed swivel housing",
+      "object_b": "Swivel lock pin",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source pin actuator/housing guided engagement through withdrawal/restoration; this pair is distinct from the obstructing bolt and rotating surfaces."
+    },
+    {
+      "object_a": "Lift outer guide",
+      "object_b": "Swivel bearing race",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Rotating swivel plate",
+      "object_b": "Swivel lock pin",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel detent boss",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel detent boss.001",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel lock pin",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel detent boss",
+      "object_b": "Swivel lock pin",
+      "channel": "roof_transfer",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact forward detent/pin engagement during aligned lock withdrawal only; no free-turn exception."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot -1 -0.2",
+      "object_b": "AFT01 | hatch hinge link -1 -0.2",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot -1 0.2",
+      "object_b": "AFT01 | hatch hinge link -1 0.2",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot 1 -0.2",
+      "object_b": "AFT01 | hatch hinge link 1 -0.2",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot 1 0.2",
+      "object_b": "AFT01 | hatch hinge link 1 0.2",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link -1 -0.2",
+      "object_b": "AFT01 | hatch hinge pin -1",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link -1 0.2",
+      "object_b": "AFT01 | hatch hinge pin -1",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link 1 -0.2",
+      "object_b": "AFT01 | hatch hinge pin 1",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link 1 0.2",
+      "object_b": "AFT01 | hatch hinge pin 1",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | ladder pivot arm 0.18",
+      "object_b": "AFT01 | ladder wall bracket 0.18",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored ladder pivot arm and wall-bracket bearing joint, not a pressure-wall exception."
+    },
+    {
+      "object_a": "AFT01 | ladder pivot arm 1.36",
+      "object_b": "AFT01 | ladder wall bracket 1.36",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored ladder pivot arm and wall-bracket bearing joint, not a pressure-wall exception."
+    },
+    {
+      "object_a": "Fixed swivel housing",
+      "object_b": "Lift outer guide",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Fixed swivel housing",
+      "object_b": "Swivel lock pin",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source pin actuator/housing guided engagement through withdrawal/restoration; this pair is distinct from the obstructing bolt and rotating surfaces."
+    },
+    {
+      "object_a": "Lift outer guide",
+      "object_b": "Swivel bearing race",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Rotating swivel plate",
+      "object_b": "Swivel lock pin",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel detent boss",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel detent boss.001",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel lock pin",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel detent boss",
+      "object_b": "Swivel lock pin",
+      "channel": "inner_door",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact forward detent/pin engagement during aligned lock withdrawal only; no free-turn exception."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot -1 -0.2",
+      "object_b": "AFT01 | hatch hinge link -1 -0.2",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot -1 0.2",
+      "object_b": "AFT01 | hatch hinge link -1 0.2",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot 1 -0.2",
+      "object_b": "AFT01 | hatch hinge link 1 -0.2",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge fixed foot 1 0.2",
+      "object_b": "AFT01 | hatch hinge link 1 0.2",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored hinge foot/link engagement at the closed stop; on roof_transfer the link leaves this contact after progress0."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link -1 -0.2",
+      "object_b": "AFT01 | hatch hinge pin -1",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link -1 0.2",
+      "object_b": "AFT01 | hatch hinge pin -1",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link 1 -0.2",
+      "object_b": "AFT01 | hatch hinge pin 1",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | hatch hinge link 1 0.2",
+      "object_b": "AFT01 | hatch hinge pin 1",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact hinge link rotates on the authored pin; this bearing pair remains engaged."
+    },
+    {
+      "object_a": "AFT01 | ladder pivot arm 0.18",
+      "object_b": "AFT01 | ladder wall bracket 0.18",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored ladder pivot arm and wall-bracket bearing joint, not a pressure-wall exception."
+    },
+    {
+      "object_a": "AFT01 | ladder pivot arm 1.36",
+      "object_b": "AFT01 | ladder wall bracket 1.36",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored ladder pivot arm and wall-bracket bearing joint, not a pressure-wall exception."
+    },
+    {
+      "object_a": "Fixed swivel housing",
+      "object_b": "Lift outer guide",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Fixed swivel housing",
+      "object_b": "Swivel lock pin",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source pin actuator/housing guided engagement through withdrawal/restoration; this pair is distinct from the obstructing bolt and rotating surfaces."
+    },
+    {
+      "object_a": "Lift outer guide",
+      "object_b": "Swivel bearing race",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Rotating swivel plate",
+      "object_b": "Swivel lock pin",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        0.6
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Rotating swivel plate",
+      "object_b": "Swivel lock pin",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.95,
+        1.0
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel detent boss",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel detent boss.001",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact source seat bearing/guide/detent installation interface; plain source solids represent the engaged joint without modeled bearing recesses."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel lock pin",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        0.6
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel bearing race",
+      "object_b": "Swivel lock pin",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.95,
+        1.0
+      ],
+      "reason": "Exact positive-lock engagement only while the seat is aligned: locked withdrawal progress0..0.60 or aligned restoration0.95..1. The freely rotating interval must have no crossing."
+    },
+    {
+      "object_a": "Swivel detent boss",
+      "object_b": "Swivel lock pin",
+      "channel": "seat_boarding",
+      "progress_range": [
+        0.0,
+        0.6
+      ],
+      "reason": "Exact forward detent/pin engagement during aligned lock withdrawal only; no free-turn exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 guide rail.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.002",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT03 | door 04 jamb.003",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored isolation-door bolt traverses its own fixed guide/jamb locking interface; no leaf/frame or pipe exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT04 | door 04 leaf 2.001",
+      "object_b": "DK09 DOOR | KIT05 | door 04 leaf joint gasket.003",
+      "channel": "station_closure",
+      "progress_range": [
+        0.2631578947368421,
+        1.0
+      ],
+      "reason": "Exact adjacent isolation-leaf joint gasket receives the lowering leaf and stays compressed after closure; no broad leaf overlap exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT04 | door 04 leaf 3.001",
+      "object_b": "DK09 DOOR | KIT05 | door 04 leaf joint gasket.004",
+      "channel": "station_closure",
+      "progress_range": [
+        0.3684210526315789,
+        1.0
+      ],
+      "reason": "Exact adjacent isolation-leaf joint gasket receives the lowering leaf and stays compressed after closure; no broad leaf overlap exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT04 | door 04 leaf 4.001",
+      "object_b": "DK09 DOOR | KIT05 | door 04 leaf joint gasket.005",
+      "channel": "station_closure",
+      "progress_range": [
+        0.47368421052631576,
+        1.0
+      ],
+      "reason": "Exact adjacent isolation-leaf joint gasket receives the lowering leaf and stays compressed after closure; no broad leaf overlap exception."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.008",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.009",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 0 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.010",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.011",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 1 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.012",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.013",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 2 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.014",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 DOOR | KIT05 | door 04 lock actuator.015",
+      "object_b": "DK09 DOOR | KIT05 | door 04 lock bolt 3 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        0.5526315789473685
+      ],
+      "reason": "Exact bolt remains within its dedicated actuator until authored locking extension205..215."
+    },
+    {
+      "object_a": "DK09 | deck hatch retracting gasket.001",
+      "object_b": "DK09 | sliding deck hatch -1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.7894736842105263,
+        1.0
+      ],
+      "reason": "Exact retracting deck gasket raises only after the deck lids close at frame260 and compresses against the two closed lid surfaces."
+    },
+    {
+      "object_a": "DK09 | deck hatch retracting gasket.001",
+      "object_b": "DK09 | sliding deck hatch 1.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.7894736842105263,
+        1.0
+      ],
+      "reason": "Exact retracting deck gasket raises only after the deck lids close at frame260 and compresses against the two closed lid surfaces."
+    },
+    {
+      "object_a": "DK09 | magnetic retention cartridge.004",
+      "object_b": "DK09 | transfer shaft.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored magnetic retention cartridge mounting interface on the shaft outer wall through the bounded40mm release stroke."
+    },
+    {
+      "object_a": "DK09 | magnetic retention cartridge.005",
+      "object_b": "DK09 | transfer shaft.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored magnetic retention cartridge mounting interface on the shaft outer wall through the bounded40mm release stroke."
+    },
+    {
+      "object_a": "DK09 | magnetic retention cartridge.006",
+      "object_b": "DK09 | transfer shaft.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored magnetic retention cartridge mounting interface on the shaft outer wall through the bounded40mm release stroke."
+    },
+    {
+      "object_a": "DK09 | magnetic retention cartridge.007",
+      "object_b": "DK09 | transfer shaft.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact authored magnetic retention cartridge mounting interface on the shaft outer wall through the bounded40mm release stroke."
+    },
+    {
+      "object_a": "DK09 | safety gate crossbar.002",
+      "object_b": "KIT10 | gate hinge knuckle",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact safety-gate hinge edge/knuckle pivot joint through authored gate rotation; no guardrail/body waiver."
+    },
+    {
+      "object_a": "DK09 | safety gate crossbar.003",
+      "object_b": "KIT10 | gate hinge knuckle.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact safety-gate hinge edge/knuckle pivot joint through authored gate rotation; no guardrail/body waiver."
+    },
+    {
+      "object_a": "DK09 | safety gate upright.002",
+      "object_b": "KIT10 | gate hinge knuckle",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact safety-gate hinge edge/knuckle pivot joint through authored gate rotation; no guardrail/body waiver."
+    },
+    {
+      "object_a": "DK09 | safety gate upright.002",
+      "object_b": "KIT10 | gate hinge knuckle.001",
+      "channel": "station_closure",
+      "progress_range": [
+        0.0,
+        1.0
+      ],
+      "reason": "Exact safety-gate hinge edge/knuckle pivot joint through authored gate rotation; no guardrail/body waiver."
+    }
+  ],
+  "negative_controls": [
+    {
+      "name": "restore_unbored_DK09 | continuous deck with open well.001",
+      "detected": true
+    },
+    {
+      "name": "restore_unbored_DK09 | belly shaft mounting flange.001",
+      "detected": true
+    },
+    {
+      "name": "restore_original_pipe_DK09 | sliding deck hatch 1.001",
+      "detected": true
+    },
+    {
+      "name": "restore_original_pipe_DK09 | capture witness.004",
+      "detected": true
+    },
+    {
+      "name": "closed_inner_door_blocks_standing_union",
+      "detected": true
+    },
+    {
+      "name": "restore_inner_authored_fraction_0.60_hits_frame",
+      "detected": true
+    },
+    {
+      "name": "restore_original_hinge_link_hits_pressure_ceiling",
+      "detected": true
+    },
+    {
+      "name": "restore_original_mounting_bolt_hits_withdrawing_pin",
+      "detected": true
+    },
+    {
+      "name": "retain_locked_pin_hits_rotating_lift_guide",
+      "detected": true
+    },
+    {
+      "name": "triangle_separated",
+      "detected": true
+    },
+    {
+      "name": "triangle_touching",
+      "detected": true
+    },
+    {
+      "name": "triangle_crossing",
+      "detected": true
+    }
+  ],
+  "limits": [
+    "Operating hardware only: no player body entry, articulated ladder reach, seat reach, flight boarding or pressure/load certification.",
+    "41 samples per full hardware channel and81pipe closure samples detect exact triangle crossings; sampled rotational motion does not prove continuous separation.",
+    "Exact source hinge/bearing/bolt/guide/gasket/retention/positive-lock engagements are enumerated; unknown contact pairs or forbidden free-turn pin contact fail qualification.",
+    "The affected existing supported station corridor has full standing swept-AABB separation and121\u00d75realtriangle floor probes. No floor is added under the D1 shaft.",
+    "The corrected4.357mshaft pure-descent reservation is clear for a0.60\u00d70.40\u00d71.95mcompact proxy; this geometric result does not admit climbing or body entry.",
+    "The existing inner cabin threshold lies77.5mm below the nominal floor over craft back-axis3.6305..3.6644m and fails complete30mm-reach five-probe support. Its failed support evidence is retained; no completed supported cabin traversal is claimed.",
+    "40mm deck/flange bores around the18mm pipe leave2mm nominal radial clearance; no sealing collar is modeled. Source pressure/service ratings are not certified.",
+    "Surface intersection diagnostics do not establish absence of solid containment; full standing-volume SAT separately catches contained contact faces."
+  ]
+}

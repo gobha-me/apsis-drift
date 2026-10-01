@@ -61,6 +61,12 @@ source-bound contact derivative compiled into the C++ core, preserving headless
 support/contact checks independently of Godot. Asset admission alone does not
 complete boarding or the flight loop.
 
+A separate [Wayfarer operating package](docs/WAYFARER_OPERATING_ASSETS.md)
+provides source-bound roof, ladder, inner-door, seat and D1 closure inspection.
+Its preparation and opt-in preview preserve the original assets and C++ player
+state. Actual boarding and supported cabin traversal remain integration work;
+the measured inner threshold support seam is recorded in its qualification.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
