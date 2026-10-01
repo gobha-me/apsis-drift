@@ -293,14 +293,15 @@ int main() {
     auto geometry = require(decode_origin_cabin_seam_contact(bytes, support));
     geometry_queries(geometry);
     auto moved = std::move(geometry);
-    // NOLINTBEGIN(bugprone-use-after-move) -- Geometry explicitly supports
-    // absent metadata and refused queries after move.
+    // NOLINTBEGIN(bugprone-use-after-move,clang-analyzer-cplusplus.Move) --
+    // Geometry explicitly supports absent metadata and refused queries after
+    // move.
     check(geometry.support_catalog() == nullptr &&
               !assess_origin_cabin_proxy_support(
                   geometry, {0, kCabinSeamFloorMetres, 3.6475}),
           "movedfrom handle refuses");
-    // NOLINTEND(bugprone-use-after-move) -- End documented moved-from geometry
-    // checks.
+    // NOLINTEND(bugprone-use-after-move,clang-analyzer-cplusplus.Move) -- End
+    // documented moved-from geometry checks.
     check(require(certify_origin_cabin_seam_translation(moved, 3.84, 3.45))
               .nonpenetrating_crossing,
           "movedcatalog retains source-qualified evidence");
