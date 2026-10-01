@@ -55,6 +55,8 @@ of sole-edge/rectangle-edge events. The certificate checks these events and
 the endpoints in both directions. The minimum supported area is 123/140
 (about 87.86%) of each sole, with a minimum projected-load margin of 106 mm.
 These bounds exceed the declared 75% and 10 mm requirements.
+Reported extrema use the provider's binary64 arithmetic and documented area
+comparison precision. They are not claims of exact real-number computation.
 
 For fixed axes and linear translation, the endpoint-union body and boot boxes
 conservatively contain every intervening pose. Triangle/box tests use the
