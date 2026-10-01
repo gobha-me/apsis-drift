@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "scope": "Editorial narrative; these conversations are not implemented game systems",
+  "cards": [
+    {
+      "id": "opening",
+      "kind": "title",
+      "speaker": "APSIS DRIFT",
+      "text": "Beyond the paperwork",
+      "detail": "An in-engine narrative demo reel"
+    },
+    {
+      "id": "c01",
+      "speaker": "STATION CLERK",
+      "text": "Your berth has renewed."
+    },
+    {
+      "id": "c02",
+      "speaker": "PILOT",
+      "text": "I've been here eleven minutes."
+    },
+    {
+      "id": "c03",
+      "speaker": "STATION CLERK",
+      "text": "An excellent renewal rate."
+    },
+    {
+      "id": "c04",
+      "speaker": "PILOT",
+      "text": "What's beyond the mapped lanes?"
+    },
+    {
+      "id": "c05",
+      "speaker": "STATION CLERK",
+      "text": "Fewer forms. Longer walks home."
+    },
+    {
+      "id": "c06",
+      "speaker": "PILOT",
+      "text": "Is this the way to my ship?"
+    },
+    {
+      "id": "c07",
+      "speaker": "STATION CLERK",
+      "text": "Follow the expensive machinery."
+    },
+    {
+      "id": "c08",
+      "speaker": "PILOT",
+      "text": "That narrows it down to the whole station."
+    },
+    {
+      "id": "c09",
+      "speaker": "PILOT",
+      "text": "Why does the cockpit detach?"
+    },
+    {
+      "id": "c10",
+      "speaker": "TECHNICIAN",
+      "text": "We prefer \"independent return capability.\""
+    },
+    {
+      "id": "c11",
+      "speaker": "PILOT",
+      "text": "I'll keep the rest of the ship, thanks."
+    },
+    {
+      "id": "c12",
+      "speaker": "TECHNICIAN",
+      "text": "Display looks good. Your confidence is still pending."
+    },
+    {
+      "id": "c13",
+      "speaker": "PILOT",
+      "text": "Can you sign that off?"
+    },
+    {
+      "id": "c14",
+      "speaker": "TECHNICIAN",
+      "text": "I'm a technician, not a magician."
+    },
+    {
+      "id": "c15",
+      "speaker": "PILOT",
+      "text": "That door looks expensive."
+    },
+    {
+      "id": "c16",
+      "speaker": "TECHNICIAN",
+      "text": "It has better benefits, too."
+    },
+    {
+      "id": "c17",
+      "speaker": "PILOT",
+      "text": "Anything else I should know before I go?"
+    },
+    {
+      "id": "c18",
+      "speaker": "TECHNICIAN",
+      "text": "Leave yourself enough to come home."
+    },
+    {
+      "id": "flight-cut",
+      "kind": "title",
+      "speaker": "LATER / AN INDEPENDENT FLIGHT SLICE",
+      "text": "A little room to breathe",
+      "detail": "Actual C++ saved flight, already in orbit\nBoarding and departure are still being built"
+    },
+    {
+      "id": "c19",
+      "speaker": "PILOT",
+      "text": "Station, are you still there?"
+    },
+    {
+      "id": "c20",
+      "speaker": "STATION CLERK",
+      "text": "Unfortunately for both of us."
+    },
+    {
+      "id": "c21",
+      "speaker": "PILOT",
+      "text": "The world looks smaller from here."
+    },
+    {
+      "id": "c22",
+      "speaker": "STATION CLERK",
+      "text": "Try losing your keys on it."
+    },
+    {
+      "id": "c23",
+      "speaker": "PILOT",
+      "text": "I thought leaving would feel like getting away."
+    },
+    {
+      "id": "c24",
+      "speaker": "STATION CLERK",
+      "text": "Does it?"
+    },
+    {
+      "id": "c25",
+      "speaker": "PILOT",
+      "text": "It feels like having somewhere to return to."
+    },
+    {
+      "id": "c26",
+      "speaker": "STATION CLERK",
+      "text": "I'll leave the light on."
+    },
+    {
+      "id": "c27",
+      "speaker": "PILOT",
+      "text": "Free of charge?"
+    },
+    {
+      "id": "c28",
+      "speaker": "STATION CLERK",
+      "text": "Let's not spoil the moment."
+    },
+    {
+      "id": "closing",
+      "kind": "title",
+      "speaker": "APSIS DRIFT",
+      "text": "Pick your own horizon",
+      "detail": "Freedom in progress / private owner review\nC++ world and simulation / Godot presentation"
+    },
+    {
+      "id": "credits",
+      "kind": "title",
+      "speaker": "MADE TOGETHER",
+      "text": "Ships. People. Possibilities.",
+      "detail": "Wayfarer & station asset session / Hero pixel-pilot session / engine work\nFirst Light score / source and license receipts accompany this reel"
+    },
+    {
+      "id": "integrated-scene",
+      "kind": "badge",
+      "text": "SCRIPTED CREW SCENE\nEDITORIAL DIALOGUE"
+    },
+    {
+      "id": "hardware-study",
+      "kind": "badge",
+      "text": "WAYFARER HARDWARE\nREAD-ONLY MOTION STUDY"
+    },
+    {
+      "id": "window-scene",
+      "kind": "badge",
+      "text": "OBSERVATION STUDY\nACTUAL C++ WORLD"
+    },
+    {
+      "id": "c12-left",
+      "speaker": "TECHNICIAN",
+      "text": "Display looks good. Your confidence is still pending.",
+      "placement": "left"
+    }
+  ]
+}
