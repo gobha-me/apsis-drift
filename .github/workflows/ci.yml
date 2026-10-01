@@ -44,6 +44,9 @@ jobs:
       - name: Check operating asset package refusal and atomic preparation
         run: python3 test/operating_asset_package_test.py
 
+      - name: Check operating motion source identity and atomic preparation
+        run: python3 test/operating_motion_package_test.py
+
       - name: Check operating GLB numeric and buffer boundaries
         run: python3 test/wayfarer_operating_glb_audit_test.py
 

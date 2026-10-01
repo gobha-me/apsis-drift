@@ -67,6 +67,10 @@ Its preparation and opt-in preview preserve the original assets and C++ player
 state. Actual boarding and supported cabin traversal remain integration work;
 the measured inner threshold support seam is recorded in its qualification.
 
+The [C++ operating-motion recipe](docs/GODOT_OPERATING_MOTION.md) evaluates
+continuous source-local hardware poses for a separate read-only native proof.
+It preserves world/save state; actor boarding and seat ownership still follow.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and

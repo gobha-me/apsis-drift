@@ -149,6 +149,19 @@ configure_file(include/apsis_drift/origin_walk_geometry.hpp.in
   "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/origin_walk_geometry.hpp" @ONLY)
 unset(APSIS_ORIGIN_WALK_JSON)
 
+# The mechanism source policy is compiled from independently admitted bytes.
+# Runtime parsing/evaluation cannot authorize a different source rig or curve.
+set(APSIS_OPERATING_MOTION_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/operating-motion-01/operating-motion-01.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_OPERATING_MOTION_DATA}")
+file(SHA256 "${APSIS_OPERATING_MOTION_DATA}" APSIS_OPERATING_MOTION_SHA256)
+if (NOT APSIS_OPERATING_MOTION_SHA256 STREQUAL "afa1eb3d81deab1b5ac00a53d1650fa9bb222bcf8ea9c376efa166b93eda0298")
+  message(FATAL_ERROR "Operating motion recipe differs from the admitted version-one bytes")
+endif ()
+file(READ "${APSIS_OPERATING_MOTION_DATA}" APSIS_OPERATING_MOTION_RECIPE_JSON)
+configure_file(include/apsis_drift/operating_motion_recipe.hpp.in
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/operating_motion_recipe.hpp" @ONLY)
+unset(APSIS_OPERATING_MOTION_RECIPE_JSON)
+
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
@@ -158,6 +171,7 @@ add_library(apsis_drift_core STATIC
   src/freedom_docking_save.cpp
   src/freedom_journey_save.cpp
   src/origin_walker.cpp
+  src/operating_motion.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -210,7 +224,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -314,6 +328,14 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-operating-motion-tests test/operating_motion_test.cpp)
+  target_link_libraries(apsis-drift-operating-motion-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_definitions(apsis-drift-operating-motion-tests PRIVATE
+    APSIS_OPERATING_MOTION_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/native/operating-motion-01/sources")
+  target_compile_options(apsis-drift-operating-motion-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME operating-motion-contract COMMAND apsis-drift-operating-motion-tests)
+  set_tests_properties(operating-motion-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-origin-walker-tests test/origin_walker_test.cpp)
   target_link_libraries(apsis-drift-origin-walker-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-origin-walker-tests PRIVATE

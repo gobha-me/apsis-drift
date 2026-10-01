@@ -1,0 +1,103 @@
+{
+  "schema": "apsis.operating-motion-assets/1",
+  "package_id": "operating-motion-01",
+  "files": [
+    {
+      "path": "operating-motion-01.json",
+      "bytes": 59883,
+      "sha256": "afa1eb3d81deab1b5ac00a53d1650fa9bb222bcf8ea9c376efa166b93eda0298"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 4025,
+      "sha256": "0a86b3b6f397f71f059408ed71bc06569a00f0d1c5a05a3cb059ce225ba54730"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/craft-combined.json",
+      "bytes": 169510,
+      "sha256": "485f9fa8d9030abd53e1db8a53dff830436e3133c726c7af1ddfc3daa37cbeab"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/d1-recipe-source-poses.json",
+      "bytes": 2103060,
+      "sha256": "c33dfdce9613fe978a96ebeae6346af2dc60d85dfd48c3d99ec9633fe311d6db"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/licenses/HOPPER_GENERATED_CONCEPTS.md",
+      "bytes": 1783,
+      "sha256": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/licenses/HOPPER_MESHY_TRIAL.md",
+      "bytes": 3084,
+      "sha256": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/licenses/LICENSE.md",
+      "bytes": 1521,
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+      "bytes": 1762,
+      "sha256": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/licenses/STATION_KIT_01.md",
+      "bytes": 11622,
+      "sha256": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+    },
+    {
+      "path": "sources/operating-motion-fixtures-01/provenance.json",
+      "bytes": 3788,
+      "sha256": "9d0a2ed8497bb051ed6659c5f9a509d501af6bcaf154479c63883dc2059e6174"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/composition.json",
+      "bytes": 22136,
+      "sha256": "943462f6f84edffa72258942deb6c6c82566deb1d2e44e1c51d062a9ca838ee1"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/licenses/HOPPER_GENERATED_CONCEPTS.md",
+      "bytes": 1783,
+      "sha256": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/licenses/HOPPER_MESHY_TRIAL.md",
+      "bytes": 3084,
+      "sha256": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/licenses/LICENSE.md",
+      "bytes": 1521,
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+      "bytes": 1762,
+      "sha256": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/licenses/STATION_KIT_01.md",
+      "bytes": 11622,
+      "sha256": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/provenance.json",
+      "bytes": 4312,
+      "sha256": "3de8b526246c778fb181dceefc01cc2d852dc173c4e81cac3e707716153dda9b"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/recipe.json",
+      "bytes": 45604,
+      "sha256": "189569f398a004d8040a7faf545a8bd7528cce517c308f78a7ab3dd70d36c987"
+    },
+    {
+      "path": "sources/wayfarer-motion-proposal/source-poses.json",
+      "bytes": 1369307,
+      "sha256": "9e0685b20363d6d93eefc8364faf764775cb29577a188269777833adae009d6f"
+    }
+  ],
+  "runtime": "operating-motion-01.json",
+  "provenance": "provenance.json"
+}
