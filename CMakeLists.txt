@@ -186,6 +186,41 @@ configure_file(include/apsis_drift/boarding_support_data.hpp.in
   "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/boarding_support_data.hpp" @ONLY)
 unset(APSIS_BOARDING_SUPPORT_JSON)
 
+# Full contact and extraction policy independently select source completeness.
+set(APSIS_CABIN_CONTACT_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/wayfarer-operating-02/metadata/contact.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_CABIN_CONTACT_DATA}")
+file(SHA256 "${APSIS_CABIN_CONTACT_DATA}" APSIS_CABIN_CONTACT_SHA256)
+if (NOT APSIS_CABIN_CONTACT_SHA256 STREQUAL "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a")
+  message(FATAL_ERROR "Cabin full contact differs from admitted bytes")
+endif ()
+set(APSIS_CABIN_EXTRACTOR "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/boarding-support-01/sources/tools/extract_boarding_support.py")
+set(APSIS_CABIN_SOURCE_SUPPORT "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/boarding-support-01/sources/wayfarer-boarding-support-01/support.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_CABIN_EXTRACTOR}" "${APSIS_CABIN_SOURCE_SUPPORT}")
+file(SHA256 "${APSIS_CABIN_EXTRACTOR}" APSIS_CABIN_EXTRACTOR_SHA256)
+file(SHA256 "${APSIS_CABIN_SOURCE_SUPPORT}" APSIS_CABIN_SOURCE_SUPPORT_SHA256)
+if (NOT APSIS_CABIN_EXTRACTOR_SHA256 STREQUAL "8173c9498e97b07af1813ec5645a38b9745505d0e3dadfb2edb7f52190cf97b6" OR
+    NOT APSIS_CABIN_SOURCE_SUPPORT_SHA256 STREQUAL "2d84bf607ac136e8c847a5e7cd7be5529d9a28a89f01f444b520a0950cdaa5d2")
+  message(FATAL_ERROR "Cabin fixed-crop/full-moving-source extraction policy differs")
+endif ()
+file(READ "${APSIS_CABIN_CONTACT_DATA}" APSIS_CABIN_CONTACT_JSON)
+string(LENGTH "${APSIS_CABIN_CONTACT_JSON}" APSIS_CABIN_CONTACT_BYTES)
+set(APSIS_CABIN_CONTACT_CHUNKS "")
+set(APSIS_CABIN_CONTACT_OFFSET 0)
+set(APSIS_CABIN_CONTACT_CHUNK_COUNT 0)
+while (APSIS_CABIN_CONTACT_OFFSET LESS APSIS_CABIN_CONTACT_BYTES)
+  math(EXPR APSIS_CABIN_CONTACT_LENGTH "${APSIS_CABIN_CONTACT_BYTES} - ${APSIS_CABIN_CONTACT_OFFSET}")
+  if (APSIS_CABIN_CONTACT_LENGTH GREATER 60000)
+    set(APSIS_CABIN_CONTACT_LENGTH 60000)
+  endif ()
+  string(SUBSTRING "${APSIS_CABIN_CONTACT_JSON}" ${APSIS_CABIN_CONTACT_OFFSET} ${APSIS_CABIN_CONTACT_LENGTH} APSIS_CABIN_CONTACT_CHUNK)
+  string(APPEND APSIS_CABIN_CONTACT_CHUNKS "  std::string_view{R\"APSISCABIN(${APSIS_CABIN_CONTACT_CHUNK})APSISCABIN\", ${APSIS_CABIN_CONTACT_LENGTH}},\n")
+  math(EXPR APSIS_CABIN_CONTACT_OFFSET "${APSIS_CABIN_CONTACT_OFFSET} + ${APSIS_CABIN_CONTACT_LENGTH}")
+  math(EXPR APSIS_CABIN_CONTACT_CHUNK_COUNT "${APSIS_CABIN_CONTACT_CHUNK_COUNT} + 1")
+endwhile ()
+configure_file(include/apsis_drift/cabin_contact_data.hpp.in
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/cabin_contact_data.hpp" @ONLY)
+unset(APSIS_CABIN_CONTACT_JSON)
+
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
@@ -197,6 +232,7 @@ add_library(apsis_drift_core STATIC
   src/origin_walker.cpp
   src/operating_motion.cpp
   src/origin_boarding_support.cpp
+  src/origin_cabin_seam.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -249,7 +285,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -353,6 +389,14 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-cabin-seam-tests test/origin_cabin_seam_test.cpp)
+  target_link_libraries(apsis-drift-cabin-seam-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_definitions(apsis-drift-cabin-seam-tests PRIVATE
+    APSIS_CABIN_CONTACT_FIXTURE="${APSIS_CABIN_CONTACT_DATA}")
+  target_compile_options(apsis-drift-cabin-seam-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME cabin-seam-contract COMMAND apsis-drift-cabin-seam-tests)
+  set_tests_properties(cabin-seam-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-boarding-support-tests test/origin_boarding_support_test.cpp)
   target_link_libraries(apsis-drift-boarding-support-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-boarding-support-tests PRIVATE

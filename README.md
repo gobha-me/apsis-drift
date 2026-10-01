@@ -76,6 +76,11 @@ contact triangles to source objects and evaluates candidate-surface evidence
 in C++. Physical reach, supported traversal and occupied seating follow under
 their separate route qualification.
 
+The [first cabin seam provider](docs/ORIGIN_CABIN_SEAM.md) qualifies finite
+sole support and conservative swept clearance across two real walking tiles.
+This craft-local evidence feeds the boarding route; player actions and the
+remaining ladder, cockpit and seat transitions still require integration.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
