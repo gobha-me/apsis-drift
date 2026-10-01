@@ -283,7 +283,8 @@ auto invalid(const OperatingMotionRecipe& recipe) -> void {
   bad = canonical;
   bad["craft"]["tracks"][0]["knots"][1][1] = .5;
   refuse(bad, "finite altered authored travel refuses");
-  const auto unchanged = recipe;
+  const auto unchanged = require(
+      decode_operating_motion_recipe(detail::kOperatingMotionRecipeJson));
   auto changed = recipe;
   changed.craft_nodes[0].location_metres.x =
       std::numeric_limits<double>::quiet_NaN();

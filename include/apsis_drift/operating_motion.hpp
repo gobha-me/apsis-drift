@@ -13,7 +13,8 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kOperatingMotionRecipeVersion{1};
-inline constexpr std::size_t kOperatingMotionMaximumDocumentBytes{128U * 1024U};
+inline constexpr std::size_t kOperatingMotionMaximumDocumentBytes{
+    std::size_t{128} * std::size_t{1024}};
 inline constexpr std::array<std::string_view, 13> kOperatingCraftGroupIds{
     "roof_port",
     "roof_starboard",
