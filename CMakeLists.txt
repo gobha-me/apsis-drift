@@ -142,6 +142,7 @@ add_library(apsis_drift_core STATIC
   src/craft_frame.cpp
   src/freedom_save.cpp
   src/freedom_flight_save.cpp
+  src/freedom_docking_save.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -298,6 +299,12 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-freedom-docking-save-tests test/freedom_docking_save_test.cpp)
+  target_link_libraries(apsis-drift-freedom-docking-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-docking-save-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME freedom-docking-save-contract COMMAND apsis-drift-freedom-docking-save-tests)
+  set_tests_properties(freedom-docking-save-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-native-startup-tests test/native_startup_test.cpp)
   target_link_libraries(apsis-drift-native-startup-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-native-startup-tests PRIVATE

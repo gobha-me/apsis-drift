@@ -50,6 +50,7 @@ TESTS = {
     "native_station_view": "native_assets",
     "wayfarer_frame": "native_assets",
     "saved_flight": "freedom_saves",
+    "native_port": "freedom_saves",
     "physical_lighting_integration": "physical_snapshots",
     "thrust": "snapshot",
     "rotation_coast": "snapshot",
@@ -222,7 +223,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] == "native_assets" or name in ("native_shell", "native_save", "saved_flight") for name in selected):
+    if any(TESTS[name] == "native_assets" or name in ("native_shell", "native_save", "saved_flight", "native_port") for name in selected):
         package = repo / "assets/native/freedom-starter-01"
         preparer = work / "prepare_native_assets.py"
         shutil.copy2(repo / "tools/prepare_native_assets.py", preparer)
@@ -264,7 +265,11 @@ def main(argv=None):
                                      ("flight-18.json", "25", "flight"),
                                      ("wayfarer-flight.json", "25", "wayfarer-flight"),
                                      ("flight-trace.json", "25", "flight-trace"),
-                                     ("flight-overflow.json", "18446744073709551613", "wayfarer-flight")):
+                                     ("flight-overflow.json", "18446744073709551613", "wayfarer-flight"),
+                                     ("port-approach.json", "25", "port-approach"),
+                                     ("port-docked.json", "25", "port-docked"),
+                                     ("port-trace.json", "25", "port-trace"),
+                                     ("port-far.json", "25", "port-far")):
             path = work / filename
             log = work / f"{filename}.log"
             code, timed_out, _ = run_logged(
@@ -381,6 +386,29 @@ def main(argv=None):
             save()
             print(f"{status.upper()} {name} ({len(cases)} launch cases)", flush=True)
             continue
+        if name == "native_port":
+            cases = []
+            for label, save_name, validate in (
+                    ("approach_validate", "port-approach.json", True),
+                    ("attached_validate", "port-docked.json", True),
+                    ("attached_view", "port-docked.json", False)):
+                log = work / f"native_port-{label}.log"
+                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://native_start_shell.tscn"]
+                if not validate:
+                    command += ["--quit-after", "3"]
+                command += ["--", f"--continue={work / save_name}"]
+                command += ["--validate-only"] if validate else [f"--assets={work / 'native-assets'}"]
+                code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
+                output = log.read_text(errors="replace")
+                good = not timed_out and code == 0 and "Freedom native flight shell " in output and "seed=42 tick=25" in output and not ERROR.search(output)
+                cases.append({"case": label, "pass": good, "returncode": code, "seconds": elapsed, "log": log.name})
+            report["setup"].append({"family": "native_port_launch", "cases": cases})
+            save()
+            if not all(case["pass"] for case in cases):
+                report["tests"].append({"name": name, "status": "launch_failed", "cases": cases})
+                save()
+                print(f"FAIL {name} launch cases", flush=True)
+                continue
         if name == "saved_flight":
             case_reports = []
             for label, extra, accepted in (
@@ -426,6 +454,8 @@ def main(argv=None):
             arguments.append(str(work / "flight-18.json"))
         if name == "saved_flight":
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "flight-trace.json", "corrupt.json", "freedom-0.json", "native-assets", "flight-overflow.json")]
+        if name == "native_port":
+            arguments = [str(work / path) for path in ("port-approach.json", "port-docked.json", "port-trace.json", "port-far.json", "native-assets")]
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
                    "--path", str(project), "--script", f"res://{name}_test.gd",

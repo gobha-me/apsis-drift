@@ -101,6 +101,41 @@ auto main(int argc, char** argv) -> int {
       std::cerr << save_file_error_message(written.error()) << '\n';
       return 1;
     }
+  } else if (mode == "port-approach" || mode == "port-docked" ||
+             mode == "port-trace" || mode == "port-far") {
+    auto origin = make_freedom_new_game_document(Seed{*seed});
+    origin.state.tick = *tick;
+    const auto system = generate_physical_origin_system(Seed{*seed});
+    const auto station = generate_origin_station(Seed{*seed});
+    const auto geometry = origin_station_geometry(station);
+    if (!system || !geometry) return 1;
+    auto pose =
+        resolve_origin_port_pose(*system, station, *geometry, {station.id, 1},
+                                 *tick, mode == "port-far" ? 12.0 : .1);
+    if (!pose) return 1;
+    auto body = pose->planet_relative;
+    body.craft = wayfarer_frame().recipe;
+    const auto& planet =
+        system->catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+    FreedomDockingSaveDocument document{{origin, body, {}},
+                                        {1, {station.id, 1}, false}};
+    auto session = NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom, document, planet, {}});
+    if (!session) return 1;
+    if (mode == "port-docked" || mode == "port-trace") {
+      if (!session->capture_port()) return 1;
+    }
+    if (mode == "port-trace") {
+      for (int n = 0; n < 120; ++n)
+        if (!session->advance({})) return 1;
+      if (!session->release_port()) return 1;
+      NativeFlightControls controls;
+      controls.negative_translation.y = .25;
+      controls.negative_translation.z = .1;
+      for (int n = 0; n < 120; ++n)
+        if (!session->advance(controls)) return 1;
+    }
+    if (!session->save_as(path)) return 1;
   } else if (mode == "career" && *tick == 0) {
     const auto written =
         write_save_file_atomically(path, make_new_game_document(Seed{*seed}));

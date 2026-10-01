@@ -4,6 +4,30 @@
 #include <cmath>
 
 namespace apsis_drift {
+auto origin_dock_decision_text(OriginDockDecision decision)
+    -> std::string_view {
+  switch (decision) {
+    case OriginDockDecision::capture_ready: return "Ready to capture";
+    case OriginDockDecision::incompatible_craft:
+      return "Incompatible craft collar";
+    case OriginDockDecision::wrong_side: return "Approach from below the port";
+    case OriginDockDecision::wrong_attitude:
+      return "Align the full craft attitude";
+    case OriginDockDecision::outside_reservation:
+      return "Keep the complete hull in the approach column";
+    case OriginDockDecision::too_far:
+      return "Move the collar closer to the port";
+    case OriginDockDecision::retreating:
+      return "Stop outward motion before capture";
+    case OriginDockDecision::excessive_closure:
+      return "Reduce inward closure speed";
+    case OriginDockDecision::excessive_lateral_motion:
+      return "Reduce lateral motion";
+    case OriginDockDecision::excessive_angular_motion:
+      return "Stop craft rotation";
+  }
+  return "Unknown capture decision";
+}
 namespace {
 using V = RigidVector3;
 auto add(V a, V b) -> V {

@@ -71,6 +71,20 @@ auto select_document(FreedomFlightSaveDocument document,
 }
 } // namespace
 
+namespace {
+auto select_document(FreedomDockingSaveDocument document,
+                     std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto valid = validate_freedom_docking_document(document); !valid)
+    return std::unexpected{"Freedom docking save rejected: " +
+                           valid.error().path + ": " + valid.error().detail};
+  auto selected = select_document(document.flight, source_save);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
+} // namespace
+
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   return select_document(make_freedom_new_game_document(universe_seed),

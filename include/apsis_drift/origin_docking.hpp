@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string_view>
+
 #include "apsis_drift/station_geometry.hpp"
 
 namespace apsis_drift {
@@ -25,6 +27,8 @@ enum class OriginDockError : std::uint8_t {
   capture_refused,
   invalid_constraint
 };
+[[nodiscard]] auto origin_dock_decision_text(OriginDockDecision)
+    -> std::string_view;
 struct OriginDockAssessment {
   OriginPortId port;
   SimulationTick tick{};
