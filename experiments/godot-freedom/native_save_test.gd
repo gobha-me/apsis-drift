@@ -49,11 +49,11 @@ func run() -> void:
 	var study: Dictionary = bridge.get_state()
 	refuse(bridge, destination, {})
 	check(bridge.get_state() == study and not FileAccess.file_exists(destination), "Study Save As wrote a file or changed flight")
-	check(bridge.initialize_freedom_new_game("42"), "New Game refused")
+	check(bridge.initialize_freedom_continue(args[0]), "Historical station17 Continue refused")
 	var fresh: Dictionary = bridge.get_freedom_start()
-	check(bridge.save_freedom_as(destination), "New Game Save As refused: " + str(bridge.get_last_error()))
-	check(FileAccess.get_file_as_bytes(destination) == original[0], "Native New Game save differs from C++ fixture bytes")
-	check(bridge.get_freedom_start() == fresh, "Saving changed New Game selection")
+	check(bridge.save_freedom_as(destination), "Historical station17 Save As refused: " + str(bridge.get_last_error()))
+	check(FileAccess.get_file_as_bytes(destination) == original[0], "Historical station17 save differs from C++ fixture bytes")
+	check(bridge.get_freedom_start() == fresh, "Saving changed historical station selection")
 	var reloaded: Variant = ClassDB.instantiate("FreedomBridge")
 	check(reloaded.initialize_freedom_continue(destination), "Native-written save could not Continue")
 	var expected := fresh.duplicate(true)
@@ -99,10 +99,10 @@ func run() -> void:
 
 	# Full unsigned seed precision must survive the actual writer, too.
 	check(bridge.initialize_freedom_new_game("18446744073709551615"), "Maximum uint64 seed refused")
-	var extreme: Dictionary = bridge.get_freedom_start()
+	var extreme: Dictionary = bridge.get_freedom_walk_state()
 	check(bridge.save_freedom_as(destination) and reloaded.initialize_freedom_continue(destination), "Maximum-seed native save refused")
 	extreme.continued = true
-	check(reloaded.get_freedom_start() == extreme, "Maximum-seed save lost identity precision")
+	check(not extreme.is_empty() and reloaded.get_freedom_walk_state() == extreme, "Maximum-seed actor save lost identity precision")
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == original[i], "Native save modified a source fixture")
 	for filename in DirAccess.get_files_at(directory):

@@ -155,24 +155,21 @@ string identities before allocation. Files above 96 MiB are rejected.
 
 ## Freedom station bootstrap boundary
 
-The live `FreedomBridge` now has separate `initialize_freedom_new_game(seed)`
-and `initialize_freedom_continue(absolute_save_path)` methods. The seed is a
-canonical unsigned decimal string; Continue loads a selected v17 Freedom save
-through C++. A successful selection exposes `get_freedom_start()`: decimal-string
-universe, system, planet, station and craft identities, the saved tick, history
-counts, the C++ home-planet radius, and C++ resolved physical host/station
-positions and velocities in `PackedFloat64Array` metre units. The bridge retains
-the selected save in C++.
+The live `FreedomBridge` has separate `initialize_freedom_new_game(seed)` and
+`initialize_freedom_continue(absolute_save_path)` methods. Seeds and identities
+are canonical unsigned decimal strings. Fresh New Game creates the shared C++
+station actor, attached Wayfarer and physical home world in explicit format20.
+`get_freedom_walk_state()` exposes the supported actor and same-tick station/ship
+projection; `get_freedom_flight_state()` exposes the underlying voyage.
+Historical format17 Continue retains the frozen inspector and
+`get_freedom_start()` contract; formats18/19 retain saved flight/port semantics.
+
 Invalid inputs return `false` with `get_last_error()` and leave the prior session
 and source save unchanged. The existing `initialize(snapshot_json)` remains the
-study fixture path; a successful start replaces the prior session.
-
-The separate native start shell below presents selected docked state or resumes
-the selected physical flight save. It does not create a walkable station or
-implement boarding, sitting, docked release or surface contact. The composed journey remains in
-[#291](https://github.com/gobha-me/apsis-drift/issues/291). Hosted GCC and
-Clang native-core jobs compile the live extension; the isolated Godot runtime
-contracts for selected starts, the shell and saving also run in hosted CI.
+study fixture path; a successful start replaces the prior session. The separate
+native shell selects the actual saved mode. The composed boarding/departure and
+surface/home journey remains in
+[#291](https://github.com/gobha-me/apsis-drift/issues/291).
 
 ## Ordinary native start and saved flight
 
@@ -184,37 +181,37 @@ GODOT_BIN=/path/to/godot tools/run_godot_native.sh --continue="$PWD/saves/freedo
 ```
 
 The launcher configures a TermForge-free `build-native` and builds the C++
-bridge before opening the Godot scene. New Game uses the selected seed; Continue
-loads selected v17 station, v18 physical-flight or v19 port-lifecycle saves without writing to them.
-The station screen shows the
-C++ universe, system, station, craft, saved tick and discovery count. It is a
-docked-state inspection shell with Save As and Quit buttons. A flight save opens
-the [ordinary saved-flight view](../../docs/SAVED_NATIVE_FLIGHT.md), initially
-paused, with C++ control commands, terrain streaming, actual Wayfarer presentation
-and applied-force main exhaust. Wayfarer flights can target, physically capture
-and release D1/D2 through the [C++ port lifecycle](../../docs/NATIVE_PORT_LIFECYCLE.md),
-with explicit format19 persistence. Station exploration and departure from New Game remain
-in development. The
-snapshot study remains available through `tools/run_godot_study.sh`.
+bridge before opening Godot. Ordinary New Game starts on Origin Station's hub
+floor, walking through the workshop to D1 using the
+[saved C++ station actor](../../docs/SAVED_STATION_WALK.md). WASD/left-stick walks;
+right-drag/right-stick looks; Escape pauses. Contact and support use the actual
+bounded station geometry. The open docking well stops unsupported travel;
+open-hatch/ladder boarding, sitting and departure from New Game remain in development.
 
-**Save As** opens a filesystem chooser with `.json` save files and confirmation
-before replacing an existing file. It calls `save_freedom_as(absolute_path)` in
-the bridge, which delegates the selected document to C++ `native_save_freedom`
-and the existing v17 atomic writer. New Game saves can then be selected with
-Continue; saved clocks, discoveries, world deltas and physical station geometry
-survive unchanged. Saving keeps the current selection and its original source
-identity intact. Cancellation does nothing, and failures appear in the view
-so another destination can be chosen. The writer preserves its existing
-durability diagnostics, including the case where replacement succeeded but
-directory synchronization failed. No save is written on launch or quit, and
-the unsaved study-flight session cannot use this operation.
+Continue loads selected format17 station-inspector, format18 physical-flight,
+format19 port-lifecycle or format20 station-actor saves without writing to them.
+Format20 restores the actor and attached ship at their shared clock, initially
+paused. Format17 remains the historical frozen inspector without an inferred
+actor. A flight save opens the
+[ordinary saved-flight view](../../docs/SAVED_NATIVE_FLIGHT.md), initially paused,
+with C++ commands, terrain streaming, actual Wayfarer and applied-force main
+exhaust. Wayfarer flights target, physically capture and release D1/D2 through
+[the C++ port lifecycle](../../docs/NATIVE_PORT_LIFECYCLE.md). The snapshot study
+remains available through `tools/run_godot_study.sh`.
 
-The shell's [station-local 3D view](../../docs/NATIVE_STATION_VIEW.md) imports
-the selected station at physical metre scale, with C++-registered D1/D2 markers
-and a host silhouette using the authoritative angular size/direction. The
-saved station clock remains frozen. The ordinary flight consumer advances the
-selected saved clock only through C++ and uses the selected rotating planet
-and same-tick lighting; camera/UI choices have no simulation authority.
+**Save As** opens a filesystem chooser and confirms destination replacement.
+`save_freedom_as(absolute_path)` delegates to the existing C++ atomic writer for
+the selected explicit format. Actor, voyage, history, discovery and selected
+world survive unchanged. Saving preserves the original source identity;
+cancellation does nothing, and failures appear in the view. Existing durability
+diagnostics distinguish successful replacement from failed directory sync.
+Launch and quit never autosave; the unsaved study-flight session cannot Save As.
+
+The same [station presentation](../../docs/NATIVE_STATION_VIEW.md) imports the
+actual metre-scaled station with C++-registered ports and physical host direction.
+Only the historical inspector clock stays frozen. Mutable walking/flight modes
+advance the selected clock through C++; Godot camera/UI choices do not own
+physical actor, ship or simulation state.
 
 For a headless selection check, add `--headless-validate`. It exits zero and
 prints the selected IDs and history counts only after the C++ bridge succeeds;
@@ -224,7 +221,7 @@ legacy and corrupt save fixtures.
 
 Hosted CI downloads the pinned official Godot 4.7.2 Linux archive, verifies
 its SHA-256, builds the TermForge-free bridge, and runs the `freedom_start`,
-`native_shell`, `native_save` and `saved_flight` headless contracts, alongside
+`native_shell`, `native_save`, `native_walk` and `saved_flight` headless contracts, alongside
 the admitted asset/frame/station checks. The saving contract compares
 real bridge-written bytes against C++ fixtures, reloads the selected station,
 and exercises the shell's actual button/dialog callbacks in isolated files.
@@ -247,7 +244,7 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 
 This Linux runner stages the selected build's exporter and bridge, copies the
 test project, generates atmospheric/airless and C++ saved-start fixtures, and
-runs 39 explicitly listed contracts headlessly with Dummy audio. Each run gets
+runs 41 explicitly listed contracts headlessly with Dummy audio. Each run gets
 a fresh retained directory under `build-godot`, isolated preferences/cache,
 per-test logs and a JSON report with source/binary hashes. It does not build,
 download content, import the editor, launch a visible window or use private

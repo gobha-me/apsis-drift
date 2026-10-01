@@ -85,10 +85,26 @@ auto select_document(FreedomDockingSaveDocument document,
 }
 } // namespace
 
+namespace {
+auto select_document(FreedomJourneySaveDocument document,
+                     std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto valid = validate_freedom_journey_document(document); !valid)
+    return std::unexpected{"Freedom journey save rejected: " +
+                           valid.error().path + ": " + valid.error().detail};
+  auto selected = select_document(document.voyage, source_save);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
+} // namespace
+
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
-  return select_document(make_freedom_new_game_document(universe_seed),
-                         std::nullopt);
+  auto document = make_freedom_journey_new_game_document(universe_seed);
+  if (!document)
+    return std::unexpected{"New Game rejected: " + document.error().detail};
+  return select_document(std::move(*document), std::nullopt);
 }
 
 auto native_legacy_new_game(Seed universe_seed)
@@ -114,10 +130,21 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
   if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document))
     return std::unexpected{"The docked native shell cannot present a Freedom "
                            "flight save yet"};
-  if (selected.mode != NativeStartup::Mode::freedom ||
-      !std::holds_alternative<FreedomSaveDocument>(selected.document))
+  if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
-  const auto& save = std::get<FreedomSaveDocument>(selected.document);
+  const FreedomSaveDocument* origin{};
+  if (const auto* journey =
+          std::get_if<FreedomJourneySaveDocument>(&selected.document)) {
+    if (auto valid = validate_freedom_journey_document(*journey); !valid)
+      return std::unexpected{"Journey station bootstrap refused: " +
+                             valid.error().detail};
+    origin = &journey->voyage.flight.origin;
+  } else
+    origin = std::get_if<FreedomSaveDocument>(&selected.document);
+  if (!origin)
+    return std::unexpected{
+        "Station bootstrap requires a supported station selection"};
+  const auto& save = *origin;
   if (const auto valid = validate_freedom_save_document(save); !valid)
     return std::unexpected{"Freedom save rejected: " + valid.error().path +
                            ": " + valid.error().detail};
@@ -153,10 +180,14 @@ auto native_save_freedom(const NativeStartup& selected,
   if (const auto prepared = prepare_native_freedom_station_start(selected);
       !prepared)
     return std::unexpected{prepared.error()};
-  const auto& document = std::get<FreedomSaveDocument>(selected.document);
-  if (const auto written =
-          write_freedom_save_file_atomically(destination, document);
-      !written)
+  const auto written =
+      std::holds_alternative<FreedomJourneySaveDocument>(selected.document)
+          ? write_freedom_journey_file_atomically(
+                destination,
+                std::get<FreedomJourneySaveDocument>(selected.document))
+          : write_freedom_save_file_atomically(
+                destination, std::get<FreedomSaveDocument>(selected.document));
+  if (!written)
     return std::unexpected{save_file_error_message(written.error())};
   return {};
 }

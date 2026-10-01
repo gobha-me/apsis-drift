@@ -188,3 +188,17 @@ see [Freedom design notes](FREEDOM_DESIGN_PROPOSAL.md). Runtime documentation
 continues to describe shipped behavior until implementation changes it. No
 release, tag, new remote, engine installation or game-code migration is
 authorized merely by this roadmap.
+
+## Supported station walking checkpoint — 2026-10-01
+
+[#344](https://github.com/gobha-me/apsis-drift/issues/344) composes a first-person
+station actor, source-bound C++ support/contact checks and attached D1 Wayfarer
+through the existing shared flight clock. Fresh New Game uses explicit format20;
+Save As/Continue retains the actual actor and voyage. Historical formats16–19
+retain their contracts. The bounded hub/workshop/D1 route is documented in
+[saved station walking](SAVED_STATION_WALK.md).
+
+Open-hatch/ladder boarding, a real seat transition, departure from New Game,
+surface contact and the composed home-return handoff remain active #245/#291
+work. This checkpoint does not satisfy the owner's complete minimum or activate
+NPC/dialogue, AG failure, EVA, weapons, missions or paid-economy horizons.

@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "asset_id": "origin-walk-01",
+  "geometry_sha256": "9cc9b5703ad53ff11871a21af707f9803c9a9c79067675ad6ff247a7950f7753",
+  "source_sha256": "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6",
+  "presentation_model_sha256": "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80",
+  "source": "assets/visual/station-reference.blend",
+  "source_unchanged": true,
+  "units": "metres",
+  "coordinate_conversion": "Blender (x,y,z) to (x-.97,z,-y+.978)",
+  "frame": 1,
+  "vertices": 55204,
+  "triangles": 108437,
+  "maximum_coordinate_rounding_error_metres": 5e-07,
+  "geometry_reduction": "Spatial triangle crop only; no simplification",
+  "objects": [
+    {
+      "object": "DK09 DOOR | KIT05 | door 04 perimeter gasket.001",
+      "triangles": 16
+    },
+    {
+      "object": "DK09 | continuous deck with open well.001",
+      "triangles": 872
+    },
+    {
+      "object": "DK09 | deck edge inlay.002",
+      "triangles": 260
+    },
+    {
+      "object": "DK09 | deck edge inlay.003",
+      "triangles": 260
+    },
+    {
+      "object": "DK09 | equalization pipe.001",
+      "triangles": 16
+    },
+    {
+      "object": "DK09 | formed outer shell.001",
+      "triangles": 118
+    },
+    {
+      "object": "DK09 | inboard structural collar.001",
+      "triangles": 154
+    },
+    {
+      "object": "DK09 | safety gate crossbar.002",
+      "triangles": 16
+    },
+    {
+      "object": "DK09 | safety gate crossbar.003",
+      "triangles": 16
+    },
+    {
+      "object": "DK09 | safety gate upright.002",
+      "triangles": 16
+    },
+    {
+      "object": "DK09 | safety gate upright.003",
+      "triangles": 16
+    },
+    {
+      "object": "DK09 | sliding deck hatch -1.001",
+      "triangles": 102
+    },
+    {
+      "object": "DK09 | sliding deck hatch 1.001",
+      "triangles": 102
+    },
+    {
+      "object": "DK09 | tapered deck.002",
+      "triangles": 8
+    },
+    {
+      "object": "DK09 | tapered deck.003",
+      "triangles": 4
+    },
+    {
+      "object": "DK09 | underdeck transverse frame.002",
+      "triangles": 22
+    },
+    {
+      "object": "DK09 | underdeck transverse frame.003",
+      "triangles": 22
+    },
+    {
+      "object": "DK09 | upper well rim.001",
+      "triangles": 1024
+    },
+    {
+      "object": "DK09 | well guardrail.002",
+      "triangles": 48
+    },
+    {
+      "object": "DK09 | well guardrail.003",
+      "triangles": 48
+    },
+    {
+      "object": "DK09 | well rear guard.001",
+      "triangles": 16
+    },
+    {
+      "object": "KIT02 | connector load ring -1.002",
+      "triangles": 154
+    },
+    {
+      "object": "KIT02 | connector load ring -1.003",
+      "triangles": 154
+    },
+    {
+      "object": "KIT02 | connector load ring 1.002",
+      "triangles": 154
+    },
+    {
+      "object": "KIT02 | connector load ring 1.003",
+      "triangles": 154
+    },
+    {
+      "object": "KIT02 | continuous deck pressure plate.001",
+      "triangles": 18
+    },
+    {
+      "object": "KIT02 | continuous wayfinding edge.002",
+      "triangles": 260
+    },
+    {
+      "object": "KIT02 | continuous wayfinding edge.003",
+      "triangles": 260
+    },
+    {
+      "object": "KIT02 | planar mating gasket -1.001",
+      "triangles": 154
+    },
+    {
+      "object": "KIT02 | planar mating gasket 1.001",
+      "triangles": 154
+    },
+    {
+      "object": "KIT02 | port pressure liner.001",
+      "triangles": 2
+    },
+    {
+      "object": "KIT02 | portal edge lamp.004",
+      "triangles": 96
+    },
+    {
+      "object": "KIT02 | portal edge lamp.005",
+      "triangles": 96
+    },
+    {
+      "object": "KIT02 | portal edge lamp.006",
+      "triangles": 96
+    },
+    {
+      "object": "KIT02 | portal edge lamp.007",
+      "triangles": 96
+    },
+    {
+      "object": "KIT02 | removable floor seam.005",
+      "triangles": 8
+    },
+    {
+      "object": "KIT02 | removable floor seam.006",
+      "triangles": 8
+    },
+    {
+      "object": "KIT02 | removable floor seam.007",
+      "triangles": 8
+    },
+    {
+      "object": "KIT02 | removable floor seam.008",
+      "triangles": 8
+    },
+    {
+      "object": "KIT02 | removable floor seam.009",
+      "triangles": 8
+    },
+    {
+      "object": "KIT02 | starboard pressure liner.001",
+      "triangles": 2
+    },
+    {
+      "object": "KIT03 | branch 01 floor",
+      "triangles": 6
+    },
+    {
+      "object": "KIT03 | branch reinforcing arch 01",
+      "triangles": 3
+    },
+    {
+      "object": "KIT03 | branch reinforcing arch 01.001",
+      "triangles": 3
+    },
+    {
+      "object": "KIT03 | branch reinforcing arch 01.002",
+      "triangles": 3
+    },
+    {
+      "object": "KIT03 | branch reinforcing arch 01.003",
+      "triangles": 3
+    },
+    {
+      "object": "KIT03 | deck service lift.003",
+      "triangles": 260
+    },
+    {
+      "object": "KIT03 | floor guide 01",
+      "triangles": 300
+    },
+    {
+      "object": "KIT03 | floor guide 01.001",
+      "triangles": 300
+    },
+    {
+      "object": "KIT03 | hub continuous deck",
+      "triangles": 8
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.002",
+      "triangles": 148
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.003",
+      "triangles": 184
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.007",
+      "triangles": 148
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.008",
+      "triangles": 184
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.012",
+      "triangles": 148
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.013",
+      "triangles": 184
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.017",
+      "triangles": 84
+    },
+    {
+      "object": "KIT03 | replaceable deck panel.018",
+      "triangles": 104
+    },
+    {
+      "object": "KIT03 | replaceable interface seal 01",
+      "triangles": 6
+    },
+    {
+      "object": "KIT05 | door 01 perimeter gasket",
+      "triangles": 16
+    },
+    {
+      "object": "KIT05 | linked workbench",
+      "triangles": 98347
+    },
+    {
+      "object": "KIT05 | workbench mounting riser",
+      "triangles": 170
+    },
+    {
+      "object": "KIT05 | workbench mounting riser.001",
+      "triangles": 170
+    },
+    {
+      "object": "KIT05 | workshop aisle guide",
+      "triangles": 16
+    },
+    {
+      "object": "KIT05 | workshop aisle guide.001",
+      "triangles": 16
+    },
+    {
+      "object": "KIT05 | workshop deck panel",
+      "triangles": 36
+    },
+    {
+      "object": "KIT05 | workshop deck panel.001",
+      "triangles": 36
+    },
+    {
+      "object": "KIT05 | workshop deck panel.002",
+      "triangles": 36
+    },
+    {
+      "object": "KIT05 | workshop deck panel.003",
+      "triangles": 36
+    },
+    {
+      "object": "KIT05 | workshop deck panel.004",
+      "triangles": 36
+    },
+    {
+      "object": "KIT10 | gate hinge knuckle",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | gate hinge knuckle.001",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | mount / DK09 | well guardrail.001",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | mount / DK09 | well guardrail.002",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | mount / DK09 | well guardrail.003",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | mount / DK09 | well guardrail.004",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | mount / KIT10 | gate hinge knuckle",
+      "triangles": 300
+    },
+    {
+      "object": "KIT10 | mount / KIT10 | gate hinge knuckle.001",
+      "triangles": 300
+    }
+  ],
+  "paid_provider_calls": 0,
+  "license": "BSD-3-Clause; repository-owned station authoring",
+  "limits": [
+    "Bounded hub-to-D1 supported interior contact mesh.",
+    "No ladder, spacecraft cabin, exterior/EVA or AG failure simulation.",
+    "Source selection matches station_export; visiting fixtures excluded."
+  ]
+}

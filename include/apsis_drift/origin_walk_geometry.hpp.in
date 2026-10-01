@@ -1,0 +1,8 @@
+#pragma once
+#include <string_view>
+namespace apsis_drift {
+inline constexpr char kOriginWalkGeometryBytes[]{
+R"APSISWALK(@APSIS_ORIGIN_WALK_JSON@)APSISWALK"};
+inline constexpr std::string_view kOriginWalkGeometryJson{
+    kOriginWalkGeometryBytes, sizeof(kOriginWalkGeometryBytes)-1};
+}

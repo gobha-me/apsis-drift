@@ -27,6 +27,24 @@ MIDI and procedural audio remain assets, not discarded prototypes. The preview
 film uses an offline render of the current C++ music system; it does not by
 itself demonstrate live Godot audio integration.
 
+## Supported station walking ownership
+
+The bounded Origin hub-to-D1 slice uses application-owned kinematic locomotion.
+C++ holds the station-relative actor pose/velocity/heading, contact/support
+checks, attached craft and shared 120-Hz tick. An immutable contact derivative
+of the actual station geometry is compiled into the core. Conservative swept
+standing-box/triangle tests and source floor probes decide accepted movement;
+Godot does not run a competing CharacterBody3D gameplay controller or own an
+actor clock. Native input requests C++ steps; the first-person camera consumes
+same-tick projected actor/station/craft results.
+
+Format20 explicitly composes actor state with the existing physical docking
+save. Formats16–19 retain their contracts. Fresh New Game selects this supported
+station state; historical station saves are not given an inferred actor pose.
+This kinematic ordinary-interior slice establishes no AG acceleration/failure,
+EVA, ladder, seat, dynamic-object collision or planet-surface walking model.
+See [saved station walking](SAVED_STATION_WALK.md) for bounds and qualification.
+
 ## Build boundary
 
 `apsis-drift::core` holds authoritative world, flight and save code used by the

@@ -136,6 +136,19 @@ FetchContent_Declare(tinysoundfont
 FetchContent_MakeAvailable(tinysoundfont)
 endif ()
 
+# Bounded source-bound station contact data is part of the application core;
+# headless walking and saves never depend on a presentation-side physics world.
+set(APSIS_ORIGIN_WALK_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/origin-walk-01/geometry.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_ORIGIN_WALK_DATA}")
+file(SHA256 "${APSIS_ORIGIN_WALK_DATA}" APSIS_ORIGIN_WALK_SHA256)
+if (NOT APSIS_ORIGIN_WALK_SHA256 STREQUAL "9cc9b5703ad53ff11871a21af707f9803c9a9c79067675ad6ff247a7950f7753")
+  message(FATAL_ERROR "Origin walking contact geometry differs from the admitted version-one bytes")
+endif ()
+file(READ "${APSIS_ORIGIN_WALK_DATA}" APSIS_ORIGIN_WALK_JSON)
+configure_file(include/apsis_drift/origin_walk_geometry.hpp.in
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/origin_walk_geometry.hpp" @ONLY)
+unset(APSIS_ORIGIN_WALK_JSON)
+
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
@@ -143,6 +156,8 @@ add_library(apsis_drift_core STATIC
   src/freedom_save.cpp
   src/freedom_flight_save.cpp
   src/freedom_docking_save.cpp
+  src/freedom_journey_save.cpp
+  src/origin_walker.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -195,7 +210,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -299,6 +314,18 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-origin-walker-tests test/origin_walker_test.cpp)
+  target_link_libraries(apsis-drift-origin-walker-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-origin-walker-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME origin-walker-contract COMMAND apsis-drift-origin-walker-tests)
+  set_tests_properties(origin-walker-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-freedom-journey-save-tests test/freedom_journey_save_test.cpp)
+  target_link_libraries(apsis-drift-freedom-journey-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-journey-save-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME freedom-journey-save-contract COMMAND apsis-drift-freedom-journey-save-tests)
+  set_tests_properties(freedom-journey-save-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-freedom-docking-save-tests test/freedom_docking_save_test.cpp)
   target_link_libraries(apsis-drift-freedom-docking-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-docking-save-tests PRIVATE

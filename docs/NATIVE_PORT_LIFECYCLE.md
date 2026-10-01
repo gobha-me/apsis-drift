@@ -46,9 +46,10 @@ format19 cannot fall back to a station or older flight save.
 
 Formats16/17/18 retain their meanings and encoding. Continuing format18 without
 selecting a port still writes format18. Selecting a qualified port explicitly
-adds docking state; its next Save As writes format19. New Game remains format17
-station inspection. It does not fabricate a port/pilot or skip the pending
-station walk and boarding path.
+adds docking state; its next Save As writes format19. Fresh New Game now uses
+[explicit format20 station walking](SAVED_STATION_WALK.md), with an actor on
+the station and Wayfarer constrained at D1. Historical format17 Continue keeps
+its inspection view; boarding and seating remain separate transitions.
 
 ## Native presentation
 

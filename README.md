@@ -25,35 +25,41 @@ tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
 Select exactly one mode. New Game accepts the full unsigned 64-bit seed range,
-including zero. Continue accepts supported Freedom save17 station and save18
-physical-flight files and refuses
-missing, corrupt, legacy-career or unsupported saves without rewriting them or
-substituting a study universe. The C++ bridge resolves the selected physical
-origin station, host planet and saved clock.
+including zero, and starts a first-person actor on Origin Station's hub floor.
+Walk with WASD or the left stick; right-drag or the right stick controls look.
+Escape or the on-screen button pauses. The bounded route reaches the workshop
+and D1 access, where the real open well stops unsupported walking. Wayfarer
+remains attached at the actual D1 port while the C++ shared clock advances.
+See the [saved station walking contract](docs/SAVED_STATION_WALK.md).
 
-New Game currently opens **docked-only, with a frozen clock**. It shows the
-selected station at physical metre scale with C++-registered D1/D2 port markers,
-a host silhouette and **Save As**
-through the C++ atomic save writer. Choose a path, confirm any overwrite, then
-use that absolute path with Continue. A selected flight save opens the
-[saved native flight view](docs/SAVED_NATIVE_FLIGHT.md), paused initially, with
-C++ controls, rotating terrain, the Wayfarer and animated main exhaust from
-actual propulsion. Resume with Escape or the on-screen button; the view lists
-its keyboard controls. A Wayfarer flight can target D1/D2 and use the
+**Save As** writes the actor, attached craft, history and shared clock through
+C++ in explicit format20. Choose a path, confirm any overwrite, then Continue
+from that absolute path. Continue begins paused. Quit does not autosave.
+Missing, corrupt, legacy-career or unsupported saves refuse without rewriting
+or substituting a study universe.
+
+Historical format17 station files retain their frozen inspection view.
+Formats18/19 open the [saved native flight view](docs/SAVED_NATIVE_FLIGHT.md),
+paused initially, with C++ controls, rotating terrain, Wayfarer and main exhaust
+from actual applied propulsion. Resume with Escape or the on-screen button.
+Wayfarer flight can target D1/D2 and use the
 [physical port capture/release controls](docs/NATIVE_PORT_LIFECYCLE.md).
-Save As retains format18 until explicit port selection, then persists the
-target and optional attachment in format19 through C++.
-Quit does not autosave. Station walking, boarding, sitting, departure from New Game and
-planetary contact remain integration work; this is not a completed Freedom
-play loop or the owner's minimum playable handoff. Validate selection without opening a window by adding
-`--headless-validate` to either command.
+A flight Save As retains format18 until explicit port selection, then writes
+format19 with its target and optional attachment. Historical files are not
+silently assigned an actor or migrated to format20.
+
+The station walk has no hatch/ladder boarding or seat transition yet. Departure
+from New Game, planetary contact and the composed home-return journey remain
+integration work; this is not the owner's minimum playable handoff. Validate
+selection without opening a window by adding `--headless-validate` to either
+command.
 
 The selected station and Wayfarer exports have a
-[source-bound native asset package](docs/NATIVE_STARTER_ASSETS.md), with portable
-preparation and actual Godot import checks. The ordinary launcher prepares this
-package before opening the [station inspection view](docs/NATIVE_STATION_VIEW.md).
-Station walking and the composed flight journey remain under development;
-package admission alone does not complete the flight loop.
+[source-bound native asset package](docs/NATIVE_STARTER_ASSETS.md). The launcher
+prepares its verified models before opening a view. Walking uses a separate
+source-bound contact derivative compiled into the C++ core, preserving headless
+support/contact checks independently of Godot. Asset admission alone does not
+complete boarding or the flight loop.
 
 ## Native studies and flight playtests
 

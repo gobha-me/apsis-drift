@@ -108,11 +108,14 @@ struct Fixture {
   }
 };
 auto invalid(const Fixture& f) -> void {
-  check(
-      !NativeFreedomFlightSession::open(required(native_new_game(Seed{42}))) &&
-          !NativeFreedomFlightSession::open(
-              required(native_legacy_new_game(Seed{42}))),
-      "flight owner refuses docked/career selections, no replacement spawn");
+  check(!NativeFreedomFlightSession::open(
+            {NativeStartup::Mode::freedom,
+             make_freedom_new_game_document(Seed{42}),
+             f.planet,
+             {}}) &&
+            !NativeFreedomFlightSession::open(
+                required(native_legacy_new_game(Seed{42}))),
+        "flight owner refuses docked/career selections, no replacement spawn");
   auto wrong = f.selected(f.document());
   wrong.mode = NativeStartup::Mode::legacy_career;
   check(!NativeFreedomFlightSession::open(wrong),
@@ -235,7 +238,8 @@ auto ordinary_and_hold(const Fixture& f) -> void {
       }
   auto d = f.held();
   auto session = f.open(d);
-  session.set_assistance(false);
+  check(session.set_assistance(false).has_value(),
+        "flight assistance change accepted");
   check(session.document().flight == d.flight &&
             session.document().model.hold == d.model.hold &&
             !session.document().model.assistance,
@@ -310,8 +314,10 @@ auto continuation(const Fixture& f, const std::filesystem::path& directory)
            NativeFreedomFlightSession::open(required(native_continue(source)))),
        b = a;
   for (unsigned n = 0; n < 600; ++n) {
-    a.set_assistance((n / 97) % 2 == 0);
-    b.set_assistance((n / 97) % 2 == 0);
+    check(a.set_assistance((n / 97) % 2 == 0).has_value(),
+          "replay assistance accepted");
+    check(b.set_assistance((n / 97) % 2 == 0).has_value(),
+          "continued assistance accepted");
     if (n == 150) {
       check(a.set_hold({}).has_value() && b.set_hold({}).has_value(),
             "explicit hold disable changes selection only");

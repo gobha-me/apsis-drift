@@ -22,7 +22,11 @@ func run() -> void:
 	var bridge: Variant = ClassDB.instantiate("FreedomBridge")
 	check(bridge.get_freedom_station_geometry().is_empty(), "Uninitialized geometry exposed")
 	check(bridge.initialize_freedom_new_game("42"), "New Game refused")
-	var start: Dictionary = bridge.get_freedom_start()
+	var start: Dictionary = bridge.get_freedom_walk_state()
+	if start.is_empty():
+		check(false, "New Game station actor is unavailable")
+		quit(1)
+		return
 	var geometry: Dictionary = bridge.get_freedom_station_geometry()
 	check(StationView.valid_geometry(geometry, start.station_id), "C++ geometry refused")
 	check(not bridge.initialize_freedom_new_game("01"), "Invalid seed accepted")
@@ -86,7 +90,7 @@ func run() -> void:
 						check(cue.station_id == start.station_id and cue.label == "D%d" % ordinal, "Cue lost port identity")
 						check(cue.pixel.is_finite() and is_finite(cue.range_metres) and cue.range_metres > 0, "Unbounded projection cue")
 						check(cue.visibility == "projection_only", "Projection pretends to prove visibility")
-	check(bridge.get_freedom_start() == start and bridge.get_freedom_station_geometry() == geometry, "Inspection advanced simulation or changed geometry")
+	check(bridge.get_freedom_walk_state() == start and bridge.get_freedom_station_geometry() == geometry, "Inspection advanced simulation or changed geometry")
 	viewport.free()
 	print("Native station view: %d failures; physical geometry, LOD, camera and projection contracts; no GPU claim" % failures)
 	quit(0 if failures == 0 else 1)
