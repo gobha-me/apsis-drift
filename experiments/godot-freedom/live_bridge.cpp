@@ -6,6 +6,7 @@
 #include "thrust_flight.hpp"
 
 #include "apsis_drift/native_startup.hpp"
+#include "apsis_drift/operating_motion.hpp"
 #include "apsis_drift/station_geometry.hpp"
 
 #include <charconv>
@@ -177,6 +178,7 @@ struct LiveWorld {
 class FreedomBridge : public godot::RefCounted {
   GDCLASS(FreedomBridge, godot::RefCounted)
   std::unique_ptr<LiveWorld> world;
+  std::optional<OperatingMotionRecipe> operating_motion_recipe;
   std::unique_ptr<NativeFreedomStationStart> native_start;
   std::unique_ptr<SavedFlightWorld> saved_flight;
   godot::String last_error;
@@ -250,6 +252,13 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_freedom_station_geometry);
     godot::ClassDB::bind_method(godot::D_METHOD("get_wayfarer_frame"),
                                 &FreedomBridge::get_wayfarer_frame);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("initialize_operating_motion", "recipe_json"),
+        &FreedomBridge::initialize_operating_motion);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_operating_motion_pose", "roof_transfer",
+                        "inner_door", "seat_boarding", "station_closure"),
+        &FreedomBridge::get_operating_motion_pose);
     godot::ClassDB::bind_method(godot::D_METHOD("save_freedom_as", "save_path"),
                                 &FreedomBridge::save_freedom_as);
     godot::ClassDB::bind_method(godot::D_METHOD("get_world_lighting"),
@@ -297,6 +306,63 @@ class FreedomBridge : public godot::RefCounted {
   }
 
  public:
+  auto initialize_operating_motion(const godot::String& recipe_json) -> bool {
+    try {
+      if (static_cast<std::size_t>(recipe_json.length()) >
+          kOperatingMotionMaximumDocumentBytes)
+        throw std::invalid_argument("Motion recipe exceeds document bound");
+      const auto utf8 = recipe_json.utf8();
+      const auto candidate = decode_operating_motion_recipe(
+          {utf8.get_data(), static_cast<std::size_t>(utf8.length())});
+      if (!candidate) throw std::invalid_argument(candidate.error());
+      operating_motion_recipe = *candidate;
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto get_operating_motion_pose(double roof_transfer, double inner_door,
+                                 double seat_boarding, double station_closure)
+      -> godot::Dictionary {
+    try {
+      if (!operating_motion_recipe)
+        throw std::invalid_argument(
+            "Initialize the admitted motion recipe first");
+      const auto pose = evaluate_operating_motion(
+          *operating_motion_recipe,
+          {roof_transfer, inner_door, seat_boarding, station_closure});
+      if (!pose) throw std::invalid_argument(pose.error());
+      const auto matrices = [](const auto& values, const auto& ids) {
+        godot::Dictionary result;
+        for (std::size_t index = 0; index < values.size(); ++index) {
+          godot::PackedFloat64Array columns;
+          for (const auto& column : values[index].columns) {
+            columns.append(column.x);
+            columns.append(column.y);
+            columns.append(column.z);
+          }
+          result[godot::String{std::string{ids[index]}.c_str()}] = columns;
+        }
+        return result;
+      };
+      godot::Dictionary result;
+      result["craft_world_deltas"] =
+          matrices(pose->craft_world_deltas, kOperatingCraftGroupIds);
+      result["station_node_local"] =
+          matrices(pose->station_node_local, kOperatingStationGroupIds);
+      result["station_contact_deltas"] =
+          matrices(pose->station_contact_deltas, kOperatingStationGroupIds);
+      last_error = godot::String{};
+      return result;
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return {};
+    }
+  }
+
   auto initialize_freedom_new_game(const godot::String& universe_seed) -> bool {
     try {
       const auto utf8 = universe_seed.utf8();

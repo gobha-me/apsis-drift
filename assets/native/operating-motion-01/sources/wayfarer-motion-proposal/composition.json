@@ -1,0 +1,777 @@
+{
+  "schema_version": 1,
+  "passed": true,
+  "recipe_sha256": "189569f398a004d8040a7faf545a8bd7528cce517c308f78a7ab3dd70d36c987",
+  "tool_sha256": "89eadcfb7c9a36407925af0df75324a9addda4ea74b584a7199c366afdfdd1df",
+  "cases": [
+    {
+      "progress": {
+        "roof_transfer": 0.0,
+        "inner_door": 0.0,
+        "seat_boarding": 0.0
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 4.470348358154297e-08,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.0,
+        "inner_door": 0.0,
+        "seat_boarding": 0.0
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 4.470348358154297e-08,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.0,
+        "inner_door": 0.0,
+        "seat_boarding": 0.0
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 4.470348358154297e-08,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.0,
+        "inner_door": 0.0,
+        "seat_boarding": 0.0
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 4.470348358154297e-08,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.0,
+        "inner_door": 0.0,
+        "seat_boarding": 0.0
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 4.470348358154297e-08,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.0,
+        "inner_door": 0.0,
+        "seat_boarding": 0.0
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 4.470348358154297e-08,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 1.0
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 1.0
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 1.0
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 1.0
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 1.0
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 1.0
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.425,
+        "inner_door": 0.375,
+        "seat_boarding": 0.775
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.7555927206712738e-08,
+      "maximum_member_world_component_error": 3.030848301222022e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.425,
+        "inner_door": 0.375,
+        "seat_boarding": 0.775
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.7555927206712738e-08,
+      "maximum_member_world_component_error": 3.030848301222022e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.425,
+        "inner_door": 0.375,
+        "seat_boarding": 0.775
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.7555927206712738e-08,
+      "maximum_member_world_component_error": 3.030848301222022e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.425,
+        "inner_door": 0.375,
+        "seat_boarding": 0.775
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.7555927206712738e-08,
+      "maximum_member_world_component_error": 3.030848301222022e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.425,
+        "inner_door": 0.375,
+        "seat_boarding": 0.775
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.7555927206712738e-08,
+      "maximum_member_world_component_error": 3.030848301222022e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.425,
+        "inner_door": 0.375,
+        "seat_boarding": 0.775
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.7555927206712738e-08,
+      "maximum_member_world_component_error": 3.030848301222022e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.7,
+        "inner_door": 0.55,
+        "seat_boarding": 0.55
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.7,
+        "inner_door": 0.55,
+        "seat_boarding": 0.55
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.7,
+        "inner_door": 0.55,
+        "seat_boarding": 0.55
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.7,
+        "inner_door": 0.55,
+        "seat_boarding": 0.55
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.7,
+        "inner_door": 0.55,
+        "seat_boarding": 0.55
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.7,
+        "inner_door": 0.55,
+        "seat_boarding": 0.55
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.725,
+        "inner_door": 0.55,
+        "seat_boarding": 0.6
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.725,
+        "inner_door": 0.55,
+        "seat_boarding": 0.6
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.725,
+        "inner_door": 0.55,
+        "seat_boarding": 0.6
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.725,
+        "inner_door": 0.55,
+        "seat_boarding": 0.6
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.725,
+        "inner_door": 0.55,
+        "seat_boarding": 0.6
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.725,
+        "inner_door": 0.55,
+        "seat_boarding": 0.6
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 4.470348358154297e-08,
+      "maximum_member_world_component_error": 1.9717272081720694e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.4,
+        "inner_door": 1.0,
+        "seat_boarding": 0.95
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.4,
+        "inner_door": 1.0,
+        "seat_boarding": 0.95
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.4,
+        "inner_door": 1.0,
+        "seat_boarding": 0.95
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.4,
+        "inner_door": 1.0,
+        "seat_boarding": 0.95
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.4,
+        "inner_door": 1.0,
+        "seat_boarding": 0.95
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.4,
+        "inner_door": 1.0,
+        "seat_boarding": 0.95
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 0.975
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 0.975
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 0.975
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 0.975
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 0.975
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 1.0,
+        "inner_door": 1.0,
+        "seat_boarding": 0.975
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 2.4115435648397465e-08,
+      "maximum_member_world_component_error": 2.2867977955698393e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.625,
+        "inner_door": 0.13,
+        "seat_boarding": 0.525
+      },
+      "application_order": [
+        "roof_transfer",
+        "inner_door",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 7.72151080852268e-08,
+      "maximum_member_world_component_error": 2.738470570307072e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.625,
+        "inner_door": 0.13,
+        "seat_boarding": 0.525
+      },
+      "application_order": [
+        "roof_transfer",
+        "seat_boarding",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 7.72151080852268e-08,
+      "maximum_member_world_component_error": 2.738470570307072e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.625,
+        "inner_door": 0.13,
+        "seat_boarding": 0.525
+      },
+      "application_order": [
+        "inner_door",
+        "roof_transfer",
+        "seat_boarding"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 7.72151080852268e-08,
+      "maximum_member_world_component_error": 2.738470570307072e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.625,
+        "inner_door": 0.13,
+        "seat_boarding": 0.525
+      },
+      "application_order": [
+        "inner_door",
+        "seat_boarding",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 7.72151080852268e-08,
+      "maximum_member_world_component_error": 2.738470570307072e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.625,
+        "inner_door": 0.13,
+        "seat_boarding": 0.525
+      },
+      "application_order": [
+        "seat_boarding",
+        "roof_transfer",
+        "inner_door"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 7.72151080852268e-08,
+      "maximum_member_world_component_error": 2.738470570307072e-07,
+      "application_order_error": 0.0
+    },
+    {
+      "progress": {
+        "roof_transfer": 0.625,
+        "inner_door": 0.13,
+        "seat_boarding": 0.525
+      },
+      "application_order": [
+        "seat_boarding",
+        "inner_door",
+        "roof_transfer"
+      ],
+      "source_objects_compared": 1746,
+      "maximum_rig_world_component_error": 7.72151080852268e-08,
+      "maximum_member_world_component_error": 2.738470570307072e-07,
+      "application_order_error": 0.0
+    }
+  ],
+  "limits": "Transform-only source comparison of eight combined progress sets and all six application orders. This does not admit simultaneous gameplay motion, interlocks, actor support, collision clearance or continuous trajectories."
+}

@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "id": "wayfarer-motion-proposal",
+  "status": "Art-side source evidence for Engine issue 348; no runtime admission",
+  "source": {
+    "path": "assets/visual/hopper-craft-09.blend",
+    "sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677"
+  },
+  "model_identity_only": {
+    "file": "wayfarer-operating-02.glb",
+    "sha256": "a9a8104a0ea8b5c22e4149861a76b5ab3911a9f77ba871b446c08bf9ed56621c"
+  },
+  "geometry_included": false,
+  "engine_bindings_sha256": {
+    "tools/export_wayfarer_operating.py": "73fa1609a6597427da8befe531d9fbe02679591f60659d17ab44aed7ecceeab0",
+    "tools/wayfarer_flight_export_base.py": "762499e37fe13a33bf297fc58801e711590cd9d56058a6462b3467ff6b7102fe",
+    "tools/wayfarer_operating_spec.py": "41bc77dd225a059427525113da3cef46db3b794937f433af818d31f3bb2f3113",
+    "tools/wayfarer_operating_blender.py": "00bd9327cea482518cf4bf5811f21a351b50309323d64a93c991d9356007e261",
+    "assets/native/wayfarer-operating-02/metadata/wayfarer-operating-02.json": "db7b0a2de2516adf9925abe74133a6c523bd334062884a1bfc403448c2b1e72e",
+    "assets/native/wayfarer-operating-02/package.json": "9a3d2632b3231dfd0a418049a0e80fa6534feaebd3ffa944c2c9635755a5f957",
+    "assets/native/wayfarer-operating-02/licenses/HOPPER_GENERATED_CONCEPTS.md": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879",
+    "assets/native/wayfarer-operating-02/licenses/HOPPER_MESHY_TRIAL.md": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad",
+    "assets/native/wayfarer-operating-02/licenses/LICENSE.md": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d",
+    "assets/native/wayfarer-operating-02/licenses/MESHY_QUALIFICATION_OUTPUT.md": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225",
+    "assets/native/wayfarer-operating-02/licenses/STATION_KIT_01.md": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7",
+    "assets/native/wayfarer-operating-02/metadata/contact.json": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+    "assets/native/wayfarer-operating-02/metadata/provenance.json": "efe100447b6ebd028b41ee326c66ab8c30f088f0ff7aa8c800ad531f22e4ecbf",
+    "assets/native/wayfarer-operating-02/metadata/qualification.json": "06d38bbc05b085c3ad73fe1b09cd5728bc94034e9d3d49748ea0c6e9cdc7cd46",
+    "assets/native/wayfarer-operating-02/metadata/station-closure.json": "662287856666bc9f3bffdd6ccda3fce2a2c2b55fd393998f4cf65597c3ffeada",
+    "assets/native/wayfarer-operating-02/payloads/model-00.xz-part": "1f36dfe61c558ec3285ec862bcf262a1bf6d3a20065f4b90e9cece27ce518174",
+    "assets/native/wayfarer-operating-02/payloads/station_model-00.xz-part": "912b54d63ae947ec606618d90d126d4c825c4a041276702be370944767d03647"
+  },
+  "files": [
+    {
+      "path": "recipe.json",
+      "sha256": "189569f398a004d8040a7faf545a8bd7528cce517c308f78a7ab3dd70d36c987"
+    },
+    {
+      "path": "source-poses.json",
+      "sha256": "9e0685b20363d6d93eefc8364faf764775cb29577a188269777833adae009d6f"
+    },
+    {
+      "path": "composition.json",
+      "sha256": "943462f6f84edffa72258942deb6c6c82566deb1d2e44e1c51d062a9ca838ee1"
+    },
+    {
+      "path": "licenses/HOPPER_GENERATED_CONCEPTS.md",
+      "sha256": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879"
+    },
+    {
+      "path": "licenses/HOPPER_MESHY_TRIAL.md",
+      "sha256": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad"
+    },
+    {
+      "path": "licenses/LICENSE.md",
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "licenses/MESHY_QUALIFICATION_OUTPUT.md",
+      "sha256": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225"
+    },
+    {
+      "path": "licenses/STATION_KIT_01.md",
+      "sha256": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+    }
+  ],
+  "tools": [
+    "tools/extract_wayfarer_motion_recipe.py",
+    "tools/check_wayfarer_motion_composition.py"
+  ],
+  "license_scope": "Preserved five-document operating-02 roster in licenses/. No new third-party content, generation or geometry. Source and derivative lineage in recipe.json.",
+  "limitations": "Measured source poses and local recipe proposal; Engine owns runtime admission, evaluator and gameplay tests."
+}
