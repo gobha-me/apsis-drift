@@ -162,6 +162,30 @@ configure_file(include/apsis_drift/operating_motion_recipe.hpp.in
   "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/operating_motion_recipe.hpp" @ONLY)
 unset(APSIS_OPERATING_MOTION_RECIPE_JSON)
 
+# Exact source-bound support metadata is independent of submitted receipts.
+set(APSIS_BOARDING_SUPPORT_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/boarding-support-01/boarding-support-01.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_BOARDING_SUPPORT_DATA}")
+file(SHA256 "${APSIS_BOARDING_SUPPORT_DATA}" APSIS_BOARDING_SUPPORT_SHA256)
+if (NOT APSIS_BOARDING_SUPPORT_SHA256 STREQUAL "58694e671102f27df5f405478af43d00fd05b3aeaef34c612939af6fa548a8d3")
+  message(FATAL_ERROR "Boarding support differs from the admitted version-one bytes")
+endif ()
+file(READ "${APSIS_BOARDING_SUPPORT_DATA}" APSIS_BOARDING_SUPPORT_JSON)
+string(LENGTH "${APSIS_BOARDING_SUPPORT_JSON}" APSIS_BOARDING_SUPPORT_BYTES)
+set(APSIS_BOARDING_SUPPORT_CHUNKS "")
+set(APSIS_BOARDING_SUPPORT_OFFSET 0)
+while (APSIS_BOARDING_SUPPORT_OFFSET LESS APSIS_BOARDING_SUPPORT_BYTES)
+  math(EXPR APSIS_BOARDING_SUPPORT_LENGTH "${APSIS_BOARDING_SUPPORT_BYTES} - ${APSIS_BOARDING_SUPPORT_OFFSET}")
+  if (APSIS_BOARDING_SUPPORT_LENGTH GREATER 60000)
+    set(APSIS_BOARDING_SUPPORT_LENGTH 60000)
+  endif ()
+  string(SUBSTRING "${APSIS_BOARDING_SUPPORT_JSON}" ${APSIS_BOARDING_SUPPORT_OFFSET} ${APSIS_BOARDING_SUPPORT_LENGTH} APSIS_BOARDING_SUPPORT_CHUNK)
+  string(APPEND APSIS_BOARDING_SUPPORT_CHUNKS "    result.append(R\"APSISSUPPORT(${APSIS_BOARDING_SUPPORT_CHUNK})APSISSUPPORT\", ${APSIS_BOARDING_SUPPORT_LENGTH});\n")
+  math(EXPR APSIS_BOARDING_SUPPORT_OFFSET "${APSIS_BOARDING_SUPPORT_OFFSET} + ${APSIS_BOARDING_SUPPORT_LENGTH}")
+endwhile ()
+configure_file(include/apsis_drift/boarding_support_data.hpp.in
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/boarding_support_data.hpp" @ONLY)
+unset(APSIS_BOARDING_SUPPORT_JSON)
+
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
@@ -172,6 +196,7 @@ add_library(apsis_drift_core STATIC
   src/freedom_journey_save.cpp
   src/origin_walker.cpp
   src/operating_motion.cpp
+  src/origin_boarding_support.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -224,7 +249,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -328,6 +353,12 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-boarding-support-tests test/origin_boarding_support_test.cpp)
+  target_link_libraries(apsis-drift-boarding-support-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-boarding-support-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-support-contract COMMAND apsis-drift-boarding-support-tests)
+  set_tests_properties(boarding-support-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-operating-motion-tests test/operating_motion_test.cpp)
   target_link_libraries(apsis-drift-operating-motion-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-operating-motion-tests PRIVATE

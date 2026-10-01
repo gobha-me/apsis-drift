@@ -444,8 +444,8 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
                        std::int64_t fraction) {
     return from + (to - from) * fraction / kFixedOne;
   };
-  const auto bilerp = [&](std::int64_t a, std::int64_t b, std::int64_t c,
-                          std::int64_t d) {
+  const auto bilerp = [lerp, tx, ty](std::int64_t a, std::int64_t b,
+                                     std::int64_t c, std::int64_t d) {
     return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
   };
   const auto elevation =

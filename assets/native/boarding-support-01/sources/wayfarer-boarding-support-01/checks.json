@@ -1,0 +1,18 @@
+{
+  "groups": 32,
+  "objects": 1087,
+  "triangles_covered_once": 475212,
+  "patches": 42,
+  "candidate_triangles_with_opposite_source_winding": 233,
+  "checks": "Gap-free per-object range coverage, exact source roster, finite transforms, referenced patch triangles, surface areas/bounds/barycentric points and end-margin predicates",
+  "support_sha256": "2d84bf607ac136e8c847a5e7cd7be5529d9a28a89f01f444b520a0950cdaa5d2",
+  "contact_sha256": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+  "checker_sha256": "40ad1e20e850d5dc14f0a7a16aac4e4e6f6d8060ba606457b477687226dca104",
+  "rejected_invalid_fixtures": [
+    "range_gap",
+    "nonfinite_transform",
+    "out_of_bounds_patch",
+    "invalid_point",
+    "whole_group_exemption"
+  ]
+}
