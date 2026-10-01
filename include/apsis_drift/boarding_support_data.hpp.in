@@ -1,0 +1,12 @@
+#pragma once
+#include <string>
+namespace apsis_drift::detail {
+inline auto boarding_support_json() -> const std::string& {
+  static const auto json = [] {
+    std::string result;
+    result.reserve(@APSIS_BOARDING_SUPPORT_BYTES@);
+@APSIS_BOARDING_SUPPORT_CHUNKS@    return result;
+  }();
+  return json;
+}
+} // namespace apsis_drift::detail

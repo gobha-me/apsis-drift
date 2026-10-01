@@ -1,0 +1,68 @@
+{
+  "schema": "apsis.boarding-support-assets/1",
+  "package_id": "boarding-support-01",
+  "files": [
+    {
+      "path": "boarding-support-01.json",
+      "bytes": 707366,
+      "sha256": "58694e671102f27df5f405478af43d00fd05b3aeaef34c612939af6fa548a8d3"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 3543,
+      "sha256": "29dbc42a7c25e35049ce06586959032bb8a7b9ab5461d241d652d21581d58938"
+    },
+    {
+      "path": "sources/tools/check_boarding_support.py",
+      "bytes": 6074,
+      "sha256": "40ad1e20e850d5dc14f0a7a16aac4e4e6f6d8060ba606457b477687226dca104"
+    },
+    {
+      "path": "sources/tools/extract_boarding_support.py",
+      "bytes": 16882,
+      "sha256": "8173c9498e97b07af1813ec5645a38b9745505d0e3dadfb2edb7f52190cf97b6"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/checks.json",
+      "bytes": 757,
+      "sha256": "8bf903aba6016b30a780991dd51826be0908d64025a0e59181d3532609c089f1"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/licenses/HOPPER_GENERATED_CONCEPTS.md",
+      "bytes": 1783,
+      "sha256": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/licenses/HOPPER_MESHY_TRIAL.md",
+      "bytes": 3084,
+      "sha256": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/licenses/LICENSE.md",
+      "bytes": 1521,
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+      "bytes": 1762,
+      "sha256": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/licenses/STATION_KIT_01.md",
+      "bytes": 11622,
+      "sha256": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/provenance.json",
+      "bytes": 3669,
+      "sha256": "297878dc9eb1de62816e6ca8346632906e2193ab2b3b1f890f9bcc8d0f2e0092"
+    },
+    {
+      "path": "sources/wayfarer-boarding-support-01/support.json",
+      "bytes": 1328909,
+      "sha256": "2d84bf607ac136e8c847a5e7cd7be5529d9a28a89f01f444b520a0950cdaa5d2"
+    }
+  ],
+  "runtime": "boarding-support-01.json",
+  "provenance": "provenance.json"
+}

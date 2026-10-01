@@ -71,6 +71,11 @@ The [C++ operating-motion recipe](docs/GODOT_OPERATING_MOTION.md) evaluates
 continuous source-local hardware poses for a separate read-only native proof.
 It preserves world/save state; actor boarding and seat ownership still follow.
 
+The [Origin boarding support catalog](docs/ORIGIN_BOARDING_SUPPORT.md) attributes
+contact triangles to source objects and evaluates candidate-surface evidence
+in C++. Physical reach, supported traversal and occupied seating follow under
+their separate route qualification.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and

@@ -1,0 +1,43 @@
+{
+  "schema": "apsis.boarding-support-provenance/1",
+  "identities": {
+    "support_sha256": "2d84bf607ac136e8c847a5e7cd7be5529d9a28a89f01f444b520a0950cdaa5d2",
+    "contact_sha256": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+    "operating_motion_sha256": "afa1eb3d81deab1b5ac00a53d1650fa9bb222bcf8ea9c376efa166b93eda0298",
+    "craft_model_sha256": "a9a8104a0ea8b5c22e4149861a76b5ab3911a9f77ba871b446c08bf9ed56621c",
+    "station_clearance_model_sha256": "a02d4b2a14f4459f6b5109768fa102aa214e611d3aa3faf28e573cd557e3a29e",
+    "station_motion_model_sha256": "79c8303ebe362a619f58a931cf97102cf63cd7bdd36f46a86152368107e0be80",
+    "craft_source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+    "station_source_sha256": "6a3d4cf56af54b8b4d1cc1e344f32651609022280f1c3fb0a9109bf86dfa4fb6",
+    "closure_source_sha256": "6a12e1e6846be4de6c89ce0c65b154567a8a07818d37bf574de2a319109319b4",
+    "operating_package_sha256": "9a3d2632b3231dfd0a418049a0e80fa6534feaebd3ffa944c2c9635755a5f957"
+  },
+  "scope": "Immutable source attribution and candidate surface evidence; no actor, support acquisition, route or collision exemption",
+  "limits": [
+    "All source objects retain obstacle policy.",
+    "Candidate predicates establish no posture, reach, penetration or neighboring clearance.",
+    "Source corrections/matrices are baked provenance; apply only admitted contact motion once.",
+    "Hand-grasp candidates have no declared side; rod intervals already exclude 30 mm ends.",
+    "Crop bounds describe finite rest coverage, not complete exterior collision geometry.",
+    "No new render models, private character art, actor actions, save phases or clock are admitted."
+  ],
+  "source_artifacts_sha256": {
+    "wayfarer-boarding-support-01/checks.json": "8bf903aba6016b30a780991dd51826be0908d64025a0e59181d3532609c089f1",
+    "wayfarer-boarding-support-01/licenses/HOPPER_GENERATED_CONCEPTS.md": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879",
+    "wayfarer-boarding-support-01/licenses/HOPPER_MESHY_TRIAL.md": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad",
+    "wayfarer-boarding-support-01/licenses/LICENSE.md": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d",
+    "wayfarer-boarding-support-01/licenses/MESHY_QUALIFICATION_OUTPUT.md": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225",
+    "wayfarer-boarding-support-01/licenses/STATION_KIT_01.md": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7",
+    "wayfarer-boarding-support-01/provenance.json": "297878dc9eb1de62816e6ca8346632906e2193ab2b3b1f890f9bcc8d0f2e0092",
+    "wayfarer-boarding-support-01/support.json": "2d84bf607ac136e8c847a5e7cd7be5529d9a28a89f01f444b520a0950cdaa5d2",
+    "tools/check_boarding_support.py": "40ad1e20e850d5dc14f0a7a16aac4e4e6f6d8060ba606457b477687226dca104",
+    "tools/extract_boarding_support.py": "8173c9498e97b07af1813ec5645a38b9745505d0e3dadfb2edb7f52190cf97b6"
+  },
+  "tool_sha256": {
+    "boarding_support_identity.py": "3abb5a1916b1d27a917cd3501b02cc5af33865ae64ddd2ce7d884e9346be2d3f",
+    "boarding_support_spec.py": "96ffdda32ee413d7123357eb6495841dcbb5f7d0e2a15998fdcb1fd83f1eef5b",
+    "package_boarding_support.py": "384891f8cdc7b443bc521dc353f8fe016f4adc0e92b32fee20381a9862a7c2a8",
+    "prepare_boarding_support.py": "75c4d2de23b93b7d6e5845f126d92688b8ff69126984070c6d593af179b6da5b",
+    "prepare_native_assets.py": "fb23ea1e4521a387960c40b96c0d4ffa55c16318181d46b539fc3fc75efaa8ed"
+  }
+}

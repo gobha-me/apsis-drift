@@ -47,6 +47,9 @@ jobs:
       - name: Check operating motion source identity and atomic preparation
         run: python3 test/operating_motion_package_test.py
 
+      - name: Check boarding support identity and candidate geometry
+        run: python3 test/boarding_support_package_test.py
+
       - name: Check operating GLB numeric and buffer boundaries
         run: python3 test/wayfarer_operating_glb_audit_test.py
 
