@@ -4,7 +4,6 @@
 #include <bit>
 #include <cmath>
 #include <limits>
-#include <tuple>
 #include <type_traits>
 
 namespace apsis_drift {
@@ -420,6 +419,10 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
 [[nodiscard]] auto sample_tile_address(const TerrainTile& tile,
                                        const TerrainTileAddress& address)
     -> std::expected<TerrainSurfaceSample, TerrainTileError> {
+  struct InterpolationAxis {
+    std::size_t lower, upper;
+    std::int64_t fraction;
+  };
   const auto interpolate_axis = [](double coordinate) {
     const double grid = std::clamp(coordinate, 0.0, 1.0) *
                         static_cast<double>(kTerrainTileIntervalsPerAxis);
@@ -427,15 +430,15 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
     const auto upper = std::min(lower + 1, kTerrainTileIntervalsPerAxis);
     const auto fraction = static_cast<std::int64_t>(std::llround(
         (grid - static_cast<double>(lower)) * static_cast<double>(kFixedOne)));
-    return std::tuple{lower, upper,
-                      std::clamp(fraction, std::int64_t{0}, kFixedOne)};
+    return InterpolationAxis{lower, upper,
+                             std::clamp(fraction, std::int64_t{0}, kFixedOne)};
   };
-  const auto [x0, x1, tx] = interpolate_axis(address.u);
-  const auto [y0, y1, ty] = interpolate_axis(address.v);
-  const auto s00 = tile.sample_at(x0, y0);
-  const auto s10 = tile.sample_at(x1, y0);
-  const auto s01 = tile.sample_at(x0, y1);
-  const auto s11 = tile.sample_at(x1, y1);
+  const auto x = interpolate_axis(address.u);
+  const auto y = interpolate_axis(address.v);
+  const auto s00 = tile.sample_at(x.lower, y.lower);
+  const auto s10 = tile.sample_at(x.upper, y.lower);
+  const auto s01 = tile.sample_at(x.lower, y.upper);
+  const auto s11 = tile.sample_at(x.upper, y.upper);
   if (!s00 || !s10 || !s01 || !s11) {
     return std::unexpected{TerrainTileError::invalid_sample_coordinate};
   }
@@ -444,8 +447,9 @@ auto TerrainTileCache::contains(TerrainTileKey key) const noexcept -> bool {
                        std::int64_t fraction) {
     return from + (to - from) * fraction / kFixedOne;
   };
-  const auto bilerp = [lerp, tx, ty](std::int64_t a, std::int64_t b,
-                                     std::int64_t c, std::int64_t d) {
+  const auto bilerp = [lerp, tx = x.fraction,
+                       ty = y.fraction](std::int64_t a, std::int64_t b,
+                                        std::int64_t c, std::int64_t d) {
     return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
   };
   const auto elevation =
