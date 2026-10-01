@@ -41,6 +41,18 @@ jobs:
       - name: Check native asset package refusal and atomic preparation
         run: python3 test/native_asset_package_test.py
 
+      - name: Check operating asset package refusal and atomic preparation
+        run: python3 test/operating_asset_package_test.py
+
+      - name: Check operating GLB numeric and buffer boundaries
+        run: python3 test/wayfarer_operating_glb_audit_test.py
+
+      - name: Check operating GLB source and node bindings
+        run: python3 test/operating_glb_binding_test.py
+
+      - name: Check boarding contact qualification policy
+        run: python3 test/boarding_contact_policy_test.py
+
       - name: Run static analysis
         run: tools/lint.sh
 
@@ -185,6 +197,7 @@ jobs:
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight
           --test native_port --test native_walk
+          --test wayfarer_operating
           --test recorded_audio_shutdown
 
       - name: Retain native runtime logs and report

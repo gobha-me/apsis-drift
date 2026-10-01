@@ -233,6 +233,26 @@ logs as a short-lived CI artifact, including on failure. This runtime check
 does not run the editor import path tracked by
 [#276](https://github.com/gobha-me/apsis-drift/issues/276).
 
+## Operating mechanism inspection
+
+The separate [Wayfarer operating asset delivery](../../docs/WAYFARER_OPERATING_ASSETS.md)
+prepares the source-bound roof, ladder, inner door, seat and D1 closure derivative.
+It consumes the existing starter station and the actual C++ D1 placement through
+an explicit read-only view. Ordinary New Game keeps its saved station walking
+contract; mechanism preview does not board a player or advance the shared clock.
+The recorded inner threshold support seam leaves full cabin traversal unqualified.
+
+```sh
+python3 tools/prepare_operating_assets.py \
+  --package assets/native/wayfarer-operating-02 \
+  --output build-native/prepared-operating
+python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
+  --build-dir build-native --test wayfarer_operating
+```
+
+The linked delivery document records exact source identities, bounded fit
+corrections, sampler/contact limits and an opt-in rendered capture command.
+
 ## Verify
 
 For the native GDScript contracts, first finish a build with both
