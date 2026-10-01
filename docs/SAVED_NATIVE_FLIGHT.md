@@ -1,7 +1,8 @@
 # Ordinary saved physical flight
 
-2026-09-30, #340. The ordinary launcher selects format-17 station state or
-format-18 physical flight. New Game still starts at Origin Station. Continuing
+2026-09-30, #340; port lifecycle added 2026-10-01 in #342. The ordinary launcher
+selects format-17 station state, format-18 physical flight or explicit
+[format-19 port state](NATIVE_PORT_LIFECYCLE.md). New Game still starts at Origin Station. Continuing
 flight never constructs a study snapshot, relocates the craft, resets its clock
 or changes its frame recipe. Station walking/boarding/release and planetary
 contact remain required journey work before the owner's six-part handoff.

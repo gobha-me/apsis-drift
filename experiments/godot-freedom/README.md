@@ -185,13 +185,15 @@ GODOT_BIN=/path/to/godot tools/run_godot_native.sh --continue="$PWD/saves/freedo
 
 The launcher configures a TermForge-free `build-native` and builds the C++
 bridge before opening the Godot scene. New Game uses the selected seed; Continue
-loads selected v17 station or v18 physical-flight saves without writing to them.
+loads selected v17 station, v18 physical-flight or v19 port-lifecycle saves without writing to them.
 The station screen shows the
 C++ universe, system, station, craft, saved tick and discovery count. It is a
 docked-state inspection shell with Save As and Quit buttons. A flight save opens
 the [ordinary saved-flight view](../../docs/SAVED_NATIVE_FLIGHT.md), initially
 paused, with C++ control commands, terrain streaming, actual Wayfarer presentation
-and applied-force main exhaust. Station exploration and physical departure remain
+and applied-force main exhaust. Wayfarer flights can target, physically capture
+and release D1/D2 through the [C++ port lifecycle](../../docs/NATIVE_PORT_LIFECYCLE.md),
+with explicit format19 persistence. Station exploration and departure from New Game remain
 in development. The
 snapshot study remains available through `tools/run_godot_study.sh`.
 

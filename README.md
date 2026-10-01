@@ -39,8 +39,11 @@ use that absolute path with Continue. A selected flight save opens the
 [saved native flight view](docs/SAVED_NATIVE_FLIGHT.md), paused initially, with
 C++ controls, rotating terrain, the Wayfarer and animated main exhaust from
 actual propulsion. Resume with Escape or the on-screen button; the view lists
-its keyboard controls. Flight Save As uses the C++ atomic save18 writer.
-Quit does not autosave. Station walking, boarding, sitting, docked release and
+its keyboard controls. A Wayfarer flight can target D1/D2 and use the
+[physical port capture/release controls](docs/NATIVE_PORT_LIFECYCLE.md).
+Save As retains format18 until explicit port selection, then persists the
+target and optional attachment in format19 through C++.
+Quit does not autosave. Station walking, boarding, sitting, departure from New Game and
 planetary contact remain integration work; this is not a completed Freedom
 play loop or the owner's minimum playable handoff. Validate selection without opening a window by adding
 `--headless-validate` to either command.

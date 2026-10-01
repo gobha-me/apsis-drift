@@ -14,6 +14,17 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<FreedomDockingState> docking;
+  if (selected.mode == NativeStartup::Mode::freedom &&
+      std::holds_alternative<FreedomDockingSaveDocument>(selected.document)) {
+    auto& document = std::get<FreedomDockingSaveDocument>(selected.document);
+    if (auto valid = validate_freedom_docking_document(document); !valid)
+      return std::unexpected{"Docking session rejected: " + valid.error().path +
+                             ": " + valid.error().detail};
+    docking = document.docking;
+    auto flight = std::move(document.flight);
+    selected.document = std::move(flight);
+  }
   if (selected.mode != NativeStartup::Mode::freedom ||
       !std::holds_alternative<FreedomFlightSaveDocument>(selected.document))
     return std::unexpected{
@@ -28,8 +39,82 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
       hydrated->system.catalog.planets[kOriginHomePlanetOrdinal].descriptor)
     return std::unexpected{
         "Selected home planet differs from the saved physical owner"};
-  return NativeFreedomFlightSession{std::move(document), std::move(*hydrated),
+  NativeFreedomFlightSession result{std::move(document), std::move(*hydrated),
                                     std::move(selected.source_save)};
+  result.docking_ = docking;
+  return result;
+}
+
+auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
+    -> std::expected<void, std::string> {
+  if (docking_ && docking_->attached)
+    return std::unexpected{"Release the current port before changing target"};
+  const FreedomDockingState candidate{
+      1, {document_.origin.state.station, ordinal}, false};
+  if (auto valid = validate_freedom_docking_document({document_, candidate});
+      !valid)
+    return std::unexpected{"Port selection refused: " + valid.error().detail};
+  docking_ = candidate;
+  return {};
+}
+
+auto NativeFreedomFlightSession::assess_port() const
+    -> std::expected<OriginDockAssessment, std::string> {
+  if (!docking_) return std::unexpected{"Select an Origin port first"};
+  const auto station =
+      generate_origin_station(document_.origin.recipe.universe_seed);
+  const auto geometry = origin_station_geometry(station);
+  if (!geometry) return std::unexpected{"Origin geometry is unavailable"};
+  const auto result = assess_origin_dock(system_, station, *geometry,
+                                         docking_->target, document_.flight);
+  if (!result) return std::unexpected{"Origin port assessment refused"};
+  return *result;
+}
+
+auto NativeFreedomFlightSession::capture_port()
+    -> std::expected<void, std::string> {
+  if (!docking_ || docking_->attached)
+    return std::unexpected{"Select a free Origin port before capture"};
+  const auto assessed = assess_port();
+  if (!assessed) return std::unexpected{assessed.error()};
+  if (assessed->decision != OriginDockDecision::capture_ready)
+    return std::unexpected{
+        "Capture refused: " +
+        std::string{origin_dock_decision_text(assessed->decision)}};
+  const auto station =
+      generate_origin_station(document_.origin.recipe.universe_seed);
+  const auto geometry = origin_station_geometry(station);
+  if (!geometry) return std::unexpected{"Origin geometry is unavailable"};
+  const auto constraint = capture_origin_port(
+      system_, station, *geometry, docking_->target, document_.flight);
+  if (!constraint) return std::unexpected{"Physical port capture refused"};
+  const auto pose =
+      release_origin_port(system_, station, *geometry, *constraint);
+  if (!pose) return std::unexpected{"Constrained pose refused"};
+  auto candidate = document_;
+  candidate.flight = *pose;
+  auto attachment = *docking_;
+  attachment.attached = true;
+  if (auto valid = validate_freedom_docking_document({candidate, attachment});
+      !valid)
+    return std::unexpected{"Captured state cannot be persisted: " +
+                           valid.error().detail};
+  document_ = std::move(candidate);
+  docking_ = attachment;
+  return {};
+}
+
+auto NativeFreedomFlightSession::release_port()
+    -> std::expected<void, std::string> {
+  if (!docking_ || !docking_->attached)
+    return std::unexpected{"The craft is not attached to an Origin port"};
+  if (auto valid = validate_freedom_docking_document({document_, *docking_});
+      !valid)
+    return std::unexpected{"Release state refused: " + valid.error().detail};
+  // The canonical body already is the same-tick release pose. Removing the
+  // constraint never advances it, changes momentum or withdraws the craft.
+  docking_->attached = false;
+  return {};
 }
 
 auto NativeFreedomFlightSession::observe() const
@@ -79,6 +164,39 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
       document_.model.central);
   if (!air)
     return std::unexpected{"Flight input or atmospheric observation refused"};
+  if (docking_ && docking_->attached) {
+    if (controls.positive_translation != RigidVector3{} ||
+        controls.negative_translation != RigidVector3{} ||
+        controls.positive_rotation != RigidVector3{} ||
+        controls.negative_rotation != RigidVector3{})
+      return std::unexpected{"Release the port before firing propulsion"};
+    const auto station =
+        generate_origin_station(document_.origin.recipe.universe_seed);
+    const auto geometry = origin_station_geometry(station);
+    if (!geometry) return std::unexpected{"Origin geometry is unavailable"};
+    const OriginDockConstraint constraint{
+        docking_->geometry_version, docking_->target, document_.flight.craft,
+        document_.flight.tick + 1};
+    const auto pose =
+        release_origin_port(system_, station, *geometry, constraint);
+    if (!pose) return std::unexpected{"Constrained clock advance refused"};
+    auto candidate = *this;
+    candidate.document_.flight = *pose;
+    candidate.document_.origin.state.tick = pose->tick;
+    if (auto valid =
+            validate_freedom_docking_document({candidate.document_, *docking_});
+        !valid)
+      return std::unexpected{"Constrained candidate refused: " +
+                             valid.error().detail};
+    auto observed = candidate.observe();
+    if (!observed) return std::unexpected{observed.error()};
+    NativeFlightStep result{};
+    result.actuation.initial = *air;
+    result.actuation.after = observed->atmosphere;
+    result.actuation.observation_after = observed->orbit;
+    document_ = std::move(candidate.document_);
+    return result;
+  }
   const auto correction = evaluate_orbit_hold_correction(
       context, document_.flight, intent, rotation_,
       {1, air->space_boundary_altitude_metres}, document_.model.hold,
@@ -111,7 +229,10 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
       bytes.find('\0') != std::string::npos || !path.is_absolute())
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
-  const auto written = write_freedom_flight_file_atomically(path, document_);
+  const auto written =
+      docking_
+          ? write_freedom_docking_file_atomically(path, {document_, *docking_})
+          : write_freedom_flight_file_atomically(path, document_);
   if (!written)
     return std::unexpected{save_file_error_message(written.error())};
   return {};

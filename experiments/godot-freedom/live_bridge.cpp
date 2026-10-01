@@ -183,7 +183,8 @@ class FreedomBridge : public godot::RefCounted {
   std::set<StreamKey> exported;
 
   auto commit_freedom_start(NativeStartup selected) -> bool {
-    if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document)) {
+    if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomDockingSaveDocument>(selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
       (void)project_saved_flight(*opened);
@@ -224,6 +225,13 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_freedom_start);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
                                 &FreedomBridge::get_freedom_flight_state);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("select_freedom_port", "ordinal"),
+        &FreedomBridge::select_freedom_port);
+    godot::ClassDB::bind_method(godot::D_METHOD("capture_freedom_port"),
+                                &FreedomBridge::capture_freedom_port);
+    godot::ClassDB::bind_method(godot::D_METHOD("release_freedom_port"),
+                                &FreedomBridge::release_freedom_port);
     godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_flight",
                                                 "elapsed", "fractions",
                                                 "paused"),
@@ -425,6 +433,48 @@ class FreedomBridge : public godot::RefCounted {
     return true;
   }
 
+  template <class Command>
+  auto change_freedom_port(Command command, bool reset_actuation = false)
+      -> bool {
+    try {
+      if (!saved_flight)
+        throw std::runtime_error("Continue physical flight first");
+      auto candidate = saved_flight->session;
+      auto changed = command(candidate);
+      if (!changed) throw std::runtime_error(changed.error());
+      (void)project_saved_flight(candidate);
+      saved_flight->session = std::move(candidate);
+      if (reset_actuation) saved_flight->last_step.reset();
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto select_freedom_port(std::int64_t ordinal) -> bool {
+    return change_freedom_port([ordinal](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      if (ordinal < 1 || ordinal > 2) return std::unexpected{"Select D1 or D2"};
+      return session.select_port(static_cast<std::uint32_t>(ordinal));
+    });
+  }
+  auto capture_freedom_port() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.capture_port();
+        },
+        true);
+  }
+  auto release_freedom_port() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.release_port();
+        },
+        true);
+  }
+
   auto get_freedom_flight_state() -> godot::Dictionary {
     godot::Dictionary result;
     if (!saved_flight) return result;
@@ -501,6 +551,36 @@ class FreedomBridge : public godot::RefCounted {
       result["assistance"] = document.model.assistance;
       result["hold_enabled"] = document.model.hold.target.has_value();
       result["dropped_seconds"] = saved_flight->dropped_seconds;
+      result["attached"] = session.docking() && session.docking()->attached;
+      result["target_port"] =
+          session.docking()
+              ? static_cast<std::int64_t>(session.docking()->target.ordinal)
+              : std::int64_t{0};
+      godot::Dictionary docking;
+      if (session.docking()) {
+        const auto assessed = require(session.assess_port());
+        docking["ready"] =
+            assessed.decision == OriginDockDecision::capture_ready;
+        docking["reason"] =
+            godot::String{origin_dock_decision_text(assessed.decision).data()};
+        docking["separation"] = assessed.separation_metres;
+        docking["alignment_radians"] = assessed.alignment_radians;
+        docking["inward_speed"] = assessed.inward_speed_metres_per_second;
+        docking["lateral_speed"] = assessed.lateral_speed_metres_per_second;
+        docking["angular_speed"] = assessed.angular_speed_radians_per_second;
+        docking["hull_inside"] = assessed.hull_inside_reservation;
+        const auto geometry = require(origin_station_geometry(view.station));
+        const auto& collar =
+            geometry.ports[session.docking()->target.ordinal - 1]
+                .collar_position_metres;
+        const auto offset =
+            rotate_saved(inverse_saved(body.orientation),
+                         {collar.x - assessed.collar_station_metres.x,
+                          collar.y - assessed.collar_station_metres.y,
+                          collar.z - assessed.collar_station_metres.z});
+        docking["offset_body_metres"] = coordinates(offset);
+      }
+      result["docking"] = docking;
       const auto force =
           saved_flight->last_step
               ? saved_flight->last_step->actuation.central.propulsion
@@ -542,8 +622,13 @@ class FreedomBridge : public godot::RefCounted {
 
   auto get_freedom_station_geometry() const -> godot::Dictionary {
     godot::Dictionary result;
-    if (!native_start) return result;
-    const auto geometry = origin_station_geometry(native_start->station);
+    if (!native_start && !saved_flight) return result;
+    const auto station =
+        native_start
+            ? native_start->station
+            : generate_origin_station(
+                  saved_flight->session.document().origin.recipe.universe_seed);
+    const auto geometry = origin_station_geometry(station);
     if (!geometry) return result;
     const auto vector = [](RigidVector3 value) {
       godot::PackedFloat64Array array;

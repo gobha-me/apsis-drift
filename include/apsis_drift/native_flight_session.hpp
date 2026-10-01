@@ -51,6 +51,16 @@ class NativeFreedomFlightSession {
       -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto save_as(const std::filesystem::path&) const
       -> std::expected<void, std::string>;
+  [[nodiscard]] auto docking() const
+      -> const std::optional<FreedomDockingState>& {
+    return docking_;
+  }
+  [[nodiscard]] auto select_port(std::uint32_t ordinal)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto assess_port() const
+      -> std::expected<OriginDockAssessment, std::string>;
+  [[nodiscard]] auto capture_port() -> std::expected<void, std::string>;
+  [[nodiscard]] auto release_port() -> std::expected<void, std::string>;
 
  private:
   NativeFreedomFlightSession(FreedomFlightSaveDocument document,
@@ -60,5 +70,6 @@ class NativeFreedomFlightSession {
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;
+  std::optional<FreedomDockingState> docking_;
 };
 } // namespace apsis_drift

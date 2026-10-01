@@ -55,7 +55,7 @@ static func valid_geometry(value: Variant, station_id: String) -> bool:
 	return true
 
 
-func initialize(start: Dictionary, contract: Dictionary, assets: String) -> bool:
+func initialize(start: Dictionary, contract: Dictionary, assets: String, inspection_camera: bool = true) -> bool:
 	if not valid_geometry(contract, str(start.get("station_id", ""))):
 		error = "C++ station geometry is unavailable or invalid"
 		return false
@@ -104,6 +104,8 @@ func initialize(start: Dictionary, contract: Dictionary, assets: String) -> bool
 		label.font_size = 32
 		label.pixel_size = 0.015
 		marker.add_child(label)
+	if not inspection_camera:
+		return true
 	camera = Camera3D.new()
 	camera.name = "StationInspectionCamera"
 	camera.near = 0.05

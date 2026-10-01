@@ -3,6 +3,7 @@ extends Control
 const PlanetStreamView = preload("res://planet_stream.gd")
 const MainExhaust = preload("res://native_main_exhaust.gd")
 const HopperPresentation = preload("res://hopper_presentation.gd")
+const StationPresentation = preload("res://native_station_view.gd")
 const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8"
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
 var bridge: Variant
@@ -23,6 +24,14 @@ var paused := true
 var cockpit := false
 var pilot_eye := Vector3.ZERO
 var state: Dictionary = {}
+var station: Node3D
+var scene: Node3D
+var assets_root := ""
+var station_geometry: Dictionary = {}
+var dock_status: Label
+var port_buttons: Array[Button] = []
+var capture_button: Button
+var release_button: Button
 var error := ""
 
 
@@ -39,6 +48,8 @@ static func valid_state(value: Dictionary) -> bool:
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
+		return false
+	if not value.get("attached") is bool or not value.get("target_port") is int or value.target_port < 0 or value.target_port > 2 or not value.get("docking") is Dictionary:
 		return false
 	for key in ["position_metres", "velocity_metres_per_second", "angular_velocity_body", "positive_force_body", "negative_force_body", "positive_force_ratings", "negative_force_ratings"]:
 		var vector: Variant = value.get(key)
@@ -62,6 +73,11 @@ func initialize(owner: Variant, assets: String) -> bool:
 	if not assets.is_absolute_path():
 		error = "Prepare the native starter assets before viewing flight"
 		return false
+	assets_root = assets
+	station_geometry = bridge.get_freedom_station_geometry()
+	if not StationPresentation.valid_geometry(station_geometry, state.station_id) or FileAccess.get_sha256(assets.path_join("station-reference.glb")) != StationPresentation.STATION_HASH:
+		error = "The selected Origin Station geometry/export is missing or changed"
+		return false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var container := SubViewportContainer.new()
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -72,7 +88,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 	viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	container.add_child(viewport)
-	var scene := Node3D.new()
+	scene = Node3D.new()
 	viewport.add_child(scene)
 	ship = Node3D.new()
 	scene.add_child(ship)
@@ -180,6 +196,28 @@ func build_ui() -> void:
 			error = str(bridge.get_last_error())
 	)
 	column.add_child(assist_button)
+	if state.frame_id == "2":
+		var ports := HBoxContainer.new()
+		column.add_child(ports)
+		for ordinal in [1, 2]:
+			var button := Button.new()
+			button.text = "Target D%d" % ordinal
+			button.focus_mode = Control.FOCUS_NONE
+			button.pressed.connect(func(): port_command("select_freedom_port", ordinal))
+			ports.add_child(button)
+			port_buttons.append(button)
+		dock_status = Label.new()
+		column.add_child(dock_status)
+		capture_button = Button.new()
+		capture_button.text = "Capture port"
+		capture_button.focus_mode = Control.FOCUS_NONE
+		capture_button.pressed.connect(func(): port_command("capture_freedom_port"))
+		column.add_child(capture_button)
+		release_button = Button.new()
+		release_button.text = "Release port"
+		release_button.focus_mode = Control.FOCUS_NONE
+		release_button.pressed.connect(func(): port_command("release_freedom_port"))
+		column.add_child(release_button)
 	var save_button := Button.new()
 	save_button.text = "Save As…"
 	save_button.focus_mode = Control.FOCUS_NONE
@@ -206,6 +244,21 @@ func build_ui() -> void:
 	column.add_child(quit_button)
 
 
+func port_command(command: String, ordinal: int = 0) -> void:
+	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
+	if not accepted:
+		save_status.text = str(bridge.get_last_error())
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+	if state.attached:
+		save_status.text = "Attached to D%d. Release before firing propulsion." % state.target_port
+	elif command == "release_freedom_port":
+		save_status.text = "Released D%d. Use thrusters to depart." % state.target_port
+	else:
+		save_status.text = "Port selected. Capture requires physical alignment and low closure."
+
+
 func toggle_pause() -> void:
 	paused = not paused
 	pause_button.text = "Resume flight" if paused else "Pause flight"
@@ -224,7 +277,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if bridge == null or camera == null or terrain == null or not error.is_empty():
 		return
-	if not bridge.advance_freedom_flight(delta, controls(), paused or save_dialog.visible):
+	var demand := controls()
+	if state.get("attached", false):
+		demand.fill(0.0)
+	if not bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible):
 		error = str(bridge.get_last_error())
 		paused = true
 		save_status.text = "Flight paused: " + error
@@ -244,12 +300,26 @@ func _process(delta: float) -> void:
 
 func update_view(delta: float) -> void:
 	ship.basis = state.body_basis
+	if station == null and state.station_position.length() < 1000.0:
+		station = StationPresentation.new()
+		scene.add_child(station)
+		if not station.initialize({"station_id": state.station_id}, station_geometry, assets_root, false):
+			error = station.error
+			paused = true
+			return
+		set_ship_layer(station)
+	if station != null:
+		station.transform = Transform3D(state.station_basis, state.station_position)
+		station.visible = state.station_position.length() < 1000.0
 	terrain_camera.far = minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
 	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
 	if cockpit:
 		camera.transform = Transform3D(state.body_basis, state.body_basis * pilot_eye)
 	else:
-		camera.position = state.body_basis * Vector3(17.0, 9.0, 28.0)
+		# The overhead dock occupies the usual elevated chase viewpoint. Keep
+		# the near-port camera below the craft so it has a real exterior view.
+		var height := -7.0 if not state.docking.is_empty() and state.docking.separation < 100.0 else 9.0
+		camera.position = state.body_basis * Vector3(17.0, height, 28.0)
 		camera.look_at(Vector3.ZERO, state.body_basis.y)
 	terrain_camera.transform = camera.transform
 	if state.star_direction.length_squared() > 0.5:
@@ -260,3 +330,15 @@ func update_view(delta: float) -> void:
 	var target: Vector3 = state.station_position
 	var suffix := " · off screen" if camera.is_position_behind(target) or not Rect2(Vector2.ZERO, camera.get_viewport().size).has_point(camera.unproject_position(target)) else ""
 	home_cue.text = "Origin Station %s · %.1f km%s" % [state.station_id, target.length() / 1000.0, suffix]
+	if dock_status != null:
+		var assessment: Dictionary = state.docking
+		dock_status.text = "Select a port for approach"
+		if state.attached:
+			dock_status.text = "Attached to D%d · station co-motion" % state.target_port
+		elif not assessment.is_empty():
+			var offset: PackedFloat64Array = assessment.offset_body_metres
+			dock_status.text = "D%d · %s\nCollar %.3f m · attitude %.2f°\nInward %.3f m/s · lateral %.3f m/s\nPort offset: right %.2f · up %.2f · back %.2f m" % [state.target_port, assessment.reason, assessment.separation, rad_to_deg(assessment.alignment_radians), assessment.inward_speed, assessment.lateral_speed, offset[0], offset[1], offset[2]]
+		capture_button.disabled = state.attached or assessment.is_empty() or not assessment.get("ready", false)
+		release_button.disabled = not state.attached
+		for button in port_buttons:
+			button.disabled = state.attached
