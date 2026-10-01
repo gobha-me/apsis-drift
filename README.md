@@ -94,6 +94,10 @@ Watch the [40-second Godot technical preview](docs/FREEDOM_PREVIEW_01.md):
 original cockpit, shuttle and station assets, streamed terrain, and the existing
 First Light score. It is a scripted offline rendering preview, not gameplay.
 
+[Beyond the paperwork](docs/GODOT_DEMO_REEL.md) documents the longer local
+owner-review narrative reel, with Godot capture tools, editorial dialogue,
+chapter labels and source receipts.
+
 Audio policy is also application-owned. The current
 [audio contract](docs/AUDIO.md) provides deterministic tick-addressed cues,
 bounded non-blocking delivery, optional RtAudio device output, and a no-device
