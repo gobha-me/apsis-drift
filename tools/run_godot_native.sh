@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Explicit docked Freedom start. Snapshot studies use run_godot_study.sh.
+# Explicit Freedom station/flight selection. Studies use run_godot_study.sh.
 set -euo pipefail
 
 usage() {

@@ -134,6 +134,11 @@ superseding the earlier exclusion of station walking. It is the minimum handoff,
 not a complete 1.0/MVP/beta requirement or an instruction to stop there. See the
 [dated #245 amendment](https://github.com/gobha-me/apsis-drift/issues/245).
 
+The [saved native flight consumer](SAVED_NATIVE_FLIGHT.md) connects format-18
+Continue, C++ fixed-step controls, terrain projection and applied main exhaust.
+New Game remains station inspection while walking/boarding/seat/release and
+contact are integrated. This increment does not satisfy the composed handoff.
+
 Missions, economy, carriers, shipbuilder UI, populated stations and full
 large-ship interiors remain outside this first path. Existing mission/career
 evidence stays preserved; Freedom gets an explicit new-game baseline rather
