@@ -1,0 +1,16 @@
+#pragma once
+#include <array>
+#include <string_view>
+namespace apsis_drift::detail {
+inline constexpr std::array<std::string_view, @APSIS_CABIN_CONTACT_CHUNK_COUNT@> kCabinContactChunks{
+@APSIS_CABIN_CONTACT_CHUNKS@};
+inline auto approved_cabin_contact_bytes(std::string_view input) -> bool {
+  if (input.size() != @APSIS_CABIN_CONTACT_BYTES@) return false;
+  std::size_t offset{};
+  for (const auto chunk : kCabinContactChunks) {
+    if (input.substr(offset, chunk.size()) != chunk) return false;
+    offset += chunk.size();
+  }
+  return true;
+}
+} // namespace apsis_drift::detail
