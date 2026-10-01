@@ -41,8 +41,11 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto observe() const
       -> std::expected<NativeFlightObservation, std::string>;
-  auto set_assistance(bool enabled) -> void {
+  auto set_assistance(bool enabled) -> std::expected<void, std::string> {
+    if (actor_)
+      return std::unexpected{"Board and sit before controlling the craft"};
     document_.model.assistance = enabled;
+    return {};
   }
   [[nodiscard]] auto set_hold(OrbitHoldRequest)
       -> std::expected<void, std::string>;
@@ -60,6 +63,12 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto assess_port() const
       -> std::expected<OriginDockAssessment, std::string>;
   [[nodiscard]] auto capture_port() -> std::expected<void, std::string>;
+  [[nodiscard]] auto walker() const -> const std::optional<OriginWalkerState>& {
+    return actor_;
+  }
+  [[nodiscard]] auto advance_walk(const OriginWalkControls&,
+                                  SimulationSeconds = kSimulationStep)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto release_port() -> std::expected<void, std::string>;
 
  private:
@@ -71,5 +80,6 @@ class NativeFreedomFlightSession {
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;
   std::optional<FreedomDockingState> docking_;
+  std::optional<OriginWalkerState> actor_;
 };
 } // namespace apsis_drift

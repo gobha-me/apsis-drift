@@ -3,6 +3,7 @@ extends Control
 
 const StationView = preload("res://native_station_view.gd")
 const HostSky = preload("res://native_host_sky.gdshader")
+const WalkView = preload("res://native_walk_view.gd")
 const FlightView = preload("res://native_flight_view.gd")
 
 var bridge: Variant = null
@@ -144,6 +145,23 @@ func _ready() -> void:
 	var accepted: bool = bridge.initialize_freedom_new_game(options.value) if options.mode == "new_game" else bridge.initialize_freedom_continue(options.value)
 	if not accepted:
 		fail(str(bridge.get_last_error()))
+		return
+	var walking: Dictionary = bridge.get_freedom_walk_state()
+	if not walking.is_empty():
+		if not WalkView.valid_state(walking):
+			fail("C++ bridge returned an invalid station actor view")
+			return
+		if options.get("validate_only", false):
+			print("Freedom native walking shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s actor=%s" % [walking.universe_seed, walking.tick, walking.system_id, walking.planet_id, walking.station_id, walking.craft_id, walking.actor_id])
+			get_tree().quit(0)
+			return
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var walking_view := WalkView.new()
+		add_child(walking_view)
+		if not walking_view.initialize(bridge, options.get("assets", "")):
+			fail(walking_view.error)
+			return
+		print("Freedom native walking shell opened: seed=%s tick=%s actor=%s" % [walking.universe_seed, walking.tick, walking.actor_id])
 		return
 	var flight: Dictionary = bridge.get_freedom_flight_state()
 	if not flight.is_empty():

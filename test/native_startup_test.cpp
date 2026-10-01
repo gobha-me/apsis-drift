@@ -40,9 +40,11 @@ auto main() -> int {
     check(created.has_value(), "explicit New Game was rejected");
     check(created->mode == NativeStartup::Mode::freedom,
           "New Game did not select Freedom mode");
-    check(std::holds_alternative<FreedomSaveDocument>(created->document),
+    check(std::holds_alternative<FreedomJourneySaveDocument>(created->document),
           "New Game selected a career document");
-    const auto freedom = std::get<FreedomSaveDocument>(created->document);
+    const auto journey =
+        std::get<FreedomJourneySaveDocument>(created->document);
+    const auto freedom = journey.voyage.flight.origin;
     check(freedom == make_freedom_new_game_document(seed),
           "New Game changed authoritative saved state");
     check(freedom.state.craft !=
@@ -74,7 +76,7 @@ auto main() -> int {
     const auto original = contents(save);
     auto continued = native_continue(save);
     check(continued.has_value(), "valid Continue was rejected");
-    check(continued->document == created->document,
+    check(std::get<FreedomSaveDocument>(continued->document) == freedom,
           "Continue changed authoritative saved state");
     check(continued->source_save == save, "Continue lost selected path");
     check(contents(save) == original, "Continue modified its source save");

@@ -91,7 +91,7 @@ auto main(int argc, char** argv) -> int {
       controls.negative_translation.z = .25;
       controls.positive_rotation.y = .05;
       for (int n = 0; n < 120; ++n) {
-        if (n == 60) session->set_assistance(false);
+        if (n == 60 && !session->set_assistance(false)) return 1;
         if (!session->advance(controls)) return 1;
       }
       document = session->document();
@@ -136,6 +136,29 @@ auto main(int argc, char** argv) -> int {
         if (!session->advance(controls)) return 1;
     }
     if (!session->save_as(path)) return 1;
+  } else if ((mode == "journey" || mode == "journey-trace") && *tick == 0) {
+    auto selected = native_new_game(Seed{*seed});
+    if (!selected) {
+      std::cerr << selected.error() << '\n';
+      return 1;
+    }
+    auto session = NativeFreedomFlightSession::open(std::move(*selected));
+    if (!session) {
+      std::cerr << session.error() << '\n';
+      return 1;
+    }
+    if (mode == "journey-trace") {
+      for (int n = 0; n < 1920; ++n)
+        if (auto walked = session->advance_walk({0, n < 960 ? -1.0 : 1.0, 0});
+            !walked) {
+          std::cerr << walked.error() << '\n';
+          return 1;
+        }
+    }
+    if (auto saved = session->save_as(path); !saved) {
+      std::cerr << saved.error() << '\n';
+      return 1;
+    }
   } else if (mode == "career" && *tick == 0) {
     const auto written =
         write_save_file_atomically(path, make_new_game_document(Seed{*seed}));

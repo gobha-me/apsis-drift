@@ -14,6 +14,17 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<OriginWalkerState> actor;
+  if (selected.mode == NativeStartup::Mode::freedom &&
+      std::holds_alternative<FreedomJourneySaveDocument>(selected.document)) {
+    auto& journey = std::get<FreedomJourneySaveDocument>(selected.document);
+    if (auto valid = validate_freedom_journey_document(journey); !valid)
+      return std::unexpected{"Journey session rejected: " + valid.error().path +
+                             ": " + valid.error().detail};
+    actor = journey.actor;
+    auto voyage = std::move(journey.voyage);
+    selected.document = std::move(voyage);
+  }
   std::optional<FreedomDockingState> docking;
   if (selected.mode == NativeStartup::Mode::freedom &&
       std::holds_alternative<FreedomDockingSaveDocument>(selected.document)) {
@@ -42,11 +53,14 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   NativeFreedomFlightSession result{std::move(document), std::move(*hydrated),
                                     std::move(selected.source_save)};
   result.docking_ = docking;
+  result.actor_ = actor;
   return result;
 }
 
 auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
     -> std::expected<void, std::string> {
+  if (actor_)
+    return std::unexpected{"Board and sit before controlling the craft"};
   if (docking_ && docking_->attached)
     return std::unexpected{"Release the current port before changing target"};
   const FreedomDockingState candidate{
@@ -73,6 +87,8 @@ auto NativeFreedomFlightSession::assess_port() const
 
 auto NativeFreedomFlightSession::capture_port()
     -> std::expected<void, std::string> {
+  if (actor_)
+    return std::unexpected{"Board and sit before controlling the craft"};
   if (!docking_ || docking_->attached)
     return std::unexpected{"Select a free Origin port before capture"};
   const auto assessed = assess_port();
@@ -106,6 +122,8 @@ auto NativeFreedomFlightSession::capture_port()
 
 auto NativeFreedomFlightSession::release_port()
     -> std::expected<void, std::string> {
+  if (actor_)
+    return std::unexpected{"Board and sit before controlling the craft"};
   if (!docking_ || !docking_->attached)
     return std::unexpected{"The craft is not attached to an Origin port"};
   if (auto valid = validate_freedom_docking_document({document_, *docking_});
@@ -135,6 +153,8 @@ auto NativeFreedomFlightSession::observe() const
 
 auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     -> std::expected<void, std::string> {
+  if (actor_)
+    return std::unexpected{"Board and sit before controlling the craft"};
   const auto observed = observe();
   if (!observed) return std::unexpected{observed.error()};
   if (!validate_orbit_hold_request(
@@ -150,6 +170,9 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
 auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
                                          SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (actor_)
+    return std::unexpected{
+        "Walking owns the shared tick while outside the craft"};
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{"Flight step requires one fixed 120 Hz tick"};
   if (document_.flight.tick >= std::numeric_limits<SimulationTick>::max() - 2)
@@ -222,6 +245,27 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   return result;
 }
 
+auto NativeFreedomFlightSession::advance_walk(
+    const OriginWalkControls& controls, SimulationSeconds step)
+    -> std::expected<NativeFlightStep, std::string> {
+  if (!actor_ || !docking_)
+    return std::unexpected{"Walking requires a supported station actor"};
+  auto actor = advance_origin_walker(*actor_, controls, step);
+  if (!actor) return std::unexpected{actor.error()};
+  auto candidate = *this;
+  candidate.actor_.reset();
+  auto flight = candidate.advance({}, step);
+  if (!flight) return std::unexpected{flight.error()};
+  candidate.actor_ = *actor;
+  if (auto valid = validate_freedom_journey_document(
+          {{candidate.document_, *candidate.docking_}, *actor});
+      !valid)
+    return std::unexpected{"Walking candidate refused: " +
+                           valid.error().detail};
+  *this = std::move(candidate);
+  return *flight;
+}
+
 auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     const -> std::expected<void, std::string> {
   const auto& bytes = path.native();
@@ -230,7 +274,9 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      docking_
+      actor_ ? write_freedom_journey_file_atomically(
+                   path, {{document_, *docking_}, *actor_})
+      : docking_
           ? write_freedom_docking_file_atomically(path, {document_, *docking_})
           : write_freedom_flight_file_atomically(path, document_);
   if (!written)

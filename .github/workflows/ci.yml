@@ -184,7 +184,7 @@ jobs:
           --test freedom_start --test native_shell --test native_save
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight
-          --test native_port
+          --test native_port --test native_walk
           --test recorded_audio_shutdown
 
       - name: Retain native runtime logs and report

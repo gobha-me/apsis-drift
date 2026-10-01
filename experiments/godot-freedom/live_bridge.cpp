@@ -11,6 +11,7 @@
 #include <charconv>
 #include <filesystem>
 #include <memory>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 
@@ -184,7 +185,8 @@ class FreedomBridge : public godot::RefCounted {
 
   auto commit_freedom_start(NativeStartup selected) -> bool {
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
-        std::holds_alternative<FreedomDockingSaveDocument>(selected.document)) {
+        std::holds_alternative<FreedomDockingSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomJourneySaveDocument>(selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
       (void)project_saved_flight(*opened);
@@ -223,6 +225,11 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::initialize_freedom_continue);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
                                 &FreedomBridge::get_freedom_start);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_walk_state"),
+                                &FreedomBridge::get_freedom_walk_state);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("advance_freedom_walk", "elapsed", "controls"),
+        &FreedomBridge::advance_freedom_walk);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
                                 &FreedomBridge::get_freedom_flight_state);
     godot::ClassDB::bind_method(
@@ -428,7 +435,11 @@ class FreedomBridge : public godot::RefCounted {
       last_error = "Continue a physical flight save first";
       return false;
     }
-    saved_flight->session.set_assistance(enabled);
+    const auto accepted = saved_flight->session.set_assistance(enabled);
+    if (!accepted) {
+      last_error = godot::String{accepted.error().c_str()};
+      return false;
+    }
     last_error = godot::String{};
     return true;
   }
@@ -473,6 +484,120 @@ class FreedomBridge : public godot::RefCounted {
           return session.release_port();
         },
         true);
+  }
+
+  auto advance_freedom_walk(double elapsed,
+                            const godot::PackedFloat64Array& controls) -> bool {
+    try {
+      if (!saved_flight || !saved_flight->session.walker())
+        throw std::invalid_argument("Select a station walking journey first");
+      if (!std::isfinite(elapsed) || elapsed < 0 || elapsed > 60 ||
+          controls.size() != 3)
+        throw std::invalid_argument("Invalid walking time/control buffer");
+      for (std::int64_t i = 0; i < controls.size(); ++i)
+        if (!std::isfinite(controls[i]))
+          throw std::invalid_argument("Walking controls must be finite");
+      if (std::abs(controls[0]) > 1 || std::abs(controls[1]) > 1 ||
+          std::abs(controls[2]) > std::numbers::pi)
+        throw std::invalid_argument("Walking axes/heading exceed bounds");
+      auto candidate = saved_flight->session;
+      auto clock = saved_flight->clock;
+      auto actuation = saved_flight->last_step;
+      const auto scheduled = require(clock.advance(SimulationSeconds{elapsed}));
+      const OriginWalkControls demand{controls[0], controls[1], controls[2]};
+      for (int i = 0; i < scheduled.steps; ++i)
+        actuation = require(candidate.advance_walk(demand));
+      (void)project_saved_flight(candidate);
+      saved_flight->session = std::move(candidate);
+      saved_flight->clock = clock;
+      saved_flight->last_step = std::move(actuation);
+      saved_flight->dropped_seconds += scheduled.dropped.count();
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  auto get_freedom_walk_state() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight || !saved_flight->session.walker()) return result;
+    try {
+      const auto& session = saved_flight->session;
+      const auto& actor = *session.walker();
+      const auto& document = session.document();
+      const auto view = project_saved_flight(session);
+      const auto ephemeris = require(resolve_origin_station_ephemeris(
+          session.system(), view.station, {document.flight.tick}));
+      const auto coordinates = [](const auto& value) {
+        godot::PackedFloat64Array array;
+        for (double v : {value.x, value.y, value.z})
+          array.append(v);
+        return array;
+      };
+      const auto decimal = [](std::uint64_t value) {
+        return godot::String{std::to_string(value).c_str()};
+      };
+      const auto local_vector = [](LocalPositionMetres value) {
+        return godot::Vector3(value.east, value.up, -value.north);
+      };
+      godot::Basis basis;
+      for (int i = 0; i < 3; ++i)
+        basis.set_column(
+            i, local_vector(view.system_axes[static_cast<std::size_t>(i)]));
+      const auto foot = actor.foot_position_metres;
+      // Eye height is presentation framing inside the qualified standing body.
+      // The station-relative support point remains entirely application-owned.
+      const RigidVector3 eye{foot.x, foot.y + kOriginWalkerEyeHeightMetres,
+                             foot.z};
+      const auto project = [&](RigidVector3 value) {
+        // Complete subtraction/projection in binary64 before the renderer cast.
+        const auto& axes = view.system_axes;
+        return LocalPositionMetres{
+            axes[0].east * value.x + axes[1].east * value.y +
+                axes[2].east * value.z,
+            axes[0].north * value.x + axes[1].north * value.y +
+                axes[2].north * value.z,
+            axes[0].up * value.x + axes[1].up * value.y + axes[2].up * value.z};
+      };
+      result["mode"] = "freedom_walk";
+      result["universe_seed"] =
+          decimal(document.origin.recipe.universe_seed.value);
+      result["system_id"] = decimal(session.system().catalog.id.value);
+      result["planet_id"] = decimal(document.flight.frame.planet->value);
+      result["station_id"] = decimal(view.station.id.value);
+      result["craft_id"] = decimal(document.origin.state.craft.value);
+      result["actor_id"] = decimal(actor.actor_id);
+      result["tick"] = decimal(document.flight.tick);
+      result["geometry_version"] =
+          static_cast<std::int64_t>(actor.geometry_version);
+      result["continued"] = session.source_save().has_value();
+      result["foot_position_metres"] = coordinates(foot);
+      result["eye_position_metres"] = coordinates(eye);
+      result["velocity_metres_per_second"] =
+          coordinates(actor.velocity_metres_per_second);
+      result["heading_radians"] = actor.heading_radians;
+      result["station_basis"] = basis;
+      result["station_position"] = local_vector(view.station_position);
+      const auto eye_offset = project(eye);
+      result["actor_eye_position"] =
+          godot::Vector3(view.station_position.east + eye_offset.east,
+                         view.station_position.up + eye_offset.up,
+                         -(view.station_position.north + eye_offset.north));
+      result["actor_position_metres"] = coordinates(
+          RigidVector3{ephemeris.host_relative_position.x + foot.x,
+                       ephemeris.host_relative_position.y + foot.y,
+                       ephemeris.host_relative_position.z + foot.z});
+      result["actor_global_position_metres"] = coordinates(RigidVector3{
+          ephemeris.position.x + foot.x, ephemeris.position.y + foot.y,
+          ephemeris.position.z + foot.z});
+      result["dropped_seconds"] = saved_flight->dropped_seconds;
+    } catch (const std::exception&) {
+      // Read-only presentation queries do not overwrite a command refusal.
+      result.clear();
+    }
+    return result;
   }
 
   auto get_freedom_flight_state() -> godot::Dictionary {

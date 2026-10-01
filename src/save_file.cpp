@@ -374,6 +374,12 @@ auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError> {
   auto contents = read_save_bytes(path);
   if (!contents) return std::unexpected{contents.error()};
+  auto journey = decode_freedom_journey_document_json(*contents);
+  if (journey) return NativeSaveDocument{std::move(*journey)};
+  if (journey.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "save file is malformed or incompatible", journey.error()}};
   auto docking = decode_freedom_docking_document_json(*contents);
   if (docking) return NativeSaveDocument{std::move(*docking)};
   if (docking.error().code != SaveSchemaErrorCode::unsupported_format_version)
@@ -461,6 +467,23 @@ auto write_freedom_docking_file_atomically(
     return std::unexpected{
         SaveFileError{SaveFileErrorCode::invalid_document, path,
                       "docking state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
+}
+
+auto write_freedom_journey_file_atomically(
+    const std::filesystem::path& path,
+    const FreedomJourneySaveDocument& document)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{
+        file_failure(SaveFileErrorCode::invalid_path, path,
+                     "save path must name an existing directory")};
+  const auto encoded = encode_freedom_journey_document_json(document);
+  if (!encoded)
+    return std::unexpected{
+        SaveFileError{SaveFileErrorCode::invalid_document, path,
+                      "journey state cannot be encoded", encoded.error()}};
   return write_atomically(path, *encoded,
                           detail::AtomicSaveTestInterruption::none);
 }
