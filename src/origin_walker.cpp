@@ -64,7 +64,7 @@ auto bin(double coordinate, std::size_t axis) -> std::size_t {
       std::clamp(value, 0.0, static_cast<double>(count - 1)));
 }
 auto read_mesh(std::string_view text) -> std::expected<Mesh, std::string> {
-  if (text.empty() || text.size() > 16U * 1024U * 1024U)
+  if (text.empty() || text.size() > std::size_t{16U} * 1024U * 1024U)
     return std::unexpected("Origin contact document byte limit");
   // Reject excessive recursion before the JSON parser allocates nested values.
   // Quoted braces and escaped quotes are data, not nesting delimiters.

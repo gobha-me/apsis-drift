@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <stdexcept>
 
 namespace {
@@ -71,6 +72,58 @@ auto invalid() -> void {
     rejected(bad);
   }
   const auto root = Json::parse(text);
+  auto quoted = root;
+  quoted["application_version"] =
+      std::string{"\"\\{[}]"} + std::string(50, '{');
+  check(
+      require(decode_freedom_journey_document_json(quoted.dump())) == good,
+      "quoted delimiters and escaped quotes/backslashes are not JSON nesting");
+  auto deeply_nested = text;
+  const std::string flight_prefix{"\"flight\": {"};
+  const auto flight_key = deeply_nested.find(flight_prefix);
+  check(flight_key != std::string::npos, "flight fixture field present");
+  deeply_nested.insert(flight_key + flight_prefix.size(),
+                       "\"unknown\":" + std::string(100000, '[') + "0" +
+                           std::string(100000, ']') + ",");
+  check(!decode_freedom_journey_document_json(deeply_nested),
+        "deep unknown array refuses before JSON tree allocation or recursive "
+        "dump");
+  const auto nested_path =
+      std::filesystem::temp_directory_path() /
+      ("apsis-journey-deep-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()) +
+       ".json");
+  {
+    std::ofstream output{nested_path};
+    output << deeply_nested;
+  }
+  check(!load_native_save_file(nested_path) &&
+            contents(nested_path) == deeply_nested,
+        "native load rejects deep unknown array without fallback or source "
+        "mutation");
+  std::filesystem::remove(nested_path);
+  for (const auto malformed : {"{]", "[{]}", "[[0]", "\"unterminated\\"})
+    check(!decode_freedom_journey_document_json(malformed),
+          "unbalanced nesting or unterminated escaped string refuses");
+  const auto at_limit = decode_freedom_journey_document_json(
+      std::string(64, '[') + "0" + std::string(64, ']'));
+  const auto over_limit = decode_freedom_journey_document_json(
+      std::string(65, '[') + "0" + std::string(65, ']'));
+  check(!at_limit &&
+            at_limit.error().code == SaveSchemaErrorCode::invalid_state &&
+            !over_limit &&
+            over_limit.error().code == SaveSchemaErrorCode::malformed_json,
+        "64-level boundary reaches schema validation and level65 refuses "
+        "lexical preflight");
+  auto duplicated_actor = text;
+  const auto actor_key = duplicated_actor.find("\"actor_id\":");
+  check(actor_key != std::string::npos, "actor identity fixture field present");
+  duplicated_actor.insert(actor_key, "\"actor_id\": \"1\", ");
+  const auto duplicate = decode_freedom_journey_document_json(duplicated_actor);
+  check(!duplicate &&
+            duplicate.error().code == SaveSchemaErrorCode::duplicate_key,
+        "nested actor duplicate key refuses before delegated dumping");
   std::array<Json, 15> mutations;
   mutations.fill(root);
   mutations[0]["actor"]["extra"] = true;
@@ -144,11 +197,20 @@ auto roundtrip() -> void {
        {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
     auto selected = require(native_new_game(seed));
     const auto fresh = std::get<FreedomJourneySaveDocument>(selected.document);
-    check(fresh.actor == OriginWalkerState{} && fresh.voyage.docking.attached &&
+    const OriginWalkerState spawn{1, 1, {}, {}, std::numbers::pi / 2.0};
+    check(fresh.actor == spawn && fresh.voyage.docking.attached &&
               fresh.voyage.flight.flight.tick == 0 &&
               fresh.voyage.flight.origin.recipe.universe_seed == seed &&
               !selected.source_save,
           "fresh New Game supported hub with same-seed attached Wayfarer");
+    auto oriented = require(NativeFreedomFlightSession::open(selected));
+    require(oriented.advance_walk({1, 0, fresh.actor.heading_radians}));
+    check(oriented.walker()->foot_position_metres.x < 0 &&
+              std::abs(oriented.walker()->foot_position_metres.z) < 1e-12 &&
+              oriented.document().flight.tick == 1 &&
+              fresh.voyage.flight.flight.tick == 0,
+          "fresh heading faces the D1 route and forward movement owns exactly "
+          "one tick");
     const auto format17 =
         require(encode_freedom_save_document_json(fresh.voyage.flight.origin));
     const auto format18 =

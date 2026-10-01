@@ -1,8 +1,10 @@
 #include "apsis_drift/freedom_journey_save.hpp"
 
+#include <array>
 #include <charconv>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <unordered_set>
 
 namespace apsis_drift {
@@ -28,6 +30,35 @@ auto decimal(const Json& value) -> std::optional<std::uint64_t> {
       read.ec != std::errc{} || read.ptr != s.data() + s.size())
     return {};
   return result;
+}
+// Bound recursion before building a JSON tree or delegating its dump to older
+// schemas. Delimiters inside strings (including escaped quotes) are data.
+auto bounded_nesting(std::string_view text) -> bool {
+  std::array<char, 64> opened{};
+  std::size_t depth{};
+  bool quoted{}, escaped{};
+  for (const char c : text) {
+    if (quoted) {
+      if (escaped)
+        escaped = false;
+      else if (c == '\\')
+        escaped = true;
+      else if (c == '"')
+        quoted = false;
+      continue;
+    }
+    if (c == '"')
+      quoted = true;
+    else if (c == '{' || c == '[') {
+      if (depth == opened.size()) return false;
+      opened[depth++] = c;
+    } else if (c == '}' || c == ']') {
+      if (depth == 0 || opened[depth - 1] != (c == '}' ? '{' : '['))
+        return false;
+      --depth;
+    }
+  }
+  return depth == 0 && !quoted;
 }
 } // namespace
 
@@ -61,7 +92,8 @@ auto make_freedom_journey_new_game_document(Seed seed)
     return std::unexpected{
         failure("$.flight", "Origin D1 constraint unavailable")};
   FreedomJourneySaveDocument document{
-      {{std::move(origin), *body, {}}, {1, {station.id, 1}, true}}, {}};
+      {{std::move(origin), *body, {}}, {1, {station.id, 1}, true}},
+      {1, 1, {}, {}, std::numbers::pi / 2.0}};
   if (auto valid = validate_freedom_journey_document(document); !valid)
     return std::unexpected{valid.error()};
   return document;
@@ -103,6 +135,10 @@ auto decode_freedom_journey_document_json(std::string_view text)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
                         "journey save exceeds limit"}};
+  if (!bounded_nesting(text))
+    return std::unexpected{SaveSchemaError{
+        SaveSchemaErrorCode::malformed_json, "$",
+        "JSON nesting exceeds 64 levels or has unbalanced delimiters/quotes"}};
   bool duplicate{};
   std::vector<std::unordered_set<std::string>> keys;
   const Json::parser_callback_t callback = [&](int, Json::parse_event_t event,

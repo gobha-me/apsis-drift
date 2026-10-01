@@ -48,9 +48,9 @@ func run() -> void:
 				push_error(view.error)
 				quit(1)
 				return
-		# The turn advances the same actor/ship clock once; camera yaw consumes
-		# the accepted C++ heading. No separate camera walkthrough substitutes it.
-		if not view.advance_requested(1.0 / 120.0, PackedFloat64Array([0.0, 0.0, PI / 2.0])):
+		# Fresh hub captures the exact ordinary spawn, already facing D1. Later
+		# turns advance the same actor/ship clock; camera yaw consumes C++ heading.
+		if phase != "hub" and not view.advance_requested(1.0 / 120.0, PackedFloat64Array([0.0, 0.0, PI / 2.0])):
 			quit(1)
 			return
 		# Pitch is the ordinary presentation-only head look. Inspect the real open

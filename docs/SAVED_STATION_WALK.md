@@ -49,7 +49,7 @@ No unqualified Hero model or pixel study is admitted by this increment.
 
 Fresh New Game generates the selected seed's existing physical Origin world,
 history and identities. It places the actor at local `(0,0,0)` on the supported
-hub floor and resolves Wayfarer frame 2/version1 at the actual same-tick D1
+hub floor facing west toward the workshop/D1 and resolves Wayfarer frame 2/version1 at the actual same-tick D1
 constraint. It does not reuse a study snapshot, select a second home world or
 place the pilot in a cockpit by changing cameras.
 
@@ -84,7 +84,10 @@ stick looks, Escape pauses, and the chooser invokes the real Save As owner.
 
 Tests reject nonfinite data, invalid dimensions/buffers/indices, excessive
 nesting, stale geometry, unsupported spawns, malformed fields, corrupt saves,
-bad steps and terminal clocks before visual checks. Out/back traces and exact
+bad steps and terminal clocks before visual checks. Journey decoding bounds JSON
+nesting to 64 levels before parsing/delegated serialization; quoted delimiters
+and escapes remain data. A 100,000-level unknown-field regression exercises both
+direct decode and native file load without source mutation. Out/back traces and exact
 Save As/Continue bytes compose actor, craft and history at different native
 cadences. Historical station and physical-flight/docking paths remain required.
 Cross-host math-library qualification remains separately tracked by #255.
@@ -115,14 +118,18 @@ affected C++ contracts. The full native runs passed 40/41 before correcting one
 historical inspector test that still requested New Game's old format17 view;
 that affected contract then passed in both builds. No deadline was increased.
 Pinned formatter20, suppression policy and runner tests pass. Local tidy20 is
-unavailable; hosted analysis remains a required publication check.
+unavailable; hosted analysis remains a required publication check. Its initial
+integer-widening finding in the mesh byte limit is fixed without suppression.
+After the depth guard and spawn orientation change, all four affected C++ and
+five affected native contracts pass again with both compiler builds.
 
 Displayed Godot 4.7.2 compatibility-renderer review produced four 1280x720
 images per compiler: hub, workshop, downward look into the actual D1 well and
 return. All image/script/bridge receipts verify; corresponding GCC/Clang images
 are byte-identical on the same Mesa software renderer. The real C++ actor
-reaches X=-16 m at tick962, stops at X=-22.4166666666667 m at tick1603, and returns
-to the hub at tick2949. Actor and craft ticks agree throughout. The downward
+reaches X=-16 m at tick961, stops at X=-22.4166666666667 m at tick1602, and returns
+to the hub at tick2948. The hub image uses the ordinary untouched tick-zero
+spawn, already facing the workshop. Actor and craft ticks agree throughout. The downward
 look changes only presentation pitch, not the supported actor pose. Evidence
 is retained locally in `build-native/walk-review-gcc` and
 `build-native/walk-review-clang`; no target-hardware acceptance is implied.
