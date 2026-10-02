@@ -29,6 +29,10 @@ python3 tools/prepare_lower_cockpit_contact.py \
 Preparation refuses an existing destination. It neither loads a model into
 Godot nor changes player state.
 
+Package contract tests require Python 3 and NumPy for the archived checker
+replay. CI installs `python3-numpy` with its analysis dependencies. Run these
+checks with `python3 test/lower_cockpit_contact_package_test.py`.
+
 ## Coordinates and coverage
 
 The halo is already in corrected craft-rest coordinates, with Blender axes
