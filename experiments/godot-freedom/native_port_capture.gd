@@ -43,7 +43,7 @@ func run() -> void:
 	var captures := []
 	var before_release: Dictionary = {}
 	view.toggle_pause()
-	for phase in ["approach", "captured", "cockpit", "constrained", "released", "departure"]:
+	for phase in ["approach", "captured", "cockpit", "constrained", "released", "withdrawal", "departure"]:
 		view.cockpit = phase == "cockpit"
 		if phase == "captured":
 			view.port_command("capture_freedom_port")
@@ -64,12 +64,14 @@ func run() -> void:
 				push_error("Release refused or changed same-tick canonical pose")
 				quit(1)
 				return
-		elif phase == "departure":
+		elif phase == "withdrawal" or phase == "departure":
 			var commands := neutral.duplicate()
 			commands[4] = 0.25
 			# Withdraw down the reserved column before applying forward thrust.
-			for tick in 720:
-				commands[5] = 0.1 if tick >= 360 else 0.0
+			# Preserve the original 720-tick trace; capture the first 120 separately.
+			var steps := 120 if phase == "withdrawal" else 600
+			for tick in steps:
+				commands[5] = 0.1 if phase == "departure" and tick >= 240 else 0.0
 				if not owner.advance_freedom_flight(1.0 / 120.0, commands, false):
 					push_error(str(owner.get_last_error()))
 					quit(1)
@@ -90,9 +92,9 @@ func run() -> void:
 			push_error("Port lifecycle image could not be saved")
 			quit(1)
 			return
-		captures.append({"phase": phase, "file": filename, "sha256": FileAccess.get_sha256(args[2].path_join(filename)), "width": picture.get_width(), "height": picture.get_height(), "tick": view.state.tick, "checksum": view.state.checksum, "attached": view.state.attached, "target_port": view.state.target_port, "collar_separation_metres": view.state.docking.separation, "capture_ready": view.state.docking.ready, "main_intensity": view.exhaust.intensity, "camera_position": [view.camera.position.x, view.camera.position.y, view.camera.position.z], "station_position": [view.state.station_position.x, view.state.station_position.y, view.state.station_position.z]})
+		captures.append({"phase": phase, "file": filename, "sha256": FileAccess.get_sha256(args[2].path_join(filename)), "width": picture.get_width(), "height": picture.get_height(), "tick": view.state.tick, "checksum": view.state.checksum, "attached": view.state.attached, "target_port": view.state.target_port, "collar_separation_metres": view.state.docking.separation, "capture_ready": view.state.docking.ready, "main_intensity": view.exhaust.intensity, "withdrawal_intensity": view.exhaust.withdrawal_intensity, "exhaust_phase": view.exhaust.phase, "negative_force_body": Array(view.state.negative_force_body), "negative_force_ratings": Array(view.state.negative_force_ratings), "camera_position": [view.camera.position.x, view.camera.position.y, view.camera.position.z], "station_position": [view.state.station_position.x, view.state.station_position.y, view.state.station_position.z]})
 	var sources := {}
-	for name in ["native_port_capture.gd", "native_flight_view.gd", "native_station_view.gd", "hopper_presentation.gd", "native_main_exhaust.gd", "native_main_exhaust.gdshader", "planet_stream.gd", "terrain.gdshader", "bin/libapsis_freedom_bridge.so"]:
+	for name in ["native_port_capture.gd", "native_flight_view.gd", "native_station_view.gd", "hopper_presentation.gd", "native_main_exhaust.gd", "native_main_exhaust.gdshader", "native_withdrawal_aperture.gdshader", "planet_stream.gd", "terrain.gdshader", "bin/libapsis_freedom_bridge.so"]:
 		sources[name] = FileAccess.get_sha256("res://" + name)
 	var report := FileAccess.open(args[2].path_join("capture.json"), FileAccess.WRITE)
 	if report == null:

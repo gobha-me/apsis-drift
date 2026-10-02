@@ -99,6 +99,14 @@ unpaused. This increment animates the two main nozzles; retro, VTOL shutters,
 RCS allocation and their measured emitter locations remain further asset/runtime
 integration. The plume is visual, without invented thrust or collision damage.
 
+2026-10-02, #374 adds [vertical withdrawal exhaust](WITHDRAWAL_EXHAUST.md) on
+two separately authored exterior cosmetic mouths. It consumes actual gross
+negative-Y force independently of the existing main effect. Both groups validate
+the selected flight owner and complete gross buffers, stay dark while attached
+or paused, and freeze their phase on invalid state. The imported craft remains
+unchanged; reversible lift-shutter motion and other propulsion channels remain
+separate work.
+
 ## Verification
 
 The isolated native contract rejects malformed/truncated/nonfinite actuator

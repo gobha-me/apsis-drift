@@ -107,3 +107,10 @@ existing absolute `CAPTURE_DIR`, review that same selected state with:
 ```
 
 The capture script refuses a headless display and records the engine/renderer.
+
+2026-10-02, #374 adds a seventh capture for the first second of
+[vertical withdrawal](WITHDRAWAL_EXHAUST.md). The full departure still applies
+the original 720 ticks and preserves its forward-thrust timing. Its manifest now
+records separate main/withdrawal intensities, gross negative force and ratings,
+and visual phase. This increment qualifies propulsion presentation; boarding
+and the composed New Game journey remain open.

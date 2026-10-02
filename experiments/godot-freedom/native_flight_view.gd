@@ -106,6 +106,11 @@ func initialize(owner: Variant, assets: String) -> bool:
 		# a separate journey transition, not authorized by toggling this camera.
 		pilot_eye = HopperPresentation.vector(model.specification.pilot_eye)
 		exhaust = MainExhaust.new()
+		if not exhaust.bind_skin(model):
+			exhaust.free()
+			exhaust = null
+			error = "The selected Wayfarer exterior exhaust interface is unavailable"
+			return false
 		ship.add_child(exhaust)
 	else:
 		# Preserve the registered legacy frame without relabelling it Wayfarer.

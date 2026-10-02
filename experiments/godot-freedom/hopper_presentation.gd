@@ -77,7 +77,31 @@ static func load_asset(directory: String) -> Node3D:
 	if document.append_from_file(path, state) != OK:
 		return null
 	for mesh in state.get_meshes():
-		mesh.get_mesh().generate_lods(60.0, 25.0, [])
+		var imported: ImporterMesh = mesh.get_mesh()
+		var fixed_skin := false
+		if imported.get_surface_count() > 18:
+			var coating := imported.get_surface_material(18)
+			fixed_skin = coating != null and coating.resource_name == "WF08 | factory-new exterior atlas"
+		if fixed_skin:
+			if imported.get_blend_shape_count() != 0:
+				return null
+			# Bind the source chart before any generated LOD or lossy GPU packing.
+			var source_skin := imported.get_surface_arrays(18)
+			imported.generate_lods(60.0, 25.0, [])
+			var retained := ImporterMesh.new()
+			for surface in imported.get_surface_count():
+				var lods := {}
+				var arrays := source_skin if surface == 18 else imported.get_surface_arrays(surface)
+				var flags := imported.get_surface_format(surface)
+				if surface == 18:
+					flags &= ~Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES
+				else:
+					for level in imported.get_surface_lod_count(surface):
+						lods[imported.get_surface_lod_size(surface, level)] = imported.get_surface_lod_indices(surface, level)
+				retained.add_surface(imported.get_surface_primitive_type(surface), arrays, [], lods, imported.get_surface_material(surface), imported.get_surface_name(surface), flags)
+			mesh.set_mesh(retained)
+		else:
+			imported.generate_lods(60.0, 25.0, [])
 	var model := document.generate_scene(state) as Node3D
 	if model == null:
 		return null
