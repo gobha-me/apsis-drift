@@ -91,6 +91,11 @@ support qualification across all eight center walking tiles over 4.19 metres.
 It retains the actual tile gaps, tapered surfaces and neighboring obstacles;
 the lower steps and occupied seat remain separate route qualification work.
 
+The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
+the existing seat and harness meshes while proving their complete render
+triangle union matches the original. Harness opening and supported seating
+remain separate qualification work.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and

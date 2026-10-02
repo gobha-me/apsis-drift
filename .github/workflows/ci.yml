@@ -59,6 +59,9 @@ jobs:
       - name: Check operating GLB source and node bindings
         run: python3 test/operating_glb_binding_test.py
 
+      - name: Check restraint subset integrity and atomic export boundaries
+        run: python3 test/wayfarer_restraint_export_checks_test.py
+
       - name: Check boarding contact qualification policy
         run: python3 test/boarding_contact_policy_test.py
 
