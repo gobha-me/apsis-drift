@@ -1,0 +1,84 @@
+{
+  "schema": "apsis.lower-cockpit-contact-assets/1",
+  "package_id": "lower-cockpit-contact-01",
+  "files": [
+    {
+      "path": "contact-policy.json",
+      "bytes": 4497,
+      "sha256": "da32508e5b8b062ba622576d8c3ce23828b2f119235542ece1cc66ffa73d7020"
+    },
+    {
+      "path": "lower-cockpit-contact-01.json",
+      "bytes": 863927,
+      "sha256": "31407a19a36d45eb43f318d83f4bc362c837e7e2bf4b92c332f1444f4fcb7c42"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 3998,
+      "sha256": "d381f5b382cd95491e76dd19e0434dea06a2f348db807bc9230843371a4f07a3"
+    },
+    {
+      "path": "sources/tools/check_boarding_floor_evidence.py",
+      "bytes": 4642,
+      "sha256": "ec3be1b47277dbab224137e153bcef05bce36fd9b273bf4c58b47404c5d39fe6"
+    },
+    {
+      "path": "sources/tools/extract_boarding_floor_evidence.py",
+      "bytes": 9532,
+      "sha256": "17ee09bc9927ee91870e1b95585a0b84dbfdac641915098a1d389e7658a37e3b"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/checks.json",
+      "bytes": 939,
+      "sha256": "917ff53094f7bb2c72159052fd1fc83203ba8ef64283e76c2b412c03fbddae0c"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/evidence.json",
+      "bytes": 4894708,
+      "sha256": "3aae9c319521a5b41bdbd8a0ee2ab580a26c0ec287705c2205b065fd8898b28f"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/findings.json",
+      "bytes": 52579,
+      "sha256": "fce2c06cfd1c32224e05a5e3d01074cef8ed502a39a5d3c688515f47e2b8e0f6"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/halo.json",
+      "bytes": 863927,
+      "sha256": "31407a19a36d45eb43f318d83f4bc362c837e7e2bf4b92c332f1444f4fcb7c42"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/licenses/HOPPER_GENERATED_CONCEPTS.md",
+      "bytes": 1783,
+      "sha256": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/licenses/HOPPER_MESHY_TRIAL.md",
+      "bytes": 3084,
+      "sha256": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/licenses/LICENSE.md",
+      "bytes": 1521,
+      "sha256": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/licenses/MESHY_QUALIFICATION_OUTPUT.md",
+      "bytes": 1762,
+      "sha256": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/licenses/STATION_KIT_01.md",
+      "bytes": 11622,
+      "sha256": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+    },
+    {
+      "path": "sources/wayfarer-floor-evidence-01/provenance.json",
+      "bytes": 2211,
+      "sha256": "df64d9357a8c0bfba7ba5ae9a88a47f0bfd81038fd95d262f11fcf5a17140aea"
+    }
+  ],
+  "runtime": "lower-cockpit-contact-01.json",
+  "policy": "contact-policy.json",
+  "provenance": "provenance.json"
+}

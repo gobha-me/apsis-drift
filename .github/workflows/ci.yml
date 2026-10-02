@@ -50,6 +50,9 @@ jobs:
       - name: Check boarding support identity and candidate geometry
         run: python3 test/boarding_support_package_test.py
 
+      - name: Check lower cockpit source identity and contact package admission
+        run: python3 test/lower_cockpit_contact_package_test.py
+
       - name: Check operating GLB numeric and buffer boundaries
         run: python3 test/wayfarer_operating_glb_audit_test.py
 

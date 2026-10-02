@@ -1,0 +1,32 @@
+{
+  "vertices": 4598,
+  "triangles": 8100,
+  "objects": 75,
+  "quantized_zero_area_triangles": 0,
+  "bounds_rest_m": [
+    [
+      -1.483897,
+      -1.2325,
+      -4.20879
+    ],
+    [
+      1.483897,
+      -0.217,
+      1.518554
+    ]
+  ],
+  "old_crop_overlap_triangles": 0,
+  "schema_version": 1,
+  "passed": true,
+  "halo_sha256": "31407a19a36d45eb43f318d83f4bc362c837e7e2bf4b92c332f1444f4fcb7c42",
+  "evidence_sha256": "3aae9c319521a5b41bdbd8a0ee2ab580a26c0ec287705c2205b065fd8898b28f",
+  "checker_sha256": "ec3be1b47277dbab224137e153bcef05bce36fd9b273bf4c58b47404c5d39fe6",
+  "negative_fixtures_refused": [
+    "bad-index",
+    "range-gap",
+    "moving-owner",
+    "nonfinite-transform",
+    "invalid-query-box"
+  ],
+  "limits": "Independent buffer/range/finite/crop checks against admitted contact. Exact source-coordinate reproduction is recorded by the Blender extractor; no collision/support admission or missing-floor repair."
+}

@@ -10,6 +10,9 @@
 #include <vector>
 
 namespace apsis_drift {
+namespace detail {
+struct CabinContactAccess;
+}
 inline constexpr std::size_t kCabinContactMaximumBytes{
     std::size_t{32} * std::size_t{1024} * std::size_t{1024}};
 inline constexpr double kCabinSeamFloorMetres{-100000.0 * 1e-6};
@@ -68,6 +71,7 @@ class OriginCabinSeamGeometry {
  private:
   explicit OriginCabinSeamGeometry(std::shared_ptr<const Data>);
   std::shared_ptr<const Data> data_;
+  friend struct detail::CabinContactAccess;
   friend auto decode_origin_cabin_seam_contact(std::string_view,
                                                const OriginBoardingSupport&)
       -> std::expected<OriginCabinSeamGeometry, std::string>;

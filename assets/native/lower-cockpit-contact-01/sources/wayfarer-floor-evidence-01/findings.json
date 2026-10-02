@@ -1,0 +1,2236 @@
+{
+  "schema_version": 1,
+  "evidence_sha256": "3aae9c319521a5b41bdbd8a0ee2ab580a26c0ec287705c2205b065fd8898b28f",
+  "halo_sha256": "31407a19a36d45eb43f318d83f4bc362c837e7e2bf4b92c332f1444f4fcb7c42",
+  "centerline_transition_samples": [
+    {
+      "z_m": -0.9,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.8999999761581421
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.8999999761581421
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      }
+    },
+    {
+      "z_m": -0.91,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.9100000262260437
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.9100000262260437
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      }
+    },
+    {
+      "z_m": -0.92,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9200000166893005
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9200000166893005
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      }
+    },
+    {
+      "z_m": -0.93,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9300000071525574
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9300000071525574
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      }
+    },
+    {
+      "z_m": -0.9400000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9399999976158142
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9399999976158142
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      }
+    },
+    {
+      "z_m": -0.9500000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.949999988079071
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.949999988079071
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      }
+    },
+    {
+      "z_m": -0.9600000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.9599999785423279
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.9599999785423279
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      }
+    },
+    {
+      "z_m": -0.9700000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9700000286102295
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1600000262260437,
+          -0.9700000286102295
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000321865082
+      }
+    },
+    {
+      "z_m": -0.98,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.9800000190734863
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.1599999964237213,
+          -0.9800000190734863
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3100000023841858
+      }
+    },
+    {
+      "z_m": -0.99,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 134,
+        "point_m": [
+          0.0,
+          -0.16053509712219238,
+          -0.9900000095367432
+        ],
+        "winding_normal": [
+          0.0,
+          0.9660228490829468,
+          -0.2584565281867981
+        ],
+        "distance_m": 0.31053510308265686
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 134,
+        "point_m": [
+          0.0,
+          -0.16053509712219238,
+          -0.9900000095367432
+        ],
+        "winding_normal": [
+          0.0,
+          0.9660228490829468,
+          -0.2584565281867981
+        ],
+        "distance_m": 0.31053510308265686
+      }
+    },
+    {
+      "z_m": -1.0,
+      "first_dedicated_floor_hit": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 139,
+        "point_m": [
+          0.0,
+          -0.171999990940094,
+          -1.0
+        ],
+        "winding_normal": [
+          0.0,
+          0.25845861434936523,
+          -0.9660223722457886
+        ],
+        "distance_m": 0.32199999690055847
+      },
+      "nearest_other_surface": {
+        "source_object": "CABIN | cockpit transition step",
+        "source_triangle": 139,
+        "point_m": [
+          0.0,
+          -0.171999990940094,
+          -1.0
+        ],
+        "winding_normal": [
+          0.0,
+          0.25845861434936523,
+          -0.9660223722457886
+        ],
+        "distance_m": 0.32199999690055847
+      }
+    },
+    {
+      "z_m": -1.01,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_triangle": 433,
+        "point_m": [
+          0.0,
+          -0.23054149746894836,
+          -1.0099999904632568
+        ],
+        "winding_normal": [
+          -1.0376547621149257e-08,
+          0.8626189827919006,
+          0.5058541893959045
+        ],
+        "distance_m": 0.38054150342941284
+      }
+    },
+    {
+      "z_m": -1.02,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_triangle": 483,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.0199999809265137
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.03,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_triangle": 483,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.0299999713897705
+        ],
+        "winding_normal": [
+          -0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.04,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_triangle": 482,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.0399999618530273
+        ],
+        "winding_normal": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.05,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_triangle": 482,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.0499999523162842
+        ],
+        "winding_normal": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.06,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_triangle": 444,
+        "point_m": [
+          0.0,
+          -0.23054149746894836,
+          -1.059999942779541
+        ],
+        "winding_normal": [
+          0.0,
+          0.862636148929596,
+          -0.5058249235153198
+        ],
+        "distance_m": 0.38054150342941284
+      }
+    },
+    {
+      "z_m": -1.07,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN hatch perimeter seal",
+        "source_triangle": 148,
+        "point_m": [
+          0.0,
+          -0.21989279985427856,
+          -1.0700000524520874
+        ],
+        "winding_normal": [
+          0.002942170947790146,
+          0.9510525465011597,
+          0.30901530385017395
+        ],
+        "distance_m": 0.36989280581474304
+      }
+    },
+    {
+      "z_m": -1.08,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "WF02 | CABIN hatch perimeter seal",
+        "source_triangle": 150,
+        "point_m": [
+          0.0,
+          -0.22082394361495972,
+          -1.0800000429153442
+        ],
+        "winding_normal": [
+          0.002376878634095192,
+          0.951054036617279,
+          -0.30901578068733215
+        ],
+        "distance_m": 0.3708239495754242
+      }
+    },
+    {
+      "z_m": -1.09,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "HOPPER GEAR01 | front sealed bay roof",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.2759999632835388,
+          -1.090000033378601
+        ],
+        "winding_normal": [
+          0.0,
+          -0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.4259999692440033
+      }
+    },
+    {
+      "z_m": -1.1,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "HOPPER GEAR01 | front sealed bay roof",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.2759999632835388,
+          -1.100000023841858
+        ],
+        "winding_normal": [
+          0.0,
+          -0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.4259999692440033
+      }
+    },
+    {
+      "z_m": -1.1099999999999999,
+      "first_dedicated_floor_hit": null,
+      "nearest_other_surface": {
+        "source_object": "HOPPER GEAR01 | front sealed bay roof",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.2759999632835388,
+          -1.1100000143051147
+        ],
+        "winding_normal": [
+          0.0,
+          -0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.4259999692440033
+      }
+    },
+    {
+      "z_m": -1.12,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 88,
+        "point_m": [
+          0.0,
+          -0.4144000709056854,
+          -1.1200000047683716
+        ],
+        "winding_normal": [
+          -0.0,
+          0.029956495389342308,
+          0.9995512366294861
+        ],
+        "distance_m": 0.5644000768661499
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 88,
+        "point_m": [
+          0.0,
+          -0.4144000709056854,
+          -1.1200000047683716
+        ],
+        "winding_normal": [
+          -0.0,
+          0.029956495389342308,
+          0.9995512366294861
+        ],
+        "distance_m": 0.5644000768661499
+      }
+    },
+    {
+      "z_m": -1.13,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.4196000397205353,
+          -1.1299999952316284
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.5696000456809998
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.4196000397205353,
+          -1.1299999952316284
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.5696000456809998
+      }
+    },
+    {
+      "z_m": -1.1400000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.4248000681400299,
+          -1.1399999856948853
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.5748000741004944
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.4248000681400299,
+          -1.1399999856948853
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.5748000741004944
+      }
+    },
+    {
+      "z_m": -1.15,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.43000009655952454,
+          -1.149999976158142
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.580000102519989
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.43000009655952454,
+          -1.149999976158142
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.580000102519989
+      }
+    },
+    {
+      "z_m": -1.1600000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.4352000653743744,
+          -1.159999966621399
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.5852000713348389
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 2,
+        "point_m": [
+          0.0,
+          -0.4352000653743744,
+          -1.159999966621399
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168660163879,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.5852000713348389
+      }
+    },
+    {
+      "z_m": -1.17,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 175,
+        "point_m": [
+          0.0,
+          -0.25471732020378113,
+          -1.1699999570846558
+        ],
+        "winding_normal": [
+          0.0,
+          0.13987372815608978,
+          0.9901694059371948
+        ],
+        "distance_m": 0.4047173261642456
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 175,
+        "point_m": [
+          0.0,
+          -0.25471732020378113,
+          -1.1699999570846558
+        ],
+        "winding_normal": [
+          0.0,
+          0.13987372815608978,
+          0.9901694059371948
+        ],
+        "distance_m": 0.4047173261642456
+      }
+    },
+    {
+      "z_m": -1.1800000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 170,
+        "point_m": [
+          0.0,
+          -0.23160123825073242,
+          -1.1799999475479126
+        ],
+        "winding_normal": [
+          -0.0,
+          0.8920186161994934,
+          0.45199862122535706
+        ],
+        "distance_m": 0.3816012442111969
+      },
+      "nearest_other_surface": {
+        "source_object": "WF02 | POD emergency pressure frame",
+        "source_triangle": 433,
+        "point_m": [
+          0.0,
+          -0.23054158687591553,
+          -1.1799999475479126
+        ],
+        "winding_normal": [
+          -1.0376547621149257e-08,
+          0.8626189827919006,
+          0.5058541893959045
+        ],
+        "distance_m": 0.38054159283638
+      }
+    },
+    {
+      "z_m": -1.19,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.190000057220459
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.190000057220459
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.2000000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2000000476837158
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2000000476837158
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.21,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2100000381469727
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2100000381469727
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.2200000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2200000286102295
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "WF02 | POD emergency pressure frame",
+        "source_triangle": 482,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2200000286102295
+        ],
+        "winding_normal": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.23,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2300000190734863
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2300000190734863
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.24,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2400000095367432
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "WF02 | POD hatch perimeter seal",
+        "source_triangle": 148,
+        "point_m": [
+          0.0,
+          -0.21989279985427856,
+          -1.2400000095367432
+        ],
+        "winding_normal": [
+          0.002942170947790146,
+          0.9510525465011597,
+          0.30901530385017395
+        ],
+        "distance_m": 0.36989280581474304
+      }
+    },
+    {
+      "z_m": -1.25,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.25
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "WF02 | POD hatch perimeter seal",
+        "source_triangle": 150,
+        "point_m": [
+          0.0,
+          -0.22082394361495972,
+          -1.25
+        ],
+        "winding_normal": [
+          0.002376878634095192,
+          0.951054036617279,
+          -0.30901578068733215
+        ],
+        "distance_m": 0.3708239495754242
+      }
+    },
+    {
+      "z_m": -1.26,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2599999904632568
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 183,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2599999904632568
+        ],
+        "winding_normal": [
+          0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.27,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2699999809265137
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2699999809265137
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.28,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2799999713897705
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2799999713897705
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.29,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2899999618530273
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.2899999618530273
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.3,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2999999523162842
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.2999999523162842
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.31,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.309999942779541
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.309999942779541
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.32,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.3200000524520874
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999995946884155,
+          -1.3200000524520874
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.37999996542930603
+      }
+    },
+    {
+      "z_m": -1.33,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.3300000429153442
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.3300000429153442
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.34,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.340000033378601
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 182,
+        "point_m": [
+          0.0,
+          -0.22999998927116394,
+          -1.340000033378601
+        ],
+        "winding_normal": [
+          -0.0,
+          0.9999999403953552,
+          0.0
+        ],
+        "distance_m": 0.3799999952316284
+      }
+    },
+    {
+      "z_m": -1.35,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 134,
+        "point_m": [
+          0.0,
+          -0.23160123825073242,
+          -1.350000023841858
+        ],
+        "winding_normal": [
+          0.0,
+          0.8920186161994934,
+          -0.45199862122535706
+        ],
+        "distance_m": 0.3816012442111969
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 134,
+        "point_m": [
+          0.0,
+          -0.23160123825073242,
+          -1.350000023841858
+        ],
+        "winding_normal": [
+          0.0,
+          0.8920186161994934,
+          -0.45199862122535706
+        ],
+        "distance_m": 0.3816012442111969
+      }
+    },
+    {
+      "z_m": -1.3599999999999999,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 139,
+        "point_m": [
+          0.0,
+          -0.25471732020378113,
+          -1.3600000143051147
+        ],
+        "winding_normal": [
+          0.0,
+          0.13987372815608978,
+          -0.9901694059371948
+        ],
+        "distance_m": 0.4047173261642456
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | pilot transition intermediate step",
+        "source_triangle": 139,
+        "point_m": [
+          0.0,
+          -0.25471732020378113,
+          -1.3600000143051147
+        ],
+        "winding_normal": [
+          0.0,
+          0.13987372815608978,
+          -0.9901694059371948
+        ],
+        "distance_m": 0.4047173261642456
+      }
+    },
+    {
+      "z_m": -1.37,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 3,
+        "point_m": [
+          0.0,
+          -0.5443999767303467,
+          -1.3700000047683716
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168064117432,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.6944000124931335
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 3,
+        "point_m": [
+          0.0,
+          -0.5443999767303467,
+          -1.3700000047683716
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168064117432,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.6944000124931335
+      }
+    },
+    {
+      "z_m": -1.38,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 3,
+        "point_m": [
+          0.0,
+          -0.5496000051498413,
+          -1.3799999952316284
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168064117432,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.6995999813079834
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 3,
+        "point_m": [
+          0.0,
+          -0.5496000051498413,
+          -1.3799999952316284
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168064117432,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.6995999813079834
+      }
+    },
+    {
+      "z_m": -1.3900000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 3,
+        "point_m": [
+          0.0,
+          -0.5548001527786255,
+          -1.3899999856948853
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168064117432,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.7048001289367676
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 3,
+        "point_m": [
+          0.0,
+          -0.5548001527786255,
+          -1.3899999856948853
+        ],
+        "winding_normal": [
+          0.0,
+          0.8872168064117432,
+          -0.46135270595550537
+        ],
+        "distance_m": 0.7048001289367676
+      }
+    },
+    {
+      "z_m": -1.4,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5600000619888306,
+          -1.399999976158142
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7100000381469727
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5600000619888306,
+          -1.399999976158142
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7100000381469727
+      }
+    },
+    {
+      "z_m": -1.4100000000000001,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5603333711624146,
+          -1.409999966621399
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7103334069252014
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5603333711624146,
+          -1.409999966621399
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7103334069252014
+      }
+    },
+    {
+      "z_m": -1.42,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5606666803359985,
+          -1.4199999570846558
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7106666564941406
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5606666803359985,
+          -1.4199999570846558
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7106666564941406
+      }
+    },
+    {
+      "z_m": -1.4300000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5610001087188721,
+          -1.4299999475479126
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7110000848770142
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5610001087188721,
+          -1.4299999475479126
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7110000848770142
+      }
+    },
+    {
+      "z_m": -1.44,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.561333417892456,
+          -1.440000057220459
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7113333940505981
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.561333417892456,
+          -1.440000057220459
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7113333940505981
+      }
+    },
+    {
+      "z_m": -1.4500000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5616666078567505,
+          -1.4500000476837158
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7116666436195374
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5616666078567505,
+          -1.4500000476837158
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7116666436195374
+      }
+    },
+    {
+      "z_m": -1.46,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.562000036239624,
+          -1.4600000381469727
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7120000123977661
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.562000036239624,
+          -1.4600000381469727
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7120000123977661
+      }
+    },
+    {
+      "z_m": -1.4700000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5623334646224976,
+          -1.4700000286102295
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7123334407806396
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5623334646224976,
+          -1.4700000286102295
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7123334407806396
+      }
+    },
+    {
+      "z_m": -1.48,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.562666654586792,
+          -1.4800000190734863
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7126666903495789
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.562666654586792,
+          -1.4800000190734863
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7126666903495789
+      }
+    },
+    {
+      "z_m": -1.4900000000000002,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5630000829696655,
+          -1.4900000095367432
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7130000591278076
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5630000829696655,
+          -1.4900000095367432
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7130000591278076
+      }
+    },
+    {
+      "z_m": -1.5,
+      "first_dedicated_floor_hit": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5633333921432495,
+          -1.5
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7133334279060364
+      },
+      "nearest_other_surface": {
+        "source_object": "CRAFT | cockpit pressure tub",
+        "source_triangle": 8,
+        "point_m": [
+          0.0,
+          -0.5633333921432495,
+          -1.5
+        ],
+        "winding_normal": [
+          0.0,
+          0.9994449019432068,
+          -0.03331479802727699
+        ],
+        "distance_m": 0.7133334279060364
+      }
+    }
+  ],
+  "sampled_station_landing_surfaces": {
+    "DK09 | continuous deck with open well.001": {
+      "source_triangle_indices_seen": [
+        0,
+        8,
+        9,
+        16,
+        17,
+        24,
+        25,
+        32,
+        33,
+        40,
+        41,
+        48,
+        49,
+        56,
+        57,
+        64,
+        65,
+        72,
+        73,
+        80,
+        81,
+        88,
+        89,
+        96,
+        97,
+        104,
+        105,
+        112,
+        113,
+        120,
+        121,
+        129,
+        130,
+        140,
+        197,
+        206,
+        218,
+        268,
+        379,
+        394,
+        420,
+        421,
+        428,
+        429,
+        436,
+        437,
+        444,
+        445,
+        452,
+        453,
+        460,
+        461,
+        468,
+        469,
+        476,
+        477,
+        484,
+        485,
+        492,
+        493,
+        500,
+        501,
+        508,
+        509,
+        516,
+        532,
+        540,
+        548,
+        549,
+        556,
+        557,
+        564,
+        565,
+        572,
+        573,
+        580,
+        581,
+        588,
+        589,
+        596,
+        597,
+        604,
+        605,
+        612,
+        613,
+        620,
+        621,
+        628,
+        629,
+        636,
+        637,
+        644,
+        645,
+        652,
+        653,
+        660,
+        661,
+        668,
+        669,
+        676,
+        677,
+        684,
+        685,
+        692,
+        693,
+        700,
+        701,
+        708,
+        709,
+        716,
+        717,
+        724,
+        725,
+        732,
+        733,
+        740,
+        741,
+        748,
+        749,
+        756,
+        757,
+        764,
+        765,
+        772,
+        773,
+        780,
+        781,
+        788,
+        796,
+        797,
+        804,
+        805,
+        812,
+        813,
+        820,
+        821,
+        828,
+        829,
+        836,
+        837,
+        844,
+        845,
+        852,
+        853,
+        860,
+        861,
+        868,
+        869,
+        876,
+        877,
+        884,
+        885,
+        892,
+        893,
+        900,
+        901,
+        908,
+        909,
+        916,
+        917,
+        924,
+        925,
+        932,
+        933,
+        940,
+        941,
+        948,
+        949,
+        956,
+        957,
+        964,
+        965,
+        972,
+        973,
+        980,
+        981,
+        988,
+        989,
+        996,
+        997,
+        1004,
+        1005,
+        1012,
+        1013,
+        1020,
+        1021,
+        1028,
+        1029,
+        1036,
+        1037,
+        1044,
+        1045,
+        1052,
+        1053,
+        1060,
+        1061,
+        1068,
+        1069,
+        1076,
+        1077,
+        1084,
+        1085,
+        1092,
+        1093,
+        1100,
+        1101,
+        1108,
+        1109,
+        1116,
+        1117,
+        1124,
+        1125,
+        1132,
+        1133,
+        1140,
+        1141,
+        1148,
+        1149,
+        1156,
+        1157,
+        1164,
+        1165,
+        1172,
+        1173,
+        1180,
+        1181,
+        1188,
+        1189,
+        1196,
+        1197,
+        1204,
+        1205,
+        1212,
+        1213,
+        1220,
+        1221,
+        1228,
+        1229,
+        1236,
+        1237,
+        1244,
+        1245,
+        1252,
+        1253,
+        1260,
+        1261,
+        1268,
+        1269,
+        1276,
+        1277,
+        1284,
+        1285
+      ],
+      "sample_count": 1589,
+      "height_range_m": [
+        -5.960464477539063e-08,
+        5.960464477539063e-08
+      ]
+    },
+    "DK09 | upper well rim.001": {
+      "source_triangle_indices_seen": [
+        10,
+        11,
+        19,
+        27,
+        42,
+        58,
+        66,
+        75,
+        90,
+        98,
+        114,
+        122,
+        131,
+        146,
+        155,
+        178,
+        187,
+        203,
+        210,
+        226,
+        242,
+        251,
+        267,
+        283,
+        298,
+        307,
+        322,
+        331,
+        354,
+        363,
+        378,
+        386,
+        395,
+        410,
+        419,
+        435,
+        442,
+        451,
+        467,
+        483,
+        490,
+        499,
+        514,
+        515,
+        530,
+        531,
+        546,
+        547,
+        563,
+        578,
+        587,
+        602,
+        610,
+        619,
+        634,
+        643,
+        651,
+        667,
+        674,
+        690,
+        699,
+        706,
+        722,
+        738,
+        754,
+        770,
+        779,
+        795,
+        811,
+        826,
+        834,
+        843,
+        858,
+        867,
+        882,
+        891,
+        899,
+        915,
+        922,
+        931,
+        947,
+        954,
+        970,
+        986,
+        1002,
+        1003,
+        1018,
+        1019
+      ],
+      "sample_count": 90,
+      "height_range_m": [
+        0.011999934911727905,
+        0.012000024318695068
+      ]
+    }
+  },
+  "findings": [
+    "Intermediate step:188source triangles, zero admitted by old crop; corrected top Y=-.23m, full Z bounds[-1.36004,-1.16996].",
+    "Pressure tub:92source triangles,52old cropped triangles,18additional triangles in bounded lower halo. Centerline inner floor slopes nearY=-.56,-.57,-.58 atZ=-1.4,-1.7,-2.0.",
+    "No dedicated step/tub floor hit in centerline10mm samplesZ=-1.01 through-1.11. Other pressure-frame, gear-bay roof or load-ring surfaces can lie below; they are not automatically walking deck.",
+    "Intermediate-step top is about.33m above tub floor beyond its forward edge; engine must qualify the actual foot/body transition.",
+    "Cabin tile pitch is.595m with16mm longitudinal gaps. Center seam rays find the existing pressure floor atY=-.1775m instead of tile topY=-.10m. No filler is proposed.",
+    "Station landing is existing continuous deckY=0 and well rim reachingY=.012m. Existing highest rung topY=-.192m; no new handhold is declared.",
+    "Halo query box is a triangle-selection box, not a clipped mesh boundary. Retained whole source faces extend beyond it; checks.json records actual bounds."
+  ],
+  "limits": "Source evidence and additive obstacle proposal only. No posture, support permission, pressure/load or continuous crossing qualification."
+}

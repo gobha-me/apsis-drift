@@ -221,6 +221,39 @@ configure_file(include/apsis_drift/cabin_contact_data.hpp.in
   "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/cabin_contact_data.hpp" @ONLY)
 unset(APSIS_CABIN_CONTACT_JSON)
 
+# Additive static source geometry has its own independent admission boundary;
+# the original contact/support/motion bytes and seam coverage stay unchanged.
+set(APSIS_LOWER_CONTACT_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/lower-cockpit-contact-01/lower-cockpit-contact-01.json")
+set(APSIS_LOWER_CONTACT_POLICY "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/lower-cockpit-contact-01/contact-policy.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_LOWER_CONTACT_DATA}" "${APSIS_LOWER_CONTACT_POLICY}")
+file(SHA256 "${APSIS_LOWER_CONTACT_DATA}" APSIS_LOWER_CONTACT_SHA256)
+file(SHA256 "${APSIS_LOWER_CONTACT_POLICY}" APSIS_LOWER_CONTACT_POLICY_SHA256)
+if (NOT APSIS_LOWER_CONTACT_SHA256 STREQUAL "31407a19a36d45eb43f318d83f4bc362c837e7e2bf4b92c332f1444f4fcb7c42" OR
+    NOT APSIS_LOWER_CONTACT_POLICY_SHA256 STREQUAL "da32508e5b8b062ba622576d8c3ce23828b2f119235542ece1cc66ffa73d7020")
+  message(FATAL_ERROR "Lower cockpit geometry or independent source policy differs from admitted bytes")
+endif ()
+file(READ "${APSIS_LOWER_CONTACT_DATA}" APSIS_LOWER_CONTACT_JSON)
+string(LENGTH "${APSIS_LOWER_CONTACT_JSON}" APSIS_LOWER_CONTACT_BYTES)
+set(APSIS_LOWER_CONTACT_CHUNKS "")
+set(APSIS_LOWER_CONTACT_OFFSET 0)
+set(APSIS_LOWER_CONTACT_CHUNK_COUNT 0)
+while (APSIS_LOWER_CONTACT_OFFSET LESS APSIS_LOWER_CONTACT_BYTES)
+  math(EXPR APSIS_LOWER_CONTACT_LENGTH "${APSIS_LOWER_CONTACT_BYTES} - ${APSIS_LOWER_CONTACT_OFFSET}")
+  if (APSIS_LOWER_CONTACT_LENGTH GREATER 60000)
+    set(APSIS_LOWER_CONTACT_LENGTH 60000)
+  endif ()
+  string(SUBSTRING "${APSIS_LOWER_CONTACT_JSON}" ${APSIS_LOWER_CONTACT_OFFSET} ${APSIS_LOWER_CONTACT_LENGTH} APSIS_LOWER_CONTACT_CHUNK)
+  string(APPEND APSIS_LOWER_CONTACT_CHUNKS "  std::string_view{R\"APSISLOWER(${APSIS_LOWER_CONTACT_CHUNK})APSISLOWER\", ${APSIS_LOWER_CONTACT_LENGTH}},\n")
+  math(EXPR APSIS_LOWER_CONTACT_OFFSET "${APSIS_LOWER_CONTACT_OFFSET} + ${APSIS_LOWER_CONTACT_LENGTH}")
+  math(EXPR APSIS_LOWER_CONTACT_CHUNK_COUNT "${APSIS_LOWER_CONTACT_CHUNK_COUNT} + 1")
+endwhile ()
+file(READ "${APSIS_LOWER_CONTACT_POLICY}" APSIS_LOWER_CONTACT_POLICY_JSON)
+string(LENGTH "${APSIS_LOWER_CONTACT_POLICY_JSON}" APSIS_LOWER_CONTACT_POLICY_BYTES)
+configure_file(include/apsis_drift/lower_cockpit_contact_data.hpp.in
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/lower_cockpit_contact_data.hpp" @ONLY)
+unset(APSIS_LOWER_CONTACT_JSON)
+unset(APSIS_LOWER_CONTACT_POLICY_JSON)
+
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
@@ -233,6 +266,7 @@ add_library(apsis_drift_core STATIC
   src/operating_motion.cpp
   src/origin_boarding_support.cpp
   src/origin_cabin_seam.cpp
+  src/origin_lower_cockpit_contact.cpp
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
@@ -285,7 +319,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -389,6 +423,16 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-lower-cockpit-contact-tests test/origin_lower_cockpit_contact_test.cpp)
+  target_link_libraries(apsis-drift-lower-cockpit-contact-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_definitions(apsis-drift-lower-cockpit-contact-tests PRIVATE
+    APSIS_LOWER_CONTACT_FIXTURE="${APSIS_LOWER_CONTACT_DATA}"
+    APSIS_LOWER_CONTACT_POLICY_FIXTURE="${APSIS_LOWER_CONTACT_POLICY}"
+    APSIS_CABIN_CONTACT_FIXTURE="${APSIS_CABIN_CONTACT_DATA}")
+  target_compile_options(apsis-drift-lower-cockpit-contact-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME lower-cockpit-contact-contract COMMAND apsis-drift-lower-cockpit-contact-tests)
+  set_tests_properties(lower-cockpit-contact-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-cabin-seam-tests test/origin_cabin_seam_test.cpp)
   target_link_libraries(apsis-drift-cabin-seam-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-cabin-seam-tests PRIVATE
