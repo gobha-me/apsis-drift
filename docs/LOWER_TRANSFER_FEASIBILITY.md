@@ -143,6 +143,13 @@ attachment/coupler proofs. The unchanged closed-rest exporter remains a
 historical identity reference. Neither derivative supplies an opening curve or
 qualifies the lower transfer.
 
+[Self Model02](ORIGIN_BOARDING_SELF_MODEL02.md), registered in
+[#368](https://github.com/gobha-me/apsis-drift/issues/368), keeps the same world
+reservations and introduces rounded self trunk/helmet solids plus fixed finite
+connected regions. Every static checkpoint requires all 105 pair certificates.
+The five historical forearm/trunk negatives remain refusals; a source-free
+standing control does not qualify the lower transfer or a boarding action.
+
 ## Evidence identities
 
 | Input | SHA-256 |
