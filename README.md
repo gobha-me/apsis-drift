@@ -105,6 +105,11 @@ The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
 Its unresolved self model does not grant a boarding route or seat occupancy.
 
+[Self Model02](docs/ORIGIN_BOARDING_SELF_MODEL02.md) separately tests rounded
+self solids and finite joint ownership while retaining the existing world
+reservations. A proved static self checkpoint still needs source clearance,
+support and continuous motion before boarding.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
