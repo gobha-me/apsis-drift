@@ -86,6 +86,11 @@ exact omitted static floor geometry for source-attributed collision queries.
 This closes a geometry gap; supported step transfers and sitting remain part
 of the boarding work.
 
+The [complete upper cabin corridor](docs/ORIGIN_CABIN_CORRIDOR.md) extends that
+support qualification across all eight center walking tiles over 4.19 metres.
+It retains the actual tile gaps, tapered surfaces and neighboring obstacles;
+the lower steps and occupied seat remain separate route qualification work.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
