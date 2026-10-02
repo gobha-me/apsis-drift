@@ -81,6 +81,11 @@ sole support and conservative swept clearance across two real walking tiles.
 This craft-local evidence feeds the boarding route; player actions and the
 remaining ladder, cockpit and seat transitions still require integration.
 
+The [lower cockpit contact provider](docs/LOWER_COCKPIT_CONTACT.md) adds the
+exact omitted static floor geometry for source-attributed collision queries.
+This closes a geometry gap; supported step transfers and sitting remain part
+of the boarding work.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and

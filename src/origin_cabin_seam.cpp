@@ -1,5 +1,6 @@
 #include "apsis_drift/origin_cabin_seam.hpp"
 #include "apsis_drift/cabin_contact_data.hpp"
+#include "origin_cabin_contact_internal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -12,15 +13,8 @@
 namespace apsis_drift {
 namespace {
 using Json = nlohmann::json;
-struct Box {
-  RigidVector3 low, high;
-};
-struct Triangle {
-  BoardingTriangleKey key;
-  std::uint32_t object{};
-  std::array<RigidVector3, 3> points;
-  Box bounds;
-};
+using Box = detail::CabinContactBox;
+using Triangle = detail::CabinContactObstacle;
 constexpr std::array<std::uint32_t, 4> floor_ids{85129, 85130, 85537, 85538};
 constexpr double area_tolerance{1e-12}, sole_area{.12 * .28};
 auto fail(std::string_view reason) -> void {
@@ -97,11 +91,13 @@ auto reservations(RigidVector3 foot) -> std::array<Box, 3> {
 auto intersection(const Triangle& triangle, Box box)
     -> std::optional<CabinIntersection> {
   if (!overlapping(triangle.bounds, box)) return std::nullopt;
-  const auto centre = scale(add(box.low, box.high), .5),
-             half = scale(sub(box.high, box.low), .5);
+  // Anchor at the actual lower endpoint. Center/half arithmetic can erase
+  // an adjacent representable intrusion or turn an exact lower-face touch
+  // into penetration. Signed extent supports retain that distinction.
+  const auto extent = sub(box.high, box.low);
   std::array<RigidVector3, 3> p;
   for (std::size_t i = 0; i < 3; ++i)
-    p[i] = sub(triangle.points[i], centre);
+    p[i] = sub(triangle.points[i], box.low);
   const std::array<RigidVector3, 3> edges{sub(p[1], p[0]), sub(p[2], p[1]),
                                           sub(p[0], p[2])};
   constexpr std::array<RigidVector3, 3> box_axes{
@@ -118,10 +114,14 @@ auto intersection(const Triangle& triangle, Box box)
     if (dot(axis, axis) == 0) continue;
     const auto a = dot(p[0], axis), b = dot(p[1], axis), c = dot(p[2], axis);
     const auto lo = std::min({a, b, c}), hi = std::max({a, b, c});
-    const auto radius = half.x * std::abs(axis.x) + half.y * std::abs(axis.y) +
-                        half.z * std::abs(axis.z);
-    if (lo > radius || hi < -radius) return std::nullopt;
-    boundary = boundary || lo == radius || hi == -radius;
+    const auto lower = std::min(0.0, extent.x * axis.x) +
+                       std::min(0.0, extent.y * axis.y) +
+                       std::min(0.0, extent.z * axis.z);
+    const auto upper = std::max(0.0, extent.x * axis.x) +
+                       std::max(0.0, extent.y * axis.y) +
+                       std::max(0.0, extent.z * axis.z);
+    if (lo > upper || hi < lower) return std::nullopt;
+    boundary = boundary || lo == upper || hi == lower;
   }
   return boundary ? CabinIntersection::boundary : CabinIntersection::interior;
 }
@@ -247,6 +247,33 @@ struct OriginCabinSeamGeometry::Data {
   std::array<Triangle, 4> floor;
   Box fixed_crop;
 };
+auto detail::CabinContactAccess::obstacles(
+    const OriginCabinSeamGeometry& geometry)
+    -> std::span<const CabinContactObstacle> {
+  return geometry.data_
+             ? std::span<const CabinContactObstacle>{geometry.data_->triangles}
+             : std::span<const CabinContactObstacle>{};
+}
+auto detail::CabinContactAccess::reservations(RigidVector3 foot)
+    -> std::array<CabinContactBox, 3> {
+  return apsis_drift::reservations(foot);
+}
+auto detail::CabinContactAccess::intersection(const CabinContactObstacle& t,
+                                              CabinContactBox box)
+    -> std::optional<CabinIntersection> {
+  return apsis_drift::intersection(t, box);
+}
+auto detail::CabinContactAccess::bounds(
+    const std::array<RigidVector3, 3>& points) -> CabinContactBox {
+  return apsis_drift::bounds(points);
+}
+auto detail::CabinContactAccess::unite(CabinContactBox a, CabinContactBox b)
+    -> CabinContactBox {
+  return apsis_drift::unite(a, b);
+}
+auto detail::CabinContactAccess::finite(RigidVector3 p) -> bool {
+  return apsis_drift::finite(p);
+}
 OriginCabinSeamGeometry::OriginCabinSeamGeometry(
     std::shared_ptr<const Data> data)
     : data_(std::move(data)) {

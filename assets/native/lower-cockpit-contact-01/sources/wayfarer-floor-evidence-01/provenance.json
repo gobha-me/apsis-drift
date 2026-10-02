@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "wayfarer-floor-evidence-01",
+  "source_kind": "derived",
+  "parents": [
+    "wayfarer-operating-02",
+    "wayfarer-boarding-support-01",
+    "hopper-craft-09",
+    "station-reference"
+  ],
+  "engine_bindings_sha256": {
+    "assets/native/wayfarer-operating-02/metadata/contact.json": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+    "tools/export_boarding_contact.py": "20353bd2f3ef5182a70339fb4a5ad1ae1c99874640aa38c0c95b0a6520f5201c",
+    "tools/wayfarer_operating_blender.py": "00bd9327cea482518cf4bf5811f21a351b50309323d64a93c991d9356007e261",
+    "tools/wayfarer_operating_spec.py": "41bc77dd225a059427525113da3cef46db3b794937f433af818d31f3bb2f3113",
+    "tools/station_clearance_blender.py": "ab21962c6ecbc0219caf09cd665e3dc0589045c75cd9e79622cf75412e995212"
+  },
+  "artifacts_sha256": {
+    "checks.json": "917ff53094f7bb2c72159052fd1fc83203ba8ef64283e76c2b412c03fbddae0c",
+    "evidence.json": "3aae9c319521a5b41bdbd8a0ee2ab580a26c0ec287705c2205b065fd8898b28f",
+    "findings.json": "fce2c06cfd1c32224e05a5e3d01074cef8ed502a39a5d3c688515f47e2b8e0f6",
+    "halo.json": "31407a19a36d45eb43f318d83f4bc362c837e7e2bf4b92c332f1444f4fcb7c42",
+    "licenses/HOPPER_GENERATED_CONCEPTS.md": "e0b30edddcc4e847687c3510fe29b83ecdaabaccc777b89164304ee69b0c5879",
+    "licenses/HOPPER_MESHY_TRIAL.md": "0b4d01c948f92f2d13b85c6f8f19c8dc77696285c8b764e5a3fc506446178dad",
+    "licenses/LICENSE.md": "984659cb7e96b257c5190f461f9ef2313971f28dc84be4495d926bd1196b3a6d",
+    "licenses/MESHY_QUALIFICATION_OUTPUT.md": "46456e7d2ee3ba826b67cbd4c4d9611755ca1d35a1776afa4257a927fa014225",
+    "licenses/STATION_KIT_01.md": "db66c2c3dca629867586d156c3956a45de85e6a45e657df951fe4d2bd9c354b7"
+  },
+  "tools_sha256": {
+    "tools/extract_boarding_floor_evidence.py": "17ee09bc9927ee91870e1b95585a0b84dbfdac641915098a1d389e7658a37e3b",
+    "tools/check_boarding_floor_evidence.py": "ec3be1b47277dbab224137e153bcef05bce36fd9b273bf4c58b47404c5d39fe6"
+  },
+  "scope": "Read-only exact-source measurements and separately versioned static additive contact-halo proposal. Inherited five-document operating-02 license roster. No paid generation, model edits or runtime admission."
+}

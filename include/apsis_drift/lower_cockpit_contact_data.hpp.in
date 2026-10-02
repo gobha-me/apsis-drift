@@ -1,0 +1,17 @@
+#pragma once
+#include <array>
+#include <string_view>
+namespace apsis_drift::detail {
+inline constexpr std::array<std::string_view, @APSIS_LOWER_CONTACT_CHUNK_COUNT@> kLowerContactChunks{
+@APSIS_LOWER_CONTACT_CHUNKS@};
+inline constexpr std::string_view kLowerContactPolicyJson{R"APSISLOWPOL(@APSIS_LOWER_CONTACT_POLICY_JSON@)APSISLOWPOL", @APSIS_LOWER_CONTACT_POLICY_BYTES@};
+inline auto approved_lower_contact_bytes(std::string_view input) -> bool {
+  if(input.size()!=@APSIS_LOWER_CONTACT_BYTES@) return false;
+  std::size_t offset{};
+  for(const auto chunk:kLowerContactChunks) {
+    if(input.substr(offset,chunk.size())!=chunk) return false;
+    offset+=chunk.size();
+  }
+  return true;
+}
+} // namespace apsis_drift::detail
