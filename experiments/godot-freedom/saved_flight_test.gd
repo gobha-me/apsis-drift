@@ -207,6 +207,48 @@ func run() -> void:
 	for path in ["relative.json", "", args[0].get_base_dir(), args[0].get_base_dir() + "/missing/save.json"]:
 		check(not owner.save_freedom_as(path) and owner.get_freedom_flight_state() == final, "Refused Save As changed selected flight")
 	check(other.initialize_freedom_continue(args[3]) and other.get_freedom_flight_state().is_empty(), "Station selection retained stale saved flight")
+	# Exercise the production consumer after a lit frame, including its early exit.
+	view.paused = false
+	check(view.exhaust.update_applied(final, 0.1, false) and view.exhaust.plumes[0].visible and view.exhaust.withdrawal_plumes[0].visible, "Consumer failure control did not start firing")
+	phase = view.exhaust.phase
+	view.toggle_pause()
+	check(view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Pause callback left exhaust firing until the next frame")
+	view.toggle_pause()
+	check(view.exhaust.update_applied(final, 0.1, false), "Refused-batch control did not resume firing")
+	phase = view.exhaust.phase
+	view._process(NAN)
+	check(not view.error.is_empty() and view.paused and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.phase == phase, "Rejected flight batch left stale exhaust firing")
+	check(owner.get_freedom_flight_state() == final, "Consumer refusal advanced C++ flight")
+	view._process(0.1)
+	check(owner.get_freedom_flight_state() == final and view.exhaust.phase == phase, "Failed view advanced state or visual phase")
+	view.toggle_pause()
+	view.port_command("select_freedom_port", 2)
+	view.assist_button.toggled.emit(not final.assistance)
+	check(view.paused and owner.get_freedom_flight_state() == final, "Terminal error UI commands changed C++ state or resumed flight")
+	view.update_view(0.1)
+	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Terminal error refresh relit stale exhaust")
+	view.error = ""
+	view.paused = false
+	view.terrain.error = "Unavailable terrain control"
+	check(view.exhaust.update_applied(final, 0.1, false), "Terrain failure control did not start firing")
+	phase = view.exhaust.phase
+	view._process(1.0 / 120.0)
+	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Terrain failure refreshed stale firing or advanced visual phase")
+	check(int(owner.get_freedom_flight_state().tick) == int(final.tick) + 1, "Terrain failure rolled back the valid C++ flight tick")
+	view.terrain.error = ""
+	view.error = ""
+	view.paused = false
+	view.bridge = other
+	check(view.exhaust.update_applied(final, 0.1, false), "Lost-owner consumer control did not start firing")
+	phase = view.exhaust.phase
+	view._process(0.1)
+	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Lost flight owner retained stale firing")
+	view.error = ""
+	view.paused = false
+	check(view.exhaust.update_applied(final, 0.1, false), "Assistance failure control did not start firing")
+	phase = view.exhaust.phase
+	view.assist_button.toggled.emit(true)
+	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Assistance failure callback retained stale firing")
 	view.free()
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == original[i], "Native flight modified a source fixture")

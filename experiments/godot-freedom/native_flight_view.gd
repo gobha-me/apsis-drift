@@ -197,8 +197,10 @@ func build_ui() -> void:
 	assist_button.button_pressed = state.assistance
 	assist_button.focus_mode = Control.FOCUS_NONE
 	assist_button.toggled.connect(func(enabled: bool):
+		if not error.is_empty():
+			return
 		if not bridge.set_freedom_assistance(enabled):
-			error = str(bridge.get_last_error())
+			pause_on_error(str(bridge.get_last_error()))
 	)
 	column.add_child(assist_button)
 	if state.frame_id == "2":
@@ -237,6 +239,7 @@ func build_ui() -> void:
 	add_child(save_dialog)
 	save_button.pressed.connect(func():
 		paused = true
+		hide_exhaust()
 		pause_button.text = "Resume flight"
 		save_dialog.popup_centered_ratio(0.75)
 	)
@@ -250,6 +253,9 @@ func build_ui() -> void:
 
 
 func port_command(command: String, ordinal: int = 0) -> void:
+	if not error.is_empty():
+		hide_exhaust()
+		return
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
 		save_status.text = str(bridge.get_last_error())
@@ -265,7 +271,12 @@ func port_command(command: String, ordinal: int = 0) -> void:
 
 
 func toggle_pause() -> void:
+	if not error.is_empty():
+		hide_exhaust()
+		return
 	paused = not paused
+	if paused:
+		hide_exhaust()
 	pause_button.text = "Resume flight" if paused else "Pause flight"
 	save_status.text = "Flight paused. Save As keeps the committed state." if paused else "Flight running. Save As pauses the session."
 
@@ -279,38 +290,54 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		cockpit = not cockpit
 
 
+func hide_exhaust() -> void:
+	if exhaust != null:
+		exhaust.update_applied({}, 0.0, true)
+
+
+func pause_on_error(message: String) -> void:
+	error = message
+	paused = true
+	hide_exhaust()
+	if save_status != null:
+		save_status.text = "Flight paused: " + error
+
+
 func _process(delta: float) -> void:
 	if bridge == null or camera == null or terrain == null or not error.is_empty():
+		hide_exhaust()
 		return
 	var demand := controls()
 	if state.get("attached", false):
 		demand.fill(0.0)
 	if not bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible):
-		error = str(bridge.get_last_error())
-		paused = true
-		save_status.text = "Flight paused: " + error
+		pause_on_error(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
 	if not valid_state(state):
-		error = "C++ flight view became unavailable: " + str(bridge.get_last_error())
-		save_status.text = error
+		pause_on_error("C++ flight view became unavailable: " + str(bridge.get_last_error()))
 		return
-	update_view(delta)
+	update_view(delta, true)
+	if not error.is_empty():
+		return
 	terrain.tick(delta, camera.position)
 	if not terrain.error.is_empty():
-		error = str(terrain.error)
-		paused = true
-		save_status.text = "Flight paused: " + error
+		pause_on_error(str(terrain.error))
+		return
+	if exhaust != null:
+		exhaust.update_applied(state, delta, paused)
 
 
-func update_view(delta: float) -> void:
+func update_view(delta: float, defer_exhaust: bool = false) -> void:
+	if not error.is_empty():
+		hide_exhaust()
+		return
 	ship.basis = state.body_basis
 	if station == null and state.station_position.length() < 1000.0:
 		station = StationPresentation.new()
 		scene.add_child(station)
 		if not station.initialize({"station_id": state.station_id}, station_geometry, assets_root, false):
-			error = station.error
-			paused = true
+			pause_on_error(station.error)
 			return
 		set_ship_layer(station)
 	if station != null:
@@ -329,7 +356,7 @@ func update_view(delta: float) -> void:
 	terrain_camera.transform = camera.transform
 	if state.star_direction.length_squared() > 0.5:
 		light.look_at(-state.star_direction, Vector3.UP if absf(state.star_direction.y) < 0.99 else Vector3.RIGHT)
-	if exhaust != null:
+	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
 	var target: Vector3 = state.station_position

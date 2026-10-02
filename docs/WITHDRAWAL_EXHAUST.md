@@ -74,6 +74,11 @@ also hide both groups and freeze phase. Intensity reads gross negative force
 divided by its own channel rating. Positive opposing firing, gravity, drag and
 coasting velocity cannot erase or invent a nozzle firing.
 
+Terminal flight-view errors also hide both groups immediately. Exhaust refresh
+follows terrain validation, so a failed presentation frame freezes the prior
+visual phase. A valid C++ flight batch committed before a terrain error remains
+committed; the view does not roll back simulation time.
+
 The real native saved-flight and port tests exercise independent main/vertical
 commands, the first withdrawal tick, zero net vertical force with opposing
 firings, pause, attachment, coast and invalid ownership/buffers. Existing
