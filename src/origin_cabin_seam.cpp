@@ -274,6 +274,19 @@ auto detail::CabinContactAccess::unite(CabinContactBox a, CabinContactBox b)
 auto detail::CabinContactAccess::finite(RigidVector3 p) -> bool {
   return apsis_drift::finite(p);
 }
+auto detail::CabinContactAccess::clip_floor_polygon(
+    std::vector<RigidVector3> polygon, std::size_t axis, double limit,
+    bool greater) -> std::vector<RigidVector3> {
+  return clipped(std::move(polygon), axis, limit, greater);
+}
+auto detail::CabinContactAccess::floor_polygon_area(
+    const std::vector<RigidVector3>& polygon) -> double {
+  return polygon_area(polygon);
+}
+auto detail::CabinContactAccess::floor_support_hull(
+    std::vector<RigidVector3> points) -> std::vector<RigidVector3> {
+  return hull(std::move(points));
+}
 OriginCabinSeamGeometry::OriginCabinSeamGeometry(
     std::shared_ptr<const Data> data)
     : data_(std::move(data)) {
