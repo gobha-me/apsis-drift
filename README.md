@@ -40,8 +40,9 @@ or substituting a study universe.
 
 Historical format17 station files retain their frozen inspection view.
 Formats18/19 open the [saved native flight view](docs/SAVED_NATIVE_FLIGHT.md),
-paused initially, with C++ controls, rotating terrain, Wayfarer and main exhaust
-from actual applied propulsion. Resume with Escape or the on-screen button.
+paused initially, with C++ controls, rotating terrain, Wayfarer, main exhaust and
+[vertical withdrawal exhaust](docs/WITHDRAWAL_EXHAUST.md) from actual applied
+propulsion. Resume with Escape or the on-screen button.
 Wayfarer flight can target D1/D2 and use the
 [physical port capture/release controls](docs/NATIVE_PORT_LIFECYCLE.md).
 A flight Save As retains format18 until explicit port selection, then writes
