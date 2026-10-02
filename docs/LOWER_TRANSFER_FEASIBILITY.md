@@ -84,6 +84,37 @@ subsequently occupied actor, nor that the whole transfer works. A failed source
 study must remain a failed study. Do not publish a route provider from these
 refused candidates or silently resize the body until it passes.
 
+## Restraint source studies
+
+The first bounded opening investigation retained all 1,746 source objects and
+5,503,130 evaluated triangles. Its 28 rigid-pivot candidates and 588 sampled
+poses preserved ribbon topology, materials and terminal centers. A final
+shoulder lift/splay and negative crotch release cleared the central exploratory
+body at its floating hip position, but that position had no admitted pan load.
+Strict source intersections remained; sampled clearance would not prove the
+whole curve, attachment strength or occupied closure.
+
+One concrete obstruction is the existing right lap strap crossing the seat
+service manifold, including in the original closed geometry. A separately
+declared temporary +80mm source-local X manifold correction cleared the housing
+against original closed neighbors. It failed the final 60-degree lap stow: an
+actual triangle-intersection segment measured 1.805mm, with strictly positive
+barycentric coordinates in both faces. The preceding 20 samples lacked that
+pair; this did not qualify the endpoint or a continuous sweep. No conditional
+body search followed that refusal.
+
+The source manifold is a closed layout-proposal housing with no modeled ports.
+The retained service-loop endpoint was already disconnected in the inspected
+boarding pose. No functional service continuity was inferred or claimed. The
+temporary correction was not saved or admitted. Further declared study
+candidates remain separate from the original geometry and its strict contact
+policy.
+
+[The closed-rest exporter](WAYFARER_RESTRAINT_EXPORT.md) preserves the original
+seat render union while separating its seven restraint components. It supplies
+source attribution for later motion work; it includes no housing correction,
+opening curve or route qualification.
+
 ## Evidence identities
 
 | Input | SHA-256 |
@@ -96,7 +127,9 @@ refused candidates or silently resize the body until it passes.
 | Lower contact policy | `da32508e5b8b062ba622576d8c3ce23828b2f119235542ece1cc66ffa73d7020` |
 
 Ignored local evidence is under `build-native/lower-transfer-probe/` and
-`build-native/restraint-audit/`: source export/probe scripts, exact candidate
-records, clipped witnesses, receipts and artifact identities. These are bounded
+`build-native/restraint-audit/`, with opening studies under
+`build-native/restraint-study/` and `build-native/restraint-manifold-study/`:
+source export/probe scripts, exact candidate records, clipped witnesses,
+receipts and artifact identities. These are bounded
 diagnostics, not a production route package. No actor action, saved phase or
 First Flight completion is claimed; #361, #352, #291 and #245 remain open.
