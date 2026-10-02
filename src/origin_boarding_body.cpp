@@ -126,56 +126,113 @@ auto two_sum(double a, double b) -> ExactSum {
   return {high, (a - av) + (b - bv)};
 }
 enum class SquaredRelation : std::uint8_t { below, equal, above, unsupported };
-// Three distance coordinates and two radii need at most 24 product/residual
-// terms. Preserve exact binary64 subtraction/addition and fma residuals in a
-// fixed expansion, so rounded dot/sqrt equality cannot erase strict intrusion.
-// This arithmetic never introduces geometric slack or wider production types.
-auto squared_relation(Vec p, Vec q, double first_radius, double second_radius)
-    -> SquaredRelation {
-  std::array<double, 32> expansion{};
-  std::size_t count{};
-  bool supported{true};
-  auto append = [&](double scalar) {
-    std::array<double, 32> next{};
+// Purpose-specific checkpoint predicates only. Squared distance needs at most
+// 24 product/residual terms. SAT needs at most 12 center-difference terms plus
+// 2 boxes * 3 basis projections * 6 dot terms * 2 scaling terms = 84. The fixed
+// 96 slots include a checked capacity guard; nothing allocates an exact-math
+// service or exports it as gameplay/world authority.
+class BodyExpansion {
+ public:
+  auto append(double scalar) -> void {
+    if (!std::isfinite(scalar) || count_ >= values_.size()) {
+      supported_ = false;
+      return;
+    }
+    if (scalar == 0) return;
+    std::array<double, 96> next{};
     std::size_t next_count{};
     auto carry = scalar;
-    for (std::size_t i = 0; i < count; ++i) {
-      const auto sum = two_sum(carry, expansion[i]);
+    for (std::size_t i = 0; i < count_; ++i) {
+      const auto sum = two_sum(carry, values_[i]);
       if (sum.low != 0) next[next_count++] = sum.low;
       carry = sum.high;
     }
     if (carry != 0) next[next_count++] = carry;
-    expansion = next;
-    count = next_count;
-  };
-  auto product = [&](double a, double b, double sign) {
-    const auto high = a * b;
-    // fma cannot preserve a residual below the binary64 subnormal domain.
-    // Unsupported private scales refuse instead of asserting equality.
-    if (a != 0 && b != 0 &&
-        std::abs(high) < std::numeric_limits<double>::min()) {
-      supported = false;
+    values_ = next;
+    count_ = next_count;
+  }
+  auto product(double a, double b, double sign = 1) -> void {
+    if (a == 0 || b == 0) return;
+    // A product of two 53-bit significands must have its lowest possible bit
+    // inside binary64's subnormal domain for an exact fma residual. This is a
+    // conservative arithmetic-domain refusal, never a collision tolerance.
+    if (!std::isfinite(a) || !std::isfinite(b) ||
+        std::ilogb(a) + std::ilogb(b) < -970) {
+      supported_ = false;
       return;
     }
+    const auto high = a * b;
     append(sign * std::fma(a, b, -high));
     append(sign * high);
-  };
+  }
+  auto include(const BodyExpansion& other, double sign = 1) -> void {
+    supported_ = supported_ && other.supported_;
+    for (std::size_t i = 0; i < other.count_; ++i)
+      append(sign * other.values_[i]);
+  }
+  auto scaled(const BodyExpansion& other, double factor) -> void {
+    supported_ = supported_ && other.supported_;
+    for (std::size_t i = 0; i < other.count_; ++i)
+      product(other.values_[i], factor);
+  }
+  [[nodiscard]] auto relation() const -> SquaredRelation {
+    if (!supported_) return SquaredRelation::unsupported;
+    if (count_ == 0) return SquaredRelation::equal;
+    return values_[count_ - 1] < 0 ? SquaredRelation::below
+                                   : SquaredRelation::above;
+  }
+
+ private:
+  std::array<double, 96> values_{};
+  std::size_t count_{};
+  bool supported_{true};
+};
+auto squared_relation(Vec p, Vec q, double first_radius, double second_radius)
+    -> SquaredRelation {
+  BodyExpansion result;
   auto square = [&](ExactSum value, double sign) {
-    product(value.high, value.high, sign);
-    product(2 * value.high, value.low, sign);
-    product(value.low, value.low, sign);
+    result.product(value.high, value.high, sign);
+    result.product(2 * value.high, value.low, sign);
+    result.product(value.low, value.low, sign);
   };
   for (std::size_t i = 0; i < 3; ++i)
     square(two_sum(component(p, i), -component(q, i)), 1);
   square(two_sum(first_radius, second_radius), -1);
-  if (!supported) return SquaredRelation::unsupported;
-  if (count == 0) return SquaredRelation::equal;
-  return expansion[count - 1] < 0 ? SquaredRelation::below
-                                  : SquaredRelation::above;
+  return result.relation();
+}
+auto projection_relation(const Box& a, const Box& b, Vec axis)
+    -> SquaredRelation {
+  BodyExpansion center;
+  for (std::size_t i = 0; i < 3; ++i) {
+    const auto difference =
+        two_sum(component(b.center_metres, i), -component(a.center_metres, i));
+    center.product(difference.high, component(axis, i));
+    center.product(difference.low, component(axis, i));
+  }
+  const auto center_relation = center.relation();
+  if (center_relation == SquaredRelation::unsupported)
+    return SquaredRelation::unsupported;
+  BodyExpansion gap;
+  gap.include(center, center_relation == SquaredRelation::below ? 1 : -1);
+  for (const auto* box : {&a, &b})
+    for (std::size_t basis = 0; basis < 3; ++basis) {
+      BodyExpansion projection;
+      for (std::size_t i = 0; i < 3; ++i)
+        projection.product(component(box->frame.columns[basis], i),
+                           component(axis, i));
+      const auto relation = projection.relation();
+      if (relation == SquaredRelation::unsupported)
+        return SquaredRelation::unsupported;
+      gap.scaled(projection, (relation == SquaredRelation::below ? -1 : 1) *
+                                 component(box->half_size_metres, basis));
+    }
+  // gap = sum of exact projected half extents - abs(exact center projection).
+  return gap.relation();
 }
 struct SegmentPair {
   Vec first, second;
   double distance_squared{};
+  bool supported{true};
 };
 // Boundary candidates plus the unconstrained stationary point cover the
 // finite square of segment parameters. Cross-norm squared avoids subtracting
@@ -197,6 +254,10 @@ auto segment_pair(const Capsule& a, const Capsule& b) -> SegmentPair {
   const auto v = sub(b.end_metres, b.start_metres);
   const auto n = cross(u, v);
   const auto determinant = dot(n, n);
+  if (n != Vec{} && determinant == 0) {
+    best.supported = false;
+    return best;
+  }
   if (determinant > 0) {
     const auto r = sub(b.start_metres, a.start_metres);
     const auto s = dot(cross(r, v), n) / determinant;
@@ -278,11 +339,6 @@ auto corners(const Box& b) -> std::array<Vec, 8> {
                 (i & 2) != 0 ? b.half_size_metres.y : -b.half_size_metres.y,
                 (i & 4) != 0 ? b.half_size_metres.z : -b.half_size_metres.z}));
   return result;
-}
-auto box_radius(const Box& b, Vec axis) -> double {
-  return (std::abs(dot(b.frame.columns[0], axis)) * b.half_size_metres.x +
-          std::abs(dot(b.frame.columns[1], axis)) * b.half_size_metres.y) +
-         std::abs(dot(b.frame.columns[2], axis)) * b.half_size_metres.z;
 }
 auto connected(BoardingBodyPartId a, BoardingBodyPartId b) -> bool {
   using Id = BoardingBodyPartId;
@@ -405,6 +461,8 @@ auto boarding_body_capsule_capsule(const Capsule& a, const Capsule& b)
   if (!valid(a) || !valid(b))
     return {BoardingBodyIntersection::invalid_geometry, std::nullopt};
   const auto nearest = segment_pair(a, b);
+  if (!nearest.supported)
+    return {BoardingBodyIntersection::invalid_geometry, std::nullopt};
   const auto radii = a.radius_metres + b.radius_metres;
   const auto relation = squared_relation(nearest.first, nearest.second,
                                          a.radius_metres, b.radius_metres);
@@ -465,12 +523,15 @@ auto boarding_body_box_box(const Box& a, const Box& b) -> Narrow {
   bool boundary{};
   const auto delta = sub(b.center_metres, a.center_metres);
   for (const auto axis : axes) {
-    if (dot(axis, axis) == 0) continue;
-    const auto displacement = std::abs(dot(delta, axis));
-    const auto extent = box_radius(a, axis) + box_radius(b, axis);
-    if (displacement > extent)
+    if (axis == Vec{}) continue;
+    if (dot(axis, axis) == 0)
+      return {BoardingBodyIntersection::invalid_geometry, std::nullopt};
+    const auto relation = projection_relation(a, b, axis);
+    if (relation == SquaredRelation::unsupported)
+      return {BoardingBodyIntersection::invalid_geometry, std::nullopt};
+    if (relation == SquaredRelation::below)
       return {BoardingBodyIntersection::separated_or_contact, std::nullopt};
-    boundary = boundary || displacement == extent;
+    boundary = boundary || relation == SquaredRelation::equal;
   }
   if (boundary)
     return {BoardingBodyIntersection::separated_or_contact, std::nullopt};

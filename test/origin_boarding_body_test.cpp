@@ -745,6 +745,39 @@ auto narrow_tests() -> void {
   check(boarding_body_capsule_capsule(tiny_first, tiny_second).intersection ==
             BoardingBodyIntersection::invalid_geometry,
         "Unsupported private scales refuse squared-distance underflow");
+  const BoardingBodyBox extent_first{{0, 0, 0}, {.5, .5, .5}, {}};
+  const BoardingBodyBox extent_second{
+      {1, 0, 0}, {std::nextafter(.5, 1.), .5, .5}, {}};
+  const RigidVector3 extent_witness{std::nextafter(.5, 0.), 0, 0};
+  check(strictly_inside(extent_first, extent_witness) &&
+            strictly_inside(extent_second, extent_witness),
+        "Independent membership proves representable witness in "
+        "extent-rounding overlap");
+  const auto extent_result = boarding_body_box_box(extent_first, extent_second);
+  check(interior(extent_result.intersection),
+        "Rounded box half-extent sum cannot erase strict interior overlap");
+  if (extent_result.witness)
+    check(
+        strictly_inside(extent_first, extent_result.witness->point_metres) &&
+            strictly_inside(extent_second, extent_result.witness->point_metres),
+        "Extent-rounding emitted witness independently lies inside both boxes");
+  auto exact_extent_contact = extent_second;
+  exact_extent_contact.half_size_metres.x = .5;
+  check(
+      boarding_body_box_box(extent_first, exact_extent_contact).intersection ==
+          BoardingBodyIntersection::separated_or_contact,
+      "Exact half-plus-half box contact remains boundary");
+  const BoardingBodyBox displacement_first{{-.5, 0, 0}, {.5, .5, .5}, {}};
+  const BoardingBodyBox displacement_second{
+      {std::nextafter(.5, 0.), 0, 0}, {.5, .5, .5}, {}};
+  const RigidVector3 displacement_witness{-0x1p-55, 0, 0};
+  check(strictly_inside(displacement_first, displacement_witness) &&
+            strictly_inside(displacement_second, displacement_witness),
+        "Independent membership proves real center-difference cancellation "
+        "overlap");
+  check(interior(boarding_body_box_box(displacement_first, displacement_second)
+                     .intersection),
+        "Rounded projected center difference cannot clear strict box overlap");
   const auto nan = std::numeric_limits<double>::quiet_NaN();
   const auto inf = std::numeric_limits<double>::infinity();
   for (const double value : {0., -1., nan, inf}) {

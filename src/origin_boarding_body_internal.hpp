@@ -5,7 +5,8 @@
 // Purpose-specific private diagnostic seams, not gameplay or source authority.
 // Numerical domain: coordinates bounded by 16 m, box half dimensions/capsule
 // radii in [1e-6,4] m, conditioned right-handed frames. Degenerate capsules are
-// spheres; nonzero axes whose squared lengths underflow refuse. Unsupported
+// spheres; nonzero axes/cross axes with underflowed squared norms refuse, as do
+// products outside the compensated binary64 residual domain. Unsupported
 // primitives return invalid_geometry; these are not source-clearance limits.
 namespace apsis_drift::detail {
 struct BoardingBodyNarrowIntersection {

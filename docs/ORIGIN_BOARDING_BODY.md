@@ -96,8 +96,12 @@ comparisons. There is no collision tolerance.
 
 Capsule narrow comparisons preserve binary64 subtraction/addition and explicit
 FMA product residuals in a bounded expansion before comparing squared distance
-with squared radii. Rounded square-root equality cannot turn a resolved strict
-intrusion into clearance. Unsupported underflow refuses; rounded placement
+with squared radii. Box SAT similarly preserves center projection, basis
+projection, projected half-size scaling and summed extents before its sign
+test. The checked fixed expansion has 96 slots for at most 84 SAT terms.
+Rounded square-root or extent-sum equality cannot turn a resolved strict
+intrusion into clearance. Unsupported products or nonzero cross-axis
+underflow refuse; rounded placement
 without a verified witness remains `interior_unresolved`. This arithmetic is
 part of the checkpoint diagnostic, without continuous-sweep authority.
 
