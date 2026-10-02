@@ -150,6 +150,14 @@ connected regions. Every static checkpoint requires all 105 pair certificates.
 The five historical forearm/trunk negatives remain refusals; a source-free
 standing control does not qualify the lower transfer or a boarding action.
 
+[Self Recipe03](ORIGIN_BOARDING_SELF_MODEL03.md), registered in
+[#371](https://github.com/gobha-me/apsis-drift/issues/371), replaces only the
+neck and hip/ankle/wrist ownership definitions. Its seven registered source-free
+controls qualify all 105 self pairs; the six original conflicts still refuse.
+The folded-arm controls have no new source or seat-support qualification.
+[#372](https://github.com/gobha-me/apsis-drift/issues/372) separately investigates
+retained stowed starting restraints; it does not supply the lower transfer.
+
 ## Evidence identities
 
 | Input | SHA-256 |
