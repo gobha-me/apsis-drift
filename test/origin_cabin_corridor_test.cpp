@@ -111,6 +111,7 @@ auto reference_fraction(double x, double z, std::size_t foot) -> double {
   long double area{};
   for (const auto& face : source_faces) {
     std::vector<Point> polygon;
+    polygon.reserve(face.xz.size());
     for (const auto& v : face.xz)
       polygon.push_back(
           {static_cast<long double>(v[0]), static_cast<long double>(v[1])});
@@ -494,8 +495,9 @@ int main() {
         require(decode_origin_lower_cockpit_contact(halo, policy, original));
     auto handle = require(make_origin_cabin_corridor_geometry(lower));
     auto geometry = std::move(handle);
-    // NOLINTBEGIN(bugprone-use-after-move) -- Immutable corridor handle
-    // explicitly supports empty views and refused queries after move.
+    // The immutable handle supports empty views and refused queries after move.
+    // NOLINTBEGIN(bugprone-use-after-move) -- Empty-handle query contract.
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move) -- Empty-handle API.
     check(handle.selected_top_faces().empty() &&
               handle.lower_contact() == nullptr &&
               !assess_origin_cabin_corridor_proxy_support(handle,
