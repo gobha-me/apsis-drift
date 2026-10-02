@@ -96,6 +96,10 @@ the existing seat and harness meshes while proving their complete render
 triangle union matches the original. Harness opening and supported seating
 remain separate qualification work.
 
+The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
+articulated proxy and reports strict self conflicts before further ship fits.
+Its unresolved self model does not grant a boarding route or seat occupancy.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and

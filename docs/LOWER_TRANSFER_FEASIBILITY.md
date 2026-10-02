@@ -115,6 +115,28 @@ seat render union while separating its seven restraint components. It supplies
 source attribution for later motion work; it includes no housing correction,
 opening curve or route qualification.
 
+The subsequent fixed 33-pose study found five source-surface-clear pan
+snapshots with finite selected skin polygons and friction-eligible normals.
+Independent self review refused all five: each forearm axis runs 313.820mm
+inside the trunk, with its 55mm-radius midpoint ball entirely contained. The
+same proxy also has shoulder-cap/helmet and hip-cap/trunk conflicts at its
+canonical reference, independent of limb flexion. These model defects must be corrected before drawing physical fit
+conclusions.
+
+The [C++ checkpoint diagnostic](ORIGIN_BOARDING_BODY.md) registers the unchanged
+world reservations and these negative controls before renewed source fitting.
+Positive self geometry and finite connected ownership require a separate
+versioned registration. A clear world-surface query or positive pan margin
+cannot override a failed self check.
+
+[#366](https://github.com/gobha-me/apsis-drift/issues/366) separately corrects the
+restraint foundation: the original closed shoulder ribbons already cross the
+back pad and each other outside the buckle. Retaining that starting geometry
+makes a continuously clear opening impossible under the strict contract.
+Any corrected rest path must disclose changed geometry and lengths, preserve
+original recovery, and qualify actual finite attachments before another curve.
+No runtime replacement or supported seating follows from that source work.
+
 ## Evidence identities
 
 | Input | SHA-256 |
