@@ -110,6 +110,11 @@ self solids and finite joint ownership while retaining the existing world
 reservations. A proved static self checkpoint still needs source clearance,
 support and continuous motion before boarding.
 
+[Self Recipe03](docs/ORIGIN_BOARDING_SELF_MODEL03.md) binds the neck to the
+actual trunk top and gives hip/ankle/wrist regions finite cuts on original limb
+axes. Seven source-free checkpoints now qualify in the boarding coordinate
+chart. Ship clearance, support and actual boarding remain separate gates.
+
 ## Native studies and flight playtests
 
 `tools/run_godot_study.sh` retains the fixed seed-42 experimental snapshot and
