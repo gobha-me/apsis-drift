@@ -137,6 +137,12 @@ Any corrected rest path must disclose changed geometry and lengths, preserve
 original recovery, and qualify actual finite attachments before another curve.
 No runtime replacement or supported seating follows from that source work.
 
+The [corrected closed-rest foundation](WAYFARER_CORRECTED_REST.md) records the
+registered edits, separate rest/posed comparisons and finite exported
+attachment/coupler proofs. The unchanged closed-rest exporter remains a
+historical identity reference. Neither derivative supplies an opening curve or
+qualifies the lower transfer.
+
 ## Evidence identities
 
 | Input | SHA-256 |

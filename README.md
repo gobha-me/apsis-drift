@@ -96,6 +96,11 @@ the existing seat and harness meshes while proving their complete render
 triangle union matches the original. Harness opening and supported seating
 remain separate qualification work.
 
+The [corrected closed-rest foundation](docs/WAYFARER_CORRECTED_REST.md) reroutes
+the declared harness spans and models finite shoulder connectors in a separate
+source derivative. Export integrity and static attachment proofs do not grant
+harness opening, runtime replacement or boarding.
+
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
 Its unresolved self model does not grant a boarding route or seat occupancy.
