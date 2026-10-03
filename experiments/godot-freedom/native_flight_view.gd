@@ -6,6 +6,7 @@ const HopperPresentation = preload("res://hopper_presentation.gd")
 const StationPresentation = preload("res://native_station_view.gd")
 const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8"
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
+const FLIGHT_KEYS = [KEY_D, KEY_SPACE, KEY_S, KEY_A, KEY_CTRL, KEY_W, KEY_UP, KEY_LEFT, KEY_Q, KEY_DOWN, KEY_RIGHT, KEY_E]
 var bridge: Variant
 var camera: Camera3D
 var terrain_camera: Camera3D
@@ -21,6 +22,8 @@ var assist_button: CheckButton
 var save_dialog: FileDialog
 var save_status: Label
 var paused := true
+var focused := true
+var controls_armed := true
 var cockpit := false
 var pilot_eye := Vector3.ZERO
 var state: Dictionary = {}
@@ -38,9 +41,8 @@ var error := ""
 static func controls() -> PackedFloat64Array:
 	var fractions := PackedFloat64Array()
 	fractions.resize(12)
-	var keys := [KEY_D, KEY_SPACE, KEY_S, KEY_A, KEY_CTRL, KEY_W, KEY_UP, KEY_LEFT, KEY_Q, KEY_DOWN, KEY_RIGHT, KEY_E]
 	for i in 12:
-		fractions[i] = 1.0 if Input.is_physical_key_pressed(keys[i]) else 0.0
+		fractions[i] = 1.0 if Input.is_physical_key_pressed(FLIGHT_KEYS[i]) else 0.0
 	return fractions
 
 
@@ -274,11 +276,42 @@ func toggle_pause() -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
+	if paused:
+		if not focused or save_dialog.visible:
+			hide_exhaust()
+			return
+		observe_neutral_controls()
+		if not controls_armed:
+			save_status.text = "Release all flight controls before resuming."
+			return
 	paused = not paused
 	if paused:
 		hide_exhaust()
 	pause_button.text = "Resume flight" if paused else "Pause flight"
 	save_status.text = "Flight paused. Save As keeps the committed state." if paused else "Flight running. Save As pauses the session."
+
+
+func observe_neutral_controls() -> void:
+	if not focused or controls_armed:
+		return
+	for key in FLIGHT_KEYS:
+		if Input.is_physical_key_pressed(key):
+			return
+	controls_armed = true
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		focused = false
+		controls_armed = false
+		paused = true
+		hide_exhaust()
+		if pause_button != null:
+			pause_button.text = "Resume flight"
+		if save_status != null and error.is_empty():
+			save_status.text = "Focus lost. Release flight controls, then resume explicitly."
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		focused = true
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -307,6 +340,10 @@ func _process(delta: float) -> void:
 	if bridge == null or camera == null or terrain == null or not error.is_empty():
 		hide_exhaust()
 		return
+	if not focused:
+		hide_exhaust()
+		return
+	observe_neutral_controls()
 	var demand := controls()
 	if state.get("attached", false):
 		demand.fill(0.0)
