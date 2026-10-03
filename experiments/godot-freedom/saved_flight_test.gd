@@ -88,6 +88,87 @@ func joy_button(button: int, pressed: bool, device := 0) -> void:
 	Input.flush_buffered_events()
 
 
+func check_orbit_fields(start: Dictionary) -> void:
+	for field in ["orbit_classification", "orbit_bound", "orbit_near_parabolic", "periapsis_radius", "apoapsis_radius"]:
+		var malformed := start.duplicate(true)
+		malformed.erase(field)
+		check(not FlightView.valid_state(malformed), "Missing orbital field accepted: " + field)
+	for field in ["periapsis_radius", "apoapsis_radius"]:
+		for value in [NAN, INF, -INF, -1.0, 2.1e15, "0", false, [], 1]:
+			var malformed := start.duplicate(true)
+			malformed[field] = value
+			check(not FlightView.valid_state(malformed), "Malformed orbital radius accepted: " + field)
+	for field in ["orbit_bound", "orbit_near_parabolic"]:
+		for value in [null, 0, 1, "true"]:
+			var malformed := start.duplicate(true)
+			malformed[field] = value
+			check(not FlightView.valid_state(malformed), "Nonboolean orbital flag accepted")
+	for value in [null, "unknown", "STABLE", 0, false]:
+		var malformed := start.duplicate(true)
+		malformed.orbit_classification = value
+		check(not FlightView.valid_state(malformed), "Unknown orbital classification accepted")
+	var malformed := start.duplicate(true)
+	malformed.apoapsis_radius = start.periapsis_radius - 1.0
+	check(not FlightView.valid_state(malformed), "Apoapsis below periapsis accepted")
+	malformed = start.duplicate(true)
+	malformed.orbit_near_parabolic = true
+	check(not FlightView.valid_state(malformed), "Bound near-parabolic orbit accepted")
+	malformed = start.duplicate(true)
+	malformed.orbit_classification = "escape"
+	check(not FlightView.valid_state(malformed), "Bound escape classification accepted")
+
+
+func check_orbit_fixtures(directory: String) -> void:
+	var output: Array = []
+	var oracle_path := directory.path_join("orbital-readout.json")
+	var code := OS.execute(directory.path_join("apsis-drift-freedom-start-fixture"), PackedStringArray([oracle_path, "42", "25", "orbital-readout"]), output, true)
+	check(code == 0, "Independent C++ orbital fixtures failed: " + str(output))
+	if code != 0:
+		return
+	var rows: Variant = JSON.parse_string(FileAccess.get_file_as_string(oracle_path))
+	check(rows is Array and rows.size() == 7, "Orbital fixture manifest malformed")
+	if not rows is Array:
+		return
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	for row in rows:
+		var path := directory.path_join(row.file)
+		var original := FileAccess.get_file_as_bytes(path)
+		check(owner.initialize_freedom_continue(path), "Analytic orbital saved state refused: " + row.file)
+		var state: Dictionary = owner.get_freedom_flight_state()
+		check(FlightView.valid_state(state), "Real orbital bridge state malformed: " + row.file)
+		check(state.orbit_classification == row.classification and state.orbit_bound == row.bound and state.orbit_near_parabolic == row.near_parabolic and state.periapsis_radius == row.periapsis_radius and state.apoapsis_radius == row.apoapsis_radius and state.planet_radius == row.planet_radius, "Bridge orbital prediction differs from C++ oracle: " + row.file)
+		var text := FlightView.orbit_text(state)
+		check("%.1f km" % ((row.periapsis_radius - row.planet_radius) / 1000.0) in text and "Central-body" in text and "Not terrain" in text, "Orbit readout used radius as altitude or granted terrain safety")
+		if row.apoapsis_radius == null:
+			check("Apo unavailable" in text, "Missing apoapsis fabricated a number")
+		if row.file == "orbit-outbound.json":
+			check(state.periapsis_radius < state.planet_radius and "Escape" in text and "Intersects" not in text, "Past outbound periapsis became future impact")
+		if row.file == "orbit-inbound.json":
+			check("Intersects reference surface" in text, "Inbound hyperbola lost impact assessment")
+		if row.file == "orbit-bound-no-apo.json":
+			check(state.orbit_bound and "Stable orbit" in text, "Missing apoapsis became unbound")
+		check(owner.get_freedom_flight_state() == state and FileAccess.get_file_as_bytes(path) == original, "Readout query mutated fixture/flight")
+	owner = null
+
+
+func check_orbit_layout(view: Control, owner: Variant) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	for pixels in [Vector2i(1280, 720), Vector2i(800, 450)]:
+		root.size = pixels
+		for frame in 3:
+			await process_frame
+		view.update_view(0.0)
+		await process_frame
+		check(Rect2(Vector2.ZERO, view.size).encloses(view.orbital_forecast.get_rect()), "Orbital HUD clipped at " + str(pixels) + " view=" + str(view.size) + " label=" + str(view.orbital_forecast.get_rect()))
+		check(view.orbital_forecast.get_content_height() <= view.orbital_forecast.size.y, "Orbital HUD text overflowed")
+		for control in [view.capture_button, view.release_button, view.save_status]:
+			check(Rect2(Vector2.ZERO, view.size).encloses(control.get_global_rect()), "Orbital HUD displaced port/save controls")
+		check(view.orbital_forecast.text == FlightView.orbit_text(before) and owner.get_freedom_flight_state() == before and view.paused, "Orbit layout changed forecast/state or resumed")
+	root.size = Vector2i(1280, 720)
+	await process_frame
+	view.update_view(0.0)
+
+
 func check_saved_reference(view: Node, owner: Variant, directory: String) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
 	var before_path := directory.path_join("reference-before.json")
@@ -397,6 +478,8 @@ func run() -> void:
 	check(absf(start.body_basis.determinant() - 1.0) < 0.00001 and absf(start.station_basis.determinant() - 1.0) < 0.00001, "Projection changed orientation handedness")
 	check(absf(start.altitude - 500000.0) < 0.001, "Rotation projection changed saved radial altitude")
 	check_controller_domains()
+	check_orbit_fields(start)
+	check_orbit_fixtures(args[0].get_base_dir())
 	check_exhaust_inputs(start)
 	check(owner.get_freedom_start().is_empty() and owner.get_state().is_empty(), "Flight created a docked or study owner")
 	for size in [0, 1, 11, 13, 1000]:
@@ -459,6 +542,7 @@ func run() -> void:
 		mesh_record.close()
 	var glass: MeshInstance3D = view.ship.find_child("HopperGlass", true, false)
 	check(glass != null and glass.material_override != null and glass.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.material_override.albedo_color.a < 0.1, "Selected cockpit glass blocks native flight visibility")
+	await check_orbit_layout(view, owner)
 	await check_saved_reference(view, owner, args[0].get_base_dir())
 	await check_saved_controller(view, owner, args[0])
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
@@ -476,7 +560,11 @@ func run() -> void:
 			check(owner.save_freedom_as(output) and owner.initialize_freedom_continue(output), "Mid-trace Save As/Continue failed")
 			check(owner.set_freedom_assistance(false), "Explicit Advanced piloting refused")
 		check(owner.advance_freedom_flight(1.0 / 120.0, commands, false), "C++ flight rejected a real control step")
+		view.state = owner.get_freedom_flight_state()
+		view.update_view(0.0)
+		check(view.orbital_forecast.text == FlightView.orbit_text(view.state), "Committed flight step left stale orbital forecast")
 	var final: Dictionary = owner.get_freedom_flight_state()
+	check(view.orbital_forecast.text == FlightView.orbit_text(final) and final.periapsis_radius != start.periapsis_radius, "Live actuation did not refresh orbital readout")
 	check(final.tick == "145" and not final.assistance and final.checksum != start.checksum, "Input did not advance/persist selected state")
 	check(owner.save_freedom_as(output), "Flight Save As refused")
 	check(FileAccess.get_file_as_bytes(output) == original[1], "Godot input/save trace differs from independent C++ trace bytes")

@@ -1,7 +1,10 @@
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -25,13 +28,122 @@ namespace {
   return value;
 }
 
+// Independent analytic saved configurations, with exact C++ observation
+// oracles for the bridge. These do not replace any gameplay starting state.
+auto orbital_readout(const std::filesystem::path& path, std::uint64_t seed,
+                     std::uint64_t tick) -> bool {
+  using namespace apsis_drift;
+  const auto system = generate_physical_origin_system(Seed{seed});
+  if (!system) return false;
+  const auto& planet =
+      system->catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  const double radius = planet.radius.value * 1000.0;
+  const double r = radius + 500000;
+  RigidBodyState initial;
+  initial.craft = wayfarer_frame().recipe;
+  initial.frame = {RigidFrameKind::planet_relative_inertial,
+                   system->catalog.id,
+                   planet.id,
+                   {}};
+  initial.tick = tick;
+  initial.position_metres = {r, 0, 0};
+  const auto gravity =
+      evaluate_central_body_gravity(RigidBodyWorldContext{*system}, initial);
+  if (!gravity) return false;
+  const double mu =
+      gravity->gravitational_parameter_metres_cubed_per_second_squared;
+  auto origin = make_freedom_new_game_document(Seed{seed});
+  origin.state.tick = tick;
+  const auto reference = NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       FreedomFlightSaveDocument{origin, initial, {}},
+       planet,
+       {}});
+  if (!reference) return false;
+  const auto air = reference->observe();
+  if (!air || air->atmosphere.space_boundary_altitude_metres <= 0) return false;
+  std::ofstream output(path);
+  if (!output) return false;
+  output << std::setprecision(17) << "[\n";
+  constexpr std::array names{"stable",      "decaying", "impact",
+                             "inbound",     "outbound", "near-parabolic",
+                             "bound-no-apo"};
+  for (std::size_t i = 0; i < names.size(); ++i) {
+    auto state = initial;
+    auto expected = OrbitClassification::stable;
+    const std::string_view name{names[i]};
+    if (name == "decaying" || name == "impact") {
+      const double peri =
+          name == "impact"
+              ? radius - 1000
+              : radius + air->atmosphere.space_boundary_altitude_metres * .5;
+      const double apo = radius + 1000000;
+      state.position_metres.x = apo;
+      state.linear_velocity_metres_per_second.z =
+          std::sqrt(mu * (2 / apo - 2 / (peri + apo)));
+      expected = name == "impact" ? OrbitClassification::impact
+                                  : OrbitClassification::decaying;
+    } else if (name == "inbound" || name == "outbound") {
+      state.linear_velocity_metres_per_second.x =
+          (name == "inbound" ? -1 : 1) * std::sqrt(3 * mu / r);
+      expected = name == "inbound" ? OrbitClassification::impact
+                                   : OrbitClassification::escape;
+    } else if (name == "near-parabolic") {
+      state.linear_velocity_metres_per_second.z = std::sqrt(2 * mu / r);
+      expected = OrbitClassification::escape;
+    } else if (name == "bound-no-apo") {
+      const double energy = -mu / (8 * kMaximumOrbitalElementRadiusMetres);
+      state.linear_velocity_metres_per_second.z =
+          std::sqrt(2 * (mu / r + energy));
+    } else {
+      state.linear_velocity_metres_per_second.z = std::sqrt(mu / r);
+    }
+    const FreedomFlightSaveDocument document{origin, state, {}};
+    const auto session = NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom, document, planet, {}});
+    if (!session) return false;
+    const auto observed = session->observe();
+    if (!observed || observed->orbit.classification != expected ||
+        observed->orbit.bound != (name == "stable" || name == "decaying" ||
+                                  name == "impact" || name == "bound-no-apo") ||
+        observed->orbit.near_parabolic != (name == "near-parabolic") ||
+        (name == "bound-no-apo" && observed->orbit.apoapsis_radius_metres))
+      return false;
+    const auto save =
+        path.parent_path() / ("orbit-" + std::string{name} + ".json");
+    if (!write_freedom_flight_file_atomically(save, document)) return false;
+    const std::string_view classification =
+        expected == OrbitClassification::stable     ? "stable"
+        : expected == OrbitClassification::decaying ? "decaying"
+        : expected == OrbitClassification::impact   ? "impact"
+                                                    : "escape";
+    const auto& o = observed->orbit;
+    output << (i == 0 ? "" : ",\n") << "{\"file\":\""
+           << save.filename().string() << "\",\"classification\":\""
+           << classification << "\",\"bound\":" << (o.bound ? "true" : "false")
+           << ",\"near_parabolic\":" << (o.near_parabolic ? "true" : "false")
+           << ",\"planet_radius\":" << radius
+           << ",\"periapsis_radius\":" << o.periapsis_radius_metres
+           << ",\"apoapsis_radius\":";
+    if (o.apoapsis_radius_metres)
+      output << *o.apoapsis_radius_metres;
+    else
+      output << "null";
+    output << '}';
+  }
+  output << "\n]\n";
+  output.close();
+  return !output.fail();
+}
+
 } // namespace
 
 auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
   if (argc != 5) {
     std::cerr << "usage: freedom-start-fixture ABSOLUTE_PATH SEED TICK "
-                 "freedom|flight|wayfarer-flight|flight-trace|career\n";
+                 "freedom|flight|wayfarer-flight|flight-trace|orbital-readout|"
+                 "career\n";
     return 2;
   }
   const auto path = std::filesystem::path{argv[1]};
@@ -43,7 +155,9 @@ auto main(int argc, char** argv) -> int {
     std::cerr << "invalid fixture path, seed or tick\n";
     return 2;
   }
-  if (mode == "freedom") {
+  if (mode == "orbital-readout") {
+    return orbital_readout(path, *seed, *tick) ? 0 : 1;
+  } else if (mode == "freedom") {
     auto save = make_freedom_new_game_document(Seed{*seed});
     save.state.tick = *tick;
     if (*tick >= 9) {

@@ -16,6 +16,7 @@ var ship: Node3D
 var terrain: Node3D
 var exhaust: Node3D
 var light: DirectionalLight3D
+var orbital_forecast: RichTextLabel
 var telemetry: Label
 var home_cue: Label
 var pause_button: Button
@@ -72,7 +73,32 @@ static func valid_state(value: Dictionary) -> bool:
 	for key in ["latitude", "longitude", "altitude", "planet_radius", "atmosphere_edge", "air_density", "surface_speed", "radial_rate"]:
 		if not value.get(key) is float or not is_finite(value[key]):
 			return false
-	return value.planet_radius > 0.0
+	return value.planet_radius > 0.0 and valid_orbit(value)
+
+
+static func valid_orbit(value: Dictionary) -> bool:
+	if not value.get("orbit_classification") in ["stable", "decaying", "impact", "escape"] or not value.get("orbit_bound") is bool or not value.get("orbit_near_parabolic") is bool:
+		return false
+	if value.orbit_near_parabolic and value.orbit_bound:
+		return false
+	if value.orbit_classification in ["stable", "decaying"] and not value.orbit_bound:
+		return false
+	if value.orbit_classification == "escape" and value.orbit_bound:
+		return false
+	var peri: Variant = value.get("periapsis_radius")
+	if not peri is float or not is_finite(peri) or peri < 0.0 or peri > 2.0e15 or not value.has("apoapsis_radius"):
+		return false
+	var apo: Variant = value.apoapsis_radius
+	if apo != null and (not apo is float or not is_finite(apo) or apo < peri or apo > 2.0e15 or not value.orbit_bound):
+		return false
+	return true
+
+
+static func orbit_text(value: Dictionary) -> String:
+	var descriptions := {"stable": "Stable orbit", "decaying": "Enters atmosphere", "impact": "Intersects reference surface", "escape": "Escape"}
+	var apo := "unavailable" if value.apoapsis_radius == null else "%.1f km" % ((value.apoapsis_radius - value.planet_radius) / 1000.0)
+	var qualifier := " · near-parabolic" if value.orbit_near_parabolic else ""
+	return "Orbital forecast: %s%s\nPeri %.1f km · Apo %s\nCentral-body prediction · thrust and drag change it\nNot terrain or landing clearance" % [descriptions[value.orbit_classification], qualifier, (value.periapsis_radius - value.planet_radius) / 1000.0, apo]
 
 
 func initialize(owner: Variant, assets: String) -> bool:
@@ -189,6 +215,11 @@ static func set_ship_layer(node: Node) -> void:
 
 
 func build_ui() -> void:
+	orbital_forecast = RichTextLabel.new()
+	orbital_forecast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	orbital_forecast.scroll_active = false
+	orbital_forecast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(orbital_forecast)
 	var column := VBoxContainer.new()
 	column.position = Vector2(16, 16)
 	add_child(column)
@@ -470,6 +501,8 @@ func _process(delta: float) -> void:
 
 
 func update_view(delta: float, defer_exhaust: bool = false) -> void:
+	if not valid_state(state) and error.is_empty():
+		pause_on_error("Saved flight observation is invalid")
 	if not error.is_empty():
 		hide_exhaust()
 		return
@@ -506,6 +539,15 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
+	# Keep this compact readout readable in actual pixels without pushing the
+	# existing port/save controls out of their left-hand column.
+	var pixels := Vector2(get_window().size)
+	if pixels.x > 0 and pixels.y > 0:
+		var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
+		orbital_forecast.add_theme_font_size_override("normal_font_size", roundi(20 * scale))
+		orbital_forecast.size = Vector2(minf(460 * scale, size.x - 32 * scale), 190 * scale)
+		orbital_forecast.position = Vector2(size.x - orbital_forecast.size.x - 16 * scale, 16 * scale)
+	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	var suffix := " · off screen" if camera.is_position_behind(target) or not Rect2(Vector2.ZERO, camera.get_viewport().size).has_point(camera.unproject_position(target)) else ""
 	home_cue.text = "Origin Station %s · %.1f km%s" % [state.station_id, target.length() / 1000.0, suffix]
