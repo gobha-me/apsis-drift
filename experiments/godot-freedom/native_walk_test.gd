@@ -14,6 +14,218 @@ func _initialize() -> void:
 	call_deferred("run")
 
 
+func physical_key(key: int, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = key
+	event.keycode = key
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	check(Input.is_physical_key_pressed(key) == pressed, "Software physical key did not update current input")
+
+
+func joy_axis(axis: int, value: float, device := 0) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = device
+	event.axis = axis
+	event.axis_value = value
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func joy_button(button: int, pressed: bool, device := 0) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = button
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func right_mouse(pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_RIGHT
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	check(Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) == pressed, "Software right mouse did not update current input")
+
+
+func paused_checkpoint(view: Control, owner: Variant, path: String, walk: Dictionary, flight: Dictionary, bytes: PackedByteArray, pose: Transform3D, heading: float, pitch: float, label: String) -> void:
+	view._process(60.0)
+	check(view.advance_requested(60.0, PackedFloat64Array([1.0, 1.0, PI])), label + ": paused request failed")
+	view.input_controls(60.0)
+	check(view.paused and owner.get_freedom_walk_state() == walk and owner.get_freedom_flight_state() == flight, label + ": actor/craft/clock advanced")
+	check(view.camera.transform == pose and view.requested_heading == heading and view.pitch == pitch, label + ": paused inspection changed")
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, label + ": exact C++ save bytes changed")
+
+
+func check_station_controls(view: Control, owner: Variant, path: String, start: Dictionary, bytes: PackedByteArray) -> void:
+	await process_frame
+	await process_frame
+	var flight: Dictionary = owner.get_freedom_flight_state()
+	var pose: Transform3D = view.camera.transform
+	var heading: float = view.requested_heading
+	var pitch: float = view.pitch
+	check(view.paused and not view.controls_armed, "Held W startup ran before neutral input")
+	paused_checkpoint(view, owner, path, start, flight, bytes, pose, heading, pitch, "Startup")
+	physical_key(KEY_W, false)
+	view.observe_neutral_controls()
+	check(view.paused and view.controls_armed, "Startup neutral observation implicitly resumed")
+	# Individually opposed keys are held controls, even when their sums cancel.
+	for pair in [[KEY_W, KEY_S], [KEY_A, KEY_D]]:
+		physical_key(pair[0], true)
+		physical_key(pair[1], true)
+		view.set_paused(false)
+		check(view.paused and not view.controls_armed, "Opposed walking keys bypassed Resume")
+		physical_key(pair[0], false)
+		physical_key(pair[1], false)
+	# A neutral paused frame cannot authorize a press deferred until Resume.
+	view.observe_neutral_controls()
+	physical_key(KEY_D, true)
+	physical_key(KEY_ESCAPE, true)
+	physical_key(KEY_ESCAPE, false)
+	check(view.paused and not view.controls_armed, "Deferred held key bypassed current-neutral Escape")
+	physical_key(KEY_D, false)
+	right_mouse(true)
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Held right-drag bypassed Resume")
+	var motion := InputEventMouseMotion.new()
+	motion.relative = Vector2(90, -70)
+	Input.parse_input_event(motion)
+	Input.flush_buffered_events()
+	paused_checkpoint(view, owner, path, start, flight, bytes, pose, heading, pitch, "Opposed/deferred/mouse")
+	right_mouse(false)
+	physical_key(KEY_ESCAPE, true)
+	physical_key(KEY_ESCAPE, false)
+	check(not view.paused, "Explicit neutral Escape did not resume walking")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.set_paused(false)
+	check(view.paused and not view.focused, "Direct Resume bypassed focus loss")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	physical_key(KEY_W, true)
+	view.toggle_pause()
+	paused_checkpoint(view, owner, path, start, flight, bytes, pose, heading, pitch, "Focus return held")
+	physical_key(KEY_W, false)
+	view.set_paused(false)
+	check(not view.paused, "Explicit neutral focus rearm refused")
+	view.set_paused(true)
+	# Real menu key events select the actual Save As callback, without a tick.
+	view.pause_button.grab_focus()
+	physical_key(KEY_DOWN, true)
+	physical_key(KEY_DOWN, false)
+	physical_key(KEY_ENTER, true)
+	physical_key(KEY_ENTER, false)
+	check(view.save_dialog.visible and view.paused, "Keyboard navigation did not open real Save As")
+	physical_key(KEY_W, true)
+	view.set_paused(false)
+	view.save_dialog.hide()
+	view.save_dialog.canceled.emit()
+	view.toggle_pause()
+	paused_checkpoint(view, owner, path, start, flight, bytes, pose, heading, pitch, "Save cancellation held")
+	physical_key(KEY_W, false)
+	view.open_save_dialog()
+	view.save_dialog.hide()
+	view.save_dialog.file_selected.emit(path)
+	check(view.paused and FileAccess.get_file_as_bytes(path) == bytes, "Save selection resumed or changed committed bytes")
+	# Software connection signals plus actual pad events exercise selected ownership.
+	if view.selected_pad >= 0:
+		Input.joy_connection_changed.emit(view.selected_pad, false)
+	Input.joy_connection_changed.emit(0, true)
+	joy_axis(JOY_AXIS_LEFT_X, 0.7)
+	joy_button(JOY_BUTTON_START, true)
+	joy_button(JOY_BUTTON_START, false)
+	check(view.selected_pad == 0 and view.paused, "Explicit Start selection resumed or failed to select absent pad")
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Selected held left stick bypassed Resume")
+	joy_axis(JOY_AXIS_LEFT_X, 0.0)
+	for axis in [JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+		joy_axis(axis, 0.8)
+		view.set_paused(false)
+		check(view.paused and not view.controls_armed, "Held movement/look axis bypassed Resume")
+		joy_axis(axis, 0.0)
+	Input.joy_connection_changed.emit(7, true)
+	joy_axis(JOY_AXIS_LEFT_X, 1.0, 7)
+	joy_axis(JOY_AXIS_RIGHT_Y, 1.0, 7)
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	check(view.selected_pad == 0 and view.current_controls_neutral(), "Foreign pad stole selection or neutral authority")
+	view.pause_button.grab_focus()
+	joy_button(JOY_BUTTON_DPAD_DOWN, true)
+	joy_button(JOY_BUTTON_DPAD_DOWN, false)
+	joy_button(JOY_BUTTON_A, true)
+	joy_button(JOY_BUTTON_A, false)
+	check(view.save_dialog.visible and view.paused, "Selected pad navigation did not open real Save As")
+	view.save_dialog.hide()
+	view.save_dialog.canceled.emit()
+	view.set_paused(false)
+	check(not view.paused, "Explicit neutral selected-pad Resume refused")
+	joy_axis(JOY_AXIS_RIGHT_Y, 0.8)
+	Input.joy_connection_changed.emit(0, false)
+	check(view.paused and view.selected_pad == 0, "Disconnect resumed or automatically reassigned pad")
+	joy_button(JOY_BUTTON_START, true)
+	joy_button(JOY_BUTTON_START, false)
+	check(view.paused, "Stale disconnected-pad Start resumed walking")
+	view.save_button.grab_focus()
+	joy_button(JOY_BUTTON_A, true)
+	joy_button(JOY_BUTTON_A, false)
+	check(view.paused and not view.save_dialog.visible, "Stale disconnected-pad accept opened Save As")
+	Input.joy_connection_changed.emit(0, true)
+	view.set_paused(false)
+	check(view.paused and not view.controls_armed, "Reconnect reused held look axis")
+	joy_axis(JOY_AXIS_RIGHT_Y, 0.0)
+	paused_checkpoint(view, owner, path, start, flight, bytes, pose, heading, pitch, "Device/dialog menu")
+	joy_axis(JOY_AXIS_LEFT_X, 0.0, 7)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0.0, 7)
+	view.set_paused(false)
+	# Actual station events retain WASD signs, not the saved-flight mapping.
+	physical_key(KEY_W, true)
+	check(view.input_controls(0.0) == PackedFloat64Array([1.0, 0.0, heading]), "Station W channel changed")
+	physical_key(KEY_W, false)
+	physical_key(KEY_S, true)
+	check(view.input_controls(0.0) == PackedFloat64Array([-1.0, 0.0, heading]), "Station S channel changed")
+	physical_key(KEY_S, false)
+	physical_key(KEY_A, true)
+	check(view.input_controls(0.0) == PackedFloat64Array([0.0, -1.0, heading]), "Station A channel changed")
+	physical_key(KEY_A, false)
+	joy_axis(JOY_AXIS_LEFT_X, 1.0)
+	joy_axis(JOY_AXIS_LEFT_Y, -1.0)
+	check(view.input_controls(0.0) == PackedFloat64Array([1.0, 1.0, heading]), "Selected left stick changed station movement channels")
+	joy_axis(JOY_AXIS_LEFT_X, 0.0)
+	joy_axis(JOY_AXIS_LEFT_Y, 0.0)
+	joy_axis(JOY_AXIS_RIGHT_X, 1.0)
+	joy_axis(JOY_AXIS_RIGHT_Y, -1.0)
+	view.input_controls(0.1)
+	check(is_equal_approx(view.requested_heading, heading - 0.18) and is_equal_approx(view.pitch, pitch + 0.18), "Selected right stick changed station look signs/rate")
+	joy_axis(JOY_AXIS_RIGHT_X, 0.0)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0.0)
+	right_mouse(true)
+	motion = InputEventMouseMotion.new()
+	# parse_input_event takes window coordinates; the headless viewport stretches them.
+	motion.relative = root.get_final_transform().basis_xform(Vector2(-100, 50))
+	Input.parse_input_event(motion)
+	Input.flush_buffered_events()
+	check(is_equal_approx(view.requested_heading, heading + 0.12) and is_equal_approx(view.pitch, pitch + 0.03) and owner.get_freedom_walk_state() == start, "Actual right-drag changed station look mapping or advanced C++ time")
+	right_mouse(false)
+	var accepted_heading: float = view.requested_heading
+	physical_key(KEY_D, true)
+	var expected: Variant = ClassDB.instantiate("FreedomBridge")
+	check(expected.initialize_freedom_new_game("42") and expected.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, 1.0, accepted_heading])), "Independent C++ station input oracle refused")
+	view._process(1.0 / 120.0)
+	physical_key(KEY_D, false)
+	check(owner.get_freedom_walk_state() == expected.get_freedom_walk_state() and owner.get_freedom_flight_state() == expected.get_freedom_flight_state(), "Actual accepted input diverged from C++ actor/craft tick")
+	check(owner.initialize_freedom_new_game("42"), "Could not reset owned input fixture for independent long trace")
+	view.update_view()
+	# A consumer refusal is terminal; every menu/direct Resume remains paused.
+	check(not view.advance_requested(NAN, PackedFloat64Array([0.0, 0.0, heading])), "Nonfinite consumer time accepted")
+	var message: String = view.error
+	view.toggle_pause()
+	view.set_paused(false)
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view._process(1.0)
+	check(view.paused and not message.is_empty() and view.error == message and view.pause_button.disabled and owner.get_freedom_walk_state() == start, "Terminal error recovered through Resume/focus/process")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3:
@@ -58,6 +270,7 @@ func run() -> void:
 	malformed["station_basis"] = Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)
 	check(not WalkView.valid_state(malformed), "Walk view accepted collapsed frame")
 	var view := WalkView.new()
+	physical_key(KEY_W, true)
 	root.add_child(view)
 	view.set_process(false)
 	if not view.initialize(owner, args[2]):
@@ -67,6 +280,12 @@ func run() -> void:
 		return
 	check(view.station != null and view.station.camera == null and view.ship != null, "Walking lost real ship/station or used an inspection camera")
 	check(view.camera.position == start.actor_eye_position and view.station.transform == Transform3D(start.station_basis, start.station_position), "Actor camera/station differs from authoritative projection")
+	await check_station_controls(view, owner, path, start, originals[0])
+	view.free()
+	view = WalkView.new()
+	root.add_child(view)
+	view.set_process(false)
+	check(view.initialize(owner, args[2]) and not view.paused, "Fresh already-neutral view did not retain running startup")
 	view.set_paused(true)
 	check(view.advance_requested(60.0, neutral) and owner.get_freedom_walk_state() == start, "Paused view advanced shared time")
 	view.set_paused(false)
