@@ -12,10 +12,14 @@ var scene: Node3D
 var viewport: SubViewport
 var telemetry: Label
 var pause_button: Button
+var save_button: Button
 var save_dialog: FileDialog
 var save_status: Label
 var paused := false
 var focused := true
+var controls_armed := false
+var selected_pad := -1
+var available_pads: Dictionary = {}
 var requested_heading := 0.0
 var pitch := 0.0
 var error := ""
@@ -111,8 +115,16 @@ func initialize(owner: Variant, assets: String) -> bool:
 	light.light_energy = 1.5
 	scene.add_child(light)
 	requested_heading = state.heading_radians
-	paused = state.continued
+	for pad in Input.get_connected_joypads():
+		available_pads[pad] = true
+		if selected_pad == -1:
+			selected_pad = pad
+	Input.joy_connection_changed.connect(controller_connection_changed)
 	build_ui()
+	controls_armed = current_controls_neutral()
+	paused = state.continued or not controls_armed
+	if paused:
+		pause_controls("Release walking and look controls, then Resume explicitly.")
 	update_view()
 	return true
 
@@ -124,16 +136,16 @@ func build_ui() -> void:
 	telemetry = Label.new()
 	column.add_child(telemetry)
 	var hint := Label.new()
-	hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc pause · Walk through the workshop toward D1"
+	hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk through the workshop toward D1"
 	column.add_child(hint)
 	pause_button = Button.new()
-	pause_button.focus_mode = Control.FOCUS_NONE
+	pause_button.focus_mode = Control.FOCUS_ALL
 	pause_button.text = "Resume" if paused else "Pause"
 	pause_button.pressed.connect(toggle_pause)
 	column.add_child(pause_button)
-	var save_button := Button.new()
+	save_button = Button.new()
 	save_button.text = "Save As…"
-	save_button.focus_mode = Control.FOCUS_NONE
+	save_button.focus_mode = Control.FOCUS_ALL
 	column.add_child(save_button)
 	save_status = Label.new()
 	save_status.text = "D1 access: hatch, ladder and seating are in development."
@@ -145,23 +157,92 @@ func build_ui() -> void:
 	save_dialog.filters = PackedStringArray(["*.json ; Apsis Drift save"])
 	save_dialog.current_file = "apsis-drift.json"
 	add_child(save_dialog)
-	save_button.pressed.connect(func():
-		set_paused(true)
-		save_dialog.popup_centered_ratio(0.75)
-	)
-	save_dialog.file_selected.connect(func(path: String):
-		save_status.text = "Saved to " + path if bridge.save_freedom_as(path) else "Save failed: " + str(bridge.get_last_error())
-	)
+	save_button.pressed.connect(open_save_dialog)
+	save_dialog.file_selected.connect(save_selected)
+	save_dialog.canceled.connect(save_canceled)
 
 
 func set_paused(value: bool) -> void:
-	paused = value
+	if value:
+		pause_controls("Walking paused. Release controls before Resume.")
+	else:
+		resume_requested()
+
+
+func pause_controls(reason: String) -> void:
+	paused = true
+	controls_armed = false
 	if pause_button != null:
-		pause_button.text = "Resume" if paused else "Pause"
+		pause_button.text = "Resume"
+		pause_button.disabled = not error.is_empty()
+		if focused and save_dialog != null and not save_dialog.visible:
+			(save_button if pause_button.disabled else pause_button).grab_focus()
+	if save_status != null:
+		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
 
 
 func toggle_pause() -> void:
-	set_paused(not paused)
+	if paused:
+		resume_requested()
+	else:
+		pause_controls("Walking paused. Release controls before Resume.")
+
+
+func resume_requested() -> void:
+	if not error.is_empty() or not focused or save_dialog == null or save_dialog.visible:
+		return
+	# A past neutral frame cannot authorize a later held press (even W+S / A+D).
+	observe_neutral_controls()
+	if not controls_armed:
+		save_status.text = "Release WASD, both sticks and right mouse before Resume."
+		return
+	paused = false
+	pause_button.text = "Pause"
+	pause_button.release_focus()
+	save_button.release_focus()
+	save_status.text = "Walking. Save As pauses the journey."
+
+
+func current_controls_neutral() -> bool:
+	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
+		if Input.is_physical_key_pressed(key):
+			return false
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		return false
+	if available_pads.get(selected_pad, false):
+		for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+			var value := Input.get_joy_axis(selected_pad, axis)
+			if not is_finite(value) or stick(value) != 0.0:
+				return false
+	return true
+
+
+func observe_neutral_controls() -> void:
+	controls_armed = focused and error.is_empty() and current_controls_neutral()
+
+
+func controller_connection_changed(device: int, connected: bool) -> void:
+	available_pads[device] = connected
+	if device == selected_pad:
+		pause_controls("Selected controller changed. Release controls, then Resume explicitly.")
+	elif connected and not available_pads.get(selected_pad, false):
+		pause_controls("Controller available. Press its Start to select it, then Resume after neutral.")
+
+
+func open_save_dialog() -> void:
+	if not focused or save_dialog == null:
+		return
+	pause_controls("Save As preserves the last committed journey state.")
+	save_dialog.popup_centered_ratio(0.75)
+
+
+func save_selected(path: String) -> void:
+	pause_controls("Save As closed. Resume explicitly after neutral.")
+	save_status.text = "Saved to " + path if bridge.save_freedom_as(path) else "Save failed: " + str(bridge.get_last_error())
+
+
+func save_canceled() -> void:
+	pause_controls("Save canceled. Resume explicitly after neutral.")
 
 
 static func stick(value: float) -> float:
@@ -169,21 +250,21 @@ static func stick(value: float) -> float:
 
 
 func input_controls(delta: float) -> PackedFloat64Array:
+	if paused or not focused or not error.is_empty() or save_dialog.visible:
+		return PackedFloat64Array([0.0, 0.0, requested_heading])
 	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
-	var pads := Input.get_connected_joypads()
-	if not pads.is_empty():
-		var pad := pads[0]
-		forward -= stick(Input.get_joy_axis(pad, JOY_AXIS_LEFT_Y))
-		right += stick(Input.get_joy_axis(pad, JOY_AXIS_LEFT_X))
-		requested_heading -= stick(Input.get_joy_axis(pad, JOY_AXIS_RIGHT_X)) * delta * 1.8
-		pitch = clampf(pitch - stick(Input.get_joy_axis(pad, JOY_AXIS_RIGHT_Y)) * delta * 1.8, -1.3, 1.3)
+	if available_pads.get(selected_pad, false):
+		forward -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_Y))
+		right += stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_X))
+		requested_heading -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_RIGHT_X)) * delta * 1.8
+		pitch = clampf(pitch - stick(Input.get_joy_axis(selected_pad, JOY_AXIS_RIGHT_Y)) * delta * 1.8, -1.3, 1.3)
 	requested_heading = wrapf(requested_heading, -PI, PI)
 	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), requested_heading])
 
 
 func advance_requested(delta: float, commands: PackedFloat64Array) -> bool:
-	if paused or not focused:
+	if paused or not focused or not error.is_empty() or (save_dialog != null and save_dialog.visible):
 		return true
 	if not bridge.advance_freedom_walk(delta, commands):
 		error = str(bridge.get_last_error())
@@ -207,7 +288,12 @@ func update_view() -> void:
 
 
 func _process(delta: float) -> void:
-	if bridge == null or paused or not focused:
+	if bridge == null:
+		return
+	if paused:
+		observe_neutral_controls()
+		return
+	if not focused or not error.is_empty() or save_dialog.visible:
 		return
 	advance_requested(delta, input_controls(minf(delta, 0.1)))
 
@@ -215,15 +301,46 @@ func _process(delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focused = false
-		set_paused(true)
+		pause_controls("Focus lost. Resume explicitly after current neutral input.")
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
+		controls_armed = false
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_ESCAPE:
+func _input(event: InputEvent) -> void:
+	if save_dialog == null:
+		return
+	var pad_event := event is InputEventJoypadButton or event is InputEventJoypadMotion
+	if pad_event and not available_pads.get(event.device, false):
+		# Queued events from a disconnected selection carry no menu authority.
+		get_viewport().set_input_as_handled()
+		return
+	if pad_event and event.device != selected_pad:
+		# Start selects only when the current device is absent; it never resumes.
+		if focused and not save_dialog.visible and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START and available_pads.get(event.device, false) and not available_pads.get(selected_pad, false):
+			selected_pad = event.device
+			pause_controls("Controller selected. Release controls, then Resume explicitly.")
+		get_viewport().set_input_as_handled()
+		return
+	if not focused or save_dialog == null or save_dialog.visible:
+		return
+	var pressed := event.is_pressed() and not event.is_echo()
+	var key: int = event.physical_keycode if event is InputEventKey else KEY_NONE
+	var button: int = event.button_index if event is InputEventJoypadButton else -1
+	if pressed and (key == KEY_ESCAPE or button == JOY_BUTTON_START or (paused and button == JOY_BUTTON_B)):
 		toggle_pause()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and not paused and focused and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
+		var current := get_viewport().gui_get_focus_owner()
+		(save_button if current == pause_button or pause_button.disabled else pause_button).grab_focus()
+		get_viewport().set_input_as_handled()
+	elif paused and pressed and (key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE] or button == JOY_BUTTON_A):
+		var current := get_viewport().gui_get_focus_owner()
+		if current == save_button:
+			open_save_dialog()
+		else:
+			resume_requested()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and not paused and error.is_empty() and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		requested_heading = wrapf(requested_heading - event.relative.x * 0.003, -PI, PI)
 		pitch = clampf(pitch - event.relative.y * 0.003, -1.3, 1.3)

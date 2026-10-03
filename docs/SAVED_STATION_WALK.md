@@ -67,8 +67,9 @@ retargeting, propulsion, hold and assistance requests refuse. Sitting/boarding
 must eventually change that state through real actions.
 
 Save As uses the existing C++ atomic writer and preserves the selected source.
-Continue restores the actor and voyage and begins paused. Fresh New Game runs;
-pause, focus loss and the save chooser prevent stepping. Quit does not autosave.
+Continue restores the actor and voyage and begins paused. Fresh New Game runs
+when its current walking/look controls are neutral; held input starts paused.
+Pause, focus loss and the save chooser prevent stepping. Quit does not autosave.
 Formats16/17/18/19 preserve their meanings and encodings. Format17 Continue
 remains the historical frozen station inspector; older files do not acquire
 an inferred actor or migrate merely by loading.
@@ -79,8 +80,28 @@ The view imports the same verified station and Wayfarer models used by saved
 flight. C++ projects the actor eye, station and craft at the shared tick in
 binary64 before native renderer casts. Godot receives input and handles look,
 materials, UI and camera placement; it runs no alternate locomotion body.
-WASD/left-stick requests use the same C++ movement channels. Right-drag/right
-stick looks, Escape pauses, and the chooser invokes the real Save As owner.
+WASD/left-stick requests use the same station movement channels. Right-drag/right
+stick looks. These remain the station mappings, independent of saved-flight
+controls and preferences.
+
+2026-10-03, #382: Escape or the selected controller's Start opens pause/Resume.
+Arrows or Tab and the selected D-pad navigate Resume and Save As; Enter, Space
+or A/Cross selects. B/Circle also requests explicit Resume while paused. Every
+Resume checks the controls held now: each W/A/S/D key, right mouse and both
+selected sticks must be neutral. Opposed keys remain held even if their summed
+movement is zero; a prior neutral paused frame cannot authorize a later press.
+Start and menu confirmation are UI actions, not walking-neutral axes.
+
+The view selects its initially connected controller once. Other controllers
+cannot steer, navigate or steal an available selection. Selected-device loss or
+reconnection pauses; an absent/unselected controller can be selected explicitly
+with its Start, which stays paused until a separate neutral Resume. Keyboard
+Resume remains available with a disconnected selected pad. No device change,
+focus return, Save As cancellation or completed save resumes automatically.
+The chooser invokes the real C++ atomic Save As owner. These paused paths
+preserve the committed actor/craft/shared-clock state and inspection heading,
+pitch and camera. A consumer error remains paused and cannot recover through
+Resume. Physical controller hardware qualification remains separate.
 
 Tests reject nonfinite data, invalid dimensions/buffers/indices, excessive
 nesting, stale geometry, unsupported spawns, malformed fields, corrupt saves,
@@ -91,6 +112,11 @@ direct decode and native file load without source mutation. Out/back traces and 
 Save As/Continue bytes compose actor, craft and history at different native
 cadences. Historical station and physical-flight/docking paths remain required.
 Cross-host math-library qualification remains separately tracked by #255.
+The station-input contract injects real software key, mouse and pad events,
+including individual held/opposed controls, deferred presses, menu navigation,
+focus and connection callbacks and dialog return. Paused navigation is checked
+against exact C++ state and independent Save As fixture bytes; accepted station
+input still matches C++ motion and the independent long/cadence traces.
 
 The six-part owner handoff still needs open-hatch/ladder boarding, actual sitting,
 departure from New Game, surface contact and the composed home-return journey.
