@@ -134,12 +134,19 @@ auto assess_touchdown_envelope(const RigidBodyWorldContext& context,
       return std::unexpected(TouchdownError::invalid_normal);
     }
   }
-  const auto planet =
-      find_local_system_planet(context.system, observations.planet);
+  const auto* planet = [&]() -> const LocalSystemPlanet* {
+    if (const auto* owner = context.physical_owner()) {
+      const auto found = find_local_system_planet(*owner, observations.planet);
+      return found ? *found : nullptr;
+    }
+    const auto found =
+        find_local_system_planet(context.system, observations.planet);
+    return found ? *found : nullptr;
+  }();
   if (!planet) {
     return std::unexpected(TouchdownError::invalid_state);
   }
-  const auto& descriptor = (*planet)->descriptor;
+  const auto& descriptor = planet->descriptor;
   const double gravity = static_cast<double>(descriptor.surface_gravity.value) *
                          kStandardGravityMetresPerSecondSquared / 1000.0;
   const double weight = static_cast<double>(craft.dry_mass_kg) * gravity;

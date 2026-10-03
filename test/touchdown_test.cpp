@@ -615,6 +615,223 @@ auto pad_velocity_and_combined_margins(const Fixture& f) -> void {
         "all simultaneous unmet margins accumulate without first-failure short "
         "circuit");
 }
+
+auto physical_owner_contract() -> void {
+  const auto origin = generate_physical_origin_system(Seed{42});
+  check(origin.has_value(), "genuine physical origin generated");
+  if (!origin) return;
+  const auto procedural = generate_physical_local_system(origin->catalog.seed);
+  check(procedural.has_value(), "genuine same-ID procedural owner generated");
+  if (!procedural) return;
+  check(origin->catalog.id == procedural->catalog.id &&
+            origin->catalog.planets.front().descriptor.id ==
+                procedural->catalog.planets.front().descriptor.id &&
+            origin->catalog.planets.front().descriptor !=
+                procedural->catalog.planets.front().descriptor,
+        "same numeric IDs do not substitute origin/procedural descriptors");
+  const auto station = generate_origin_station(Seed{42});
+  for (const auto* owner : {&*origin, &*procedural}) {
+    const auto before_owner = *owner;
+    const auto& planet = owner->catalog.planets.front();
+    const RigidBodyWorldContext context{*owner};
+    const auto selected =
+        find_local_system_planet(*owner, planet.descriptor.id);
+    check(selected && *selected == &planet &&
+              !validate_local_system(owner->catalog) &&
+              !find_local_system_planet(owner->catalog, planet.descriptor.id),
+          "physical owner resolves its own descriptor; legacy catalog refuses");
+    for (const auto recipe :
+         {CraftFrameRecipe{kStarterShuttleFrameId, kStarterShuttleFrameVersion},
+          CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion}}) {
+      const auto frame = resolve_craft_frame(recipe);
+      check(frame.has_value(), "registered terrain-contact craft resolves");
+      if (!frame) continue;
+      const auto& craft = frame->properties;
+      RigidBodyState state;
+      state.craft = recipe;
+      state.frame = {RigidFrameKind::planet_fixed, owner->catalog.id,
+                     planet.descriptor.id, std::nullopt};
+      state.tick = 17;
+      state.position_metres = {
+          0,
+          planet.descriptor.radius.value * 1000.0 -
+              static_cast<double>(craft.supports[0].contact_mm[1]) / 1000.0,
+          0};
+      TouchdownObservations observations;
+      observations.planet = planet.descriptor.id;
+      observations.tick = state.tick;
+      observations.support_count = craft.support_count;
+      observations.gear_deployed = true;
+      for (std::uint8_t i = 0; i < observations.support_count; ++i)
+        observations.supports[i] = {
+            i, 0, 0, {0, 1, 0}, TouchdownSurface::solid, true};
+      const auto before_state = state;
+      const auto before_observations = observations;
+      const auto bytes = encode_rigid_body_state_json(context, state);
+      const auto checksum = rigid_body_state_checksum(context, state);
+      const auto result =
+          assess_touchdown_envelope(context, state, observations);
+      const double gravity =
+          planet.descriptor.surface_gravity.value * 9.80665 / 1000.0;
+      std::uint32_t expected{};
+      if (gravity > craft.max_surface_gravity_mm_per_second2 / 1000.0)
+        expected |= bit(TouchdownMargin::gravity_rating_exceeded);
+      if (planet.descriptor.atmosphere_pressure.value >
+          craft.max_pressure_millibars)
+        expected |= bit(TouchdownMargin::pressure_rating_exceeded);
+      for (std::size_t i = 0; i < craft.support_count; ++i)
+        if (craft.dry_mass_kg * gravity > craft.supports[i].rated_load_newtons)
+          expected |= bit(TouchdownMargin::static_support_load_exceeded);
+      check(result && result->failed_margins == expected && expected == 0 &&
+                result->classification == TouchdownClass::pad_contact_ready &&
+                result->support_count == craft.support_count,
+            "both physical owners/crafts retain actual environment/load rules");
+      if (result)
+        for (std::size_t i = 0; i < craft.support_count; ++i) {
+          near(result->supports[i].normal_velocity_metres_per_second, 0, 0,
+               "physical level pad normal speed is zero");
+          near(result->supports[i].tangential_speed_metres_per_second, 0, 0,
+               "physical level pad tangential speed is zero");
+          near(result->supports[i].compression_capacity_metres, .3, 0,
+               "physical craft retains authored stroke");
+        }
+      auto moving = state;
+      moving.linear_velocity_metres_per_second.y = -1.9;
+      const double pitch = recipe.id == kStarterShuttleFrameId ? -.1 : .1;
+      moving.angular_velocity_radians_per_second.x = pitch;
+      const auto spun =
+          assess_touchdown_envelope(context, moving, observations);
+      check(spun && has(*spun, TouchdownMargin::descent_speed_exceeded),
+            "both physical craft geometries retain pad overspeed at safe COM");
+      if (spun)
+        for (std::size_t i = 0; i < craft.support_count; ++i) {
+          const double offset =
+              static_cast<double>(craft.supports[i].contact_mm[2] -
+                                  craft.center_of_mass_mm[2]) /
+              1000.0;
+          near(spun->supports[i].normal_velocity_metres_per_second,
+               -1.9 - pitch * offset, 1e-14,
+               "independent body-X cross lever-arm normal velocity");
+        }
+      const auto reject = [&](const RigidBodyWorldContext& selected_context,
+                              RigidBodyState invalid_state,
+                              TouchdownObservations invalid_observations,
+                              TouchdownError error) {
+        const auto prior_state = invalid_state;
+        const auto prior_observations = invalid_observations;
+        const auto rejected = assess_touchdown_envelope(
+            selected_context, invalid_state, invalid_observations);
+        check(!rejected && rejected.error() == error,
+              "physical invalid input preserves existing error/order");
+        check(same(invalid_state, prior_state) &&
+                  same(invalid_observations, prior_observations),
+              "physical refusal leaves every state/observation bit unchanged");
+      };
+      for (unsigned field = 0; field < 4; ++field) {
+        auto forged = *owner;
+        if (field == 0) ++forged.generator_version;
+        if (field == 1) ++forged.source_catalog_generator;
+        if (field == 2) ++forged.ephemeris_version;
+        if (field == 3) forged.origin_universe_seed = Seed{43};
+        auto bad_observations = observations;
+        bad_observations.support_count = 0;
+        reject(RigidBodyWorldContext{forged}, state, bad_observations,
+               TouchdownError::invalid_state);
+      }
+      auto wrong_state = state;
+      wrong_state.frame.kind = RigidFrameKind::system_inertial;
+      wrong_state.frame.planet.reset();
+      auto wrong_observations = observations;
+      ++wrong_observations.tick;
+      reject(context, wrong_state, wrong_observations,
+             TouchdownError::unsupported_frame);
+      wrong_observations.support_count = 0;
+      reject(context, state, wrong_observations,
+             TouchdownError::observation_identity_mismatch);
+      wrong_state = state;
+      wrong_state.frame.system.value ^= 1;
+      reject(context, wrong_state, observations, TouchdownError::invalid_state);
+      wrong_state = state;
+      wrong_state.frame.planet = PlanetId{0};
+      reject(context, wrong_state, observations, TouchdownError::invalid_state);
+      wrong_observations = observations;
+      wrong_observations.planet = PlanetId{0};
+      reject(context, state, wrong_observations,
+             TouchdownError::observation_identity_mismatch);
+      for (double bad : {NAN, INFINITY, -INFINITY}) {
+        wrong_state = state;
+        wrong_state.position_metres.y = bad;
+        reject(context, wrong_state, observations,
+               TouchdownError::invalid_state);
+        wrong_observations = observations;
+        wrong_observations.supports[1].minimum_gap_metres = bad;
+        reject(context, state, wrong_observations,
+               TouchdownError::invalid_observation);
+        wrong_observations = observations;
+        wrong_observations.supports[1].outward_normal.z = bad;
+        reject(context, state, wrong_observations,
+               TouchdownError::invalid_normal);
+      }
+      wrong_observations = observations;
+      wrong_observations.support_count = 4;
+      reject(context, state, wrong_observations,
+             TouchdownError::invalid_support_count);
+      wrong_observations = observations;
+      wrong_observations.supports[1].support_index = 0;
+      reject(context, state, wrong_observations,
+             TouchdownError::invalid_support_order);
+      wrong_observations = observations;
+      wrong_observations.supports[3] = observations.supports[0];
+      reject(context, state, wrong_observations,
+             TouchdownError::invalid_observation);
+      wrong_observations = observations;
+      wrong_observations.supports[1].outward_normal = {0, -1, 0};
+      reject(context, state, wrong_observations,
+             TouchdownError::invalid_normal);
+      wrong_observations = observations;
+      wrong_observations.gear_deployed = false;
+      wrong_observations.supports[0].surface = TouchdownSurface::water;
+      wrong_observations.supports[1].footprint_supported = false;
+      wrong_observations.supports[2].minimum_gap_metres =
+          -std::nextafter(.3, 1.0);
+      const auto unsafe =
+          assess_touchdown_envelope(context, state, wrong_observations);
+      check(
+          unsafe &&
+              unsafe->classification == TouchdownClass::pad_contact_unsafe &&
+              unsafe->failed_margins ==
+                  (bit(TouchdownMargin::gear_not_deployed) |
+                   bit(TouchdownMargin::unsupported_material) |
+                   bit(TouchdownMargin::unsupported_footprint) |
+                   bit(TouchdownMargin::compression_exceeded)),
+          "physical owner lookup grants no gear/material/footprint permission");
+      if (owner == &*origin) {
+        const PhysicalLocalSystem substituted{
+            origin->generator_version,
+            origin->source_catalog_generator,
+            origin->ephemeris_version,
+            origin->origin_universe_seed,
+            procedural->catalog,
+            origin->stellar_mass_millisolar,
+            origin->stellar_gm_km3_per_second2};
+        reject(RigidBodyWorldContext{substituted}, state, observations,
+               TouchdownError::invalid_state);
+        reject(RigidBodyWorldContext{*procedural, &station}, state,
+               observations, TouchdownError::invalid_state);
+        check(
+            bytes && !decode_rigid_body_state_json(
+                         RigidBodyWorldContext{*procedural}, *bytes),
+            "same-ID procedural owner cannot hydrate origin-owned projection");
+      }
+      check(same(state, before_state) &&
+                same(observations, before_observations) &&
+                *owner == before_owner && bytes && checksum &&
+                encode_rigid_body_state_json(context, state) == bytes &&
+                rigid_body_state_checksum(context, state) == checksum,
+            "physical assessment preserves owner, input bits and projection");
+    }
+  }
+}
 } // namespace
 
 auto main() -> int {
@@ -626,6 +843,7 @@ auto main() -> int {
   geometry_and_material(fixture);
   pad_velocity_and_combined_margins(fixture);
   exact_assessment_contract(fixture);
+  physical_owner_contract();
   std::cout << "Touchdown supplied-pad envelope: " << failures << " failures\n";
   return failures == 0 ? 0 : 1;
 }
