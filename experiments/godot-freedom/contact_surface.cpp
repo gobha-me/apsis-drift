@@ -1,4 +1,5 @@
 #include "contact_surface.hpp"
+#include "contact_geometry_internal.hpp"
 
 #include "relief.hpp"
 
@@ -111,7 +112,7 @@ auto build_validated(const PlanetDescriptor& planet,
     if (!sample) return std::unexpected{ContactSurfaceError::sampling_failure};
     // Validated generated radii and address bound relief's coordinate/cell
     // arithmetic. No arbitrary heights, relief versions or vector magnitudes.
-    *sample = with_relief(*sample, planet, *reference, 1);
+    *sample = with_relief(*sample, planet, *reference, recipe.relief);
     const auto vertex = planet_fixed_from_terrain_address(
         planet, address, sample->elevation_metres);
     if (!vertex || !valid_point(*vertex))
@@ -164,6 +165,27 @@ auto intersect_validated(const ContactTriangle& triangle,
   return ContactSurfacePoint{triangle, hit, distance, barycentric};
 }
 } // namespace
+
+namespace detail {
+auto locate_selected_contact_triangle(const PlanetDescriptor& planet,
+                                      PlanetFixedDirection direction)
+    -> std::expected<ContactTriangleId, ContactSurfaceError> {
+  return locate_validated(planet, direction);
+}
+auto build_selected_contact_triangle(const PlanetDescriptor& planet,
+                                     ContactSurfaceRecipe recipe,
+                                     ContactTriangleId id,
+                                     TerrainTileCache& cache)
+    -> std::expected<ContactTriangle, ContactSurfaceError> {
+  if (id.planet != planet.id)
+    return std::unexpected{ContactSurfaceError::wrong_planet};
+  if (!valid_id(id))
+    return std::unexpected{ContactSurfaceError::invalid_triangle};
+  if (recipe.relief > kExperimentalReliefVersion)
+    return std::unexpected{ContactSurfaceError::unsupported_recipe};
+  return build_validated(planet, recipe, id, cache);
+}
+} // namespace detail
 
 auto locate_contact_triangle(const PlanetDescriptor& planet,
                              ContactSurfaceRecipe recipe,

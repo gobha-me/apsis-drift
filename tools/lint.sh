@@ -47,7 +47,9 @@ cmake -S . -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DAPSIS_DRIFT_RTAUDIO=ON \
-  -DAPSIS_DRIFT_MIDI_SPIKE=ON
+  -DAPSIS_DRIFT_MIDI_SPIKE=ON \
+  -DAPSIS_DRIFT_GODOT_SPIKE=ON \
+  -DAPSIS_DRIFT_GODOT_LIVE=OFF
 
 "$runner" \
   -p "$build_dir" \
@@ -55,4 +57,4 @@ cmake -S . -B "$build_dir" \
   -clang-tidy-binary "$tidy" \
   -warnings-as-errors='*' \
   -quiet \
-  "^${repo_root}/(src|test)/.*[.]cpp$"
+  "^${repo_root}/((src|test)/.*|experiments/godot-freedom/(contact_(surface|patch)|saved_contact_geometry)(_test)?)[.]cpp$"
