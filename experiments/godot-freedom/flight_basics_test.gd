@@ -151,6 +151,49 @@ func run() -> void:
 	var limits := Basics.page_text(4, controls, true, true)
 	check("not autopilot" in limits and "16 m" in limits and "flight saves are not implemented" in limits, "Prototype limitations missing")
 	menu.free()
+	# The same widget has explicit ordinary saved and historical craft profiles.
+	for wayfarer in [true, false]:
+		menu = Menu.new()
+		menu.controls = controls
+		menu.saved_flight = true
+		menu.saved_wayfarer = wayfarer
+		root.add_child(menu)
+		pause()
+		await layout_settle()
+		check(is_instance_valid(menu.basics_button) and menu.basics.saved_flight, "Saved reference entry/profile missing")
+		menu.basics_button.grab_focus()
+		await key(KEY_ENTER, true)
+		await key(KEY_ENTER, false)
+		check(menu.basics.visible and not controls.enabled, "Saved reference entry resumed controls")
+		check(controls.rebind("forward", "key", {"kind": "key", "code": KEY_T}), "Saved reference remap fixture failed")
+		menu.refresh_bindings()
+		check(Basics.binding(controls, "forward") in menu.basics.body.text and "R2" in menu.basics.body.text and controls.binding_label("forward", "key") == "T", "Saved reference failed current remapped/PlayStation labels")
+		var complete := ""
+		for size in [Vector2i(1280, 720), Vector2i(960, 540), Vector2i(800, 450)]:
+			root.size = size
+			for index in menu.basics.titles().size():
+				menu.basics.page = index
+				menu.basics.refresh()
+				await layout_settle()
+				for item in [menu.basics.heading, menu.basics.scroll, menu.basics.previous_button, menu.basics.next_button, menu.basics.back_button]:
+					check(root.get_visible_rect().encloses(item.get_global_rect()), "Saved reference clipped at %s page %d" % [size, index])
+				complete += menu.basics.body.text
+		check("flight saves are not implemented" not in complete and "practice relocates" not in complete and "16 m" not in complete and "NAV" not in complete, "Saved reference inherited lab capabilities")
+		check("actual atmosphere boundary" in complete and "20 km" not in complete and "physical torque fractions" in complete and "automatic hover" in complete, "Saved reference misstated orbit/actuator model")
+		check("Quit does not autosave" in complete and "last committed" in complete, "Saved reference lost committed save policy")
+		var ports := Basics.saved_page_text(4, controls, wayfarer)
+		check(("Target D1 / D2" in ports) == wayfarer and ("no supported Wayfarer" in ports) == not wayfarer, "Historical profile manufactured port support")
+		controls.waiting_action = "forward"
+		menu.close_basics()
+		menu.show_basics()
+		check(not menu.basics.visible, "Remap capture opened saved reference")
+		controls.waiting_action = ""
+		menu.show_basics()
+		menu.basics.back_button.grab_focus()
+		await key(KEY_ENTER, true)
+		await key(KEY_ENTER, false)
+		check(not menu.basics.visible and menu.menu_margin.visible and root.gui_get_focus_owner() == menu.basics_button and not controls.enabled, "Saved Back lost paused entry focus")
+		menu.free()
 	controls.free()
 	print("Flight basics: %d failures; remapped paused reference, controller/keyboard navigation and small viewport wrapping" % failures)
 	quit(0 if failures == 0 else 1)

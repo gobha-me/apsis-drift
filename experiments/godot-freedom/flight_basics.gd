@@ -1,8 +1,11 @@
 extends MarginContainer
-## BSD-3-Clause. Read-only paused reference for the native thrust lab, not a
+## BSD-3-Clause. Read-only paused reference for native lab/saved flight, not a
 ## tutorial state machine or flight authority. Bindings come from input owner.
 signal back_requested
 const TITLES := ["Thrust and momentum", "Space is not orbit", "Flight assistance", "Look without steering", "Guidance and prototype limits"]
+const SAVED_TITLES := ["Physical thrust and momentum", "Air and orbital observations", "Physical assistance", "Look without steering", "Origin ports", "Committed saves and limits"]
+var saved_flight := false
+var saved_wayfarer := false
 var controls: Node
 var rotational_coasting := false
 var orbit_preserving_assist := false
@@ -39,6 +42,27 @@ static func page_text(index: int, controls_ref: Node, rotation_coasts: bool, tra
 		4:
 			return "Flight guidance is advisory—not autopilot. Choose it from the controls menu; flight continues while the guidance selector is open. You still steer and apply thrust.\n\nOrbit / Re-entry practice relocates the unsaved flight. It is a test setup, not travel or a checkpoint.\n\nLanding gear is not a landing system. This native lab has no landing/contact collision; its 16 m test floor guard is not a touchdown.\n\nFuel use, jumps and flight saves are not implemented in this native slice. Settings persistence is separate."
 	return ""
+
+static func saved_page_text(index: int, controls_ref: Node, wayfarer: bool) -> String:
+	match index:
+		0:
+			return "Main thrust: %s\nWeak retro: %s\nRoll left / right: %s · %s\n\nYour controls request independent physical thrust and torque. Releasing thrust is not a stop command. Retro is weaker than main: allow time and room to slow down.\n\nTurning the ship does not redirect its momentum. Opposed engines can both fire even when their net force cancels. Air resistance changes motion; gravity remains in space." % [binding(controls_ref, "forward"), binding(controls_ref, "backward"), binding(controls_ref, "roll_left"), binding(controls_ref, "roll_right")]
+		1:
+			return "Altitude is height above the planet's reference sphere, not terrain clearance. Surface speed is relative to the rotating planet; radial rate says whether you are rising or falling. Air density describes the environment, not a safe trajectory.\n\nPeriapsis is a predicted lowest radius from the planet's centre; subtract the reference radius to express its altitude. Apoapsis may be unavailable. Being in space does not mean you are in orbit.\n\nA stable closed orbit is bound, with periapsis above the actual atmosphere boundary. Escape is not a closed orbit. These are central-body observations, not terrain avoidance, landing clearance or autopilot. Thrust changes the prediction."
+		2:
+			return "Toggle assistance: %s\n\nON uses bounded real actuator torque to stabilize rotation toward the requested angular rate. OFF removes that active stabilization; released rotation can coast. Passive air effects still act.\n\nAssistance is not a translation brake, forward-speed hold or automatic hover. Assistance alone does not brake orbital coasting. Held attitude controls request physical torque fractions; available actuators limit the response.\n\nA saved orbit-hold request is separate from assistance and remains subject to your flight inputs and flight conditions. No hold selector is available in this view." % binding(controls_ref, "assist")
+		3:
+			return "Hold to look: %s\nCockpit / chase: %s\n\nHold and use your configured look directions to look around or orbit the exterior camera. Release to recenter; center the shared yaw / rise-fall controls before steering resumes. Other independent flight controls remain available during look.\n\nThe mapping stays the same in atmosphere and space. Examples update with remapping; the controls menu lists every binding. A camera choice does not board or seat a pilot." % [binding(controls_ref, "look_hold"), binding(controls_ref, "camera")]
+		4:
+			if not wayfarer:
+				return "This historical saved craft has no supported Wayfarer docking controls. Its placeholder presentation preserves the original craft configuration.\n\nContinue and Save As preserve that craft. This reference does not substitute a Wayfarer, relocate it or board a pilot."
+			return "Target D1 / D2 selects a port without moving the craft. Release an attachment before changing target.\n\nCapture needs the current port assessment: outward approach, collar separation at most 0.15 m, full attitude within 3°, inward closure 0–0.3 m/s, lateral motion at most 0.2 m/s and angular speed at most 0.02 rad/s. The complete stowed hull must fit the reserved column. Read the current readiness or refusal in the flight view or controls menu.\n\nCapture locks your craft to the station and matches its motion. Thrusters remain off while attached. Release unlocks the craft without changing its position or velocity; then use thrusters to depart. Docking does not board or seat the pilot."
+		5:
+			return "Continue opens paused. Save As records the last committed flight state, including your craft, journey and any port attachment. Held controls and camera offsets are separate from that save.\n\nCancel or failed Save As stays paused. Quit does not autosave. Release every mapped control before explicitly resuming; focus return alone never resumes. Control preferences are separate from world saves.\n\nThis saved view offers no practice relocation or reset. Boarding / seating, planetary touchdown and recovery remain incomplete journey work. Fuel accounting and jump travel are not implemented here. Landing gear appearance is not a qualified landing system."
+	return ""
+
+func titles() -> Array:
+	return SAVED_TITLES if saved_flight else TITLES
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -109,15 +133,15 @@ func open() -> void:
 	next_button.grab_focus()
 
 func change_page(direction: int) -> void:
-	page = posmod(page + direction, TITLES.size())
+	page = posmod(page + direction, titles().size())
 	scroll.scroll_vertical = 0
 	refresh()
 
 func refresh() -> void:
 	if not is_instance_valid(heading) or not is_instance_valid(controls):
 		return
-	heading.text = "FLIGHT BASICS  %d / %d  —  %s" % [page+1, TITLES.size(), TITLES[page]]
-	body.text = page_text(page, controls, rotational_coasting, orbit_preserving_assist)
+	heading.text = "FLIGHT BASICS  %d / %d  —  %s" % [page+1, titles().size(), titles()[page]]
+	body.text = saved_page_text(page, controls, saved_wayfarer) if saved_flight else page_text(page, controls, rotational_coasting, orbit_preserving_assist)
 
 func _apply_readable_scale() -> void:
 	# The study normally draws a 1920 logical canvas into a 1280 window. Keep

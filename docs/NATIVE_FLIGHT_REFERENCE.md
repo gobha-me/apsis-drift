@@ -32,3 +32,15 @@ localization, hardware-controller or all-existing-menu-layout qualification.
 #180 remains open for contextual teaching as additional real navigation,
 landing, fuel and recovery mechanics become available; this reference does not
 advertise those future systems as shipped.
+
+2026-10-03, #384 extends this same panel to ordinary saved flight. Its explicit
+saved profile describes physical thrust/torque, current orbital observations,
+assistance, remapped look/view actions, Wayfarer port readiness and committed
+Save As/Continue behavior. Historical saved craft receives a ports-unavailable
+profile. The lab's practice, floor and no-flight-saves claims remain confined to
+the lab; its additional 20 km orbit criterion is not the saved C++ STABLE policy.
+Saved help introduces no NAV instrument, flight command, boarding transition,
+landing, fuel or jump capability. Back returns to controls while paused and
+explicit resume retains the existing current-neutral gate. Reference software
+contracts cover both profiles and exact saved-owner state/save preservation;
+hardware and complete First Flight remain separate qualification.
