@@ -1,4 +1,5 @@
 #include "contact_patch.hpp"
+#include "contact_geometry_internal.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -57,31 +58,10 @@ auto certify_patch_impl(const RigidBodyWorldContext& context,
       find_local_system_planet(context.system, *state.frame.planet);
   if (!body) return std::unexpected{ContactPatchError::invalid_state};
   const auto& planet = (*body)->descriptor;
-  const auto& support = craft->properties.supports[support_index];
-  V offset{};
-  const auto relative_mm = [&](unsigned axis) {
-    // Promote BEFORE subtraction, including future signed COM offsets.
-    return static_cast<double>(std::int64_t{support.contact_mm[axis]} -
-                               craft->properties.center_of_mass_mm[axis]) /
-           1000.0;
-  };
-  offset = {relative_mm(0), relative_mm(1), relative_mm(2)};
-  const V center = add({state.position_metres.x, state.position_metres.y,
-                        state.position_metres.z},
-                       rotate(state.orientation, offset));
-  const V width =
-      rotate(state.orientation,
-             {static_cast<double>(support.half_width_mm) / 1000.0, 0, 0});
-  const V depth =
-      rotate(state.orientation,
-             {0, 0, static_cast<double>(support.half_length_mm) / 1000.0});
-  const V up = rotate(state.orientation, {0, 1, 0});
-  const auto radial = length(center);
-  const auto radius = static_cast<double>(planet.radius.value) * 1000.0;
-  if (!finite(center) || !finite(width) || !finite(depth) || !finite(up) ||
-      !std::isfinite(radial) || radial <= 0 ||
-      std::abs(radial - radius) > kContactPatchMaximumDatumAltitudeMetres)
-    return std::unexpected{ContactPatchError::outside_query_bounds};
+  const auto rectangle = detail::nominal_contact_rectangle(
+      planet, state, craft->properties, support_index);
+  if (!rectangle) return std::unexpected{rectangle.error()};
+  const auto& center = rectangle->center;
 
   // Input validation and query bounds above touch no terrain cache. This one
   // candidate is chosen by radial center, not claimed to be a first normal hit.
@@ -104,8 +84,59 @@ auto certify_patch_impl(const RigidBodyWorldContext& context,
   }();
   if (!triangle)
     return std::unexpected{ContactPatchError::surface_query_failed};
-  const auto& vertices = triangle->vertices;
-  const auto normal = triangle->outward_normal;
+  return detail::certify_contact_rectangle(state, support_index, *rectangle,
+                                           *triangle);
+}
+} // namespace
+
+namespace detail {
+auto nominal_contact_rectangle(const PlanetDescriptor& planet,
+                               const RigidBodyState& state,
+                               const CraftFrameProperties& craft,
+                               unsigned support_index)
+    -> std::expected<NominalContactRectangle, ContactPatchError> {
+  if (support_index >= craft.support_count ||
+      support_index >= craft.supports.size())
+    return std::unexpected{ContactPatchError::invalid_support};
+  const auto& support = craft.supports[support_index];
+  V offset{};
+  const auto relative_mm = [&](unsigned axis) {
+    // Promote BEFORE subtraction, including future signed COM offsets.
+    return static_cast<double>(std::int64_t{support.contact_mm[axis]} -
+                               craft.center_of_mass_mm[axis]) /
+           1000.0;
+  };
+  offset = {relative_mm(0), relative_mm(1), relative_mm(2)};
+  const V center = add({state.position_metres.x, state.position_metres.y,
+                        state.position_metres.z},
+                       rotate(state.orientation, offset));
+  const V width =
+      rotate(state.orientation,
+             {static_cast<double>(support.half_width_mm) / 1000.0, 0, 0});
+  const V depth =
+      rotate(state.orientation,
+             {0, 0, static_cast<double>(support.half_length_mm) / 1000.0});
+  const V up = rotate(state.orientation, {0, 1, 0});
+  const auto radial = length(center);
+  const auto radius = static_cast<double>(planet.radius.value) * 1000.0;
+  if (!finite(center) || !finite(width) || !finite(depth) || !finite(up) ||
+      !std::isfinite(radial) || radial <= 0 ||
+      std::abs(radial - radius) > kContactPatchMaximumDatumAltitudeMetres)
+    return std::unexpected{ContactPatchError::outside_query_bounds};
+
+  return NominalContactRectangle{center, width, depth, up};
+}
+auto certify_contact_rectangle(const RigidBodyState& state,
+                               unsigned support_index,
+                               const NominalContactRectangle& rectangle,
+                               const ContactTriangle& triangle)
+    -> std::expected<ContactPatch, ContactPatchError> {
+  const auto& center = rectangle.center;
+  const auto& width = rectangle.width;
+  const auto& depth = rectangle.depth;
+  const auto& up = rectangle.up;
+  const auto& vertices = triangle.vertices;
+  const auto normal = triangle.outward_normal;
   const V n{normal.x, normal.y, normal.z};
   const V relative = subtract(center, vertices[0]);
   if (!finite(relative) || length(relative) > 200000.0)
@@ -131,7 +162,7 @@ auto certify_patch_impl(const RigidBodyWorldContext& context,
   result.frame = state.frame;
   result.tick = state.tick;
   result.support_index = static_cast<std::uint8_t>(support_index);
-  result.triangle = *triangle;
+  result.triangle = triangle;
   result.pad_center = center;
   result.half_width = direction(width);
   result.half_length = direction(depth);
@@ -162,7 +193,7 @@ auto certify_patch_impl(const RigidBodyWorldContext& context,
     return std::unexpected{ContactPatchError::ill_conditioned_geometry};
   return result;
 }
-} // namespace
+} // namespace detail
 
 auto certify_contact_patch(const RigidBodyWorldContext& context,
                            const RigidBodyState& state, unsigned support_index,

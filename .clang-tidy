@@ -60,7 +60,7 @@ Checks: >
   modernize-use-nullptr,
   modernize-use-override
 WarningsAsErrors: '*'
-HeaderFilterRegex: '^.*/(include|src)/'
+HeaderFilterRegex: '^.*/((include|src)/|experiments/godot-freedom/(contact_(surface|patch|geometry_internal)|saved_contact_geometry(_internal)?)[.]hpp$)'
 ExcludeHeaderFilterRegex: '^.*/(build[^/]*/|_deps)/'
 SystemHeaders: false
 FormatStyle: file
