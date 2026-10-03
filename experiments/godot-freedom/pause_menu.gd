@@ -1,5 +1,8 @@
 extends CanvasLayer
 ## Native focus-navigation controls. Menu input never advances flight.
+signal save_requested
+signal assistance_requested(enabled: bool)
+signal port_requested(command: String, ordinal: int)
 signal resumed
 signal quit_requested
 signal reset_flight
@@ -9,6 +12,12 @@ signal practice_requested(reentry: bool)
 signal guidance_requested
 signal ship_audio_muted(value: bool)
 signal audio_mix_changed
+var saved_flight := false
+var saved_wayfarer := false
+var saved_assist_button: CheckButton
+var saved_port_buttons: Dictionary = {}
+var saved_note: Label
+var save_button: Button
 var ship_audio_available := false
 var audio_preferences: RefCounted
 var audio_sliders: Dictionary = {}
@@ -64,14 +73,26 @@ func _ready() -> void:
 	theme.default_font_size = 26
 	margin.theme = theme
 	var note := Label.new()
-	if controls.thrust_mode:
+	if saved_flight:
+		saved_note = note
+	elif controls.thrust_mode:
 		note.text = "THRUST LAB / CURRENT BINDINGS ON THE RIGHT\nFlight basics explains movement, orbit and limits.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: resume"
 	else:
 		note.text = "LEGACY FOUR-AXIS FLIGHT / LAYOUT 4\nRT / R2: forward · LT / L2: reverse\nRight stick: heading / rise-fall\nLB / L1: strafe left · RB / R1: strafe right\nHold left stick click / L3: head-look\nRelease: snap to ship centerline\nCenter right stick to resume yaw / rise-fall.\nLeft-stick pitch / roll require thrust model.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: resume"
 	note.add_theme_font_size_override("font_size", 23)
 	left.add_child(note)
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
-	if controls.thrust_mode:
+	if saved_flight:
+		save_button = add_button(left, "Save As…", func(): save_requested.emit())
+		saved_assist_button = CheckButton.new()
+		saved_assist_button.text = "Assisted piloting"
+		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
+		left.add_child(saved_assist_button)
+		if saved_wayfarer:
+			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0]]:
+				var button := add_button(left, item[0], func(): port_requested.emit(item[1], item[2]))
+				saved_port_buttons[item[0]] = button
+	elif controls.thrust_mode:
 		basics_button = add_button(left, "Flight basics (paused)", show_basics)
 	if ship_audio_available:
 		audio_toggle = CheckButton.new()
@@ -98,34 +119,36 @@ func _ready() -> void:
 					item.label.text = "%s: %d%%" % [item.title, roundi(audio_preferences.levels[key]*100)]
 				ship_audio_muted.emit(false)
 				audio_mix_changed.emit())
-	add_button(left, "Reset experimental flight", func(): reset_flight.emit())
-	if controls.thrust_mode:
-		add_button(left, "Flight guidance — flight continues; no autopilot", func(): guidance_requested.emit())
-		add_button(left, "Orbit practice — relocates unsaved flight", func(): practice_requested.emit(false))
-		add_button(left, "Re-entry practice — relocates unsaved flight", func(): practice_requested.emit(true))
+	if not saved_flight:
+		add_button(left, "Reset experimental flight", func(): reset_flight.emit())
+		if controls.thrust_mode:
+			add_button(left, "Flight guidance — flight continues; no autopilot", func(): guidance_requested.emit())
+			add_button(left, "Orbit practice — relocates unsaved flight", func(): practice_requested.emit(false))
+			add_button(left, "Re-entry practice — relocates unsaved flight", func(): practice_requested.emit(true))
 	add_button(left, "Toggle fullscreen", func():
 		var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN))
 	add_slider(left, "Stick / trigger dead zone", "deadzone", 0.05, 0.45, 0.01)
 	add_slider(left, "Response curve", "curve", 1.0, 3.0, 0.1)
 	add_slider(left, "Head-look speed", "look_speed", 0.3, 4.0, 0.1)
-	var debug := CheckButton.new()
-	diagnostic_toggle = debug
-	debug.text = "Engineering diagnostics (F3 in flight)"
-	debug.toggled.connect(func(value: bool): debug_changed.emit(value))
-	left.add_child(debug)
-	var zoom_label := Label.new()
-	zoom_label.text = "Chase camera distance (mouse wheel outside)"
-	left.add_child(zoom_label)
-	var zoom := HSlider.new()
-	camera_slider = zoom
-	zoom.min_value = 22
-	zoom.max_value = 100
-	zoom.value = 36
-	zoom.step = 1
-	zoom.custom_minimum_size.y = 30
-	zoom.value_changed.connect(func(value: float): camera_distance_changed.emit(value))
-	left.add_child(zoom)
+	if not saved_flight:
+		var debug := CheckButton.new()
+		diagnostic_toggle = debug
+		debug.text = "Engineering diagnostics (F3 in flight)"
+		debug.toggled.connect(func(value: bool): debug_changed.emit(value))
+		left.add_child(debug)
+		var zoom_label := Label.new()
+		zoom_label.text = "Chase camera distance (mouse wheel outside)"
+		left.add_child(zoom_label)
+		var zoom := HSlider.new()
+		camera_slider = zoom
+		zoom.min_value = 22
+		zoom.max_value = 100
+		zoom.value = 36
+		zoom.step = 1
+		zoom.custom_minimum_size.y = 30
+		zoom.value_changed.connect(func(value: float): camera_distance_changed.emit(value))
+		left.add_child(zoom)
 	var invert := CheckButton.new()
 	invert.text = "Invert vertical head-look"
 	invert.button_pressed = controls.settings.invert_look
@@ -147,7 +170,7 @@ func _ready() -> void:
 		controls.install()
 		controls.save_settings()
 		refresh_bindings())
-	add_button(left, "Quit study", func(): quit_requested.emit())
+	add_button(left, "Quit without autosave" if saved_flight else "Quit study", func(): quit_requested.emit())
 	message = Label.new()
 	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	message.custom_minimum_size.y = 64
@@ -183,7 +206,7 @@ func _ready() -> void:
 			bind.custom_minimum_size.x = 260
 			binding_buttons.append({"button": bind, "action": action, "family": family})
 	controls.bindings_changed.connect(refresh_bindings)
-	if controls.thrust_mode:
+	if controls.thrust_mode and not saved_flight:
 		basics = preload("res://flight_basics.gd").new()
 		basics.controls = controls
 		basics.rotational_coasting = rotational_coasting
@@ -219,7 +242,31 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 		controls.save_settings())
 	parent.add_child(slider)
 
+func sync_saved_state(state: Dictionary, failed: bool) -> void:
+	if not saved_flight:
+		return
+	saved_assist_button.set_pressed_no_signal(state.get("assistance", false))
+	saved_assist_button.disabled = failed
+	resume_button.disabled = failed
+	var attached: bool = state.get("attached", false)
+	var assessment: Dictionary = state.get("docking", {})
+	for name in saved_port_buttons:
+		var button: Button = saved_port_buttons[name]
+		button.disabled = failed
+		if name.begins_with("Target"):
+			button.disabled = failed or attached
+			button.tooltip_text = "Release the attached port before selecting another." if attached else "Select the port to approach."
+		elif name == "Release attached port":
+			button.disabled = failed or not attached
+			button.tooltip_text = "Release the physical attachment." if attached else "No port is attached."
+		else:
+			button.disabled = failed or attached or not assessment.get("ready", false)
+			button.tooltip_text = "Already attached." if attached else str(assessment.get("reason", "Select a port for approach."))
+
 func refresh_bindings() -> void:
+	if saved_flight and saved_note != null:
+		var family := "pad" if controls.last_device == "pad" else "key"
+		saved_note.text = "SAVED FLIGHT / CURRENT BINDINGS ON THE RIGHT\n%s main · %s weaker retro\n%s look hold · %s view · %s assist\nRelease look to recenter; center shared yaw/heave before reuse.\nSticks/keys request physical actuator torque, not target turn rate.\nAssistance supports piloting; it is not autopilot.\nSave As preserves committed flight. Quit does not autosave.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: explicit resume after neutral." % [controls.binding_label("forward", family), controls.binding_label("backward", family), controls.binding_label("look_hold", family), controls.binding_label("camera", family), controls.binding_label("assist", family)]
 	for item in binding_buttons:
 		item.button.text = ("Key: " if item.family == "key" else "Pad: ") + controls.binding_label(item.action, item.family)
 	if is_instance_valid(basics):

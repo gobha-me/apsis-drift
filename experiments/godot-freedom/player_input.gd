@@ -5,7 +5,9 @@ signal camera_requested
 signal recenter_requested
 signal safety_pause(reason: String)
 signal bindings_changed
+signal assist_requested(enabled: bool)
 
+const MAX_REMAP_NEUTRAL_EVENTS := 128
 const SETTINGS_PATH := "user://freedom-controls-v4.json"
 const ACTIONS := ["forward", "backward", "turn_left", "turn_right", "strafe_left", "strafe_right", "rise", "fall", "look_left", "look_right", "look_up", "look_down", "camera", "recenter", "look_hold", "pitch_up", "pitch_down", "roll_left", "roll_right", "assist"]
 const TITLES := ["Main thrust", "Retro thrust", "Yaw left", "Yaw right", "Strafe left", "Strafe right", "Rise", "Fall", "Look left (modifier)", "Look right (modifier)", "Look up (modifier)", "Look down (modifier)", "Cockpit / chase", "Recenter head", "Hold to look", "Pitch up", "Pitch down", "Roll left", "Roll right", "Toggle flight assist"]
@@ -21,8 +23,12 @@ var waiting_action := ""
 var waiting_family := ""
 var status := ""
 var persist := true
+var settings_path := SETTINGS_PATH
+var assistance_request_only := false
 var looking := false
 var look_axes_needs_neutral := false
+var remap_neutral_events: Array[InputEvent] = []
+var remap_neutral_overflow := false
 var assist := true
 var thrust_mode := false
 
@@ -101,7 +107,9 @@ static func shared_context(a: String, b: String, family: String) -> bool:
 static func binding_token(binding: Dictionary) -> String:
 	return "%s:%d:%d" % [binding.kind, binding.code, binding.get("sign", 0)]
 
-func load_settings(path: String = SETTINGS_PATH) -> void:
+func load_settings(path: String = "") -> void:
+	if path.is_empty():
+		path = settings_path
 	if not FileAccess.file_exists(path):
 		return
 	var file := FileAccess.open(path, FileAccess.READ)
@@ -115,7 +123,9 @@ func load_settings(path: String = SETTINGS_PATH) -> void:
 	settings = value.settings
 	bindings = value.bindings
 
-func save_settings(path: String = SETTINGS_PATH) -> void:
+func save_settings(path: String = "") -> void:
+	if path.is_empty():
+		path = settings_path
 	if not persist:
 		return
 	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
@@ -131,7 +141,33 @@ func save_settings(path: String = SETTINGS_PATH) -> void:
 	if DirAccess.rename_absolute(path + ".tmp", path) != OK:
 		status = "Could not replace controls file."
 
+func event_held(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		return Input.is_physical_key_pressed(event.physical_keycode)
+	if event.device != device or device < 0:
+		return false
+	if event is InputEventJoypadButton:
+		return Input.is_joy_button_pressed(device, event.button_index)
+	if event is InputEventJoypadMotion:
+		return Input.get_joy_axis(device, event.axis) * event.axis_value > float(settings.deadzone)
+	return false
+
 func install() -> void:
+	# A removed mapping can still be physically held. Retain that release barrier
+	# until neutral rather than letting action-state reconstruction hide it.
+	for action in ACTIONS:
+		if InputMap.has_action("pilot_" + action):
+			for event in InputMap.action_get_events("pilot_" + action):
+				if event_held(event):
+					var known := false
+					for retained in remap_neutral_events:
+						known = known or retained.is_match(event)
+					if not known:
+						if remap_neutral_events.size() < MAX_REMAP_NEUTRAL_EVENTS:
+							remap_neutral_events.append(event)
+						else:
+							remap_neutral_overflow = true
+							status = "Release all inputs: remap release barrier reached its bound."
 	# Built-in UI actions do not consistently include pad bindings. Keep native
 	# keyboard navigation, but bind menu controls explicitly to the active pad.
 	var menu_buttons := {"ui_accept": JOY_BUTTON_A, "ui_cancel": JOY_BUTTON_B,
@@ -239,7 +275,10 @@ func _input(event: InputEvent) -> void:
 			recenter_requested.emit()
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("pilot_assist") and thrust_mode and not needs_neutral:
-			assist = not assist
+			var requested := not assist
+			if not assistance_request_only:
+				assist = requested
+			assist_requested.emit(requested)
 			get_viewport().set_input_as_handled()
 
 static func shape(value: float, deadzone: float, curve: float) -> float:
@@ -250,11 +289,18 @@ static func shape(value: float, deadzone: float, curve: float) -> float:
 func strength(action: String) -> float:
 	return Input.get_action_raw_strength("pilot_" + action)
 
-func sample() -> Dictionary:
-	var raw: Array[float] = []
-	for pair in [["backward", "forward"], ["turn_left", "turn_right"], ["strafe_left", "strafe_right"], ["fall", "rise"], ["look_left", "look_right"], ["look_up", "look_down"]]:
-		raw.append(strength(pair[1]) - strength(pair[0]))
+func observe_neutral() -> bool:
 	var neutral := true
+	# Overflow never drops a held barrier into permission. Complete physical
+	# release recovers this rare bounded case without retaining more events.
+	if remap_neutral_overflow:
+		remap_neutral_overflow = Input.is_anything_pressed()
+		neutral = not remap_neutral_overflow
+	for i in range(remap_neutral_events.size() - 1, -1, -1):
+		if event_held(remap_neutral_events[i]):
+			neutral = false
+		else:
+			remap_neutral_events.remove_at(i)
 	# Check individual actions, not differences: two held opposing triggers
 	# must not unlock the gate merely because they cancel numerically.
 	for action in ACTIONS:
@@ -272,6 +318,13 @@ func sample() -> Dictionary:
 				neutral = false
 	if needs_neutral and neutral:
 		needs_neutral = false
+	return neutral
+
+func sample() -> Dictionary:
+	var raw: Array[float] = []
+	for pair in [["backward", "forward"], ["turn_left", "turn_right"], ["strafe_left", "strafe_right"], ["fall", "rise"], ["look_left", "look_right"], ["look_up", "look_down"]]:
+		raw.append(strength(pair[1]) - strength(pair[0]))
+	observe_neutral()
 	var result := {"axes": PackedFloat64Array([0, 0, 0, 0]), "thrust_axes": PackedFloat64Array([0, 0, 0, 0, 0, 0, 0]), "look": Vector2.ZERO, "recenter": false}
 	if not enabled or not focused or needs_neutral:
 		result.recenter = looking

@@ -70,14 +70,209 @@ func physical_key(key: Key, pressed: bool) -> void:
 	check(Input.is_physical_key_pressed(key) == pressed, "Real physical key event did not update input")
 
 
+func joy_axis(axis: int, value: float, device := 0) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = device
+	event.axis = axis
+	event.axis_value = value
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func joy_button(button: int, pressed: bool, device := 0) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = device
+	event.button_index = button
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func check_controller_domains() -> void:
+	for size in [0, 6, 8, 1000]:
+		var bad := PackedFloat64Array()
+		bad.resize(size)
+		check(FlightView.actuator_fractions(bad).is_empty(), "Saved adapter accepted malformed dimensions")
+	for value in [NAN, INF, -INF, -1.01, 1.01]:
+		for i in 7:
+			var bad := PackedFloat64Array([0, 0, 0, 0, 0, 0, 0])
+			bad[i] = value
+			check(FlightView.actuator_fractions(bad).is_empty(), "Saved adapter accepted nonfinite/out-of-range demand")
+	for i in 2:
+		var bad := PackedFloat64Array([0, 0, 0, 0, 0, 0, 0])
+		bad[i] = -0.1
+		check(FlightView.actuator_fractions(bad).is_empty(), "Saved adapter accepted negative engine demand")
+	check(FlightView.actuator_fractions(PackedFloat64Array([0.3, 0.2, 0.4, -0.5, 0.6, -0.7, 0.8])) == PackedFloat64Array([0, 0.8, 0.2, 0.7, 0, 0.3, 0.4, 0.5, 0, 0, 0, 0.6]), "Saved adapter changed complete semantic signs or binary64 fractions")
+
+
+func check_saved_controller(view: Control, owner: Variant, save: String) -> void:
+	check(owner.enable_streaming(), "Controller fixture could not enable authoritative terrain")
+	var controls: Node = view.player_input
+	controls.device = 0
+	controls.install()
+	view.toggle_pause()
+	check(not view.paused and controls.enabled, "Neutral production adapter did not resume")
+	var reference: Variant = ClassDB.instantiate("FreedomBridge")
+	check(reference.initialize_freedom_continue(save), "Independent controller owner refused Continue")
+	# Independent explicit channel expectations; physical key events reach the view.
+	var keys := [KEY_E, KEY_SPACE, KEY_S, KEY_Q, KEY_CTRL, KEY_W, KEY_I, KEY_A, KEY_Z, KEY_K, KEY_D, KEY_X]
+	for channel in 12:
+		physical_key(keys[channel], true)
+		var expected := PackedFloat64Array()
+		expected.resize(12)
+		expected[channel] = 1.0
+		check(FlightView.actuator_fractions(controls.sample().thrust_axes) == expected, "Approved keyboard actuator sign missing: " + str(channel))
+		view._process(1.0 / 120.0)
+		check(reference.advance_freedom_flight(1.0 / 120.0, expected, false) and owner.get_freedom_flight_state() == reference.get_freedom_flight_state(), "Production keyboard command differs from independent saved owner")
+		physical_key(keys[channel], false)
+		controls.sample()
+	# All controller directions, including fractional demands and gross triggers.
+	for item in [[JOY_AXIS_TRIGGER_RIGHT, 0.6, 5], [JOY_AXIS_TRIGGER_LEFT, 0.7, 2], [JOY_AXIS_LEFT_Y, 0.7, 6], [JOY_AXIS_LEFT_Y, -0.7, 9], [JOY_AXIS_LEFT_X, -0.7, 8], [JOY_AXIS_LEFT_X, 0.7, 11], [JOY_AXIS_RIGHT_X, -0.7, 7], [JOY_AXIS_RIGHT_X, 0.7, 10], [JOY_AXIS_RIGHT_Y, -0.7, 1], [JOY_AXIS_RIGHT_Y, 0.7, 4]]:
+		joy_axis(item[0], item[1])
+		var expected := PackedFloat64Array()
+		expected.resize(12)
+		expected[item[2]] = controls.shape(absf(PackedFloat32Array([item[1]])[0]), controls.settings.deadzone, 1.0 if item[0] >= JOY_AXIS_TRIGGER_LEFT else controls.settings.curve)
+		check(FlightView.actuator_fractions(controls.sample().thrust_axes) == expected, "Approved controller channel/sign/fraction differs")
+		view._process(1.0 / 120.0)
+		check(reference.advance_freedom_flight(1.0 / 120.0, expected, false) and owner.get_freedom_flight_state() == reference.get_freedom_flight_state(), "Controller fixed-tick command differs from independent saved owner")
+		joy_axis(item[0], 0.0)
+		controls.sample()
+	for item in [[JOY_BUTTON_LEFT_SHOULDER, 3], [JOY_BUTTON_RIGHT_SHOULDER, 0]]:
+		joy_button(item[0], true)
+		var expected := PackedFloat64Array()
+		expected.resize(12)
+		expected[item[1]] = 1.0
+		view._process(1.0 / 120.0)
+		check(reference.advance_freedom_flight(1.0 / 120.0, expected, false) and owner.get_freedom_flight_state() == reference.get_freedom_flight_state(), "Bumper lateral thrust differs from authoritative commands")
+		joy_button(item[0], false)
+		controls.sample()
+	var directory := save.get_base_dir()
+	check(owner.save_freedom_as(directory.path_join("controller-owner.json")) and reference.save_freedom_as(directory.path_join("controller-reference.json")), "Controller parity Save As failed")
+	check(FileAccess.get_file_as_bytes(directory.path_join("controller-owner.json")) == FileAccess.get_file_as_bytes(directory.path_join("controller-reference.json")), "Controller fixed schedule changed exact saved bytes")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 1.0, 7)
+	check(FlightView.actuator_fractions(controls.sample().thrust_axes) == PackedFloat64Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), "Foreign pad acquired saved flight")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0, 7)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.6)
+	joy_axis(JOY_AXIS_TRIGGER_LEFT, 0.4)
+	var gross := FlightView.actuator_fractions(controls.sample().thrust_axes)
+	check(gross[5] > gross[2] and gross[2] > 0, "Saved input erased independent opposed engines")
+	view._process(1.0 / 120.0)
+	check(view.exhaust.intensity > 0.0, "Real controller main command did not light saved exhaust")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	joy_axis(JOY_AXIS_TRIGGER_LEFT, 0.0)
+	controls.sample()
+	# View and look are presentation only; both registered cameras remain mirrored.
+	var before: Dictionary = owner.get_freedom_flight_state()
+	joy_button(JOY_BUTTON_X, true)
+	joy_button(JOY_BUTTON_X, false)
+	check(view.cockpit, "Controller view button did not reach production callback")
+	joy_button(JOY_BUTTON_LEFT_STICK, true)
+	joy_axis(JOY_AXIS_RIGHT_X, 0.7)
+	joy_axis(JOY_AXIS_RIGHT_Y, -0.6)
+	var looking: Dictionary = controls.sample()
+	check(looking.thrust_axes[3] == 0 and looking.thrust_axes[6] == 0, "Saved head-look leaked yaw/heave")
+	view._process(1.0 / 120.0)
+	check(view.look_offset.length() > 0 and view.camera.transform == view.terrain_camera.transform and view.camera.basis != view.state.body_basis, "Saved head-look missing or split registered cameras")
+	joy_button(JOY_BUTTON_LEFT_STICK, false)
+	view._process(1.0 / 120.0)
+	check(view.look_offset == Vector2.ZERO and view.camera.basis == view.state.body_basis and controls.sample().thrust_axes[3] == 0, "Look release did not recenter/suppress held yaw")
+	joy_axis(JOY_AXIS_RIGHT_X, 0)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0)
+	controls.sample()
+	joy_axis(JOY_AXIS_RIGHT_X, 0.7)
+	check(controls.sample().thrust_axes[3] > 0, "Centered look channels did not rearm")
+	joy_axis(JOY_AXIS_RIGHT_X, 0)
+	controls.sample()
+	physical_key(KEY_F3, true)
+	physical_key(KEY_F3, false)
+	check(not view.cockpit, "Explicit legacy F3 camera alias failed")
+	joy_button(JOY_BUTTON_Y, true)
+	joy_button(JOY_BUTTON_Y, false)
+	check(not owner.get_freedom_flight_state().assistance and not controls.assist and not view.assist_button.button_pressed, "Controller assistance did not reflect accepted C++ state")
+	joy_button(JOY_BUTTON_Y, true)
+	joy_button(JOY_BUTTON_Y, false)
+	check(owner.get_freedom_flight_state().assistance and controls.assist, "Controller assistance did not restore accepted state")
+	# A real remap while the old physical key stays held must retain its barrier.
+	physical_key(KEY_W, true)
+	view._process(1.0 / 120.0)
+	before = owner.get_freedom_flight_state()
+	var phase: float = view.exhaust.phase
+	controls.persist = true
+	controls.settings_path = "user://saved-controls-%d.json" % OS.get_process_id()
+	check(not FileAccess.file_exists(controls.settings_path), "Owned preference fixture already exists")
+	check(controls.rebind("forward", "key", {"kind": "key", "code": KEY_T}), "Saved remap rejected")
+	check(view.paused and not controls.enabled and view.exhaust.intensity == 0.0 and view.exhaust.phase == phase and owner.get_freedom_flight_state() == before, "Remap did not immediately pause/darken without a C++ step")
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Removed held key escaped remap-neutral barrier")
+	physical_key(KEY_W, false)
+	view.observe_neutral_controls()
+	check(view.controls_armed, "Released old key retained stale barrier")
+	controls.defaults()
+	controls.load_settings()
+	check(controls.bindings.forward.key.code == KEY_T, "Saved remap did not reload from isolated preferences")
+	check(owner.get_freedom_flight_state() == before, "External preference changes mutated saved flight")
+	check(DirAccess.remove_absolute(controls.settings_path) == OK, "Owned preference fixture could not be removed")
+	controls.persist = false
+	controls.defaults()
+	controls.install()
+	# Controller navigation reaches the real Save As callback while paused.
+	await process_frame
+	await process_frame
+	# A prior paused neutral observation cannot authorize a later held press.
+	view.observe_neutral_controls()
+	physical_key(KEY_I, true)
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Delayed held input bypassed current-neutral resume check")
+	physical_key(KEY_I, false)
+	view.controls_menu.save_button.grab_focus()
+	joy_button(JOY_BUTTON_A, true)
+	await process_frame
+	joy_button(JOY_BUTTON_A, false)
+	check(view.save_dialog.visible and view.paused and not controls.enabled and owner.get_freedom_flight_state() == before, "Pad UI accept did not open real paused Save As")
+	view.save_dialog.hide()
+	view.save_dialog.canceled.emit()
+	check(view.paused and view.controls_menu.panel.visible, "Save cancellation resumed flight or lost controls menu")
+	view.controls_menu.saved_port_buttons["Target D2"].pressed.emit()
+	check(owner.get_freedom_flight_state().target_port == 2, "Saved menu did not reach existing port selection owner")
+	var selected: Dictionary = owner.get_freedom_flight_state()
+	check(view.controls_menu.saved_port_buttons["Capture selected port"].disabled and view.controls_menu.saved_port_buttons["Capture selected port"].tooltip_text == selected.docking.reason, "Saved menu ignored physical capture assessment/refusal reason")
+	# Deliberate callback-owner refusal test; a player cannot activate this disabled button.
+	view.controls_menu.saved_port_buttons["Capture selected port"].pressed.emit()
+	check(owner.get_freedom_flight_state() == selected and not str(owner.get_last_error()).is_empty(), "Saved menu bypassed physical capture refusal")
+	for button in view.controls_menu.panel.find_children("*", "Button", true, false):
+		check(not "practice" in button.text.to_lower() and not "experimental" in button.text.to_lower() and not "guidance" in button.text.to_lower(), "Saved menu exposed an unavailable study action")
+	controls.settings.prompts = 2
+	controls.last_device = "pad"
+	view.controls_menu.refresh_bindings()
+	check("Square" in view.controls_menu.saved_note.text and "Triangle" in view.controls_menu.saved_note.text, "Saved help did not derive physical prompt override")
+	view.toggle_pause()
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 1)
+	joy_axis(JOY_AXIS_RIGHT_Y, 1)
+	view._process(1.0 / 120.0)
+	before = owner.get_freedom_flight_state()
+	phase = view.exhaust.phase
+	controls.connection_changed(0, false)
+	check(view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase and owner.get_freedom_flight_state() == before, "Selected device loss advanced state or retained lit effects")
+	controls.connection_changed(0, true)
+	check(view.paused, "Device reconnect automatically resumed saved flight")
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Held reconnect axes bypassed explicit neutral resume")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0)
+	controls.sample()
+	check(owner.get_freedom_flight_state() == before and view.exhaust.phase == phase, "Reconnect-neutral callback changed owner/phase")
+	view.pause_controls("Controller regression complete")
+
+
 func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:
 	# Earlier direct Continue checks reset the real stream owned by this bridge.
 	check(owner.enable_streaming(), "Focus regression could not reenable authoritative terrain")
 	view.state = owner.get_freedom_flight_state()
+	view.toggle_pause()
 	physical_key(KEY_W, true)
 	physical_key(KEY_CTRL, true)
-	check(FlightView.controls()[5] == 1.0 and FlightView.controls()[4] == 1.0, "Physical flight keys did not reach production gross channels")
-	view.toggle_pause()
+	var resolved := FlightView.actuator_fractions(view.player_input.sample().thrust_axes)
+	check(resolved[5] == 1.0 and resolved[4] == 1.0, "Physical flight keys did not reach production gross channels")
 	view._process(1.0 / 120.0)
 	check(view.error.is_empty() and view.exhaust.intensity == 1.0 and view.exhaust.withdrawal_intensity == 1.0, "Focus regression did not begin with real main and withdrawal firing: " + str([view.error, view.paused, view.focused, view.controls_armed, view.exhaust.intensity, view.exhaust.withdrawal_intensity]))
 	var before: Dictionary = owner.get_freedom_flight_state()
@@ -122,7 +317,7 @@ func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:
 	# Each physical flight key independently blocks rearming; no omitted axis.
 	before = owner.get_freedom_flight_state()
 	phase = view.exhaust.phase
-	for key in [KEY_D, KEY_SPACE, KEY_S, KEY_A, KEY_CTRL, KEY_W, KEY_UP, KEY_LEFT, KEY_Q, KEY_DOWN, KEY_RIGHT, KEY_E]:
+	for key in [KEY_E, KEY_SPACE, KEY_S, KEY_Q, KEY_CTRL, KEY_W, KEY_I, KEY_A, KEY_Z, KEY_K, KEY_D, KEY_X]:
 		view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
 		physical_key(key, true)
 		view._notification(NOTIFICATION_APPLICATION_FOCUS_IN)
@@ -158,6 +353,7 @@ func run() -> void:
 	check(FlightView.valid_state(start) and start.tick == "25" and start.frame_id == "2" and start.assistance, "Selected state was not the saved Wayfarer")
 	check(absf(start.body_basis.determinant() - 1.0) < 0.00001 and absf(start.station_basis.determinant() - 1.0) < 0.00001, "Projection changed orientation handedness")
 	check(absf(start.altitude - 500000.0) < 0.001, "Rotation projection changed saved radial altitude")
+	check_controller_domains()
 	check_exhaust_inputs(start)
 	check(owner.get_freedom_start().is_empty() and owner.get_state().is_empty(), "Flight created a docked or study owner")
 	for size in [0, 1, 11, 13, 1000]:
@@ -178,6 +374,7 @@ func run() -> void:
 	check(owner.advance_freedom_flight(60.0, neutral, true) and owner.get_freedom_flight_state() == start, "Paused time changed clock/body")
 	check(not owner.initialize_freedom_continue(args[2]) and owner.get_freedom_flight_state() == start, "Corrupt load replaced selected flight")
 	var view := FlightView.new()
+	view.persist_controls = false
 	root.add_child(view)
 	check(view.initialize(owner, args[4]), "Production flight view failed: " + view.error)
 	view.set_process(false)
@@ -219,6 +416,9 @@ func run() -> void:
 		mesh_record.close()
 	var glass: MeshInstance3D = view.ship.find_child("HopperGlass", true, false)
 	check(glass != null and glass.material_override != null and glass.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.material_override.albedo_color.a < 0.1, "Selected cockpit glass blocks native flight visibility")
+	await check_saved_controller(view, owner, args[0])
+	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
+	view.state = owner.get_freedom_flight_state()
 	check_focus_loss(view, owner, args[0].get_base_dir())
 	check(owner.initialize_freedom_continue(args[0]) and owner.get_freedom_flight_state() == start, "Focus control damaged the original Continue")
 	view.state = owner.get_freedom_flight_state()
