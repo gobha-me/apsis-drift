@@ -60,6 +60,79 @@ func _initialize() -> void:
 	call_deferred("run")
 
 
+func physical_key(key: Key, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = key
+	event.keycode = key
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	check(Input.is_physical_key_pressed(key) == pressed, "Real physical key event did not update input")
+
+
+func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:
+	# Earlier direct Continue checks reset the real stream owned by this bridge.
+	check(owner.enable_streaming(), "Focus regression could not reenable authoritative terrain")
+	view.state = owner.get_freedom_flight_state()
+	physical_key(KEY_W, true)
+	physical_key(KEY_CTRL, true)
+	check(FlightView.controls()[5] == 1.0 and FlightView.controls()[4] == 1.0, "Physical flight keys did not reach production gross channels")
+	view.toggle_pause()
+	view._process(1.0 / 120.0)
+	check(view.error.is_empty() and view.exhaust.intensity == 1.0 and view.exhaust.withdrawal_intensity == 1.0, "Focus regression did not begin with real main and withdrawal firing: " + str([view.error, view.paused, view.focused, view.controls_armed, view.exhaust.intensity, view.exhaust.withdrawal_intensity]))
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var phase: float = view.exhaust.phase
+	var checkpoint := directory.path_join("focus-before.json")
+	var after := directory.path_join("focus-after.json")
+	check(owner.save_freedom_as(checkpoint), "Focus baseline save failed")
+	var saved := FileAccess.get_file_as_bytes(checkpoint)
+	view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(not view.focused and view.paused and not view.controls_armed and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.phase == phase, "Focus-out did not immediately pause and darken both effects")
+	check(owner.get_freedom_flight_state() == before, "Focus notification changed committed C++ flight")
+	view._process(60.0)
+	view.toggle_pause()
+	check(view.paused and owner.get_freedom_flight_state() == before and view.exhaust.phase == phase, "Unfocused callbacks scheduled flight or resumed it")
+	view._notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+	check(view.focused and view.paused and not view.controls_armed, "Focus-in automatically resumed or rearmed controls")
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Held main/withdrawal input resumed after focus return")
+	physical_key(KEY_W, false)
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Releasing only one held channel rearmed flight")
+	physical_key(KEY_CTRL, false)
+	view._process(60.0)
+	check(view.controls_armed and view.paused and owner.get_freedom_flight_state() == before and view.exhaust.phase == phase, "Neutral rearming advanced paused time or resumed flight")
+	check(owner.save_freedom_as(after) and FileAccess.get_file_as_bytes(after) == saved, "Focus/neutral callbacks changed exact save bytes")
+	view.toggle_pause()
+	check(not view.paused, "Neutral controls did not permit explicit resume")
+	physical_key(KEY_W, true)
+	physical_key(KEY_CTRL, true)
+	view._process(1.0 / 120.0)
+	check(view.error.is_empty() and int(owner.get_freedom_flight_state().tick) == int(before.tick) + 1 and view.exhaust.intensity == 1.0 and view.exhaust.withdrawal_intensity == 1.0, "Resume did not restore actual controls or accumulated unfocused ticks")
+	physical_key(KEY_W, false)
+	physical_key(KEY_CTRL, false)
+	var independent: Variant = ClassDB.instantiate("FreedomBridge")
+	check(independent.initialize_freedom_continue(checkpoint), "Focus comparison could not Continue")
+	var commands := PackedFloat64Array()
+	commands.resize(12)
+	commands[4] = 1.0
+	commands[5] = 1.0
+	check(independent.advance_freedom_flight(1.0 / 120.0, commands, false) and independent.get_freedom_flight_state() == owner.get_freedom_flight_state(), "Resumed input differs from uninterrupted C++ commands")
+	check(owner.save_freedom_as(after) and independent.save_freedom_as(checkpoint) and FileAccess.get_file_as_bytes(after) == FileAccess.get_file_as_bytes(checkpoint), "Resumed real controls differ in exact C++ save bytes")
+	# Each physical flight key independently blocks rearming; no omitted axis.
+	before = owner.get_freedom_flight_state()
+	phase = view.exhaust.phase
+	for key in [KEY_D, KEY_SPACE, KEY_S, KEY_A, KEY_CTRL, KEY_W, KEY_UP, KEY_LEFT, KEY_Q, KEY_DOWN, KEY_RIGHT, KEY_E]:
+		view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+		physical_key(key, true)
+		view._notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+		view.toggle_pause()
+		check(view.paused and not view.controls_armed, "Held physical channel escaped focus gate: " + str(key))
+		physical_key(key, false)
+		view._process(1.0 / 120.0)
+		check(view.paused and view.controls_armed and owner.get_freedom_flight_state() == before and view.exhaust.phase == phase, "Neutral key release changed flight or resumed: " + str(key))
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 6:
@@ -146,6 +219,9 @@ func run() -> void:
 		mesh_record.close()
 	var glass: MeshInstance3D = view.ship.find_child("HopperGlass", true, false)
 	check(glass != null and glass.material_override != null and glass.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.material_override.albedo_color.a < 0.1, "Selected cockpit glass blocks native flight visibility")
+	check_focus_loss(view, owner, args[0].get_base_dir())
+	check(owner.initialize_freedom_continue(args[0]) and owner.get_freedom_flight_state() == start, "Focus control damaged the original Continue")
+	view.state = owner.get_freedom_flight_state()
 	var commands := neutral.duplicate()
 	commands[4] = 0.1
 	commands[5] = 0.25

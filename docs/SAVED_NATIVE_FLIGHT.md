@@ -24,6 +24,10 @@ bounded scheduler; excess elapsed time is reported as dropped, never simulated
 silently. Pause/residual presentation time is not serialized. Save As preserves
 the authoritative last committed tick, pose, history, frame and physical model.
 Reopen starts a fresh presentation clock without changing those saved values.
+Application focus loss immediately pauses flight and hides both exhaust groups
+without advancing their visual phase. Focus return stays paused: release all
+twelve flight keys, then resume explicitly. Unfocused elapsed callbacks schedule
+no flight ticks or catch-up backlog; this presentation latch is not saved state.
 Assistance changes explicitly through C++; the persisted orbit-hold request
 continues to use the existing owner and its normal manual-input/environment gates.
 
