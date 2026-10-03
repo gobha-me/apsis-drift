@@ -16,13 +16,18 @@ var ship: Node3D
 var terrain: Node3D
 var exhaust: Node3D
 var light: DirectionalLight3D
+var hud_scroll: ScrollContainer
+var hud_column: VBoxContainer
+var hud_theme: Theme
+var hud_scroll_style: StyleBox
+var hud_stacked := false
 var orbital_forecast: RichTextLabel
-var telemetry: Label
-var home_cue: Label
+var telemetry: RichTextLabel
+var home_cue: RichTextLabel
 var pause_button: Button
 var assist_button: CheckButton
 var save_dialog: FileDialog
-var save_status: Label
+var save_status: RichTextLabel
 var paused := true
 var focused := true
 var controls_armed := false
@@ -31,7 +36,7 @@ var controls_menu: CanvasLayer
 var persist_controls := true
 var control_settings_path := PlayerInput.SETTINGS_PATH
 var look_offset := Vector2.ZERO
-var hint: Label
+var hint: RichTextLabel
 var cockpit := false
 var pilot_eye := Vector3.ZERO
 var state: Dictionary = {}
@@ -39,7 +44,7 @@ var station: Node3D
 var scene: Node3D
 var assets_root := ""
 var station_geometry: Dictionary = {}
-var dock_status: Label
+var dock_status: RichTextLabel
 var port_buttons: Array[Button] = []
 var capture_button: Button
 var release_button: Button
@@ -215,19 +220,34 @@ static func set_ship_layer(node: Node) -> void:
 
 
 func build_ui() -> void:
+	var backing := StyleBoxFlat.new()
+	backing.bg_color = Color(0.01, 0.015, 0.025, 0.94)
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		backing.set_content_margin(side, 0.0)
 	orbital_forecast = RichTextLabel.new()
 	orbital_forecast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	orbital_forecast.scroll_active = false
 	orbital_forecast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	orbital_forecast.add_theme_stylebox_override("normal", backing)
 	add_child(orbital_forecast)
+	hud_scroll = ScrollContainer.new()
+	hud_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	hud_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+	hud_scroll.add_theme_stylebox_override("panel", backing)
+	hud_scroll_style = hud_scroll.get_v_scroll_bar().get_theme_stylebox("scroll").duplicate()
+	hud_scroll.get_v_scroll_bar().add_theme_stylebox_override("scroll", hud_scroll_style)
+	add_child(hud_scroll)
 	var column := VBoxContainer.new()
-	column.position = Vector2(16, 16)
-	add_child(column)
-	telemetry = Label.new()
+	hud_column = column
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud_scroll.add_child(column)
+	hud_theme = Theme.new()
+	column.theme = hud_theme
+	telemetry = hud_text()
 	column.add_child(telemetry)
-	home_cue = Label.new()
+	home_cue = hud_text()
 	column.add_child(home_cue)
-	hint = Label.new()
+	hint = hud_text()
 	column.add_child(hint)
 	pause_button = Button.new()
 	pause_button.text = "Resume flight"
@@ -250,7 +270,7 @@ func build_ui() -> void:
 			button.pressed.connect(func(): port_command("select_freedom_port", ordinal))
 			ports.add_child(button)
 			port_buttons.append(button)
-		dock_status = Label.new()
+		dock_status = hud_text()
 		column.add_child(dock_status)
 		capture_button = Button.new()
 		capture_button.text = "Capture port"
@@ -266,7 +286,7 @@ func build_ui() -> void:
 	save_button.text = "Save As…"
 	save_button.focus_mode = Control.FOCUS_NONE
 	column.add_child(save_button)
-	save_status = Label.new()
+	save_status = hud_text()
 	save_status.text = "Paused after Continue. Quit does not autosave."
 	column.add_child(save_status)
 	save_dialog = FileDialog.new()
@@ -287,6 +307,57 @@ func build_ui() -> void:
 	quit_button.text = "Quit"
 	quit_button.pressed.connect(func(): get_tree().quit())
 	column.add_child(quit_button)
+	resized.connect(layout_hud)
+	get_window().size_changed.connect(layout_hud)
+	layout_hud()
+
+
+func hud_text() -> RichTextLabel:
+	var label := RichTextLabel.new()
+	label.fit_content = true
+	label.scroll_active = false
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func layout_hud() -> void:
+	if hud_scroll == null:
+		return
+	var pixels := Vector2(get_window().size)
+	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
+		return
+	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
+	var margin := 16 * scale
+	var usable := size - Vector2.ONE * (2 * margin)
+	if usable.x <= 0 or usable.y <= 0:
+		return
+	hud_theme.default_font_size = roundi(18 * scale)
+	# ScrollContainer reserves the intrinsic style width, not a custom minimum.
+	hud_scroll_style.content_margin_left = 8 * scale
+	hud_scroll_style.content_margin_right = 8 * scale
+	hud_column.add_theme_constant_override("separation", roundi(8 * scale))
+	for child in hud_column.get_children():
+		if child is Button:
+			child.custom_minimum_size.y = 40 * scale
+	for button in port_buttons:
+		button.custom_minimum_size.y = 40 * scale
+	orbital_forecast.add_theme_font_size_override("normal_font_size", roundi(20 * scale))
+	hud_stacked = usable.x < (260 + 460 + 16) * scale
+	if hud_stacked:
+		if orbital_forecast.get_parent() != hud_column:
+			orbital_forecast.reparent(hud_column, false)
+		orbital_forecast.fit_content = true
+		orbital_forecast.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hud_scroll.size = usable
+	else:
+		if orbital_forecast.get_parent() != self:
+			orbital_forecast.reparent(self, false)
+		orbital_forecast.fit_content = false
+		orbital_forecast.size = Vector2(460 * scale, 190 * scale)
+		orbital_forecast.position = Vector2(size.x - orbital_forecast.size.x - margin, margin)
+		hud_scroll.size = Vector2(minf(480 * scale, usable.x - orbital_forecast.size.x - margin), usable.y)
+	hud_scroll.position = Vector2.ONE * margin
 
 
 func setup_controls() -> void:
@@ -539,14 +610,6 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
-	# Keep this compact readout readable in actual pixels without pushing the
-	# existing port/save controls out of their left-hand column.
-	var pixels := Vector2(get_window().size)
-	if pixels.x > 0 and pixels.y > 0:
-		var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
-		orbital_forecast.add_theme_font_size_override("normal_font_size", roundi(20 * scale))
-		orbital_forecast.size = Vector2(minf(460 * scale, size.x - 32 * scale), 190 * scale)
-		orbital_forecast.position = Vector2(size.x - orbital_forecast.size.x - 16 * scale, 16 * scale)
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	var suffix := " · off screen" if camera.is_position_behind(target) or not Rect2(Vector2.ZERO, camera.get_viewport().size).has_point(camera.unproject_position(target)) else ""
