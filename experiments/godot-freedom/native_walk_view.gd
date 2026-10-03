@@ -15,6 +15,11 @@ var pause_button: Button
 var save_button: Button
 var save_dialog: FileDialog
 var save_status: Label
+var hud_scroll: ScrollContainer
+var hud_column: VBoxContainer
+var hud_theme: Theme
+var hud_scroll_style: StyleBox
+var hud_hint: Label
 var paused := false
 var focused := true
 var controls_armed := false
@@ -130,12 +135,28 @@ func initialize(owner: Variant, assets: String) -> bool:
 
 
 func build_ui() -> void:
+	var backing := StyleBoxFlat.new()
+	backing.bg_color = Color(0.01, 0.015, 0.025, 0.94)
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		backing.set_content_margin(side, 0.0)
+	hud_scroll = ScrollContainer.new()
+	hud_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	hud_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+	hud_scroll.follow_focus = true
+	hud_scroll.add_theme_stylebox_override("panel", backing)
+	hud_scroll_style = hud_scroll.get_v_scroll_bar().get_theme_stylebox("scroll").duplicate()
+	hud_scroll.get_v_scroll_bar().add_theme_stylebox_override("scroll", hud_scroll_style)
+	add_child(hud_scroll)
 	var column := VBoxContainer.new()
-	column.position = Vector2(16, 16)
-	add_child(column)
-	telemetry = Label.new()
+	hud_column = column
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud_scroll.add_child(column)
+	hud_theme = Theme.new()
+	column.theme = hud_theme
+	telemetry = hud_text()
 	column.add_child(telemetry)
-	var hint := Label.new()
+	var hint := hud_text()
+	hud_hint = hint
 	hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk through the workshop toward D1"
 	column.add_child(hint)
 	pause_button = Button.new()
@@ -147,7 +168,7 @@ func build_ui() -> void:
 	save_button.text = "Save As…"
 	save_button.focus_mode = Control.FOCUS_ALL
 	column.add_child(save_button)
-	save_status = Label.new()
+	save_status = hud_text()
 	save_status.text = "D1 access: hatch, ladder and seating are in development."
 	column.add_child(save_status)
 	save_dialog = FileDialog.new()
@@ -160,6 +181,39 @@ func build_ui() -> void:
 	save_button.pressed.connect(open_save_dialog)
 	save_dialog.file_selected.connect(save_selected)
 	save_dialog.canceled.connect(save_canceled)
+	resized.connect(layout_hud)
+	get_window().size_changed.connect(layout_hud)
+	layout_hud()
+
+
+func hud_text() -> Label:
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func layout_hud() -> void:
+	if hud_scroll == null:
+		return
+	var pixels := Vector2(get_window().size)
+	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
+		return
+	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
+	var margin := 16 * scale
+	var usable := size - Vector2.ONE * (2 * margin)
+	if usable.x <= 0 or usable.y <= 0:
+		return
+	hud_theme.default_font_size = roundi(18 * scale)
+	hud_column.add_theme_constant_override("separation", roundi(8 * scale))
+	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
+	hud_scroll_style.content_margin_left = 8 * scale
+	hud_scroll_style.content_margin_right = 8 * scale
+	for button in [pause_button, save_button]:
+		button.custom_minimum_size.y = 40 * scale
+	hud_scroll.position = Vector2.ONE * margin
+	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y)
 
 
 func set_paused(value: bool) -> void:

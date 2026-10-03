@@ -103,6 +103,23 @@ preserve the committed actor/craft/shared-clock state and inspection heading,
 pitch and camera. A consumer error remains paused and cannot recover through
 Resume. Physical controller hardware qualification remains separate.
 
+2026-10-03, #392: the station view keeps these same two actions and mappings in
+a bounded dark scroll panel. Telemetry, movement hints and save/error status
+wrap within the panel, clear of the visible scroll gutter. Text targets about
+18 physical pixels and Pause/Resume and Save As target at least 40 pixels high
+when the window resizes. Focus navigation scrolls either action into view;
+mouse-wheel scrolling also leaves the paused journey unchanged. Smaller windows
+retain readable type and vertical scrolling rather than shrinking controls.
+Long messages remain reachable by scrolling; all content need not fit at once.
+There is no new flight reference, actor phase or boarding shortcut.
+
+The affected software contract checks 1280, 960, 800 and 640-pixel layouts,
+long save/error text, real wheel and keyboard/selected-pad action navigation,
+and exact C++ actor/craft/shared-clock state and saved bytes. Displayed review
+records actual raster dimensions separately from requested window dimensions;
+it qualifies readability, not physical controller hardware or the boarding
+route.
+
 Tests reject nonfinite data, invalid dimensions/buffers/indices, excessive
 nesting, stale geometry, unsupported spawns, malformed fields, corrupt saves,
 bad steps and terminal clocks before visual checks. Journey decoding bounds JSON

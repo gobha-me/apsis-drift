@@ -60,6 +60,103 @@ func paused_checkpoint(view: Control, owner: Variant, path: String, walk: Dictio
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, label + ": exact C++ save bytes changed")
 
 
+func check_hud_layout(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	var walk: Dictionary = owner.get_freedom_walk_state()
+	var flight: Dictionary = owner.get_freedom_flight_state()
+	var pose: Transform3D = view.camera.transform
+	var heading: float = view.requested_heading
+	var pitch: float = view.pitch
+	var hint: String = view.hud_hint.text
+	var status: String = view.save_status.text
+	var device: int = view.selected_pad
+	var temporary_pad: bool = not view.available_pads.get(device, false)
+	if temporary_pad:
+		Input.joy_connection_changed.emit(19, true)
+		joy_button(JOY_BUTTON_START, true, 19)
+		joy_button(JOY_BUTTON_START, false, 19)
+		device = view.selected_pad
+	check(view.available_pads.get(device, false) and view.paused, "Station layout fixture has no explicitly selected paused pad")
+	var backing: StyleBox = view.hud_scroll.get_theme_stylebox("panel")
+	check(backing is StyleBoxFlat and backing.bg_color.a >= 0.9 and maxf(backing.bg_color.r, maxf(backing.bg_color.g, backing.bg_color.b)) <= 0.05, "Station HUD lacks adequate dark backing")
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		check(backing.get_content_margin(side) == 0.0, "Station backing shifted content margins")
+	check(view.hud_scroll.follow_focus and view.pause_button.focus_mode == Control.FOCUS_ALL and view.save_button.focus_mode == Control.FOCUS_ALL, "Station HUD lost existing focus navigation")
+	for pixels in [Vector2i(1280, 720), Vector2i(960, 540), Vector2i(800, 450), Vector2i(640, 450)]:
+		root.size = pixels
+		for frame in 3:
+			await process_frame
+		view.hud_hint.text = hint + "\n" + "Existing station movement and selected-controller controls. ".repeat(12)
+		view.save_status.text = "Save failed: " + "long-station-save-directory/".repeat(36) + "journey.json"
+		for frame in 3:
+			await process_frame
+		var bounds := Rect2(Vector2.ZERO, view.size)
+		check(bounds.encloses(view.hud_scroll.get_rect()), "Station HUD escaped viewport " + str(pixels))
+		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Station HUD has horizontal overflow")
+		var font_pixels: float = view.telemetry.get_theme_font_size("font_size") * pixels.x / view.size.x
+		check(font_pixels >= 17.5 and font_pixels <= 20.5, "Station HUD font shrank in small window")
+		for button in [view.pause_button, view.save_button]:
+			check(button.size.y * pixels.y / view.size.y >= 39.5, "Station action height shrank")
+		for label in [view.telemetry, view.hud_hint, view.save_status]:
+			check(label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and label.size.y >= label.get_minimum_size().y, "Station text clipped or lost wrapping")
+			check(label.get_global_rect().end.x <= view.hud_scroll.get_v_scroll_bar().get_global_rect().position.x + 1.0, "Station text extends under scroll gutter")
+		check(view.save_status.get_line_count() > 1 and view.hud_scroll.get_v_scroll_bar().visible, "Long save status did not wrap or show scroll affordance")
+		view.hud_scroll.scroll_vertical = 0
+		await process_frame
+		var position: Vector2 = view.hud_scroll.get_global_rect().get_center()
+		var motion := InputEventMouseMotion.new()
+		motion.position = position
+		motion.global_position = position
+		root.push_input(motion, true)
+		for step in 8:
+			var wheel := InputEventMouseButton.new()
+			wheel.position = position
+			wheel.global_position = position
+			wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+			wheel.pressed = true
+			wheel.factor = 5.0
+			root.push_input(wheel, true)
+		await process_frame
+		check(view.hud_scroll.scroll_vertical > 0, "Actual mouse wheel did not scroll station HUD")
+		view.hud_scroll.ensure_control_visible(view.save_status)
+		await process_frame
+		check(view.hud_scroll.get_global_rect().intersects(view.save_status.get_global_rect()), "Station save status unreachable")
+		# Wheel scrolling can hide the current focus; follow-focus runs on a
+		# genuine focus transition, not grabbing an already focused control.
+		view.save_button.grab_focus()
+		await process_frame
+		view.pause_button.grab_focus()
+		await process_frame
+		check(view.hud_scroll.get_global_rect().encloses(view.pause_button.get_global_rect()), "Follow-focus did not reveal Resume")
+		physical_key(KEY_DOWN, true)
+		physical_key(KEY_DOWN, false)
+		await process_frame
+		check(root.gui_get_focus_owner() == view.save_button and view.hud_scroll.get_global_rect().encloses(view.save_button.get_global_rect()), "Keyboard focus did not reveal Save As")
+		physical_key(KEY_ENTER, true)
+		physical_key(KEY_ENTER, false)
+		check(view.save_dialog.visible, "Readable station Save As did not invoke real chooser")
+		view.save_dialog.hide()
+		view.save_dialog.canceled.emit()
+		await process_frame
+		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
+		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
+		await process_frame
+		check(root.gui_get_focus_owner() == view.save_button and view.hud_scroll.get_global_rect().encloses(view.save_button.get_global_rect()), "Selected D-pad did not reveal Save As")
+		joy_button(JOY_BUTTON_A, true, device)
+		joy_button(JOY_BUTTON_A, false, device)
+		check(view.save_dialog.visible, "Selected pad did not invoke readable station Save As")
+		view.save_dialog.hide()
+		view.save_dialog.canceled.emit()
+		paused_checkpoint(view, owner, path, walk, flight, bytes, pose, heading, pitch, "HUD resize/scroll/navigation")
+	if temporary_pad:
+		Input.joy_connection_changed.emit(19, false)
+	view.hud_hint.text = hint
+	view.save_status.text = status
+	root.size = Vector2i(1280, 720)
+	for frame in 3:
+		await process_frame
+	view.hud_scroll.scroll_vertical = 0
+
+
 func check_station_controls(view: Control, owner: Variant, path: String, start: Dictionary, bytes: PackedByteArray) -> void:
 	await process_frame
 	await process_frame
@@ -287,6 +384,7 @@ func run() -> void:
 	view.set_process(false)
 	check(view.initialize(owner, args[2]) and not view.paused, "Fresh already-neutral view did not retain running startup")
 	view.set_paused(true)
+	await check_hud_layout(view, owner, path, originals[0])
 	check(view.advance_requested(60.0, neutral) and owner.get_freedom_walk_state() == start, "Paused view advanced shared time")
 	view.set_paused(false)
 	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
