@@ -6,7 +6,8 @@ const HopperPresentation = preload("res://hopper_presentation.gd")
 const StationPresentation = preload("res://native_station_view.gd")
 const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8"
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
-const FLIGHT_KEYS = [KEY_D, KEY_SPACE, KEY_S, KEY_A, KEY_CTRL, KEY_W, KEY_UP, KEY_LEFT, KEY_Q, KEY_DOWN, KEY_RIGHT, KEY_E]
+const PlayerInput = preload("res://player_input.gd")
+const PauseMenu = preload("res://pause_menu.gd")
 var bridge: Variant
 var camera: Camera3D
 var terrain_camera: Camera3D
@@ -23,7 +24,13 @@ var save_dialog: FileDialog
 var save_status: Label
 var paused := true
 var focused := true
-var controls_armed := true
+var controls_armed := false
+var player_input: Node
+var controls_menu: CanvasLayer
+var persist_controls := true
+var control_settings_path := PlayerInput.SETTINGS_PATH
+var look_offset := Vector2.ZERO
+var hint: Label
 var cockpit := false
 var pilot_eye := Vector3.ZERO
 var state: Dictionary = {}
@@ -38,12 +45,14 @@ var release_button: Button
 var error := ""
 
 
-static func controls() -> PackedFloat64Array:
-	var fractions := PackedFloat64Array()
-	fractions.resize(12)
-	for i in 12:
-		fractions[i] = 1.0 if Input.is_physical_key_pressed(FLIGHT_KEYS[i]) else 0.0
-	return fractions
+static func actuator_fractions(axes: PackedFloat64Array) -> PackedFloat64Array:
+	# Layout-4 input is semantic actuator demand, not the lab's rate controller.
+	if axes.size() != 7:
+		return PackedFloat64Array()
+	for i in 7:
+		if not is_finite(axes[i]) or absf(axes[i]) > 1.0 or (i < 2 and axes[i] < 0.0):
+			return PackedFloat64Array()
+	return PackedFloat64Array([maxf(axes[5], 0), maxf(axes[6], 0), axes[1], maxf(-axes[5], 0), maxf(-axes[6], 0), axes[0], maxf(axes[2], 0), maxf(-axes[3], 0), maxf(-axes[4], 0), maxf(-axes[2], 0), maxf(axes[3], 0), maxf(axes[4], 0)])
 
 
 static func valid_state(value: Dictionary) -> bool:
@@ -167,6 +176,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 	terrain.bridge = bridge
 	scene.add_child(terrain)
 	build_ui()
+	setup_controls()
 	update_view(0.0)
 	return true
 
@@ -186,8 +196,7 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	home_cue = Label.new()
 	column.add_child(home_cue)
-	var hint := Label.new()
-	hint.text = "W/S main/retro · A/D strafe · Space/Ctrl rise/fall\nArrows pitch/yaw · Q/E roll · F3 camera · Esc pause"
+	hint = Label.new()
 	column.add_child(hint)
 	pause_button = Button.new()
 	pause_button.text = "Resume flight"
@@ -198,12 +207,7 @@ func build_ui() -> void:
 	assist_button.text = "Assisted piloting"
 	assist_button.button_pressed = state.assistance
 	assist_button.focus_mode = Control.FOCUS_NONE
-	assist_button.toggled.connect(func(enabled: bool):
-		if not error.is_empty():
-			return
-		if not bridge.set_freedom_assistance(enabled):
-			pause_on_error(str(bridge.get_last_error()))
-	)
+	assist_button.toggled.connect(request_assistance)
 	column.add_child(assist_button)
 	if state.frame_id == "2":
 		var ports := HBoxContainer.new()
@@ -239,14 +243,14 @@ func build_ui() -> void:
 	save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	save_dialog.filters = PackedStringArray(["*.json ; Apsis Drift save"])
 	add_child(save_dialog)
-	save_button.pressed.connect(func():
-		paused = true
-		hide_exhaust()
-		pause_button.text = "Resume flight"
-		save_dialog.popup_centered_ratio(0.75)
-	)
+	save_button.pressed.connect(open_save_dialog)
+	save_dialog.canceled.connect(func():
+		if controls_menu != null:
+			controls_menu.show_menu("Save canceled. Resume explicitly after neutral."))
 	save_dialog.file_selected.connect(func(path: String):
 		save_status.text = "Saved to " + path if bridge.save_freedom_as(path) else "Save failed: " + str(bridge.get_last_error())
+		if controls_menu != null:
+			controls_menu.show_menu(save_status.text)
 	)
 	var quit_button := Button.new()
 	quit_button.text = "Quit"
@@ -254,8 +258,99 @@ func build_ui() -> void:
 	column.add_child(quit_button)
 
 
+func setup_controls() -> void:
+	player_input = PlayerInput.new()
+	player_input.persist = persist_controls
+	player_input.settings_path = control_settings_path
+	player_input.thrust_mode = true
+	player_input.assistance_request_only = true
+	player_input.assist = state.assistance
+	add_child(player_input)
+	player_input.set_enabled(false)
+	controls_menu = PauseMenu.new()
+	controls_menu.controls = player_input
+	controls_menu.saved_flight = true
+	controls_menu.saved_wayfarer = state.frame_id == "2"
+	add_child(controls_menu)
+	player_input.pause_requested.connect(toggle_pause)
+	player_input.safety_pause.connect(pause_controls)
+	player_input.bindings_changed.connect(func():
+		pause_controls("Controls changed. Release mapped controls before resuming."))
+	player_input.assist_requested.connect(request_assistance)
+	player_input.camera_requested.connect(change_camera)
+	player_input.recenter_requested.connect(recenter_camera)
+	controls_menu.resumed.connect(toggle_pause)
+	controls_menu.save_requested.connect(open_save_dialog)
+	controls_menu.assistance_requested.connect(request_assistance)
+	controls_menu.port_requested.connect(port_command)
+	controls_menu.quit_requested.connect(func(): get_tree().quit())
+	controls_menu.sync_saved_state(state, false)
+	controls_menu.show_menu("Paused after Continue. Release controls, then resume explicitly.")
+	refresh_control_hint()
+
+
+func refresh_control_hint() -> void:
+	if player_input == null:
+		return
+	var family := "pad" if player_input.last_device == "pad" else "key"
+	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nF3: legacy camera alias. Flight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family)]
+
+
+func request_assistance(enabled: bool) -> void:
+	if not error.is_empty() or not focused or save_dialog.visible:
+		hide_exhaust()
+		assist_button.set_pressed_no_signal(state.get("assistance", false))
+		return
+	if not bridge.set_freedom_assistance(enabled):
+		assist_button.set_pressed_no_signal(state.get("assistance", false))
+		pause_on_error(str(bridge.get_last_error()))
+		return
+	state = bridge.get_freedom_flight_state()
+	player_input.assist = state.assistance
+	assist_button.set_pressed_no_signal(state.assistance)
+	controls_menu.sync_saved_state(state, false)
+
+
+func open_save_dialog() -> void:
+	pause_controls("Save As preserves the last committed state.", false)
+	controls_menu.hide_menu()
+	save_dialog.popup_centered_ratio(0.75)
+
+
+func pause_controls(reason: String, show_menu := true) -> void:
+	paused = true
+	controls_armed = false
+	if player_input != null:
+		player_input.set_enabled(false)
+		player_input.looking = false
+		player_input.look_axes_needs_neutral = true
+	look_offset = Vector2.ZERO
+	hide_exhaust()
+	if pause_button != null:
+		pause_button.text = "Resume flight"
+	if controls_menu != null:
+		controls_menu.sync_saved_state(state, not error.is_empty())
+		if show_menu:
+			controls_menu.show_menu(reason)
+	if save_status != null and error.is_empty():
+		save_status.text = reason
+
+
+func change_camera() -> void:
+	if error.is_empty() and focused and not paused and not save_dialog.visible and state.frame_id == "2":
+		cockpit = not cockpit
+		look_offset = Vector2.ZERO
+		update_view(0.0)
+
+
+func recenter_camera() -> void:
+	if error.is_empty() and focused and not paused and not save_dialog.visible:
+		look_offset = Vector2.ZERO
+		update_view(0.0)
+
+
 func port_command(command: String, ordinal: int = 0) -> void:
-	if not error.is_empty():
+	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
@@ -276,51 +371,54 @@ func toggle_pause() -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
-	if paused:
-		if not focused or save_dialog.visible:
-			hide_exhaust()
-			return
-		observe_neutral_controls()
-		if not controls_armed:
-			save_status.text = "Release all flight controls before resuming."
-			return
-	paused = not paused
-	if paused:
+	if not paused:
+		pause_controls("Flight paused. Release controls before resuming.")
+		return
+	if not focused or save_dialog.visible:
 		hide_exhaust()
-	pause_button.text = "Resume flight" if paused else "Pause flight"
-	save_status.text = "Flight paused. Save As keeps the committed state." if paused else "Flight running. Save As pauses the session."
+		return
+	observe_neutral_controls()
+	if not controls_armed:
+		save_status.text = "Release all mapped flight controls before resuming."
+		player_input.status = save_status.text
+		return
+	paused = false
+	# The already-observed neutral latch owns resume; do not reset it again.
+	player_input.enabled = true
+	player_input.look_axes_needs_neutral = false
+	controls_menu.hide_menu()
+	pause_button.text = "Pause flight"
+	save_status.text = "Flight running. Save As pauses the session."
 
 
 func observe_neutral_controls() -> void:
-	if not focused or controls_armed:
+	if not focused or player_input == null:
 		return
-	for key in FLIGHT_KEYS:
-		if Input.is_physical_key_pressed(key):
-			return
-	controls_armed = true
+	var neutral: bool = player_input.observe_neutral()
+	controls_armed = neutral and not player_input.needs_neutral
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focused = false
-		controls_armed = false
-		paused = true
-		hide_exhaust()
-		if pause_button != null:
-			pause_button.text = "Resume flight"
-		if save_status != null and error.is_empty():
-			save_status.text = "Focus lost. Release flight controls, then resume explicitly."
+		if player_input != null:
+			player_input.focused = false
+		pause_controls("Focus lost. Release controls, then resume explicitly.")
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
+		if player_input != null:
+			player_input.focused = true
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo or save_dialog == null or save_dialog.visible:
 		return
-	if event.physical_keycode == KEY_ESCAPE:
-		toggle_pause()
-	elif event.physical_keycode == KEY_F3 and state.frame_id == "2":
+	# Esc/Start and remapped camera input belong to PlayerInput only.
+	if event.physical_keycode == KEY_F3 and error.is_empty() and focused and state.frame_id == "2":
+		# Historical alias may inspect the camera while paused; no world action.
 		cockpit = not cockpit
+		look_offset = Vector2.ZERO
+		update_view(0.0)
 
 
 func hide_exhaust() -> void:
@@ -330,8 +428,7 @@ func hide_exhaust() -> void:
 
 func pause_on_error(message: String) -> void:
 	error = message
-	paused = true
-	hide_exhaust()
+	pause_controls(message)
 	if save_status != null:
 		save_status.text = "Flight paused: " + error
 
@@ -343,8 +440,9 @@ func _process(delta: float) -> void:
 	if not focused:
 		hide_exhaust()
 		return
-	observe_neutral_controls()
-	var demand := controls()
+	var resolved: Dictionary = player_input.sample()
+	controls_armed = not player_input.needs_neutral
+	var demand := actuator_fractions(resolved.thrust_axes)
 	if state.get("attached", false):
 		demand.fill(0.0)
 	if not bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible):
@@ -354,6 +452,12 @@ func _process(delta: float) -> void:
 	if not valid_state(state):
 		pause_on_error("C++ flight view became unavailable: " + str(bridge.get_last_error()))
 		return
+	if not paused and not save_dialog.visible:
+		if resolved.recenter:
+			look_offset = Vector2.ZERO
+		look_offset += resolved.look * delta
+		look_offset.x = clampf(look_offset.x, -1.2 if cockpit else -PI, 1.2 if cockpit else PI)
+		look_offset.y = clampf(look_offset.y, -0.8 if cockpit else -1.2, 0.8 if cockpit else 1.2)
 	update_view(delta, true)
 	if not error.is_empty():
 		return
@@ -382,15 +486,21 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		station.visible = state.station_position.length() < 1000.0
 	terrain_camera.far = minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
 	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
+	var look_basis := Basis(Vector3.UP, -look_offset.x) * Basis(Vector3.RIGHT, -look_offset.y)
 	if cockpit:
-		camera.transform = Transform3D(state.body_basis, state.body_basis * pilot_eye)
+		camera.transform = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
 	else:
 		# The overhead dock occupies the usual elevated chase viewpoint. Keep
 		# the near-port camera below the craft so it has a real exterior view.
 		var height := -7.0 if not state.docking.is_empty() and state.docking.separation < 100.0 else 9.0
-		camera.position = state.body_basis * Vector3(17.0, height, 28.0)
+		camera.position = state.body_basis * (look_basis * Vector3(17.0, height, 28.0))
 		camera.look_at(Vector3.ZERO, state.body_basis.y)
 	terrain_camera.transform = camera.transform
+	if player_input != null:
+		player_input.assist = state.assistance
+		assist_button.set_pressed_no_signal(state.assistance)
+		controls_menu.sync_saved_state(state, false)
+		refresh_control_hint()
 	if state.star_direction.length_squared() > 0.5:
 		light.look_at(-state.star_direction, Vector3.UP if absf(state.star_direction.y) < 0.99 else Vector3.RIGHT)
 	if exhaust != null and not defer_exhaust:

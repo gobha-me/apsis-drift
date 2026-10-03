@@ -155,6 +155,7 @@ func run() -> void:
 	Input.action_press("pilot_forward", 1)
 	check(controls.sample().axes[0] == 0, "Unfocused input leaked")
 	Input.action_release("pilot_forward")
+	check_request_and_history(controls)
 	controls.queue_free()
 	print("Player input contracts: %d failures (synthetic events; not hardware qualification)" % failures)
 	quit(0 if failures == 0 else 1)
@@ -174,3 +175,55 @@ func joy_button(code: int, pressed: bool) -> void:
 	event.pressed = pressed
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
+
+func physical_key(code: int, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = code
+	event.keycode = code
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+func check_request_and_history(controls: Node) -> void:
+	controls.focused = true
+	controls.enabled = true
+	controls.device = -1
+	controls.install()
+	controls.observe_neutral()
+	controls.assistance_request_only = true
+	controls.assist = true
+	var requests := []
+	controls.assist_requested.connect(func(value: bool): requests.append(value))
+	physical_key(KEY_F, true)
+	physical_key(KEY_F, false)
+	check(requests == [false] and controls.assist, "Request-only assistance fabricated accepted world state")
+	# Real held physical keys accumulate across removals; no mocked barrier.
+	var held: Array[int] = []
+	check(controls.rebind("forward", "key", {"kind": "key", "code": 0x400100}), "History first binding rejected")
+	for i in controls.MAX_REMAP_NEUTRAL_EVENTS + 1:
+		var code: int = 0x400100 + i
+		physical_key(code, true)
+		check(Input.is_physical_key_pressed(code), "Held-history fixture did not reach physical input")
+		held.append(code)
+		check(controls.rebind("forward", "key", {"kind": "key", "code": code + 1}), "History remap rejected")
+	check(controls.remap_neutral_events.size() == controls.MAX_REMAP_NEUTRAL_EVENTS and controls.remap_neutral_overflow and not controls.observe_neutral() and controls.needs_neutral, "Held remap history exceeded bound or overflow authorized resume")
+	for i in held.size() - 1:
+		physical_key(held[i], false)
+	check(not controls.observe_neutral() and controls.needs_neutral, "Untracked overflow key disappeared into permission")
+	physical_key(held[-1], false)
+	# Foreign-pad state used earlier must also be physically released for the
+	# deliberately conservative overflow recovery boundary.
+	for device in [0, 2, 7]:
+		for axis in 6:
+			var event := InputEventJoypadMotion.new()
+			event.device = device
+			event.axis = axis
+			event.axis_value = 0.0
+			Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	check(controls.observe_neutral() and not controls.needs_neutral and not controls.remap_neutral_overflow and controls.remap_neutral_events.is_empty(), "Complete physical release did not recover bounded remap history")
+	# A previously cleared latch is not a claim about current physical neutrality.
+	physical_key(controls.bindings.forward.key.code, true)
+	check(not controls.observe_neutral() and not controls.needs_neutral, "Current-neutral observation was replaced by historical latch")
+	physical_key(controls.bindings.forward.key.code, false)
+	check(controls.observe_neutral(), "Current neutral observation failed after release")

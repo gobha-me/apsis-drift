@@ -26,8 +26,13 @@ the authoritative last committed tick, pose, history, frame and physical model.
 Reopen starts a fresh presentation clock without changing those saved values.
 Application focus loss immediately pauses flight and hides both exhaust groups
 without advancing their visual phase. Focus return stays paused: release all
-twelve flight keys, then resume explicitly. Unfocused elapsed callbacks schedule
-no flight ticks or catch-up backlog; this presentation latch is not saved state.
+mapped keys, buttons and axes, then resume explicitly. Unfocused elapsed callbacks schedule
+no flight ticks or catch-up backlog; these presentation latches are not saved state. Selected-controller loss/replacement,
+remapping, opening controls and Save As also pause immediately and require
+current individual neutrality before explicit resume; opposed inputs cannot
+cancel through that gate. Removed held mappings remain release barriers. That
+history is bounded to 128 events; overflow conservatively requires complete
+physical input release before rearming.
 Assistance changes explicitly through C++; the persisted orbit-hold request
 continues to use the existing owner and its normal manual-input/environment gates.
 
@@ -43,11 +48,36 @@ actionably rather than generating a substitute universe.
 ## Presentation and controls
 
 `tools/run_godot_native.sh --continue=/absolute/path/to/flight-save.json` opens
-the flight view. Escape or the pause button toggles flight; W/S fire main/retro,
-A/D strafe, Space/Ctrl rise/fall, arrows pitch/yaw, and Q/E roll. F3 changes
-between chase and cockpit cameras for Wayfarer. That camera choice is not a
-boarding or seat transition. The current input cut is keyboard; existing
-controller/study paths remain separate qualification work.
+the flight view. The approved layout-4 adapter now controls saved flight as well
+as the existing study, with keyboard equivalents and remapping. RT/R2 requests
+main thrust; LT/L2 requests weaker retro. Left stick controls pitch/roll (pull
+back pitches up), right stick yaw/heave, and LB/RB lateral translation. Hold L3
+and use right stick for cockpit look or exterior orbit. Release recenters;
+shared yaw/heave channels remain suppressed until centered. Independent engines,
+pitch/roll and bumpers remain usable during look. X/Square changes view;
+Y/Triangle requests assistance, reflecting only accepted saved state. Flight
+inputs request physical thrust/torque fractions, not the lab's target turn rates.
+No atmosphere-dependent mapping change or boost is introduced.
+
+Keyboard defaults are W/S main/retro, A/D yaw, Q/E strafe, Space/Ctrl rise/fall,
+I/K pitch, Z/X roll, Alt+arrows look, C view, Home recenter and F assist.
+This consolidates the earlier saved-only A/D strafe, arrow attitude and Q/E roll
+map onto the already approved layout 4; both maps are not sampled concurrently.
+F3 remains an explicit saved-view camera alias, including harmless inspection
+while paused. A camera choice never changes boarding or seat ownership.
+
+Esc/Start opens the controller-navigable paused controls menu. It exposes the
+actual current binding names, existing deadzone/response/head-look preferences,
+remapping, Resume, assistance, Save As and Quit. Wayfarer also exposes existing
+port selection/capture/release with the same physical assessment and refusal
+reasons as the HUD. The saved context has no experimental reset, relocation or
+lab-only help. B/Circle or Resume requests explicit resumption after current
+mapped inputs are neutral. Closing a chooser never resumes automatically.
+Preferences remain external in `user://freedom-controls-v4.json`; installed v4
+profiles load unchanged. Settings, devices, held input and camera offsets never
+enter deterministic world saves. Defaults/invalid-profile behavior remain the
+existing adapter's policy. Synthetic event contracts qualify software input
+resolution, not physical SteamOS/Xbox/PlayStation hardware.
 
 The view imports the selected Wayfarer export only for explicit frame 2/version
 1, verifying its existing model hash before import. Registered historical
@@ -120,5 +150,8 @@ commands and an assistance change. The actual Godot bridge trace, including a
 mid-trace Save As/Continue, must reproduce its complete save bytes. A second
 presentation cadence must reproduce the same final authoritative state and
 applied propulsion. Source fixtures remain unchanged. Native import/controls
-and exhaust semantics are distinct from visible GPU evidence and from the
+and exhaust semantics include real selected/foreign joypad events, all twelve
+actuator signs, fractional/opposed triggers, remapping/persistence, current
+neutral resume, focus/hotplug and exact fixed-schedule saved-owner parity. Those
+software checks are distinct from hardware qualification and visible GPU evidence and from the
 still-open composed station/surface journey.
