@@ -734,6 +734,22 @@ class FreedomBridge : public godot::RefCounted {
       result["surface_speed"] =
           observed.orbit.surface_relative_speed_metres_per_second;
       result["radial_rate"] = observed.orbit.radial_rate_metres_per_second;
+      switch (observed.orbit.classification) {
+        case OrbitClassification::stable:
+          result["orbit_classification"] = "stable";
+          break;
+        case OrbitClassification::decaying:
+          result["orbit_classification"] = "decaying";
+          break;
+        case OrbitClassification::impact:
+          result["orbit_classification"] = "impact";
+          break;
+        case OrbitClassification::escape:
+          result["orbit_classification"] = "escape";
+          break;
+      }
+      result["orbit_bound"] = observed.orbit.bound;
+      result["orbit_near_parabolic"] = observed.orbit.near_parabolic;
       result["periapsis_radius"] = observed.orbit.periapsis_radius_metres;
       result["apoapsis_radius"] =
           observed.orbit.apoapsis_radius_metres

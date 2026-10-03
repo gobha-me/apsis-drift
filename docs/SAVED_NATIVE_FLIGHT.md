@@ -36,6 +36,18 @@ physical input release before rearming.
 Assistance changes explicitly through C++; the persisted orbit-hold request
 continues to use the existing owner and its normal manual-input/environment gates.
 
+The saved HUD now shows the same-tick C++ **orbital forecast**: stable orbit,
+atmosphere entry, reference-surface intersection or escape, with periapsis and
+optional apoapsis expressed as altitude above the selected reference radius.
+Thrust and atmospheric drag change the trajectory; this central-body prediction
+is not terrain or landing clearance. Current altitude, surface speed, radial rate and air stay
+separate from that forecast. Near-parabolic cases are labelled explicitly.
+Unavailable apoapsis is shown as unavailable even for a bound trajectory beyond
+the reporting domain. An outbound escape can have a below-surface *past*
+periapsis; the display retains C++ escape classification rather than inventing
+an impending impact from that number. No lab NAV widget, additional 20 km orbit
+threshold, hold command or save field is introduced.
+
 The displayed full body attitude and home-station vector are projected in C++
 from the saved nonrotating planet frame into the generated rotating planet's
 same-tick tangent frame. Projection is query data, never a new saved frame or
