@@ -44,6 +44,14 @@ fuel, mutate terrain, create landed state, award progress, or apply damage.
 Named unmet margins explain why contact is unsuitable. Malformed observations
 are errors, distinct from a valid observation of dangerous contact.
 
+Planet resolution uses the context's explicitly selected legacy or physical
+world owner. A physical owner's embedded catalog cannot opt into legacy
+validation. Origin and procedural physical owners may share numeric body IDs;
+each resolves its own descriptor, while inconsistent owner/version or supplied
+origin-station provenance is rejected. This compatibility does not supply
+terrain observations, material or bearing authority, deploy gear, or change
+the caller's whole-footprint support obligation.
+
 ## Version 1 inputs and threshold policy
 
 `assess_touchdown_envelope` requires canonical `RigidBodyState` in the named
