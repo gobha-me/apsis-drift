@@ -92,7 +92,7 @@ func _ready() -> void:
 			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0]]:
 				var button := add_button(left, item[0], func(): port_requested.emit(item[1], item[2]))
 				saved_port_buttons[item[0]] = button
-	elif controls.thrust_mode:
+	if saved_flight or controls.thrust_mode:
 		basics_button = add_button(left, "Flight basics (paused)", show_basics)
 	if ship_audio_available:
 		audio_toggle = CheckButton.new()
@@ -206,8 +206,10 @@ func _ready() -> void:
 			bind.custom_minimum_size.x = 260
 			binding_buttons.append({"button": bind, "action": action, "family": family})
 	controls.bindings_changed.connect(refresh_bindings)
-	if controls.thrust_mode and not saved_flight:
+	if saved_flight or controls.thrust_mode:
 		basics = preload("res://flight_basics.gd").new()
+		basics.saved_flight = saved_flight
+		basics.saved_wayfarer = saved_wayfarer
 		basics.controls = controls
 		basics.rotational_coasting = rotational_coasting
 		basics.orbit_preserving_assist = orbit_preserving_assist

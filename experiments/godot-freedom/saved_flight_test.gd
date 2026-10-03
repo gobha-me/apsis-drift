@@ -88,6 +88,49 @@ func joy_button(button: int, pressed: bool, device := 0) -> void:
 	Input.flush_buffered_events()
 
 
+func check_saved_reference(view: Node, owner: Variant, directory: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var before_path := directory.path_join("reference-before.json")
+	var after_path := directory.path_join("reference-after.json")
+	check(owner.save_freedom_as(before_path), "Reference oracle Save As failed")
+	var before_bytes := FileAccess.get_file_as_bytes(before_path)
+	var menu: CanvasLayer = view.controls_menu
+	view.player_input.device = 0
+	view.player_input.install()
+	menu.basics_button.grab_focus()
+	physical_key(KEY_ENTER, true)
+	await process_frame
+	physical_key(KEY_ENTER, false)
+	check(menu.basics.visible and view.paused and not view.player_input.enabled, "Real saved reference entry resumed flight")
+	joy_button(JOY_BUTTON_A, true)
+	await process_frame
+	joy_button(JOY_BUTTON_A, false)
+	check(menu.basics.page == 1, "Saved reference controller page navigation failed")
+	view._process(1.0 / 60.0)
+	check(owner.get_freedom_flight_state() == before, "Reading reference advanced C++ clock/state")
+	view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view._notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+	check(view.paused and not menu.basics.visible and menu.menu_margin.visible and owner.get_freedom_flight_state() == before, "Reference focus return resumed or changed flight")
+	menu.show_basics()
+	check(menu.basics.visible, "Reference could not reopen after focus return")
+	# Current held inputs still block resume from the help panel.
+	physical_key(KEY_W, true)
+	physical_key(KEY_ESCAPE, true)
+	await process_frame
+	physical_key(KEY_ESCAPE, false)
+	check(view.paused and not view.controls_armed and owner.get_freedom_flight_state() == before, "Reference Resume bypassed held-flight gate")
+	physical_key(KEY_W, false)
+	menu.show_basics()
+	menu.basics.back_button.grab_focus()
+	physical_key(KEY_ENTER, true)
+	await process_frame
+	physical_key(KEY_ENTER, false)
+	check(not menu.basics.visible and menu.menu_margin.visible and root.gui_get_focus_owner() == menu.basics_button and view.paused, "Saved reference Back lost pause/focus")
+	check(owner.save_freedom_as(after_path) and FileAccess.get_file_as_bytes(after_path) == before_bytes, "Reference changed committed C++ save bytes")
+	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0, "Reference displayed firing exhaust")
+	menu.show_menu()
+
+
 func check_controller_domains() -> void:
 	for size in [0, 6, 8, 1000]:
 		var bad := PackedFloat64Array()
@@ -416,6 +459,7 @@ func run() -> void:
 		mesh_record.close()
 	var glass: MeshInstance3D = view.ship.find_child("HopperGlass", true, false)
 	check(glass != null and glass.material_override != null and glass.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.material_override.albedo_color.a < 0.1, "Selected cockpit glass blocks native flight visibility")
+	await check_saved_reference(view, owner, args[0].get_base_dir())
 	await check_saved_controller(view, owner, args[0])
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
 	view.state = owner.get_freedom_flight_state()

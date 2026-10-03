@@ -70,8 +70,25 @@ Esc/Start opens the controller-navigable paused controls menu. It exposes the
 actual current binding names, existing deadzone/response/head-look preferences,
 remapping, Resume, assistance, Save As and Quit. Wayfarer also exposes existing
 port selection/capture/release with the same physical assessment and refusal
-reasons as the HUD. The saved context has no experimental reset, relocation or
-lab-only help. B/Circle or Resume requests explicit resumption after current
+reasons as the HUD. The saved context has no experimental reset or relocation.
+**Flight basics
+(paused)** reuses the existing reference panel with explicit saved-flight pages:
+physical thrust/torque and momentum, air/orbit observations, bounded rotational
+assistance, current look/view bindings, Origin-port assessment and committed
+saves. Historical frame 1 explains its unavailable Wayfarer port actions.
+The lab profile retains its separate practice and prototype wording.
+
+The saved reference explains C++ STABLE as bound periapsis clearing the actual
+atmosphere boundary; it does not transfer the lab's additional 20 km criterion
+or claim an absent NAV instrument. Altitude is relative to the reference sphere,
+not terrain clearance. Assistance is actual bounded torque, without automatic
+hover or neutral translation braking; a persisted orbit-hold request is separate.
+Viewing help does not select or change it. Back returns to controls while paused;
+resume still requires current individual neutrality. Focus return and Save As
+cancellation never resume automatically. Fuel, jump travel, planetary touchdown
+and the composed boarding/seating journey remain unqualified by this reference.
+
+B/Circle or Resume requests explicit resumption after current
 mapped inputs are neutral. Closing a chooser never resumes automatically.
 Preferences remain external in `user://freedom-controls-v4.json`; installed v4
 profiles load unchanged. Settings, devices, held input and camera offsets never
