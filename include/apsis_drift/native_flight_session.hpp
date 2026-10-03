@@ -72,6 +72,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto release_port() -> std::expected<void, std::string>;
 
  private:
+  [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
+                                        SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   NativeFreedomFlightSession(FreedomFlightSaveDocument document,
                              FreedomFlightHydration hydrated,
                              std::optional<std::filesystem::path> source);
