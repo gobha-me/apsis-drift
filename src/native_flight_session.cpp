@@ -173,6 +173,12 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
+  return advance_craft_tick(controls, step);
+}
+
+auto NativeFreedomFlightSession::advance_craft_tick(
+    const NativeFlightControls& controls, SimulationSeconds step)
+    -> std::expected<NativeFlightStep, std::string> {
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{"Flight step requires one fixed 120 Hz tick"};
   if (document_.flight.tick >= std::numeric_limits<SimulationTick>::max() - 2)
@@ -253,8 +259,7 @@ auto NativeFreedomFlightSession::advance_walk(
   auto actor = advance_origin_walker(*actor_, controls, step);
   if (!actor) return std::unexpected{actor.error()};
   auto candidate = *this;
-  candidate.actor_.reset();
-  auto flight = candidate.advance({}, step);
+  auto flight = candidate.advance_craft_tick({}, step);
   if (!flight) return std::unexpected{flight.error()};
   candidate.actor_ = *actor;
   if (auto valid = validate_freedom_journey_document(

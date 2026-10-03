@@ -231,8 +231,35 @@ auto roundtrip() -> void {
     const auto original = contents(source);
     auto session = require(
         NativeFreedomFlightSession::open(require(native_continue(source))));
-    for (int n = 0; n < 240; ++n)
-      require(session.advance_walk({0, -1, 0}));
+    auto docked =
+        require(NativeFreedomFlightSession::open({NativeStartup::Mode::freedom,
+                                                  fresh.voyage,
+                                                  selected.home_planet,
+                                                  {}}));
+    for (int n = 0; n < 240; ++n) {
+      const auto walked_step = require(session.advance_walk({0, -1, 0}));
+      const auto docked_step = require(docked.advance({}));
+      check(
+          session.document() == docked.document() &&
+              session.docking() == docked.docking() &&
+              require(session.observe()) == require(docked.observe()) &&
+              walked_step.actuation.central.propulsion.applied_force_newtons ==
+                  docked_step.actuation.central.propulsion
+                      .applied_force_newtons &&
+              walked_step.actuation.central.propulsion
+                      .applied_torque_newton_metres ==
+                  docked_step.actuation.central.propulsion
+                      .applied_torque_newton_metres &&
+              walked_step.applied_hold_force_body_newtons ==
+                  docked_step.applied_hold_force_body_newtons,
+          "walking and actorless docked ticks have identical craft, clock "
+          "and observed applied actuation");
+      check(session.walker() && !docked.walker() &&
+                session.walker()->actor_id == fresh.actor.actor_id &&
+                session.walker()->geometry_version ==
+                    fresh.actor.geometry_version,
+            "successful walking tick retains its supported actor identity");
+    }
     const auto walked = current(session);
     check(walked.actor.foot_position_metres.x < -3.9 &&
               walked.voyage.flight.flight.tick == 240 &&
