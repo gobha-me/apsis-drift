@@ -151,22 +151,95 @@ func check_orbit_fixtures(directory: String) -> void:
 	owner = null
 
 
-func check_orbit_layout(view: Control, owner: Variant) -> void:
+func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
-	for pixels in [Vector2i(1280, 720), Vector2i(800, 450)]:
+	for style in [view.hud_scroll.get_theme_stylebox("panel"), view.orbital_forecast.get_theme_stylebox("normal")]:
+		check(style is StyleBoxFlat and style.bg_color.a >= 0.9 and maxf(style.bg_color.r, maxf(style.bg_color.g, style.bg_color.b)) <= 0.05, "HUD lost its dark text backing")
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			check(style.get_content_margin(side) == 0.0, "HUD backing shifted content margins")
+	var save := directory.path_join("hud-before.json")
+	check(owner.save_freedom_as(save), "HUD baseline save failed")
+	var original := FileAccess.get_file_as_bytes(save)
+	view.controls_menu.hide_menu()
+	for pixels in [Vector2i(1280, 720), Vector2i(960, 540), Vector2i(800, 450), Vector2i(640, 450)]:
 		root.size = pixels
 		for frame in 3:
 			await process_frame
 		view.update_view(0.0)
+		view.home_cue.text += " · " + "Long station identity and off-screen cue ".repeat(8)
+		view.save_status.text = "Save failed: " + "long-save-directory-name/".repeat(12) + "flight.json"
+		for frame in 3:
+			await process_frame
+		var bounds := Rect2(Vector2.ZERO, view.size)
+		check(bounds.encloses(view.hud_scroll.get_rect()), "HUD scroll bounds escaped " + str(pixels))
+		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "HUD has horizontal overflow")
+		var font_pixels: float = view.telemetry.get_theme_font_size("normal_font_size") * pixels.x / view.size.x
+		check(font_pixels >= 17.5 and font_pixels <= 20.5 and view.pause_button.size.y * pixels.y / view.size.y >= 39.5, "HUD type/action targets shrank")
+		check(view.hud_stacked == (pixels.x < 800), "Narrow HUD did not use local stacked fallback")
+		if not view.hud_stacked:
+			check(bounds.encloses(view.orbital_forecast.get_rect()) and not view.hud_scroll.get_rect().intersects(view.orbital_forecast.get_rect()), "HUD overlaps forecast")
+		check(view.hud_scroll.get_v_scroll_bar().visible, "HUD scroll affordance hidden")
+		for label in [view.telemetry, view.home_cue, view.hint, view.save_status]:
+			check(label.get_content_height() > 0 and label.size.y >= label.get_content_height(), "HUD text collapsed or clipped")
+			check(label.get_global_rect().end.x <= view.hud_scroll.get_v_scroll_bar().get_global_rect().position.x + 1.0, "HUD text extended under scrollbar")
+		view.hud_scroll.scroll_vertical = 0
 		await process_frame
-		check(Rect2(Vector2.ZERO, view.size).encloses(view.orbital_forecast.get_rect()), "Orbital HUD clipped at " + str(pixels) + " view=" + str(view.size) + " label=" + str(view.orbital_forecast.get_rect()))
+		var position: Vector2 = view.hud_scroll.get_global_rect().get_center()
+		var motion := InputEventMouseMotion.new()
+		motion.position = position
+		motion.global_position = position
+		root.push_input(motion, true)
+		for step in 8:
+			var wheel := InputEventMouseButton.new()
+			wheel.position = position
+			wheel.global_position = position
+			wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+			wheel.pressed = true
+			wheel.factor = 5.0
+			root.push_input(wheel, true)
+		await process_frame
+		check(view.hud_scroll.scroll_vertical > 0, "Actual GUI wheel did not scroll HUD")
+		view.hud_scroll.ensure_control_visible(view.save_status)
+		await process_frame
+		check(view.hud_scroll.get_global_rect().intersects(view.save_status.get_global_rect()), "Save status unreachable by scroll")
+		if view.hud_stacked:
+			view.hud_scroll.ensure_control_visible(view.orbital_forecast)
+			await process_frame
+			check(view.orbital_forecast.get_parent() == view.hud_column and view.hud_scroll.get_global_rect().intersects(view.orbital_forecast.get_global_rect()), "Stacked forecast unreachable")
 		check(view.orbital_forecast.get_content_height() <= view.orbital_forecast.size.y, "Orbital HUD text overflowed")
-		for control in [view.capture_button, view.release_button, view.save_status]:
-			check(Rect2(Vector2.ZERO, view.size).encloses(control.get_global_rect()), "Orbital HUD displaced port/save controls")
-		check(view.orbital_forecast.text == FlightView.orbit_text(before) and owner.get_freedom_flight_state() == before and view.paused, "Orbit layout changed forecast/state or resumed")
+		check(view.orbital_forecast.text == FlightView.orbit_text(before) and owner.get_freedom_flight_state() == before and view.paused, "HUD layout/scroll changed forecast/state or resumed")
+	check(owner.save_freedom_as(save) and FileAccess.get_file_as_bytes(save) == original, "HUD resize/scroll changed saved bytes")
 	root.size = Vector2i(1280, 720)
 	await process_frame
+	view.hud_scroll.scroll_vertical = 0
 	view.update_view(0.0)
+	view.controls_menu.show_menu()
+
+
+func check_hud_profiles(directory: String, assets: String) -> void:
+	root.size = Vector2i(800, 450)
+	for fixture in ["flight-18.json", "port-far.json", "port-approach.json", "port-docked.json"]:
+		var owner: Variant = ClassDB.instantiate("FreedomBridge")
+		check(owner.initialize_freedom_continue(directory.path_join(fixture)), "HUD profile fixture refused")
+		var before: Dictionary = owner.get_freedom_flight_state()
+		var view := FlightView.new()
+		view.persist_controls = false
+		root.add_child(view)
+		view.set_process(false)
+		check(view.initialize(owner, assets), "HUD profile view refused: " + view.error)
+		for frame in 3:
+			await process_frame
+		if before.frame_id == "2":
+			check(view.port_buttons.size() == 2 and view.capture_button.disabled == (before.attached or not before.docking.ready) and view.release_button.disabled == not before.attached, "Responsive HUD changed real port assessment")
+			check(view.port_buttons[0].disabled == before.attached and (before.attached and "Attached to D" in view.dock_status.text or not before.attached and str(before.docking.reason) in view.dock_status.text), "Responsive HUD lost port target/refusal")
+		else:
+			check(view.port_buttons.is_empty() and view.capture_button == null and view.dock_status == null, "Legacy HUD invented docking controls")
+		check(owner.get_freedom_flight_state() == before and view.paused, "HUD profile changed owner")
+		view.free()
+		owner = null
+		await process_frame
+	root.size = Vector2i(1280, 720)
+	await process_frame
 
 
 func check_saved_reference(view: Node, owner: Variant, directory: String) -> void:
@@ -481,6 +554,7 @@ func run() -> void:
 	check_orbit_fields(start)
 	check_orbit_fixtures(args[0].get_base_dir())
 	check_exhaust_inputs(start)
+	await check_hud_profiles(args[0].get_base_dir(), args[4])
 	check(owner.get_freedom_start().is_empty() and owner.get_state().is_empty(), "Flight created a docked or study owner")
 	for size in [0, 1, 11, 13, 1000]:
 		var truncated := PackedFloat64Array()
@@ -542,7 +616,7 @@ func run() -> void:
 		mesh_record.close()
 	var glass: MeshInstance3D = view.ship.find_child("HopperGlass", true, false)
 	check(glass != null and glass.material_override != null and glass.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.material_override.albedo_color.a < 0.1, "Selected cockpit glass blocks native flight visibility")
-	await check_orbit_layout(view, owner)
+	await check_hud_layout(view, owner, args[0].get_base_dir())
 	await check_saved_reference(view, owner, args[0].get_base_dir())
 	await check_saved_controller(view, owner, args[0])
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
