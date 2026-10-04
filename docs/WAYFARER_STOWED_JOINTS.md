@@ -101,12 +101,30 @@ It establishes neither penetration nor complete clearance. The dispatcher
 records the final over-entitlement counter separately from admitted prior
 work; complete final consumption remains unknown.
 
-About 94% of the completed prefix's work was point classification against
-connector faces. [Issue #399](https://github.com/gobha-me/apsis-drift/issues/399)
-targets exact finite-face and forward-ray bounds while preserving the original
+About 94% of that completed prefix's work was point classification against
+connector faces. [PR #400](https://github.com/gobha-me/apsis-drift/pull/400)
+adds exact finite-face and forward-ray bounds while preserving the original
 predicates, ordered evidence, ambiguity refusals and work allowance. The
 original winding code and imported certificates remain unchanged; new behavior
 requires its own reviewed source binding. A closed job is never replayed.
+
+A fresh, separately registered attempt with those bounds certified 455 checks
+and exhausted the remaining allowance on check 456, against the starboard lap
+connector and face 103 of the starboard pan edge welt. All 463 entered methods
+completed; 636 source checks remain unstarted.
+[Independent recorded review accepted this closed refusal](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5977457025).
+This is an operation-limit refusal, not penetration or full clearance. Complete
+final work consumption remains unknown after the over-entitlement counter.
+
+The completed prefix still spent about 81% of its admitted work on
+classification. Its 4,537 queries repeatedly rebuilt and scanned the same face
+bounds. [Issue #401](https://github.com/gobha-me/apsis-drift/issues/401) adds a
+bounded prepared hierarchy for reuse within one source-triangle evaluation.
+Its source consumer and new source binding require separate review before a
+fresh numerical attempt. Preparation, traversal and original face ordering
+consume the same fixed allowance; original predicates, source geometry and
+finite-contact policy remain bound. Synthetic improvements cannot predict
+complete ship-batch clearance.
 
 Complete numerical clearance, source/material preservation, package admission
 and runtime movement remain separate checks. Existing work and buffer limits
@@ -136,6 +154,7 @@ Run these checks with Python's standard library:
 python3 test/wayfarer_fixed_winding_differential_test.py
 python3 test/wayfarer_fixed_winding_source_reads_test.py
 python3 test/wayfarer_fixed_winding_callable_semantics_test.py
+python3 test/wayfarer_prepared_winding_test.py
 ```
 
 For the invented 432-face cube, interior, exterior and boundary controls use
@@ -145,6 +164,54 @@ handle verification; it is neither a wall-clock benchmark nor a prediction
 that the actual ship batch will fit. Bound construction and rational slab
 arithmetic consume the existing allowance. Exhaustion retains partial coverage
 and the original over-limit counter; it never grants complete clearance.
+
+### Reusing exact face bounds
+
+`prepare_classifier(winding, material, operation_limit=remaining)` returns
+construction status, charged work and a prepared handle. A failed construction
+returns no handle. `classify_prepared_point(winding, material, prepared, point,
+operation_limit=remaining)` preserves the original classification evidence and
+adds traversal accounting. The caller must prepare lazily, subtract construction
+work from the same source-triangle allowance, pass the decreasing remainder to
+each query and discard the handle when that evaluation ends. These functions
+do not enforce the caller's evaluation lifetime or qualify the source consumer.
+
+The deterministic hierarchy stores exact bounds as original vertex references.
+Stable median splits use exact coordinate keys; leaves contain at most eight
+faces. Closed node and face boxes only filter candidates. Boundary testing
+finishes before ray testing, and retained candidates execute the original
+predicates in original face order. Equality, positive singleton intersections
+and ambiguous rays retain their previous handling. Construction, sorting,
+partitioning, traversal and narrow predicates all consume mathematical work;
+exhaustion preserves an incomplete result and the actual over-limit counter.
+
+The existing input limits remain 256 vertices and 512 faces. The index has at
+most 1,023 nodes and a conservative encoded bound of 29,778 bytes, below its
+32 KiB ceiling. It binds the supplied material and winding instances. Integer
+field validation, encoding, hashing and existing material/source authentication
+are separately bounded identity overhead outside mathematical work. They do
+not rebuild geometric bounds or classify points. For the invented 432-face
+cube, each index identity pass visits 4,167 integer fields and 8,691 encoded
+bytes. Frozen handles follow the existing cooperative module contract.
+
+The invented ten-query comparisons below include construction once, then all
+queries, under the same operation counter. They compare complete mathematical
+evidence with the original winding classifier and compare cost with the
+unchanged flat-bounds helper preserved in the test references.
+
+| Invented workload | Flat operations | Prepared operations | Reduction |
+| --- | ---: | ---: | ---: |
+| Tetrahedron, mixed boundary/noncontact | 2,649 | 1,933 | 27.0% |
+| 432-face cube, mixed boundary/noncontact | 171,648 | 82,315 | 52.0% |
+| Same cube, shuffled face order | 171,648 | 86,519 | 49.6% |
+| 432-face cube, ten noncontact queries | 191,072 | 83,486 | 56.3% |
+
+A single query can cost more after preparation. These synthetic operation
+counts exclude the disclosed identity overhead, are not elapsed-time claims
+and do not establish that the actual source batch fits. The original flat API
+remains available. The prepared tests also cover legal large rational values,
+the maximum vertex/face dimensions, wrong or changed handles, exact decreasing
+allowances and partial construction or traversal.
 
 ## Portable observer
 

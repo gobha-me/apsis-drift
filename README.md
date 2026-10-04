@@ -106,10 +106,13 @@ The [static stowed-joint contract](docs/WAYFARER_STOWED_JOINTS.md) records the
 empty craft's ten declared attachment footprints and their remaining boundary
 checks. Complete perimeter observation now supports explicit finite edge and
 corner rules, and the updated assembly inspection has completed within its
-work limit. The numerical check certified 159 source-triangle calls before
-exhausting its allowance; 932 calls remain unstarted. Exact classification
-optimization is in progress. The harness still needs complete clearance and
-runtime admission before boarding or sitting.
+work limit. Exact classification bounds are merged. A fresh numerical attempt
+certified 455 source-triangle checks before exhausting its allowance; 636
+checks remain unstarted. [Independent recorded review accepted that refusal](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5977457025).
+A bounded face hierarchy now supports reuse within each evaluation; its
+separate source integration still needs qualification.
+The harness still needs complete clearance and runtime admission before
+boarding or sitting.
 
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
