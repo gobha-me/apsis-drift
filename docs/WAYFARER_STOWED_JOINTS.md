@@ -209,9 +209,27 @@ Previous failed attempts and an unused refused metadata preparation stay
 preserved; no closed key is retried.
 
 This completes numerical checks against retained source geometry and storage
-integration.
-The ten mutual bridge pairs and selected old-material interior checks remain
-separate, followed by exact K/material/source preservation, package and matched
+integration. A separately registered ten-pair run also completed with five
+fresh imports and all 17 durable methods
+([accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5982901427)).
+The run returned certificates for
+disjoint material interiors for all ten declared connector pairs using each
+connector's own face0 first vertex; its recorded-only audit verifies those
+certificates. This origin relies on the independently
+accepted continuing owner and its current import events; the audit does not
+reconstruct coordinates or rerun numerical methods.
+
+All ten pairs have known consumption: 1,381,081 operations under their separate
+64M aggregate allocation and the existing 16M per-query limit. Restoration
+uses 37,490,206 operations; the five imports use 2,128,606. The closed journal
+contains 60 files totaling 85,349 bytes. Final readback verifies all 100 output
+and metadata byte/physical rows, 19 directory identities and 26 role identities.
+The earlier metadata-path refusal stays closed and preserved. The corrected
+launcher binds both small metadata roles to the actual approved copies before
+launch; every geometry input path, numerical predicate and limit stays fixed.
+
+Selected old-material interior checks remain separate, followed by exact
+K/material/source preservation, package and matched
 render/contact admission. Supported actor travel, loaded seat/sole evidence,
 saved equipment and actor state, seat-to-flight/release, applied exhaust and
 same-world atmosphere/terrain/home return remain required for First Flight.

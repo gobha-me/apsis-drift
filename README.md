@@ -103,24 +103,18 @@ source derivative. Export integrity and static attachment proofs do not grant
 harness opening, runtime replacement or boarding.
 
 The [static stowed-joint contract](docs/WAYFARER_STOWED_JOINTS.md) records the
-empty craft's ten declared attachment footprints and their remaining boundary
-checks. Complete perimeter observation now supports explicit finite edge and
-corner rules, and the updated assembly inspection has completed within its
-work limit. Exact classification bounds and a bounded hierarchy for reuse
-within each evaluation are merged. A previous separately registered attempt
-certified 742 source-triangle checks before exhausting its allowance; 349
-checks remain unstarted. [Independent recorded review accepted that refusal](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5978372144).
-[Issue #403](https://github.com/gobha-me/apsis-drift/issues/403) reduced the
-measured construction and contact costs without changing geometry or limits.
-The next attempt recorded all 1,092 source-check results, then failed while
-writing a duplicate aggregate report. [Issue #405](https://github.com/gobha-me/apsis-drift/issues/405)
-replaces those duplicate copies with verified references under the same storage
-allowance. A fresh registered run now has an
+empty craft's ten declared attachment footprints and selected finite edge and
+corner rules. Work and storage improvements in
+[issue #403](https://github.com/gobha-me/apsis-drift/issues/403) and
+[issue #405](https://github.com/gobha-me/apsis-drift/issues/405) preserve the
+geometry, policy and limits. The retained-source run has an
 [accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5980565053):
 all 1,092 source certificates and five imports are verified, including exact
-reconstruction of the original full report. This completes numerical checks
-against retained source geometry. Mutual connector and old-material interior
-checks, source/package
+reconstruction of the original full report. A separately registered run returned
+certificates for all ten mutual connector pairs within their existing work
+allocation; its [accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5982901427)
+verifies those certificates.
+Old-material interior checks, exact K/material/source preservation, package
 admission and supported actor travel remain open before boarding or sitting.
 
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
