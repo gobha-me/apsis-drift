@@ -147,11 +147,13 @@ its own review and registration.
 The [single-order/contact attempt](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5979061301)
 recorded all 1,092 source methods as completed with successful certificate
 statuses, then failed while persisting the aggregate dispatch report. Closed
-collection retained 316,016,201 bytes in 3,303 files. These are recorded claims;
-independent certificate review is still pending. The owner already saved each
-certificate in its method journal, and the final report attempted to save the
-same evidence again under the fixed 512 MiB allowance. The attempt remains
-closed, with one unfinished dispatch method; it grants no admission.
+collection retained 316,016,201 bytes in 3,303 files.
+[A later recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5979650900)
+validated the available local certificates; that failed attempt still lacks the
+complete aggregate/import/work checks. The owner already saved each certificate
+in its method journal, and the final report attempted to save the same evidence
+again under the fixed 512 MiB allowance. The attempt remains closed, with one
+unfinished dispatch method; it grants no admission.
 
 [Issue #405](https://github.com/gobha-me/apsis-drift/issues/405) introduces
 compact durable dispatch references. The writer preserves each complete
@@ -183,9 +185,36 @@ explicit. Run the invented controls with:
 python3 test/wayfarer_dispatch_evidence_test.py
 ```
 
-The portable helper still needs separately reviewed admission into the durable
-owner and recorded reader, followed by a new registered actual attempt. It does
-not retroactively complete the failed report or authorize reuse of claimed keys.
+The helper has now received separately reviewed admission into the durable
+owner and recorded reader. A [fresh registered attempt](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5980093787)
+completed, and its [independent recorded audit passed](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5980565053).
+All 1,092 source certificates, five imports and 1,099 durable methods are complete.
+The audit retains import/source identity, exact entitlements, first-error and
+complete work accounting checks. It binds the previously accepted 119 finite
+rules and full ordered schedule; it does not re-decode raw structural buffers.
+No numerical methods or original geometry inputs are replayed during this audit.
+
+The closed journal contains 3,307 files totaling 316,786,279 bytes within the
+unchanged 512 MiB limit. The compact aggregate is 764,520 bytes and fits the
+ordinary record limits. Streaming verification reconstructs the unmodified full
+dispatch exactly: 315,537,534 bytes, SHA256
+`5b99dc4a31b2431d8f37ba903de097552bd6be21b1f66b41fa3b59187061c562`.
+Numerical consumption is 53,667,471 within its 64M allowance; restoration and
+shared integrity consume 48,303,967 within their separate 64M allowance. Final
+readback confirms all 3,307 output and 61 metadata byte/physical records,
+1,101 directory identities and 26 original-role STAT identities remain stable.
+The closed audit receipt is 4,091 bytes, SHA256
+`fb3ddb1016193cb148e8a9705e0cb2c7dca8d380874079f4afea663fcd8349e0`.
+Previous failed attempts and an unused refused metadata preparation stay
+preserved; no closed key is retried.
+
+This completes numerical checks against retained source geometry and storage
+integration.
+The ten mutual bridge pairs and selected old-material interior checks remain
+separate, followed by exact K/material/source preservation, package and matched
+render/contact admission. Supported actor travel, loaded seat/sole evidence,
+saved equipment and actor state, seat-to-flight/release, applied exhaust and
+same-world atmosphere/terrain/home return remain required for First Flight.
 
 Complete numerical clearance, source/material preservation, package admission
 and runtime movement remain separate checks. Existing work and buffer limits
