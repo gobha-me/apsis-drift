@@ -113,11 +113,15 @@ checks remain unstarted. [Independent recorded review accepted that refusal](htt
 [Issue #403](https://github.com/gobha-me/apsis-drift/issues/403) reduced the
 measured construction and contact costs without changing geometry or limits.
 The next attempt recorded all 1,092 source-check results, then failed while
-writing a duplicate aggregate report. Certificate review remains pending;
-[issue #405](https://github.com/gobha-me/apsis-drift/issues/405) replaces those
-duplicate copies with verified references under the same storage allowance.
-The harness still needs complete clearance and runtime admission before
-boarding or sitting.
+writing a duplicate aggregate report. [Issue #405](https://github.com/gobha-me/apsis-drift/issues/405)
+replaces those duplicate copies with verified references under the same storage
+allowance. A fresh registered run now has an
+[accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5980565053):
+all 1,092 source certificates and five imports are verified, including exact
+reconstruction of the original full report. This completes numerical checks
+against retained source geometry. Mutual connector and old-material interior
+checks, source/package
+admission and supported actor travel remain open before boarding or sitting.
 
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
