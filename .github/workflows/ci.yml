@@ -74,6 +74,12 @@ jobs:
       - name: Check stowed-joint indexed boundaries and bounded observation
         run: python3 test/wayfarer_stowed_joint_observation_test.py
 
+      - name: Check exact fixed-ray bounds and callable identity
+        run: |
+          python3 test/wayfarer_fixed_winding_differential_test.py
+          python3 test/wayfarer_fixed_winding_source_reads_test.py
+          python3 test/wayfarer_fixed_winding_callable_semantics_test.py
+
       - name: Run static analysis
         run: tools/lint.sh
 
