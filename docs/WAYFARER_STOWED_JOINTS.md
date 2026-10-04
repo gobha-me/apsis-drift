@@ -144,6 +144,49 @@ overlapping bounds must still enter the original contact predicates; every
 face remains accounted for. Any new source binding or actual attempt requires
 its own review and registration.
 
+The [single-order/contact attempt](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5979061301)
+recorded all 1,092 source methods as completed with successful certificate
+statuses, then failed while persisting the aggregate dispatch report. Closed
+collection retained 316,016,201 bytes in 3,303 files. These are recorded claims;
+independent certificate review is still pending. The owner already saved each
+certificate in its method journal, and the final report attempted to save the
+same evidence again under the fixed 512 MiB allowance. The attempt remains
+closed, with one unfinished dispatch method; it grants no admission.
+
+[Issue #405](https://github.com/gobha-me/apsis-drift/issues/405) introduces
+compact durable dispatch references. The writer preserves each complete
+certificate, binds its ordered method identity, argument hash, entitlement,
+start/result/completion pins and completion state, and records the original
+full dispatch's canonical byte count and SHA256. It replaces only duplicate
+aggregate result copies. The source dispatcher, consumer, geometric predicates
+and mathematical allowances remain separate and unchanged.
+
+[`wayfarer_dispatch_evidence.py`](../tools/wayfarer_dispatch_evidence.py)
+contains the portable storage transformation and verification. Verification
+reads named records through an explicitly supplied reader, checks every pin
+and method binding, and streams the reconstructed original canonical JSON into
+the recorded full-dispatch hash. It returns only after the final hash matches.
+The reader must enforce its approved same-job root and stable FD/name identities;
+the pure helper has no filesystem authority. A valid storage report grants no
+numerical, material, package or runtime qualification.
+
+Individual result records retain the 16 MiB, one-million-value-node bounds;
+markers retain 512 KiB bounds. JSON depth and token bounds apply before parsing.
+The full dispatch may contain more nodes than one result, but its canonical
+bytes and total referenced reads remain bounded by 512 MiB. No cross-evaluation
+cache, extra mathematical work allowance or omitted certificate is introduced.
+Malformed integers, duplicate JSON keys, reordered/foreign references and
+changed result bytes refuse verification. Partial refusals and error rows stay
+explicit. Run the invented controls with:
+
+```sh
+python3 test/wayfarer_dispatch_evidence_test.py
+```
+
+The portable helper still needs separately reviewed admission into the durable
+owner and recorded reader, followed by a new registered actual attempt. It does
+not retroactively complete the failed report or authorize reuse of claimed keys.
+
 Complete numerical clearance, source/material preservation, package admission
 and runtime movement remain separate checks. Existing work and buffer limits
 remain unchanged.
