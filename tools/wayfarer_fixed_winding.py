@@ -434,47 +434,53 @@ def prepare_classifier(w, material, *, operation_limit=16_000_000):
         phases[phase] = work.operations-prior; prior = work.operations; phase = 'spatial_orders'
         bounds = tuple(bounds); nodes = []
         all_faces = tuple(range(len(material.faces))); charge(work, len(all_faces))
-        orders = []; spatial_keys = []
-        for axis in range(3) if len(all_faces) > LEAF_FACES else ():
-            keys = []
-            for box in bounds:
-                keys.append(work.number(material.vertices[box[2*axis]][axis] + material.vertices[box[2*axis+1]][axis]))
-            spatial_keys.append(tuple(keys))
-            orders.append(spatial_order(keys, all_faces, work))
-        if not orders: orders = [all_faces]*3
+        # One charged stable order on the exact dominant vertex-cloud axis.
+        # The cloud selects a split only; it is never a membership shortcut.
+        if len(all_faces) > LEAF_FACES:
+            extrema = [0] * 6
+            for vertex in range(1, len(material.vertices)):
+                work.tick()  # Visit one bounded original vertex.
+                for axis in range(3):
+                    work.tick()
+                    if material.vertices[vertex][axis] < material.vertices[extrema[2*axis]][axis]:
+                        extrema[2*axis] = vertex
+                    work.tick()
+                    if material.vertices[vertex][axis] > material.vertices[extrema[2*axis+1]][axis]:
+                        extrema[2*axis+1] = vertex
+            charge(work, 6)  # Install exactly six bounded extremum references.
+            extents = tuple(work.number(material.vertices[extrema[2*a+1]][a]
+                                        - material.vertices[extrema[2*a]][a]) for a in range(3))
+            axis = 0
+            for candidate in (1, 2):
+                work.tick()
+                if extents[candidate] > extents[axis]: axis = candidate
+            keys = tuple(work.number(material.vertices[box[2*axis]][axis]
+                                     + material.vertices[box[2*axis+1]][axis]) for box in bounds)
+            ordered = spatial_order(keys, all_faces, work)
+        else:
+            ordered = all_faces
         phases[phase] = work.operations-prior; prior = work.operations; phase = 'hierarchy'
-        def build(orders):
-            work.tick(); faces = orders[0]
+        def build(start, end):
+            work.tick()  # Node visit and allocation-bound check.
             if len(nodes) >= MAX_NODES: raise ValueError('Prepared node allocation bound')
             ordinal = len(nodes); nodes.append(None)
-            if len(faces) <= LEAF_FACES:
+            work.tick(); count = end-start
+            work.tick()  # Fixed leaf/branch comparison.
+            if count <= LEAF_FACES:
+                faces = []
+                for position in range(start, end):
+                    work.tick(); faces.append(ordered[position])
+                faces = tuple(faces)
                 box = union_bound_ids(material, bounds, faces, work)
-                charge(work, len(faces))
-                row = (box, -1, -1, tuple(faces), len(faces))
+                row = (box, -1, -1, faces, count)
             else:
-                extents = tuple(work.number(spatial_keys[a][orders[a][-1]]-spatial_keys[a][orders[a][0]]) for a in range(3))
-                axis = 0
-                for candidate in (1, 2):
-                    work.tick()
-                    if extents[candidate] > extents[axis]: axis = candidate
-                middle = len(faces)//2
-                left_ids = set()
-                for face in orders[axis][:middle]: work.tick(); left_ids.add(face)
-                left_orders = []; right_orders = []
-                for ordered in orders:
-                    left_faces = []; right_faces = []
-                    for face in ordered:
-                        work.tick()  # One bounded true-int membership visit.
-                        if face in left_ids: left_faces.append(face)
-                        else: right_faces.append(face)
-                        work.tick()  # Install one ordered child reference.
-                    left_orders.append(tuple(left_faces)); right_orders.append(tuple(right_faces))
-                left = build(tuple(left_orders)); right = build(tuple(right_orders))
+                charge(work, 2); middle = start+count//2
+                left = build(start, middle); right = build(middle, end)
                 box = union_bound_ids(material, (nodes[left][0], nodes[right][0]), (0,1), work)
-                row = (box, left, right, (), len(faces))
+                row = (box, left, right, (), count)
             work.tick(); nodes[ordinal] = row; counts['nodes_completed'] += 1
             return ordinal
-        build(tuple(orders))
+        build(0, len(ordered))
         nodes = tuple(nodes)
         phases[phase] = work.operations-prior; prior = work.operations; phase = 'integrity'
         digest = index_digest(material, bounds, nodes, identity_accounting)
@@ -608,3 +614,15 @@ def classify_prepared_point(w, material, prepared, point, *, operation_limit=16_
             'prepared_identity_accounting': identity_accounting, 'helper_sha256': CODE_SHA,
             'winding_sha256': WINDING_SHA, 'embedding_sha256': EMBEDDING_SHA,
             'factory_calls': 0, 'seed_calls': 0, 'source_authority': False}
+
+
+def closed_boxes_disjoint(first, second, work):
+    """First strict separating closed interval; validated face_box rows only."""
+    for axis in range(3):
+        work.tick()
+        if first[axis][1] < second[axis][0]:
+            return (axis, 1)
+        work.tick()
+        if second[axis][1] < first[axis][0]:
+            return (axis, -1)
+    return None

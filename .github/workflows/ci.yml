@@ -80,6 +80,8 @@ jobs:
           python3 test/wayfarer_fixed_winding_source_reads_test.py
           python3 test/wayfarer_fixed_winding_callable_semantics_test.py
           python3 test/wayfarer_prepared_winding_test.py
+          python3 test/wayfarer_single_order_winding_test.py
+          python3 test/wayfarer_contact_bounds_test.py
 
       - name: Run static analysis
         run: tools/lint.sh
