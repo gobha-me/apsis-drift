@@ -47,7 +47,7 @@ distinct from contact along an edge. Coincident geometry with different source
 indices must not silently substitute for the declared attachment. Unmatched
 partial edges remain visible.
 
-A future selected rule may permit a named finite edge or point only inside
+Each selected rule permits a named finite edge or point only inside
 its original attachment footprint and on its proven indexed parents. It
 does not permit a third corner, an off-footprint segment, surface area,
 interior overlap or an entire component. Interior crossings or unsupported
@@ -61,17 +61,39 @@ objects: 8,730 connector/source partitions, 1,092 numerical obligations and
 27,481,730 source-face occurrences. Structural accounting is separate from
 numerical clearance.
 
-The latest numerical pass certifies its first ten source-triangle checks and
-stops at a finite line contact on the port shoulder strap's declared root
+The earlier two-rule numerical pass certifies its first ten source-triangle
+checks and stops at a finite line contact on the port shoulder strap's declared root
 attachment. Eleven calls completed, none unfinished, and 1,081 remain
 unstarted. Both previously selected shoulder-anchor edge contacts pass in
 that prefix. This is a contact-policy refusal, not proof of penetration.
 
-The next bounded observation covers the complete perimeters of all ten
-existing attachments before selecting further rules. It preserves the
-current positive-area footprints and prior selected anchor boundaries.
-Source observations, numerical clearance, source/material preservation,
-package admission and runtime movement remain separate checks.
+The complete perimeter observation now covers all ten existing attachments,
+including their original edge and corner incidence. It completed within its
+fixed work allowance and passed an independent recorded audit. The stopping
+strap contact follows genuine indexed attachment correspondence; observing
+that correspondence does not itself grant contact permission.
+
+[The selected finite-boundary policy](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5975823720)
+retains both prior anchor rules and adds 36 finite edge domains and 29 copied
+corner domains. Each names its actual indexed support and complete parent
+facets, clipped to the original finite attachment triangle. Unmatched partial
+edges and unsupported partial corners remain unselected.
+
+Original triangle ownership is recorded per cap: 18 copied caps each belong
+to one source face, while the eight partial anchor caps retain their two-face
+source partitions. The full attachment's owner-face union cannot substitute
+for an individual triangle's owner. The compact ledger preserves all
+54 existing rows and adds 65 references. Its independent byte audit reproduces
+the original ledger exactly after removing those additions. Input validation
+resolves each reference to exactly one original cap row and binds its full
+executable geometry and provenance.
+
+The updated assembly inspection completed under the selected policy with all
+119 records and complete source-face accounting, within the existing work
+limit. [Independent review of its recorded structure passed](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5976258379).
+Numerical clearance, source/material preservation, package admission and runtime
+movement remain separate checks. Existing work and buffer limits remain
+unchanged.
 
 ## Portable observer
 
