@@ -107,11 +107,15 @@ empty craft's ten declared attachment footprints and their remaining boundary
 checks. Complete perimeter observation now supports explicit finite edge and
 corner rules, and the updated assembly inspection has completed within its
 work limit. Exact classification bounds and a bounded hierarchy for reuse
-within each evaluation are merged. The latest separately registered attempt
+within each evaluation are merged. A previous separately registered attempt
 certified 742 source-triangle checks before exhausting its allowance; 349
 checks remain unstarted. [Independent recorded review accepted that refusal](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5978372144).
-[Issue #403](https://github.com/gobha-me/apsis-drift/issues/403) targets the
+[Issue #403](https://github.com/gobha-me/apsis-drift/issues/403) reduced the
 measured construction and contact costs without changing geometry or limits.
+The next attempt recorded all 1,092 source-check results, then failed while
+writing a duplicate aggregate report. Certificate review remains pending;
+[issue #405](https://github.com/gobha-me/apsis-drift/issues/405) replaces those
+duplicate copies with verified references under the same storage allowance.
 The harness still needs complete clearance and runtime admission before
 boarding or sitting.
 

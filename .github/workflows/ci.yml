@@ -82,6 +82,7 @@ jobs:
           python3 test/wayfarer_prepared_winding_test.py
           python3 test/wayfarer_single_order_winding_test.py
           python3 test/wayfarer_contact_bounds_test.py
+          python3 test/wayfarer_dispatch_evidence_test.py
 
       - name: Run static analysis
         run: tools/lint.sh
