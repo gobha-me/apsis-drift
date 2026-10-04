@@ -71,6 +71,9 @@ jobs:
       - name: Check corrected-rest atomic publication and failure boundaries
         run: python3 test/wayfarer_corrected_rest_package_test.py
 
+      - name: Check stowed-joint indexed boundaries and bounded observation
+        run: python3 test/wayfarer_stowed_joint_observation_test.py
+
       - name: Run static analysis
         run: tools/lint.sh
 

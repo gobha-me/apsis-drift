@@ -102,6 +102,11 @@ the declared harness spans and models finite shoulder connectors in a separate
 source derivative. Export integrity and static attachment proofs do not grant
 harness opening, runtime replacement or boarding.
 
+The [static stowed-joint contract](docs/WAYFARER_STOWED_JOINTS.md) records the
+empty craft's ten declared attachment footprints and their remaining boundary
+checks. Complete structural accounting and a partial numerical clearance pass
+do not yet qualify this harness for runtime boarding or sitting.
+
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
 Its unresolved self model does not grant a boarding route or seat occupancy.
