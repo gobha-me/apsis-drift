@@ -91,9 +91,60 @@ executable geometry and provenance.
 The updated assembly inspection completed under the selected policy with all
 119 records and complete source-face accounting, within the existing work
 limit. [Independent review of its recorded structure passed](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5976258379).
-Numerical clearance, source/material preservation, package admission and runtime
-movement remain separate checks. Existing work and buffer limits remain
-unchanged.
+
+The numerical run under this policy certified its first 159 source-triangle
+checks. The next call, the port lap connector against face 99 of the pan edge
+welt, exhausted the remaining work allowance. All 167 entered methods
+completed; 932 source-triangle calls remain unstarted.
+[Independent recorded review accepted this closed refusal](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5976555427).
+It establishes neither penetration nor complete clearance. The dispatcher
+records the final over-entitlement counter separately from admitted prior
+work; complete final consumption remains unknown.
+
+About 94% of the completed prefix's work was point classification against
+connector faces. [Issue #399](https://github.com/gobha-me/apsis-drift/issues/399)
+targets exact finite-face and forward-ray bounds while preserving the original
+predicates, ordered evidence, ambiguity refusals and work allowance. The
+original winding code and imported certificates remain unchanged; new behavior
+requires its own reviewed source binding. A closed job is never replayed.
+
+Complete numerical clearance, source/material preservation, package admission
+and runtime movement remain separate checks. Existing work and buffer limits
+remain unchanged.
+
+## Exact classification bounds
+
+[`wayfarer_fixed_winding.py`](../tools/wayfarer_fixed_winding.py) builds finite
+triangle bounds within each query. Closed point bounds prune boundary tests;
+closed positive-ray slab intervals prune ray tests. Retained faces use the
+unchanged exact predicates and preserve ordered boundary, hit and ambiguity
+records. Box equality and positive singleton intersections remain candidates.
+No whole-mesh box decision substitutes for winding membership.
+
+The helper consumes a handle from the supplied original winding module. Its
+source, predicate functions, typed callable defaults and live work methods are
+checked separately; an original handle certificate does not authenticate this
+new algorithm. New helper source reads have allocation limits and stable
+regular-file FD/name checks. Legacy material verification retains its original
+source-read behavior.
+
+The portable tests use invented shapes and byte-exact source references under
+[`test/fixtures/wayfarer_fixed_winding`](../test/fixtures/wayfarer_fixed_winding).
+Run these checks with Python's standard library:
+
+```sh
+python3 test/wayfarer_fixed_winding_differential_test.py
+python3 test/wayfarer_fixed_winding_source_reads_test.py
+python3 test/wayfarer_fixed_winding_callable_semantics_test.py
+```
+
+For the invented 432-face cube, interior, exterior and boundary controls use
+about 24–37% of the reference classifier's charged work. This measures the
+defined mathematical operations, excluding source hashing, compilation and
+handle verification; it is neither a wall-clock benchmark nor a prediction
+that the actual ship batch will fit. Bound construction and rational slab
+arithmetic consume the existing allowance. Exhaustion retains partial coverage
+and the original over-limit counter; it never grants complete clearance.
 
 ## Portable observer
 

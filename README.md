@@ -106,8 +106,10 @@ The [static stowed-joint contract](docs/WAYFARER_STOWED_JOINTS.md) records the
 empty craft's ten declared attachment footprints and their remaining boundary
 checks. Complete perimeter observation now supports explicit finite edge and
 corner rules, and the updated assembly inspection has completed within its
-work limit. Complete structural accounting and a partial numerical clearance
-pass do not yet qualify this harness for runtime boarding or sitting.
+work limit. The numerical check certified 159 source-triangle calls before
+exhausting its allowance; 932 calls remain unstarted. Exact classification
+optimization is in progress. The harness still needs complete clearance and
+runtime admission before boarding or sitting.
 
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
