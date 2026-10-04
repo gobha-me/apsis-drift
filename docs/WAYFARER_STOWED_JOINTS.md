@@ -118,13 +118,31 @@ final work consumption remains unknown after the over-entitlement counter.
 
 The completed prefix still spent about 81% of its admitted work on
 classification. Its 4,537 queries repeatedly rebuilt and scanned the same face
-bounds. [Issue #401](https://github.com/gobha-me/apsis-drift/issues/401) adds a
+bounds. [PR #402](https://github.com/gobha-me/apsis-drift/pull/402) adds a
 bounded prepared hierarchy for reuse within one source-triangle evaluation.
-Its source consumer and new source binding require separate review before a
+Its source consumer and new source binding passed separate review before a
 fresh numerical attempt. Preparation, traversal and original face ordering
 consume the same fixed allowance; original predicates, source geometry and
 finite-contact policy remain bound. Synthetic improvements cannot predict
 complete ship-batch clearance.
+
+That fresh attempt certified 742 source checks and refused on check 743,
+against the crotch connector and face 76 of Buckle release. All 750 entered
+methods completed, including all five imports; 349 source checks remain
+unstarted. [Independent recorded review accepted the closed partial refusal](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5978372144).
+The last source check reports 81,978 operations against 81,977 remaining,
+stopping during index construction. Prior admitted work is 63,918,023;
+complete final consumption remains unknown. This establishes neither a
+geometric failure nor clearance of unstarted checks.
+
+Independent performance review attributes 43.16% of the certified prefix's
+work to index construction, 32.15% to contact checks and 22.79% to
+classification. There are 728 completed builds and 7,252 queries.
+[Issue #403](https://github.com/gobha-me/apsis-drift/issues/403) bounds cheaper
+charged construction and conservative exact contact rejection. Touching or
+overlapping bounds must still enter the original contact predicates; every
+face remains accounted for. Any new source binding or actual attempt requires
+its own review and registration.
 
 Complete numerical clearance, source/material preservation, package admission
 and runtime movement remain separate checks. Existing work and buffer limits
@@ -177,13 +195,21 @@ each query and discard the handle when that evaluation ends. These functions
 do not enforce the caller's evaluation lifetime or qualify the source consumer.
 
 The deterministic hierarchy stores exact bounds as original vertex references.
-Stable median splits use exact coordinate keys; leaves contain at most eight
-faces. Closed node and face boxes only filter candidates. Boundary testing
-finishes before ray testing, and retained candidates execute the original
-predicates in original face order. Equality, positive singleton intersections
-and ambiguous rays retain their previous handling. Construction, sorting,
-partitioning, traversal and narrow predicates all consume mathematical work;
-exhaustion preserves an incomplete result and the actual over-limit counter.
+For more than eight faces, it selects the axis with the largest exact extent of
+the complete vertex cloud; X, then Y, then Z resolves ties. One stable sort uses
+exact doubled face-box midpoint keys on that axis and original face IDs for ties.
+Balanced median splits divide contiguous ranges of this single order. Leaves
+contain at most eight faces; their bounds are built once, and parent bounds are
+conservative bottom-up unions of the two children. The cloud extent selects the
+order only: it never determines point membership.
+
+Closed node and face boxes only filter candidates. Boundary testing finishes
+before ray testing, and retained candidates execute the original predicates in
+original face order. Equality, positive singleton intersections and ambiguous
+rays retain their previous handling. Geometric bounds, extent/key arithmetic,
+sorting, range partitioning, traversal and narrow predicates all consume the
+same mathematical work; exhaustion preserves an incomplete result and the
+actual over-limit counter.
 
 The existing input limits remain 256 vertices and 512 faces. The index has at
 most 1,023 nodes and a conservative encoded bound of 29,778 bytes, below its
@@ -194,24 +220,92 @@ not rebuild geometric bounds or classify points. For the invented 432-face
 cube, each index identity pass visits 4,167 integer fields and 8,691 encoded
 bytes. Frozen handles follow the existing cooperative module contract.
 
-The invented ten-query comparisons below include construction once, then all
-queries, under the same operation counter. They compare complete mathematical
-evidence with the original winding classifier and compare cost with the
-unchanged flat-bounds helper preserved in the test references.
+These invented ten-query comparisons include construction once, then every
+query. They recompute the same ordered point sequences as the earlier PR402
+table with the single-order constructor; they are separate from the six-case
+prototype experiment, which used a different query sequence. Complete
+mathematical evidence matches the original winding classifier. The flat cost
+uses the unchanged flat-bounds API preserved in the test references.
 
 | Invented workload | Flat operations | Prepared operations | Reduction |
 | --- | ---: | ---: | ---: |
-| Tetrahedron, mixed boundary/noncontact | 2,649 | 1,933 | 27.0% |
-| 432-face cube, mixed boundary/noncontact | 171,648 | 82,315 | 52.0% |
-| Same cube, shuffled face order | 171,648 | 86,519 | 49.6% |
-| 432-face cube, ten noncontact queries | 191,072 | 83,486 | 56.3% |
+| Tetrahedron, mixed boundary/noncontact | 2,649 | 1,935 | 27.0% |
+| 432-face cube, mixed boundary/noncontact | 171,648 | 49,087 | 71.4% |
+| Same cube, shuffled face order | 171,648 | 54,822 | 68.1% |
+| 432-face cube, ten noncontact queries | 191,072 | 52,044 | 72.8% |
 
-A single query can cost more after preparation. These synthetic operation
-counts exclude the disclosed identity overhead, are not elapsed-time claims
-and do not establish that the actual source batch fits. The original flat API
-remains available. The prepared tests also cover legal large rational values,
-the maximum vertex/face dimensions, wrong or changed handles, exact decreasing
+A single query can cost more after preparation, and the cheaper single-axis
+construction can increase traversal work. These synthetic operation counts
+exclude the disclosed identity overhead, are not elapsed-time claims and do
+not establish that the actual source batch fits. The original flat API remains
+available. The prepared tests also cover legal large rational values, the
+maximum vertex/face dimensions, wrong or changed handles, exact decreasing
 allowances and partial construction or traversal.
+
+Reproduce the table from the repository root using only portable invented
+fixtures:
+
+```sh
+python3 - <<'PY'
+from pathlib import Path
+from fractions import Fraction as F
+import sys
+sys.path.insert(0, 'test')
+import wayfarer_prepared_winding_fixtures as f
+b = f.load(Path('tools/wayfarer_fixed_winding.py'), 'measurement_helper')
+tetra = f.material(((0,0,0),(2,0,0),(0,2,0),(0,0,2)))
+cube = f.grid_cube(6)
+shuffled = f.material(cube.vertices, tuple(cube.faces[(i*137)%432] for i in range(432)))
+mixed = ((F(1,7),F(1,9),F(1,11)), (3,3,3), (1,F(1,7),F(1,9)),
+         (-3,-3,-3), (-1,-1,-1), (F(1,3),F(1,5),F(1,7)),
+         (3,0,0), (0,3,0), (0,0,3), (0,0,0))
+noncontact = ((F(1,7),F(1,9),F(1,11)), (3,3,3), (-3,-3,-3),
+              (F(1,3),F(1,5),F(1,7)), (3,0,0), (0,3,0), (0,0,3),
+              (F(1,8),)*3, (F(2,7),F(2,9),F(2,11)), (-3,F(1,5),F(1,7)))
+for label, material, points in (('tetra',tetra,mixed), ('cube',cube,mixed),
+                                 ('shuffled',shuffled,mixed), ('noncontact',cube,noncontact)):
+    build = b.prepare_classifier(f.w, material)
+    assert build['prepared'] is not None
+    queries = [b.classify_prepared_point(f.w, material, build['prepared'], q) for q in points]
+    assert all(q['classification_scans_complete'] for q in queries)
+    flat = sum(b.classify_point(f.w, material, q)['operations'] for q in points)
+    prepared = build['operations'] + sum(q['operations'] for q in queries)
+    print(label, flat, prepared)
+PY
+```
+
+### Strict bounds for finite contact enumeration
+
+`closed_boxes_disjoint(first, second, work)` accepts caller-validated exact
+finite closed intervals from `face_box`. It charges each comparison and returns
+only the first strict separating axis/direction, or `None`. Touching endpoints
+and overlaps remain candidates for the original finite triangle-intersection
+predicate. There is no epsilon, expanded allowance or contact-permission grant.
+
+A source consumer can compute its source-triangle box once after existing
+validation and patch normals, then compute each original bridge-face box under
+its remaining allowance. Each face box costs 13 operations; the separating
+test costs 1–6 comparisons. Every complete face retains an ordered ledger row.
+Strictly separated rows need explicit complete bounds-exclusion evidence, a null
+narrow-intersection certificate and an empty fan. Touching or overlapping rows
+retain the original narrow result. Refused partial faces must remain uncounted;
+a refused narrow entry must be distinguished from a completed face. The later
+lazy classifier still charges its own construction rather than trusting an
+unbound contact cache.
+
+On the invented tetrahedron, total contact work changes from 327 to 73 for
+separated faces, from 327 to 364 for touching, and from 525 to 614 for coplanar
+faces. These comparisons include source/face boxes and separation tests, but
+exclude unrelated source normal, partition and point-classification work on
+both sides. Bounds add overhead when they prune little; these measurements
+supply no full-batch fit or material qualification.
+
+Run the focused portable controls:
+
+```sh
+python3 test/wayfarer_single_order_winding_test.py
+python3 test/wayfarer_contact_bounds_test.py
+```
 
 ## Portable observer
 
