@@ -247,4 +247,47 @@ struct BoardingPlantedBodyDiagnostic {
 [[nodiscard]] auto assess_origin_boarding_planted_body(double first = 0,
                                                        double last = 1)
     -> std::expected<BoardingPlantedBodyDiagnostic, std::string>;
+
+inline constexpr std::uint32_t kBoardingPlantedHipPreflightVersion{1};
+enum class BoardingPlantedHipPreflightCondition : std::uint8_t {
+  body_prerequisite,
+  unsupported_arithmetic,
+  pelvis_interior,
+  segment_projection,
+  thigh_interior,
+  hip_region_exclusion
+};
+struct BoardingPlantedHipPreflightDiagnostic {
+  std::uint32_t preflight_version{kBoardingPlantedHipPreflightVersion};
+  BoardingPlantedBodyDiagnostic body;
+  BoardingBodyPartId first_part{BoardingBodyPartId::pelvis},
+      second_part{BoardingBodyPartId::port_thigh};
+  // Exact witness = the SAME root expression + this vector, then the body's
+  // common Y placement ONCE. The following point bounds do not create a new
+  // rounded witness or a caller-supplied solid.
+  RigidVector3 candidate_relative_to_root;
+  BoardingPlantedLegPointBounds candidate_canonical, candidate_placed;
+  BoardingPlantedLegPointBounds axis, unit_axis, witness_from_hip;
+  double axis_length_metres{}, thigh_radius_metres{}, hip_limit_metres{};
+  std::array<BoardingPlantedLegScalarBounds, 3> pelvis_gaps;
+  BoardingPlantedLegScalarBounds projection, segment_upper_gap, hip_region_gap,
+      radius_squared, witness_norm_squared;
+  // The perpendicular-distance identity is evaluated ONLY after proving the
+  // projection strictly within the original segment, not its infinite line.
+  std::optional<BoardingPlantedLegScalarBounds> radial_distance_squared,
+      thigh_gap;
+  bool axis_link_identity{}, arithmetic_supported{}, pelvis_strict_interior{},
+      projection_strict_interior{}, thigh_strict_interior{},
+      hip_region_strict_exclusion{}, strict_unowned_conflict{};
+  std::optional<BoardingPlantedHipPreflightCondition> first_refusal;
+  static constexpr bool full_self_qualified{false}, self_qualified{false},
+      dynamics_qualified{false}, free_foot_swing_qualified{false},
+      load_qualified{false}, world_qualified{false}, crop_qualified{false},
+      sweep_qualified{false}, route_qualified{false}, actor_qualified{false},
+      seat_qualified{false}, save_qualified{false},
+      first_flight_qualified{false};
+};
+// One registered source-free t=0 port-hip candidate, with no public inputs.
+[[nodiscard]] auto assess_origin_boarding_planted_hip_preflight()
+    -> std::expected<BoardingPlantedHipPreflightDiagnostic, std::string>;
 } // namespace apsis_drift

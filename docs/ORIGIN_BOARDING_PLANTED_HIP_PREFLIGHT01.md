@@ -92,3 +92,44 @@ be separately registered within the authorized #361 work, preserving this
 recipe and its findings. No art or existing historical region is changed.
 Self/full105, load, world/crop/sweep, route, seating, actor/save and First Flight
 qualification remain false. No rendered capture or owner playtest is claimed.
+
+## First recorded observation
+
+The frozen public query confirms a strict unowned common-interior point at
+parameter 0 on both GCC and Clang. Each first contract run passes 1,824 checks;
+no witness, body, branch, clock, joint limit or hip region was changed.
+Independent unfactored knee reconstruction and all registered private controls
+pass. The first runs report identical outward bounds:
+
+| Quantity | Lower bound | Upper bound |
+| --- | ---: | ---: |
+| Axis projection s (m) | 0.22131328586765997 | 0.22131328586766216 |
+| s minus original hip limit (m) | 0.0049802093398206284 | 0.0049802093398228229 |
+| Squared radial distance (m²) | 0.0060384294984584174 | 0.0060384294984594461 |
+| Original squared radius (m²) | 0.011024999999999997 | 0.011025 |
+| Radius² minus radial distance² (m²) | 0.0049865705015405496 | 0.0049865705015415835 |
+
+All three pelvis gaps are strictly positive, including approximately 3 mm on
+Y and Z. Both segment endpoint gaps are strictly positive. The complete owned
+point-body and all unchanged closure/timing prerequisites certify before the
+witness graph. The exact unit-axis identity permits tightening only the squared
+radial distance's lower bound to its known nonnegative domain; its upper bound
+and strict predicates remain unchanged outward arithmetic.
+
+This disproves full-interval self clearance for the original curve. Broader
+self-clearance work must not treat that curve as a positive route. Preserve its
+kinematic/body/COM evidence and this conflict; select any later movement in a
+separate registered recipe within #361. This finding neither changes character
+art nor qualifies supported boarding, seating or First Flight.
+
+## Completed local validation
+
+The final contract adds three assertions preserving the observed strict conflict
+and separately complete parents: 1,827 checks pass on each compiler. Full native
+builds and all 55 tests pass on GCC (22.19 s) and Clang (21.23 s), preserving the
+old closure, timing, body/COM, native walk, save and flight contracts. Pinned
+format20, full tidy20 over 145 translation units and the 31 existing justified
+suppression directives pass; no new suppression is introduced. First-run logs
+and the source-only independent review remain retained as development evidence.
+Publication depends on #428 / PR #431 merging. No rendered capture or owner
+playtest is claimed by this source-free diagnostic.

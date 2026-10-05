@@ -1111,6 +1111,168 @@ auto assess_body(double first, double last, std::size_t body_capacity,
   result.com_derivatives_complete = true;
   return result;
 }
+auto assess_hip_preflight(Vec candidate, std::size_t body_leaves,
+                          std::size_t timing_depth, std::size_t timing_nodes,
+                          std::size_t timing_leaves)
+    -> std::expected<BoardingPlantedHipPreflightDiagnostic, std::string> {
+  using HipCondition = BoardingPlantedHipPreflightCondition;
+  if (!bounded(candidate.x, 8) || !bounded(candidate.y, 8) ||
+      !bounded(candidate.z, 8))
+    return std::unexpected("Planted hip candidate must be finite within +/-8m");
+  auto body =
+      assess_body(0, 0, body_leaves, timing_depth, timing_nodes, timing_leaves);
+  if (!body) return std::unexpected(body.error());
+  BoardingPlantedHipPreflightDiagnostic result;
+  result.body = std::move(*body);
+  result.candidate_relative_to_root = candidate;
+  result.axis_length_metres = thigh_length;
+  result.hip_limit_metres = kBoardingSelfHipLengthMetres;
+  auto arithmetic_refusal = [&] {
+    result.first_refusal = HipCondition::unsupported_arithmetic;
+    // No partial strict predicate survives unsupported arithmetic.
+    result.arithmetic_supported = false;
+    result.pelvis_strict_interior = false;
+    result.projection_strict_interior = false;
+    result.thigh_strict_interior = false;
+    result.hip_region_strict_exclusion = false;
+    result.strict_unowned_conflict = false;
+    result.radial_distance_squared.reset();
+    result.thigh_gap.reset();
+  };
+  if (!supported_environment()) {
+    arithmetic_refusal();
+    return result;
+  }
+  const auto& parent = result.body;
+  if (!parent.complete || !parent.reservations_complete ||
+      !parent.mass_model_complete || !parent.com_derivatives_complete ||
+      parent.leaves.size() != 1 || !parent.timing.complete ||
+      !parent.timing.derivative_domains_certified ||
+      !parent.timing.root_speed_certified ||
+      !parent.timing.root_acceleration_certified ||
+      !parent.timing.leg_joint_speed_certified ||
+      parent.timing.leaves.size() != 1 || !parent.timing.closure.complete ||
+      !parent.timing.closure.plane_identities ||
+      !parent.timing.closure.link_identities ||
+      !parent.timing.closure.joint_limits_certified) {
+    result.first_refusal = HipCondition::body_prerequisite;
+    return result;
+  }
+  const auto* pelvis =
+      std::get_if<BoardingPlantedBodyBoxBinding>(&parent.parts[0].reservation);
+  const auto* thigh = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+      &parent.parts[3].reservation);
+  const auto& leg = parent.timing.leaves.front().legs[0].closure;
+  if (!pelvis || !thigh || parent.parts[0].id != BoardingBodyPartId::pelvis ||
+      parent.parts[3].id != BoardingBodyPartId::port_thigh ||
+      pelvis->center != BodyPointId::root ||
+      pelvis->half_size_metres != Vec{.24, .12, .18} ||
+      pelvis->frame.columns != BoardingBodyFrame{}.columns ||
+      thigh->start != BodyPointId::port_hip ||
+      thigh->end != BodyPointId::port_knee || thigh->radius_metres != .105 ||
+      !leg.plane_identity || !leg.link_identities || !leg.limits_certified ||
+      parent.common_translation_y_metres != placement_y ||
+      !(thigh->radius_metres <= result.hip_limit_metres &&
+        result.hip_limit_metres < thigh_length)) {
+    result.first_refusal = HipCondition::body_prerequisite;
+    return result;
+  }
+  result.axis_link_identity = true;
+  result.thigh_radius_metres = thigh->radius_metres;
+  const auto& leaf = parent.leaves.front();
+  const auto hip =
+      body_intervals(leaf.points[body_index(BodyPointId::port_hip)].value);
+  const auto knee =
+      body_intervals(leaf.points[body_index(BodyPointId::port_knee)].value);
+  const auto root_point =
+      body_intervals(leaf.points[body_index(BodyPointId::root)].value);
+  const Point selected{point(candidate.x), point(candidate.y),
+                       point(candidate.z)};
+  Point axis, unit, w, canonical, placed;
+  bool supported{true};
+  auto scalar_bounds = [&](Interval v) {
+    supported = supported && v.supported;
+    return bounds(v);
+  };
+  auto projection = point(0), norm_squared = point(0);
+  bool pelvis_inside{true};
+  const std::array halves{pelvis->half_size_metres.x,
+                          pelvis->half_size_metres.y,
+                          pelvis->half_size_metres.z};
+  for (std::size_t axis_index = 0; axis_index < axis.size(); ++axis_index) {
+    // At this fixed t=0 point H-P=(-.14,0,0) EXACTLY. Both canonical
+    // endpoints belong to the owned body; no report midpoint is normalized.
+    axis[axis_index] = subtract(knee[axis_index], hip[axis_index]);
+    unit[axis_index] = divide(axis[axis_index], point(thigh_length));
+    w[axis_index] =
+        subtract(selected[axis_index], point(axis_index == 0 ? -.14 : 0));
+    canonical[axis_index] = add(root_point[axis_index], selected[axis_index]);
+    placed[axis_index] = axis_index == 1
+                             ? add(canonical[axis_index], point(placement_y))
+                             : canonical[axis_index];
+    const auto gap =
+        subtract(point(halves[axis_index]), absolute(selected[axis_index]));
+    result.pelvis_gaps[axis_index] = scalar_bounds(gap);
+    pelvis_inside = pelvis_inside && gap.supported && gap.low > 0;
+    projection = add(projection, multiply(unit[axis_index], w[axis_index]));
+    norm_squared = add(norm_squared, square(w[axis_index]));
+  }
+  result.axis = body_bounds(axis, supported);
+  result.unit_axis = body_bounds(unit, supported);
+  result.witness_from_hip = body_bounds(w, supported);
+  result.candidate_canonical = body_bounds(canonical, supported);
+  result.candidate_placed = body_bounds(placed, supported);
+  result.projection = scalar_bounds(projection);
+  const auto upper_gap = subtract(point(thigh_length), projection);
+  const auto region_gap =
+      subtract(projection, point(kBoardingSelfHipLengthMetres));
+  const auto radius_squared = square(point(thigh->radius_metres));
+  result.segment_upper_gap = scalar_bounds(upper_gap);
+  result.hip_region_gap = scalar_bounds(region_gap);
+  result.radius_squared = scalar_bounds(radius_squared);
+  result.witness_norm_squared = scalar_bounds(norm_squared);
+  if (!supported) {
+    arithmetic_refusal();
+    return result;
+  }
+  const auto projection_inside = projection.low > 0 && upper_gap.low > 0;
+  bool thigh_inside{};
+  if (projection_inside) {
+    auto radial = subtract(norm_squared, square(projection));
+    // The exact registered unit-axis identity makes this squared norm >=0;
+    // tightening its LOWER bound is not a clearance tolerance or repair.
+    if (!radial.supported || radial.high < 0) {
+      arithmetic_refusal();
+      return result;
+    }
+    radial.low = std::max(0., radial.low);
+    const auto gap = subtract(radius_squared, radial);
+    result.radial_distance_squared = scalar_bounds(radial);
+    result.thigh_gap = scalar_bounds(gap);
+    if (!supported) {
+      arithmetic_refusal();
+      return result;
+    }
+    thigh_inside = gap.low > 0;
+  }
+  result.arithmetic_supported = true;
+  result.pelvis_strict_interior = pelvis_inside;
+  result.projection_strict_interior = projection_inside;
+  result.thigh_strict_interior = thigh_inside;
+  result.hip_region_strict_exclusion = region_gap.low > 0;
+  result.strict_unowned_conflict = pelvis_inside && projection_inside &&
+                                   thigh_inside &&
+                                   result.hip_region_strict_exclusion;
+  if (!pelvis_inside)
+    result.first_refusal = HipCondition::pelvis_interior;
+  else if (!projection_inside)
+    result.first_refusal = HipCondition::segment_projection;
+  else if (!thigh_inside)
+    result.first_refusal = HipCondition::thigh_interior;
+  else if (!result.hip_region_strict_exclusion)
+    result.first_refusal = HipCondition::hip_region_exclusion;
+  return result;
+}
 } // namespace
 namespace detail {
 auto boarding_planted_leg_numeric(RigidVector3 hip, double ankle_x,
@@ -1168,6 +1330,15 @@ auto boarding_planted_body_bounded(double first, double last,
   return assess_body(first, last, body_leaves, timing_depth, timing_nodes,
                      timing_leaves);
 }
+auto boarding_planted_hip_preflight_bounded(Vec candidate,
+                                            std::size_t body_leaves,
+                                            std::size_t timing_depth,
+                                            std::size_t timing_nodes,
+                                            std::size_t timing_leaves)
+    -> std::expected<BoardingPlantedHipPreflightDiagnostic, std::string> {
+  return assess_hip_preflight(candidate, body_leaves, timing_depth,
+                              timing_nodes, timing_leaves);
+}
 } // namespace detail
 auto assess_origin_boarding_planted_legs(double first, double last)
     -> std::expected<BoardingPlantedLegDiagnostic, std::string> {
@@ -1187,5 +1358,12 @@ auto assess_origin_boarding_planted_body(double first, double last)
                      kBoardingPlantedLegMaximumDepth,
                      kBoardingPlantedLegMaximumNodes,
                      kBoardingPlantedLegMaximumLeaves);
+}
+auto assess_origin_boarding_planted_hip_preflight()
+    -> std::expected<BoardingPlantedHipPreflightDiagnostic, std::string> {
+  return assess_hip_preflight(
+      {-.04, -.117, -.177}, kBoardingPlantedBodyMaximumLeaves,
+      kBoardingPlantedLegMaximumDepth, kBoardingPlantedLegMaximumNodes,
+      kBoardingPlantedLegMaximumLeaves);
 }
 } // namespace apsis_drift

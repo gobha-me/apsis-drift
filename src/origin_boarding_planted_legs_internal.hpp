@@ -46,4 +46,13 @@ namespace apsis_drift::detail {
     std::size_t max_timing_nodes = kBoardingPlantedLegMaximumNodes,
     std::size_t max_timing_leaves = kBoardingPlantedLegMaximumLeaves)
     -> std::expected<BoardingPlantedBodyDiagnostic, std::string>;
+// Fixed t=0 body and original hip region. Only the numerical candidate and
+// lowered prerequisite budgets vary; no caller geometry grants authority.
+[[nodiscard]] auto boarding_planted_hip_preflight_bounded(
+    RigidVector3 candidate,
+    std::size_t max_body_leaves = kBoardingPlantedBodyMaximumLeaves,
+    std::size_t max_timing_depth = kBoardingPlantedLegMaximumDepth,
+    std::size_t max_timing_nodes = kBoardingPlantedLegMaximumNodes,
+    std::size_t max_timing_leaves = kBoardingPlantedLegMaximumLeaves)
+    -> std::expected<BoardingPlantedHipPreflightDiagnostic, std::string>;
 } // namespace apsis_drift::detail

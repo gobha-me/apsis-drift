@@ -132,6 +132,13 @@ provides the fixed whole-body reservations and surrogate center-of-mass
 value, velocity and acceleration bounds on that same curve. Support and
 continuous clearance remain separate checks under #361.
 
+The [fixed planted hip preflight](docs/ORIGIN_BOARDING_PLANTED_HIP_PREFLIGHT01.md)
+checks one registered point for strict pelvis/thigh overlap outside the existing
+finite hip junction. It retains the complete point-body prerequisites and
+separate membership bounds. Both compilers confirm a strict conflict at the
+start of the frozen curve, so that curve cannot qualify as a route. A separately
+registered movement follows; unresolved witnesses grant no clearance.
+
 The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
 the existing seat and harness meshes while proving their complete render
 triangle union matches the original. Harness opening and supported seating
