@@ -1,6 +1,8 @@
 #include "apsis_drift/origin_boarding_boot_support.hpp"
 #include "origin_boarding_foot_sites_internal.hpp"
 #include "origin_boarding_self_model02_internal.hpp"
+#include "origin_boarding_source_endpoint_load_internal.hpp"
+#include "origin_boarding_source_endpoint_self_internal.hpp"
 #include <algorithm>
 #include <bit>
 #include <cfenv>
@@ -729,5 +731,552 @@ auto assess_origin_boarding_foot_sites(
     -> std::expected<BoardingFootSitesDiagnostic, std::string> {
   return detail::boarding_foot_sites_bounded(provider, {},
                                              kBoardingBootSourcePartitionCount);
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+using LoadQuad = BoardingSourceEndpointLoadQuadMathEvidence;
+using LoadPressure = BoardingSourceEndpointLoadPressureEvidence;
+using LoadPayload = BoardingSourceEndpointLoadPayload;
+using LoadCondition = BoardingSourceEndpointLoadCondition;
+using LoadCandidate = BoardingSourceEndpointLoadCandidate;
+using LoadStatus = BoardingSourceEndpointLoadCandidateStatus;
+using LoadPointId = BoardingPlantedBodyPointId;
+// Fixed storage only, excluding the independently owned child/output. All
+// nested arithmetic temporaries are accounted separately below; no root or
+// old 256-term exact-sign expansion enters this new assessment.
+struct LoadScratch {
+  std::array<Point, 2> centers{}, pressures{};
+  Point com{}, barycenter{}, delta{};
+  std::array<Point, 4> sole{}, source{};
+  std::array<BoardingFootSiteEdgeEvidence, 4> edges{};
+};
+constexpr std::size_t load_nested_scratch =
+    2 * sizeof(BoardingFootSiteEdgeEvidence) + sizeof(LoadQuad) +
+    sizeof(LoadCandidate) + 24 * sizeof(Interval) + 16 * sizeof(std::size_t) +
+    10 * sizeof(double) + 4 * sizeof(Vec) + 4 * sizeof(double);
+// Live helpers reuse this pool; the categories above are NOT independent
+// stack allocations. Include by-value Point parameters, not just Interval
+// locals. Deep disk chain: fill pressure/required48 + site_edge parameters112
+// and edge32 + edge_side parameters96 and e/d64 + retained product16 +
+// multiply arguments32/products32/return16 =548. Add outer numeric Point
+// copies96, reference/control slots128 and two edge-record returns160.
+constexpr std::size_t load_disk_helper_scratch =
+    548 + 3 * sizeof(Point) + 16 * sizeof(std::size_t) +
+    2 * sizeof(BoardingFootSiteEdgeEvidence);
+// Alternate quad path: two guard records, one supplied perimeter, Point
+// locals/parameters/conversions, six intervals, controls, a corner return and
+// the product array. It never nests inside the disk path.
+constexpr std::size_t load_quad_helper_scratch =
+    2 * sizeof(LoadQuad) + 4 * sizeof(Vec) + 9 * sizeof(Point) +
+    6 * sizeof(Interval) + 16 * sizeof(std::size_t) + 4 * sizeof(Point) +
+    4 * sizeof(double);
+static_assert(load_disk_helper_scratch <= load_nested_scratch);
+static_assert(load_quad_helper_scratch <= load_nested_scratch);
+static_assert(sizeof(LoadPayload) <= 4096);
+static_assert(sizeof(LoadScratch) + load_nested_scratch + 240 <= 2048);
+static_assert(sizeof(LoadQuad) <= 72);
+static_assert(sizeof(LoadCandidate) <= 56);
+static_assert(sizeof(LoadPressure) <= 1312);
+
+auto load_finite(double x) -> bool {
+  return std::isfinite(x) && std::abs(x) <= 8;
+}
+auto load_finite(Vec p) -> bool {
+  return load_finite(p.x) && load_finite(p.y) && load_finite(p.z);
+}
+auto load_input_bound(BoardingPlantedLegScalarBounds b) -> bool {
+  return load_finite(b.lower) && load_finite(b.upper) && b.lower <= b.upper;
+}
+auto load_minimum(SiteBounds& accumulated, Interval next, bool first,
+                  bool& supported) -> void {
+  supported = supported && finite(next);
+  if (!finite(next)) return;
+  if (first)
+    accumulated = {next.low, next.high, true};
+  else {
+    accumulated.lower = std::min(accumulated.lower, next.low);
+    accumulated.upper = std::min(accumulated.upper, next.high);
+  }
+}
+auto load_quad(const std::array<Vec, 4>& q, double plane) -> LoadQuad {
+  LoadQuad result;
+  if (!site_supported_environment() || !load_finite(plane) ||
+      !std::ranges::all_of(q, [](Vec p) { return load_finite(p); }))
+    return result;
+  result.arithmetic_supported = true;
+  result.horizontal =
+      std::ranges::all_of(q, [plane](Vec p) { return p.y == plane; });
+  result.nondegenerate = true;
+  result.convex = true;
+  for (std::size_t i = 0; i < q.size(); ++i) {
+    const auto a = wide(q[i]), b = wide(q[(i + 1) % q.size()]);
+    const auto edge = subtract(b, a);
+    const auto length = add(square(edge.x), square(edge.z));
+    load_minimum(result.minimum_edge_squared, length, result.checked_edges == 0,
+                 result.arithmetic_supported);
+    ++result.checked_edges;
+    result.nondegenerate =
+        result.nondegenerate && finite(length) && length.low > 0;
+    for (std::size_t j = 2; j < q.size(); ++j) {
+      const auto side = edge_side(a, b, wide(q[(i + j) % q.size()]));
+      load_minimum(result.minimum_signed_side, side,
+                   result.checked_side_signs == 0, result.arithmetic_supported);
+      ++result.checked_side_signs;
+      result.convex = result.convex && finite(side) && side.low > 0;
+    }
+  }
+  result.minimum_edge_squared.supported = result.arithmetic_supported;
+  result.minimum_signed_side.supported = result.arithmetic_supported;
+  result.upward = result.horizontal && result.convex;
+  result.valid = result.arithmetic_supported && result.horizontal &&
+                 result.upward && result.convex && result.nondegenerate;
+  return result;
+}
+auto load_source_quad(const BoardingBootSourcePartition& source) -> LoadQuad {
+  auto result = load_quad(source.perimeter_metres, source.plane_metres);
+  if (!result.arithmetic_supported) return result;
+  // A geometric +Y perimeter is insufficient: retain exact emitted triangles
+  // and prove they cover it once on the actual opposite-corner diagonal.
+  std::array<std::size_t, 4> incidence{};
+  bool triangles = true;
+  for (const auto& face : source.faces) {
+    std::array<bool, 4> seen{};
+    bool finite_face = true;
+    for (const auto vertex : face.points_current_metres) {
+      if (!load_finite(vertex)) {
+        result.arithmetic_supported = false;
+        finite_face = false;
+        triangles = false;
+        continue;
+      }
+      result.horizontal = result.horizontal && vertex.y == source.plane_metres;
+      if (vertex.y != source.plane_metres) triangles = false;
+      const auto found = std::ranges::find(source.perimeter_metres, vertex);
+      if (found == source.perimeter_metres.end()) {
+        triangles = false;
+        continue;
+      }
+      const auto index =
+          static_cast<std::size_t>(found - source.perimeter_metres.begin());
+      triangles = triangles && !seen[index];
+      seen[index] = true;
+      ++incidence[index];
+    }
+    if (!finite_face) continue;
+    const auto winding = edge_side(wide(face.points_current_metres[0]),
+                                   wide(face.points_current_metres[1]),
+                                   wide(face.points_current_metres[2]));
+    result.arithmetic_supported =
+        result.arithmetic_supported && finite(winding);
+    triangles = triangles && finite(winding) && winding.low > 0;
+  }
+  std::size_t shared_first{}, shared_last{}, shared_count{}, single_count{};
+  for (std::size_t i = 0; i < incidence.size(); ++i) {
+    if (incidence[i] == 2) {
+      if (shared_count == 0) shared_first = i;
+      shared_last = i;
+      ++shared_count;
+    } else if (incidence[i] == 1)
+      ++single_count;
+  }
+  triangles = triangles && shared_count == 2 && single_count == 2 &&
+              shared_last - shared_first == 2;
+  result.upward = result.upward && triangles;
+  result.valid = result.valid && result.arithmetic_supported && triangles;
+  return result;
+}
+auto load_provider_valid(const OriginBoardingBootSupport& provider) -> bool {
+  const auto source = provider.selected_partitions();
+  return provider.contact() && provider.contact()->stowed_partition() &&
+         source.size() == kBoardingBootSourcePartitionCount &&
+         source[8].plane_metres == site_upper_plane &&
+         source[9].plane_metres == site_transition_plane;
+}
+auto load_refuse(LoadPayload& out, LoadCondition condition,
+                 std::optional<std::size_t> site = {},
+                 std::optional<std::size_t> partition = {}) -> void {
+  if (!out.first_refusal)
+    out.first_refusal =
+        BoardingSourceEndpointLoadRefusal{condition, site, partition};
+}
+auto load_fill_edges(const std::array<Point, 4>& corners, Point pressure,
+                     std::array<BoardingFootSiteEdgeEvidence, 4>& edges,
+                     std::size_t& attempts, bool& supported) -> void {
+  const auto required = add(point(kBoardingBootPressureRadiusMetres),
+                            point(kBoardingBootDiskEdgeMarginMetres));
+  for (std::size_t i = 0; i < corners.size(); ++i) {
+    edges[i] = site_edge(corners[i], corners[(i + 1) % corners.size()],
+                         pressure, required, supported);
+    ++attempts;
+  }
+}
+auto load_summary(const std::array<BoardingFootSiteEdgeEvidence, 4>& edges,
+                  bool supported) -> LoadCandidate {
+  LoadCandidate result;
+  result.arithmetic_supported = supported;
+  result.quad_valid = true;
+  for (std::size_t i = 0; i < edges.size(); ++i) {
+    const auto& e = edges[i];
+    result.arithmetic_supported =
+        result.arithmetic_supported && e.signed_side.supported &&
+        e.edge_length_squared.supported && e.squared_margin_gap.supported;
+    load_minimum(result.minimum_signed_side,
+                 {e.signed_side.lower, e.signed_side.upper}, i == 0,
+                 result.arithmetic_supported);
+    load_minimum(result.minimum_squared_gap,
+                 {e.squared_margin_gap.lower, e.squared_margin_gap.upper},
+                 i == 0, result.arithmetic_supported);
+  }
+  result.minimum_signed_side.supported = result.arithmetic_supported;
+  result.minimum_squared_gap.supported = result.arithmetic_supported;
+  result.status =
+      !result.arithmetic_supported    ? LoadStatus::numerical_unresolved
+      : site_disk_contained(edges)    ? LoadStatus::contained
+      : site_margin_unresolved(edges) ? LoadStatus::numerical_unresolved
+                                      : LoadStatus::margin_refused;
+  return result;
+}
+auto load_geometry_pressure(std::size_t site, Point pressure,
+                            const BoardingBootSourcePartition& source,
+                            LoadPressure& result, LoadScratch& scratch,
+                            std::size_t& edge_checks, const LoadQuad& quad)
+    -> void {
+  result.plane_metres = site == 0 ? site_upper_plane : site_transition_plane;
+  result.arithmetic_supported = true;
+  const Point center{add(point(.16), point(site == 0 ? -.14 : .14)),
+                     point(site == 0 ? -.5 : -.8)};
+  scratch.sole = site_sole_corners(center);
+  result.pressure_bounds_metres = site_point_bounds(
+      pressure, point(result.plane_metres), result.arithmetic_supported);
+  load_fill_edges(scratch.sole, pressure, result.sole_edges, edge_checks,
+                  result.arithmetic_supported);
+  result.sole_disk_contained = site_disk_contained(result.sole_edges);
+  result.coplanar = source.plane_metres == result.plane_metres;
+  result.scanned_partitions = 1;
+  if (quad.valid && result.coplanar) {
+    scratch.source = source_corners(source);
+    load_fill_edges(scratch.source, pressure, result.source_edges, edge_checks,
+                    result.arithmetic_supported);
+    result.source_disk_contained =
+        result.arithmetic_supported && site_disk_contained(result.source_edges);
+    result.source_keys = {source.faces[0].key, source.faces[1].key};
+  }
+  result.coverage_complete = true; // One selected arithmetic-only candidate.
+  result.complete = quad.valid && result.coplanar &&
+                    result.arithmetic_supported && result.sole_disk_contained &&
+                    result.source_disk_contained;
+}
+} // namespace
+namespace {
+struct LoadMassIdentity {
+  LoadPointId first, second;
+  std::uint32_t weight;
+};
+constexpr std::array<LoadMassIdentity, kBoardingBodyPartCount> load_masses{
+    {{LoadPointId::root, LoadPointId::root, 144},
+     {LoadPointId::trunk_center, LoadPointId::trunk_center, 540},
+     {LoadPointId::helmet_center, LoadPointId::helmet_center, 96},
+     {LoadPointId::port_hip, LoadPointId::port_knee, 120},
+     {LoadPointId::port_knee, LoadPointId::port_ankle, 48},
+     {LoadPointId::port_boot_center, LoadPointId::port_boot_center, 12},
+     {LoadPointId::port_shoulder, LoadPointId::port_elbow, 15},
+     {LoadPointId::port_elbow, LoadPointId::port_wrist, 10},
+     {LoadPointId::port_wrist, LoadPointId::port_wrist, 5},
+     {LoadPointId::starboard_hip, LoadPointId::starboard_knee, 120},
+     {LoadPointId::starboard_knee, LoadPointId::starboard_ankle, 48},
+     {LoadPointId::starboard_boot_center, LoadPointId::starboard_boot_center,
+      12},
+     {LoadPointId::starboard_shoulder, LoadPointId::starboard_elbow, 15},
+     {LoadPointId::starboard_elbow, LoadPointId::starboard_wrist, 10},
+     {LoadPointId::starboard_wrist, LoadPointId::starboard_wrist, 5}}};
+static_assert([] {
+  std::uint32_t total{};
+  for (const auto& mass : load_masses)
+    total += mass.weight;
+  return total == kBoardingBodyMassDenominator && 144 + 540 + 96 == 780 &&
+         15 + 10 + 5 == 30 && 120 + 48 + 12 == 180;
+}());
+auto load_binding(const BoardingSourceEndpointSelfDiagnostic& self) -> bool {
+  const auto& endpoint = self.endpoint;
+  if (!self.complete || !self.bindings_complete || !self.arithmetic_supported ||
+      !self.coverage_complete || !self.self_qualified ||
+      self.certified_pairs != kBoardingBodyPairCount || !endpoint.complete ||
+      !endpoint.body || !endpoint.arithmetic_supported ||
+      !endpoint.plane_identities || !endpoint.link_identities ||
+      !endpoint.joint_limits_certified || !endpoint.reservations_complete ||
+      !endpoint.mass_model_complete || !endpoint.hip_regions_certified ||
+      !endpoint.sites.eligible || !endpoint.sites.coverage_complete ||
+      !endpoint.sites.arithmetic_supported ||
+      endpoint.common_translation_y_metres != .847 ||
+      endpoint.root_z_metres != -.55 ||
+      endpoint.port_x_terms != std::array{.16, -.14} ||
+      endpoint.starboard_x_terms != std::array{.16, .14})
+    return false;
+  for (std::size_t i = 0; i < load_masses.size(); ++i) {
+    const auto& binding = endpoint.parts[i];
+    const auto& expected = load_masses[i];
+    if (static_cast<std::size_t>(binding.id) != i ||
+        binding.mass.first != expected.first ||
+        binding.mass.second != expected.second ||
+        binding.mass.weight != expected.weight)
+      return false;
+  }
+  // Self01 authenticates the entire original fixed body binding/frames before
+  // certifying. The checks below bind the same sole and expression terms;
+  // neither mass midpoints nor COM are rebuilt here.
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto plane = side == 0 ? site_upper_plane : site_transition_plane;
+    const auto& site = endpoint.sites.sites[side];
+    const auto& leg = endpoint.legs[side];
+    const auto* boot = std::get_if<BoardingPlantedBodyBoxBinding>(
+        &endpoint.parts[side == 0 ? 5 : 11].reservation);
+    if (!boot ||
+        boot->center != (side == 0 ? LoadPointId::port_boot_center
+                                   : LoadPointId::starboard_boot_center) ||
+        boot->half_size_metres != Vec{.06, .05, .14} ||
+        boot->frame.columns != BoardingBodyFrame{}.columns ||
+        site.half_size_metres != boot->half_size_metres ||
+        site.center_x_terms != std::array{.16, side == 0 ? -.14 : .14, 0.} ||
+        site.center_y_terms != std::array{plane, .05, 0.} ||
+        site.center_z_terms != std::array{side == 0 ? -.5 : -.8, 0.} ||
+        !site.placement_nonpenetrating || !site.coverage_complete ||
+        !leg.plane_identity || !leg.link_identities || !leg.limits_certified ||
+        leg.plane_metres != plane ||
+        leg.boot_center_y_terms != std::array{plane, .05, -.847} ||
+        leg.ankle_y_terms != std::array{plane, .1, -.847})
+      return false;
+  }
+  const auto& com = endpoint.body->center_of_mass;
+  return load_finite(com.lower) && load_finite(com.upper) &&
+         com.lower.x <= com.upper.x && com.lower.y <= com.upper.y &&
+         com.lower.z <= com.upper.z;
+}
+auto load_pressure_scan(std::size_t site,
+                        std::span<const BoardingBootSourcePartition> sources,
+                        std::size_t cap, LoadPayload& out, LoadScratch& scratch)
+    -> void {
+  auto& record = out.pressures[site];
+  record.plane_metres = site == 0 ? site_upper_plane : site_transition_plane;
+  record.arithmetic_supported = true;
+  record.pressure_bounds_metres =
+      site_point_bounds(scratch.pressures[site], point(record.plane_metres),
+                        record.arithmetic_supported);
+  scratch.sole = site_sole_corners(scratch.centers[site]);
+  load_fill_edges(scratch.sole, scratch.pressures[site], record.sole_edges,
+                  out.edge_checks, record.arithmetic_supported);
+  record.sole_disk_contained =
+      record.arithmetic_supported && site_disk_contained(record.sole_edges);
+  if (!record.arithmetic_supported)
+    load_refuse(out, LoadCondition::unsupported_arithmetic, site);
+  else if (!record.sole_disk_contained)
+    load_refuse(out,
+                site_margin_unresolved(record.sole_edges)
+                    ? LoadCondition::numerical_unresolved
+                    : LoadCondition::sole_disk_margin,
+                site);
+  bool matching{}, uncertain{};
+  for (std::size_t p = 0; p < cap; ++p) {
+    ++out.pressure_candidates;
+    ++record.scanned_partitions;
+    auto& candidate = record.candidates[p];
+    const auto& quad = out.source_quads[p];
+    candidate.quad_valid = quad.valid;
+    candidate.arithmetic_supported = quad.arithmetic_supported;
+    if (!quad.valid) {
+      candidate.status = LoadStatus::invalid_support;
+      record.arithmetic_supported =
+          record.arithmetic_supported && quad.arithmetic_supported;
+      continue;
+    }
+    if (sources[p].plane_metres != record.plane_metres) {
+      candidate.status = LoadStatus::noncoplanar;
+      continue;
+    }
+    matching = true;
+    scratch.source = source_corners(sources[p]);
+    bool supported = true;
+    load_fill_edges(scratch.source, scratch.pressures[site], scratch.edges,
+                    out.edge_checks, supported);
+    candidate = load_summary(scratch.edges, supported);
+    record.arithmetic_supported = record.arithmetic_supported && supported;
+    uncertain =
+        uncertain || candidate.status == LoadStatus::numerical_unresolved;
+    if (!supported)
+      load_refuse(out, LoadCondition::unsupported_arithmetic, site, p);
+    if (candidate.status == LoadStatus::contained && !record.source_partition) {
+      record.source_partition = p;
+      record.source_edges = scratch.edges;
+      record.source_keys = {sources[p].faces[0].key, sources[p].faces[1].key};
+    }
+  }
+  record.coplanar = matching;
+  record.coverage_complete = cap == sources.size();
+  record.source_disk_contained = record.source_partition.has_value();
+  record.complete = record.arithmetic_supported && record.coverage_complete &&
+                    record.sole_disk_contained && record.source_disk_contained;
+  if (!record.coverage_complete)
+    load_refuse(out, LoadCondition::pressure_capacity, site);
+  else if (!record.source_disk_contained)
+    load_refuse(out,
+                !matching   ? LoadCondition::no_matching_support
+                : uncertain ? LoadCondition::numerical_unresolved
+                            : LoadCondition::source_disk_margin,
+                site);
+  out.arithmetic_supported =
+      out.arithmetic_supported && record.arithmetic_supported;
+}
+} // namespace
+
+auto detail::boarding_source_endpoint_load_quad_math(
+    std::array<RigidVector3, 4> perimeter, double plane_metres)
+    -> std::expected<BoardingSourceEndpointLoadQuadMathEvidence, std::string> {
+  if (!load_finite(plane_metres) ||
+      !std::ranges::all_of(perimeter, [](Vec p) { return load_finite(p); }))
+    return std::unexpected("Load quad finite coordinates/plane <=8 required");
+  return load_quad(perimeter, plane_metres);
+}
+auto detail::boarding_source_endpoint_load_pressure_math(
+    const OriginBoardingBootSupport& provider, std::size_t site,
+    std::size_t source_partition,
+    std::array<BoardingPlantedLegScalarBounds, 2> pressure_xz)
+    -> std::expected<BoardingSourceEndpointLoadPressureMathEvidence,
+                     std::string> {
+  if (!load_provider_valid(provider) || site > 1 ||
+      source_partition >= kBoardingBootSourcePartitionCount ||
+      !std::ranges::all_of(pressure_xz, load_input_bound))
+    return std::unexpected("Load pressure selected provider/site/source and "
+                           "finite bounds <=8 required");
+  BoardingSourceEndpointLoadPressureMathEvidence result;
+  if (!site_supported_environment()) return result;
+  const auto& source = provider.selected_partitions()[source_partition];
+  result.source_quad = load_source_quad(source);
+  LoadScratch scratch;
+  const Point pressure{{pressure_xz[0].lower, pressure_xz[0].upper},
+                       {pressure_xz[1].lower, pressure_xz[1].upper}};
+  load_geometry_pressure(site, pressure, source, result.pressure, scratch,
+                         result.edge_checks, result.source_quad);
+  auto& candidate = result.pressure.candidates[source_partition];
+  if (!result.source_quad.valid) {
+    candidate.status = LoadStatus::invalid_support;
+    candidate.arithmetic_supported = result.source_quad.arithmetic_supported;
+    result.pressure.arithmetic_supported =
+        result.pressure.arithmetic_supported &&
+        result.source_quad.arithmetic_supported;
+  } else if (!result.pressure.coplanar) {
+    candidate.status = LoadStatus::noncoplanar;
+    candidate.arithmetic_supported = true;
+    candidate.quad_valid = true;
+  } else {
+    candidate = load_summary(result.pressure.source_edges,
+                             result.pressure.arithmetic_supported);
+    if (result.pressure.source_disk_contained)
+      result.pressure.source_partition = source_partition;
+  }
+  return result;
+}
+auto detail::boarding_source_endpoint_load_bounded(
+    const OriginBoardingBootSupport& provider,
+    std::size_t max_source_partitions, std::size_t max_body_records,
+    std::size_t max_self_pairs, std::size_t max_self_axes,
+    std::size_t max_pressure_partitions)
+    -> std::expected<BoardingSourceEndpointLoadDiagnostic, std::string> {
+  if (max_pressure_partitions > kBoardingBootSourcePartitionCount)
+    return std::unexpected("Load pressure cap <=10 required");
+  auto child = detail::boarding_source_endpoint_self_bounded(
+      provider, max_source_partitions, max_body_records, max_self_pairs,
+      max_self_axes);
+  if (!child) return std::unexpected(child.error());
+  BoardingSourceEndpointLoadDiagnostic result{std::move(*child), {}};
+  auto& out = result.load;
+  if (!result.self.complete) {
+    load_refuse(out, LoadCondition::self_prerequisite);
+    return result;
+  }
+  if (!site_supported_environment()) {
+    load_refuse(out, LoadCondition::unsupported_arithmetic);
+    return result;
+  }
+  if (!load_binding(result.self)) {
+    load_refuse(out, LoadCondition::invalid_binding);
+    return result;
+  }
+  const auto& endpoint = result.self.endpoint;
+  const auto sources = endpoint.sites.source.selected_partitions();
+  if (!load_provider_valid(endpoint.sites.source)) {
+    load_refuse(out, LoadCondition::invalid_binding);
+    return result;
+  }
+  LoadScratch scratch;
+  // The authenticated full1200 COM record is the sole Z authority. Paired X
+  // cancellation is structural in this fixed body: central780, arms30+30 at
+  // root +/- .20265, legs180+180 at root +/- .14. No interval cancellation
+  // or alternative COM reconstruction is used to grant this identity.
+  scratch.com = {point(.16),
+                 {endpoint.body->center_of_mass.lower.z,
+                  endpoint.body->center_of_mass.upper.z}};
+  scratch.centers[0] = {add(point(.16), point(-.14)), point(-.5)};
+  scratch.centers[1] = {add(point(.16), point(.14)), point(-.8)};
+  scratch.barycenter = {point(.16),
+                        multiply(add(point(-.5), point(-.8)), point(.5))};
+  scratch.delta = {point(0), subtract(scratch.com.z, scratch.barycenter.z)};
+  bool supported = true;
+  out.barycenter_z = site_bounds(scratch.barycenter.z, supported);
+  out.common_pressure_delta_z = site_bounds(scratch.delta.z, supported);
+  for (std::size_t site = 0; site < scratch.pressures.size(); ++site)
+    scratch.pressures[site] = {scratch.centers[site].x,
+                               add(scratch.centers[site].z, scratch.delta.z)};
+  if (!supported || !finite(scratch.pressures[0].z) ||
+      !finite(scratch.pressures[1].z)) {
+    load_refuse(out, LoadCondition::unsupported_arithmetic);
+    return result;
+  }
+  out.bindings_complete = true;
+  out.arithmetic_supported = true;
+  out.paired_com_x_identity = true;
+  out.positive_reactions = true;
+  out.projected_barycenter_identity = true;
+  out.vertical_force_identity = true;
+  out.vertical_moment_identity = true;
+  out.placement_nonpenetrating = true;
+  if (max_pressure_partitions == 0) {
+    load_refuse(out, LoadCondition::pressure_capacity);
+    return result;
+  }
+  bool all_quads = max_pressure_partitions == sources.size();
+  for (std::size_t p = 0; p < max_pressure_partitions; ++p) {
+    out.source_quads[p] = load_source_quad(sources[p]);
+    ++out.checked_quads;
+    const auto& quad = out.source_quads[p];
+    out.arithmetic_supported =
+        out.arithmetic_supported && quad.arithmetic_supported;
+    all_quads = all_quads && quad.valid;
+    if (!quad.valid)
+      load_refuse(out,
+                  !quad.arithmetic_supported
+                      ? LoadCondition::unsupported_arithmetic
+                      : LoadCondition::invalid_support_quad,
+                  {}, p);
+  }
+  for (std::size_t site = 0; site < out.pressures.size(); ++site)
+    load_pressure_scan(site, sources, max_pressure_partitions, out, scratch);
+  out.contact_supported = all_quads && out.arithmetic_supported &&
+                          out.pressures[0].complete &&
+                          out.pressures[1].complete;
+  out.projected_margin_certified = out.contact_supported;
+  out.load_qualified = out.contact_supported && out.placement_nonpenetrating &&
+                       out.vertical_force_identity &&
+                       out.vertical_moment_identity;
+  out.complete = out.load_qualified && !out.first_refusal;
+  if (out.projected_margin_certified)
+    out.certified_resultant_disk_radius_metres =
+        kBoardingBootPressureRadiusMetres;
+  return result;
+}
+auto assess_origin_boarding_source_endpoint_load(
+    const OriginBoardingBootSupport& provider)
+    -> std::expected<BoardingSourceEndpointLoadDiagnostic, std::string> {
+  return detail::boarding_source_endpoint_load_bounded(provider);
 }
 } // namespace apsis_drift

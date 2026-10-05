@@ -37,6 +37,7 @@ player's station-to-flight journey.
 - [Actual foot sites](ORIGIN_BOARDING_FOOT_SITES02.md),
   [fixed body endpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT01.md) and
   [complete static self check](ORIGIN_BOARDING_SOURCE_ENDPOINT_SELF01.md)
+- [Fixed endpoint vertical load](ORIGIN_BOARDING_SOURCE_ENDPOINT_LOAD01.md)
 
 ## Studies and history
 
