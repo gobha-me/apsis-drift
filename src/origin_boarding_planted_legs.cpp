@@ -1,6 +1,9 @@
 #include "apsis_drift/origin_boarding_planted_legs.hpp"
+#include "apsis_drift/origin_boarding_source_endpoint.hpp"
+#include "origin_boarding_foot_sites_internal.hpp"
 #include "origin_boarding_planted_legs_internal.hpp"
 #include "origin_boarding_self_model02_internal.hpp"
+#include "origin_boarding_source_endpoint_internal.hpp"
 #include <algorithm>
 #include <bit>
 #include <cfenv>
@@ -1365,5 +1368,343 @@ auto assess_origin_boarding_planted_hip_preflight()
       {-.04, -.117, -.177}, kBoardingPlantedBodyMaximumLeaves,
       kBoardingPlantedLegMaximumDepth, kBoardingPlantedLegMaximumNodes,
       kBoardingPlantedLegMaximumLeaves);
+}
+namespace {
+using EndpointCondition = BoardingSourceEndpointCondition;
+constexpr double endpoint_upper_plane{kCabinCorridorFloorMetres},
+    endpoint_lower_plane{-160000.0 * 1e-6};
+struct EndpointLeg {
+  BoardingPlantedLegEvidence evidence;
+  Point hip, knee, ankle, boot, axis;
+  bool arithmetic_supported{};
+};
+auto endpoint_scalar(Interval v, bool& supported) -> Bounds {
+  supported = supported && v.supported;
+  return v.supported ? bounds(v) : Bounds{};
+}
+auto endpoint_leg(std::size_t side, double common_y, double root_z)
+    -> EndpointLeg {
+  EndpointLeg result;
+  auto& evidence = result.evidence;
+  const auto plane = side == 0 ? endpoint_upper_plane : endpoint_lower_plane;
+  const auto ankle_z = side == 0 ? -.5 : -.8;
+  evidence.plane_metres = plane;
+  evidence.ankle_y_terms = {plane, .1, -common_y};
+  evidence.boot_center_y_terms = {plane, .05, -common_y};
+  const auto refuse = [&](Condition condition) {
+    evidence.limiting_condition = condition;
+    if (condition == Condition::unsupported_arithmetic) {
+      result.arithmetic_supported = false;
+      evidence.plane_identity = false;
+      evidence.link_identities = false;
+      evidence.limits_certified = false;
+    }
+    return result;
+  };
+  if (!supported_environment())
+    return refuse(Condition::unsupported_arithmetic);
+  bool supported{true};
+  // This SAME X expression is shared by the hip, ankle and knee. The exact
+  // d.X=0 identity is not inferred from subtraction of independent bounds.
+  const auto x = add(point(.16), point(side == 0 ? -.14 : .14));
+  const auto ankle_y = subtract(add(point(plane), point(.1)), point(common_y));
+  const auto boot_y = subtract(add(point(plane), point(.05)), point(common_y));
+  result.hip = {x, point(0), point(root_z)};
+  result.ankle = {x, ankle_y, point(ankle_z)};
+  result.boot = {x, boot_y, point(ankle_z)};
+  evidence.hip = body_bounds(result.hip, supported);
+  evidence.ankle = body_bounds(result.ankle, supported);
+  evidence.boot_center = body_bounds(result.boot, supported);
+  if (!supported) return refuse(Condition::unsupported_arithmetic);
+  evidence.plane_identity = true;
+  result.arithmetic_supported = true;
+  const auto dy = ankle_y, dz = subtract(point(ankle_z), point(root_z));
+  const auto rho = negate(dy), D = add(square(rho), square(dz));
+  evidence.rho = endpoint_scalar(rho, supported);
+  evidence.distance_squared = endpoint_scalar(D, supported);
+  if (!supported) return refuse(Condition::unsupported_arithmetic);
+  if (dy.high >= 0) return refuse(Condition::forward_branch);
+  if (rho.low <= 0 || D.low <= 0) return refuse(Condition::singular_plane);
+  const auto l1 = point(thigh_length), l2 = point(shin_length);
+  const auto maximum_reach = square(add(l1, l2)),
+             minimum_reach = square(subtract(l1, l2));
+  if (!maximum_reach.supported || !minimum_reach.supported)
+    return refuse(Condition::unsupported_arithmetic);
+  if (D.high > maximum_reach.low || D.low < minimum_reach.high)
+    return refuse(Condition::reach);
+  const auto alpha =
+      divide(add(subtract(square(l1), square(l2)), D), multiply(point(2), D));
+  auto outer = subtract(maximum_reach, D), inner = subtract(D, minimum_reach);
+  if (!outer.supported || !inner.supported)
+    return refuse(Condition::unsupported_arithmetic);
+  // Value-only reach identities prove these exact factors nonnegative.
+  outer.low = std::max(0., outer.low);
+  inner.low = std::max(0., inner.low);
+  const auto gamma =
+      root(divide(multiply(outer, inner), multiply(point(4), square(D))));
+  evidence.alpha = endpoint_scalar(alpha, supported);
+  evidence.gamma = endpoint_scalar(gamma, supported);
+  if (!supported) return refuse(Condition::unsupported_arithmetic);
+  const auto complement = subtract(point(1), alpha);
+  const auto F1 = add(multiply(alpha, rho), multiply(gamma, dz)),
+             G1 = subtract(multiply(gamma, rho), multiply(alpha, dz)),
+             F2 = subtract(multiply(complement, rho), multiply(gamma, dz)),
+             G2 = negate(add(multiply(complement, dz), multiply(gamma, rho)));
+  // q=(0,-dz,-rho), q.dot(d)=0, q^2=D. These F/G expressions are exactly
+  // alpha*d+gamma*q and its complementary shin, not normalized report vectors.
+  result.axis = {point(0), negate(F1), negate(G1)};
+  result.knee = {x, result.axis[1], add(point(root_z), result.axis[2])};
+  evidence.knee = body_bounds(result.knee, supported);
+  evidence.hip_sine = endpoint_scalar(divide(G1, l1), supported);
+  evidence.hip_cosine = endpoint_scalar(divide(F1, l1), supported);
+  evidence.shin_sine = endpoint_scalar(divide(G2, l2), supported);
+  evidence.shin_cosine = endpoint_scalar(divide(F2, l2), supported);
+  const auto knee_cosine = divide(subtract(subtract(D, square(l1)), square(l2)),
+                                  multiply(point(2), multiply(l1, l2)));
+  evidence.knee_cosine = endpoint_scalar(knee_cosine, supported);
+  evidence.roll_sine = {0, 0};
+  evidence.roll_cosine = {1, 1};
+  if (!supported || !F1.supported || !G1.supported || !F2.supported ||
+      !G2.supported)
+    return refuse(Condition::unsupported_arithmetic);
+  evidence.link_identities = true;
+  const auto& selected = limits();
+  const auto hip_lower = add(multiply(G1, selected.cos20),
+                             multiply(F1, selected.sin20)),
+             hip_upper = subtract(multiply(F1, selected.sin65),
+                                  multiply(G1, selected.cos65));
+  if (!hip_lower.supported || !hip_upper.supported)
+    return refuse(Condition::unsupported_arithmetic);
+  if (F1.low <= 0 || hip_lower.low < 0 || hip_upper.low < 0)
+    return refuse(Condition::hip_flex);
+  const auto knee_lower = negate(divide(selected.sqrt2, point(2)));
+  if (!knee_lower.supported) return refuse(Condition::unsupported_arithmetic);
+  if (knee_cosine.low < knee_lower.high) return refuse(Condition::knee_flex);
+  const auto ankle_sector =
+      subtract(multiply(F2, point(.5)),
+               multiply(absolute(G2), divide(selected.sqrt3, point(2))));
+  if (!ankle_sector.supported) return refuse(Condition::unsupported_arithmetic);
+  if (F2.low <= 0 || ankle_sector.low < 0)
+    return refuse(Condition::ankle_pitch);
+  evidence.limits_certified = true;
+  const auto display = evidence;
+  report_angles(evidence, display, side);
+  return result;
+}
+struct EndpointBodyScratch {
+  BoardingSourceEndpointBody body;
+  std::array<Point, kBoardingPlantedBodyPointCount> points;
+  Point weighted;
+};
+static_assert(sizeof(BoardingSourceEndpointBody) <= 6144);
+static_assert(sizeof(EndpointBodyScratch) + sizeof(BodyParts) +
+                  2 * sizeof(EndpointLeg) + 4 * sizeof(Point) <=
+              8192);
+auto endpoint_body(EndpointBodyScratch& scratch,
+                   const std::array<EndpointLeg, 2>& legs,
+                   const BodyParts& parts, double root_z, bool& supported)
+    -> bool {
+  auto& points = scratch.points;
+  const Point root_point{point(.16), point(0), point(root_z)};
+  const auto offset = [&](const Point& base, const Point& delta) {
+    Point result;
+    for (std::size_t axis = 0; axis < result.size(); ++axis)
+      result[axis] = add(base[axis], delta[axis]);
+    supported = supported && std::ranges::all_of(result, [](Interval v) {
+                  return v.supported;
+                });
+    return result;
+  };
+  points[body_index(BodyPointId::root)] = root_point;
+  points[body_index(BodyPointId::trunk_center)] =
+      offset(root_point, {point(0), point(.3495), point(0)});
+  points[body_index(BodyPointId::helmet_center)] =
+      offset(root_point, {point(0), point(.70237), point(0)});
+  points[body_index(BodyPointId::eye)] =
+      offset(root_point, {point(0), point(.65237), point(0)});
+  const auto arm_component = negate(multiply(point(.35898), root(point(.5))));
+  supported = supported && arm_component.supported;
+  for (std::size_t side = 0; side < legs.size(); ++side) {
+    const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                           : BodyPointId::starboard_hip);
+    points[base] = legs[side].hip;
+    points[base + 1] = legs[side].knee;
+    points[base + 2] = legs[side].ankle;
+    points[base + 3] = legs[side].boot;
+    points[base + 4] = offset(root_point, {point(side == 0 ? -.20265 : .20265),
+                                           point(.579), point(0)});
+    points[base + 5] =
+        offset(points[base + 4], {point(0), arm_component, arm_component});
+    points[base + 6] =
+        offset(points[base + 5], {point(0), point(.386), point(0)});
+  }
+  for (std::size_t i = 0; i < points.size(); ++i)
+    scratch.body.points[i] = body_bounds(points[i], supported);
+  if (!supported) return false;
+  scratch.weighted = {point(0), point(0), point(0)};
+  for (std::size_t i = 0; i < parts.size(); ++i) {
+    const auto& mass = parts[i].mass;
+    const auto first = body_index(mass.first), second = body_index(mass.second);
+    if (parts[i].id != static_cast<BoardingBodyPartId>(i) ||
+        first >= points.size() || second >= points.size() ||
+        mass.weight != body_weights[i])
+      return false;
+    Point mass_point;
+    for (std::size_t axis = 0; axis < mass_point.size(); ++axis) {
+      mass_point[axis] =
+          first == second
+              ? points[first][axis]
+              : multiply(add(points[first][axis], points[second][axis]),
+                         point(.5));
+      scratch.weighted[axis] =
+          add(scratch.weighted[axis],
+              multiply(point(mass.weight), mass_point[axis]));
+    }
+    scratch.body.mass_points[i] = body_bounds(mass_point, supported);
+  }
+  for (auto& axis : scratch.weighted)
+    axis = divide(axis, point(kBoardingBodyMassDenominator));
+  scratch.body.center_of_mass = body_bounds(scratch.weighted, supported);
+  return supported;
+}
+auto endpoint_hip(const EndpointLeg& leg, const BodyParts& parts,
+                  std::size_t side) -> BoardingSourceEndpointHipRegionEvidence {
+  BoardingSourceEndpointHipRegionEvidence result;
+  const auto thigh_index = 3 + side * 6;
+  result.second_part = side == 0 ? BoardingBodyPartId::port_thigh
+                                 : BoardingBodyPartId::starboard_thigh;
+  result.hip_limit_metres = kBoardingSelfHipLengthMetres;
+  result.axis_length_metres = thigh_length;
+  const auto* pelvis =
+      std::get_if<BoardingPlantedBodyBoxBinding>(&parts[0].reservation);
+  const auto* thigh = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+      &parts[thigh_index].reservation);
+  result.bindings_valid =
+      pelvis && thigh && parts[0].id == BoardingBodyPartId::pelvis &&
+      parts[thigh_index].id == result.second_part &&
+      pelvis->center == BodyPointId::root &&
+      pelvis->half_size_metres == Vec{.24, .12, .18} &&
+      pelvis->frame.columns == BoardingBodyFrame{}.columns &&
+      thigh->start ==
+          (side == 0 ? BodyPointId::port_hip : BodyPointId::starboard_hip) &&
+      thigh->end ==
+          (side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee) &&
+      thigh->radius_metres == .105 &&
+      thigh->radius_metres <= result.hip_limit_metres &&
+      result.hip_limit_metres < thigh_length;
+  if (!result.bindings_valid || !leg.evidence.link_identities) return result;
+  result.thigh_radius_metres = thigh->radius_metres;
+  result.link_identity = true;
+  result.structural_x_zero = true;
+  bool supported{true};
+  result.axis = body_bounds(leg.axis, supported);
+  // P and the common placement cancel before interval evaluation. Since v.X=0,
+  // H-P=(+/- .14,0,0) contributes exactly zero to the whole-pelvis support.
+  const auto extent =
+      add(multiply(point(pelvis->half_size_metres.y), absolute(leg.axis[1])),
+          multiply(point(pelvis->half_size_metres.z), absolute(leg.axis[2])));
+  const auto limit =
+      multiply(point(result.hip_limit_metres), point(thigh_length));
+  const auto gap = subtract(limit, extent);
+  result.scaled_pelvis_extent = endpoint_scalar(extent, supported);
+  result.scaled_hip_limit = endpoint_scalar(limit, supported);
+  result.scaled_gap = endpoint_scalar(gap, supported);
+  result.arithmetic_supported = supported;
+  result.certified = supported && gap.low >= 0;
+  return result;
+}
+auto endpoint_refuse(BoardingSourceEndpointDiagnostic& result,
+                     EndpointCondition condition,
+                     std::optional<std::size_t> side = {},
+                     Condition leg_condition = Condition::none) -> void {
+  if (!result.first_refusal)
+    result.first_refusal =
+        BoardingSourceEndpointRefusal{condition, side, leg_condition};
+}
+} // namespace
+auto detail::boarding_source_endpoint_bounded(
+    const OriginBoardingBootSupport& provider, double root_y, double root_z,
+    std::size_t max_site_partitions, std::size_t max_body_records)
+    -> std::expected<BoardingSourceEndpointDiagnostic, std::string> {
+  if (!bounded(root_y, 8) || !bounded(root_z, 8) ||
+      max_site_partitions > kBoardingBootSourcePartitionCount ||
+      max_body_records > kBoardingSourceEndpointMaximumRecords)
+    return std::unexpected(
+        "Endpoint finite absolute roots <=8 and lowered capacities required");
+  auto sites = boarding_foot_sites_bounded(provider, {}, max_site_partitions);
+  if (!sites) return std::unexpected(sites.error());
+  BoardingSourceEndpointDiagnostic result{std::move(*sites)};
+  result.common_translation_y_metres = root_y;
+  result.root_z_metres = root_z;
+  if (!result.sites.arithmetic_supported || !supported_environment()) {
+    endpoint_refuse(result, EndpointCondition::unsupported_arithmetic);
+    return result;
+  }
+  result.arithmetic_supported = true;
+  if (!result.sites.coverage_complete || !result.sites.eligible) {
+    endpoint_refuse(result, EndpointCondition::sites_prerequisite);
+    return result;
+  }
+  if (max_body_records == 0) {
+    endpoint_refuse(result, EndpointCondition::body_capacity);
+    return result;
+  }
+  std::array<EndpointLeg, 2> legs;
+  for (std::size_t side = 0; side < legs.size(); ++side) {
+    legs[side] = endpoint_leg(side, root_y, root_z);
+    ++result.evaluated_legs;
+    result.legs[side] = legs[side].evidence;
+    result.arithmetic_supported =
+        result.arithmetic_supported && legs[side].arithmetic_supported;
+    if (!legs[side].evidence.limits_certified) {
+      endpoint_refuse(result,
+                      legs[side].arithmetic_supported
+                          ? EndpointCondition::leg_closure
+                          : EndpointCondition::unsupported_arithmetic,
+                      side, legs[side].evidence.limiting_condition);
+      return result;
+    }
+  }
+  result.plane_identities = true;
+  result.link_identities = true;
+  result.joint_limits_certified = true;
+  result.parts = body_parts();
+  EndpointBodyScratch scratch;
+  bool supported{true};
+  if (!endpoint_body(scratch, legs, result.parts, root_z, supported)) {
+    result.arithmetic_supported = result.arithmetic_supported && supported;
+    endpoint_refuse(result, supported
+                                ? EndpointCondition::body_bindings
+                                : EndpointCondition::unsupported_arithmetic);
+    return result;
+  }
+  result.body = scratch.body;
+  result.assembled_records = 1;
+  result.reservations_complete = true;
+  result.mass_model_complete = true;
+  result.hip_regions_certified = true;
+  for (std::size_t side = 0; side < result.hips.size(); ++side) {
+    auto& hip = result.hips[side];
+    hip = endpoint_hip(legs[side], result.parts, side);
+    ++result.examined_hip_regions;
+    result.hip_regions_certified =
+        result.hip_regions_certified && hip.certified;
+    if (!hip.bindings_valid)
+      endpoint_refuse(result, EndpointCondition::hip_region_guard, side);
+    else if (!hip.arithmetic_supported) {
+      result.arithmetic_supported = false;
+      endpoint_refuse(result, EndpointCondition::unsupported_arithmetic, side);
+    } else if (!hip.certified)
+      endpoint_refuse(result, EndpointCondition::hip_region_support, side);
+  }
+  result.complete = result.arithmetic_supported && result.hip_regions_certified;
+  return result;
+}
+auto assess_origin_boarding_source_endpoint(
+    const OriginBoardingBootSupport& provider)
+    -> std::expected<BoardingSourceEndpointDiagnostic, std::string> {
+  return detail::boarding_source_endpoint_bounded(
+      provider, .847, -.55, kBoardingBootSourcePartitionCount,
+      kBoardingSourceEndpointMaximumRecords);
 }
 } // namespace apsis_drift

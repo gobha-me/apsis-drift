@@ -101,3 +101,40 @@ First Flight flags remain false. Sites02 pressure points are geometric only:
 they do not establish this body's reaction equilibrium. A physical load witness
 must later use this exact COM and independently registered pressure expressions.
 No art, source/master/capture or archived material-proof replay is requested.
+
+## First recorded observations
+
+Both first GCC and Clang contracts pass 1,099 checks with no failures and
+identical outward results. The frozen point owns complete source eligibility,
+plane/link identities, joint sectors, all body/mass/COM records and both original
+finite hip certificates. No root, source, dimension, branch or limit was changed
+after observation. The two scaled whole-pelvis support certificates are:
+
+| Side | Scaled extent bounds (m²) | Scaled limit-minus-extent bounds (m²) |
+| --- | --- | --- |
+| Port | [0.085609372685575585, 0.08560937268557621] | [0.016683722550612606, 0.016683722550613265] |
+| Starboard | [0.084790285680915442, 0.084790285680916691] | [0.017502809555272125, 0.017502809555273408] |
+
+Independent unfactored knees and nominal links, directed sectors, exact sole
+expression cancellation, complete bindings and weighted COM pass alongside
+private refusal, coverage/storage, environment, lifetime and unchanged historical
+snapshot checks. First logs were retained before observed-result assertions.
+These two certificates provide no result for the other 103 self pairs, physical
+reaction pressures, all-obstacle clearance or acquisition/movement/seating.
+
+## Publication validation
+
+The final observed-result contract passes 1,103 checks on both compilers,
+retaining the first positive outcome, both strictly positive hip gaps, exact
+two-leg/one-body/two-region work counters and all authority denials. Complete
+native builds and all 57 tests pass on GCC (22.66 seconds) and Clang (22.22
+seconds). Pinned format20, all 147 tidy20 translation units and the 36 exact
+suppression directives pass.
+
+The first full tidy run found that formatting had wrapped the two intentional
+moved-from test justifications onto an intervening comment line, detaching their
+NEXTLINE directives from the calls. Shorter exact-check comments restore the
+intended empty-handle controls; no production suppression, geometry or test
+behavior changed. The failed log remains preserved alongside the passing repair.
+Publication awaits #432; full static self, physical load, world and supported
+movement remain separate work.
