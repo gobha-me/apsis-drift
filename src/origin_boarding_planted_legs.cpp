@@ -1,9 +1,11 @@
 #include "apsis_drift/origin_boarding_planted_legs.hpp"
 #include "apsis_drift/origin_boarding_source_endpoint.hpp"
+#include "apsis_drift/origin_boarding_source_endpoint_self.hpp"
 #include "origin_boarding_foot_sites_internal.hpp"
 #include "origin_boarding_planted_legs_internal.hpp"
 #include "origin_boarding_self_model02_internal.hpp"
 #include "origin_boarding_source_endpoint_internal.hpp"
+#include "origin_boarding_source_endpoint_self_internal.hpp"
 #include <algorithm>
 #include <bit>
 #include <cfenv>
@@ -1706,5 +1708,605 @@ auto assess_origin_boarding_source_endpoint(
   return detail::boarding_source_endpoint_bounded(
       provider, .847, -.55, kBoardingBootSourcePartitionCount,
       kBoardingSourceEndpointMaximumRecords);
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+using SelfShape = BoardingSourceEndpointSelfShape;
+using SelfPair = BoardingSourceEndpointSelfPair;
+using SelfRegion = BoardingSourceEndpointSelfRegion;
+using SelfCert = BoardingSourceEndpointSelfCertificate;
+using SelfCondition = BoardingSourceEndpointSelfCondition;
+using SelfDiagnostic = BoardingSourceEndpointSelfDiagnostic;
+using PartId = BoardingBodyPartId;
+using Junction = BoardingSelfJunction;
+struct EndpointSelfSolid {
+  SelfShape shape{};
+  Point first{}, second{};
+  Vec half;
+  double radius{};
+};
+struct EndpointSelfPacket {
+  std::array<Point, kBoardingPlantedBodyPointCount> points;
+  std::array<EndpointSelfSolid, kBoardingBodyPartCount> solids;
+};
+using SelfRegions = std::array<SelfRegion, kBoardingSelfConnectedRegionCount>;
+struct SelfSquareScratch {
+  std::array<double, 3> values{}, next{};
+  std::size_t count{};
+};
+static_assert(sizeof(std::array<SelfPair, kBoardingBodyPairCount>) +
+                  sizeof(SelfRegions) <=
+              16384);
+static_assert(sizeof(EndpointSelfPacket) + sizeof(BodyParts) +
+                  sizeof(SelfRegions) + 14 * sizeof(Vec) + 8 * sizeof(Point) +
+                  12 * sizeof(Interval) + sizeof(SelfSquareScratch) +
+                  12 * sizeof(double) <=
+              8192);
+auto self_squared_relation(double r, double x) -> Sign {
+  if (!std::isfinite(r) || !std::isfinite(x) ||
+      (r != 0 && 2 * std::ilogb(r) < -970))
+    return Sign::unsupported;
+  const auto product = r * r;
+  if (!std::isfinite(product)) return Sign::unsupported;
+  // This proof has ONLY three raw terms. Bound its inherited error-free
+  // TwoSum expansion accordingly instead of invoking the 256-term old kernel.
+  const std::array terms{product, std::fma(r, r, -product), -x};
+  SelfSquareScratch scratch;
+  for (const auto term : terms) {
+    if (!std::isfinite(term)) return Sign::unsupported;
+    if (term == 0) continue;
+    scratch.next = {};
+    std::size_t count{};
+    auto carry = term;
+    for (std::size_t i = 0; i < scratch.count; ++i) {
+      const auto high = carry + scratch.values[i];
+      const auto bv = high - carry, av = high - bv;
+      const auto low = (carry - av) + (scratch.values[i] - bv);
+      if (!std::isfinite(high) || !std::isfinite(low)) return Sign::unsupported;
+      if (low != 0) {
+        if (count == scratch.next.size()) return Sign::unsupported;
+        scratch.next[count++] = low;
+      }
+      carry = high;
+    }
+    if (carry != 0) {
+      if (count == scratch.next.size()) return Sign::unsupported;
+      scratch.next[count++] = carry;
+    }
+    scratch.values = scratch.next;
+    scratch.count = count;
+  }
+  return scratch.count == 0                      ? Sign::zero
+         : scratch.values[scratch.count - 1] < 0 ? Sign::negative
+                                                 : Sign::positive;
+}
+auto self_root(Interval v) -> Interval {
+  if (!v.supported || v.low < 0) return failed();
+  if (zero(v)) return point(0);
+  auto low = std::sqrt(v.low), high = std::sqrt(v.high);
+  bool low_ok{}, high_ok{};
+  for (std::size_t i = 0; i < 4; ++i) {
+    const auto sign = self_squared_relation(low, v.low);
+    if (sign == Sign::zero || sign == Sign::negative) {
+      low_ok = true;
+      break;
+    }
+    if (sign == Sign::unsupported) return failed();
+    low = down(low);
+  }
+  for (std::size_t i = 0; i < 4; ++i) {
+    const auto sign = self_squared_relation(high, v.high);
+    if (sign == Sign::zero || sign == Sign::positive) {
+      high_ok = true;
+      break;
+    }
+    if (sign == Sign::unsupported) return failed();
+    high = up(high);
+  }
+  return low_ok && high_ok ? interval(low, high) : failed();
+}
+auto self_offset(const Point& a, const Point& b) -> Point {
+  Point result;
+  for (std::size_t i = 0; i < result.size(); ++i)
+    result[i] = add(a[i], b[i]);
+  return result;
+}
+auto self_point_supported(const Point& p) -> bool {
+  return std::ranges::all_of(p, [](Interval v) { return v.supported; });
+}
+auto self_dot(const Point& p, Vec n) -> Interval {
+  return add(add(multiply(p[0], point(n.x)), multiply(p[1], point(n.y))),
+             multiply(p[2], point(n.z)));
+}
+auto self_norm(Vec n) -> Interval {
+  return self_root(
+      add(add(square(point(n.x)), square(point(n.y))), square(point(n.z))));
+}
+auto self_maximum(Interval a, Interval b) -> Interval {
+  if (!a.supported || !b.supported) return failed();
+  return interval(std::max(a.low, b.low), std::max(a.high, b.high));
+}
+auto self_support(const EndpointSelfSolid& solid, Vec n) -> Interval {
+  if (!self_point_supported(solid.first)) return failed();
+  const auto center = self_dot(solid.first, n);
+  if (solid.shape == SelfShape::capsule)
+    return add(self_maximum(center, self_dot(solid.second, n)),
+               multiply(point(solid.radius), self_norm(n)));
+  const std::array half{solid.half.x, solid.half.y, solid.half.z};
+  const std::array normal{n.x, n.y, n.z};
+  auto extent = point(0);
+  for (std::size_t i = 0; i < half.size(); ++i) {
+    const auto term = multiply(point(half[i]), absolute(point(normal[i])));
+    extent = add(extent, solid.shape == SelfShape::box ? term : square(term));
+  }
+  return add(center,
+             solid.shape == SelfShape::box ? extent : self_root(extent));
+}
+auto self_direction(Vec n) -> bool {
+  return n != Vec{} && bounded(n.x, 64) && bounded(n.y, 64) && bounded(n.z, 64);
+}
+auto self_binding_equal(const BoardingPlantedBodyPartBinding& actual,
+                        const BoardingPlantedBodyPartBinding& expected)
+    -> bool {
+  if (actual.id != expected.id || actual.mass.first != expected.mass.first ||
+      actual.mass.second != expected.mass.second ||
+      actual.mass.weight != expected.mass.weight ||
+      actual.reservation.index() != expected.reservation.index())
+    return false;
+  if (const auto* box =
+          std::get_if<BoardingPlantedBodyBoxBinding>(&actual.reservation)) {
+    const auto& other =
+        std::get<BoardingPlantedBodyBoxBinding>(expected.reservation);
+    return box->center == other.center &&
+           box->half_size_metres == other.half_size_metres &&
+           box->frame.columns == other.frame.columns;
+  }
+  const auto& capsule =
+      std::get<BoardingPlantedBodyCapsuleBinding>(actual.reservation);
+  const auto& other =
+      std::get<BoardingPlantedBodyCapsuleBinding>(expected.reservation);
+  return capsule.start == other.start && capsule.end == other.end &&
+         capsule.radius_metres == other.radius_metres;
+}
+auto self_packet(const BoardingSourceEndpointDiagnostic& child,
+                 EndpointSelfPacket& packet) -> bool {
+  if (!child.complete || !child.body || !child.arithmetic_supported ||
+      !child.plane_identities || !child.link_identities ||
+      !child.joint_limits_certified || !child.reservations_complete ||
+      !child.mass_model_complete || !child.hip_regions_certified ||
+      child.common_translation_y_metres != .847 ||
+      child.root_z_metres != -.55 ||
+      child.port_x_terms != std::array{.16, -.14} ||
+      child.starboard_x_terms != std::array{.16, .14})
+    return false;
+  const auto expected = body_parts();
+  for (std::size_t i = 0; i < expected.size(); ++i)
+    if (!self_binding_equal(child.parts[i], expected[i])) return false;
+  // Authenticating the compiled child allows cancellation of P and the ONE
+  // common Y before support. The moving leg axis comes from the owned link,
+  // never a midpoint reconstruction or another evaluation of the knee graph.
+  auto& p = packet.points;
+  p[body_index(BodyPointId::root)] = {point(0), point(0), point(0)};
+  p[body_index(BodyPointId::trunk_center)] = {point(0), point(.3495), point(0)};
+  p[body_index(BodyPointId::helmet_center)] = {point(0), point(.70237),
+                                               point(0)};
+  p[body_index(BodyPointId::eye)] = {point(0), point(.65237), point(0)};
+  const auto arm = negate(multiply(point(.35898), self_root(point(.5))));
+  if (!arm.supported) return false;
+  for (std::size_t side = 0; side < 2; ++side) {
+    if (!child.hips[side].bindings_valid || !child.hips[side].link_identity ||
+        !child.hips[side].structural_x_zero ||
+        !child.hips[side].arithmetic_supported ||
+        !child.legs[side].link_identities)
+      return false;
+    const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                           : BodyPointId::starboard_hip);
+    p[base] = {point(side == 0 ? -.14 : .14), point(0), point(0)};
+    p[base + 1] = self_offset(p[base], body_intervals(child.hips[side].axis));
+    const auto& terms = child.legs[side].ankle_y_terms;
+    p[base + 2] = {
+        p[base][0], add(add(point(terms[0]), point(terms[1])), point(terms[2])),
+        subtract(point(side == 0 ? -.5 : -.8), point(child.root_z_metres))};
+    p[base + 3] = self_offset(p[base + 2], {point(0), point(-.05), point(0)});
+    p[base + 4] = {point(side == 0 ? -.20265 : .20265), point(.579), point(0)};
+    p[base + 5] = self_offset(p[base + 4], {point(0), arm, arm});
+    p[base + 6] = self_offset(p[base + 5], {point(0), point(.386), point(0)});
+  }
+  if (!std::ranges::all_of(p, self_point_supported)) return false;
+  for (std::size_t i = 0; i < packet.solids.size(); ++i) {
+    auto& solid = packet.solids[i];
+    if (const auto* box = std::get_if<BoardingPlantedBodyBoxBinding>(
+            &child.parts[i].reservation)) {
+      solid.shape = i == 1 || i == 2 ? SelfShape::ellipsoid : SelfShape::box;
+      solid.first = p[body_index(box->center)];
+      solid.second = solid.first;
+      solid.half = box->half_size_metres;
+    } else {
+      const auto& capsule = std::get<BoardingPlantedBodyCapsuleBinding>(
+          child.parts[i].reservation);
+      solid.shape = SelfShape::capsule;
+      solid.first = p[body_index(capsule.start)];
+      solid.second = p[body_index(capsule.end)];
+      solid.radius = capsule.radius_metres;
+    }
+  }
+  return true;
+}
+auto self_regions() -> SelfRegions {
+  using P = BodyPointId;
+  SelfRegions result{};
+  result[0] = {PartId::pelvis, PartId::trunk,   Junction::waist,
+               P::root,        P::trunk_center, kBoardingSelfWaistLimitMetres};
+  result[1] = {PartId::trunk,   PartId::helmet,   Junction::neck,
+               P::trunk_center, P::helmet_center, .2695};
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto base = 3 + side * 6, index = 2 + side * 6;
+    const auto hip =
+        static_cast<P>(body_index(side == 0 ? P::port_hip : P::starboard_hip));
+    const auto point_id = [hip](std::size_t offset) {
+      return static_cast<P>(body_index(hip) + offset);
+    };
+    const auto id = [base](std::size_t offset) {
+      return static_cast<PartId>(base + offset);
+    };
+    result[index] = {PartId::pelvis, id(0),
+                     Junction::hip,  hip,
+                     point_id(1),    kBoardingSelfHipLengthMetres};
+    result[index + 1] = {id(0),       id(1), Junction::knee,
+                         point_id(1), hip,   kBoardingSelfKneeRadiusMetres};
+    result[index + 2] = {id(1),           id(2),
+                         Junction::ankle, point_id(2),
+                         point_id(1),     kBoardingSelfAnkleLengthMetres};
+    result[index + 3] = {PartId::trunk,      id(3),
+                         Junction::shoulder, point_id(4),
+                         point_id(5),        kBoardingSelfShoulderRadiusMetres};
+    result[index + 4] = {id(3),           id(4),
+                         Junction::elbow, point_id(5),
+                         point_id(4),     kBoardingSelfElbowRadiusMetres};
+    result[index + 5] = {id(4),           id(5),
+                         Junction::wrist, point_id(6),
+                         point_id(5),     kBoardingSelfWristLengthMetres};
+  }
+  std::ranges::sort(result, [](const auto& a, const auto& b) {
+    return a.first == b.first ? a.second < b.second : a.first < b.first;
+  });
+  return result;
+}
+auto self_half_ray(double first, double second, double radius, Interval cosine)
+    -> BoardingSourceEndpointSelfHalfRayEvidence {
+  BoardingSourceEndpointSelfHalfRayEvidence result;
+  const bool opposite =
+      cosine.supported && cosine.low == -1 && cosine.high == -1;
+  const auto sine_squared =
+      opposite ? point(1) : multiply(point(.5), subtract(point(1), cosine));
+  const auto maximum = std::max(first, second);
+  const auto extent = square(point(maximum));
+  const auto limit = multiply(square(point(radius)), sine_squared);
+  // For exactly opposite rays and the SAME radius expression, the original
+  // endpoint-ball bound is equality; avoid subtracting independent enclosures
+  // of that identical square. This is an identity, never an epsilon repair.
+  const auto gap =
+      opposite && radius == maximum ? point(0) : subtract(limit, extent);
+  result.arithmetic_supported = sine_squared.supported && gap.supported;
+  if (!result.arithmetic_supported) return result;
+  result.sine_squared = bounds(sine_squared);
+  result.squared_gap = bounds(gap);
+  result.certified = sine_squared.low > 0 && gap.low >= 0;
+  return result;
+}
+auto self_owned(const BoardingSourceEndpointDiagnostic& child,
+                const SelfRegion& region, SelfPair& pair) -> void {
+  Interval extent, limit, secondary = point(0);
+  auto certificate = SelfCert::none;
+  const auto second = static_cast<std::size_t>(region.second);
+  const auto side = second >= 9 ? std::size_t{1} : std::size_t{0};
+  switch (region.junction) {
+    case Junction::waist:
+      extent = point(.12);
+      limit = point(region.limit_metres);
+      certificate = SelfCert::cap_partner_support;
+      break;
+    case Junction::neck:
+      // SAME actual trunk semi-axis defines support and original cap limit.
+      extent = limit = point(.2695);
+      pair.structural_identity = true;
+      certificate = SelfCert::cap_partner_support;
+      break;
+    case Junction::hip:
+      extent = interval(child.hips[side].scaled_pelvis_extent.lower,
+                        child.hips[side].scaled_pelvis_extent.upper);
+      limit = interval(child.hips[side].scaled_hip_limit.lower,
+                       child.hips[side].scaled_hip_limit.upper);
+      pair.structural_identity = child.hips[side].structural_x_zero;
+      certificate = SelfCert::original_axis_box_support;
+      break;
+    case Junction::ankle: {
+      const auto& leg = child.legs[side];
+      const auto sine = interval(leg.shin_sine.lower, leg.shin_sine.upper);
+      const auto cosine =
+          interval(leg.shin_cosine.lower, leg.shin_cosine.upper);
+      if (!cosine.supported || cosine.low <= 0 || .075 > region.limit_metres ||
+          region.limit_metres >= shin_length) {
+        pair.arithmetic_supported = false;
+        return;
+      }
+      // A-to-K is (0,+F2,+G2)/L2. Boot-A=(0,-.05,0): the two
+      // exact .05*cosine terms cancel after authenticated positive cosine.
+      extent =
+          multiply(point(.14), multiply(point(shin_length), absolute(sine)));
+      limit = multiply(point(region.limit_metres), point(shin_length));
+      pair.structural_identity = true;
+      certificate = SelfCert::original_axis_box_support;
+      break;
+    }
+    case Junction::wrist:
+      if (.055 > region.limit_metres || region.limit_metres >= .386) {
+        pair.arithmetic_supported = false;
+        return;
+      }
+      // Hand center is SAME W; W-to-E is exact -Y with length .386.
+      extent = point(.05);
+      limit = point(region.limit_metres);
+      pair.structural_identity = true;
+      certificate = SelfCert::original_axis_box_support;
+      break;
+    case Junction::knee:
+    case Junction::elbow: {
+      const auto cosine =
+          region.junction == Junction::knee
+              ? negate(interval(child.legs[side].knee_cosine.lower,
+                                child.legs[side].knee_cosine.upper))
+              : self_root(point(.5));
+      const auto first_radius = region.junction == Junction::knee ? .105 : .065;
+      const auto second_radius =
+          region.junction == Junction::knee ? .075 : .055;
+      const auto proof = self_half_ray(first_radius, second_radius,
+                                       region.limit_metres, cosine);
+      pair.arithmetic_supported =
+          pair.arithmetic_supported && proof.arithmetic_supported;
+      if (!proof.arithmetic_supported) return;
+      extent = square(point(std::max(first_radius, second_radius)));
+      limit = multiply(
+          square(point(region.limit_metres)),
+          interval(proof.sine_squared.lower, proof.sine_squared.upper));
+      pair.structural_identity = true;
+      certificate = SelfCert::half_ray_angle_bound;
+      break;
+    }
+    case Junction::shoulder: {
+      if (.065 > region.limit_metres) {
+        pair.arithmetic_supported = false;
+        return;
+      }
+      const auto c = self_root(point(.5));
+      const auto threshold = self_root(
+          subtract(square(point(region.limit_metres)), square(point(.065))));
+      // Root ball is within R. Outside it the cylinder starts at threshold;
+      // exact u.Z=-c and perpendicular projection length c bound its maximum Z.
+      extent = add(negate(multiply(threshold, c)), multiply(point(.065), c));
+      secondary = add(negate(multiply(point(.35898), c)), point(.065));
+      limit = point(-.18);
+      pair.structural_identity = true;
+      certificate = SelfCert::shoulder_split;
+      break;
+    }
+  }
+  const auto gap = subtract(limit, extent);
+  pair.arithmetic_supported = pair.arithmetic_supported && extent.supported &&
+                              limit.supported && gap.supported &&
+                              secondary.supported;
+  if (!pair.arithmetic_supported) return;
+  pair.ownership_extent = bounds(extent);
+  pair.ownership_limit = bounds(limit);
+  pair.ownership_secondary_extent = bounds(secondary);
+  pair.certificate_gap = bounds(gap);
+  const bool certified =
+      region.junction == Junction::shoulder
+          ? extent.high < limit.low && secondary.high < limit.low
+          : gap.low >= 0;
+  if (certified) {
+    pair.certificate = certificate;
+    pair.certified = pair.whole_owned = true;
+  }
+}
+auto self_center(const EndpointSelfSolid& solid) -> Point {
+  if (solid.shape != SelfShape::capsule) return solid.first;
+  Point result;
+  for (std::size_t i = 0; i < result.size(); ++i)
+    result[i] = multiply(add(solid.first[i], solid.second[i]), point(.5));
+  return result;
+}
+auto self_reporting(const Point& p) -> Vec {
+  const auto midpoint = [](Interval v) {
+    return v.low + (v.high - v.low) * .5;
+  };
+  return {midpoint(p[0]), midpoint(p[1]), midpoint(p[2])};
+}
+auto self_difference(Vec a, Vec b) -> Vec {
+  return {a.x - b.x, a.y - b.y, a.z - b.z};
+}
+auto self_negate(Vec a) -> Vec {
+  return {-a.x, -a.y, -a.z};
+}
+auto self_separate(const EndpointSelfSolid& a, const EndpointSelfSolid& b,
+                   SelfPair& pair, std::size_t max_axes) -> bool {
+  std::array<Vec, 14> axes{};
+  std::size_t count{};
+  const auto push = [&](Vec n) {
+    if (count < axes.size()) axes[count++] = n;
+  };
+  push({1, 0, 0});
+  push({0, 1, 0});
+  push({0, 0, 1});
+  const auto ac = self_reporting(self_center(a)),
+             bc = self_reporting(self_center(b));
+  push(self_difference(bc, ac));
+  for (const auto* solid : {&a, &b})
+    if (solid->shape != SelfShape::capsule) {
+      push({1, 0, 0});
+      push({0, 1, 0});
+      push({0, 0, 1});
+    }
+  for (const auto* solid : {&a, &b})
+    if (solid->shape == SelfShape::capsule) {
+      const auto other = solid == &a ? bc : ac;
+      push(self_difference(self_reporting(solid->first), other));
+      push(self_difference(self_reporting(solid->second), other));
+    }
+  for (std::size_t i = 0; i < std::min(count, max_axes); ++i) {
+    ++pair.examined_axes;
+    if (!self_direction(axes[i])) continue;
+    for (const auto n : {axes[i], self_negate(axes[i])}) {
+      ++pair.signed_support_trials;
+      const auto first = self_support(a, n),
+                 second = self_support(b, self_negate(n));
+      const auto total = add(first, second);
+      if (!total.supported) {
+        pair.arithmetic_supported = false;
+        continue;
+      }
+      if (total.high <= 0) {
+        pair.certificate_gap = bounds(negate(total));
+        pair.separating_direction = n;
+        pair.certificate = SelfCert::convex_support_plane;
+        pair.certified = true;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+auto self_refuse(SelfDiagnostic& result, SelfCondition condition,
+                 std::optional<std::size_t> pair = {}) -> void {
+  if (!result.first_refusal)
+    result.first_refusal = BoardingSourceEndpointSelfRefusal{condition, pair};
+}
+} // namespace
+
+auto detail::boarding_source_endpoint_self_bounded(
+    const OriginBoardingBootSupport& provider, std::size_t max_site_partitions,
+    std::size_t max_body_records, std::size_t max_pairs, std::size_t max_axes)
+    -> std::expected<BoardingSourceEndpointSelfDiagnostic, std::string> {
+  if (max_site_partitions > 10 || max_body_records > 1 ||
+      max_pairs > kBoardingBodyPairCount || max_axes > 14)
+    return std::unexpected(
+        "Endpoint self reduced capacities exceed registered bounds");
+  auto child = detail::boarding_source_endpoint_bounded(
+      provider, .847, -.55, max_site_partitions, max_body_records);
+  if (!child) return std::unexpected(child.error());
+  SelfDiagnostic result{std::move(*child)};
+  if (!result.endpoint.complete) {
+    self_refuse(result, SelfCondition::endpoint_prerequisite);
+    return result;
+  }
+  if (!supported_environment()) {
+    self_refuse(result, SelfCondition::unsupported_arithmetic);
+    return result;
+  }
+  EndpointSelfPacket packet;
+  if (!self_packet(result.endpoint, packet)) {
+    self_refuse(result, SelfCondition::invalid_binding);
+    return result;
+  }
+  result.regions = self_regions();
+  for (std::size_t i = 0; i < result.parts.size(); ++i)
+    result.parts[i] = {static_cast<PartId>(i), packet.solids[i].shape,
+                       result.endpoint.parts[i]};
+  result.bindings_complete = result.arithmetic_supported = true;
+  std::size_t index{};
+  for (std::size_t a = 0; a < result.parts.size(); ++a)
+    for (std::size_t b = a + 1; b < result.parts.size(); ++b) {
+      auto& pair = result.pairs[index];
+      pair.first = static_cast<PartId>(a);
+      pair.second = static_cast<PartId>(b);
+      for (std::size_t r = 0; r < result.regions.size(); ++r)
+        if (result.regions[r].first == pair.first &&
+            result.regions[r].second == pair.second)
+          pair.connected_region_index = r;
+      if (index >= max_pairs) {
+        self_refuse(result, SelfCondition::pair_capacity, index);
+        ++index;
+        continue;
+      }
+      pair.examined = pair.arithmetic_supported = true;
+      if (pair.connected_region_index)
+        self_owned(result.endpoint,
+                   result.regions[*pair.connected_region_index], pair);
+      if (!pair.certified)
+        self_separate(packet.solids[a], packet.solids[b], pair, max_axes);
+      ++result.examined_pairs;
+      result.examined_axes += pair.examined_axes;
+      result.signed_support_trials += pair.signed_support_trials;
+      result.arithmetic_supported =
+          result.arithmetic_supported && pair.arithmetic_supported;
+      if (pair.certified) ++result.certified_pairs;
+      if (!pair.arithmetic_supported)
+        self_refuse(result, SelfCondition::unsupported_arithmetic, index);
+      else if (!pair.certified) {
+        const auto proposed =
+            4 + (packet.solids[a].shape == SelfShape::capsule ? 2U : 3U) +
+            (packet.solids[b].shape == SelfShape::capsule ? 2U : 3U);
+        self_refuse(result,
+                    pair.examined_axes < proposed
+                        ? SelfCondition::axis_capacity
+                        : SelfCondition::unresolved_pair,
+                    index);
+      }
+      ++index;
+    }
+  result.coverage_complete = result.examined_pairs == kBoardingBodyPairCount;
+  result.self_qualified = result.bindings_complete &&
+                          result.arithmetic_supported &&
+                          result.coverage_complete &&
+                          result.certified_pairs == kBoardingBodyPairCount;
+  result.complete = result.self_qualified;
+  return result;
+}
+auto assess_origin_boarding_source_endpoint_self(
+    const OriginBoardingBootSupport& provider)
+    -> std::expected<BoardingSourceEndpointSelfDiagnostic, std::string> {
+  return detail::boarding_source_endpoint_self_bounded(
+      provider, 10, 1, kBoardingBodyPairCount, 14);
+}
+auto detail::boarding_source_endpoint_self_support(
+    const OriginBoardingBootSupport& provider, BoardingBodyPartId part,
+    RigidVector3 direction)
+    -> std::expected<BoardingSourceEndpointSelfSupportEvidence, std::string> {
+  if (static_cast<std::size_t>(part) >= kBoardingBodyPartCount ||
+      !self_direction(direction))
+    return std::unexpected(
+        "Endpoint self fixed part and nonzero finite direction <=64 required");
+  BoardingSourceEndpointSelfSupportEvidence result;
+  if (!supported_environment()) return result;
+  const auto child = assess_origin_boarding_source_endpoint(provider);
+  if (!child) return std::unexpected(child.error());
+  EndpointSelfPacket packet;
+  if (!self_packet(*child, packet)) return result;
+  // The test seam reports canonical support, BEFORE common placement, whereas
+  // the full graph cancels P as well before comparing both primitive supports.
+  const Point canonical_root{point(.16), point(0), point(-.55)};
+  const auto support = add(
+      self_support(packet.solids[static_cast<std::size_t>(part)], direction),
+      self_dot(canonical_root, direction));
+  result.arithmetic_supported = support.supported;
+  if (support.supported) result.support = bounds(support);
+  return result;
+}
+auto detail::boarding_source_endpoint_self_half_ray(
+    double first_radius, double second_radius, double region_radius,
+    BoardingPlantedLegScalarBounds outgoing_cosine)
+    -> std::expected<BoardingSourceEndpointSelfHalfRayEvidence, std::string> {
+  const auto valid_radius = [](double v) { return bounded(v, 8) && v > 0; };
+  const auto cosine = interval(outgoing_cosine.lower, outgoing_cosine.upper);
+  if (!valid_radius(first_radius) || !valid_radius(second_radius) ||
+      !valid_radius(region_radius) || !cosine.supported || cosine.low < -1 ||
+      cosine.high > 1)
+    return std::unexpected("Endpoint self half-ray positive radii <=8 and "
+                           "cosine bounds in [-1,1] required");
+  if (!supported_environment())
+    return BoardingSourceEndpointSelfHalfRayEvidence{};
+  return self_half_ray(first_radius, second_radius, region_radius, cosine);
 }
 } // namespace apsis_drift

@@ -14,8 +14,8 @@ caller pose, solids, expression tree, region, norm or authority flags enter.
 
 Use the original 15 part IDs and bindings. Only for self, trunk and helmet are
 identity ellipsoids whose semi-axes equal their unchanged box half sizes; all
-world reservations remain full original boxes. The other seven world boxes
-and eight capsules therefore give five self boxes, two self ellipsoids and
+world reservations remain full original boxes. The seven world boxes and
+eight capsules therefore give five self boxes, two self ellipsoids and
 eight self capsules. Scan all 105 lexicographic pairs, with exactly the original
 14 finite connected regions. Names and adjacency never exempt a pair.
 
@@ -129,3 +129,27 @@ tidy20 with exact justified suppressions. All force/load, all-obstacle world/
 crop/sweep, acquisition, transfer, continuous motion, dynamics, route, actor,
 seat, save and First Flight flags remain false, including on static self pass.
 No art, master/material/capture or historical archive replay is requested.
+
+## Recorded outcome
+
+The first GCC and Clang contracts each passed 11,822 checks with identical
+reported bounds and counters. All 105 pairs qualified: the 14 original finite
+junctions by complete ownership and the other 91 by convex support planes.
+The fixed graph examined 172 proposals and 274 signed support trials. The
+neck equality remained an authenticated exact zero; both shoulder cylinder
+and distal-ball bounds were strictly below the original trunk minimum Z.
+Observed-result regression assertions were added only after those first logs
+were recorded. Geometry, source sites and original region limits stayed fixed.
+
+Independent prequery review corrected two implementation details before
+execution: the refusal category now measures exhaustion of the actual axis
+list, and a purpose-specific three-term square-sign expansion bounds the new
+verified-root helper scratch. Old evaluators and their kernels remain unchanged.
+This positive result qualifies only the registered static self graph. Physical
+load, world clearance, continuous boarding and runtime interaction remain
+unqualified.
+
+Final observed-result contracts passed 11,834 checks on each compiler; all 58
+native tests passed under both full builds. Pinned format20, full tidy20 across
+148 translation units and all 38 justified suppression directives passed.
+Reduced-budget tests also verify the exact first-refusal pair and category.
