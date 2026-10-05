@@ -470,6 +470,13 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-boarding-route-body-tests test/origin_boarding_route_body_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-body-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-boarding-route-body-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-body-contract COMMAND apsis-drift-boarding-route-body-tests)
+  set_tests_properties(boarding-route-body-contract PROPERTIES TIMEOUT 90)
+
   add_executable(apsis-drift-boarding-self-model03-tests test/origin_boarding_self_model03_test.cpp)
   target_link_libraries(apsis-drift-boarding-self-model03-tests PRIVATE apsis-drift::core)
   target_include_directories(apsis-drift-boarding-self-model03-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
