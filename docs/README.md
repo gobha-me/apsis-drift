@@ -39,6 +39,7 @@ player's station-to-flight journey.
   [complete static self check](ORIGIN_BOARDING_SOURCE_ENDPOINT_SELF01.md)
 - [Fixed endpoint vertical load](ORIGIN_BOARDING_SOURCE_ENDPOINT_LOAD01.md)
 - [Fixed endpoint surface checkpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT_SURFACE_CHECKPOINT01.md)
+- [Partial lower-foot transfer01](ORIGIN_BOARDING_LOWER_FOOT_TRANSFER01.md): registered continuous nominal load preparation; implementation and outcome pending.
 
 ## Studies and history
 
