@@ -59,12 +59,12 @@ under sustained GPU load, and audible transitions remain human checkpoints.
 ## Repeat the checks
 
 Run the selected Godot executable with `--headless --audio-driver Dummy`,
-`--path experiments/godot-freedom`, and each of:
+`--path godot`, and each of:
 
-- `--script res://ship_audio_test.gd`
-- `--script res://ship_audio_level_test.gd`
-- `--script res://ship_audio_playback_test.gd`
-- `--script res://ship_audio_integration_test.gd -- --snapshot=ABSOLUTE_SNAPSHOT`
+- `--script res://tests/ship_audio_test.gd`
+- `--script res://tests/ship_audio_level_test.gd`
+- `--script res://tests/ship_audio_playback_test.gd`
+- `--script res://tests/ship_audio_integration_test.gd -- --snapshot=ABSOLUTE_SNAPSHOT`
 
 The updated `ship_audio_capture.gd` writes a native 16-second load sweep,
 40-second comfort fixture and separate atmospheric example, with source/output

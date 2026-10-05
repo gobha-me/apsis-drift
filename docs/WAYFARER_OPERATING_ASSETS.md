@@ -59,7 +59,7 @@ directory and `CAPTURE_DIR` to an existing, disposable absolute directory:
 ```sh
 "$GODOT_BIN" --rendering-method gl_compatibility \
   --path "$CONTRACT_DIR/project" --audio-driver Dummy \
-  --script res://wayfarer_operating_capture.gd -- \
+  --script res://studies/captures/wayfarer_operating_capture.gd -- \
   "$CONTRACT_DIR/native-assets" "$CONTRACT_DIR/operating-assets" "$CAPTURE_DIR"
 ```
 

@@ -28,7 +28,7 @@ Meshes are authored in metres, Blender +Y forward/+Z up, at the cabin datum.
 GLB export converts to Godot +Y up/-Z forward. Mount the GLB at identity beneath
 the existing cabin; do not apply the cabin-to-ship offset twice. The gameplay
 eye, grip and lower-body joint anchors come from `tools/flight_cell.py` and
-`experiments/godot-freedom/cockpit-layout.json`; no camera relocation or whole
+`godot/settings/cockpit-layout.json`; no camera relocation or whole
 body scaling is required. The helmet/neck is positioned behind the eye anchor
 so the eye is toward the visor, rather than at the centre of the skull.
 

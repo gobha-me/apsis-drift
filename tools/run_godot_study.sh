@@ -11,7 +11,7 @@ if [[ -z "$engine" ]]; then
     elif [[ -x "${study_data}/tools/Godot_v4.7.2-stable_linux.x86_64" ]]; then
         engine="${study_data}/tools/Godot_v4.7.2-stable_linux.x86_64"
     else
-        echo 'Set GODOT_BIN to a Godot 4 executable; see experiments/godot-freedom/README.md.' >&2
+        echo 'Set GODOT_BIN to a Godot 4 executable; see godot/README.md.' >&2
         exit 1
     fi
 fi
@@ -44,11 +44,11 @@ cmake --build "$study_build" --target "${build_targets[@]}" -j 4
 if [[ "$live_mode" == ON ]]; then
     # Restore this build's plugin even if another compiler last staged its own.
     cmake -E copy \
-        "${study_build}/experiments/godot-freedom/bin/libapsis_freedom_bridge.so" \
-        "${repo_dir}/experiments/godot-freedom/bin/libapsis_freedom_bridge.so.launch.new"
+        "${study_build}/src/godot/bin/libapsis_freedom_bridge.so" \
+        "${repo_dir}/godot/bin/libapsis_freedom_bridge.so.launch.new"
     cmake -E rename \
-        "${repo_dir}/experiments/godot-freedom/bin/libapsis_freedom_bridge.so.launch.new" \
-        "${repo_dir}/experiments/godot-freedom/bin/libapsis_freedom_bridge.so"
+        "${repo_dir}/godot/bin/libapsis_freedom_bridge.so.launch.new" \
+        "${repo_dir}/godot/bin/libapsis_freedom_bridge.so"
 fi
 mkdir -p "$study_data"
 snapshot="${study_data}/snapshot-42.json"
@@ -58,13 +58,13 @@ if [[ ! -f "$snapshot" ]]; then
     if [[ "$stream_mode" == true ]]; then
         relief_version=0
         if [[ "$relief_mode" == true ]]; then relief_version=1; fi
-        "${study_build}/experiments/godot-freedom/apsis-drift-godot-snapshot" "$snapshot" 42 3 32000 "$relief_version"
+        "${study_build}/src/godot/apsis-drift-godot-snapshot" "$snapshot" 42 3 32000 "$relief_version"
     elif [[ "$relief_mode" == true ]]; then
-        "${study_build}/experiments/godot-freedom/apsis-drift-godot-snapshot" "$snapshot" 42 513 32000 1
+        "${study_build}/src/godot/apsis-drift-godot-snapshot" "$snapshot" 42 513 32000 1
     else
-        "${study_build}/experiments/godot-freedom/apsis-drift-godot-snapshot" "$snapshot"
+        "${study_build}/src/godot/apsis-drift-godot-snapshot" "$snapshot"
     fi
 fi
 if [[ "$prepare_only" == true ]]; then exit 0; fi
-exec "$engine" --path "${repo_dir}/experiments/godot-freedom" --audio-driver Dummy -- \
+exec "$engine" --path "${repo_dir}/godot" --scene res://studies/main.tscn --audio-driver Dummy -- \
     "--snapshot=${snapshot}" "--assets=${repo_dir}/assets/visual" "$@"

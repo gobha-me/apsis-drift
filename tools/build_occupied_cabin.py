@@ -80,7 +80,7 @@ def main():
         "source_dependencies_sha256": {
             "tools/"+name: digest(ROOT/"tools"/name)
             for name in ("build_hero_assets.py", "build_flight_cell.py", "flight_cell.py")},
-        "layout_sha256": digest(ROOT/"experiments/godot-freedom/cockpit-layout.json"),
+        "layout_sha256": digest(ROOT/"godot/settings/cockpit-layout.json"),
         "excluded_source_objects": removed,
         "other_source_objects_unchanged": True,
         "export_recipe": "Unmodified build_hero_assets.export_lods; near tiers 0/1, 150000 triangle budget",

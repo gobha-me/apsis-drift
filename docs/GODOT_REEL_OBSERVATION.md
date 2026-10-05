@@ -59,7 +59,7 @@ starter assets, source handoff and new output. Stage the native frontend and
 matching bridge into a new project using
 [the native runner](../tools/test_godot_native.py)'s convention: preserve script,
 shader, scene and extension paths; exclude import caches. Include
-[reel_observation_capture.gd](../experiments/godot-freedom/reel_observation_capture.gd).
+[reel_observation_capture.gd](../godot/studies/captures/reel_observation_capture.gd).
 The optional private room is loaded only after source existence/hash checks;
 the ordinary native project does not require that art to parse.
 
@@ -72,16 +72,16 @@ cp "$STATION_SOURCE/assets/visual/station-observation-commons.glb" \
    "$OBSERVATION_PROJECT/observation-source/"
 "$GODOT_BIN" --headless --path "$OBSERVATION_PROJECT" --editor --import --quit
 "$GODOT_BIN" --headless --path "$OBSERVATION_PROJECT" \
-    --script res://reel_observation_capture.gd -- --check-only
+    --script res://studies/captures/reel_observation_capture.gd -- --check-only
 mkdir "$OBSERVATION_REVIEW"
 "$GODOT_BIN" --path "$OBSERVATION_PROJECT" --rendering-method gl_compatibility \
     --audio-driver Dummy --resolution 1920x1080 \
-    --script res://reel_observation_capture.gd -- \
+    --script res://studies/captures/reel_observation_capture.gd -- \
     "$NATIVE_ASSETS" "$OBSERVATION_REVIEW" review
 mkdir "$OBSERVATION_OUTPUT"
 "$GODOT_BIN" --path "$OBSERVATION_PROJECT" --rendering-method gl_compatibility \
     --audio-driver Dummy --resolution 1920x1080 \
-    --script res://reel_observation_capture.gd -- \
+    --script res://studies/captures/reel_observation_capture.gd -- \
     "$NATIVE_ASSETS" "$OBSERVATION_OUTPUT"
 ```
 

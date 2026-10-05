@@ -36,7 +36,7 @@ thresholds, airless planets, space without orbit, orbit under thrust/assist,
 escape and unit formatting. Run it with:
 
 ```sh
-godot --headless --path experiments/godot-freedom --script res://flight_status_test.gd
+godot --headless --path godot --script res://tests/flight_status_test.gd
 ```
 
 The native presentation smoke test passed with zero failures, followed by direct

@@ -65,11 +65,11 @@ mute/reset, pause/focus/stale-state safety and unchanged native state.
 These are not physical-controller or listening acceptance.
 
 Run the scripts with the project's Godot executable and
-`--headless --audio-driver Dummy --path experiments/godot-freedom --script`:
+`--headless --audio-driver Dummy --path godot --script`:
 
-- `res://audio_preferences_test.gd`
-- `res://recorded_ship_audio_test.gd`
-- `res://recorded_audio_integration_test.gd`, followed by
+- `res://tests/audio_preferences_test.gd`
+- `res://tests/recorded_ship_audio_test.gd`
+- `res://tests/recorded_audio_integration_test.gd`, followed by
   `-- --snapshot=/absolute/native-snapshot.json` (requires the native bridge).
 
 The native build 28 audition received positive human feedback ("a lot better")

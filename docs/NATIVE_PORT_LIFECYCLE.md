@@ -102,7 +102,7 @@ existing absolute `CAPTURE_DIR`, review that same selected state with:
 
 ```sh
 "$GODOT_BIN" --path "$CONTRACT_DIR/project" --audio-driver Dummy \
-  --script res://native_port_capture.gd -- \
+  --script res://studies/captures/native_port_capture.gd -- \
   "$CONTRACT_DIR/port-approach.json" "$CONTRACT_DIR/native-assets" "$CAPTURE_DIR"
 ```
 

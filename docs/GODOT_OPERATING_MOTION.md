@@ -82,7 +82,7 @@ Each parent is composed once in parent-first order. Existing source corrections
 are already baked into the selected rest geometry and recipe, so they are not
 applied again.
 
-[operating_motion_presentation.gd](../experiments/godot-freedom/operating_motion_presentation.gd)
+[operating_motion_presentation.gd](../godot/scripts/ships/operating_motion_presentation.gd)
 reuses the existing operating-02 source/model bindings without rewriting its
 exact-knot consumer. `initialize_motion(owner,native_assets,operating_assets,
 motion_assets)` takes three absolute prepared directories. `set_progress`
@@ -134,7 +134,7 @@ proof, choose a new empty capture directory and invoke its staged project:
 ```sh
 "$GODOT_BIN" --path "$STAGED_PROJECT" --rendering-method gl_compatibility \
     --audio-driver Dummy --resolution 1280x720 \
-    --script res://operating_motion_test.gd -- \
+    --script res://tests/operating_motion_test.gd -- \
     "$NATIVE_ASSETS" "$OPERATING_ASSETS" "$MOTION_ASSETS" "$EMPTY_CAPTURE_DIR"
 ```
 

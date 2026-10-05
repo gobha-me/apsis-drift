@@ -46,7 +46,7 @@ project with the matching bridge, prepared assets and an existing output folder:
 
 ```sh
 godot --path /absolute/path/to/isolated-project --audio-driver Dummy \
-  --script res://native_station_capture.gd -- \
+  --script res://studies/captures/native_station_capture.gd -- \
   /absolute/path/to/prepared-assets /absolute/path/to/captures
 ```
 

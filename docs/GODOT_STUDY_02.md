@@ -84,15 +84,15 @@ back. Save files and the production terminal application are not touched.
 Run the live boundary test after building the adapter:
 
 ```sh
-godot --headless --path experiments/godot-freedom \
-  --script res://live_test.gd -- "$PWD/build-godot/snapshot-42.json"
+godot --headless --path godot \
+  --script res://tests/live_test.gd -- "$PWD/build-godot/snapshot-42.json"
 ```
 
 Native smoke/capture (requires a graphics session):
 
 ```sh
-godot --path experiments/godot-freedom --audio-driver Dummy \
-  --script res://live_smoke.gd -- \
+godot --path godot --audio-driver Dummy \
+  --script res://tests/live_smoke.gd -- \
   --snapshot="$PWD/build-godot/snapshot-42.json" \
   --assets="$PWD/assets/visual" --live=true --render-size=3840x2160 \
   --capture="$PWD/build-godot/live-cockpit.png"

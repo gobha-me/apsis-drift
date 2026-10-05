@@ -46,7 +46,7 @@ downward gaze is a human playtest/design decision, not an asset-lighting fix.
 
 ## Evidence and limits
 
-`experiments/godot-freedom/asset_look_review.gd` produces nine native PNGs:
+`godot/studies/reviews/asset_look_review.gd` produces nine native PNGs:
 three profiles at straight-ahead cockpit, lowered-gaze cockpit and exterior
 poses. It also produces three lossless side-by-side comparisons, always
 **baseline left / cinematic right**, JSON sidecars and a review receipt.
@@ -75,8 +75,8 @@ Prepare the normal streamed snapshot, extension and assets. Create a new empty
 output directory, then run the project Godot executable with:
 
 ```sh
---path experiments/godot-freedom --audio-driver Dummy \
---script res://asset_look_review.gd -- \
+--path godot --audio-driver Dummy \
+--script res://studies/reviews/asset_look_review.gd -- \
 --snapshot="$(pwd)/build-godot/snapshot-42-stream-true.json" \
 --assets="$(pwd)/assets/visual" \
 --stream=true --flight-model=thrust --pilot=true --start-paused=true \
@@ -122,7 +122,7 @@ The completed final set is in ignored
 eight additional neighboring camera-pose images, per-image provenance JSON and
 `environment-review.json`. The surface preview is
 `cinematic-surface-day-exterior.png` with its same-name JSON sidecar. Reproduce
-using the command above with `--script res://asset_environment_review.gd` and
+using the command above with `--script res://studies/reviews/asset_environment_review.gd` and
 a new empty output directory.
 
 Observed limits: surface/orbit coatings read less like chrome while exposed

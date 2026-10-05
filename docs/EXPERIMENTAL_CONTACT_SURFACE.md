@@ -4,7 +4,7 @@ This standalone C++ prerequisite serves #202 and future #253 work. It is not a
 landing-capable build and does not close either issue. Nothing invokes it from
 live flight: the 16 m experiment floor guard remains unchanged.
 
-`experiments/godot-freedom/contact_surface.hpp` names an opt-in recipe:
+`include/apsis_drift/godot/contact_surface.hpp` names an opt-in recipe:
 experiment 1, terrain generator 1, source LOD 8, relief 1, mesh LOD 13,
 32 intervals per tile, and the existing anti-diagonal triangulation. Other
 recipes are rejected rather than silently substituted. This is not a new

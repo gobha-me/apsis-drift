@@ -76,7 +76,7 @@ Stage the native frontend and matching bridge using
 Add verified Hero runtime files without replacing native `project.godot`, main
 or presentation modules. Preserve `res://trials/...` paths and stage
 `character-resources.json`. Include
-[the workshop capture script](../experiments/godot-freedom/reel_integrated_workshop.gd).
+[the workshop capture script](../godot/studies/film/reel_integrated_workshop.gd).
 Clone without `.godot` import caches when another capture shares the baseline.
 Each process owns a separate project/cache/display. The optional script guards
 its runtime Hero load, so the ordinary native project still parses without
@@ -85,11 +85,11 @@ private character assets.
 ```bash
 "$GODOT_BIN" --headless --path "$WORKSHOP_PROJECT" --editor --import --quit
 "$GODOT_BIN" --headless --path "$WORKSHOP_PROJECT" \
-    --script res://reel_integrated_workshop.gd --check-only
+    --script res://studies/film/reel_integrated_workshop.gd --check-only
 mkdir -p "$WORKSHOP_OUTPUT"
 DISPLAY=:98 LIBGL_ALWAYS_SOFTWARE=1 "$GODOT_BIN" \
     --path "$WORKSHOP_PROJECT" --rendering-method gl_compatibility \
-    --audio-driver Dummy --script res://reel_integrated_workshop.gd -- \
+    --audio-driver Dummy --script res://studies/film/reel_integrated_workshop.gd -- \
     "$ART_ROOT" "$WORKSHOP_OUTPUT"
 ```
 

@@ -47,7 +47,7 @@ telemetry. The tile budget remains 384; extending normal sampling increases
 worker cost, not the maximum resident mesh count.
 
 To reproduce captures, create a review directory and run
-`res://terrain_transition_review.gd` with the same snapshot/assets/stream/thrust
+`res://studies/reviews/terrain_transition_review.gd` with the same snapshot/assets/stream/thrust
 arguments as `presentation_smoke.gd`, adding `--review-dir` and optionally
 `--render-size=3840x2160`. PNG sidecars contain state, residency and license
 metadata. Captures are BSD-3-Clause original Godot renders, not generated

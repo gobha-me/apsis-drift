@@ -120,7 +120,7 @@ can be exported into a separate native inspection before flight integration.
 
 High-quality male/female pilots are a separate task; this study does not call
 the existing synthetic fit mannequins finished characters. Preserve the shared
-flight-cell contract in `experiments/godot-freedom/cockpit-layout.json`,
+flight-cell contract in `godot/settings/cockpit-layout.json`,
 `tools/flight_cell.py`, `tools/build_flight_cell.py` and
 `assets/visual/cockpit-fit-report.json`.
 

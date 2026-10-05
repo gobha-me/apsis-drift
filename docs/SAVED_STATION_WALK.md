@@ -152,7 +152,7 @@ working rendering display, review actual fresh-game input with absolute paths:
 
 ```sh
 "$GODOT_BIN" --rendering-method gl_compatibility --path "$CONTRACT_DIR/project" --audio-driver Dummy \
-  --script res://native_walk_capture.gd -- "$CONTRACT_DIR/native-assets" "$CAPTURE_DIR"
+  --script res://studies/captures/native_walk_capture.gd -- "$CONTRACT_DIR/native-assets" "$CAPTURE_DIR"
 ```
 
 Prepare `CAPTURE_DIR` first. The script refuses headless rendering and records

@@ -1,6 +1,6 @@
 # Saved terrain pad geometry experiment
 
-`SavedContactGeometry` in `experiments/godot-freedom` snapshots an existing
+`SavedContactGeometry` in `godot` snapshots an existing
 `NativeFreedomFlightSession`. It retains the complete physical system, selected
 planet descriptor, physical rotation recipe, original flight state and checksum.
 Its temporary query state uses the existing physical-owner frame handoff into

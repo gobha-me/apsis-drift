@@ -101,8 +101,8 @@ Reproduce the headless bridge contract after preparing the native build:
 
 ```sh
 tools/run_godot_study.sh --stream=true --relief=true --prepare-only=true
-godot --headless --path experiments/godot-freedom \
-  --script res://rotation_coast_test.gd -- \
+godot --headless --path godot \
+  --script res://tests/rotation_coast_test.gd -- \
   "$PWD/build-godot/snapshot-42-stream-true.json"
 ctest --test-dir build --output-on-failure \
   -R 'craft-frame|rigid-body|vacuum-dynamics|godot-.*contract'

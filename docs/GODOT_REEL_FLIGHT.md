@@ -45,7 +45,7 @@ Use a qualified `APSIS_DRIFT_GODOT_LIVE=ON` build. Generate the fixture through
 C++, without editing a serialized save:
 
 ```bash
-"$ENGINE_BUILD/experiments/godot-freedom/apsis-drift-freedom-start-fixture" \
+"$ENGINE_BUILD/godot/apsis-drift-freedom-start-fixture" \
     "$SELECTED_SAVE" 42 25 wayfarer-flight
 ```
 
@@ -54,18 +54,18 @@ Stage the native frontend and matching binary into a new isolated project using
 `.gd`, `.gdshader`, `.godot`, `.tscn` and `.json` frontend files, the existing
 `bin/freedom.gdextension`, and the qualified build's `libapsis_freedom_bridge.so`.
 Preserve dependency paths; exclude `.godot` import caches. Include
-[the flight capture script](../experiments/godot-freedom/reel_flight_capture.gd).
+[the flight capture script](../godot/studies/captures/reel_flight_capture.gd).
 Each concurrent capture owns its project, cache and display.
 
 ```bash
 "$GODOT_BIN" --headless --path "$FLIGHT_PROJECT" --editor --import --quit
 "$GODOT_BIN" --headless --path "$FLIGHT_PROJECT" \
-    --script res://reel_flight_capture.gd --check-only
+    --script res://studies/captures/reel_flight_capture.gd --check-only
 mkdir -p "$FLIGHT_OUTPUT"
 sha256sum "$SELECTED_SAVE" > "$FLIGHT_OUTPUT.source-save.sha256"
 DISPLAY=:98 LIBGL_ALWAYS_SOFTWARE=1 "$GODOT_BIN" \
     --path "$FLIGHT_PROJECT" --rendering-method gl_compatibility \
-    --audio-driver Dummy --script res://reel_flight_capture.gd -- \
+    --audio-driver Dummy --script res://studies/captures/reel_flight_capture.gd -- \
     "--save=$SELECTED_SAVE" "--assets=$NATIVE_ASSETS" \
     "--output=$FLIGHT_OUTPUT" --review=false --render-size=1920x1080
 sha256sum -c "$FLIGHT_OUTPUT.source-save.sha256"
