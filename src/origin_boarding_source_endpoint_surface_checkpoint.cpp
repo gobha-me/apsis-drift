@@ -1,4 +1,5 @@
 #include "apsis_drift/origin_boarding_source_endpoint_surface_checkpoint.hpp"
+#include "origin_boarding_lower_foot_transfer_surface_sweep_internal.hpp"
 #include "origin_boarding_source_endpoint_load_internal.hpp"
 #include "origin_boarding_source_endpoint_surface_checkpoint_internal.hpp"
 #include "origin_lower_cockpit_contact_internal.hpp"
@@ -837,4 +838,309 @@ auto assess_origin_boarding_source_endpoint_surface_checkpoint(
                      std::string> {
   return detail::boarding_source_endpoint_surface_checkpoint_bounded(provider);
 }
+namespace {
+using SweepContext = detail::BoardingLowerFootTransferSurfaceContext;
+using SweepCoverage = BoardingLowerFootTransferSurfaceSweepCoverage;
+using SweepPayload = BoardingLowerFootTransferSurfaceSweepPayload;
+static_assert(sizeof(SweepPayload) <=
+              kBoardingLowerFootTransferSurfaceMaximumPayloadBytes);
+static_assert(sizeof(SweepContext) == 872);
+// The owned child/fixed payload are separate. Include the immutable union
+// context, one reused kernel workspace, original nested/closest-feature pool,
+// callback/contact state, adapter arguments/returns and extra consumer
+// controls.
+constexpr std::size_t sweep_adapter_control_scratch =
+    2 * sizeof(std::expected<SweepCoverage, std::string>) +
+    2 * sizeof(std::expected<Pair, std::string>) + 32 * sizeof(std::size_t) +
+    sizeof(std::expected<SweepContext, std::string>);
+// Includes lowered immutable limits, the new refusal return/emplacement pool,
+// Root's <=256-byte Scan/pair/std::function/visitor/reference-wrapper pool,
+// 64 additional scalar/pointer controls and the crop's expected<bool> return.
+// The existing callback/contact pools are retained conservatively as well.
+constexpr std::size_t sweep_consumer_control_scratch =
+    sizeof(detail::BoardingLowerFootTransferSurfaceSweepLimits) +
+    sizeof(BoardingLowerFootTransferSurfaceSweepRefusal) + 256 +
+    64 * sizeof(std::size_t) + sizeof(std::expected<bool, std::string>);
+// Short literal helper errors may coexist with their propagated copy; account
+// for character storage as well as the expected/string objects above.
+constexpr std::size_t sweep_error_character_scratch{512};
+constexpr std::size_t sweep_live_scratch =
+    sizeof(SweepContext) + sizeof(Workspace) + nested_scratch +
+    return_and_callback_scratch + contact_helper_scratch +
+    sweep_adapter_control_scratch + sweep_consumer_control_scratch +
+    sizeof(SweepPayload) + sweep_error_character_scratch;
+// The extra fixed payload conservatively covers non-NRVO move/return staging.
+static_assert(sizeof(SweepPayload) == 1200);
+static_assert(sweep_live_scratch == 8176);
+static_assert(sweep_live_scratch <=
+              kBoardingLowerFootTransferSurfaceMaximumScratchBytes);
+
+auto sweep_binding_equal(const BoardingPlantedBodyPartBinding& a,
+                         const BoardingPlantedBodyPartBinding& b) -> bool {
+  if (a.id != b.id || a.mass.first != b.mass.first ||
+      a.mass.second != b.mass.second || a.mass.weight != b.mass.weight ||
+      a.reservation.index() != b.reservation.index())
+    return false;
+  if (const auto* box =
+          std::get_if<BoardingPlantedBodyBoxBinding>(&a.reservation)) {
+    const auto& other = std::get<BoardingPlantedBodyBoxBinding>(b.reservation);
+    return box->center == other.center &&
+           box->half_size_metres == other.half_size_metres &&
+           box->frame.columns == other.frame.columns;
+  }
+  const auto& capsule =
+      std::get<BoardingPlantedBodyCapsuleBinding>(a.reservation);
+  const auto& other =
+      std::get<BoardingPlantedBodyCapsuleBinding>(b.reservation);
+  return capsule.start == other.start && capsule.end == other.end &&
+         capsule.radius_metres == other.radius_metres;
+}
+auto sweep_evidence_valid(const BoardingPlantedBodyPointEvidence& point)
+    -> bool {
+  if (!valid_bounds(point.value)) return false;
+  for (const auto& d :
+       {point.derivatives.velocity, point.derivatives.acceleration})
+    if (!bounded(d.lower, 4096) || !bounded(d.upper, 4096) ||
+        d.lower.x > d.upper.x || d.lower.y > d.upper.y || d.lower.z > d.upper.z)
+      return false;
+  return true;
+}
+auto sweep_same_bounds(const PointBounds& a, const PointBounds& b) -> bool {
+  return a.lower == b.lower && a.upper == b.upper;
+}
+auto sweep_stationary_boot(const BoardingLowerFootTransferCell& cell,
+                           const BoardingSourceEndpointDiagnostic& endpoint,
+                           std::size_t side) -> bool {
+  const auto point = static_cast<std::size_t>(
+      side == 0 ? BoardingPlantedBodyPointId::port_boot_center
+                : BoardingPlantedBodyPointId::starboard_boot_center);
+  const auto& boot = cell.points[point];
+  const auto& initial = endpoint.body->points[point];
+  return cell.legs[side].plane_identity &&
+         sweep_same_bounds(boot.value, initial) &&
+         boot.derivatives.velocity.lower == Vec{} &&
+         boot.derivatives.velocity.upper == Vec{} &&
+         boot.derivatives.acceleration.lower == Vec{} &&
+         boot.derivatives.acceleration.upper == Vec{};
+}
+auto sweep_world_part(const BoardingLowerFootTransferDiagnostic& child,
+                      std::size_t part_index, const PointBounds* union_points,
+                      const BoardingLowerFootTransferCell* cell,
+                      WorkingPart& out) -> bool {
+  if (part_index >= child.parts.size() ||
+      (union_points == nullptr) == (cell == nullptr))
+    return false;
+  const auto& binding = child.parts[part_index];
+  if (static_cast<std::size_t>(binding.id) != part_index) return false;
+  const auto point_bounds =
+      [&](BoardingPlantedBodyPointId id) -> const PointBounds& {
+    const auto index = static_cast<std::size_t>(id);
+    return cell ? cell->points[index].value : union_points[index];
+  };
+  out = {};
+  out.id = binding.id;
+  if (const auto* box =
+          std::get_if<BoardingPlantedBodyBoxBinding>(&binding.reservation)) {
+    if (static_cast<std::size_t>(box->center) >=
+            kBoardingPlantedBodyPointCount ||
+        box->frame.columns != BoardingBodyFrame{}.columns ||
+        !bounded(box->half_size_metres) || box->half_size_metres.x <= 0 ||
+        box->half_size_metres.y <= 0 || box->half_size_metres.z <= 0)
+      return false;
+    out.shape =
+        Shape::box; // Full WORLD trunk/helmet boxes, never self ellipsoids.
+    out.first = point_bounds(box->center);
+    out.second = out.first;
+    out.half = box->half_size_metres;
+    if (binding.id == BoardingBodyPartId::port_boot ||
+        binding.id == BoardingBodyPartId::starboard_boot) {
+      const auto side = binding.id == BoardingBodyPartId::port_boot ? 0U : 1U;
+      const auto& leg = child.initial.self.endpoint.legs[side];
+      if (box->center !=
+              (side == 0 ? BoardingPlantedBodyPointId::port_boot_center
+                         : BoardingPlantedBodyPointId::starboard_boot_center) ||
+          box->half_size_metres != Vec{.06, .05, .14} || !leg.plane_identity ||
+          leg.boot_center_y_terms != std::array{leg.plane_metres, .05, -.847} ||
+          child.common_translation_y_metres != .847)
+        return false;
+      out.sole_identity = true;
+      out.sole_plane = leg.plane_metres;
+    }
+  } else {
+    const auto& capsule =
+        std::get<BoardingPlantedBodyCapsuleBinding>(binding.reservation);
+    if (static_cast<std::size_t>(capsule.start) >=
+            kBoardingPlantedBodyPointCount ||
+        static_cast<std::size_t>(capsule.end) >=
+            kBoardingPlantedBodyPointCount ||
+        !bounded(capsule.radius_metres) || capsule.radius_metres <= 0)
+      return false;
+    out.shape = Shape::capsule;
+    out.first = point_bounds(capsule.start);
+    out.second = point_bounds(capsule.end);
+    out.radius = capsule.radius_metres;
+  }
+  return valid_bounds(out.first) && valid_bounds(out.second);
+}
+auto sweep_coverage(const Workspace& work) -> SweepCoverage {
+  return {{work.minimum[0].low, work.minimum[1].low, work.minimum[2].low},
+          {work.maximum[0].high, work.maximum[1].high, work.maximum[2].high},
+          work.part.id,
+          true,
+          true,
+          false};
+}
+} // namespace
+
+namespace detail {
+auto prepare_boarding_lower_foot_transfer_surface(
+    const BoardingLowerFootTransferDiagnostic& child)
+    -> std::expected<SweepContext, std::string> {
+  const auto& endpoint = child.initial.self.endpoint;
+  const auto* contact = endpoint.sites.source.contact();
+  if (!child.complete || !child.arithmetic_supported ||
+      !child.kinematics_complete || !child.timing_complete ||
+      !child.self_complete || !child.nominal_vertical_equilibrium_complete ||
+      !child.finite_pressure_complete || child.first_refusal ||
+      child.transfer_version != kBoardingLowerFootTransferVersion ||
+      child.initial.load.load_version != kBoardingSourceEndpointLoadVersion ||
+      child.initial.self.self_version != kBoardingSourceEndpointSelfVersion ||
+      endpoint.endpoint_version != kBoardingSourceEndpointVersion ||
+      endpoint.sites.sites_version != kBoardingFootSitesVersion ||
+      !valid_load(child.initial) || !contact || !contact->stowed_partition() ||
+      child.common_translation_y_metres != .847 ||
+      child.seconds_per_parameter != 4 ||
+      !std::isfinite(child.requested_first) ||
+      !std::isfinite(child.requested_last) || child.requested_first < 0 ||
+      child.requested_first > 1 || child.requested_last < 0 ||
+      child.requested_last > 1 ||
+      child.reverse != (child.requested_first > child.requested_last) ||
+      child.reporting_elapsed_seconds !=
+          4 * std::abs(child.requested_last - child.requested_first) ||
+      child.cells.empty() ||
+      child.cells.size() > kBoardingLowerFootTransferMaximumLeaves)
+    return std::unexpected("Surface sweep requires genuine complete registered "
+                           "transfer and selected source");
+  if (!environment_supported())
+    return std::unexpected(
+        "Surface sweep requires supported RN/subnormal arithmetic");
+  WorkingPart part;
+  for (std::size_t i = 0; i < child.parts.size(); ++i)
+    if (!sweep_binding_equal(child.parts[i], endpoint.parts[i]) ||
+        !owned_part(endpoint, i, part))
+      return std::unexpected("Surface sweep original WORLD binding required");
+  SweepContext result(child);
+  auto previous = std::min(child.requested_first, child.requested_last);
+  bool first{true};
+  for (const auto& cell : child.cells) {
+    if (!cell.complete || !cell.arithmetic_supported ||
+        !cell.kinematics_complete || !cell.timing_complete ||
+        !cell.self_complete || !cell.positive_reactions ||
+        !cell.nominal_vertical_equilibrium_complete ||
+        !cell.finite_pressure_complete || !std::isfinite(cell.first) ||
+        !std::isfinite(cell.last) || cell.first != previous ||
+        cell.first > cell.last || !sweep_evidence_valid(cell.center_of_mass) ||
+        !std::ranges::all_of(cell.mass_points, sweep_evidence_valid) ||
+        !sweep_stationary_boot(cell, endpoint, 0) ||
+        !sweep_stationary_boot(cell, endpoint, 1))
+      return std::unexpected("Surface sweep requires unchanged complete closed "
+                             "cells and stationary original soles");
+    for (std::size_t i = 0; i < cell.points.size(); ++i) {
+      const auto& p = cell.points[i];
+      if (!sweep_evidence_valid(p))
+        return std::unexpected(
+            "Surface sweep finite ordered supported point jets required");
+      auto& u = result.union_points_[i];
+      if (first)
+        u = p.value;
+      else {
+        u.lower = {std::min(u.lower.x, p.value.lower.x),
+                   std::min(u.lower.y, p.value.lower.y),
+                   std::min(u.lower.z, p.value.lower.z)};
+        u.upper = {std::max(u.upper.x, p.value.upper.x),
+                   std::max(u.upper.y, p.value.upper.y),
+                   std::max(u.upper.z, p.value.upper.z)};
+      }
+    }
+    first = false;
+    previous = cell.last;
+  }
+  if (previous != std::max(child.requested_first, child.requested_last))
+    return std::unexpected(
+        "Surface sweep complete requested closed cover required");
+  return result;
+}
+auto boarding_lower_foot_transfer_surface_union_bounds(
+    const SweepContext& context, std::size_t part)
+    -> std::expected<SweepCoverage, std::string> {
+  if (!context.child_ || part >= context.child_->parts.size())
+    return std::unexpected("Surface sweep owned part index required");
+  if (!environment_supported()) return SweepCoverage{};
+  Workspace work;
+  if (!sweep_world_part(*context.child_, part, context.union_points_.data(),
+                        nullptr, work.part))
+    return std::unexpected(
+        "Surface sweep genuine original union binding required");
+  if (!enclosing_bounds(work, context.child_->common_translation_y_metres))
+    return SweepCoverage{};
+  return sweep_coverage(work);
+}
+auto boarding_lower_foot_transfer_surface_union_broad(
+    const SweepCoverage& coverage, const std::array<Vec, 3>& triangle)
+    -> std::expected<Pair, std::string> {
+  if (!coverage.arithmetic_supported || !finite_triangle(triangle) ||
+      !bounded(coverage.lower_metres, std::numeric_limits<double>::max()) ||
+      !bounded(coverage.upper_metres, std::numeric_limits<double>::max()) ||
+      coverage.lower_metres.x > coverage.upper_metres.x ||
+      coverage.lower_metres.y > coverage.upper_metres.y ||
+      coverage.lower_metres.z > coverage.upper_metres.z)
+    return std::unexpected("Surface union broad finite original triangle and "
+                           "immutable ordered AABB required");
+  if (!environment_supported()) return Pair{};
+  Workspace work;
+  for (std::size_t i = 0; i < world_axes.size(); ++i) {
+    work.minimum[i] = point(component(coverage.lower_metres, i));
+    work.maximum[i] = point(component(coverage.upper_metres, i));
+  }
+  Pair result;
+  result.arithmetic_supported = true;
+  static_cast<void>(broad_certificate(work, triangle, result));
+  return result;
+}
+auto boarding_lower_foot_transfer_surface_cell_pair(
+    const SweepContext& context, std::size_t part, std::size_t cell,
+    const LowerCockpitEffectiveTriangle& triangle, std::size_t max_axes)
+    -> std::expected<Pair, std::string> {
+  if (!context.child_ || part >= context.child_->parts.size() ||
+      cell >= context.child_->cells.size() || !triangle.obstacle ||
+      !finite_triangle(triangle.obstacle->points) ||
+      max_axes > kBoardingLowerFootTransferSurfaceMaximumPairAxes)
+    return std::unexpected("Surface sweep genuine part/cell and finite "
+                           "original source triangle/axes required");
+  if (!environment_supported()) return Pair{};
+  Workspace work;
+  if (!sweep_world_part(*context.child_, part, nullptr,
+                        &context.child_->cells[cell], work.part))
+    return std::unexpected(
+        "Surface sweep original per-cell WORLD binding required");
+  if (!enclosing_bounds(work, context.child_->common_translation_y_metres))
+    return Pair{};
+  // The selected visitor supplied this actual triangle. Its coordinates are
+  // finite-only; never pass through the old <=8 private numeric seam.
+  return pair_certificate(work, context.child_->common_translation_y_metres,
+                          triangle.obstacle->points, max_axes);
+}
+auto boarding_lower_foot_transfer_surface_union_bounds_math(const Solid& solid,
+                                                            double common_y)
+    -> std::expected<SweepCoverage, std::string> {
+  if (!valid_solid(solid) || !bounded(common_y))
+    return std::unexpected("Numeric union WORLD box/capsule finite bounds and "
+                           "common placement required");
+  if (!environment_supported()) return SweepCoverage{};
+  Workspace work;
+  work.part = numeric_part(solid); // No source authority or sole enrollment.
+  if (!enclosing_bounds(work, common_y)) return SweepCoverage{};
+  return sweep_coverage(work);
+}
+} // namespace detail
 } // namespace apsis_drift
