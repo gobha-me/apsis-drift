@@ -306,6 +306,7 @@ add_library(apsis_drift_core STATIC
   src/origin_cabin_corridor.cpp
   src/origin_boarding_body.cpp
   src/origin_boarding_route_body.cpp
+  src/origin_boarding_route_foot_phase.cpp
   src/origin_boarding_boot_support.cpp
   src/origin_boarding_world_checkpoint.cpp
   src/origin_boarding_source_endpoint_surface_checkpoint.cpp
@@ -470,6 +471,14 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-boarding-route-foot-phase-tests test/origin_boarding_route_foot_phase_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-foot-phase-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-foot-phase-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-route-foot-phase-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-foot-phase-contract COMMAND apsis-drift-boarding-route-foot-phase-tests)
+  set_tests_properties(boarding-route-foot-phase-contract PROPERTIES TIMEOUT 90)
+
   add_executable(apsis-drift-boarding-route-body-tests test/origin_boarding_route_body_test.cpp)
   target_link_libraries(apsis-drift-boarding-route-body-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-boarding-route-body-tests PRIVATE
