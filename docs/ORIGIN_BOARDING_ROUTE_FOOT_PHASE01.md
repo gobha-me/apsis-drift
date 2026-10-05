@@ -69,3 +69,21 @@ Independent tests define permitted source-free controls before first observation
 Oracles independently reconstruct unfactored sphere intersection, U/N/q nominal identities, rotated hip offsets and ankle/boot/sole terms, actual inverse rotation order, all15 shapes/masses/COM, rational yaw/trunk frames and first/second derivatives. Tests must prove moving ankle derivatives are not erased. Check directed120 cone F1<0, wrong knee branch, unsupported rho/D/gamma domains, exact zero derivatives at endpoint holds, point instantaneous jets, reverse first-only signs, subinterval originalT, full finite sole rotation speed, hip axial cross term (both signs), ankle pitch/roll inverse order, all invalid/nonfinite/workspace/carrier/hump/time/share domains, arithmetic environment/subnormal failures, zero/exact/one-less actual work/output and prefix flags.
 
 No support, source surface, self, material or live actor result may pass from this component. Pan-only seated branch and source-supported whole route remain #361 work. The result supplies substantive reusable exact target motion/body/timing machinery while current source/pan obstructions are investigated; it is not a labels-only metadata ticket.
+
+## Compile-only ownership clarification
+
+Before the first numerical observation, the implementation stores the fifteen
+immutable part/mass bindings once in the diagnostic. Every interval cell owns
+all fifteen mass-point jets and the full COM, referring to those same bindings;
+it does not duplicate the binding table. This changes storage ownership only.
+
+Compile-only sizes are 7,248 bytes for the working graph, 7,736 for a cell,
+680 for the request and 1,848 for the fixed expected result. The conservative
+simultaneous live ledger is 30,776 bytes, within the registered 32 KiB cap.
+Helper temporaries, bounded root scratch, DFS/control and the result/return
+overlap are included. Vector capacity remains separately charged to output.
+
+The constant and swing-value enclosures may intersect independently proven
+workspace or polynomial ranges. This tightens an enclosure without changing
+the exact expression. Over-domain controls refuse; there is no input repair
+or contact tolerance.
