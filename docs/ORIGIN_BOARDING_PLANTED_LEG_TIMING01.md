@@ -1,209 +1,132 @@
 # Bounded timing for planted leg recipe01
 
-Registered for #426 on 2026-10-05 before timing implementation or fixture evaluation.
-Publication depends on #425 merge. The fixed #425 constants, branch, original
-12-second clock and completed kinematic records remain unchanged.
+Registered for #426 on 2026-10-05 before timing implementation or fixture
+evaluation. Publication depends on #425 merge. The original registration is
+preserved in the commit history; this document describes the selected cut.
 
-#361 needs movement timing as well as exact contact. #425 establishes the fixed, source-free mixed-height paired-leg closure and joint limits; its recorded 12-second duration is not a speed or acceleration certificate. Implement bounded derivatives of that same recipe before fitting a source-backed route.
+## Fixed recipe and clock
 
-Plan:
-- Add a separately named/versioned source-free timing query for the exact #425 recipe. Public input remains finite closed parameter endpoints in [0,1], including reverse and point requests; no caller geometry, duration fitting, angle overrides or supplied certificate flags. Preserve #425 diagnostics and their recorded outcomes.
-- Freeze the same root/hip/ankle/plane/link constants and positive knee branch. Use the original clock seconds=12*t; first derivatives scale by 1/12 and second derivatives by 1/144. A subinterval retains that clock. Reverse changes physical first-derivative signs, preserving second derivatives and ascending spatial coverage.
-- Bound value/first/second derivatives of the fixed analytic leg expressions with purpose-specific local interval triples. Derivative square-root/reciprocal domains must be proven strictly positive over every leaf. No generic expression framework, finite-difference production authority or derivative of rounded reports.
-- Derive hip/shin angular rates from (F*G'-G*F')/L^2 and angular second derivatives from (F*G''-G*F'')/L^2 using the exact link identity. Knee is hip minus shin; flat ankle pitch is minus shin. Derived roll uses its variable rho^2 denominator and existing side signs. Keep all current position/sector prerequisites. For the orthogonal Rz/Rx axes, certify hip speed sqrt(roll_rate^2+hip_pitch_rate^2), knee speed abs(hip_pitch_rate-shin_pitch_rate), and flat ankle speed sqrt(roll_rate^2+shin_pitch_rate^2); coordinate-rate reports alone cannot grant joint-speed qualification.
-- Freeze the existing applicable policy limits: root speed <=.25m/s, root acceleration <=.10m/s^2 and physical resultant relative leg-joint angular speed <=30degrees/s. Both planted soles are constant, with exact zero derivatives. Report point/angular second derivatives without inventing joint angular-acceleration or knee-point limits. These root/leg certificates do not qualify full-body COM/load acceleration or a free-foot swing.
-- Retain binary64 nearest/gradual-underflow arithmetic admission and depth12/nodes8191/leaves4096 ceilings, with a fixed straight-line expression graph and owned leaf evidence. Complete results require all derivative domains, applicable limits and a gap-free closed cover. Preserve closure evidence distinctly when derivative timing refuses; exact straight reach may be closure-valid but derivative-singular. No capacity enlargement or duration/fixture tuning after refusal.
+Use the [exact planted-leg recipe](ORIGIN_BOARDING_PLANTED_LEGS01.md) unchanged:
+rootX=.32*t²*(3-2*t), rootY=.72, rootZ=-.16; hip X offsets -.14/+.14;
+port ankle X=.02/Z=-.35 on plane0; starboard ankle X=.34/Z=-.65 on plane-.16;
+nominal links .47285/.47478; exact ankle/boot height expressions .1/.05;
+upright pelvis, yaw0 and fixed forward knee branch. The old closure evaluator,
+types and evaluation order remain unchanged. This work does not fit a ship.
 
-Acceptance:
-- Observe the frozen full/subinterval/reverse/point outcomes without changing recipe or clock. All successful timing bounds enclose actual analytic derivatives over their complete leaves; samples corroborate but cannot certify.
-- Independently reconstruct derivatives using higher precision and unfactored analytic forms; cross-check knee rates with a separate cosine-angle derivative away from singularities. Verify exact zero planted-foot derivatives, root critical-point extrema, clock conversion and reverse signs.
-- Exercise derivative reach/rho/gamma singularity, nonfinite/overflow/unsupported arithmetic, angular-rate threshold/nextafter boundaries, incomplete subdivision and every capacity. Distinguish closure, derivative and timing refusal without false complete/route flags.
-- Full GCC/Clang native builds/tests, pinned format20/tidy20 and current boarding/boot/self/world/walk/save/flight regressions.
+The original clock is seconds=12*t. Divide first parameter derivatives by12
+and second derivatives by144. Reverse negates physical first bounds as
+[-upper,-lower], preserving second derivatives and ascending spatial coverage.
+Subintervals retain the original clock; elapsed time is12*abs(last-first).
+Point requests describe instantaneous derivatives rather than stationary holds.
+The endpoints have zero root velocity but nonzero root acceleration; stationary
+C2 joins and supported pauses are not established by these results.
 
-This is the missing timing seam for the active #361 transfer. Whole-body expression/self ownership, finite load, source/crop sweeps, swing phases, pan-supported seating, actor/save integration and First Flight remain open. No asset/master/capture/material-proof replay, old-source mutation or new gameplay gate. Publication depends on #425 merge.
+## Public result and ownership
 
-## Numeric workspace and API registration
+`assess_origin_boarding_planted_legs_timing(first,last)` accepts only finite
+closed endpoints in [0,1], including reverse and point requests. It returns a
+separately versioned diagnostic owning the unchanged closure result, a separate
+bounded timing cover and the first owned refusal. No caller duration, geometry,
+angle override, expression tree or supplied success flag is accepted.
 
-Append a separately named/versioned timing API to the existing planted-leg
-module. Preserve the original evaluator and evaluation order. The timing result
-owns unchanged closure evidence plus a separately bounded ascending timing
-cover; closure acceptance survives derivative refusal. Complete timing requires
-both complete closure and gap-free derivative/limit evidence for every leaf.
+Each timing leaf owns hip/knee/ankle/boot-center velocity and acceleration
+bounds, signed coordinate angular first/second derivatives and physical
+resultant hip/knee/ankle speed bounds for both legs. Units are m/s, m/s²,
+rad/s and rad/s². Coordinate angle second derivatives are not complete physical
+angular-acceleration vectors. Elapsed time metadata does not retime the curve.
 
-Private adversaries use world hip value/first/second derivative vectors, with
-values within +/-8m and per-parameter first/second component magnitude <=4096.
-Ankle X/Z and plane remain within +/-8m; each link is in [1e-6,4]m; the forward
-branch stays mandatory. These private inputs are never public route geometry.
-Unsupported finite operations, arithmetic environments or derivative domains
-refuse. Freeze independent timing subdivision depth12/nodes8191/leaves4096;
-the owned old closure diagnostic retains its unchanged separate budget. No
-expression graph or unbounded scratch/catalog allocations are introduced.
+Complete timing requires complete closure plus a gap-free closed timing cover
+whose every leaf passes derivative domains, root limits and both legs' physical
+joint-speed limits. A timing refusal preserves existing closure evidence without
+granting whole-request derivative or timing flags. Self, load, full-body COM,
+world, route, actor, seat, save, dynamics and free-foot swing remain unqualified.
 
-Use physical resultant relative joint angular speed: for the orthogonal
-Rz(phi)*Rx(theta) axes, the hip squared speed is phi_dot^2+theta1_dot^2,
-knee squared speed is (theta1_dot-theta2_dot)^2 and flat ankle squared speed
-is phi_dot^2+theta2_dot^2. Bound these against the certified exact pi/6 rad/s
-threshold. Hip-abduction coordinates are port -phi/star +phi; local flat ankle
-roll is -phi on both sides. Coordinate second derivatives are reported as such,
-not as complete angular-acceleration vectors. No angular-acceleration policy
-threshold or full-body dynamics claim is introduced.
+## Analytic derivative construction
 
-The original clock is seconds=12*t. Physical first derivatives divide by12,
-second derivatives by144; reverse negates first bounds, preserving seconds and
-second derivatives. Point queries describe instantaneous curve derivatives.
-Elapsed subinterval time is12*abs(last-first), and does not retime the curve.
-No timing outcome is predicted or selected before evaluation.
-
-## Source-only derivative construction plan
-
-# Fixed planted-leg recipe: bounded derivative/timing next step
-
-Source-only planning, 2026-10-05. No new issue/API/code, fixture query, build,
-tracked change, geometry source read or prior proof replay was performed.
-
-## Existing scope and timing
-
-`docs/LOWER_TRANSFER_POLICY.md` registers root speed .25 m/s, swing-sole speed
-.35 m/s, joint angular speed 30 degrees/s and surrogate root/load acceleration
-.10 m/s². It does not register an angular-acceleration limit. GitHub #361 keeps
-continuous whole-body clearance, support/load transfer and route admission open.
-`docs/ORIGIN_BOARDING_PLANTED_LEGS01.md` and
-`src/origin_boarding_planted_legs.cpp` define only the fixed paired-leg recipe,
-its complete closure/angle bounds and duration12 s. Keep those claims intact.
-
-Use normalized parameter t and the existing fixed clock s=12t. Full forward
-play has dt/ds=1/12; reverse play has -1/12. Derivatives with respect to seconds
-are first derivatives divided by12, and second derivatives divided by144.
-Subintervals retain this original clock, with elapsed duration
-12*abs(last-first); do not silently traverse every subinterval in12 s or
-compress it into another duration. A point request is an instantaneous bound
-on the original curve, not a zero-speed pause. No caller duration fitting is
-needed for this cut.
-
-The root expression and its exact derivatives are:
-
-```
-x  = .32*t²*(3-2t)
-x' = .32*6*t*(1-t)
-x''= .32*(6-12t)
-```
-
-Prime denotes differentiation with respect to t. Y/Z and the common .72 Y
-placement are constant. Both planted ankles and boot centers are constant, so
-their first/second derivatives are exactly zero. This grants no free-foot swing
-capability. The analytic root maxima can be bounded directly using monotonic
-pieces and the t=.5 critical point; evaluating samples is unnecessary.
-
-## Small purpose-specific derivative graph
-
-Extend the existing bounded interval evaluation of the same fixed expressions
-with value/first/second derivative triples, locally named for this recipe.
-Do not build a public expression walker, automatic-differentiation framework,
-editable node registry or alternate kinematics. Retain the current algebraic
-identities, bone lengths, derived plane, positive gamma branch and joint sectors.
-
-For interval triples, addition is componentwise. For multiplication,
-(ab)'=a'b+ab' and (ab)''=a''b+2a'b'+ab''. For reciprocal,
+Use purpose-specific local triples {value,first,second} on the fixed expressions.
+For a product, (ab)'=a'b+ab' and (ab)''=a''b+2a'b'+ab''. For reciprocal,
 (1/a)'=-a'/a² and (1/a)''=2a'²/a³-a''/a². For y=sqrt(a),
-y'=a'/(2y) and y''=a''/(2y)-a'²/(4y³). Every operation uses the existing
-outward finite interval discipline. Derivative denominators must be proved
-away from zero over the entire leaf, never by its midpoint.
+y'=a'/(2y) and y''=a''/(2y)-a'²/(4y³). Every operation uses finite outward
+bounds; complete leaf denominators must be proven away from zero.
 
-Carry these triples through d=A-H, rho²=dx²+dy², D=rho²+dz²,
-alpha=(L1²-L2²+D)/(2D), the existing factored gamma², gamma, q and
-K=H+alpha*d+gamma*q. Report knee point velocity/acceleration bounds and retain
-unchanged hip/ankle/boot point identities. Do not differentiate rounded reported
-joints, sampled inverse angles or independently normalized stored frames.
+Propagate through d, rho², D, alpha, factored gamma², gamma, q and K from the
+registered closure. Do not differentiate rounded report joints or inverse-angle
+reports. Root derivatives are .32*6*t*(1-t) and .32*(6-12*t); the first has a
+fixed critical point at t=.5 and the second is affine. Every planted ankle/boot
+coordinate and the common .72 placement have exact zero derivatives.
 
-Require positive lower bounds for rho, D and gamma² when invoking their
-inverse/square-root derivative formulas. Closure allows exact straight reach;
-this derivative cut may conservatively refuse it. A vanishing radicand can
-have a finite derivative after correlated cancellation, but no unregistered
-limit or guessed zero is introduced to make that case pass. Preserve closure
-acceptance separately from derivative refusal.
+For the registered down/forward components F/G and constant bone length L,
+exact link identities give theta'=(F*G'-G*F')/L² and
+ theta''=(F*G''-G*F'')/L². Hip/shin retain the existing certified pitch sectors.
+Knee is hip minus shin; flat ankle pitch is minus shin. Roll phi=atan2(dx,-dy)
+uses its variable rho² denominator and quotient second derivative. Hip-abduction
+coordinates are port -phi/star +phi; flat ankle roll is -phi on both sides.
 
-## Angular rates without inverse-angle permission
+## Frozen policy and bounds
 
-Keep #425's down/forward components F1,G1,F2,G2 and certified pitch quadrants.
-For theta=atan2(G,F), the constant bone-length identity gives:
+The [lower transfer policy](LOWER_TRANSFER_POLICY.md) supplies root speed
+<=.25m/s, root acceleration <=.10m/s² and joint angular speed <=30degrees/s.
+This cut certifies the root and constrained legs only; it cannot qualify
+full-body COM/load acceleration. Planted soles are stationary by construction.
+Report knee point and coordinate angular accelerations without inventing new
+limits or a free-foot swing policy.
 
-```
-theta'  = (F*G' - G*F') / L²
-theta'' = (F*G''- G*F'') / L²
-```
+Joint angular speed means the physical resultant relative rotation. Orthogonal
+Rz(phi)*Rx(theta) axes give hip speed sqrt(phi_dot²+theta1_dot²), knee speed
+abs(theta1_dot-theta2_dot) and flat ankle speed sqrt(phi_dot²+theta2_dot²).
+Bound these against certified pi/6 rad/s; individual component caps do not
+suffice. This choice was frozen before implementation or timing evaluation.
 
-This uses F²+G²=L² by the registered analytic construction. It does not assume
-that independently rounded sine/cosine reports lie on a unit circle. Compute
-hip and shin angular derivative bounds this way. Knee rates are hip minus shin;
-flat ankle pitch rates are minus shin. Branch/sector certification remains
-mandatory so the reported physical angle is continuous and correctly oriented.
+Retain binary64 nearest rounding, actual nearest-addition probes, gradual
+underflow and preserved subnormal input admission. Unsupported arithmetic,
+overflow, nonfinite bounds or uncertain derivative domains refuse. Inverse
+square-root derivatives require rho, D and gamma² bounded strictly positive.
+Straight reach may be derivative-singular; do not loosen old closure acceptance
+to manufacture a boundary example or guess a removable derivative limit.
 
-For derived roll phi=atan2(dx,-dy), let F=-dy, G=dx and R=F²+G²=rho².
-Then B=F*G'-G*F', phi'=B/R and
-phi''=(F*G''-G*F'')/R-B*R'/R². Use the port/starboard sign convention of
-#425 for hip abduction and the opposite physical roll for the flat ankle;
-absolute speed limits are unchanged. R is variable, unlike the bone-length
-denominators. No rounded angle difference or acos differentiation near straight
-knees is used as production authority.
+Timing subdivision has independent depth12/nodes8191/leaves4096 ceilings, with
+left-first shared endpoints and a final closed-cover check. The owned closure
+result keeps its separate unchanged budget. Storage is bounded to these two
+leaf vectors and the fixed local expression graph. There is no hidden retry,
+capacity enlargement, generic expression framework or duration/fixture tuning.
 
-Convert rates to seconds before comparisons. The 30-degrees/s bound is pi/6
-radians/s; prove abs(rate).upper <= the lower enclosure of that exact threshold
-using the existing certified pi bracket. Degree reports use bounded conversion
-and are secondary. Report angular second derivatives, but do not invent an
-angular-acceleration policy threshold. These leg rates do not establish actual
-whole-body rotation or kinetic/force balance.
+Private adversaries accept world hip values within +/-8m and per-parameter
+first/second component magnitudes <=4096. Ankle X/Z and plane stay within +/-8m,
+links in [1e-6,4]m, side0/1 and the forward branch remain mandatory. Private
+geometry, derivative and speed-comparison seams do not become public authority.
 
-## Complete bounded certificates and refusal
+## Independent checks and observed results
 
-Retain binary64 round-to-nearest, gradual-underflow and preserved-subnormal
-environment checks before authority-bearing arithmetic. Unsupported products,
-roots, denominators, overflow, nonfinite bounds, singular derivatives or
-uncertain comparisons refuse. Keep depth12/nodes8191/leaves4096 as prospective
-ceilings; do not enlarge them after evaluating the frozen recipe. Additional
-named expression storage/work bounds must be declared before implementation.
+Tests independently differentiate unfactored sphere-intersection expressions
+with higher precision, reconstruct segment/plane derivatives and cross-check
+knee rates with a cosine-angle derivative away from singularities. Samples
+corroborate complete interval enclosures; they never certify a curve.
 
-Reuse left-first subdivision over the original requested interval, with the
-same exact endpoint-sharing and final gap-free cover check. An accepted leaf
-needs both legs' closure/angle certificates and derivative/timing certificates.
-Return distinct closure-complete, derivative-complete and applicable timing
-flags, with the first side/interval/domain or limit refusal and honest counts.
-An accepted prefix never grants a complete result. Reverse queries retain the
-same ascending spatial cover; physical first derivatives change sign and
-second derivatives do not. Leaf bounds may subdivide further for derivative
-conditioning; no pose or duration changes follow from a refusal.
+Check original-clock subinterval/point/reverse behavior, structural planted
+zeros, root critical extrema, exact differentiated link identities, physical
+resultant norms and an adversary whose two individually acceptable components
+exceed the resultant speed limit. Domain, nextafter/nonfinite, environment,
+capacity and truthful-prefix controls remain mandatory. Preserve all existing
+closure and native boarding/boot/self/world/walk/save/flight regressions.
 
-Root speed/acceleration may be compared to the policy limits for this fixed
-root curve alone. Planted sole speed is zero by construction. Joint speed
-certification concerns these two constrained legs only. Full-body COM/load
-acceleration remains false: the recipe contains neither all15 mass trajectories
-nor their consistent constrained self/world ownership. No load, self, source
-sweep, route, actor, seated or save-phase admission follows.
+The frozen timing fixture passes full/reverse [0,1] requests with 20 leaves,
+39 examined nodes and maximum depth 5. Halves have 10 leaves/19 nodes/depth 4;
+[.25,.5] has 7 leaves/13 nodes/depth 3; [.125,.875] has 16 leaves/31 nodes/depth 4.
+All five registered point requests qualify with one leaf. Both compilers pass
+the final independent timing contract's 86,985 checks and the unchanged
+closure contract's 18,829 checks. No curve, clock, branch, dimension, limit or
+workspace was changed after evaluation.
 
-The cubic has zero root velocity at t=0/1 but nonzero endpoint second derivative.
-Extension by stationary holds is C1, generally not C2. Do not claim a smooth
-acceleration join or a supported pause from endpoint timing alone; later route
-composition must explicitly declare its join/one-sided acceleration semantics.
+The first builds found two unnecessary copies in test loops; references fixed
+them before execution. Initial execution found one private pure-lateral input
+refusing a zero knee rate: widened subtraction introduced an artificial
+subnormal interval. Reusing existing equal-singleton subtraction independently
+for value/first/second preserves exact cancellation without zeroing genuine
+derivatives or changing the old evaluator. Independent review confirms the
+correction, and all original fixture outcomes remain unchanged.
 
-## Meaningful independent controls before acceptance
-
-* Verify value/closure enclosures and exact planted identities remain those of
-  #425; every returned derivative uses the same fixed branch and placement.
-* Corroborate point bounds independently at endpoints and interior parameters,
-  using a test-only higher-precision reconstruction with the unfactored
-  gamma²=L1²/D-alpha² and independently differentiated formulas. These points
-  test bounds; they do not replace complete leaf certification.
-* Cross-check knee rates with an independent test-only cosine-angle derivative
-  away from straight/folded singularities; check hip/shin sectors and roll signs.
-* Check full/subinterval/reverse covers, seconds conversion, point requests,
-  fixed-duration ownership, first-derivative sign reversal and unchanged second
-  derivatives. Test root critical-point bounds and exactly zero planted-foot
-  derivatives directly.
-* Exercise private synthetic reach/rho/gamma singularities, tiny denominators,
-  overflow/nonfinite inputs, directed rounding/FTZ/DAZ denial, angular-rate
-  threshold and nextafter boundaries, unsplittable intervals and every capacity.
-* Retain honest partial refusal and all false full-body/load/world/route flags.
-  Endpoint finite differences may corroborate reports but never certify timing.
-
-GCC/Clang publication checks and pinned format/tidy follow a separately
-registered implementation. This plan makes no assertion that the frozen
-12-second recipe passes all future timing certificates.
+Full native builds pass on GCC and Clang, each with 53/53 tests (21.64s and
+21.41s respectively). Pinned format20, all 143 tidy20 translation units and
+the existing 31 justified suppression directives pass. No whole-body clearance, source-backed load transfer,
+seated endpoint, actor action, save phase, rendered capture or First Flight
+completion is granted by this timing cut.
