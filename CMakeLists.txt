@@ -307,6 +307,7 @@ add_library(apsis_drift_core STATIC
   src/origin_boarding_body.cpp
   src/origin_boarding_boot_support.cpp
   src/origin_boarding_world_checkpoint.cpp
+  src/origin_boarding_planted_legs.cpp
   src/origin_boarding_self_model02.cpp
   src/origin_boarding_self_model03.cpp
   src/rigid_body.cpp
@@ -361,7 +362,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_planted_legs.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -511,6 +512,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-world-checkpoint-contract COMMAND apsis-drift-boarding-world-checkpoint-tests)
   set_tests_properties(boarding-world-checkpoint-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-boarding-planted-legs-tests test/origin_boarding_planted_legs_test.cpp)
+  target_link_libraries(apsis-drift-boarding-planted-legs-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-planted-legs-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-planted-legs-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-planted-legs-contract COMMAND apsis-drift-boarding-planted-legs-tests)
+  set_tests_properties(boarding-planted-legs-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-cabin-corridor-tests test/origin_cabin_corridor_test.cpp)
   target_link_libraries(apsis-drift-cabin-corridor-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-cabin-corridor-tests PRIVATE
