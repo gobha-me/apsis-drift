@@ -392,9 +392,9 @@ auto all_angles(const BoardingBodySidePose& s) -> std::array<double, 12> {
 auto within(double value, double low, double high) -> bool {
   return value >= low && value <= high;
 }
-auto validate(const BoardingBodyPose& p)
+auto validate(const BoardingBodyPose& p, std::uint32_t policy)
     -> std::expected<void, BoardingBodyError> {
-  if (p.policy_version != kBoardingBodyPolicyVersion)
+  if (p.policy_version != policy)
     return std::unexpected(BoardingBodyError::unsupported_policy);
   if (!finite(p.hip_metres))
     return std::unexpected(BoardingBodyError::non_finite_input);
@@ -417,11 +417,19 @@ auto validate(const BoardingBodyPose& p)
       p.neck_roll_degrees != 0)
     return std::unexpected(BoardingBodyError::unsupported_freedom);
   for (const auto& s : p.sides)
-    if (s.hip_abduction_degrees != 0 || s.hip_axial_degrees != 0 ||
-        s.ankle_roll_degrees != 0 || s.shoulder_abduction_degrees != 0 ||
-        s.shoulder_axial_degrees != 0 || s.wrist_pitch_degrees != 0 ||
-        s.wrist_yaw_degrees != 0 || s.wrist_roll_degrees != 0)
+    if ((policy == kBoardingBodyPolicyVersion &&
+         s.hip_abduction_degrees != 0) ||
+        s.hip_axial_degrees != 0 || s.ankle_roll_degrees != 0 ||
+        s.shoulder_abduction_degrees != 0 || s.shoulder_axial_degrees != 0 ||
+        s.wrist_pitch_degrees != 0 || s.wrist_yaw_degrees != 0 ||
+        s.wrist_roll_degrees != 0)
       return std::unexpected(BoardingBodyError::unsupported_freedom);
+  const auto lateral = policy == kBoardingBodyLateralPolicyVersion &&
+                       std::ranges::any_of(p.sides, [](const auto& side) {
+                         return side.hip_abduction_degrees != 0;
+                       });
+  if (lateral && p.pelvis_lean_degrees != 0)
+    return std::unexpected(BoardingBodyError::unsupported_freedom);
   if (!within(p.yaw_degrees, -180, 180) ||
       !within(p.pelvis_lean_degrees, -35, 35) ||
       !within(p.torso_relative_lean_degrees, -35, 35) ||
@@ -429,6 +437,8 @@ auto validate(const BoardingBodyPose& p)
     return std::unexpected(BoardingBodyError::joint_limit);
   for (const auto& s : p.sides)
     if (!within(s.hip_flex_degrees, -20, 120) ||
+        !within(s.hip_abduction_degrees, -35, 35) ||
+        !within(s.hip_abduction_degrees, -15, 15) ||
         !within(s.knee_flex_degrees, 0, 135) ||
         !within(s.shoulder_flex_degrees, -30, 150) ||
         !within(s.elbow_flex_degrees, 0, 145) ||
@@ -614,11 +624,13 @@ auto boarding_body_box_box(const Box& a, const Box& b) -> Narrow {
 }
 } // namespace detail
 
-auto evaluate_origin_boarding_body(const BoardingBodyPose& p)
+namespace {
+auto evaluate_body(const BoardingBodyPose& p, std::uint32_t policy)
     -> std::expected<BoardingBodyDiagnostic, BoardingBodyError> {
-  if (const auto checked = validate(p); !checked)
+  if (const auto checked = validate(p, policy); !checked)
     return std::unexpected(checked.error());
   BoardingBodyDiagnostic result;
+  result.policy_version = policy;
   const auto root =
       detail::boarding_body_rotation(p.yaw_degrees * radians_per_degree, 0);
   const auto pelvis =
@@ -648,9 +660,18 @@ auto evaluate_origin_boarding_body(const BoardingBodyPose& p)
     const auto& angles = p.sides[side];
     auto& joints = result.joints[side];
     const auto sign = side == 0 ? -1.0 : 1.0;
-    const auto thigh =
-        multiply(pelvis, detail::boarding_body_rotation(
-                             0, angles.hip_flex_degrees * radians_per_degree));
+    auto hip_frame = pelvis;
+    if (angles.hip_abduction_degrees != 0) {
+      const auto roll =
+          sign * angles.hip_abduction_degrees * radians_per_degree;
+      const auto c = std::cos(roll), s = std::sin(roll);
+      const BoardingBodyFrame abduction{
+          {Vec{c, s, 0}, Vec{-s, c, 0}, Vec{0, 0, 1}}};
+      hip_frame = multiply(root, abduction);
+    }
+    const auto thigh = multiply(
+        hip_frame, detail::boarding_body_rotation(0, angles.hip_flex_degrees *
+                                                         radians_per_degree));
     const auto shin =
         multiply(thigh, detail::boarding_body_rotation(
                             0, -angles.knee_flex_degrees * radians_per_degree));
@@ -669,6 +690,10 @@ auto evaluate_origin_boarding_body(const BoardingBodyPose& p)
     joints.required_ankle_pitch_degrees =
         -(p.pelvis_lean_degrees + angles.hip_flex_degrees -
           angles.knee_flex_degrees);
+    joints.required_ankle_roll_degrees =
+        angles.hip_abduction_degrees == 0
+            ? 0
+            : -sign * angles.hip_abduction_degrees;
     joints.shoulder_metres =
         add(p.hip_metres, rotate(trunk, {sign * .20265, .579, 0}));
     joints.elbow_metres =
@@ -728,5 +753,14 @@ auto evaluate_origin_boarding_body(const BoardingBodyPose& p)
       pair_index != kBoardingBodyPairCount)
     return std::unexpected(BoardingBodyError::numerical_failure);
   return result;
+}
+} // namespace
+auto evaluate_origin_boarding_body(const BoardingBodyPose& p)
+    -> std::expected<BoardingBodyDiagnostic, BoardingBodyError> {
+  return evaluate_body(p, kBoardingBodyPolicyVersion);
+}
+auto evaluate_origin_boarding_body02(const BoardingBodyPose& p)
+    -> std::expected<BoardingBodyDiagnostic, BoardingBodyError> {
+  return evaluate_body(p, kBoardingBodyLateralPolicyVersion);
 }
 } // namespace apsis_drift

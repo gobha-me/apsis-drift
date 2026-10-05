@@ -9,6 +9,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kBoardingBodyPolicyVersion{1};
+inline constexpr std::uint32_t kBoardingBodyLateralPolicyVersion{2};
 inline constexpr std::size_t kBoardingBodyPartCount{15};
 inline constexpr std::size_t kBoardingBodyPairCount{105};
 inline constexpr std::uint32_t kBoardingBodyMassDenominator{1200};
@@ -23,8 +24,8 @@ inline constexpr double kBoardingBodyStandingCrownMetres{1.93};
 struct BoardingBodySidePose {
   double hip_flex_degrees{}, knee_flex_degrees{}, shoulder_flex_degrees{},
       elbow_flex_degrees{};
-  // These freedoms have no registered policy01 joint frame. Any nonzero
-  // request refuses, even inside a historical numerical joint limit.
+  // Only the named policy02 evaluator admits hip abduction. The other
+  // freedoms, including manual ankle roll, have no registered input frame.
   double hip_abduction_degrees{}, hip_axial_degrees{}, ankle_roll_degrees{},
       shoulder_abduction_degrees{}, shoulder_axial_degrees{},
       wrist_pitch_degrees{}, wrist_yaw_degrees{}, wrist_roll_degrees{};
@@ -89,6 +90,7 @@ struct BoardingBodySideJoints {
   RigidVector3 hip_metres, knee_metres, ankle_metres, sole_origin_metres,
       shoulder_metres, elbow_metres, wrist_metres;
   double required_ankle_pitch_degrees{};
+  double required_ankle_roll_degrees{};
 };
 enum class BoardingBodyIntersection : std::uint8_t {
   separated_or_contact,
@@ -126,5 +128,10 @@ struct BoardingBodyDiagnostic {
   static constexpr bool route_qualified{false};
 };
 [[nodiscard]] auto evaluate_origin_boarding_body(const BoardingBodyPose&)
+    -> std::expected<BoardingBodyDiagnostic, BoardingBodyError>;
+// Explicit policy2, upright-pelvis lateral branch with derived flat ankles.
+// Zero-abduction geometry follows the unchanged policy1 arithmetic. This is
+// kinematic diagnostic evidence only; Recipe03 still accepts policy1 alone.
+[[nodiscard]] auto evaluate_origin_boarding_body02(const BoardingBodyPose&)
     -> std::expected<BoardingBodyDiagnostic, BoardingBodyError>;
 } // namespace apsis_drift

@@ -111,3 +111,8 @@ actual common-interior witnesses, malformed inputs and exact/neighboring
 binary64 contact cases. Its wider arithmetic is independent test evidence,
 not production geometry authority. Existing world queries, actor actions and
 saves do not consume this diagnostic.
+
+The separate [lateral policy02 evaluator](ORIGIN_BOARDING_LATERAL_BODY02.md)
+adds a bounded, explicitly versioned hip-abduction frame for load-shift
+diagnostics. This policy01 evaluator and Recipe03 keep their existing contracts;
+new lateral poses require later self/source/support qualification.
