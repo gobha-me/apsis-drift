@@ -256,3 +256,26 @@ terms cannot inherit the fixed template even when their arithmetic cancels.
 This changes no original body coordinate and supplies no provider authority.
 
 No new surface outcome has been observed at this accounting checkpoint.
+
+
+## First registered observations — 2026-10-05 20:15 UTC
+
+The first GCC and Clang executions produced byte-identical logs:1423 checks,
+zero failures. The fixed endpoint covers all15 original-shape crops and
+certifies all6125085 pairs against408339 effective triangles. Broad bounds
+certify6125080 pairs; ordinary support certifies the remaining5 through20 axis
+attempts, with zero unsupported axes. The separate sole predicate certifies
+zero pairs because the authenticated sole minimum already permits broad
+separation. Mathematical callbacks total6125085; metadata callbacks total1.
+There is no refusal. Surface qualification completes; enclosing-volume,
+material, overall-world and movement qualification remain false.
+
+Only after recording these first observations, the test adds positive
+regressions for the observed result, crops and counters, plus a full assessment
+with its pair budget set exactly to6125085. That exact budget must reproduce
+the complete child and surface evidence. Producer arithmetic, source geometry,
+body dimensions, placement and the registered hard ceilings are unchanged.
+
+The final observed-result contract passes1442 checks with zero failures on each
+compiler, including the exactly-full-budget replay. Complete native suites
+pass62/62 on GCC and Clang (37.80s and35.82s respectively).

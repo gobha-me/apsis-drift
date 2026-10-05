@@ -1511,6 +1511,33 @@ auto prefix_controls(const OriginBoardingBootSupport& p, const Inventory& inv,
         "Zero axis cap preserves broad-only work, no hidden sole/support "
         "proposal");
 }
+// Registered only after the first identical GCC/Clang observations.
+auto observed_regressions(const OriginBoardingBootSupport& provider,
+                          const Surface& actual) -> void {
+  const auto& s = actual.surface;
+  check(s.arithmetic_supported && s.coverage_complete &&
+            s.comparisons_complete && s.surface_qualified && s.complete &&
+            !s.first_refusal,
+        "Observed fixed original-shape endpoint retains complete surface "
+        "clearance");
+  check(s.effective_triangle_count == 408339 && s.expected_pairs == 6125085 &&
+            s.examined_pairs == 6125085 && s.certified_pairs == 6125085 &&
+            s.visited_triangles == 6125085 && s.metadata_visited_triangles == 1,
+        "Observed full denominator and callback counts remain exact");
+  check(s.broad_certified_pairs == 6125080 && s.sole_certified_pairs == 0 &&
+            s.support_certified_pairs == 5 && s.axes_examined == 20 &&
+            s.unsupported_axes == 0,
+        "Observed broad and support certificates retain their fixed counts");
+  for (const auto& crop : s.coverage)
+    check(crop.examined && crop.arithmetic_supported && crop.covered,
+          "All fifteen observed original-shape crops remain covered");
+  const auto exact =
+      require(detail::boarding_source_endpoint_surface_checkpoint_bounded(
+          provider, 10, 1, 105, 14, 10, s.expected_pairs));
+  check(snapshot(exact) == snapshot(actual),
+        "Exactly the full pair budget completes with identical child and "
+        "surface evidence");
+}
 auto lifetime_controls(const NativeCraftBinding& binding) -> void {
   auto d = [&] {
     auto original = require(make_origin_boarding_boot_support(binding));
@@ -1606,6 +1633,7 @@ int main() {
     original_shape_controls(actual.load, independent);
     inspect_surface(actual, inv, independent,
                     kBoardingSourceEndpointSurfaceMaximumPairs, 16);
+    observed_regressions(provider, actual);
     prefix_controls(provider, inv, independent, unchanged);
     lifetime_controls(binding);
     check(snapshot(require(assess_origin_boarding_source_endpoint_load(
