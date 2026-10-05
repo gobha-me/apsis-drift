@@ -246,7 +246,7 @@ def constructor_packet(obj, columns, convert):
     return None
 
 
-def stowed_records(writer, existing):
+def checked_stowed_inputs(existing):
     sys.path.insert(0, str(TOOLS))
     import stowed_asset_identity as identity
     documents = {}
@@ -256,7 +256,7 @@ def stowed_records(writer, existing):
     contact = documents["replacement-contact.json"]
     if (frame != identity.FRAME or contact["source_sha256"] != inventory.SOURCE_SHA
             or contact["frame_sha256"] != STOWED_PINS["frame.json"][1]
-            or contact["model_sha256"] != identity.PROFILE["model_sha256"]
+            or contact["model_sha256"] != identity.PAYLOAD_PINS["model.glb"]["sha256"]
             or contact["runtime_actor_admitted"] is not False
             or contact["retained_originals_and_halo_added_again"] is not False
             or [row["source_object"] for row in contact["objects"]] != identity.PROFILE["replacement_objects"]):
@@ -267,6 +267,11 @@ def stowed_records(writer, existing):
         if original != {"group": "craft_seat_lift", "object": removal["original_object"],
                         "triangle_start": removal["start"], "triangle_count": removal["count"]}:
             raise ValueError("Complete-original stowed removal identity")
+    return frame, contact, removals
+
+
+def stowed_records(writer, existing):
+    frame, contact, removals = checked_stowed_inputs(existing)
     rows = []
     for row in contact["objects"]:
         vertices = np.asarray(row["vertices"], dtype=np.float64)
@@ -292,6 +297,8 @@ def main():
         raise ValueError("Completion output must be new")
     document, inventory_sha = checked_json(args.inventory, MAX_INVENTORY_BYTES, INVENTORY_SHA256)
     expected = validate_inventory(document)
+    # Authenticate these small existing packets before the expensive master load.
+    checked_stowed_inputs(expected)
     for name, pin in inventory.HELPER_HASHES.items():
         if inventory.sha(TOOLS / name) != pin:
             raise ValueError("Changed original source helper")

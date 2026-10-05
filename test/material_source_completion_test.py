@@ -179,6 +179,27 @@ class CompletionControls(unittest.TestCase):
         with self.assertRaises(ValueError):
             c.validate_inventory(changed)
 
+    def test_current_stowed_packets_and_original_removals_without_blender(self):
+        sys.path.insert(0, str(ROOT / 'tools'))
+        import stowed_asset_identity as identity
+        existing = {row['source_object']: {'retained_original_contact_range': {
+            'group': 'craft_seat_lift', 'object': row['original_object'],
+            'triangle_start': row['start'], 'triangle_count': row['count']}}
+            for row in identity.ORIGINAL_RANGES}
+        stream = io.BytesIO()
+        writer = c.PayloadWriter(stream)
+        result = c.stowed_records(writer, existing)
+        self.assertEqual((writer.records, writer.vertices, writer.triangles), (13, 780, 1508))
+        self.assertEqual(len(stream.getvalue()), 780 * 48 + 1508 * 12)
+        self.assertEqual(result['original_removal_ranges'], identity.ORIGINAL_RANGES)
+        self.assertEqual(len(result['replacement_objects']), 13)
+        self.assertFalse(result['posed_membership_qualified'])
+        self.assertNotIn('bpy', sys.modules)
+        changed = copy.deepcopy(existing)
+        changed[identity.ORIGINAL_RANGES[0]['source_object']]['retained_original_contact_range']['triangle_count'] += 1
+        with self.assertRaises(ValueError):
+            c.checked_stowed_inputs(changed)
+
 
 if __name__ == '__main__':
     unittest.main()
