@@ -8,6 +8,7 @@ import io
 import json
 from pathlib import Path
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -30,6 +31,16 @@ class CompletionControls(unittest.TestCase):
     def test_no_blender_import(self):
         self.assertNotIn('bpy', sys.modules)
         self.assertLessEqual(c.MAX_BINARY_BYTES + c.MAX_METADATA_BYTES, 32 * 1024 * 1024)
+
+    def test_script_companion_import_without_script_search_path(self):
+        # Like Blender --python, isolated execution provides no script-directory
+        # import path. Loading this tool must resolve its own pinned companion.
+        source = str(ROOT / 'tools/boarding/material_source_completion.py')
+        code = ('import runpy,sys; runpy.run_path(sys.argv[1]); '
+                'assert "bpy" not in sys.modules')
+        result = subprocess.run([sys.executable, '-I', '-c', code, source],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_binary_packet_ordinals_and_independent_fingerprints(self):
         vertices, faces = self.geometry()

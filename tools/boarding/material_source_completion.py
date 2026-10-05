@@ -15,6 +15,9 @@ import sys
 
 import numpy as np
 
+# Blender's --python execution does not add the script directory to sys.path.
+# Resolve the pinned companion from this tool's own directory before importing.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import material_inventory as inventory
 
 TOOLS = Path(__file__).resolve().parents[1]
