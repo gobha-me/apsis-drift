@@ -97,3 +97,38 @@ stay frozen. This is source correction, not fitting after a failed outcome.
 The old planted curve/body/timing recipes and confirmed hip conflict remain
 unchanged source-free evidence. No previously hypothesized joint, posture, reach
 or load result transfers to these source-bound sites.
+
+## First recorded observations
+
+The first GCC and Clang contracts each pass 24,110 checks, reporting identical
+outcomes. Both fixed sites have complete ten-partition coverage, supported
+arithmetic, nonpenetrating placement against the selected tops, and pressure
+disks inside both the sole and actual matching source with the registered margin.
+The port site selects partition 8; starboard selects partition 9. Position,
+pressure, dimension, margin and source constants were unchanged after execution.
+Independent dyadic plane signs, higher-precision perimeter/edge/SAT reconstruction,
+private controls and ownership checks pass. The public pressure bounds are:
+
+| Site | Pressure X bounds (m) | Pressure Z bounds (m) |
+| --- | --- | --- |
+| Port upper | [0.01999999999999998, 0.02] | [-0.46000000000000019, -0.45999999999999991] |
+| Starboard transition | [0.29999999999999988, 0.30000000000000021] | [-0.80000000000000027, -0.79999999999999982] |
+
+The version2 source-plane correction preceded all observations. Sites01 remains
+unexecuted history; neither an observed result nor a positive body pose is
+ascribed to it. The centered upper-disk and other private controls grant no
+replacement of the frozen public pressure point. Contact eligibility still
+provides no COM/force/load, body/self, all-obstacle clearance or movement proof.
+
+## Publication validation
+
+Observed-result assertions retain the first outcomes; the final contract passes
+24,131 checks on both GCC and Clang. Complete native builds and all 56 tests pass
+on GCC (22.74 seconds) and Clang (21.83 seconds). Pinned format20 and suppression
+validation pass. Full tidy20 passes across all 146 translation units.
+
+The first full tidy run rejected intentional queries of two moved-from handles
+in negative tests. Three exact `bugprone-use-after-move` directives document those
+empty-handle API controls; no production suppression was added. The repaired
+focused contracts, format and all 34 suppression directives pass. This repair
+changes comments only; the public geometry and observed outcomes stay unchanged.
