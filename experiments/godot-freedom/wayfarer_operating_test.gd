@@ -3,6 +3,11 @@ extends SceneTree
 const Operating = preload("res://wayfarer_operating_view.gd")
 var failures := 0
 
+func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
+	if not owner.stage_freedom_new_game(seed): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
 func check(condition: bool, message: String) -> void:
 	if not condition:
 		push_error(message)
@@ -154,7 +159,7 @@ func run() -> void:
 		check(not Operating.valid_station_corrections(bad), "Malformed station mesh replacement accepted: " + str(mutation))
 	GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
-	if not owner.initialize_freedom_new_game("42"):
+	if not commit_fixture_new_game(owner, "42"):
 		push_error(str(owner.get_last_error()))
 		quit(1)
 		return

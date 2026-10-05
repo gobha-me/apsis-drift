@@ -1,6 +1,6 @@
 # Native Origin Station view
 
-2026-09-30, #219. Ordinary New Game/Continue renders the selected station-owned
+2026-09-30, #219. Historical format17 Continue renders the selected station-owned
 export at one metre per unit. It consumes the read-only C++ station geometry
 query and the verified [starter package](NATIVE_STARTER_ASSETS.md); missing or
 changed model bytes refuse before scene creation. The launcher prepares the
@@ -27,6 +27,10 @@ writer; source saves and unsupported-flight refusals retain their meanings.
 The owner’s six-point playtest minimum in #245 is still the acceptance boundary
 for the eventual playable journey.
 
+Fresh New Game uses the [saved station walking view](SAVED_STATION_WALK.md)
+and the [matched starting assembly](NATIVE_STARTING_ASSEMBLY.md). Its actor and
+craft share the mutable C++ clock; this historical inspector remains frozen.
+
 ## Evidence and rendered review
 
 `native_station_view` in `tools/test_godot_native.py` checks invalid dimensions,
@@ -46,7 +50,9 @@ godot --path /absolute/path/to/isolated-project --audio-driver Dummy \
   /absolute/path/to/prepared-assets /absolute/path/to/captures
 ```
 
-It captures eight bounded views and records the selected state, renderer,
+The active capture stages a fresh matched walking scene and changes only its
+inspection camera. It captures eight bounded views while retaining the actor,
+craft and clock, and records the selected assembly binding, renderer,
 asset hash, source license references, poses, viewport dimensions and image
 hashes in `capture.json`. Logical viewport dimensions are distinct from output
 pixels when Godot canvas stretching is active. Generated images stay in build
@@ -54,3 +60,6 @@ output with this provenance record. Compare silhouettes and port registration
 with visual tolerances across drivers; image hashes are receipts, not a
 cross-driver exact-pixel requirement. Software-rendered captures establish
 actual rendering, not target hardware performance or a playable flight loop.
+Prepare the complete assets with `tools/prepare_freedom_native_assets.py`;
+the old constituent-only starter directory does not contain the selected
+operating/stowed companions. Parked reel scripts remain historical artifacts.

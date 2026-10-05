@@ -5,6 +5,7 @@ const StationView = preload("res://native_station_view.gd")
 const HostSky = preload("res://native_host_sky.gdshader")
 const WalkView = preload("res://native_walk_view.gd")
 const FlightView = preload("res://native_flight_view.gd")
+const HopperPresentation = preload("res://hopper_presentation.gd")
 
 var bridge: Variant = null
 var selected: Dictionary = {}
@@ -14,6 +15,9 @@ var save_button: Button
 var assets_root := ""
 var station_view: Node3D
 var port_status: Label
+var current_view: Control
+var presentation_only := false
+var error := ""
 
 
 func _process(_delta: float) -> void:
@@ -78,7 +82,7 @@ func parse_selection(arguments: PackedStringArray) -> Dictionary:
 	return selection
 
 
-func decimal_text(value: Variant) -> bool:
+static func decimal_text(value: Variant) -> bool:
 	if not value is String or value.is_empty() or value.length() > 20:
 		return false
 	if value.length() > 1 and value.begins_with("0"):
@@ -89,7 +93,7 @@ func decimal_text(value: Variant) -> bool:
 	return true
 
 
-func dock_geometry(start: Dictionary) -> Dictionary:
+static func dock_geometry(start: Dictionary) -> Dictionary:
 	var radius: Variant = start.get("home_planet_radius_metres")
 	var relative: Variant = start.get("station_relative_position_metres")
 	if not radius is float or not is_finite(radius) or radius < 1000000.0 or radius > 100000000.0:
@@ -107,7 +111,7 @@ func dock_geometry(start: Dictionary) -> Dictionary:
 	return {"radius": radius, "distance": distance, "clearance": distance - radius}
 
 
-func valid_start(start: Dictionary) -> bool:
+static func valid_start(start: Dictionary) -> bool:
 	if start.get("mode") != "freedom":
 		return false
 	for key in ["universe_seed", "system_seed", "system_id", "home_planet_id", "station_id", "craft_id", "tick", "cycle_tick"]:
@@ -131,7 +135,115 @@ func valid_start(start: Dictionary) -> bool:
 	return not dock_geometry(start).is_empty()
 
 
+static func valid_pending(value: Variant) -> bool:
+	if not value is Dictionary or not value.keys().size() == 8:
+		return false
+	for key in ["candidate_id", "mode", "craft_binding", "walk_state", "flight_state", "station_state", "station_geometry", "streaming_ready"]:
+		if not value.has(key): return false
+	if not decimal_text(value.candidate_id) or value.candidate_id == "0" or not value.streaming_ready is bool or not HopperPresentation.valid_binding(value.craft_binding):
+		return false
+	for key in ["walk_state", "flight_state", "station_state", "station_geometry"]:
+		if not value[key] is Dictionary: return false
+	match value.mode:
+		"freedom_walk":
+			return value.streaming_ready and WalkView.valid_state(value.walk_state) and FlightView.valid_state(value.flight_state) and value.station_state.is_empty()
+		"freedom_flight":
+			return value.streaming_ready and value.walk_state.is_empty() and FlightView.valid_state(value.flight_state) and value.station_state.is_empty()
+		"freedom":
+			return value.walk_state.is_empty() and value.flight_state.is_empty() and valid_start(value.station_state)
+	return false
+
+static func log_selection(pending: Dictionary, verb: String, candidate: Control = null) -> void:
+	if pending.mode == "freedom_walk":
+		var walking: Dictionary = pending.walk_state
+		print("Freedom native walking shell %s: seed=%s tick=%s system=%s planet=%s station=%s craft=%s actor=%s" % [verb, walking.universe_seed, walking.tick, walking.system_id, walking.planet_id, walking.station_id, walking.craft_id, walking.actor_id])
+	elif pending.mode == "freedom_flight":
+		var flight: Dictionary = pending.flight_state
+		print("Freedom native flight shell %s: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [verb, flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
+	else:
+		var start: Dictionary = pending.station_state
+		var geometry := dock_geometry(start)
+		var suffix := " dock_view=3d far=%.1f" % candidate.station_view.camera.far if candidate != null else ""
+		print("Freedom native shell %s: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f%s" % [verb, start.universe_seed, start.tick, start.system_id, start.home_planet_id, start.station_id, start.craft_id, start.discovery_count, start.world_delta_count, geometry.radius, geometry.distance, start.station_phase_radians, suffix])
+
+
+func stage_view(owner: Variant, assets: String, pending: Dictionary) -> Control:
+	if not valid_pending(pending):
+		error = "C++ returned an invalid pending native selection"
+		return null
+	var model: Node3D
+	if pending.mode == "freedom_walk" or (pending.mode == "freedom_flight" and pending.flight_state.frame_id == "2"):
+		model = HopperPresentation.load_selected_asset(assets, pending.craft_binding)
+		if model == null:
+			error = "Selected Wayfarer assets could not be staged"
+			return null
+	var candidate: Control
+	if pending.mode == "freedom_walk":
+		candidate = WalkView.new()
+	elif pending.mode == "freedom_flight":
+		candidate = FlightView.new()
+	else:
+		candidate = load("res://native_start_shell.gd").new()
+		candidate.presentation_only = true
+		candidate.bridge = owner
+		candidate.selected = pending.station_state.duplicate(true)
+		candidate.assets_root = assets
+		if not candidate.build_view(dock_geometry(pending.station_state), pending.station_geometry):
+			error = candidate.error
+			candidate.free()
+			return null
+		return candidate
+	if not candidate.stage(owner, assets, pending, model):
+		error = candidate.error
+		if model != null and model.get_parent() == null: model.free()
+		candidate.free()
+		return null
+	return candidate
+
+func select_start(owner: Variant, options: Dictionary) -> bool:
+	var staged: bool = owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_continue(options.value)
+	if not staged:
+		error = str(owner.get_last_error())
+		return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	if not valid_pending(pending):
+		error = "Invalid pending source projection"
+		if decimal_text(pending.get("candidate_id")): owner.discard_pending_freedom_start(pending.candidate_id)
+		return false
+	if options.get("validate_only", false):
+		owner.discard_pending_freedom_start(pending.candidate_id)
+		log_selection(pending, "validated")
+		return true
+	var assets: String = options.get("assets", "")
+	var candidate := stage_view(owner, assets, pending)
+	if candidate == null:
+		owner.discard_pending_freedom_start(pending.candidate_id)
+		return false
+	if not candidate.ready_to_commit() or owner.get_pending_freedom_start() != pending or (pending.mode != "freedom" and pending.flight_state.frame_id == "2" and not HopperPresentation.sources_unchanged(assets, pending.craft_binding)):
+		error = "Pending session or complete model changed before commit"
+		candidate.free()
+		owner.discard_pending_freedom_start(pending.candidate_id)
+		return false
+	if not owner.commit_pending_freedom_start(pending.candidate_id):
+		error = str(owner.get_last_error())
+		candidate.free()
+		owner.discard_pending_freedom_start(pending.candidate_id)
+		return false
+	# No yield or asset operation between the C++ commit and ready-view swap.
+	var previous := current_view
+	if previous != null:
+		remove_child(previous)
+	add_child(candidate)
+	current_view = candidate
+	bridge = owner
+	candidate.activate()
+	log_selection(pending, "opened", candidate)
+	if previous != null: previous.free()
+	error = ""
+	return true
+
 func _ready() -> void:
+	if presentation_only: return
 	var options := parse_selection(OS.get_cmdline_user_args())
 	if options.is_empty():
 		fail("supply exactly one --new-game=SEED or --continue=ABSOLUTE_PATH")
@@ -141,59 +253,20 @@ func _ready() -> void:
 	if not ClassDB.class_exists("FreedomBridge"):
 		fail("native C++ bridge is unavailable")
 		return
-	bridge = ClassDB.instantiate("FreedomBridge")
-	var accepted: bool = bridge.initialize_freedom_new_game(options.value) if options.mode == "new_game" else bridge.initialize_freedom_continue(options.value)
-	if not accepted:
-		fail(str(bridge.get_last_error()))
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	if not select_start(owner, options):
+		fail(error)
 		return
-	var walking: Dictionary = bridge.get_freedom_walk_state()
-	if not walking.is_empty():
-		if not WalkView.valid_state(walking):
-			fail("C++ bridge returned an invalid station actor view")
-			return
-		if options.get("validate_only", false):
-			print("Freedom native walking shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s actor=%s" % [walking.universe_seed, walking.tick, walking.system_id, walking.planet_id, walking.station_id, walking.craft_id, walking.actor_id])
-			get_tree().quit(0)
-			return
-		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		var walking_view := WalkView.new()
-		add_child(walking_view)
-		if not walking_view.initialize(bridge, options.get("assets", "")):
-			fail(walking_view.error)
-			return
-		print("Freedom native walking shell opened: seed=%s tick=%s actor=%s" % [walking.universe_seed, walking.tick, walking.actor_id])
-		return
-	var flight: Dictionary = bridge.get_freedom_flight_state()
-	if not flight.is_empty():
-		if not FlightView.valid_state(flight):
-			fail("C++ bridge returned an invalid saved-flight view")
-			return
-		if options.get("validate_only", false):
-			print("Freedom native flight shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
-			get_tree().quit(0)
-			return
-		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		var view := FlightView.new()
-		add_child(view)
-		if not view.initialize(bridge, options.get("assets", "")):
-			fail(view.error)
-			return
-		print("Freedom native flight shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s checksum=%s" % [flight.universe_seed, flight.tick, flight.system_id, flight.planet_id, flight.station_id, flight.craft_id, flight.checksum])
-		return
-	selected = bridge.get_freedom_start()
-	if not valid_start(selected):
-		fail("C++ bridge returned an invalid docked-state view")
-		return
-	var geometry := dock_geometry(selected)
-	if options.get("validate_only", false):
-		print("Freedom native shell validated: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, geometry.radius, geometry.distance, selected.station_phase_radians])
-		get_tree().quit(0)
-		return
-	assets_root = options.get("assets", "")
-	build_view(geometry)
+	if options.get("validate_only", false): get_tree().quit(0)
+
+func ready_to_commit() -> bool:
+	return presentation_only and error.is_empty() and station_view != null
+
+func activate() -> void:
+	save_button.grab_focus()
 
 
-func build_view(geometry: Dictionary) -> void:
+func build_view(geometry: Dictionary, station_geometry: Dictionary) -> bool:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var viewport_frame := SubViewportContainer.new()
 	viewport_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -206,9 +279,9 @@ func build_view(geometry: Dictionary) -> void:
 	viewport_frame.add_child(spatial)
 	station_view = StationView.new()
 	spatial.add_child(station_view)
-	if not station_view.initialize(selected, bridge.get_freedom_station_geometry(), assets_root):
-		fail(station_view.error)
-		return
+	if not station_view.initialize(selected, station_geometry, assets_root):
+		error = station_view.error
+		return false
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
 	var sky := Sky.new()
@@ -296,5 +369,6 @@ func build_view(geometry: Dictionary) -> void:
 	port_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	port_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(port_status)
-	save_button.grab_focus()
-	print("Freedom native shell opened: seed=%s tick=%s system=%s planet=%s station=%s craft=%s discoveries=%d deltas=%d radius=%.1f distance=%.3f phase=%.12f dock_view=3d far=%.1f" % [selected.universe_seed, selected.tick, selected.system_id, selected.home_planet_id, selected.station_id, selected.craft_id, selected.discovery_count, selected.world_delta_count, geometry.radius, geometry.distance, selected.station_phase_radians, station_view.camera.far])
+
+
+	return true

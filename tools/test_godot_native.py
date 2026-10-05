@@ -52,6 +52,8 @@ TESTS = {
     "saved_flight": "freedom_saves",
     "native_port": "freedom_saves",
     "native_walk": "freedom_saves",
+    "native_assembly": "native_assets",
+    "native_start_staging": "freedom_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
     "physical_lighting_integration": "physical_snapshots",
@@ -226,23 +228,35 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_port", "native_walk") for name in selected):
-        package = repo / "assets/native/freedom-starter-01"
-        preparer = work / "prepare_native_assets.py"
-        shutil.copy2(repo / "tools/prepare_native_assets.py", preparer)
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_port", "native_walk", "native_start_staging") for name in selected):
+        helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
+                         "prepare_operating_assets.py", "wayfarer_operating_spec.py",
+                         "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
+                         "validate_operating_asset_glb.py", "build_boarding_qualification.py",
+                         "prepare_wayfarer_stowed.py", "prepare_lower_cockpit_contact.py",
+                         "lower_cockpit_contact_spec.py", "lower_cockpit_contact_identity.py",
+                         "wayfarer_stowed_package_checks.py", "stowed_asset_identity.py",
+                         "wayfarer_corrected_rest_geometry.py", "wayfarer_restraint_export_checks.py")
+        for filename in helpers:
+            shutil.copy2(repo / "tools" / filename, work / filename)
+        preparer = work / "prepare_freedom_native_assets.py"
         log = work / "prepare-native-assets.log"
         code, timed_out, elapsed = run_logged(
-            [sys.executable, str(preparer), "--package", str(package),
+            [sys.executable, str(preparer), "--repository", str(repo),
              "--output", str(work / "native-assets")], log, env, args.timeout)
         report["setup"].append({"family": "native_assets", "returncode": code,
                                 "timed_out": timed_out, "seconds": elapsed,
-                                "preparer_sha256": sha256(preparer)})
+                                "preparer_sha256": sha256(preparer),
+                                "helper_sha256": {name: sha256(work / name) for name in helpers}})
         save()
         if code != 0 or timed_out:
             print(f"FAIL native asset preparation: {log}", flush=True)
             return 1
         report["setup"][-1]["prepared"] = json.loads(
             (work / "native-assets/prepared.json").read_text())
+        report["setup"][-1]["companions"] = {
+            name: json.loads((work / "native-assets" / name / receipt).read_text())
+            for name, receipt in (("operating", "prepared.json"), ("stowed", "preparation.json"))}
         save()
     if any(TESTS[name] in ("operating_assets", "operating_motion") for name in selected):
         for filename in ("prepare_operating_assets.py", "wayfarer_operating_spec.py", "operating_asset_identity.py",
@@ -253,7 +267,7 @@ def main(argv=None):
         log = work / "prepare-operating-assets.log"
         code, timed_out, elapsed = run_logged(
             [sys.executable, str(preparer), "--package", str(repo / "assets/native/wayfarer-operating-02"),
-             "--output", str(work / "operating-assets")], log, env, args.timeout)
+             "--output", str(work / "native-assets/operating")], log, env, args.timeout)
         report["setup"].append({"family": "operating_assets", "returncode": code,
                                 "timed_out": timed_out, "seconds": elapsed,
                                 "preparer_sha256": sha256(preparer),
@@ -262,7 +276,7 @@ def main(argv=None):
         if code != 0 or timed_out:
             print(f"FAIL operating asset preparation: {log}", flush=True)
             return 1
-        report["setup"][-1]["prepared"] = json.loads((work / "operating-assets/prepared.json").read_text())
+        report["setup"][-1]["prepared"] = json.loads((work / "native-assets/operating/prepared.json").read_text())
         save()
     if any(TESTS[name] == "operating_motion" for name in selected):
         for filename in ("prepare_operating_motion.py", "operating_motion_spec.py",
@@ -315,6 +329,7 @@ def main(argv=None):
                                      ("port-trace.json", "25", "port-trace"),
                                      ("port-far.json", "25", "port-far"),
                                      ("journey.json", "0", "journey"),
+                                     ("journey-20.json", "0", "legacy-journey"),
                                      ("journey-trace.json", "0", "journey-trace")):
             path = work / filename
             log = work / f"{filename}.log"
@@ -520,10 +535,15 @@ def main(argv=None):
         elif TESTS[name] == "native_assets":
             arguments = [str(work / "native-assets"), str(work / "native-asset-import.json")]
         elif TESTS[name] == "operating_assets":
-            arguments = [str(work / "native-assets"), str(work / "operating-assets")]
+            arguments = [str(work / "native-assets"), str(work / "native-assets/operating")]
         elif TESTS[name] == "operating_motion":
             arguments = [str(work / path) for path in
-                         ("native-assets", "operating-assets", "operating-motion")]
+                         ("native-assets", "native-assets/operating", "operating-motion")]
+        if name == "native_assembly":
+            arguments = [str(work / "native-assets")]
+        if name == "native_start_staging":
+            arguments = [str(work / path) for path in
+                         ("native-assets", "journey-20.json", "corrupt.json")]
         if name == "native_save":
             arguments.append(str(work / "native-assets"))
         if name == "freedom_start":

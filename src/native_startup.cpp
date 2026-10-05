@@ -99,9 +99,22 @@ auto select_document(FreedomJourneySaveDocument document,
 }
 } // namespace
 
+namespace {
+auto select_document(FreedomStartingAssemblySaveDocument document,
+                     std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto v = validate_freedom_starting_assembly_document(document); !v)
+    return std::unexpected{"Starting assembly rejected: " + v.error().detail};
+  auto selected = select_document(document.journey, source_save);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
+} // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
-  auto document = make_freedom_journey_new_game_document(universe_seed);
+  auto document =
+      make_freedom_starting_assembly_new_game_document(universe_seed);
   if (!document)
     return std::unexpected{"New Game rejected: " + document.error().detail};
   return select_document(std::move(*document), std::nullopt);
@@ -133,8 +146,13 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
   const FreedomSaveDocument* origin{};
-  if (const auto* journey =
-          std::get_if<FreedomJourneySaveDocument>(&selected.document)) {
+  if (const auto* assembly = std::get_if<FreedomStartingAssemblySaveDocument>(
+          &selected.document)) {
+    if (auto v = validate_freedom_starting_assembly_document(*assembly); !v)
+      return std::unexpected{v.error().detail};
+    origin = &assembly->journey.voyage.flight.origin;
+  } else if (const auto* journey =
+                 std::get_if<FreedomJourneySaveDocument>(&selected.document)) {
     if (auto valid = validate_freedom_journey_document(*journey); !valid)
       return std::unexpected{"Journey station bootstrap refused: " +
                              valid.error().detail};
@@ -181,7 +199,12 @@ auto native_save_freedom(const NativeStartup& selected,
       !prepared)
     return std::unexpected{prepared.error()};
   const auto written =
-      std::holds_alternative<FreedomJourneySaveDocument>(selected.document)
+      std::holds_alternative<FreedomStartingAssemblySaveDocument>(
+          selected.document)
+          ? write_freedom_starting_assembly_file_atomically(
+                destination, std::get<FreedomStartingAssemblySaveDocument>(
+                                 selected.document))
+      : std::holds_alternative<FreedomJourneySaveDocument>(selected.document)
           ? write_freedom_journey_file_atomically(
                 destination,
                 std::get<FreedomJourneySaveDocument>(selected.document))

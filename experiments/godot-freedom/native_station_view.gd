@@ -121,7 +121,7 @@ func update_camera() -> void:
 	if camera == null:
 		return
 	camera.position = Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * distance
-	camera.look_at(Vector3(0, 1, 10), Vector3.UP)
+	camera.basis = Basis.looking_at(Vector3(0, 1, 10) - camera.position, Vector3.UP)
 
 
 func inspect(range_metres: float, yaw_radians: float, pitch_radians: float) -> bool:

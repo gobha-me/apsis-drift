@@ -4,6 +4,11 @@ extends SceneTree
 var failures := 0
 
 
+func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
+	if not owner.stage_freedom_new_game(seed): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
 func check(condition: bool, message: String) -> void:
 	if not condition:
 		push_error(message)
@@ -50,9 +55,9 @@ func _initialize() -> void:
 	var bridge: Variant = ClassDB.instantiate("FreedomBridge")
 	check(bridge.get_freedom_start().is_empty(), "Uninitialized bridge exposed a start")
 	var extreme: Variant = ClassDB.instantiate("FreedomBridge")
-	check(extreme.initialize_freedom_new_game("18446744073709551615"), "Maximum uint64 seed refused")
+	check(commit_fixture_new_game(extreme, "18446744073709551615"), "Maximum uint64 seed refused")
 	check(extreme.get_freedom_walk_state().universe_seed == "18446744073709551615", "Maximum seed lost precision through Godot")
-	check(bridge.initialize_freedom_new_game("42"), "Freedom New Game refused: " + str(bridge.get_last_error()))
+	check(commit_fixture_new_game(bridge, "42"), "Freedom New Game refused: " + str(bridge.get_last_error()))
 	var new_actor: Dictionary = bridge.get_freedom_walk_state()
 	check(not new_actor.is_empty() and new_actor.universe_seed == "42" and new_actor.tick == "0" and not new_actor.continued, "Ordinary New Game lost its station actor")
 	check(bridge.get_freedom_start().is_empty() and not bridge.get_freedom_flight_state().is_empty(), "New actor was confused with the historical frozen station shell")
@@ -118,7 +123,7 @@ func _initialize() -> void:
 	var snapshot_state: Dictionary = bridge.get_state()
 	check(not bridge.initialize_freedom_continue(args[3]), "Corrupt save accepted after snapshot")
 	check(bridge.get_state() == snapshot_state and bridge.get_freedom_start().is_empty(), "Refusal destroyed snapshot session")
-	check(bridge.initialize_freedom_new_game("42"), "New Game failed after snapshot")
+	check(commit_fixture_new_game(bridge, "42"), "New Game failed after snapshot")
 	check(bridge.get_state().is_empty() and bridge.get_freedom_start().is_empty() and bridge.get_freedom_walk_state() == new_actor, "Ordinary station actor did not replace fixture session")
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == source_bytes[i], "Start or refusal modified source save")

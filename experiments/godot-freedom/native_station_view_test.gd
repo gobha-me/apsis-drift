@@ -3,6 +3,11 @@ const StationView = preload("res://native_station_view.gd")
 var failures := 0
 
 
+func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
+	if not owner.stage_freedom_new_game(seed): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
 func check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
@@ -21,7 +26,7 @@ func run() -> void:
 	GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	var bridge: Variant = ClassDB.instantiate("FreedomBridge")
 	check(bridge.get_freedom_station_geometry().is_empty(), "Uninitialized geometry exposed")
-	check(bridge.initialize_freedom_new_game("42"), "New Game refused")
+	check(commit_fixture_new_game(bridge, "42"), "New Game refused")
 	var start: Dictionary = bridge.get_freedom_walk_state()
 	if start.is_empty():
 		check(false, "New Game station actor is unavailable")

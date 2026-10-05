@@ -138,7 +138,9 @@ The [saved native flight consumer](SAVED_NATIVE_FLIGHT.md) connects format-18
 Continue, C++ fixed-step controls, terrain projection and applied main exhaust.
 The [native port lifecycle](NATIVE_PORT_LIFECYCLE.md) adds physical capture,
 constrained station co-motion, same-tick release and explicit format19 persistence.
-Fresh New Game now starts the supported format20 station walk described below.
+Fresh New Game now starts a format21 saved starting assembly around the supported
+format20 station walk described below. The selected stowed Wayfarer presentation
+and C++ contact share that assembly; historical saves retain their original model.
 Boarding, seating, departure and surface contact are still being integrated;
 the complete owner handoff remains open.
 
@@ -194,9 +196,11 @@ authorized merely by this roadmap.
 
 [#344](https://github.com/gobha-me/apsis-drift/issues/344) composes a first-person
 station actor, source-bound C++ support/contact checks and attached D1 Wayfarer
-through the existing shared flight clock. Fresh New Game uses explicit format20;
-Save As/Continue retains the actual actor and voyage. Historical formats16–19
-retain their contracts. The bounded hub/workshop/D1 route is documented in
+through the existing shared flight clock. The original checkpoint used explicit
+format20. New Game now wraps that unchanged journey in the
+[format21 starting assembly](NATIVE_STARTING_ASSEMBLY.md); Save As/Continue retains
+the actual actor, voyage and selected hardware. Historical formats16–20 retain
+their contracts and original presentation. The bounded hub/workshop/D1 route is documented in
 [saved station walking](SAVED_STATION_WALK.md).
 
 Open-hatch/ladder boarding, a real seat transition, departure from New Game,

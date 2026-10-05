@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
 
 namespace apsis_drift {
@@ -71,6 +72,14 @@ class NativeFreedomFlightSession {
       -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto release_port() -> std::expected<void, std::string>;
 
+  [[nodiscard]] auto starting_assembly() const
+      -> const std::optional<NativeStartingAssemblySelection>& {
+    return starting_assembly_;
+  }
+  [[nodiscard]] auto craft_binding() const -> const NativeCraftBinding& {
+    return craft_binding_;
+  }
+
  private:
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
@@ -84,5 +93,7 @@ class NativeFreedomFlightSession {
   std::optional<std::filesystem::path> source_save_;
   std::optional<FreedomDockingState> docking_;
   std::optional<OriginWalkerState> actor_;
+  std::optional<NativeStartingAssemblySelection> starting_assembly_;
+  NativeCraftBinding craft_binding_;
 };
 } // namespace apsis_drift
