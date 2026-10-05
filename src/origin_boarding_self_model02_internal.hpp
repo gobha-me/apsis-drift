@@ -3,8 +3,9 @@
 #include "apsis_drift/origin_boarding_self_model02.hpp"
 #include <span>
 
-// Private source-free checkpoint seams only. None consumes caller-created
-// geometry through the public evaluator or grants source/actor/route authority.
+// Private checkpoint math, also reused by the same-stance world query for
+// conservative support bounds and bounded sum signs. No public evaluator
+// admits caller-created geometry or grants actor/route authority.
 namespace apsis_drift::detail {
 enum class BoardingSelfMembership : std::uint8_t {
   outside,
