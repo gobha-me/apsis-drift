@@ -119,6 +119,11 @@ checks finite pressure/load support. The [static craft checkpoint](docs/ORIGIN_B
 checks the same placed body against every selected craft surface. Continuous
 supported movement and a seated endpoint remain before actor boarding.
 
+The [planted leg expression recipe](docs/ORIGIN_BOARDING_PLANTED_LEGS01.md)
+derives linked knees for two feet on different tread heights and bounds the
+existing joint limits over a fixed lateral movement. Its source-free evidence
+is a kinematic foundation; whole-body support and swept clearance follow.
+
 The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
 the existing seat and harness meshes while proving their complete render
 triangle union matches the original. Harness opening and supported seating

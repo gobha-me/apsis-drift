@@ -55,3 +55,72 @@ Those require the actual complete-body expression and trajectory model.
 No source-free result grants route, actor, seat, saved-phase or source-volume
 qualification. Body02/self04 and their existing static checkpoints remain
 unchanged and separately versioned.
+
+## Compiled expressions and certificates
+
+For hip H and planted ankle A, let d=A-H, D=d dot d and
+rho=sqrt(dx²+dy²). The registered domain requires rho>0, D>0 and dy<0.
+Its derived upward leg-plane direction is U=(-dx,-dy,0)/rho, with normal
+N=(Uy,-Ux,0). These are new expression directions, not repaired legacy frames.
+Then q=N cross d satisfies q dot d=0, q dot q=D and qz=-rho exactly.
+
+```
+alpha = (L1²-L2²+D)/(2D)
+gamma² = (((L1+L2)²-D)*(D-(L1-L2)²))/(4D²)
+K = H + alpha*d + gamma*q
+```
+
+The positive square-root branch is fixed. Reach certificates establish the
+nonnegative factor domains before evaluating gamma. The equivalent identity
+gamma²=(L1²-alpha²*D)/D gives |K-H|²=L1² and |A-K|²=L2².
+The knee is derived from this expression; rounded points do not establish link
+lengths. Canonical point bounds subtract the same .72 placement from Y.
+Ankle terms `{plane,.1,-.72}` and boot-center terms `{plane,.05,-.72}`
+retain their exact plane expressions. Because .1 is exactly twice the stored
+.05, the flat boot bottom equals its own plane after the common placement.
+
+Down/forward components of the linked thigh and shin supply the hip, knee
+and flat-ankle sectors. Positive downward components fix the relevant pitch
+quadrants. Hip sectors use bounded sine/cosine constants for -20/65 degrees;
+knee cosine must be at least -sqrt(2)/2; flat ankle uses the +/-30-degree
+sector. Derived lateral roll uses |dx|<=(-dy)*(2-sqrt(3)), the tighter
+15-degree flat-roll limit, also satisfying 35-degree hip abduction. There is
+no independent shin plane or flat-boot override.
+
+Arithmetic bounds widen each finite operation outward. Square-root endpoints
+are checked with bounded exact product-residual signs. Trigonometric constants
+use the registered adjacent-binary64 pi bracket, fixed Taylor polynomials and
+bounded remainders. Certification requires binary64 round-to-nearest with
+gradual underflow and preserved subnormal inputs; unsupported arithmetic
+environments refuse rather than grant a complete result. Inverse-angle reports
+describe the accepted leaf midpoint and never grant a joint-limit certificate.
+
+The fixed root polynomial is monotone on [0,1]. Outward endpoint evaluation
+therefore encloses its complete interval without sampling. Each accepted leaf
+holds both legs' bounds and certificates. Depth-first subdivision visits the
+left interval before the right; a final gap-free closed-cover check is required
+for every complete summary flag. A retained prefix and first refusal remain
+diagnostic evidence only. Reverse queries retain the same ascending cover.
+
+## Implementation results
+
+The first frozen-fixture execution passed with both GCC and Clang: full and
+reverse [0,1] requests have 20 accepted leaves, 39 examined nodes and maximum
+depth 5. Each half has 10 leaves/19 nodes/depth 4; [.125,.875] has
+16 leaves/31 nodes/depth 4. Every registered point query has one accepted leaf.
+The first independent contract run passed 18,825 checks on each compiler,
+including arithmetic-environment refusals. No fixture constant, link length,
+dimension, branch or joint limit was changed after evaluation.
+
+The final contract adds assertions preserving the observed complete outcomes:
+18,829 checks pass with each compiler. Full native builds, including the Godot
+bridge, and all 52 native tests pass with GCC (23.14s) and Clang (21.81s).
+Pinned format20, the 31-directive suppression policy and full tidy20 over
+142 translation units pass. The initial compile-only test-helper declaration typo was corrected
+before either fixture execution. The first tidy pass flagged a no-effect move
+of a trivially copied leaf; removing it preserves the same evidence and the
+full native tests pass again. No rendered capture or owner playtest is claimed
+by this source-free implementation.
+
+Bounded timing follows in #426. The recorded 12-second duration alone does not
+grant dynamics or speed/acceleration qualification.
