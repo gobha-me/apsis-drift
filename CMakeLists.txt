@@ -305,6 +305,7 @@ add_library(apsis_drift_core STATIC
   src/origin_stowed_contact_partition.cpp
   src/origin_cabin_corridor.cpp
   src/origin_boarding_body.cpp
+  src/origin_boarding_route_body.cpp
   src/origin_boarding_boot_support.cpp
   src/origin_boarding_world_checkpoint.cpp
   src/origin_boarding_source_endpoint_surface_checkpoint.cpp
