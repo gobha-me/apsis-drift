@@ -484,6 +484,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-body-contract COMMAND apsis-drift-boarding-body-tests)
   set_tests_properties(boarding-body-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-boarding-lateral-body02-tests test/origin_boarding_lateral_body02_test.cpp)
+  target_link_libraries(apsis-drift-boarding-lateral-body02-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-boarding-lateral-body02-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-lateral-body02-contract COMMAND apsis-drift-boarding-lateral-body02-tests)
+  set_tests_properties(boarding-lateral-body02-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-cabin-corridor-tests test/origin_cabin_corridor_test.cpp)
   target_link_libraries(apsis-drift-cabin-corridor-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-cabin-corridor-tests PRIVATE
