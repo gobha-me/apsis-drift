@@ -228,9 +228,27 @@ The earlier metadata-path refusal stays closed and preserved. The corrected
 launcher binds both small metadata roles to the actual approved copies before
 launch; every geometry input path, numerical predicate and limit stays fixed.
 
-Selected old-material interior checks remain separate, followed by exact
-K/material/source preservation, package and matched
-render/contact admission. Supported actor travel, loaded seat/sole evidence,
+The selected old-material run has now completed with an
+[accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5986838132).
+One restoration and five fresh imports precede seven closed-oriented-chain
+checks, five fixed face0 interior-seed derivations and all 35 bridge/old-material
+classifications. Every classification is strict exterior, with no alternate
+point, ray or coordinate change. Known stage work is 329,350 operations under
+its separate 64M allocation; restoration uses 37,490,206 and imports 2,128,606.
+All 168 inner records and their causal start/result/end bindings are complete.
+The independent audit and final readback bind 197 selected files and ten
+directory anchors without reopening original roles or replaying mathematics.
+An initial collector JSON-format refusal is preserved; canonical encoding
+corrected that metadata file without changing the numerical run.
+
+Existing fixed K and two-pair correspondence remain bound to current19.
+Package identity, complete render preservation and matched render/contact
+frame admission still follow. The
+[original source partition](ORIGIN_STOWED_CONTACT_PARTITION.md) binds the eight
+whole catalog objects needed for replacement while retaining all other faces.
+Current19 has 14 flat render groups in direct REST; older proposed layouts and
+posed diagnostics do not establish its runtime mapping.
+Supported actor travel, loaded seat/sole evidence,
 saved equipment and actor state, seat-to-flight/release, applied exhaust and
 same-world atmosphere/terrain/home return remain required for First Flight.
 
