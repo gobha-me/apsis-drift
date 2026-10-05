@@ -254,6 +254,39 @@ configure_file(include/apsis_drift/lower_cockpit_contact_data.hpp.in
 unset(APSIS_LOWER_CONTACT_JSON)
 unset(APSIS_LOWER_CONTACT_POLICY_JSON)
 
+# Exact offline-prepared stowed derivatives extend the existing contact handle.
+# They do not select live presentation, actor equipment or a new save phase.
+set(APSIS_STOWED_CONTACT_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/stowed-cockpit-contact-01/replacement-contact.json")
+set(APSIS_STOWED_FRAME_DATA "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/stowed-cockpit-contact-01/frame.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${APSIS_STOWED_CONTACT_DATA}" "${APSIS_STOWED_FRAME_DATA}")
+file(SHA256 "${APSIS_STOWED_CONTACT_DATA}" APSIS_STOWED_CONTACT_SHA256)
+file(SHA256 "${APSIS_STOWED_FRAME_DATA}" APSIS_STOWED_FRAME_SHA256)
+if (NOT APSIS_STOWED_CONTACT_SHA256 STREQUAL "62b4d493f2d74f59b81fd089873360b99e3bae9d17a6d90a00066e9440e44c4a" OR
+    NOT APSIS_STOWED_FRAME_SHA256 STREQUAL "f98c50f69d71ecd38ca1d43d010f7b43ca300178dc25d40e170fd45fe5bc88a6")
+  message(FATAL_ERROR "Stowed contact or frame differs from independently prepared bytes")
+endif ()
+file(READ "${APSIS_STOWED_CONTACT_DATA}" APSIS_STOWED_CONTACT_JSON)
+string(LENGTH "${APSIS_STOWED_CONTACT_JSON}" APSIS_STOWED_CONTACT_BYTES)
+set(APSIS_STOWED_CONTACT_CHUNKS "")
+set(APSIS_STOWED_CONTACT_OFFSET 0)
+set(APSIS_STOWED_CONTACT_CHUNK_COUNT 0)
+while (APSIS_STOWED_CONTACT_OFFSET LESS APSIS_STOWED_CONTACT_BYTES)
+  math(EXPR APSIS_STOWED_CONTACT_LENGTH "${APSIS_STOWED_CONTACT_BYTES} - ${APSIS_STOWED_CONTACT_OFFSET}")
+  if (APSIS_STOWED_CONTACT_LENGTH GREATER 60000)
+    set(APSIS_STOWED_CONTACT_LENGTH 60000)
+  endif ()
+  string(SUBSTRING "${APSIS_STOWED_CONTACT_JSON}" ${APSIS_STOWED_CONTACT_OFFSET} ${APSIS_STOWED_CONTACT_LENGTH} APSIS_STOWED_CONTACT_CHUNK)
+  string(APPEND APSIS_STOWED_CONTACT_CHUNKS "  std::string_view{R\"APSISSTOW(${APSIS_STOWED_CONTACT_CHUNK})APSISSTOW\", ${APSIS_STOWED_CONTACT_LENGTH}},\n")
+  math(EXPR APSIS_STOWED_CONTACT_OFFSET "${APSIS_STOWED_CONTACT_OFFSET} + ${APSIS_STOWED_CONTACT_LENGTH}")
+  math(EXPR APSIS_STOWED_CONTACT_CHUNK_COUNT "${APSIS_STOWED_CONTACT_CHUNK_COUNT} + 1")
+endwhile ()
+file(READ "${APSIS_STOWED_FRAME_DATA}" APSIS_STOWED_FRAME_JSON)
+string(LENGTH "${APSIS_STOWED_FRAME_JSON}" APSIS_STOWED_FRAME_BYTES)
+configure_file(include/apsis_drift/stowed_contact_data.hpp.in
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/apsis_drift/stowed_contact_data.hpp" @ONLY)
+unset(APSIS_STOWED_CONTACT_JSON)
+unset(APSIS_STOWED_FRAME_JSON)
+
 add_library(apsis_drift_core STATIC
   src/celestial.cpp
   src/coordinates.cpp
@@ -469,6 +502,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME lower-cockpit-contact-contract COMMAND apsis-drift-lower-cockpit-contact-tests)
   set_tests_properties(lower-cockpit-contact-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-stowed-lower-cockpit-contact-tests test/origin_stowed_lower_cockpit_contact_test.cpp)
+  target_link_libraries(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_definitions(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE
+    APSIS_LOWER_CONTACT_FIXTURE="${APSIS_LOWER_CONTACT_DATA}"
+    APSIS_LOWER_CONTACT_POLICY_FIXTURE="${APSIS_LOWER_CONTACT_POLICY}"
+    APSIS_CABIN_CONTACT_FIXTURE="${APSIS_CABIN_CONTACT_DATA}")
+  target_compile_options(apsis-drift-stowed-lower-cockpit-contact-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME stowed-lower-cockpit-contact-contract COMMAND apsis-drift-stowed-lower-cockpit-contact-tests)
+  set_tests_properties(stowed-lower-cockpit-contact-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-cabin-seam-tests test/origin_cabin_seam_test.cpp)
   target_link_libraries(apsis-drift-cabin-seam-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-cabin-seam-tests PRIVATE

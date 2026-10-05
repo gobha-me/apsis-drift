@@ -1,9 +1,12 @@
 #include "apsis_drift/origin_lower_cockpit_contact.hpp"
 #include "apsis_drift/lower_cockpit_contact_data.hpp"
+#include "apsis_drift/stowed_contact_data.hpp"
 #include "origin_cabin_contact_internal.hpp"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <stdexcept>
@@ -66,6 +69,16 @@ auto approved_halo() -> const Json& {
   }();
   return approved;
 }
+auto approved_stowed() -> const Json& {
+  static const Json approved = [] {
+    std::string bytes;
+    bytes.reserve(detail::kStowedContactBytes);
+    for (auto chunk : detail::kStowedContactChunks)
+      bytes.append(chunk);
+    return parse(bytes, kStowedCockpitMaximumDocumentBytes);
+  }();
+  return approved;
+}
 // The independently compiled source selects a closed, bounded schema, including
 // the six optional archived region lists. Values still undergo the semantic and
 // geometry validators below before the final exact byte-equivalence gate.
@@ -107,6 +120,29 @@ auto number(const Json& value) -> double {
 auto point(const Json& value) -> RigidVector3 {
   if (!value.is_array() || value.size() != 3) fail("Lower point dimensions");
   return {number(value[0]), number(value[1]), number(value[2])};
+}
+auto stowed_point(const Json& value) -> RigidVector3 {
+  if (!value.is_array() || value.size() != 3) fail("Stowed point dimensions");
+  std::array<double, 3> components;
+  for (std::size_t i = 0; i < components.size(); ++i) {
+    if (!value[i].is_number()) fail("Stowed true numeric coordinate");
+    const auto component = value[i].get<double>();
+    if (!std::isfinite(component) || std::abs(component) > 20)
+      fail("Stowed finite source coordinate bound");
+    const auto restored = static_cast<double>(static_cast<float>(component));
+    if (std::bit_cast<std::uint64_t>(component) !=
+        std::bit_cast<std::uint64_t>(restored))
+      fail("Stowed exact binary32 source coordinate");
+    components[i] = component;
+  }
+  return {components[0], components[1], components[2]};
+}
+auto transform_point(const OperatingTransform& transform, RigidVector3 p)
+    -> RigidVector3 {
+  const auto& c = transform.columns;
+  return {((c[0].x * p.x + c[1].x * p.y) + c[2].x * p.z) + c[3].x,
+          ((c[0].y * p.x + c[1].y * p.y) + c[2].y * p.z) + c[3].y,
+          ((c[0].z * p.x + c[1].z * p.y) + c[2].z * p.z) + c[3].z};
 }
 auto subtract(RigidVector3 a, RigidVector3 b) -> RigidVector3 {
   return {a.x - b.x, a.y - b.y, a.z - b.z};
@@ -181,7 +217,15 @@ auto overlaps(Box a, Box b) -> bool {
 struct OriginLowerCockpitContact::Data {
   explicit Data(OriginCabinSeamGeometry selected)
       : original(std::move(selected)) {}
+  struct Stowed {
+    explicit Stowed(OriginStowedContactPartition selected)
+        : partition(std::move(selected)) {}
+    OriginStowedContactPartition partition;
+    std::vector<LowerCockpitSourceObject> objects;
+    std::vector<Obstacle> triangles;
+  };
   OriginCabinSeamGeometry original;
+  std::optional<Stowed> stowed;
   std::vector<LowerCockpitSourceObject> objects;
   std::vector<Obstacle> triangles;
 };
@@ -193,6 +237,16 @@ auto OriginLowerCockpitContact::objects() const
     -> std::span<const LowerCockpitSourceObject> {
   return data_ ? std::span<const LowerCockpitSourceObject>{data_->objects}
                : std::span<const LowerCockpitSourceObject>{};
+}
+auto OriginLowerCockpitContact::replacement_objects() const
+    -> std::span<const LowerCockpitSourceObject> {
+  return data_ && data_->stowed
+             ? std::span<const LowerCockpitSourceObject>{data_->stowed->objects}
+             : std::span<const LowerCockpitSourceObject>{};
+}
+auto OriginLowerCockpitContact::stowed_partition() const
+    -> const OriginStowedContactPartition* {
+  return data_ && data_->stowed ? &data_->stowed->partition : nullptr;
 }
 auto OriginLowerCockpitContact::original_geometry() const
     -> const OriginCabinSeamGeometry* {
@@ -389,6 +443,134 @@ auto decode_origin_lower_cockpit_contact(
     return std::unexpected(std::string("Lower malformed: ") + e.what());
   }
 }
+auto make_origin_stowed_lower_cockpit_contact(
+    const OriginLowerCockpitContact& base, std::string_view bytes,
+    std::string_view frame_bytes)
+    -> std::expected<OriginLowerCockpitContact, std::string> {
+  try {
+    if (!base.data_ || !base.data_->original.support_catalog())
+      fail("Stowed admitted base required");
+    if (base.data_->stowed) fail("Stowed selection already installed");
+    const auto frame = parse(frame_bytes, kStowedCockpitMaximumFrameBytes);
+    const auto approved_frame =
+        parse(detail::kStowedFrameJson, kStowedCockpitMaximumFrameBytes);
+    shape(frame, approved_frame);
+    if (frame != approved_frame)
+      fail("Stowed direct REST frame/group/motion binding");
+    const auto root = parse(bytes, kStowedCockpitMaximumDocumentBytes);
+    const auto& approved = approved_stowed();
+    shape(root, approved);
+    for (const auto key :
+         {"schema", "source_sha256", "frame_sha256",
+          "retained_originals_and_halo_added_again", "runtime_actor_admitted"})
+      if (root[key] != approved[key]) fail("Stowed source/frame/scope binding");
+    if (root["model_sha256"] != detail::kStowedModelSha256)
+      fail("Stowed independently selected model binding");
+    const auto& support = *base.data_->original.support_catalog();
+    std::array<StowedContactSourceRange, kStowedContactRemovalCount> ranges;
+    std::size_t range_count{}, face_count{};
+    const auto& objects = root["objects"];
+    // The independent closed schema supplies exact thirteen-object dimensions.
+    if (objects.size() != 13) fail("Stowed thirteen-object roster");
+    for (std::size_t oi = 0; oi < objects.size(); ++oi) {
+      const auto& object = objects[oi];
+      const auto& selected = approved["objects"][oi];
+      if (object["source_object"] != selected["source_object"] ||
+          object["render_node"] != selected["render_node"] ||
+          object["introduced_connector"] != selected["introduced_connector"])
+        fail("Stowed fixed source/render/connector roster");
+      const auto& vertices = object["vertices"];
+      const auto& triangles = object["triangles"];
+      if (vertices.empty() || vertices.size() > 220 || triangles.empty() ||
+          triangles.size() > 436 || face_count > 1508 - triangles.size())
+        fail("Stowed bounded object geometry");
+      face_count += triangles.size();
+      for (const auto& vertex : vertices)
+        static_cast<void>(stowed_point(vertex));
+      for (std::size_t ti = 0; ti < triangles.size(); ++ti) {
+        const auto& face = triangles[ti];
+        const std::array<std::uint32_t, 3> vi{
+            index(face[0], vertices.size() - 1),
+            index(face[1], vertices.size() - 1),
+            index(face[2], vertices.size() - 1)};
+        if (vi[0] == vi[1] || vi[0] == vi[2] || vi[1] == vi[2])
+          fail("Stowed repeated triangle index");
+        const auto a = stowed_point(vertices[vi[0]]),
+                   b = stowed_point(vertices[vi[1]]),
+                   c = stowed_point(vertices[vi[2]]);
+        if (const auto n = cross(subtract(b, a), subtract(c, a));
+            dot(n, n) == 0)
+          fail("Stowed nondegenerate geometry");
+        if (index(object["source_faces"][ti], triangles.size() - 1) != ti)
+          fail("Stowed complete ordered source-face identity");
+      }
+      const auto& range = object["original_catalog_range"];
+      if (object["introduced_connector"] == true) {
+        if (!range.is_null()) fail("Stowed connector has no original range");
+      } else {
+        if (!range.is_object() || range_count >= ranges.size() ||
+            range["source_object"] != object["source_object"])
+          fail("Stowed exact original source range");
+        ranges[range_count++] = {
+            index(range["original_object"], support.objects().size() - 1),
+            index(range["group"], support.groups().size() - 1),
+            object["source_object"].get_ref<const std::string&>(),
+            {index(range["start"], std::numeric_limits<std::uint32_t>::max()),
+             index(range["count"], std::numeric_limits<std::uint32_t>::max())}};
+      }
+    }
+    if (range_count != ranges.size() || face_count != 1508)
+      fail("Stowed complete replacement/removal dimensions");
+    auto partition = validate_stowed_contact_partition(support, ranges);
+    if (!partition) fail(partition.error());
+    // All source points are direct REST world-baked. The base already uses
+    // this fixed hardware pose; only the complete owner delta is applied.
+    const auto delta =
+        boarding_support_group_transform(support, kCabinSeamHardware, 11);
+    if (!delta) fail(delta.error());
+    if (!detail::approved_stowed_contact_bytes(bytes) ||
+        frame_bytes != detail::kStowedFrameJson)
+      fail("Stowed independently approved bytes differ");
+    OriginLowerCockpitContact::Data::Stowed stowed{std::move(*partition)};
+    stowed.objects.reserve(objects.size());
+    stowed.triangles.reserve(face_count);
+    std::size_t cursor{};
+    for (std::size_t oi = 0; oi < objects.size(); ++oi) {
+      const auto& object = objects[oi];
+      const auto& triangles = object["triangles"];
+      LowerCockpitSourceObject metadata;
+      metadata.source_object = object["source_object"].get<std::string>();
+      metadata.triangle_start = static_cast<std::uint32_t>(cursor);
+      metadata.triangle_count = static_cast<std::uint32_t>(triangles.size());
+      metadata.source_evaluated_triangles = metadata.triangle_count;
+      if (!object["original_catalog_range"].is_null())
+        metadata.original_object =
+            object["original_catalog_range"]["original_object"]
+                .get<std::uint32_t>();
+      metadata.evaluated_source_triangles.reserve(triangles.size());
+      for (std::size_t ti = 0; ti < triangles.size(); ++ti) {
+        Obstacle triangle;
+        triangle.key = {0, static_cast<std::uint32_t>(cursor++)};
+        triangle.object = static_cast<std::uint32_t>(oi);
+        for (std::size_t vi = 0; vi < triangle.points.size(); ++vi)
+          triangle.points[vi] = transform_point(
+              *delta,
+              stowed_point(
+                  object["vertices"][triangles[ti][vi].get<std::uint32_t>()]));
+        triangle.bounds = Access::bounds(triangle.points);
+        stowed.triangles.push_back(triangle);
+        metadata.evaluated_source_triangles.push_back(
+            static_cast<std::uint32_t>(ti));
+      }
+      stowed.objects.push_back(std::move(metadata));
+    }
+    auto data = std::make_shared<OriginLowerCockpitContact::Data>(*base.data_);
+    data->stowed.emplace(std::move(stowed));
+    return OriginLowerCockpitContact{std::move(data)};
+  } catch (const std::exception& error) {
+    return std::unexpected(std::string("Stowed malformed: ") + error.what());
+  }
+}
 auto lookup_lower_cockpit_face(const OriginLowerCockpitContact& geometry,
                                LowerCockpitTriangleKey key)
     -> std::expected<LowerCockpitFace, std::string> {
@@ -404,7 +586,22 @@ auto lookup_lower_cockpit_face(const OriginLowerCockpitContact& geometry,
     result.source_object = object.source_object;
     result.evaluated_source_triangle =
         object.evaluated_source_triangles[key.triangle - object.triangle_start];
+  } else if (key.buffer == LowerCockpitContactBuffer::replacement) {
+    if (!geometry.data_->stowed || key.group != 0 ||
+        key.triangle >= geometry.data_->stowed->triangles.size())
+      return std::unexpected("Lower replacement buffer key bound");
+    triangle = &geometry.data_->stowed->triangles[key.triangle];
+    const auto& object = geometry.data_->stowed->objects[triangle->object];
+    result.source_object = object.source_object;
+    result.evaluated_source_triangle =
+        object.evaluated_source_triangles[key.triangle - object.triangle_start];
   } else if (key.buffer == LowerCockpitContactBuffer::original) {
+    if (geometry.data_->stowed) {
+      const auto removed = stowed_contact_partition_contains_removed(
+          geometry.data_->stowed->partition, {key.group, key.triangle});
+      if (!removed) return std::unexpected(removed.error());
+      if (*removed) return std::unexpected("Lower superseded original face");
+    }
     const auto obstacles = Access::obstacles(geometry.data_->original);
     const auto found = std::ranges::find_if(obstacles, [&](const Obstacle& t) {
       return t.key == BoardingTriangleKey{key.group, key.triangle};
@@ -447,12 +644,29 @@ auto assess_lower_cockpit_reservations(
   }
   const auto collect = [&](std::span<const Obstacle> obstacles,
                            LowerCockpitContactBuffer buffer) {
-    for (const auto& triangle : obstacles)
+    for (const auto& triangle : obstacles) {
+      if (buffer == LowerCockpitContactBuffer::original &&
+          geometry.data_->stowed) {
+        // Admitted original obstacle keys are valid; membership is a whole
+        // range mask, never a coordinate match or source-face redirection.
+        const auto ranges = geometry.data_->stowed->partition.removed();
+        if (std::ranges::any_of(
+                ranges, [&](const StowedContactSourceRange& row) {
+                  return triangle.key.group == row.group &&
+                         triangle.key.triangle >= row.triangles.start &&
+                         triangle.key.triangle - row.triangles.start <
+                             row.triangles.count;
+                }))
+          continue;
+      }
       for (std::size_t i = 0; i < 3; ++i)
         if (auto contact = Access::intersection(triangle, swept[i])) {
           std::optional<std::uint32_t> source;
-          if (buffer == LowerCockpitContactBuffer::halo) {
-            const auto& o = geometry.data_->objects[triangle.object];
+          if (buffer != LowerCockpitContactBuffer::original) {
+            const auto& o =
+                buffer == LowerCockpitContactBuffer::halo
+                    ? geometry.data_->objects[triangle.object]
+                    : geometry.data_->stowed->objects[triangle.object];
             source = o.evaluated_source_triangles[triangle.key.triangle -
                                                   o.triangle_start];
           }
@@ -465,10 +679,14 @@ auto assess_lower_cockpit_reservations(
           if (*contact == CabinIntersection::interior)
             result.interior_clear = false;
         }
+    }
   };
   collect(Access::obstacles(geometry.data_->original),
           LowerCockpitContactBuffer::original);
   collect(geometry.data_->triangles, LowerCockpitContactBuffer::halo);
+  if (geometry.data_->stowed)
+    collect(geometry.data_->stowed->triangles,
+            LowerCockpitContactBuffer::replacement);
   return result;
 }
 auto assess_lower_cockpit_surface_point(

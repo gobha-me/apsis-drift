@@ -96,6 +96,10 @@ source-bound parked assembly offline, reproduces retained render attributes,
 and separates the 13 replacement contact objects from the retained seat.
 Matched runtime presentation and supported seating remain First Flight work.
 
+The [matched static cockpit contact](docs/STOWED_COCKPIT_CONTACT.md) extends the
+existing lower-cockpit queries with the parked replacement, retaining unrelated
+original obstacles and the halo. Live model selection and actor actions follow.
+
 The [complete upper cabin corridor](docs/ORIGIN_CABIN_CORRIDOR.md) extends that
 support qualification across all eight center walking tiles over 4.19 metres.
 It retains the actual tile gaps, tapered surfaces and neighboring obstacles;

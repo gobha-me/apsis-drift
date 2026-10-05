@@ -65,6 +65,11 @@ presentation, exhaust and LOD must use the verified selected surface before that
 base replaces the live model. The matched renderer/contact installer is still
 required.
 
+The [matched static contact factory](STOWED_COCKPIT_CONTACT.md) supplies the
+effective C++ replacement view through the existing lower-cockpit handle. It
+preserves the fixed coverage policy; live presentation and actor selection
+remain separate.
+
 Qualification provenance records the accepted finite results and correspondence
 identities, with their actual limits and public links. It preserves the older
 candidate receipt's unresolved status as history. No source master, provider
