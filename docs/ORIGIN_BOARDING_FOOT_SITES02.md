@@ -1,6 +1,7 @@
-# Fixed boarding foot sites01
+# Fixed boarding foot sites02
 
-Registered for #432 on 2026-10-05 before implementation or site evaluation.
+Registered for #432 on 2026-10-05 before version2 implementation or site evaluation.
+This pre-query correction supersedes the unexecuted sites01 height assumption.
 Publication depends on #430 merging. This is source eligibility under #361,
 not a body pose, load model, gait or boarding route.
 
@@ -18,8 +19,15 @@ outward bounds rather than constructing a different rounded box:
 
 | Site | Center X | Center Y | Center Z | Pressure offset X/Z |
 | --- | --- | --- | --- | --- |
-| Port upper | .16 - .14 | 0 + .05 | -.5 | (0, +.040) |
-| Starboard transition | .16 + .14 | -.16 + .05 | -.8 | (0, 0) |
+| Port upper | .16 - .14 | upper source plane + .05 | -.5 | (0, +.040) |
+| Starboard transition | .16 + .14 | transition source plane + .05 | -.8 | (0, 0) |
+
+The upper plane is the stored C++ product `-100000.0 * 1e-6`, named
+`kCabinCorridorFloorMetres` through `kCabinSeamFloorMetres`. The transition
+plane is the unchanged stored product `-160000.0 * 1e-6`. These are compiled
+source coordinates, not ideal decimal planes or replaced rounded sums. Validate
+both named planes against the immutable provider before assessment. Their actual
+step is approximately 6 cm; do not reuse the old 0/-.16 height assumption.
 
 Pressure points lie on each exact sole plane. Require the existing exact 20 mm
 radius plus 10 mm edge margin against both that sole and one actual matching-plane
@@ -75,11 +83,17 @@ seating, actor/save and First Flight flags remain false. Actual posture and join
 frames, physical load distribution, supported acquisition and transfer are separate
 work under #361. No character, ship or station art change is requested.
 
-## Superseded before evaluation
+## Pre-query correction history
 
-Source review found that the actual upper floor uses the stored product
-`-100000.0 * 1e-6`, rather than this draft's plane0 assumption. No site query
-or test execution occurred under this draft. The separately registered
-[sites02](ORIGIN_BOARDING_FOOT_SITES02.md) binds the unchanged actual source
-planes before its implementation or first observation. Preserve this original
-definition as unexecuted history; it is not an observed contact result.
+Independent source review caught the sites01 upper plane0 mismatch before any
+query, test execution or numeric outcome. Its initial implementation followed
+actual provider planes without the registered source-plane binding; that source
+was not executed or published. Preserve sites01 as an unexecuted superseded
+registration. Sites02/version2 changes only the named actual plane binding and
+validation before first observations. All X/Z expressions, pressure points,
+dimensions, margins, source identities, coverage limits and authority denials
+stay frozen. This is source correction, not fitting after a failed outcome.
+
+The old planted curve/body/timing recipes and confirmed hip conflict remain
+unchanged source-free evidence. No previously hypothesized joint, posture, reach
+or load result transfers to these source-bound sites.
