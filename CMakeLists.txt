@@ -773,14 +773,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(godot-rotation-coast-contract PROPERTIES TIMEOUT 90)
 endif ()
 
-if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
-  add_executable(apsis-drift-tests test/test.cpp)
-  target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
-  target_include_directories(apsis-drift-tests
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_compile_definitions(apsis-drift-tests PRIVATE
-    APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
-  add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
+if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-asset-manifest-tests
     test/asset_manifest_test.cpp)
   target_link_libraries(apsis-drift-asset-manifest-tests
@@ -791,6 +784,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
     COMMAND apsis-drift-asset-validator
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
+endif ()
+
+if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
+  add_executable(apsis-drift-tests test/test.cpp)
+  target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
+  target_include_directories(apsis-drift-tests
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_definitions(apsis-drift-tests PRIVATE
+    APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
+  add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE
