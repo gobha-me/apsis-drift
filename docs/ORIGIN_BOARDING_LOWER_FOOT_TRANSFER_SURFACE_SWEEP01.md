@@ -1,10 +1,9 @@
 # Partial lower-foot transfer source-surface sweep01
 
-2026-10-05. Planning only after Root recorded #447's first whole result with85
-accepted cells. This document does not inspect/replay numerical traces, predict
-surface clearance, run a query/build, change tracked files or read assets.
-The method and ceilings below must be committed and independently reviewed before implementation/first observation.
-The85-cell observation does not set a new hard capacity or permit fitting.
+2026-10-05. The following method was registered after #447's first whole
+result and committed before implementation and the first surface query. Its
+85-cell observation did not set a new hard capacity or permit fitting. The
+implementation accounting and observed outcomes follow the unchanged method.
 
 ## Ownership and public boundary
 
@@ -238,3 +237,48 @@ no source/body admission. Actual callback captures, std::function storage,
 helper arguments/returns and any bounded temporary allocation belong in the
 8KiB live ledger before first observation. No copied7,648B transfer cell or
 extra static Load/Self/Endpoint child may overlap new surface work.
+
+
+## Implementation accounting before first observation
+
+The new fixed surface payload occupies 1,200 bytes, below 4 KiB, alongside the
+independently owned unchanged transfer child. New surface work begins after
+prerequisite-return temporaries have ended. Its asserted source-live ledger
+is 8,176 bytes, below 8 KiB, including the 872-byte prepared context, kernel
+workspace and nested helper returns, callback captures, source adapters,
+query controls, non-elided payload returns and bounded error temporaries.
+GCC and Clang 20 release stack reports corroborate this phased accounting.
+The existing source kernel and its operation order remain unchanged.
+
+## First registered observations
+
+Implementation `b9c26a0` was committed before either first producer query, after
+independent source/storage review and successful native compilation. GCC and
+Clang 20 return byte-identical first logs and pass 1,457 checks each with zero
+failures. Both own the unchanged complete 85-cell partial preparation. All 15
+whole-curve WORLD bounds fit the original collision crop before triangle math.
+
+The original visitor reports 408,339 effective triangles and 6,125,085 base
+part/triangle pairs. Of those, 6,125,056 receive a whole-curve broad certificate;
+the remaining 29 are certified through 2,465 checks against the owned cells.
+These comprise 861 cell broad certificates and 1,604 full-support certificates,
+using 7,042 actual axes with no unsupported axes. Exact logical coverage is
+520,632,225 cell/part/triangle comparisons, with one metadata visit and
+6,125,085 traversal visits. No refusal occurs and no method, crop, body, clock,
+source kernel or work ceiling changed to obtain this outcome.
+
+No original far triangle was present for the finite-only bridge control; that
+control uses a private arithmetic object and grants no source admission.
+Successful surface separation qualifies only this continuous partial
+preparation. Material/occupied-volume and overall world clearance, moving-force
+dynamics, strength, friction, foot unloading/swing, complete boarding, actor
+movement, seating, saves and First Flight remain unqualified.
+
+
+Post-observation regressions require complete success for whole, reverse,
+subinterval and point requests, while keeping the first logs intact. They pass
+1,464 checks per compiler with byte-identical logs. Complete native suites pass
+64/64 with GCC (44.37s) and Clang20 (40.93s), including existing walk/save/flight
+and source-asset contracts. Pinned formatting and full Clang-tidy20 analysis pass across 155 translation
+units with 48 accepted suppression directives. Both registered issues publish
+together; their partial result leaves the parent boarding route open.

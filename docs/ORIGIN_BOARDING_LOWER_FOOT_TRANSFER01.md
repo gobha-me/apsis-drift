@@ -49,7 +49,7 @@ Let B=w*Cport+(1-w)*Cstar in XZ, ONE delta=M-B and Pi=Ci+delta. Pressure Y is it
 
 Require the unchanged20mm disk+10mm edge margin in BOTH real soles and actual selected source quads; use four signed edges and squared-side proofs with exact radius+margin sum. Validate all ten source quads once: actual horizontal plane, upward source-triangle winding/incidence, nonzero edges and all eight convexity signs. Retain actual namespaces/keys and scan coverage; invalid/wrong-plane candidates skip disk tests honestly. Full sole footprint below any higher eligible surface still refuses when overlap cannot be excluded, regardless of reaction fraction. Actual fixed footprints/planes make that placement invariant over this candidate; it can be certified once with authentic constant geometry.
 
-Contained same-radius pressure disks yield the unchanged10mm projected-load margin through the exact weighted Minkowski support argument. No rounded hull or independently selectable pressure bounds. This is a nominal QUASI-STATIC vertical-reaction certificate only: nonzero acceleration is not balanced by those nominal forces. Dynamics, engineering strength and friction permission remain false; no actor uses this curve before a separately selected moving-force model.
+Contained same-radius pressure disks yield the unchanged10mm projected-load margin through the exact weighted Minkowski support argument. No rounded hull or independently selectable pressure bounds. This is a nominal QUASI-STATIC vertical-reaction certificate only: nonzero acceleration is not balanced by those nominal forces. Dynamics, engineering strength and friction permission remain false; no actor uses this partial curve before a complete supported trajectory is qualified under #361's selected bounded kinematic model.
 
 ## Public/private interface and bounded records
 
@@ -134,3 +134,9 @@ suites pass63/63 on GCC (38.81s) and Clang20 (37.00s), including native
 walk/save/flight and asset contracts. Pinned formatting and full Clang-tidy20 analysis pass across153 translation
 units with46 accepted suppression directives. Remote publication remains
 pending at this recorded checkpoint.
+
+
+The separate [surface consumer](ORIGIN_BOARDING_LOWER_FOOT_TRANSFER_SURFACE_SWEEP01.md)
+subsequently qualifies continuous triangle-surface separation using this same
+owned preparation. It does not change this assessor's denial flags or establish
+material volume, moving-force dynamics, foot unloading, actor movement or seating.

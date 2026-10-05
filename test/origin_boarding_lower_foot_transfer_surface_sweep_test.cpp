@@ -1379,6 +1379,16 @@ auto production_caps(const OriginBoardingBootSupport& source,
           "nextunattempted pair");
   }
 }
+// Added after the frozen first GCC/Clang whole and request observations passed.
+// Keep success mandatory without depending on a particular cell or axis count.
+auto observed_success(const Sweep& d) -> void {
+  const auto& p = d.surface;
+  check(d.transfer.complete && p.arithmetic_supported && p.coverage_complete &&
+            p.comparisons_complete && p.partial_continuous_surface_qualified &&
+            p.complete && !p.first_refusal,
+        "Observed whole/reverse/sub/point requests retain complete child, crop "
+        "and continuous surface certificates");
+}
 auto request_controls(const OriginBoardingBootSupport& source) -> void {
   for (auto interval : std::array{std::array{1., 0.}, std::array{.25, .75},
                                   std::array{.75, .25}, std::array{0., 0.},
@@ -1391,6 +1401,7 @@ auto request_controls(const OriginBoardingBootSupport& source) -> void {
     check(snapshot(d.transfer) == snapshot(original),
           "Full/reverse/sub/point sourcequery consumes exact original447 "
           "request and closedcells");
+    observed_success(d);
     inspect_union(d);
   }
 }
@@ -1477,8 +1488,10 @@ int main() {
         snapshot(require(assess_origin_boarding_lower_foot_transfer(source)));
     const auto old_static = snapshot(require(
         assess_origin_boarding_source_endpoint_surface_checkpoint(source)));
-    // No whole moving surface outcome is asserted before this registered log.
+    // Frozen first compiler observations preceded the success regressions.
+    // Preserve the registered outcome log before those later assertions.
     const auto actual = observe(source);
+    observed_success(actual);
     check(snapshot(actual.transfer) == unchanged,
           "New source sweep owns one unchanged447 diagnostic rather than "
           "another pose graph");
