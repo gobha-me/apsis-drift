@@ -1,4 +1,5 @@
 #include "apsis_drift/origin_boarding_self_model03.hpp"
+#include "apsis_drift/origin_boarding_self_model04.hpp"
 #include "origin_boarding_self_model03_internal.hpp"
 #include <algorithm>
 #include <array>
@@ -716,11 +717,14 @@ auto boarding_self_model03_axial_plane_sign(const Slab& s, Vec p) -> Sign {
 }
 } // namespace detail
 
-auto evaluate_origin_boarding_self_model03(const BoardingBodyPose& pose)
-    -> std::expected<BoardingSelfDiagnostic03, BoardingBodyError> {
-  auto canonical = evaluate_origin_boarding_body(pose);
-  if (!canonical) return std::unexpected(canonical.error());
-  BoardingSelfDiagnostic03 result;
+namespace {
+// Only the two named pose evaluators reach this purpose-specific assembly.
+// All finite region definitions and pair predicates remain identical.
+template <typename Diagnostic>
+auto build_self_recipe(const BoardingBodyDiagnostic& body)
+    -> std::expected<Diagnostic, BoardingBodyError> {
+  const auto* canonical = &body;
+  Diagnostic result;
   result.canonical = *canonical;
   for (std::size_t i = 0; i < result.self_parts.size(); ++i) {
     const auto& part = canonical->parts[i];
@@ -818,5 +822,19 @@ auto evaluate_origin_boarding_self_model03(const BoardingBodyPose& pose)
   if (index != kBoardingBodyPairCount)
     return std::unexpected(BoardingBodyError::numerical_failure);
   return result;
+}
+} // namespace
+
+auto evaluate_origin_boarding_self_model03(const BoardingBodyPose& pose)
+    -> std::expected<BoardingSelfDiagnostic03, BoardingBodyError> {
+  auto canonical = evaluate_origin_boarding_body(pose);
+  if (!canonical) return std::unexpected(canonical.error());
+  return build_self_recipe<BoardingSelfDiagnostic03>(*canonical);
+}
+auto evaluate_origin_boarding_self_model04(const BoardingBodyPose& pose)
+    -> std::expected<BoardingSelfDiagnostic04, BoardingBodyError> {
+  auto canonical = evaluate_origin_boarding_body02(pose);
+  if (!canonical) return std::unexpected(canonical.error());
+  return build_self_recipe<BoardingSelfDiagnostic04>(*canonical);
 }
 } // namespace apsis_drift
