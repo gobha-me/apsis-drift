@@ -84,3 +84,23 @@ Root records FIRST GCC/Clang frozen full outcomes only after tracked preregistra
 ## Registered derivative enclosure option
 
 The compiled quintic may tighten its monotonic value enclosure to endpoint bounds and [0,1]. Its first derivative has its maximum15/8 at1/2; the second derivative has stationary points(3±sqrt(3))/6 and magnitude10/sqrt(3)<6. Thus supported analytical derivative enclosures may also intersect [0,15/8] and [-6,6] respectively, with exact zero first/second derivatives at t=0 or1. These facts constrain the same exact polynomial; they add no sampled permission or changed clock. Root/leg/full-COM derivatives must still propagate through the genuine graph with supported-state retention.
+
+
+## Implementation accounting before first observation
+
+The compiled implementation retains a7,648-byte cell,576-byte relative
+expression graph and624-byte leg packet. Its actual new fixed diagnostic
+fields occupy2,176 bytes;1024 cells plus those fields occupy7,833,728 bytes,
+below8MiB. The query checks actual vector capacity and appends without
+growth. It moves the unchanged initial child into its result before any new
+graph work, so the moved-from child does not overlap the transfer scratch.
+
+Geometry, joint predicates, mass assembly, ownership/support and pressure
+helpers have separate lifetimes. The asserted source-live ledger totals
+15,288 bytes:7,648 cell +576 graph +4,096 mutually exclusive main phase
++2,048 deepest helper/return pool +264 cover frames +512 query controls
++144 dedicated scalar constants. Release compilation with GCC and Clang20
+corroborates the phased call frames; the largest conservatively tallied GCC
+kinematic stack path is13,936 bytes. These are accounting observations, not
+claims that the curve qualifies. No producer query had run when these bounds
+and the initial compilation results were recorded.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apsis_drift/origin_boarding_source_endpoint_load.hpp"
+#include "origin_boarding_lower_foot_transfer_internal.hpp"
 
 namespace apsis_drift::detail {
 [[nodiscard]] auto boarding_source_endpoint_load_bounded(
