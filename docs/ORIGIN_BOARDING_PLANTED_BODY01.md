@@ -117,3 +117,27 @@ Publication requires full GCC/Clang builds/tests and pinned format20/tidy20.
 Continuous finite self, source-backed load and sweeps, foot acquisition/swing,
 supported pauses, pan contacts/seating, route/actor/save and First Flight remain
 open. No rendered capture or owner playtest is claimed by this cut.
+
+## First implementation outcomes
+
+The first recorded GCC and Clang builds/runs each pass275,517 independent
+checks with no failures. Full/reverse requests produce20 body leaves, halves10,
+[.25,.5]7 and[.125,.875]16, matching the unchanged timing cover. All five
+registered point requests produce one complete body leaf. Full15 reservation
+and mass records, once-only placement, COM values/derivatives and old prerequisite
+snapshots pass without changing the frozen curve, arm posture, dimensions,
+masses, branch, clock or limits.
+
+Before any body execution, independent source review caught a bound conversion
+that could discard an unsupported interval state. A monotone validity accumulator
+now guards every new conversion and the final append; old planted arithmetic
+and evaluation order remain unchanged. The corrected source was independently
+reviewed before these first runs. No failed body fixture was tuned away.
+
+Final regression assertions preserve all15 observed complete outcomes and leaf
+counts. The final contract passes275,532 checks on each compiler; earlier
+closure/timing contracts still pass18,829/86,985 respectively. Full native builds
+and54/54 tests pass on GCC22.39s and Clang21.46s. Pinned format20, full tidy20
+over144 translation units and31 existing justified suppression directives pass.
+Publication awaits dependency #426 merge. Continuous self/load/world evidence,
+supported seating and actor/First Flight integration remain open.

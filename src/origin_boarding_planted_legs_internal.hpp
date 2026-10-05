@@ -38,4 +38,12 @@ namespace apsis_drift::detail {
     -> BoardingPlantedLegSpeedEvidence;
 [[nodiscard]] auto boarding_planted_leg_speed_threshold()
     -> BoardingPlantedLegScalarBounds;
+// Only compiled body expressions; these caps can lower the registered budgets.
+// The original timing result remains owned unchanged, including refusal/prefix.
+[[nodiscard]] auto boarding_planted_body_bounded(
+    double first, double last, std::size_t max_body_leaves,
+    std::size_t max_timing_depth = kBoardingPlantedLegMaximumDepth,
+    std::size_t max_timing_nodes = kBoardingPlantedLegMaximumNodes,
+    std::size_t max_timing_leaves = kBoardingPlantedLegMaximumLeaves)
+    -> std::expected<BoardingPlantedBodyDiagnostic, std::string>;
 } // namespace apsis_drift::detail

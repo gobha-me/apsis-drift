@@ -851,6 +851,267 @@ auto assess_timing(double first, double last, std::size_t depth,
   return std::move(query.result);
 }
 } // namespace
+namespace {
+using BodyPointId = BoardingPlantedBodyPointId;
+using BodyPointEvidence = BoardingPlantedBodyPointEvidence;
+using BodyParts =
+    std::array<BoardingPlantedBodyPartBinding, kBoardingBodyPartCount>;
+using BodyCondition = BoardingPlantedBodyCondition;
+constexpr std::array<std::uint32_t, kBoardingBodyPartCount> body_weights{
+    144, 540, 96, 120, 48, 12, 15, 10, 5, 120, 48, 12, 15, 10, 5};
+static_assert([] {
+  std::uint32_t sum{};
+  for (const auto weight : body_weights)
+    sum += weight;
+  return sum == kBoardingBodyMassDenominator;
+}());
+auto body_box(BoardingBodyPartId id, BodyPointId center, Vec half,
+              std::uint32_t weight) -> BoardingPlantedBodyPartBinding {
+  return {id,
+          BoardingPlantedBodyBoxBinding{center, half, {}},
+          {center, center, weight}};
+}
+auto body_capsule(BoardingBodyPartId id, BodyPointId start, BodyPointId end,
+                  double radius, std::uint32_t weight)
+    -> BoardingPlantedBodyPartBinding {
+  return {id,
+          BoardingPlantedBodyCapsuleBinding{start, end, radius},
+          {start, end, weight}};
+}
+auto body_parts() -> BodyParts {
+  using Id = BoardingBodyPartId;
+  using P = BodyPointId;
+  return {
+      body_box(Id::pelvis, P::root, {.24, .12, .18}, body_weights[0]),
+      body_box(Id::trunk, P::trunk_center, {.26, .2695, .18}, body_weights[1]),
+      body_box(Id::helmet, P::helmet_center, {.16, .18, .18}, body_weights[2]),
+      body_capsule(Id::port_thigh, P::port_hip, P::port_knee, .105,
+                   body_weights[3]),
+      body_capsule(Id::port_shin, P::port_knee, P::port_ankle, .075,
+                   body_weights[4]),
+      body_box(Id::port_boot, P::port_boot_center, {.06, .05, .14},
+               body_weights[5]),
+      body_capsule(Id::port_upper_arm, P::port_shoulder, P::port_elbow, .065,
+                   body_weights[6]),
+      body_capsule(Id::port_forearm, P::port_elbow, P::port_wrist, .055,
+                   body_weights[7]),
+      body_box(Id::port_hand, P::port_wrist, {.04, .05, .02}, body_weights[8]),
+      body_capsule(Id::starboard_thigh, P::starboard_hip, P::starboard_knee,
+                   .105, body_weights[9]),
+      body_capsule(Id::starboard_shin, P::starboard_knee, P::starboard_ankle,
+                   .075, body_weights[10]),
+      body_box(Id::starboard_boot, P::starboard_boot_center, {.06, .05, .14},
+               body_weights[11]),
+      body_capsule(Id::starboard_upper_arm, P::starboard_shoulder,
+                   P::starboard_elbow, .065, body_weights[12]),
+      body_capsule(Id::starboard_forearm, P::starboard_elbow,
+                   P::starboard_wrist, .055, body_weights[13]),
+      body_box(Id::starboard_hand, P::starboard_wrist, {.04, .05, .02},
+               body_weights[14])};
+}
+auto body_index(BodyPointId id) -> std::size_t {
+  return static_cast<std::size_t>(id);
+}
+auto body_intervals(const BoardingPlantedLegPointBounds& p) -> Point {
+  return {interval(p.lower.x, p.upper.x), interval(p.lower.y, p.upper.y),
+          interval(p.lower.z, p.upper.z)};
+}
+auto body_supported(const BodyPointEvidence& p) -> bool {
+  for (const auto& b :
+       {p.value, p.derivatives.velocity, p.derivatives.acceleration}) {
+    if (!std::ranges::all_of(body_intervals(b),
+                             [](Interval v) { return v.supported; }))
+      return false;
+  }
+  return true;
+}
+// Retain failed interval state BEFORE flattening into public bound records.
+// Assembly never appends the temporary leaf unless every conversion supported.
+auto body_bounds(const Point& p, bool& supported)
+    -> BoardingPlantedLegPointBounds {
+  supported = supported &&
+              std::ranges::all_of(p, [](Interval v) { return v.supported; });
+  return point_bounds(p);
+}
+auto body_offset(const BodyPointEvidence& p, const Point& offset,
+                 bool& supported) -> BodyPointEvidence {
+  auto selected = body_intervals(p.value);
+  for (std::size_t i = 0; i < selected.size(); ++i)
+    selected[i] = add(selected[i], offset[i]);
+  return {body_bounds(selected, supported), p.derivatives};
+}
+auto body_midpoint(const BodyPointEvidence& a, const BodyPointEvidence& b,
+                   bool& supported) -> BodyPointEvidence {
+  auto midpoint = [&](const BoardingPlantedLegPointBounds& first,
+                      const BoardingPlantedLegPointBounds& second) {
+    auto selected = body_intervals(first);
+    const auto other = body_intervals(second);
+    for (std::size_t i = 0; i < selected.size(); ++i)
+      selected[i] = multiply(add(selected[i], other[i]), point(.5));
+    return body_bounds(selected, supported);
+  };
+  return {midpoint(a.value, b.value),
+          {midpoint(a.derivatives.velocity, b.derivatives.velocity),
+           midpoint(a.derivatives.acceleration, b.derivatives.acceleration)}};
+}
+struct BodyScratch {
+  BoardingPlantedBodyLeaf leaf;
+  Point weighted_value;
+};
+static_assert(sizeof(BoardingPlantedBodyLeaf) <= 6144);
+// Includes the assembly leaf, fixed table and conservative helper temporaries;
+// the separately owned timing cover and bounded output vector are not scratch.
+static_assert(sizeof(BodyScratch) + sizeof(BodyParts) + 4 * sizeof(Point) +
+                  2 * sizeof(BodyPointEvidence) <=
+              8192);
+auto assemble_body(BodyScratch& scratch,
+                   const BoardingPlantedLegTimingLeaf& timing,
+                   const BodyParts& parts, Interval arm_component) -> bool {
+  bool supported{true};
+  auto& leaf = scratch.leaf;
+  leaf.first = timing.first;
+  leaf.last = timing.last;
+  auto& points = leaf.points;
+  auto at = [&](BodyPointId id) -> BodyPointEvidence& {
+    return points[body_index(id)];
+  };
+  const auto x = root_x(timing.first, timing.last);
+  if (!x.supported || !arm_component.supported) return false;
+  at(BodyPointId::root) = {body_bounds({x, point(0), point(-.16)}, supported),
+                           timing.root};
+  const auto& root_point = at(BodyPointId::root);
+  at(BodyPointId::trunk_center) =
+      body_offset(root_point, {point(0), point(.3495), point(0)}, supported);
+  at(BodyPointId::helmet_center) =
+      body_offset(root_point, {point(0), point(.70237), point(0)}, supported);
+  at(BodyPointId::eye) =
+      body_offset(root_point, {point(0), point(.65237), point(0)}, supported);
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto base = side == 0 ? body_index(BodyPointId::port_hip)
+                                : body_index(BodyPointId::starboard_hip);
+    const auto& leg = timing.legs[side];
+    // These are the internally owned SAME-expression canonical bounds, not a
+    // newly reconstructed knee or a rounded inverse-angle body evaluation.
+    points[base] = {leg.closure.hip, leg.hip};
+    points[base + 1] = {leg.closure.knee, leg.knee};
+    points[base + 2] = {leg.closure.ankle, leg.ankle};
+    points[base + 3] = {leg.closure.boot_center, leg.boot_center};
+    points[base + 4] = body_offset(
+        root_point,
+        {point(side == 0 ? -.20265 : .20265), point(.579), point(0)},
+        supported);
+    points[base + 5] = body_offset(
+        points[base + 4], {point(0), arm_component, arm_component}, supported);
+    points[base + 6] = body_offset(
+        points[base + 5], {point(0), point(.386), point(0)}, supported);
+  }
+  if (!supported || !std::ranges::all_of(points, body_supported)) return false;
+  scratch.weighted_value = {point(0), point(0), point(0)};
+  for (std::size_t i = 0; i < parts.size(); ++i) {
+    const auto& mass = parts[i].mass;
+    const auto first = body_index(mass.first), second = body_index(mass.second);
+    if (first >= points.size() || second >= points.size() ||
+        static_cast<std::size_t>(parts[i].id) != i ||
+        mass.weight != body_weights[i])
+      return false;
+    leaf.mass_points[i] =
+        first == second
+            ? points[first]
+            : body_midpoint(points[first], points[second], supported);
+    if (!supported || !body_supported(leaf.mass_points[i])) return false;
+    const auto value = body_intervals(leaf.mass_points[i].value);
+    for (std::size_t axis = 0; axis < value.size(); ++axis)
+      scratch.weighted_value[axis] =
+          add(scratch.weighted_value[axis],
+              multiply(point(mass.weight), value[axis]));
+  }
+  for (auto& v : scratch.weighted_value)
+    v = divide(v, point(kBoardingBodyMassDenominator));
+  leaf.center_of_mass.value = body_bounds(scratch.weighted_value, supported);
+  auto derivative = [&](bool second) {
+    const auto& p = root_point.derivatives;
+    const auto& a = at(BodyPointId::port_knee).derivatives;
+    const auto& b = at(BodyPointId::starboard_knee).derivatives;
+    auto selected = body_intervals(second ? p.acceleration : p.velocity);
+    const auto port = body_intervals(second ? a.acceleration : a.velocity);
+    const auto starboard = body_intervals(second ? b.acceleration : b.velocity);
+    for (std::size_t axis = 0; axis < selected.size(); ++axis)
+      selected[axis] =
+          divide(add(multiply(point(960), selected[axis]),
+                     multiply(point(84), add(port[axis], starboard[axis]))),
+                 point(kBoardingBodyMassDenominator));
+    return body_bounds(selected, supported);
+  };
+  leaf.center_of_mass.derivatives = {derivative(false), derivative(true)};
+  return supported && body_supported(leaf.center_of_mass);
+}
+auto assess_body(double first, double last, std::size_t body_capacity,
+                 std::size_t timing_depth, std::size_t timing_nodes,
+                 std::size_t timing_leaves)
+    -> std::expected<BoardingPlantedBodyDiagnostic, std::string> {
+  if (body_capacity > kBoardingPlantedBodyMaximumLeaves)
+    return std::unexpected("Planted body storage exceeds registered limits");
+  auto timing =
+      assess_timing(first, last, timing_depth, timing_nodes, timing_leaves);
+  if (!timing) return std::unexpected(timing.error());
+  BoardingPlantedBodyDiagnostic result;
+  result.timing = std::move(*timing);
+  result.parts = body_parts();
+  const auto low = std::min(first, last), high = std::max(first, last);
+  auto refuse = [&](BodyCondition condition, std::size_t index, double a,
+                    double b) {
+    result.first_refusal = BoardingPlantedBodyRefusal{condition, index, a, b};
+  };
+  if (!supported_environment()) {
+    refuse(BodyCondition::unsupported_arithmetic, 0, low, high);
+    return result;
+  }
+  if (!result.timing.complete) {
+    const auto& old = result.timing.first_refusal;
+    refuse(BodyCondition::timing_prerequisite, 0, old ? old->first : low,
+           old ? old->last : high);
+    return result;
+  }
+  const auto arm_component = negate(multiply(point(.35898), root(point(.5))));
+  if (!arm_component.supported) {
+    refuse(BodyCondition::unsupported_arithmetic, 0, low, high);
+    return result;
+  }
+  result.leaves.reserve(std::min(body_capacity, result.timing.leaves.size()));
+  BodyScratch scratch;
+  auto cursor = low;
+  for (const auto& selected : result.timing.leaves) {
+    const auto index = result.leaves.size();
+    if (selected.first != cursor || selected.first > selected.last) {
+      refuse(BodyCondition::incomplete_cover, index, selected.first,
+             selected.last);
+      return result;
+    }
+    if (index == body_capacity) {
+      refuse(BodyCondition::body_capacity, index, selected.first,
+             selected.last);
+      return result;
+    }
+    if (!assemble_body(scratch, selected, result.parts, arm_component)) {
+      refuse(BodyCondition::unsupported_arithmetic, index, selected.first,
+             selected.last);
+      return result;
+    }
+    result.leaves.push_back(scratch.leaf);
+    result.assembled_leaves = result.leaves.size();
+    cursor = selected.last;
+  }
+  if (result.leaves.empty() || cursor != high) {
+    refuse(BodyCondition::incomplete_cover, result.leaves.size(), cursor, high);
+    return result;
+  }
+  result.complete = true;
+  result.reservations_complete = true;
+  result.mass_model_complete = true;
+  result.com_derivatives_complete = true;
+  return result;
+}
+} // namespace
 namespace detail {
 auto boarding_planted_leg_numeric(RigidVector3 hip, double ankle_x,
                                   double ankle_z, double plane, double l1,
@@ -898,6 +1159,15 @@ auto boarding_planted_leg_joint_speed(Bounds roll_rate, Bounds pitch_rate)
 auto boarding_planted_leg_speed_threshold() -> Bounds {
   return supported_environment() ? bounds(speed_threshold()) : Bounds{};
 }
+auto boarding_planted_body_bounded(double first, double last,
+                                   std::size_t body_leaves,
+                                   std::size_t timing_depth,
+                                   std::size_t timing_nodes,
+                                   std::size_t timing_leaves)
+    -> std::expected<BoardingPlantedBodyDiagnostic, std::string> {
+  return assess_body(first, last, body_leaves, timing_depth, timing_nodes,
+                     timing_leaves);
+}
 } // namespace detail
 auto assess_origin_boarding_planted_legs(double first, double last)
     -> std::expected<BoardingPlantedLegDiagnostic, std::string> {
@@ -910,5 +1180,12 @@ auto assess_origin_boarding_planted_legs_timing(double first, double last)
   return assess_timing(first, last, kBoardingPlantedLegMaximumDepth,
                        kBoardingPlantedLegMaximumNodes,
                        kBoardingPlantedLegMaximumLeaves);
+}
+auto assess_origin_boarding_planted_body(double first, double last)
+    -> std::expected<BoardingPlantedBodyDiagnostic, std::string> {
+  return assess_body(first, last, kBoardingPlantedBodyMaximumLeaves,
+                     kBoardingPlantedLegMaximumDepth,
+                     kBoardingPlantedLegMaximumNodes,
+                     kBoardingPlantedLegMaximumLeaves);
 }
 } // namespace apsis_drift
