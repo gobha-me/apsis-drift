@@ -866,6 +866,9 @@ void graph_cases() {
   const auto first = require(assess_origin_boarding_route_foot_phase(original));
   log_first("FIRST_PUBLIC_WHOLE", first);
   validate_report(first);
+  // The first registered GCC/Clang20 logs are retained before these now-known
+  // outcome regressions; every fresh run still prints its observation first.
+  check(first.complete, "Observed stationary whole graph remains complete");
   observed_point_budgets();
   for (const auto endpoints : std::array<std::array<double, 2>, 5>{
            {{1, 0}, {.125, .875}, {.875, .125}, {.5, .5}, {1, 1}}}) {
@@ -873,9 +876,8 @@ void graph_cases() {
         original, endpoints[0], endpoints[1]));
     log_first("STATIONARY_REQUEST", d);
     validate_report(d);
-    if (first.complete)
-      check(d.complete, "Observed complete stationary graph also covers valid "
-                        "reverse/sub/point");
+    check(d.complete, "Observed complete stationary graph also covers valid "
+                      "reverse/sub/point");
   }
   std::array<Request, 6> motions;
   motions.fill(original);
@@ -895,11 +897,34 @@ void graph_cases() {
     const auto d = require(assess_origin_boarding_route_foot_phase(request));
     log_first("MOTION", d);
     validate_report(d);
+    if (i == 2) {
+      check(!d.complete && d.first_refusal && !d.cells.empty(),
+            "Observed port lift retains a valid prefix before refusing");
+      if (d.first_refusal) {
+        check(d.first_refusal->condition == Condition::depth_capacity &&
+                  d.first_refusal->predicate_condition ==
+                      Condition::joint_sector &&
+                  d.first_refusal->first == .1240234375 &&
+                  d.first_refusal->last == .125,
+              "Observed port lift preserves its exact closed joint-sector "
+              "refusal");
+        if (!d.cells.empty())
+          check(
+              d.cells.front().first == 0 &&
+                  d.cells.back().last == d.first_refusal->first,
+              "Observed port lift prefix ends at the actual refused interval");
+      }
+    } else {
+      check(d.complete, "Observed five moving whole graphs remain complete");
+    }
     for (const auto range :
          std::array<std::array<double, 2>, 3>{{{1, 0}, {.25, .75}, {.5, .5}}}) {
       const auto report = require(
           assess_origin_boarding_route_foot_phase(request, range[0], range[1]));
       validate_report(report);
+      if (i != 2)
+        check(report.complete, "Observed passing motion also covers reverse, "
+                               "subinterval and point");
     }
     for (double endpoint : {0., 1.})
       endpoint_c2(require(assess_origin_boarding_route_foot_phase(
