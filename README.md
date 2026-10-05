@@ -91,6 +91,11 @@ The [original cockpit source partition](docs/ORIGIN_STOWED_CONTACT_PARTITION.md)
 binds the eight restraint/manifold ranges needed for the parked replacement.
 It preserves every other original object; matched package integration follows.
 
+The [static stowed asset delivery](docs/WAYFARER_STOWED_ASSETS.md) prepares the
+source-bound parked assembly offline, reproduces retained render attributes,
+and separates the 13 replacement contact objects from the retained seat.
+Matched runtime presentation and supported seating remain First Flight work.
+
 The [complete upper cabin corridor](docs/ORIGIN_CABIN_CORRIDOR.md) extends that
 support qualification across all eight center walking tiles over 4.19 metres.
 It retains the actual tile gaps, tapered surfaces and neighboring obstacles;

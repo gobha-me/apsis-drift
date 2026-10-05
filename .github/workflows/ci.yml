@@ -71,6 +71,11 @@ jobs:
       - name: Check corrected-rest atomic publication and failure boundaries
         run: python3 test/wayfarer_corrected_rest_package_test.py
 
+      - name: Check static stowed package geometry and atomic preparation
+        run: |
+          python3 test/wayfarer_stowed_package_test.py
+          python3 tools/prepare_wayfarer_stowed.py --package assets/native/wayfarer-stowed-01 --verify-only
+
       - name: Check stowed-joint indexed boundaries and bounded observation
         run: python3 test/wayfarer_stowed_joint_observation_test.py
 

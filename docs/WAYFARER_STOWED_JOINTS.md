@@ -11,6 +11,11 @@ obstacles. Five added connectors join retained endpoints to declared finite
 attachment surfaces. A successful export does not admit a gameplay asset or
 prove that the pilot can reach and occupy the seat.
 
+The [static asset delivery](WAYFARER_STOWED_ASSETS.md) freezes candidate19 into
+a portable, independently checked package. It reproduces the retained render
+buffers and prepares only the 13 replacement contact objects; selecting matched
+runtime collision and presentation remains subsequent integration.
+
 ## Declared attachments
 
 Each connector has a root footprint on its retained strap and a fixed
