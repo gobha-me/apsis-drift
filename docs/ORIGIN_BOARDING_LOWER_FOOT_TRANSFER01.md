@@ -104,3 +104,32 @@ corroborates the phased call frames; the largest conservatively tallied GCC
 kinematic stack path is13,936 bytes. These are accounting observations, not
 claims that the curve qualifies. No producer query had run when these bounds
 and the initial compilation results were recorded.
+
+
+## First registered observations
+
+Implementation84c3403 was committed before the first producer query, after
+independent method/source/test/storage review and successful complete native
+GCC/Clang20 compilation. Both first executions return byte-identical logs:
+the complete continuous partial preparation qualifies with85 accepted cells
+from169 examined nodes, maximum depth8, and no refusal. The source owns ten
+once-validated quads; performed work is8,925 self pairs,14,558 proposed axes,
+23,166 signed trials,1,700 pressure candidates and4,080 disk edges. Actual
+new output capacity is7,833,728 bytes with7,648-byte cells. Each compiler
+passes434,205 independent/contract checks with zero failures.
+
+The first runs were outcome-neutral until the full observation was printed.
+After these observations, positive whole/reverse/subinterval/point outcomes
+are retained as regressions. No curve, clock, body, owner, pressure margin,
+work ceiling or helper geometry changed after observation. The qualified
+result establishes continuous kinematics, self-clearance, timing and finite
+nominal vertical support for this partial preparation only. Source-surface
+sweep, material volume/world clearance, moving-force dynamics, foot unloading
+or swing, actor boarding/seating, saves and First Flight remain unqualified.
+
+
+Final observed-result regressions retain all complete valid requests and
+pass434,212 checks per compiler, with byte-identical logs. Complete native
+suites pass63/63 on GCC (38.81s) and Clang20 (37.00s), including native
+walk/save/flight and asset contracts. Pinned formatting passes; final static
+analysis and remote publication remain pending at this recorded checkpoint.

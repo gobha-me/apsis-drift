@@ -1235,6 +1235,9 @@ auto request_controls(const OriginBoardingBootSupport& p) -> void {
         p, interval[0], interval[1]));
     check(d.requested_first == interval[0] && d.requested_last == interval[1],
           "Output retains original request endpoints");
+    check(d.complete && !d.first_refusal,
+          "Observed qualified curve retains complete reverse, subinterval "
+          "and point requests");
     inspect_cells(d);
   }
 }
@@ -1390,6 +1393,8 @@ auto set_stale_summaries(Cell& out) -> void {
 auto stale_output_controls(const Load& initial) -> void {
   const auto context =
       require(detail::prepare_boarding_lower_foot_transfer_pressure(initial));
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- A distinct
+  // owned instance exercises pressure-context identity refusal.
   const auto distinct = initial;
   Cell out;
   set_stale_summaries(out);
@@ -1572,6 +1577,8 @@ int main() {
     quad_and_pressure_controls(provider, initial);
     // This whole-candidate observation is printed BEFORE any outcome assertion.
     const auto actual = observe(provider);
+    check(actual.complete && !actual.first_refusal,
+          "First observed complete partial transfer remains qualified");
     check(snapshot(actual.initial) == unchanged,
           "New query owns exactly unchanged initial Load/Self/Endpoint/Sites "
           "chain");
