@@ -17,9 +17,9 @@ film_dir="$(cd -- "$1" && pwd)"
 GODOT_BIN="$engine" "$repo_dir/tools/run_godot_study.sh" --stream=true --relief=true --prepare-only=true
 cmake -S "$repo_dir" -B "$repo_dir/build" -DAPSIS_DRIFT_MIDI_SPIKE=ON
 cmake --build "$repo_dir/build" --target apsis-drift-audio-pack-audition -j 4
-timeout 20s "$engine" --headless --path "$repo_dir/experiments/godot-freedom" --script res://film_test.gd
-timeout 1800s "$engine" --path "$repo_dir/experiments/godot-freedom" --audio-driver Dummy \
-    --fixed-fps 24 --script res://film.gd -- --stream=true --render-size=3840x2160 \
+timeout 20s "$engine" --headless --path "$repo_dir/godot" --script res://tests/film_test.gd
+timeout 1800s "$engine" --path "$repo_dir/godot" --audio-driver Dummy \
+    --fixed-fps 24 --script res://studies/film/film.gd -- --stream=true --render-size=3840x2160 \
     "--snapshot=$repo_dir/build-godot/snapshot-42-stream-true.json" \
     "--assets=$repo_dir/assets/visual" "--film-output=$film_dir/frames" \
     > "$film_dir/render.log" 2>&1

@@ -136,8 +136,8 @@ def main(argv=None):
     if not sys.platform.startswith("linux"):
         parser.error("this runner currently stages the Linux .so extension only")
     repo = Path(__file__).resolve().parent.parent
-    source = repo / "experiments/godot-freedom"
-    build = args.build_dir.resolve() / "experiments/godot-freedom"
+    source = repo / "godot"
+    build = args.build_dir.resolve() / "src/godot"
     engine = args.godot.resolve()
     exporter = build / "apsis-drift-godot-snapshot"
     bridge = build / "bin/libapsis_freedom_bridge.so"
@@ -187,18 +187,27 @@ def main(argv=None):
     for name in selected:
         if name == "native_shell":
             if not all((source / path).is_file() for path in
-                       ("native_start_shell.tscn", "native_start_shell.gd")):
+                       ("scenes/native_start_shell.tscn", "scripts/native/native_start_shell.gd")):
                 parser.error("missing native start shell scene or script")
-        elif not (source / f"{name}_test.gd").is_file():
+        elif not (source / "tests" / f"{name}_test.gd").is_file():
             parser.error(f"missing test source: {name}")
     args.output_parent.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="native-contracts-",
                                  dir=args.output_parent.resolve()))
     project = work / "project"
     project.mkdir()
-    for path in source.iterdir():
+    # Stage presentation resources, not unrelated local asset closures or caches.
+    resource_paths = [source / "project.godot"]
+    for folder in ("scenes", "scripts", "shaders", "settings", "tests", "studies"):
+        resource_paths.extend((source / folder).rglob("*"))
+    for path in resource_paths:
+        relative = path.relative_to(source)
+        if any(part.startswith(".") or part == "bin" for part in relative.parts):
+            continue
         if path.is_file() and path.suffix in (".gd", ".gdshader", ".godot", ".tscn", ".json"):
-            shutil.copy2(path, project / path.name)
+            destination = project / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
     (project / "bin").mkdir()
     shutil.copy2(source / "bin/freedom.gdextension", project / "bin/freedom.gdextension")
     shutil.copy2(bridge, project / "bin/libapsis_freedom_bridge.so")
@@ -217,8 +226,8 @@ def main(argv=None):
     report = {"schema_version": 1, "scope": "headless contracts, not GPU/hardware/listening acceptance",
               "selected": selected, "tests": [], "setup": [],
               "engine_sha256": sha256(engine),
-              "project_sha256": {path.name: sha256(path) for path in sorted(project.iterdir())
-                                 if path.is_file()},
+              "project_sha256": {path.relative_to(project).as_posix(): sha256(path)
+                                 for path in sorted(project.rglob("*")) if path.is_file()},
               "extension_descriptor_sha256": sha256(project / "bin/freedom.gdextension"),
               "bridge_sha256": sha256(project / "bin/libapsis_freedom_bridge.so"),
               "exporter_sha256": sha256(exporter)}
@@ -378,7 +387,7 @@ def main(argv=None):
                 log = work / f"native_shell-{label}.log"
                 command = [str(engine), "--headless", "--audio-driver", "Dummy",
                            "--path", str(project), "--scene",
-                           "res://native_start_shell.tscn"]
+                           "res://scenes/native_start_shell.tscn"]
                 if label == "view":
                     command += ["--quit-after", "2"]
                 command += ["--", *arguments]
@@ -456,7 +465,7 @@ def main(argv=None):
                     ("trace_validate", [f"--continue={work / 'journey-trace.json'}", "--validate-only"], True),
                     ("missing_assets", ["--new-game=42"], False)):
                 log = work / f"native_walk-{label}.log"
-                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://native_start_shell.tscn"]
+                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://scenes/native_start_shell.tscn"]
                 if label == "new_view":
                     command += ["--quit-after", "3"]
                 command += ["--", *extra]
@@ -479,7 +488,7 @@ def main(argv=None):
                     ("attached_validate", "port-docked.json", True),
                     ("attached_view", "port-docked.json", False)):
                 log = work / f"native_port-{label}.log"
-                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://native_start_shell.tscn"]
+                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://scenes/native_start_shell.tscn"]
                 if not validate:
                     command += ["--quit-after", "3"]
                 command += ["--", f"--continue={work / save_name}"]
@@ -503,7 +512,7 @@ def main(argv=None):
                     ("wayfarer_view", [f"--continue={work / 'wayfarer-flight.json'}", f"--assets={work / 'native-assets'}"], True),
                     ("flight_missing_assets", [f"--continue={work / 'wayfarer-flight.json'}"], False)):
                 log = work / f"saved_flight-{label}.log"
-                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://native_start_shell.tscn"]
+                command = [str(engine), "--headless", "--audio-driver", "Dummy", "--path", str(project), "--scene", "res://scenes/native_start_shell.tscn"]
                 if label == "wayfarer_view":
                     command += ["--quit-after", "3"]
                 command += ["--", *extra]
@@ -556,7 +565,7 @@ def main(argv=None):
             arguments = [str(work / path) for path in ("port-approach.json", "port-docked.json", "port-trace.json", "port-far.json", "native-assets")]
         log = work / f"{name}.log"
         command = [str(engine), "--headless", "--audio-driver", "Dummy",
-                   "--path", str(project), "--script", f"res://{name}_test.gd",
+                   "--path", str(project), "--script", f"res://tests/{name}_test.gd",
                    "--", *arguments]
         code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
         output = log.read_text(errors="replace")

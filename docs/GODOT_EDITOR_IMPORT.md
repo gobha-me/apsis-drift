@@ -80,7 +80,7 @@ For this project's isolated import step, use the selected Godot executable
 with:
 
 ```sh
-godot --headless --path experiments/godot-freedom --editor --import --quit --frame-delay 1000
+godot --headless --path godot --editor --import --quit --frame-delay 1000
 ```
 
 Require a clean process exit and inspect the log. This is not an automatic

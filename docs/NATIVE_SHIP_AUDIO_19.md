@@ -85,21 +85,21 @@ audition on the actual playback device.
 ### Reproducible checks and audition
 
 Run these scripts with the pinned Godot executable, `--headless`,
-`--audio-driver Dummy`, and `--path experiments/godot-freedom`:
+`--audio-driver Dummy`, and `--path godot`:
 
-- `--script res://ship_audio_test.gd`: CPU synthesis, malformed inputs,
+- `--script res://tests/ship_audio_test.gd`: CPU synthesis, malformed inputs,
   bounded waveform transitions and independent local noise state.
-- `--script res://ship_audio_playback_test.gd`: real generator playback through
+- `--script res://tests/ship_audio_playback_test.gd`: real generator playback through
   a test-only Dummy adapter, including queue bounds and drain/stop/resume.
-- `--script res://ship_audio_cadence_test.gd`: short local Dummy timing probe at
+- `--script res://tests/ship_audio_cadence_test.gd`: short local Dummy timing probe at
   60/30/20/15/10 requested frames per second. Reports wall time, CPU cost and
   underruns; those timings are measurements, not portable performance promises.
   A separate controlled, fine-grained consumer asserts queue/work bounds and
   nominal scheduling capacity at 20 fps and above; it is not a hardware model.
-- `--script res://ship_audio_integration_test.gd -- --snapshot=ABSOLUTE_PATH`:
+- `--script res://tests/ship_audio_integration_test.gd -- --snapshot=ABSOLUTE_PATH`:
   inherited main/menu/focus routing with actual native bridge telemetry. Only
   graphics bootstrap and the flight-frame body are omitted.
-- `--script res://ship_audio_capture.gd -- ABSOLUTE_NEW_OUTPUT_DIRECTORY`:
+- `--script res://studies/captures/ship_audio_capture.gd -- ABSOLUTE_NEW_OUTPUT_DIRECTORY`:
   five four-second PCM16 stereo comparison clips plus a provenance sidecar.
   The output directory must not already exist. No speaker output is opened.
 

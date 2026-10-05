@@ -106,12 +106,12 @@ fixtures, not a simulated atmosphere, clouds, water or orbital illumination.
 ctest --test-dir build -R 'godot-(planet-stream|snapshot)-contract' --output-on-failure
 # Repeat with build-clang after configuring/building its optional study targets.
 
-godot --headless --path experiments/godot-freedom \
-  --script res://stream_test.gd -- "$PWD/build-godot/snapshot-42-stream-true.json"
+godot --headless --path godot \
+  --script res://tests/stream_test.gd -- "$PWD/build-godot/snapshot-42-stream-true.json"
 
 # Use an already-built/staged extension; this script needs a graphics session.
-godot --path experiments/godot-freedom --audio-driver Dummy \
-  --script res://stream_smoke.gd -- --stream=true --view=4 \
+godot --path godot --audio-driver Dummy \
+  --script res://tests/stream_smoke.gd -- --stream=true --view=4 \
   --snapshot="$PWD/build-godot/snapshot-42-stream-true.json" \
   --assets="$PWD/assets/visual" --render-size=3840x2160 \
   --capture="$PWD/build-godot/stream-approach.png"

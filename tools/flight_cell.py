@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC_PATH = ROOT/'experiments/godot-freedom/cockpit-layout.json'
+SPEC_PATH = ROOT/'godot/settings/cockpit-layout.json'
 SPEC = json.loads(SPEC_PATH.read_text())
 
 

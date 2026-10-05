@@ -24,7 +24,7 @@
       "id": "sfx/native-ship-audio-prototype",
       "media_type": "sfx",
       "source_kind": "code-authored",
-      "files": ["experiments/godot-freedom/ship_audio.gd"],
+      "files": ["godot/scripts/audio/ship_audio.gd"],
       "purpose": "Opt-in procedural native ship machinery, thrust vibration and atmosphere airflow study; no replacement of the existing score or sound pack",
       "edits": ["Refined engine voice into a lower layered mechanical growl with spool inertia, audible body overtones and restrained atmosphere texture; no external audio source", "Ported human-accepted direction24 into a constant-level powered idle/light/core/dense blend with a static coherent-sum correction curve and bounded causal private-noise filters; atmospheric airflow remains separate"],
       "license": {
@@ -124,11 +124,11 @@
       "media_type": "visual",
       "source_kind": "code-authored",
       "files": [
-        "experiments/godot-freedom/instrument_screen.gd",
-        "experiments/godot-freedom/flight_status.gd",
-        "experiments/godot-freedom/flight_displays.gd",
-        "experiments/godot-freedom/navigation_sky.gd",
-        "experiments/godot-freedom/navigation_sky.gdshader"
+        "godot/scripts/flight/instrument_screen.gd",
+        "godot/scripts/flight/flight_status.gd",
+        "godot/scripts/flight/flight_displays.gd",
+        "godot/scripts/world/navigation_sky.gd",
+        "godot/shaders/navigation_sky.gdshader"
       ],
       "purpose": "Original runtime instrument graphics and bounded procedural star/atmosphere presentation; no external image model or bitmap source",
       "edits": ["Adjusted display geometry to revision-5 bezels after native capture inspection; decorrelated catalog directions and refined star splats"],
@@ -1028,9 +1028,9 @@
         "tools/build_flight_cell.py",
         "tools/flight_cell.py",
         "tools/verify_flight_cell.py",
-        "experiments/godot-freedom/cockpit-layout.json",
-        "experiments/godot-freedom/cockpit_layout.gd",
-        "experiments/godot-freedom/cockpit_fit_review.gd",
+        "godot/settings/cockpit-layout.json",
+        "godot/scripts/ships/cockpit_layout.gd",
+        "godot/studies/reviews/cockpit_fit_review.gd",
         "docs/COCKPIT_FIT_05.md",
         "tools/render_hero_views.py",
         "tools/verify_hero_assets.py",

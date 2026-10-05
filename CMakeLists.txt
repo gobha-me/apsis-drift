@@ -427,7 +427,7 @@ if (APSIS_DRIFT_GODOT_SPIKE)
   if (APSIS_DRIFT_GODOT_LIVE)
     set_target_properties(apsis_drift_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
   endif ()
-  add_subdirectory(experiments/godot-freedom)
+  add_subdirectory(src/godot)
 endif ()
 
 add_library(apsis_drift_asset_manifest STATIC
@@ -737,7 +737,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME touchdown-envelope-contract COMMAND apsis-drift-touchdown-tests)
   set_tests_properties(touchdown-envelope-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-rotation-coast-tests
-    experiments/godot-freedom/rotation_coast_test.cpp)
+    test/godot/rotation_coast_test.cpp)
   target_link_libraries(apsis-drift-rotation-coast-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-rotation-coast-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)

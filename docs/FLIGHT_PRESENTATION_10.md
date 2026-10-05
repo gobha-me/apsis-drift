@@ -140,14 +140,14 @@ First Light work; a flight proof need not require an orchestral score.
 ## Reproduce
 
 With the study configured/built and the matching exported fixture (see the
-[study README](../experiments/godot-freedom/README.md)):
+[study README](../godot/README.md)):
 
 ```sh
 ctest --test-dir build -R 'godot-.*-contract' --output-on-failure
-godot --headless --path experiments/godot-freedom --script res://thrust_test.gd \
+godot --headless --path godot --script res://tests/thrust_test.gd \
   -- "$PWD/build-godot/snapshot-42-stream-true.json"
 mkdir -p build-godot/presentation-review
-godot --path experiments/godot-freedom --script res://presentation_smoke.gd -- \
+godot --path godot --script res://tests/presentation_smoke.gd -- \
   --snapshot="$PWD/build-godot/snapshot-42-stream-true.json" \
   --assets="$PWD/assets/visual" --stream=true --flight-model=thrust \
   --pilot=true --start-paused=true --controls-persist=false \

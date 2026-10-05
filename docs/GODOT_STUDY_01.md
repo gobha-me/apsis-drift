@@ -112,4 +112,4 @@ keeps the terrain and ship allocated even when hidden.
    SteamOS target behavior, SDR/HDR and 1080p/4K. Only then complete #244's
    adopt/adapt/reject decision and decompose the next implementation slice.
 
-Run instructions: [native study](../experiments/godot-freedom/README.md).
+Run instructions: [native study](../godot/README.md).

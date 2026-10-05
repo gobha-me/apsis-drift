@@ -187,7 +187,7 @@ encoded audio clock were checked; this is not a claim of a listening review.
 Private character-art clearance still limits distribution to owner review.
 
 `tools/reel_narrative.json` holds the editorial text.
-`experiments/godot-freedom/reel_text_cards.gd` renders transparent 1080p plates
+`godot/studies/film/reel_text_cards.gd` renders transparent 1080p plates
 and records their hashes with the frozen narrative. The default dialogue panel
 starts at y=860, preserving the feet in the integrated station framing. The
 workshop wide view uses a left panel to preserve its contact demonstration.

@@ -124,8 +124,8 @@ open; reference values were not changed to make this increment appear green.
 Run headless input checks:
 
 ```sh
-"$GODOT_BIN" --headless --path experiments/godot-freedom --script res://input_test.gd
-"$GODOT_BIN" --headless --path experiments/godot-freedom --script res://live_test.gd -- "$SNAPSHOT"
+"$GODOT_BIN" --headless --path godot --script res://tests/input_test.gd
+"$GODOT_BIN" --headless --path godot --script res://tests/live_test.gd -- "$SNAPSHOT"
 ctest --test-dir build -R 'godot-(analog-input|snapshot|planet-stream)-contract' --output-on-failure
 ```
 
@@ -133,8 +133,8 @@ Native integration smoke (use an existing snapshot, absolute asset path and a
 new output PNG path; synthetic settings are not saved):
 
 ```sh
-"$GODOT_BIN" --path experiments/godot-freedom --audio-driver Dummy \
-  --script res://controller_smoke.gd -- \
+"$GODOT_BIN" --path godot --audio-driver Dummy \
+  --script res://tests/controller_smoke.gd -- \
   --snapshot="$SNAPSHOT" --assets="$PWD/assets/visual" \
   --live=true --pilot=true --controls-persist=false --render-size=1920x1080 \
   --controller-capture="$PWD/build-godot/controller-review.png"

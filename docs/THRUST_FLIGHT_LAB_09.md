@@ -59,7 +59,7 @@ consume pitch/roll/assist actions. Old screenshots show historical mappings.
 
 ## What changes physically
 
-`experiments/godot-freedom/thrust_flight.hpp` owns the fixed 120 Hz model:
+`include/apsis_drift/godot/thrust_flight.hpp` owns the fixed 120 Hz model:
 planet-centered double-precision position/velocity, full orthonormal attitude,
 bounded angular-rate control, engine spool, body-relative thrust, inverse-square
 gravity and density-dependent drag. Godot consumes the resulting full pose.

@@ -72,8 +72,8 @@ if [[ ! -f "$cache_file" ]] || \
 fi
 cmake --build "$native_build" --target apsis_freedom_bridge --parallel 4
 
-engine_args=(--path "${repo_dir}/experiments/godot-freedom" \
-    --scene res://native_start_shell.tscn --audio-driver Dummy)
+engine_args=(--path "${repo_dir}/godot" \
+    --scene res://scenes/native_start_shell.tscn --audio-driver Dummy)
 script_args=("$selection")
 if [[ "$headless_validate" == true ]]; then
     engine_args+=(--headless)

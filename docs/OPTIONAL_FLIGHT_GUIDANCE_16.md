@@ -86,12 +86,12 @@ instrument layout. The user-controlled running build was not replaced.
 Reproduce bridge tests with the installed Godot binary and a prepared snapshot:
 
 ```sh
-godot --headless --path experiments/godot-freedom \
-  --script res://guidance_test.gd -- /absolute/path/to/snapshot.json
-godot --headless --path experiments/godot-freedom \
-  --script res://flight_plan_menu_test.gd
-godot --headless --path experiments/godot-freedom \
-  --script res://guidance_integration_test.gd -- \
+godot --headless --path godot \
+  --script res://tests/guidance_test.gd -- /absolute/path/to/snapshot.json
+godot --headless --path godot \
+  --script res://tests/flight_plan_menu_test.gd
+godot --headless --path godot \
+  --script res://tests/guidance_integration_test.gd -- \
   --snapshot=/absolute/path/to/snapshot.json
 ```
 

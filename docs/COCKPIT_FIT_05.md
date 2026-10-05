@@ -34,7 +34,7 @@ is separate from the ten-image fit review.
 Previously the pilot eye was roughly 1.3 m above the seat cushion, and exterior
 window patches lay over an opaque hull. The two views were not physically
 consistent. The new source of truth is
-`experiments/godot-freedom/cockpit-layout.json`, consumed by Blender authoring
+`godot/settings/cockpit-layout.json`, consumed by Blender authoring
 through `tools/flight_cell.py` and by Godot.
 
 Cabin-to-ship translation is `(0, 3.2, 0.35)` in Blender +Y-forward/+Z-up metres.
@@ -113,7 +113,7 @@ python tools/verify_hero_assets.py
 ```
 
 Prepare the normal study snapshot and a new empty output directory. Run Godot
-with `res://cockpit_fit_review.gd`, normal `--snapshot`/`--assets` paths,
+with `res://studies/reviews/cockpit_fit_review.gd`, normal `--snapshot`/`--assets` paths,
 `--render-size=3840x2160` and `--fit-output=/path/to/new-empty-directory`.
 The review outputs ten PNGs and a pose receipt. The regular study launcher uses
 the updated assembled cockpit for live inspection.
