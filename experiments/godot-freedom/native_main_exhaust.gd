@@ -21,6 +21,12 @@ var withdrawal_material: ShaderMaterial
 var phase := 0.0
 var intensity := 0.0
 var withdrawal_intensity := 0.0
+var bound_skin: MeshInstance3D
+var bound_surface := -1
+var bound_original: StandardMaterial3D
+var bound_coating: StandardMaterial3D
+var bound_aperture: ShaderMaterial
+var bound_coating_state: Array = []
 
 
 func _init() -> void:
@@ -61,11 +67,12 @@ func _init() -> void:
 		withdrawal_plumes.append(plume)
 
 
-func bind_skin(model: Node3D) -> bool:
+func bind_skin(model: Node3D, selected_surface: int = SKIN_SURFACE) -> bool:
+	if bound_skin != null: return false
 	var skin := model.find_child("HopperStructure", true, false) as MeshInstance3D
-	if skin == null or skin.mesh == null or skin.mesh.get_surface_count() <= SKIN_SURFACE:
+	if skin == null or skin.mesh == null or skin.mesh.get_surface_count() <= selected_surface or selected_surface not in [14, 18]:
 		return false
-	var original := skin.mesh.surface_get_material(SKIN_SURFACE) as StandardMaterial3D
+	var original := skin.mesh.surface_get_material(selected_surface) as StandardMaterial3D
 	if original == null or original.resource_name != "WF08 | factory-new exterior atlas" or original.next_pass != null:
 		return false
 	var aperture := ShaderMaterial.new()
@@ -74,8 +81,22 @@ func bind_skin(model: Node3D) -> bool:
 	coated_skin.next_pass = aperture
 	# Conformed zero-volume mark: reuse the original vertices and material,
 	# with an extra pass only inside the two bound exterior chart disks.
-	skin.set_surface_override_material(SKIN_SURFACE, coated_skin)
-	return true
+	skin.set_surface_override_material(selected_surface, coated_skin)
+	bound_skin = skin
+	bound_surface = selected_surface
+	bound_original = original
+	bound_coating = coated_skin
+	bound_aperture = aperture
+	bound_coating_state = coating_state(coated_skin)
+	return valid_bound_skin()
+
+
+static func coating_state(coating: StandardMaterial3D) -> Array:
+	return [coating.albedo_color, coating.albedo_texture, coating.normal_texture, coating.normal_scale, coating.metallic, coating.roughness, coating.cull_mode, coating.texture_filter]
+
+
+func valid_bound_skin() -> bool:
+	return is_instance_valid(bound_skin) and bound_skin.mesh != null and bound_skin.mesh.get_surface_count() > bound_surface and bound_skin.mesh.surface_get_material(bound_surface) == bound_original and bound_skin.get_surface_override_material(bound_surface) == bound_coating and bound_original.next_pass == null and bound_coating.next_pass == bound_aperture and bound_aperture.shader == ApertureShader and coating_state(bound_coating) == bound_coating_state and material.shader == PlumeShader and withdrawal_material.shader == PlumeShader
 
 
 static func valid_applied(state: Dictionary, elapsed: float) -> bool:

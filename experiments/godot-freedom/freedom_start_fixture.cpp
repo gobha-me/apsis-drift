@@ -250,6 +250,10 @@ auto main(int argc, char** argv) -> int {
         if (!session->advance(controls)) return 1;
     }
     if (!session->save_as(path)) return 1;
+  } else if (mode == "legacy-journey" && *tick == 0) {
+    const auto document = make_freedom_journey_new_game_document(Seed{*seed});
+    if (!document || !write_freedom_journey_file_atomically(path, *document))
+      return 1;
   } else if ((mode == "journey" || mode == "journey-trace") && *tick == 0) {
     auto selected = native_new_game(Seed{*seed});
     if (!selected) {

@@ -55,6 +55,7 @@ collision view.
 This selection does not prove that an actor fits or can reach the seat. Matched
 Godot presentation must replace the complete old seat-lift renderer once on the
 verified operating base, preserving eye, screens, gear and exterior/exhaust
-bindings. Live selection, equipment persistence, the articulated transfer and
+bindings. The [saved starting assembly](NATIVE_STARTING_ASSEMBLY.md) connects
+that matched presentation and contact selection. The articulated transfer and
 occupied hardware motion remain under
 [First Flight #245](https://github.com/gobha-me/apsis-drift/issues/245).

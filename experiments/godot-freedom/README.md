@@ -155,19 +155,23 @@ string identities before allocation. Files above 96 MiB are rejected.
 
 ## Freedom station bootstrap boundary
 
-The live `FreedomBridge` has separate `initialize_freedom_new_game(seed)` and
-`initialize_freedom_continue(absolute_save_path)` methods. Seeds and identities
+The live `FreedomBridge` stages starts through `stage_freedom_new_game(seed)`
+and `stage_freedom_continue(absolute_save_path)`. Seeds and identities
 are canonical unsigned decimal strings. Fresh New Game creates the shared C++
-station actor, attached Wayfarer and physical home world in explicit format20.
+station actor, attached Wayfarer and physical home world in explicit format21,
+retaining the format20 journey and its fixed saved starting assembly.
 `get_freedom_walk_state()` exposes the supported actor and same-tick station/ship
 projection; `get_freedom_flight_state()` exposes the underlying voyage.
 Historical format17 Continue retains the frozen inspector and
 `get_freedom_start()` contract; formats18/19 retain saved flight/port semantics.
 
 Invalid inputs return `false` with `get_last_error()` and leave the prior session
-and source save unchanged. The existing `initialize(snapshot_json)` remains the
-study fixture path; a successful start replaces the prior session. The separate
-native shell selects the actual saved mode. The composed boarding/departure and
+and source save unchanged. `get_pending_freedom_start()` projects the unstepped
+candidate. The native shell validates its complete model/view off-tree, then
+commits the exact token and activates the ready view synchronously. Legacy
+initializers retain their explicitly supported compatibility paths; they cannot
+bypass selected-assembly staging. The existing `initialize(snapshot_json)`
+remains the study fixture path. The composed boarding/departure and
 surface/home journey remains in
 [#291](https://github.com/gobha-me/apsis-drift/issues/291).
 
@@ -189,8 +193,8 @@ bounded station geometry. The open docking well stops unsupported travel;
 open-hatch/ladder boarding, sitting and departure from New Game remain in development.
 
 Continue loads selected format17 station-inspector, format18 physical-flight,
-format19 port-lifecycle or format20 station-actor saves without writing to them.
-Format20 restores the actor and attached ship at their shared clock, initially
+format19 port-lifecycle or format20/21 station-actor saves without writing to them.
+Formats20/21 restore the actor and attached ship at their shared clock, initially
 paused. Format17 remains the historical frozen inspector without an inferred
 actor. A flight save opens the
 [ordinary saved-flight view](../../docs/SAVED_NATIVE_FLIGHT.md), initially paused,
@@ -198,6 +202,11 @@ with C++ commands, terrain streaming, actual Wayfarer and applied-force main
 exhaust. Wayfarer flights target, physically capture and release D1/D2 through
 [the C++ port lifecycle](../../docs/NATIVE_PORT_LIFECYCLE.md). The snapshot study
 remains available through `tools/run_godot_study.sh`.
+
+The launcher atomically prepares the starter and fixed operating/stowed
+companions. The [saved assembly binding](../../docs/NATIVE_STARTING_ASSEMBLY.md)
+chooses the matched native model and contact; historical saves retain their
+original presentation and unknown hardware state.
 
 **Save As** opens a filesystem chooser and confirms destination replacement.
 `save_freedom_as(absolute_path)` delegates to the existing C++ atomic writer for

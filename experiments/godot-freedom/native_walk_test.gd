@@ -4,6 +4,18 @@ const WalkView = preload("res://native_walk_view.gd")
 var failures := 0
 
 
+func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
+	if not owner.stage_freedom_new_game(seed): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
+# This test owns C++ source fixtures only; renderer admission is exercised by
+# native_start_staging, not by a direct fixture token commit.
+func commit_fixture_continue(owner: Variant, path: String) -> bool:
+	if not owner.stage_freedom_continue(path): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
 func check(ok: bool, message: String) -> void:
 	if not ok:
 		push_error(message)
@@ -307,11 +319,11 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	var accepted_heading: float = view.requested_heading
 	physical_key(KEY_D, true)
 	var expected: Variant = ClassDB.instantiate("FreedomBridge")
-	check(expected.initialize_freedom_new_game("42") and expected.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, 1.0, accepted_heading])), "Independent C++ station input oracle refused")
+	check(commit_fixture_new_game(expected, "42") and expected.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, 1.0, accepted_heading])), "Independent C++ station input oracle refused")
 	view._process(1.0 / 120.0)
 	physical_key(KEY_D, false)
 	check(owner.get_freedom_walk_state() == expected.get_freedom_walk_state() and owner.get_freedom_flight_state() == expected.get_freedom_flight_state(), "Actual accepted input diverged from C++ actor/craft tick")
-	check(owner.initialize_freedom_new_game("42"), "Could not reset owned input fixture for independent long trace")
+	check(commit_fixture_new_game(owner, "42"), "Could not reset owned input fixture for independent long trace")
 	view.update_view()
 	# A consumer refusal is terminal; every menu/direct Resume remains paused.
 	check(not view.advance_requested(NAN, PackedFloat64Array([0.0, 0.0, heading])), "Nonfinite consumer time accepted")
@@ -334,7 +346,7 @@ func run() -> void:
 	var neutral := PackedFloat64Array([0.0, 0.0, 0.0])
 	check(owner.get_freedom_walk_state().is_empty() and not owner.advance_freedom_walk(1.0 / 120.0, neutral), "Uninitialized walking accepted")
 	var originals := [FileAccess.get_file_as_bytes(args[0]), FileAccess.get_file_as_bytes(args[1])]
-	if not owner.initialize_freedom_new_game("42"):
+	if not commit_fixture_new_game(owner, "42"):
 		push_error("Fresh walking New Game failed: " + str(owner.get_last_error()))
 		quit(1)
 		return
@@ -399,7 +411,7 @@ func run() -> void:
 	var final: Dictionary = owner.get_freedom_walk_state()
 	check(final.tick == "1920" and owner.get_freedom_flight_state().tick == final.tick, "Walk/ship shared clock diverged")
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == originals[1], "Native route bytes differ from independent C++ collision/motion trace")
-	check(owner.initialize_freedom_continue(path), "Walking Continue refused")
+	check(commit_fixture_continue(owner, path), "Walking Continue refused")
 	var continued: Dictionary = owner.get_freedom_walk_state()
 	final.continued = true
 	check(continued == final, "Walking Continue changed actor pose, frame, motion or time")
@@ -410,7 +422,7 @@ func run() -> void:
 	check(view.initialize(owner, args[2]) and view.paused, "Continued walking view resumed without player action")
 	check(view.advance_requested(1.0, neutral) and owner.get_freedom_walk_state() == continued, "Continued view advanced while initially paused")
 	var other: Variant = ClassDB.instantiate("FreedomBridge")
-	check(other.initialize_freedom_new_game("42"), "Cadence walking New Game refused")
+	check(commit_fixture_new_game(other, "42"), "Cadence walking New Game refused")
 	for axis in [-1.0, 1.0]:
 		for n in 480:
 			check(other.advance_freedom_walk(1.0 / 60.0, PackedFloat64Array([0.0, axis, 0.0])), "Cadence walking refused")

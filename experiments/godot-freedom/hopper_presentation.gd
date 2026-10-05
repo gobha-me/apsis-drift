@@ -3,6 +3,18 @@ extends Node3D
 const CONTRACT := "hopper-wayfarer-01.json"
 var specification: Dictionary = {}
 var gear_nodes: Dictionary = {}
+var exterior_surface := 18
+var selected_binding: Dictionary = {}
+var replacement_nodes: Array[Node3D] = []
+var operating_nodes: Dictionary = {}
+var atlas_material: StandardMaterial3D
+var glass_material: StandardMaterial3D
+var atlas_state: Array = []
+const Operating = preload("res://wayfarer_operating_view.gd")
+
+const STOWED_MODEL := "d286dfd5174940ccd7e3db0cb023d3571ad460c6b22609c6f81208e16f06e2fc"
+const STOWED_FRAME := "f98c50f69d71ecd38ca1d43d010f7b43ca300178dc25d40e170fd45fe5bc88a6"
+const STOWED_ROOTS := ["WFStowed0", "WFStowed1", "WFStowed2", "WFStowed3", "WFStowed4", "WFStowed5", "WFStowed6", "WFStowedBridge_crotch", "WFStowedBridge_lap_port", "WFStowedBridge_lap_starboard", "WFStowedBridge_shoulder_port", "WFStowedBridge_shoulder_starboard", "WFStowedManifold", "WFStowedResidual"]
 
 static func finite_vector(value: Variant, limit: float = 100.0) -> bool:
 	if not value is Array or value.size() != 3:
@@ -72,28 +84,45 @@ static func load_asset(directory: String) -> Node3D:
 	var path: String = directory.path_join(spec.model)
 	if FileAccess.get_sha256(path) != spec.model_sha256:
 		return null
+	var model := import_model(path, 18)
+	if model == null:
+		return null
+	var instance = load("res://hopper_presentation.gd").new()
+	instance.name = "Wayfarer"
+	instance.specification = spec
+	instance.add_child(model)
+	if not instance.bind_calibration(model, spec):
+		instance.free()
+		return null
+	return instance
+
+# One selected atlas index drives both LOD/packing and exhaust attachment.
+static func import_model(path: String, atlas: int = -1) -> Node3D:
+	if not Operating.valid_glb_container(path):
+		return null
 	var document := GLTFDocument.new()
 	var state := GLTFState.new()
 	if document.append_from_file(path, state) != OK:
 		return null
+	var chart_count := 0
 	for mesh in state.get_meshes():
 		var imported: ImporterMesh = mesh.get_mesh()
 		var fixed_skin := false
-		if imported.get_surface_count() > 18:
-			var coating := imported.get_surface_material(18)
+		if atlas >= 0 and imported.get_surface_count() > atlas:
+			var coating := imported.get_surface_material(atlas)
 			fixed_skin = coating != null and coating.resource_name == "WF08 | factory-new exterior atlas"
 		if fixed_skin:
+			chart_count += 1
 			if imported.get_blend_shape_count() != 0:
 				return null
-			# Bind the source chart before any generated LOD or lossy GPU packing.
-			var source_skin := imported.get_surface_arrays(18)
+			var source_skin := imported.get_surface_arrays(atlas)
 			imported.generate_lods(60.0, 25.0, [])
 			var retained := ImporterMesh.new()
 			for surface in imported.get_surface_count():
 				var lods := {}
-				var arrays := source_skin if surface == 18 else imported.get_surface_arrays(surface)
+				var arrays := source_skin if surface == atlas else imported.get_surface_arrays(surface)
 				var flags := imported.get_surface_format(surface)
-				if surface == 18:
+				if surface == atlas:
 					flags &= ~Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES
 				else:
 					for level in imported.get_surface_lod_count(surface):
@@ -102,19 +131,28 @@ static func load_asset(directory: String) -> Node3D:
 			mesh.set_mesh(retained)
 		else:
 			imported.generate_lods(60.0, 25.0, [])
-	var model := document.generate_scene(state) as Node3D
-	if model == null:
+	if atlas >= 0 and chart_count != 1:
 		return null
-	var instance = load("res://hopper_presentation.gd").new()
-	instance.name = "Wayfarer"
-	instance.specification = spec
-	instance.add_child(model)
-	var glass: Node3D = model.find_child("HopperGlass", true, false)
+	return document.generate_scene(state) as Node3D
+
+func bind_calibration(model: Node3D, spec: Dictionary) -> bool:
+	var nodes := Operating.unique_nodes(model)
+	var glass: Variant = nodes.get("HopperGlass")
 	if not glass is MeshInstance3D:
-		instance.free()
-		return null
-	# glTF transmission does not provide the required native cockpit visibility.
-	# Deliberate clear glass presentation; no shader pretending opaque hull is glass.
+		return false
+	var gears := {}
+	for key in spec.gear_preview:
+		var node: Variant = nodes.get(key)
+		if not node is Node3D:
+			return false
+		gears[key] = node
+	var skin: Variant = nodes.get("HopperStructure")
+	if not skin is MeshInstance3D or skin.mesh == null or skin.mesh.get_surface_count() <= exterior_surface:
+		return false
+	var coating := skin.mesh.surface_get_material(exterior_surface) as StandardMaterial3D
+	if coating == null or coating.resource_name != "WF08 | factory-new exterior atlas":
+		return false
+	# All late nodes qualify before any material assignment.
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.albedo_color = Color(0.75, 0.90, 0.96, 0.055)
@@ -123,13 +161,146 @@ static func load_asset(directory: String) -> Node3D:
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	glass.material_override = material
 	glass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for key in spec.gear_preview:
-		var node := model.find_child(key, true, false) as Node3D
-		if node == null:
-			instance.free()
-			return null
-		instance.gear_nodes[key] = node
+	atlas_material = coating
+	atlas_state = [coating.albedo_color, coating.albedo_texture, coating.normal_texture, coating.normal_scale, coating.metallic, coating.roughness, coating.cull_mode, coating.texture_filter]
+	glass_material = material
+	gear_nodes = gears
+	specification = spec.duplicate(true)
+	return true
+
+static func valid_replacement(model: Node3D) -> bool:
+	if model == null or model.is_inside_tree() or model.transform != Transform3D.IDENTITY or not Operating.valid_mesh_buffers(model):
+		return false
+	var nodes := Operating.unique_nodes(model)
+	if nodes.is_empty() or model.get_child_count() != STOWED_ROOTS.size():
+		return false
+	var members := 0
+	for name in STOWED_ROOTS:
+		var node: Variant = nodes.get(name)
+		if not node is MeshInstance3D or node.get_parent() != model or node.get_child_count() != 0 or node.transform != Transform3D.IDENTITY:
+			return false
+		var extras: Variant = node.get_meta("extras", {})
+		var count := 56 if name == "WFStowedResidual" else 1
+		if not Operating.metadata_matches(extras, {"source_member_count": count, "static_stow_prototype_not_admitted": true, "source_sha256": Operating.SOURCE_HASH}):
+			return false
+		members += count
+	return members == 69
+
+# Factory works only on detached, authenticated candidates. Tests exercise this
+# narrow last-node/pose boundary directly without inventing a WorldAuthority.
+func install_replacement(model: Node3D, replacement: Node3D, spec: Dictionary, deltas: Array) -> bool:
+	if model.is_inside_tree() or not replacement_nodes.is_empty() or not valid_replacement(replacement) or deltas.size() != Operating.GROUP_NODES.size():
+		return false
+	var inspector := Operating.new()
+	if not inspector.bind_operating_model(model, spec):
+		inspector.free()
+		return false
+	var candidate := {}
+	for index in Operating.GROUP_NODES.size():
+		var id: String = Operating.GROUP_NODES.keys()[index]
+		if not valid_rigid_pose(deltas[index]):
+			inspector.free()
+			return false
+		candidate[id] = deltas[index]
+	var lift: Node3D = inspector.moving_nodes.seat_lift
+	var nodes := Operating.unique_nodes(model)
+	for name in STOWED_ROOTS:
+		if nodes.has(name):
+			inspector.free()
+			return false
+	# The whole original lift is replaced once; all new roots remain siblings.
+	operating_nodes = inspector.moving_nodes.duplicate()
+	operating_nodes.erase("seat_lift")
+	model.remove_child(lift)
+	lift.free()
+	for name in STOWED_ROOTS:
+		var node: Node3D = replacement.find_child(name, false, false)
+		node.owner = null
+		replacement.remove_child(node)
+		model.add_child(node)
+		node.owner = model
+		node.transform = candidate.seat_lift
+		replacement_nodes.append(node)
+	for id in operating_nodes:
+		operating_nodes[id].transform = candidate[id]
+	inspector.free()
+	return true
+
+static func load_selected_asset(directory: String, binding: Dictionary) -> Node3D:
+	# Exact closed C++ binding validation is supplied below; no directory fallback.
+	if not valid_binding(binding) or not directory.is_absolute_path() or not sources_unchanged(directory, binding):
+		return null
+	if binding.profile == "legacy-original":
+		var legacy := load_asset(directory)
+		if legacy != null:
+			legacy.selected_binding = binding.duplicate(true)
+		return legacy
+	var operating := directory.path_join("operating")
+	var stowed := directory.path_join("stowed")
+	if not Operating.valid_prepared(operating) or FileAccess.get_sha256(stowed.path_join("model.glb")) != STOWED_MODEL or FileAccess.get_sha256(stowed.path_join("frame.json")) != STOWED_FRAME:
+		return null
+	var spec: Variant = Operating.bounded_json(operating.path_join(Operating.MANIFEST))
+	if not Operating.valid_spec(spec) or spec.model.sha256 != binding.operating_model_sha256:
+		return null
+	var model := import_model(operating.path_join(spec.model.file), 14)
+	var replacement := import_model(stowed.path_join("model.glb"))
+	if model == null or replacement == null:
+		if model != null: model.free()
+		if replacement != null: replacement.free()
+		return null
+	var instance = load("res://hopper_presentation.gd").new()
+	instance.name = "Wayfarer"
+	instance.exterior_surface = 14
+	var calibration := {"schema_version": 1, "id": "wayfarer", "units": "metres", "model": "hopper-wayfarer-01.glb", "model_sha256": spec.model.sha256, "pilot_eye": spec.anchors.pilot_eye, "vertical_fov_degrees": 75, "screens": spec.screens, "gear_preview": spec.gear_preview, "gear_preview_samples": spec.gear_preview_samples}
+	if not valid(calibration) or not instance.bind_calibration(model, calibration) or not instance.install_replacement(model, replacement, spec, binding.craft_world_deltas):
+		model.free()
+		replacement.free()
+		instance.free()
+		return null
+	replacement.free()
+	instance.add_child(model)
+	instance.selected_binding = binding.duplicate(true)
 	return instance
+
+static func valid_rigid_pose(value: Variant) -> bool:
+	if not value is Transform3D or not value.is_finite() or value.origin.length() > 100.0:
+		return false
+	return value.basis.is_equal_approx(value.basis.orthonormalized()) and absf(value.basis.determinant() - 1.0) <= 0.00001
+
+static func valid_binding(binding: Variant) -> bool:
+	if not Operating.exact_fields(binding, ["profile", "hardware_known", "operating_model_sha256", "stowed_model_sha256", "frame_sha256", "contact_sha256", "craft_world_deltas", "replacement_world_delta", "operating_atlas_surface"]):
+		return false
+	if not binding.hardware_known is bool or not binding.operating_atlas_surface is int or not binding.craft_world_deltas is Array or not binding.replacement_world_delta is Transform3D:
+		return false
+	if binding.profile == "legacy-original":
+		return not binding.hardware_known and binding.operating_atlas_surface == 18 and binding.craft_world_deltas.is_empty() and binding.replacement_world_delta == Transform3D.IDENTITY and binding.operating_model_sha256 == "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8" and binding.stowed_model_sha256 == "" and binding.frame_sha256 == "" and binding.contact_sha256 == ""
+	if binding.profile != "wayfarer-stowed-01" or not binding.hardware_known or binding.operating_atlas_surface != 14 or binding.operating_model_sha256 != "a9a8104a0ea8b5c22e4149861a76b5ab3911a9f77ba871b446c08bf9ed56621c" or binding.stowed_model_sha256 != STOWED_MODEL or binding.frame_sha256 != STOWED_FRAME or binding.contact_sha256 != "62b4d493f2d74f59b81fd089873360b99e3bae9d17a6d90a00066e9440e44c4a" or binding.craft_world_deltas.size() != 13:
+		return false
+	for pose in binding.craft_world_deltas:
+		if not valid_rigid_pose(pose):
+			return false
+	return binding.replacement_world_delta == binding.craft_world_deltas[10]
+
+func valid_installed() -> bool:
+	if not valid_binding(selected_binding) or get_child_count() != 1 or not calibration_unchanged():
+		return false
+	if selected_binding.profile == "legacy-original":
+		return replacement_nodes.is_empty()
+	var model := get_child(0)
+	var nodes := Operating.unique_nodes(model)
+	if nodes.is_empty() or nodes.has("WFOpSeatLift") or replacement_nodes.size() != 14 or operating_nodes.size() != 12:
+		return false
+	for index in STOWED_ROOTS.size():
+		var node: Variant = nodes.get(STOWED_ROOTS[index])
+		if not is_instance_valid(node) or node != replacement_nodes[index] or node.get_parent() != model or node.transform != selected_binding.replacement_world_delta:
+			return false
+	for index in Operating.GROUP_NODES.size():
+		var id: String = Operating.GROUP_NODES.keys()[index]
+		if id == "seat_lift": continue
+		var node: Variant = operating_nodes.get(id)
+		if not is_instance_valid(node) or nodes.get(Operating.GROUP_NODES[id]) != node or node.get_parent() != model or node.transform != selected_binding.craft_world_deltas[index]:
+			return false
+	return true
 
 func set_gear_preview(deployed: float) -> bool:
 	# Explicit asset inspection, never inferred from altitude or used as landing state.
@@ -145,3 +316,22 @@ func set_gear_preview(deployed: float) -> bool:
 		var weight := sample - low
 		gear_nodes[key].transform = Transform3D(Basis(a.basis.x.lerp(b.basis.x, weight), a.basis.y.lerp(b.basis.y, weight), a.basis.z.lerp(b.basis.z, weight)), a.origin.lerp(b.origin, weight))
 	return true
+
+func calibration_unchanged() -> bool:
+	if get_child_count() != 1: return false
+	var nodes := Operating.unique_nodes(get_child(0))
+	var glass: Variant = nodes.get("HopperGlass")
+	var skin: Variant = nodes.get("HopperStructure")
+	if not glass is MeshInstance3D or glass.material_override != glass_material or not skin is MeshInstance3D or skin.mesh == null or skin.mesh.get_surface_count() <= exterior_surface or skin.mesh.surface_get_material(exterior_surface) != atlas_material:
+		return false
+	if atlas_material.next_pass != null or atlas_state != [atlas_material.albedo_color, atlas_material.albedo_texture, atlas_material.normal_texture, atlas_material.normal_scale, atlas_material.metallic, atlas_material.roughness, atlas_material.cull_mode, atlas_material.texture_filter]:
+		return false
+	for name in gear_nodes:
+		if not is_instance_valid(gear_nodes[name]) or nodes.get(name) != gear_nodes[name]: return false
+	return true
+
+static func sources_unchanged(directory: String, binding: Dictionary) -> bool:
+	if not valid_binding(binding): return false
+	if binding.profile == "legacy-original":
+		return FileAccess.get_sha256(directory.path_join("hopper-wayfarer-01.glb")) == binding.operating_model_sha256 and FileAccess.get_sha256(directory.path_join(CONTRACT)) == "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
+	return Operating.valid_prepared(directory.path_join("operating")) and FileAccess.get_sha256(directory.path_join("stowed/model.glb")) == binding.stowed_model_sha256 and FileAccess.get_sha256(directory.path_join("stowed/frame.json")) == binding.frame_sha256

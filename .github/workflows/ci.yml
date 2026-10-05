@@ -41,6 +41,9 @@ jobs:
       - name: Check native asset package refusal and atomic preparation
         run: python3 test/native_asset_package_test.py
 
+      - name: Check complete native assembly publication and refusal
+        run: python3 test/freedom_native_asset_preparation_test.py
+
       - name: Check operating asset package refusal and atomic preparation
         run: python3 test/operating_asset_package_test.py
 
@@ -233,6 +236,7 @@ jobs:
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight
           --test native_port --test native_walk
+          --test native_assembly --test native_start_staging
           --test wayfarer_operating
           --test recorded_audio_shutdown
 

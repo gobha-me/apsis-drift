@@ -28,6 +28,8 @@ var available_pads: Dictionary = {}
 var requested_heading := 0.0
 var pitch := 0.0
 var error := ""
+var activated := false
+var staged_model: Node3D
 
 
 static func finite_triplet(value: Variant) -> bool:
@@ -63,18 +65,33 @@ static func valid_state(value: Dictionary) -> bool:
 
 
 func initialize(owner: Variant, assets: String) -> bool:
-	bridge = owner
-	state = bridge.get_freedom_walk_state()
-	if not valid_state(state):
-		error = "The station walking actor is unavailable"
+	var model := HopperPresentation.load_selected_asset(assets, owner.get_freedom_craft_binding())
+	if model == null:
+		error = "The selected Wayfarer could not be staged"
 		return false
-	var flight: Dictionary = bridge.get_freedom_flight_state()
+	var pending := {"walk_state": owner.get_freedom_walk_state(), "flight_state": owner.get_freedom_flight_state(), "station_geometry": owner.get_freedom_station_geometry()}
+	if not stage(owner, assets, pending, model):
+		if model.get_parent() == null: model.free()
+		return false
+	activate()
+	return true
+
+func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D) -> bool:
+	if bridge != null or model == null or model.get_parent() != null or not model.valid_installed():
+		error = "Fresh view and complete detached model required"
+		return false
+	set_process(false)
+	set_process_input(false)
+	bridge = owner
+	state = pending.walk_state.duplicate(true)
+	if not valid_state(state):
+		error = "The pending station walking actor is unavailable"
+		return false
+	var flight: Dictionary = pending.flight_state
 	if not FlightView.valid_state(flight) or not flight.attached or flight.target_port != 1:
 		error = "The walking journey has no attached D1 Wayfarer"
 		return false
-	if not assets.is_absolute_path() or FileAccess.get_sha256(assets.path_join("hopper-wayfarer-01.glb")) != FlightView.WAYFARER_HASH or FileAccess.get_sha256(assets.path_join("hopper-wayfarer-01.json")) != FlightView.WAYFARER_DESCRIPTOR_HASH:
-		error = "Prepare the verified native starter assets"
-		return false
+	staged_model = model
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var container := SubViewportContainer.new()
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -89,15 +106,11 @@ func initialize(owner: Variant, assets: String) -> bool:
 	viewport.add_child(scene)
 	station = StationPresentation.new()
 	scene.add_child(station)
-	if not station.initialize(state, bridge.get_freedom_station_geometry(), assets, false):
+	if not station.initialize(state, pending.station_geometry, assets, false):
 		error = station.error
 		return false
 	ship = Node3D.new()
 	scene.add_child(ship)
-	var model := HopperPresentation.load_asset(assets)
-	if model == null:
-		error = "The verified Wayfarer could not be imported"
-		return false
 	ship.add_child(model)
 	camera = Camera3D.new()
 	camera.name = "StationActorEye"
@@ -120,18 +133,30 @@ func initialize(owner: Variant, assets: String) -> bool:
 	light.light_energy = 1.5
 	scene.add_child(light)
 	requested_heading = state.heading_radians
+	build_ui()
+	station.transform = Transform3D(state.station_basis, state.station_position)
+	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
+	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians), state.actor_eye_position)
+	return true
+
+func activate() -> void:
+	# Called only after the exact C++ pending token commits and view enters tree.
+	activated = true
 	for pad in Input.get_connected_joypads():
 		available_pads[pad] = true
-		if selected_pad == -1:
-			selected_pad = pad
+		if selected_pad == -1: selected_pad = pad
 	Input.joy_connection_changed.connect(controller_connection_changed)
-	build_ui()
+	get_window().size_changed.connect(layout_hud)
+	layout_hud()
 	controls_armed = current_controls_neutral()
 	paused = state.continued or not controls_armed
-	if paused:
-		pause_controls("Release walking and look controls, then Resume explicitly.")
+	if paused: pause_controls("Release walking and look controls, then Resume explicitly.")
 	update_view()
-	return true
+	set_process(true)
+	set_process_input(true)
+
+func ready_to_commit() -> bool:
+	return not activated and error.is_empty() and is_instance_valid(staged_model) and staged_model.valid_installed()
 
 
 func build_ui() -> void:
@@ -182,8 +207,6 @@ func build_ui() -> void:
 	save_dialog.file_selected.connect(save_selected)
 	save_dialog.canceled.connect(save_canceled)
 	resized.connect(layout_hud)
-	get_window().size_changed.connect(layout_hud)
-	layout_hud()
 
 
 func hud_text() -> Label:
@@ -195,7 +218,7 @@ func hud_text() -> Label:
 
 
 func layout_hud() -> void:
-	if hud_scroll == null:
+	if not activated or not is_inside_tree() or hud_scroll == null:
 		return
 	var pixels := Vector2(get_window().size)
 	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
@@ -342,7 +365,7 @@ func update_view() -> void:
 
 
 func _process(delta: float) -> void:
-	if bridge == null:
+	if bridge == null or not activated:
 		return
 	if paused:
 		observe_neutral_controls()

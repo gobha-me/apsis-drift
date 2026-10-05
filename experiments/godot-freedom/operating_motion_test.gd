@@ -11,6 +11,11 @@ var failures := 0
 var checks := 0
 var maximum_source_error := 0.0
 
+func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
+	if not owner.stage_freedom_new_game(seed): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
 func check(condition: bool, message: String) -> void:
 	checks += 1
 	if not condition:
@@ -132,7 +137,7 @@ func run() -> void:
 		finish()
 		return
 	check(owner.get_operating_motion_pose(0,0,0,0).is_empty(), "Pose query worked before recipe admission")
-	check(owner.initialize_freedom_new_game("42"), "Actual seed42 New Game refused")
+	check(commit_fixture_new_game(owner, "42"), "Actual seed42 New Game refused")
 	var before: Dictionary = owner.get_freedom_flight_state()
 	var actor: Dictionary = owner.get_freedom_walk_state()
 	var temporary := ProjectSettings.globalize_path("user://motion-contract-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])

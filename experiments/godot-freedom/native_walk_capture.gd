@@ -1,6 +1,16 @@
 extends SceneTree
 ## Actual fresh New Game/input traversal. No actor relocation or art substitution.
 const WalkView = preload("res://native_walk_view.gd")
+class CaptureShell extends "res://native_start_shell.gd":
+	func _ready() -> void:
+		pass
+
+
+static func binding_metadata(binding: Dictionary) -> Dictionary:
+	var result := {}
+	for key in ["profile", "hardware_known", "operating_model_sha256", "stowed_model_sha256", "frame_sha256", "contact_sha256", "operating_atlas_surface"]:
+		result[key] = binding[key]
+	return result
 
 
 func _initialize() -> void:
@@ -16,18 +26,23 @@ func run() -> void:
 	DirAccess.make_dir_recursive_absolute(args[1])
 	GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
-	if not owner.initialize_freedom_new_game("42"):
-		push_error(str(owner.get_last_error()))
-		quit(1)
-		return
 	root.size = Vector2i(1280, 720)
-	var view := WalkView.new()
-	root.add_child(view)
-	view.set_process(false)
-	if not view.initialize(owner, args[0]):
-		push_error(view.error)
+	var shell := CaptureShell.new()
+	root.add_child(shell)
+	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if not shell.select_start(owner, {"mode": "new_game", "value": "42", "assets": args[0]}):
+		push_error(shell.error)
 		quit(1)
 		return
+	var view: Control = shell.current_view
+	if view == null or not view is WalkView:
+		push_error("The staged New Game did not select the walking view")
+		quit(1)
+		return
+	# Keep rendering waits/input callbacks from advancing the controlled route.
+	view.set_process(false)
+	view.set_process_input(false)
+	var selected_binding := binding_metadata(owner.get_freedom_craft_binding())
 	var captures := []
 	# Heading PI/2 views west; right=-1 at heading0 moves west. Looking and
 	# movement are real command requests, never changes to the saved actor pose.
@@ -57,9 +72,14 @@ func run() -> void:
 		# well from the supported stop without moving the authoritative actor.
 		view.pitch = -0.85 if phase == "d1-edge" else 0.0
 		view.update_view()
+		var before_render: Dictionary = owner.get_freedom_walk_state()
 		await process_frame
 		await process_frame
 		await RenderingServer.frame_post_draw
+		if owner.get_freedom_walk_state() != before_render:
+			push_error("Rendering wait advanced the authoritative actor")
+			quit(1)
+			return
 		var picture := root.get_texture().get_image()
 		var filename := "station-walk-%s.png" % phase
 		if picture == null or picture.is_empty() or picture.save_png(args[1].path_join(filename)) != OK:
@@ -78,8 +98,8 @@ func run() -> void:
 	if report == null:
 		quit(1)
 		return
-	report.store_string(JSON.stringify({"schema_version": 1, "scope": "Fresh supported station walk, actual shared-clock actor input; no hatch/climb/boarding/seat or hardware performance acceptance", "seed": "42", "sources_sha256": sources, "station_sha256": WalkView.StationPresentation.STATION_HASH, "wayfarer_sha256": WalkView.FlightView.WAYFARER_HASH, "asset_package": "freedom-starter-01", "licenses": ["LicenseRef-Apsis-Station-Kit-Output", "LicenseRef-Apsis-Hopper-Meshy-Output", "BSD-3-Clause"], "license_records": "assets/native/freedom-starter-01/licenses", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name(), "captures": captures}, "\t") + "\n")
+	report.store_string(JSON.stringify({"schema_version": 1, "scope": "Fresh supported station walk, actual shared-clock actor input; no hatch/climb/boarding/seat or hardware performance acceptance", "seed": "42", "sources_sha256": sources, "station_sha256": WalkView.StationPresentation.STATION_HASH, "wayfarer_sha256": selected_binding.operating_model_sha256, "stowed_model_sha256": selected_binding.stowed_model_sha256, "operating_model_sha256": selected_binding.operating_model_sha256, "selected_binding": selected_binding, "render_path": "matched native walking view; presentation-only pitch; explicit shared-clock route commands", "asset_package": "freedom-starter-01", "licenses": ["LicenseRef-Apsis-Station-Kit-Output", "LicenseRef-Apsis-Hopper-Meshy-Output", "BSD-3-Clause"], "license_records": "assets/native/freedom-starter-01/licenses", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name(), "captures": captures}, "\t") + "\n")
 	report.close()
-	view.free()
+	shell.free()
 	print("Native station walking captures: %d" % captures.size())
 	quit(0)

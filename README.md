@@ -33,7 +33,9 @@ remains attached at the actual D1 port while the C++ shared clock advances.
 See the [saved station walking contract](docs/SAVED_STATION_WALK.md).
 
 **Save As** writes the actor, attached craft, history and shared clock through
-C++ in explicit format20. Choose a path, confirm any overwrite, then Continue
+C++ in explicit format21, which retains the format20 journey and the
+[selected parked Wayfarer assembly](docs/NATIVE_STARTING_ASSEMBLY.md).
+Choose a path, confirm any overwrite, then Continue
 from that absolute path. Continue begins paused. Quit does not autosave.
 Missing, corrupt, legacy-career or unsupported saves refuse without rewriting
 or substituting a study universe.
@@ -47,7 +49,8 @@ Wayfarer flight can target D1/D2 and use the
 [physical port capture/release controls](docs/NATIVE_PORT_LIFECYCLE.md).
 A flight Save As retains format18 until explicit port selection, then writes
 format19 with its target and optional attachment. Historical files are not
-silently assigned an actor or migrated to format20.
+silently assigned an actor or migrated to another save format. Historical
+format20 journeys retain their original ship presentation and save format.
 
 The station walk has no hatch/ladder boarding or seat transition yet. Departure
 from New Game, planetary contact and the composed home-return journey remain
@@ -57,7 +60,9 @@ command.
 
 The selected station and Wayfarer exports have a
 [source-bound native asset package](docs/NATIVE_STARTER_ASSETS.md). The launcher
-prepares its verified models before opening a view. Walking uses a separate
+prepares its verified models and the fixed operating/stowed companion packages
+before opening a view. C++ selects the assembly from saved state; both native
+views use the same binding. Walking uses a separate
 source-bound contact derivative compiled into the C++ core, preserving headless
 support/contact checks independently of Godot. Asset admission alone does not
 complete boarding or the flight loop.
@@ -94,11 +99,14 @@ It preserves every other original object; matched package integration follows.
 The [static stowed asset delivery](docs/WAYFARER_STOWED_ASSETS.md) prepares the
 source-bound parked assembly offline, reproduces retained render attributes,
 and separates the 13 replacement contact objects from the retained seat.
-Matched runtime presentation and supported seating remain First Flight work.
+The [saved starting assembly](docs/NATIVE_STARTING_ASSEMBLY.md) connects its
+matched static contact and native presentation. Supported seating remains
+First Flight work.
 
 The [matched static cockpit contact](docs/STOWED_COCKPIT_CONTACT.md) extends the
 existing lower-cockpit queries with the parked replacement, retaining unrelated
-original obstacles and the halo. Live model selection and actor actions follow.
+original obstacles and the halo. The selected native assembly owns this view;
+actor actions follow.
 
 The [complete upper cabin corridor](docs/ORIGIN_CABIN_CORRIDOR.md) extends that
 support qualification across all eight center walking tiles over 4.19 metres.

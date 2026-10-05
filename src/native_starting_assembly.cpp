@@ -3,6 +3,7 @@
 #include "apsis_drift/lower_cockpit_contact_data.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/operating_motion_recipe.hpp"
+#include "apsis_drift/origin_lower_cockpit_contact.hpp"
 #include "apsis_drift/stowed_contact_data.hpp"
 namespace apsis_drift {
 struct NativeCraftBinding::Data {

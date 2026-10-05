@@ -1,8 +1,8 @@
 #pragma once
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
-#include "apsis_drift/origin_lower_cockpit_contact.hpp"
 #include <memory>
 namespace apsis_drift {
+class OriginLowerCockpitContact;
 // Copyable immutable contact/presentation selection. Default construction is
 // legacy presentation with unknown hardware and no invented operating pose.
 class NativeCraftBinding {

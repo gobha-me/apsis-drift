@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/origin_lower_cockpit_contact.hpp"
 
 #include <array>
 #include <bit>
@@ -247,7 +248,7 @@ auto binding_lifetime() -> void {
   // documented empty accessors after moving its only shared_ptr member.
   check(!sharing.selection() && !sharing.pose() && !sharing.contact(),
         "Moved-from binding cannot expose a partial selected model");
-  // NOLINTEND(bugprone-use-after-move)
+  // NOLINTEND(bugprone-use-after-move) -- end documented moved-from accessors
 }
 auto bounded_continuation(const std::filesystem::path& directory) -> void {
   auto document =

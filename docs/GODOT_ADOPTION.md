@@ -39,7 +39,8 @@ actor clock. Native input requests C++ steps; the first-person camera consumes
 same-tick projected actor/station/craft results.
 
 Format20 explicitly composes actor state with the existing physical docking
-save. Formats16–19 retain their contracts. Fresh New Game selects this supported
+save. Format21 retains that journey and adds the fixed saved native assembly.
+Formats16–20 retain their contracts. Fresh New Game selects this supported
 station state; historical station saves are not given an inferred actor pose.
 This kinematic ordinary-interior slice establishes no AG acceleration/failure,
 EVA, ladder, seat, dynamic-object collision or planet-surface walking model.

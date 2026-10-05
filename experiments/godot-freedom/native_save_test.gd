@@ -6,8 +6,20 @@ class SaveShell extends "res://native_start_shell.gd":
 	func _ready() -> void:
 		pass # Select explicit test inputs below, rather than launcher arguments.
 
+func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
+	if not owner.stage_freedom_new_game(seed): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
+
 var failures := 0
 
+
+# This test owns C++ source fixtures only; renderer admission is exercised by
+# native_start_staging, not by a direct fixture token commit.
+func commit_fixture_continue(owner: Variant, path: String) -> bool:
+	if not owner.stage_freedom_continue(path): return false
+	var pending: Dictionary = owner.get_pending_freedom_start()
+	return owner.commit_pending_freedom_start(pending.candidate_id)
 
 func check(condition: bool, message: String) -> void:
 	if not condition:
@@ -79,7 +91,7 @@ func run() -> void:
 	shell.bridge = bridge
 	shell.selected = progressed
 	shell.assets_root = args[5]
-	shell.build_view(shell.dock_geometry(progressed))
+	check(shell.build_view(shell.dock_geometry(progressed), bridge.get_freedom_station_geometry()), "Explicit historical station view refused")
 	var ui_destination := directory.path_join("native-shell-saved.json")
 	var initial_status: String = shell.save_status.text
 	check(shell.save_dialog.file_mode == FileDialog.FILE_MODE_SAVE_FILE and shell.save_dialog.access == FileDialog.ACCESS_FILESYSTEM, "Save chooser lacks save-file/overwrite semantics")
@@ -98,9 +110,9 @@ func run() -> void:
 	check(reloaded.initialize_freedom_continue(ui_destination) and reloaded.get_freedom_start() == progressed, "Shell-written save failed Continue")
 
 	# Full unsigned seed precision must survive the actual writer, too.
-	check(bridge.initialize_freedom_new_game("18446744073709551615"), "Maximum uint64 seed refused")
+	check(commit_fixture_new_game(bridge, "18446744073709551615"), "Maximum uint64 seed refused")
 	var extreme: Dictionary = bridge.get_freedom_walk_state()
-	check(bridge.save_freedom_as(destination) and reloaded.initialize_freedom_continue(destination), "Maximum-seed native save refused")
+	check(bridge.save_freedom_as(destination) and commit_fixture_continue(reloaded, destination), "Maximum-seed native save refused")
 	extreme.continued = true
 	check(not extreme.is_empty() and reloaded.get_freedom_walk_state() == extreme, "Maximum-seed actor save lost identity precision")
 	for i in 4:

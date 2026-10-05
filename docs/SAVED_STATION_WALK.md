@@ -45,7 +45,7 @@ The first-person eye is 1.70 m above the foot datum within this reservation.
 Visible character art and its painted anchors do not define physical support.
 No unqualified Hero model or pixel study is admitted by this increment.
 
-## Fresh state and format20
+## Fresh state and journey persistence
 
 Fresh New Game generates the selected seed's existing physical Origin world,
 history and identities. It places the actor at local `(0,0,0)` on the supported
@@ -59,6 +59,11 @@ valid supported actor. The root location is `station_interior`; the body stays
 in its existing nonrotating home-planet frame. There is one clock and canonical
 craft pose. Actor geometry, identity, pose, velocity, heading and frame are
 validated before Continue or writing.
+
+New Game now persists that unchanged journey in format21 with the explicit
+[parked starting assembly](NATIVE_STARTING_ASSEMBLY.md). Historical format20
+journeys keep their original presentation and format; absence of a hardware
+selection means unknown hardware, not an inferred parked pose.
 
 The existing mutable session advances walking and neutral constrained craft
 co-motion as one transaction. Invalid input, state, terminal clock or failed
@@ -152,7 +157,10 @@ working rendering display, review actual fresh-game input with absolute paths:
 
 Prepare `CAPTURE_DIR` first. The script refuses headless rendering and records
 four actual traversal images, actor/ship ticks, poses, renderer and source/image
-hashes. Offline/software captures establish visible registration and movement;
+hashes. It stages the selected complete assembly before session activation and
+records its actual model/frame/contact pins. Render waits do not step the actor;
+the declared traversal commands advance the shared C++ clock.
+Offline/software captures establish visible registration and movement;
 they do not establish target-hardware performance or the complete journey.
 
 Local qualification on 2026-10-01 passes all 35 CTest contracts and all 41 native

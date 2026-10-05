@@ -12,6 +12,7 @@ var bridge: Variant
 var camera: Camera3D
 var terrain_camera: Camera3D
 var near_viewport: SubViewport
+var far_viewport: SubViewport
 var ship: Node3D
 var terrain: Node3D
 var exhaust: Node3D
@@ -49,6 +50,8 @@ var port_buttons: Array[Button] = []
 var capture_button: Button
 var release_button: Button
 var error := ""
+var activated := false
+var staged_model: Node3D
 
 
 static func actuator_fractions(axes: PackedFloat64Array) -> PackedFloat64Array:
@@ -107,8 +110,31 @@ static func orbit_text(value: Dictionary) -> String:
 
 
 func initialize(owner: Variant, assets: String) -> bool:
+	var flight: Dictionary = owner.get_freedom_flight_state()
+	var model: Node3D
+	if flight.get("frame_id") == "2":
+		model = HopperPresentation.load_selected_asset(assets, owner.get_freedom_craft_binding())
+		if model == null:
+			error = "The selected Wayfarer could not be staged"
+			return false
+	var pending := {"flight_state": flight, "station_geometry": owner.get_freedom_station_geometry()}
+	if not stage(owner, assets, pending, model):
+		if model != null and model.get_parent() == null: model.free()
+		return false
+	if not owner.enable_streaming():
+		error = str(owner.get_last_error())
+		return false
+	activate()
+	return true
+
+func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D) -> bool:
+	if bridge != null or (model != null and (model.get_parent() != null or not model.valid_installed())):
+		error = "Fresh view and complete detached model required"
+		return false
+	set_process(false)
+	set_process_input(false)
 	bridge = owner
-	state = bridge.get_freedom_flight_state()
+	state = pending.flight_state.duplicate(true)
 	if not valid_state(state):
 		error = "Saved physical flight view is unavailable: " + str(bridge.get_last_error())
 		return false
@@ -116,7 +142,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 		error = "Prepare the native starter assets before viewing flight"
 		return false
 	assets_root = assets
-	station_geometry = bridge.get_freedom_station_geometry()
+	station_geometry = pending.station_geometry.duplicate(true)
 	if not StationPresentation.valid_geometry(station_geometry, state.station_id) or FileAccess.get_sha256(assets.path_join("station-reference.glb")) != StationPresentation.STATION_HASH:
 		error = "The selected Origin Station geometry/export is missing or changed"
 		return false
@@ -126,6 +152,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 	container.stretch = true
 	add_child(container)
 	var viewport := SubViewport.new()
+	far_viewport = viewport
 	viewport.size = Vector2i(1280, 720)
 	viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -135,20 +162,16 @@ func initialize(owner: Variant, assets: String) -> bool:
 	ship = Node3D.new()
 	scene.add_child(ship)
 	if state.frame_id == "2":
-		var path := assets.path_join("hopper-wayfarer-01.glb")
-		if FileAccess.get_sha256(path) != WAYFARER_HASH or FileAccess.get_sha256(assets.path_join("hopper-wayfarer-01.json")) != WAYFARER_DESCRIPTOR_HASH:
-			error = "The selected Wayfarer export is missing or changed"
-			return false
-		var model := HopperPresentation.load_asset(assets)
 		if model == null:
-			error = "The Wayfarer descriptor or verified export could not be loaded"
+			error = "Selected Wayfarer model is required"
 			return false
+		staged_model = model
 		ship.add_child(model)
 		# This camera reference is presentation only. Boarding/seat ownership is
 		# a separate journey transition, not authorized by toggling this camera.
 		pilot_eye = HopperPresentation.vector(model.specification.pilot_eye)
 		exhaust = MainExhaust.new()
-		if not exhaust.bind_skin(model):
+		if not exhaust.bind_skin(model, model.exterior_surface):
 			exhaust.free()
 			exhaust = null
 			error = "The selected Wayfarer exterior exhaust interface is unavailable"
@@ -175,7 +198,7 @@ func initialize(owner: Variant, assets: String) -> bool:
 	add_child(near_container)
 	near_viewport = SubViewport.new()
 	near_viewport.size = viewport.size
-	near_viewport.world_3d = viewport.find_world_3d()
+
 	near_viewport.transparent_bg = true
 	near_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	near_container.add_child(near_viewport)
@@ -200,16 +223,32 @@ func initialize(owner: Variant, assets: String) -> bool:
 	close_environment.background_mode = Environment.BG_CLEAR_COLOR
 	camera.environment = close_environment
 	set_ship_layer(ship)
-	if not bridge.enable_streaming():
-		error = str(bridge.get_last_error())
-		return false
+	if state.station_position.length() < 1000.0:
+		station = StationPresentation.new()
+		scene.add_child(station)
+		if not station.initialize({"station_id": state.station_id}, station_geometry, assets_root, false):
+			error = station.error
+			return false
+		set_ship_layer(station)
 	terrain = PlanetStreamView.new()
 	terrain.bridge = bridge
 	scene.add_child(terrain)
 	build_ui()
+	return true
+
+func activate() -> void:
+	# Pending C++ owns preallocated streaming; this hook performs no asset reads.
+	activated = true
+	near_viewport.world_3d = far_viewport.find_world_3d()
+	get_window().size_changed.connect(layout_hud)
+	layout_hud()
 	setup_controls()
 	update_view(0.0)
-	return true
+	set_process(true)
+	set_process_input(true)
+
+func ready_to_commit() -> bool:
+	return not activated and error.is_empty() and (state.frame_id != "2" or (is_instance_valid(staged_model) and staged_model.valid_installed() and is_instance_valid(exhaust) and exhaust.valid_bound_skin()))
 
 
 static func set_ship_layer(node: Node) -> void:
@@ -308,8 +347,6 @@ func build_ui() -> void:
 	quit_button.pressed.connect(func(): get_tree().quit())
 	column.add_child(quit_button)
 	resized.connect(layout_hud)
-	get_window().size_changed.connect(layout_hud)
-	layout_hud()
 
 
 func hud_text() -> RichTextLabel:
@@ -322,7 +359,7 @@ func hud_text() -> RichTextLabel:
 
 
 func layout_hud() -> void:
-	if hud_scroll == null:
+	if not activated or not is_inside_tree() or hud_scroll == null:
 		return
 	var pixels := Vector2(get_window().size)
 	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
@@ -536,6 +573,7 @@ func pause_on_error(message: String) -> void:
 
 
 func _process(delta: float) -> void:
+	if not activated: return
 	if bridge == null or camera == null or terrain == null or not error.is_empty():
 		hide_exhaust()
 		return
