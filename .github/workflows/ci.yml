@@ -69,7 +69,9 @@ jobs:
         run: python3 test/boarding_contact_policy_test.py
 
       - name: Check complete-source material inventory bounds and fingerprints
-        run: python3 test/tools/material_inventory_test.py
+        run: |
+          python3 test/tools/material_inventory_test.py
+          python3 test/material_source_completion_test.py
 
       - name: Check corrected-rest attribution and finite assembly proofs
         run: python3 test/wayfarer_corrected_rest_checks_test.py
