@@ -2,7 +2,8 @@
 
 Registered 2026-10-05 for [#441](https://github.com/gobha-me/apsis-drift/issues/441),
 before implementation or any load evaluation. The source-only method and compact
-record layout received independent review. No load outcome is assigned here.
+record layout received independent review. The registration assigned no load
+outcome; observations below were added after the first runs.
 Refines the preserved fixed-endpoint plan and independent source review.
 
 ## Fixed scope and owned prerequisites
@@ -250,3 +251,28 @@ proxy. World/crop/sweep/volume/material, articulated strength, dynamics, continu
 motion/acquisition/swing/transfer/route, actor/seat/save/FirstFlight remainfalse.
 A later fixed endpoint world query may own load→self→endpoint once and use
 ORIGINAL full box/capsule world reservations, never Self01 ellipsoid shrinkage.
+
+
+## Observations and validation — 2026-10-05
+
+The first GCC and Clang observations at 18:54 UTC each passed 1,540 independent
+checks with identical flags, pressure bounds and counters. The unchanged fixed
+endpoint qualifies both physical contacts, the shared vertical force/moment
+identities and the projected margin. All ten source quads and twenty pressure
+candidates are visited; forty-eight disk-edge predicates include both soles and
+only the coplanar source candidates. Port selects upper partition 8 and
+starboard selects transition partition 9. The shared Z offset is enclosed by
+[0.058924628879047918, 0.058924628879052039] metres; the child's previously
+registered geometric pressure offsets remain unchanged.
+
+Three observed-result regressions were then added, and both compilers pass
+1,543 checks. Complete native builds and 59/59 contracts pass on GCC and Clang.
+Pinned format20, all 39 justified suppression directives and full tidy20 across
+149 translation units pass. Independent tests reconstruct the full fifteen-mass
+COM from unfactored knees, check unequal-height moments, genuine finite
+source/sole edges, every unchanged child field, and invalid/environment/prefix/
+lifetime refusals. The original 33,542-byte boot-support implementation remains
+exactly preserved apart from two new includes and the additive new section.
+
+This is a supported static proxy checkpoint. All-obstacle world clearance,
+continuous transfer, boarding, seating, departure and First Flight remain open.

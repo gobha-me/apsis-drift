@@ -1309,6 +1309,22 @@ int main() {
     const auto unchanged = snapshot(
         require(assess_origin_boarding_source_endpoint_self(provider)));
     const auto actual = observe(provider);
+    // Frozen only after identical first GCC/Clang observations (1540 checks).
+    check(
+        actual.load.complete && actual.load.load_qualified &&
+            actual.load.contact_supported &&
+            actual.load.projected_margin_certified &&
+            !actual.load.first_refusal,
+        "Observed fixed actual-source endpoint retains its physical load pass");
+    check(actual.load.pressures[0].source_partition == 8 &&
+              actual.load.pressures[1].source_partition == 9,
+          "Observed load pressures retain their actual finite upper/tread "
+          "sources");
+    check(actual.load.checked_quads == 10 &&
+              actual.load.pressure_candidates == 20 &&
+              actual.load.edge_checks == 48,
+          "Observed complete scan retains all source guards and only coplanar "
+          "disk work");
     check(snapshot(actual.self) == unchanged,
           "Load owns every unchanged Self01/endpoint/Sites02 result, source "
           "binding and original counter");

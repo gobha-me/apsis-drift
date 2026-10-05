@@ -760,8 +760,9 @@ constexpr std::size_t load_nested_scratch =
 // stack allocations. Include by-value Point parameters, not just Interval
 // locals. Deep disk chain: fill pressure/required48 + site_edge parameters112
 // and edge32 + edge_side parameters96 and e/d64 + retained product16 +
-// multiply arguments32/products32/return16 =548. Add outer numeric Point
-// copies96, reference/control slots128 and two edge-record returns160.
+// multiply arguments32/products32/return16 =448, plus100 for remaining
+// arithmetic/return temporaries =548. Add outer numeric Point copies96,
+// reference/control slots128 and two edge-record returns160.
 constexpr std::size_t load_disk_helper_scratch =
     548 + 3 * sizeof(Point) + 16 * sizeof(std::size_t) +
     2 * sizeof(BoardingFootSiteEdgeEvidence);
