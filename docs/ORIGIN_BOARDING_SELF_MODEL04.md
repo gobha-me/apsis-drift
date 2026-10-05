@@ -31,3 +31,11 @@ except the explicit version4/body-policy2 IDs.
 This is a source-free finite self checkpoint. It supplies no world/source
 clearance, finite source support/load, interval sweep, route, seat or actor
 permission. First Flight and #361/#352 remain open.
+
+The two frozen folded-arm controls pass all105 existing complete pair
+certificates without strict or unresolved outcomes under GCC and Clang. Their
+recomputed single-sole load margins are approximately55.714mm across and
+106.839mm along the boot, on the declared abstract plane. These margins describe
+geometry only; forward-joint rounding does not establish exact source-plane
+contact. The straight-arm controls retain strict arm–trunk conflicts and their
+precise other refusal diagnostics. No pose or finite region was tuned.

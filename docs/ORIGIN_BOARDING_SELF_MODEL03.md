@@ -113,3 +113,7 @@ separate. [The lower transfer](LOWER_TRANSFER_FEASIBILITY.md) and #352/#291/#245
 remain open. The retained stowed-harness child #372 may supply a starting
 equipment state; it does not prove sitting or boarding. No source fitting or
 runtime asset admission belongs to this contract.
+
+[Recipe04](ORIGIN_BOARDING_SELF_MODEL04.md) separately binds these unchanged
+finite regions and predicates to body policy02. This Recipe03 entry point stays
+on policy01 and does not silently certify lateral poses.
