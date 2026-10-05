@@ -123,6 +123,9 @@ The [planted leg expression recipe](docs/ORIGIN_BOARDING_PLANTED_LEGS01.md)
 derives linked knees for two feet on different tread heights and bounds the
 existing joint limits over a fixed lateral movement. Its source-free evidence
 is a kinematic foundation; whole-body support and swept clearance follow.
+The [timing bounds](docs/ORIGIN_BOARDING_PLANTED_LEG_TIMING01.md) retain the
+original movement clock and check root motion and physical joint speeds over
+complete intervals, with separate evidence for reverse and point requests.
 
 The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
 the existing seat and harness meshes while proving their complete render

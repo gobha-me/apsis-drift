@@ -16,4 +16,26 @@ namespace apsis_drift::detail {
                                                  std::size_t max_nodes,
                                                  std::size_t max_leaves)
     -> std::expected<BoardingPlantedLegDiagnostic, std::string>;
+
+// Per-parameter derivatives are converted using the original fixed 12*t clock.
+// Private geometry remains adversarial input only; side must be 0 or 1.
+[[nodiscard]] auto boarding_planted_leg_timing_numeric(
+    RigidVector3 hip, RigidVector3 parameter_first,
+    RigidVector3 parameter_second, double ankle_x, double ankle_z, double plane,
+    double thigh_length, double shin_length, bool forward_branch, bool reverse,
+    std::size_t side) -> BoardingPlantedLegTimingEvidence;
+[[nodiscard]] auto boarding_planted_legs_timing_bounded(double first,
+                                                        double last,
+                                                        std::size_t max_depth,
+                                                        std::size_t max_nodes,
+                                                        std::size_t max_leaves)
+    -> std::expected<BoardingPlantedLegTimingDiagnostic, std::string>;
+// These signed component inputs already use radians per second. The physical
+// joint speed is their orthogonal resultant; knee supplies zero roll.
+[[nodiscard]] auto boarding_planted_leg_joint_speed(
+    BoardingPlantedLegScalarBounds roll_rate,
+    BoardingPlantedLegScalarBounds pitch_rate)
+    -> BoardingPlantedLegSpeedEvidence;
+[[nodiscard]] auto boarding_planted_leg_speed_threshold()
+    -> BoardingPlantedLegScalarBounds;
 } // namespace apsis_drift::detail

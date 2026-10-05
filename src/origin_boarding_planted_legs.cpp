@@ -432,6 +432,424 @@ auto assess(double first, double last, std::size_t depth, std::size_t nodes,
   query.result.joint_limits_certified = gap_free;
   return std::move(query.result);
 }
+
+using TimingCondition = BoardingPlantedLegTimingCondition;
+using Joint = BoardingPlantedLegJoint;
+// Only the registered planted-leg expressions: no caller expression graph.
+// First and second are derivatives with respect to the original parameter t.
+struct TimingScalar {
+  Interval value, first, second;
+};
+using TimingPoint = std::array<TimingScalar, 3>;
+auto timing_constant(Interval value) -> TimingScalar {
+  return {value, point(0), point(0)};
+}
+auto timing_constant(double value) -> TimingScalar {
+  return timing_constant(point(value));
+}
+auto timing_supported(const TimingScalar& v) -> bool {
+  return v.value.supported && v.first.supported && v.second.supported;
+}
+auto timing_add(const TimingScalar& a, const TimingScalar& b) -> TimingScalar {
+  return {add(a.value, b.value), add(a.first, b.first),
+          add(a.second, b.second)};
+}
+auto timing_negate(const TimingScalar& v) -> TimingScalar {
+  return {negate(v.value), negate(v.first), negate(v.second)};
+}
+auto timing_subtract(const TimingScalar& a, const TimingScalar& b)
+    -> TimingScalar {
+  // Preserve equal-singleton cancellation separately in each component. An
+  // exactly zero position difference can still have nonzero derivatives.
+  return {subtract(a.value, b.value), subtract(a.first, b.first),
+          subtract(a.second, b.second)};
+}
+auto timing_multiply(const TimingScalar& a, const TimingScalar& b)
+    -> TimingScalar {
+  return {multiply(a.value, b.value),
+          add(multiply(a.first, b.value), multiply(a.value, b.first)),
+          add(add(multiply(a.second, b.value), multiply(a.value, b.second)),
+              multiply(point(2), multiply(a.first, b.first)))};
+}
+auto timing_square(const TimingScalar& v) -> TimingScalar {
+  return {
+      square(v.value), multiply(point(2), multiply(v.value, v.first)),
+      multiply(point(2), add(square(v.first), multiply(v.value, v.second)))};
+}
+auto timing_reciprocal(const TimingScalar& v) -> TimingScalar {
+  if (!timing_supported(v) || v.value.low <= 0) return {};
+  const auto v2 = square(v.value), v3 = multiply(v2, v.value);
+  return {divide(point(1), v.value), negate(divide(v.first, v2)),
+          subtract(divide(multiply(point(2), square(v.first)), v3),
+                   divide(v.second, v2))};
+}
+auto timing_divide(const TimingScalar& a, const TimingScalar& b)
+    -> TimingScalar {
+  return timing_multiply(a, timing_reciprocal(b));
+}
+auto timing_root(const TimingScalar& v) -> TimingScalar {
+  if (!timing_supported(v) || v.value.low <= 0) return {};
+  const auto y = root(v.value), twice_y = multiply(point(2), y),
+             four_y3 = multiply(point(4), multiply(square(y), y));
+  return {
+      y, divide(v.first, twice_y),
+      subtract(divide(v.second, twice_y), divide(square(v.first), four_y3))};
+}
+auto physical_first(Interval v, bool reverse) -> Interval {
+  const auto scaled = divide(v, point(12));
+  return reverse ? negate(scaled) : scaled;
+}
+auto physical_second(Interval v) -> Interval {
+  return divide(v, point(144));
+}
+auto point_derivatives(const TimingPoint& p, bool reverse)
+    -> BoardingPlantedLegPointDerivatives {
+  Point first{}, second{};
+  for (std::size_t i = 0; i < 3; ++i) {
+    first[i] = physical_first(p[i].first, reverse);
+    second[i] = physical_second(p[i].second);
+  }
+  return {point_bounds(first), point_bounds(second)};
+}
+struct AngularTiming {
+  Interval first, second;
+};
+auto pitch_derivatives(const TimingScalar& F, const TimingScalar& G,
+                       Interval length_squared) -> AngularTiming {
+  // F^2+G^2=L^2 is the exact registered link identity, not a rounded norm.
+  return {
+      divide(subtract(multiply(F.value, G.first), multiply(G.value, F.first)),
+             length_squared),
+      divide(subtract(multiply(F.value, G.second), multiply(G.value, F.second)),
+             length_squared)};
+}
+auto angular_derivatives(const AngularTiming& a, bool reverse)
+    -> BoardingPlantedLegAngularDerivatives {
+  return {bounds(physical_first(a.first, reverse)),
+          bounds(physical_second(a.second))};
+}
+auto negate_angular(const AngularTiming& a) -> AngularTiming {
+  return {negate(a.first), negate(a.second)};
+}
+auto speed_threshold() -> Interval {
+  return divide(interval(0x1.921fb54442d18p+1, 0x1.921fb54442d19p+1), point(6));
+}
+auto joint_speed(Interval roll_rate, Interval pitch_rate)
+    -> BoardingPlantedLegSpeedEvidence {
+  BoardingPlantedLegSpeedEvidence result;
+  if (!supported_environment()) return result;
+  auto squared_speed = add(square(roll_rate), square(pitch_rate));
+  if (!squared_speed.supported) return result;
+  // A sum of squares is nonnegative even when outward addition crosses zero.
+  squared_speed.low = std::max(0., squared_speed.low);
+  const auto norm = root(squared_speed), threshold = square(speed_threshold());
+  if (!norm.supported || !threshold.supported) return result;
+  result.speed_radians_per_second = bounds(norm);
+  result.supported = true;
+  result.certified = squared_speed.high <= threshold.low;
+  return result;
+}
+auto evaluate_timing_leg(const TimingPoint& hip, double ankle_x, double ankle_z,
+                         double plane, double l1, double l2, bool forward,
+                         bool reverse, std::size_t side)
+    -> BoardingPlantedLegTimingEvidence {
+  BoardingPlantedLegTimingEvidence result;
+  const auto refuse = [&](TimingCondition condition, Bounds limiting = {}) {
+    result.limiting_condition = condition;
+    result.limiting_bound = limiting;
+    return result;
+  };
+  if (!supported_environment() || side > 1 ||
+      !std::ranges::all_of(hip, [](const TimingScalar& v) {
+        return timing_supported(v) && v.value.low >= -8 && v.value.high <= 8 &&
+               v.first.low >= -4096 && v.first.high <= 4096 &&
+               v.second.low >= -4096 && v.second.high <= 4096;
+      }))
+    return refuse(TimingCondition::unsupported_arithmetic);
+  const Point hip_value{hip[0].value, hip[1].value, hip[2].value};
+  result.closure =
+      evaluate_leg(hip_value, ankle_x, ankle_z, plane, l1, l2, forward);
+  if (!result.closure.limits_certified)
+    return refuse(TimingCondition::closure_prerequisite);
+  const TimingPoint ankle{timing_constant(ankle_x),
+                          timing_constant(add(point(plane), point(.1))),
+                          timing_constant(ankle_z)};
+  const TimingPoint boot{timing_constant(ankle_x),
+                         timing_constant(add(point(plane), point(.05))),
+                         timing_constant(ankle_z)};
+  const TimingPoint d{timing_subtract(ankle[0], hip[0]),
+                      timing_subtract(ankle[1], hip[1]),
+                      timing_subtract(ankle[2], hip[2])};
+  const auto rho2 = timing_add(timing_square(d[0]), timing_square(d[1])),
+             D = timing_add(rho2, timing_square(d[2]));
+  if (!timing_supported(rho2) || !timing_supported(D))
+    return refuse(TimingCondition::unsupported_arithmetic);
+  if (rho2.value.low <= 0)
+    return refuse(TimingCondition::rho_derivative, bounds(rho2.value));
+  if (D.value.low <= 0)
+    return refuse(TimingCondition::distance_derivative, bounds(D.value));
+  const auto rho = timing_root(rho2);
+  const auto l1_squared = square(point(l1)), l2_squared = square(point(l2)),
+             maximum_reach = square(add(point(l1), point(l2))),
+             minimum_reach = square(subtract(point(l1), point(l2)));
+  const auto alpha = timing_divide(
+      timing_add(timing_constant(subtract(l1_squared, l2_squared)), D),
+      timing_multiply(timing_constant(2), D));
+  auto outer = timing_subtract(timing_constant(maximum_reach), D),
+       inner = timing_subtract(D, timing_constant(minimum_reach));
+  if (!timing_supported(outer) || !timing_supported(inner))
+    return refuse(TimingCondition::unsupported_arithmetic);
+  // The unchanged closure prerequisite has already proved the reach domain.
+  // Tighten only values by that proof; do not differentiate this tightening.
+  outer.value.low = std::max(0., outer.value.low);
+  inner.value.low = std::max(0., inner.value.low);
+  const auto gamma2 =
+      timing_divide(timing_multiply(outer, inner),
+                    timing_multiply(timing_constant(4), timing_square(D)));
+  if (!timing_supported(gamma2))
+    return refuse(TimingCondition::unsupported_arithmetic);
+  if (gamma2.value.low <= 0)
+    return refuse(TimingCondition::gamma_derivative, bounds(gamma2.value));
+  const auto gamma = timing_root(gamma2);
+  const TimingPoint q{timing_divide(timing_multiply(d[0], d[2]), rho),
+                      timing_divide(timing_multiply(d[1], d[2]), rho),
+                      timing_negate(rho)};
+  TimingPoint knee;
+  for (std::size_t i = 0; i < 3; ++i)
+    knee[i] = timing_add(timing_add(hip[i], timing_multiply(alpha, d[i])),
+                         timing_multiply(gamma, q[i]));
+  if (!timing_supported(alpha) || !timing_supported(gamma) ||
+      !std::ranges::all_of(knee, timing_supported))
+    return refuse(TimingCondition::unsupported_arithmetic);
+  const auto complement = timing_subtract(timing_constant(1), alpha),
+             F1 = timing_add(timing_multiply(alpha, rho),
+                             timing_multiply(gamma, d[2])),
+             G1 = timing_subtract(timing_multiply(gamma, rho),
+                                  timing_multiply(alpha, d[2])),
+             F2 = timing_subtract(timing_multiply(complement, rho),
+                                  timing_multiply(gamma, d[2])),
+             G2 = timing_negate(timing_add(timing_multiply(complement, d[2]),
+                                           timing_multiply(gamma, rho)));
+  const auto hip_pitch = pitch_derivatives(F1, G1, l1_squared),
+             shin_pitch = pitch_derivatives(F2, G2, l2_squared),
+             knee_flex =
+                 AngularTiming{subtract(hip_pitch.first, shin_pitch.first),
+                               subtract(hip_pitch.second, shin_pitch.second)};
+  const auto F = timing_negate(d[1]), G = d[0];
+  const auto numerator =
+      subtract(multiply(F.value, G.first), multiply(G.value, F.first));
+  const AngularTiming phi{
+      divide(numerator, rho2.value),
+      subtract(divide(subtract(multiply(F.value, G.second),
+                               multiply(G.value, F.second)),
+                      rho2.value),
+               divide(multiply(numerator, rho2.first), square(rho2.value)))};
+  const std::array angular_states{hip_pitch, shin_pitch, knee_flex, phi};
+  if (!std::ranges::all_of(angular_states, [](const AngularTiming& a) {
+        return a.first.supported && a.second.supported;
+      }))
+    return refuse(TimingCondition::unsupported_arithmetic);
+  result.hip = point_derivatives(hip, reverse);
+  result.knee = point_derivatives(knee, reverse);
+  result.ankle = point_derivatives(ankle, reverse);
+  result.boot_center = point_derivatives(boot, reverse);
+  result.hip_pitch = angular_derivatives(hip_pitch, reverse);
+  result.shin_pitch = angular_derivatives(shin_pitch, reverse);
+  result.knee_flex = angular_derivatives(knee_flex, reverse);
+  result.ankle_pitch = angular_derivatives(negate_angular(shin_pitch), reverse);
+  result.hip_abduction =
+      angular_derivatives(side == 0 ? negate_angular(phi) : phi, reverse);
+  // Both physical flat ankles compensate the same Rz(phi), independent of side.
+  result.ankle_roll = angular_derivatives(negate_angular(phi), reverse);
+  result.derivative_domains_certified = true;
+  const auto phi_rate = physical_first(phi.first, reverse);
+  result.hip_speed =
+      joint_speed(phi_rate, physical_first(hip_pitch.first, reverse));
+  result.knee_speed =
+      joint_speed(point(0), physical_first(knee_flex.first, reverse));
+  result.ankle_speed =
+      joint_speed(phi_rate, physical_first(shin_pitch.first, reverse));
+  const std::array speeds{result.hip_speed, result.knee_speed,
+                          result.ankle_speed};
+  const std::array joints{Joint::hip, Joint::knee, Joint::ankle};
+  for (std::size_t i = 0; i < speeds.size(); ++i) {
+    if (!speeds[i].supported || !speeds[i].certified) {
+      result.limiting_joint = joints[i];
+      return refuse(speeds[i].supported
+                        ? TimingCondition::joint_speed
+                        : TimingCondition::unsupported_arithmetic,
+                    speeds[i].speed_radians_per_second);
+    }
+  }
+  result.joint_speed_certified = true;
+  return result;
+}
+auto root_first_point(double t) -> Interval {
+  if (t == 0 || t == 1) return point(0);
+  return multiply(multiply(point(.32), point(6)),
+                  multiply(point(t), subtract(point(1), point(t))));
+}
+auto root_second_point(double t) -> Interval {
+  return multiply(point(.32),
+                  subtract(point(6), multiply(point(12), point(t))));
+}
+auto timing_root_x(double first, double last) -> TimingScalar {
+  const auto a = root_first_point(first), b = root_first_point(last),
+             critical = root_first_point(.5),
+             second_a = root_second_point(first),
+             second_b = root_second_point(last);
+  if (!a.supported || !b.supported || !critical.supported ||
+      !second_a.supported || !second_b.supported)
+    return {};
+  // x' increases up to .5 and decreases afterwards; x'' is decreasing affine.
+  // The stored .32 expression, not a separately rounded .48, sets the maximum.
+  const auto high =
+      first <= .5 && .5 <= last ? critical.high : std::max(a.high, b.high);
+  return {root_x(first, last),
+          interval(std::max(0., std::min(a.low, b.low)),
+                   std::min(high, critical.high)),
+          interval(second_b.low, second_a.high)};
+}
+auto timing_fixture_leg(const TimingScalar& x, bool reverse, std::size_t side)
+    -> BoardingPlantedLegTimingEvidence {
+  const TimingPoint hip{timing_add(x, timing_constant(side == 0 ? -.14 : .14)),
+                        timing_constant(.72), timing_constant(-.16)};
+  return evaluate_timing_leg(hip, side == 0 ? .02 : .34,
+                             side == 0 ? -.35 : -.65, side == 0 ? 0 : -.16,
+                             thigh_length, shin_length, true, reverse, side);
+}
+struct TimingSubdivision {
+  BoardingPlantedLegTimingDiagnostic result;
+  std::size_t depth_limit{}, node_limit{}, leaf_limit{};
+  auto refuse(double first, double last, std::size_t side, std::size_t depth,
+              TimingCondition reason, TimingCondition limiting,
+              Joint joint = Joint::none, Bounds limiting_bound = {}) -> bool {
+    result.first_refusal = BoardingPlantedLegTimingRefusal{
+        first, last, side, depth, reason, limiting, joint, limiting_bound};
+    return false;
+  }
+  auto visit(double first, double last, std::size_t depth) -> bool {
+    if (result.examined_nodes == node_limit)
+      return refuse(first, last, 0, depth,
+                    TimingCondition::subdivision_capacity,
+                    TimingCondition::none);
+    ++result.examined_nodes;
+    result.maximum_depth = std::max(result.maximum_depth, depth);
+    const auto x = timing_root_x(first, last);
+    BoardingPlantedLegTimingLeaf leaf;
+    leaf.first = first;
+    leaf.last = last;
+    TimingCondition condition = TimingCondition::none;
+    Bounds limiting_bound;
+    Joint joint = Joint::none;
+    std::size_t failed_side{};
+    if (!timing_supported(x)) {
+      condition = TimingCondition::unsupported_arithmetic;
+    } else {
+      const TimingPoint root_point{x, timing_constant(.72),
+                                   timing_constant(-.16)};
+      leaf.root = point_derivatives(root_point, result.reverse);
+      const auto speed = absolute(physical_first(x.first, result.reverse)),
+                 acceleration = absolute(physical_second(x.second));
+      leaf.root_speed = bounds(speed);
+      leaf.root_acceleration = bounds(acceleration);
+      if (!speed.supported || !acceleration.supported) {
+        condition = TimingCondition::unsupported_arithmetic;
+      } else if (speed.high > .25) {
+        condition = TimingCondition::root_speed;
+        limiting_bound = bounds(speed);
+      } else if (acceleration.high > .10) {
+        condition = TimingCondition::root_acceleration;
+        limiting_bound = bounds(acceleration);
+      }
+      for (std::size_t side = 0; side < 2; ++side) {
+        leaf.legs[side] = timing_fixture_leg(x, result.reverse, side);
+        if (!leaf.legs[side].joint_speed_certified &&
+            condition == TimingCondition::none) {
+          condition = leaf.legs[side].limiting_condition;
+          limiting_bound = leaf.legs[side].limiting_bound;
+          joint = leaf.legs[side].limiting_joint;
+          failed_side = side;
+        }
+      }
+    }
+    if (condition == TimingCondition::none) {
+      if (result.leaves.size() == leaf_limit)
+        return refuse(first, last, 0, depth,
+                      TimingCondition::subdivision_capacity,
+                      TimingCondition::none);
+      const auto middle = first + (last - first) * .5;
+      for (std::size_t side = 0; side < 2; ++side)
+        report_angles(leaf.legs[side].closure,
+                      fixture_leg(root_x_point(middle), side), side);
+      result.leaves.push_back(leaf);
+      return true;
+    }
+    if (depth == depth_limit)
+      return refuse(first, last, failed_side, depth,
+                    TimingCondition::subdivision_capacity, condition, joint,
+                    limiting_bound);
+    const auto middle = first + (last - first) * .5;
+    if (!(first < middle && middle < last))
+      return refuse(first, last, failed_side, depth,
+                    TimingCondition::unsplittable_interval, condition, joint,
+                    limiting_bound);
+    return visit(first, middle, depth + 1) && visit(middle, last, depth + 1);
+  }
+};
+auto assess_timing(double first, double last, std::size_t depth,
+                   std::size_t nodes, std::size_t leaves)
+    -> std::expected<BoardingPlantedLegTimingDiagnostic, std::string> {
+  if (!std::isfinite(first) || !std::isfinite(last) || first < 0 || first > 1 ||
+      last < 0 || last > 1)
+    return std::unexpected(
+        "Planted leg parameter endpoints must be finite in [0,1]");
+  if (depth > kBoardingPlantedLegMaximumDepth ||
+      nodes > kBoardingPlantedLegMaximumNodes ||
+      leaves > kBoardingPlantedLegMaximumLeaves)
+    return std::unexpected(
+        "Planted leg timing subdivision exceeds registered limits");
+  TimingSubdivision query;
+  query.result.requested_first = first;
+  query.result.requested_last = last;
+  query.result.reverse = last < first;
+  query.depth_limit = depth;
+  query.node_limit = nodes;
+  query.leaf_limit = leaves;
+  auto closure = assess_origin_boarding_planted_legs(first, last);
+  if (!closure) return std::unexpected(closure.error());
+  query.result.closure = std::move(*closure);
+  const auto low = std::min(first, last), high = std::max(first, last);
+  if (!supported_environment()) {
+    query.refuse(low, high, 0, 0, TimingCondition::unsupported_arithmetic,
+                 TimingCondition::unsupported_arithmetic);
+    return std::move(query.result);
+  }
+  query.result.reporting_elapsed_seconds = 12 * (high - low);
+  if (!query.result.closure.complete) {
+    const auto& refusal = query.result.closure.first_refusal;
+    query.refuse(refusal ? refusal->first : low, refusal ? refusal->last : high,
+                 refusal ? refusal->side : 0, refusal ? refusal->depth : 0,
+                 TimingCondition::closure_prerequisite,
+                 TimingCondition::closure_prerequisite);
+    return std::move(query.result);
+  }
+  query.result.leaves.reserve(std::min(leaves, std::size_t{16}));
+  const auto covered = query.visit(low, high, 0);
+  bool gap_free = covered && !query.result.leaves.empty();
+  auto cursor = low;
+  for (const auto& leaf : query.result.leaves) {
+    gap_free = gap_free && leaf.first == cursor && leaf.first <= leaf.last;
+    cursor = leaf.last;
+  }
+  gap_free = gap_free && cursor == high;
+  query.result.complete = gap_free;
+  query.result.derivative_domains_certified = gap_free;
+  query.result.root_speed_certified = gap_free;
+  query.result.root_acceleration_certified = gap_free;
+  query.result.leg_joint_speed_certified = gap_free;
+  return std::move(query.result);
+}
 } // namespace
 namespace detail {
 auto boarding_planted_leg_numeric(RigidVector3 hip, double ankle_x,
@@ -449,11 +867,48 @@ auto boarding_planted_legs_bounded(double first, double last, std::size_t depth,
     -> std::expected<BoardingPlantedLegDiagnostic, std::string> {
   return assess(first, last, depth, nodes, leaves);
 }
+auto boarding_planted_leg_timing_numeric(
+    RigidVector3 hip, RigidVector3 parameter_first,
+    RigidVector3 parameter_second, double ankle_x, double ankle_z, double plane,
+    double l1, double l2, bool forward, bool reverse, std::size_t side)
+    -> BoardingPlantedLegTimingEvidence {
+  const TimingPoint selected{
+      TimingScalar{point(hip.x), point(parameter_first.x),
+                   point(parameter_second.x)},
+      TimingScalar{point(hip.y), point(parameter_first.y),
+                   point(parameter_second.y)},
+      TimingScalar{point(hip.z), point(parameter_first.z),
+                   point(parameter_second.z)}};
+  auto result = evaluate_timing_leg(selected, ankle_x, ankle_z, plane, l1, l2,
+                                    forward, reverse, side);
+  report_angles(result.closure, result.closure, side);
+  return result;
+}
+auto boarding_planted_legs_timing_bounded(double first, double last,
+                                          std::size_t depth, std::size_t nodes,
+                                          std::size_t leaves)
+    -> std::expected<BoardingPlantedLegTimingDiagnostic, std::string> {
+  return assess_timing(first, last, depth, nodes, leaves);
+}
+auto boarding_planted_leg_joint_speed(Bounds roll_rate, Bounds pitch_rate)
+    -> BoardingPlantedLegSpeedEvidence {
+  return joint_speed(interval(roll_rate.lower, roll_rate.upper),
+                     interval(pitch_rate.lower, pitch_rate.upper));
+}
+auto boarding_planted_leg_speed_threshold() -> Bounds {
+  return supported_environment() ? bounds(speed_threshold()) : Bounds{};
+}
 } // namespace detail
 auto assess_origin_boarding_planted_legs(double first, double last)
     -> std::expected<BoardingPlantedLegDiagnostic, std::string> {
   return assess(first, last, kBoardingPlantedLegMaximumDepth,
                 kBoardingPlantedLegMaximumNodes,
                 kBoardingPlantedLegMaximumLeaves);
+}
+auto assess_origin_boarding_planted_legs_timing(double first, double last)
+    -> std::expected<BoardingPlantedLegTimingDiagnostic, std::string> {
+  return assess_timing(first, last, kBoardingPlantedLegMaximumDepth,
+                       kBoardingPlantedLegMaximumNodes,
+                       kBoardingPlantedLegMaximumLeaves);
 }
 } // namespace apsis_drift
