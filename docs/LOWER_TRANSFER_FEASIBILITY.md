@@ -24,10 +24,20 @@ source-attributed strict-interior witnesses, corroborated by the C++ geometry
 predicates, rather than broad-phase overlaps. The external 5mm selected-pan
 skin cannot excuse them.
 
-This finite search does not prove every possible posture impossible. Further
-bounded fit and mechanical-source review remain open within #361. A successful
-endpoint would still need finite pan load, supported acquisition, continuous
-self/world clearance and explicit material membership before actor boarding.
+The final narrow-gap family tested another 125 poses, placing selected pan
+faces halfway into the additive external skin and genuinely lowering the
+thighs. Seventy-four pass both complete static self checks and separation
+against every current source triangle. This establishes useful clear
+acquisition candidates without a source correction. All retain a negative
+pelvis-only pan load margin: the best full center of mass lies about 224mm
+outside its finite contact hull. A bounded optional thigh-contact stencil
+found no finite contact disks; it does not prove their global absence.
+
+This finite search does not prove every possible posture impossible. Endpoint
+search is held after these three families while supported motion and contact
+composition proceed within #361. A successful endpoint still needs finite pan
+load, supported acquisition, continuous self/world clearance and explicit
+material membership before actor boarding.
 Independent flat-foot turning and the complete-source inventory are being
 implemented on the same grouped route branch. No new art or film work is
 required by these findings.
