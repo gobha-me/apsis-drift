@@ -131,5 +131,6 @@ or swing, actor boarding/seating, saves and First Flight remain unqualified.
 Final observed-result regressions retain all complete valid requests and
 pass434,212 checks per compiler, with byte-identical logs. Complete native
 suites pass63/63 on GCC (38.81s) and Clang20 (37.00s), including native
-walk/save/flight and asset contracts. Pinned formatting passes; final static
-analysis and remote publication remain pending at this recorded checkpoint.
+walk/save/flight and asset contracts. Pinned formatting and full Clang-tidy20 analysis pass across153 translation
+units with46 accepted suppression directives. Remote publication remains
+pending at this recorded checkpoint.
