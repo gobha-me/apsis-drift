@@ -1,4 +1,5 @@
 #include "apsis_drift/system_flight.hpp"
+#include "local_system_internal.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -141,21 +142,60 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
   }
 }
 
-[[nodiscard]] auto planet_radius(const LocalSystemDescriptor& system,
-                                 PlanetId target)
-    -> std::expected<double, SystemFlightError> {
-  const auto found = find_local_system_planet(system, target);
-  if (!found) return std::unexpected{SystemFlightError::unknown_target};
-  return static_cast<double>((*found)->descriptor.radius.value) * 1'000.0;
-}
+// Authenticated only at a public boundary and borrowed for that ONE call.
+// The catalog is fully checked, including every nontarget planet; no cache or
+// caller-selectable validated descriptor survives to a later call.
+class ValidatedFlightTarget {
+ public:
+  [[nodiscard]] static auto prepare(const LocalSystemDescriptor& system,
+                                    const SystemFlightState& state) noexcept
+      -> std::expected<ValidatedFlightTarget, SystemFlightError> {
+    if (!validate_local_system(system) || state.system != system.id) {
+      return std::unexpected{SystemFlightError::invalid_system};
+    }
+    const auto found = std::ranges::find_if(
+        system.planets, [&state](const LocalSystemPlanet& candidate) {
+          return candidate.descriptor.id == state.target;
+        });
+    if (found == system.planets.end()) {
+      return std::unexpected{SystemFlightError::unknown_target};
+    }
+    const auto forward = normalized(vec(state.forward));
+    const auto up = normalized(vec(state.up));
+    if (!bounded(vec(state.position), 1.0e16) ||
+        !bounded(vec(state.velocity), 1.0e9) || !forward || !up ||
+        std::abs(dot(*forward, *up)) > 0.999 || !valid_mode(state.mode) ||
+        !valid_scale(state.time_scale)) {
+      return std::unexpected{SystemFlightError::invalid_state};
+    }
+    return ValidatedFlightTarget{*found};
+  }
+  [[nodiscard]] auto body() const noexcept -> const LocalSystemPlanet& {
+    return body_;
+  }
+  [[nodiscard]] auto radius() const noexcept -> double { return radius_; }
+  [[nodiscard]] auto ephemeris(SimulationTick tick) const
+      -> std::expected<PlanetEphemeris, LocalSystemError> {
+    // Authoritative flight always uses finite zero render fraction. Orbit
+    // membership/recipe were checked by prepare; kernel arithmetic is
+    // unchanged.
+    return detail::resolve_validated_circular_orbit(
+        body_.orbit, {.tick = tick, .sub_tick_fraction = 0.0});
+  }
 
-[[nodiscard]] auto guidance(const LocalSystemDescriptor& system,
+ private:
+  explicit ValidatedFlightTarget(const LocalSystemPlanet& body) noexcept
+      : body_(body),
+        radius_(static_cast<double>(body.descriptor.radius.value) * 1'000.0) {}
+  const LocalSystemPlanet& body_;
+  double radius_;
+};
+
+[[nodiscard]] auto guidance(const ValidatedFlightTarget& selected,
                             const SystemFlightState& state)
     -> std::expected<SystemFlightGuidance, SystemFlightError> {
-  const auto radius = planet_radius(system, state.target);
-  if (!radius) return std::unexpected{radius.error()};
-  const auto target = resolve_planet_ephemeris(
-      system, state.target, {.tick = state.tick, .sub_tick_fraction = 0.0});
+  const double radius = selected.radius();
+  const auto target = selected.ephemeris(state.tick);
   if (!target) return std::unexpected{SystemFlightError::ephemeris_failure};
   const Vec3 relative_position =
       subtract(vec(target->position), vec(state.position));
@@ -173,9 +213,9 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
       closing > 0.0
           ? closing * closing / (2.0 * kSystemFlightForwardAcceleration)
           : 0.0;
-  const double insertion_radius = *radius * kSystemOrbitInsertionRadiusRadii;
-  const bool approach = distance <= *radius * kSystemApproachRadiusRadii;
-  const bool ready = distance >= *radius + kMinimumFlightClearanceMetres &&
+  const double insertion_radius = radius * kSystemOrbitInsertionRadiusRadii;
+  const bool approach = distance <= radius * kSystemApproachRadiusRadii;
+  const bool ready = distance >= radius + kMinimumFlightClearanceMetres &&
                      distance <= insertion_radius &&
                      relative_speed <= kSystemOrbitInsertionMaximumSpeed &&
                      radial_speed <= kSystemOrbitInsertionMaximumRadialSpeed;
@@ -192,7 +232,7 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
   }
   return SystemFlightGuidance{
       .target = state.target,
-      .target_radius_metres = *radius,
+      .target_radius_metres = radius,
       .distance_metres = distance,
       .closing_speed_metres_per_second = closing,
       .relative_speed_metres_per_second = relative_speed,
@@ -206,15 +246,14 @@ auto apply_command(SystemFlightState& state, FlightCommandKind kind) noexcept
   };
 }
 
-auto advance_one_tick(const LocalSystemDescriptor& system,
+auto advance_one_tick(const ValidatedFlightTarget& selected,
                       SystemFlightState& state)
     -> std::expected<void, SystemFlightError> {
   if (state.tick == std::numeric_limits<SimulationTick>::max()) {
     return std::unexpected{SystemFlightError::tick_overflow};
   }
-  const auto target = resolve_planet_ephemeris(
-      system, state.target, {.tick = state.tick, .sub_tick_fraction = 0.0});
-  const auto current_guidance = guidance(system, state);
+  const auto target = selected.ephemeris(state.tick);
+  const auto current_guidance = guidance(selected, state);
   if (!target || !current_guidance) {
     return std::unexpected{target ? current_guidance.error()
                                   : SystemFlightError::ephemeris_failure};
@@ -247,7 +286,7 @@ auto advance_one_tick(const LocalSystemDescriptor& system,
   const Vec3 relative_velocity =
       subtract(vec(state.velocity), vec(target->velocity));
   if (state.mode == FlightMode::autopilot) {
-    const double radius = *planet_radius(system, state.target);
+    const double radius = selected.radius();
     const double remaining =
         std::max(0.0, current_guidance->distance_metres -
                           radius * kSystemOrbitInsertionRadiusRadii);
@@ -382,39 +421,25 @@ auto initial_system_flight_state(const LocalSystemDescriptor& system,
 auto validate_system_flight_state(const LocalSystemDescriptor& system,
                                   const SystemFlightState& state) noexcept
     -> std::expected<void, SystemFlightError> {
-  if (!validate_local_system(system) || state.system != system.id) {
-    return std::unexpected{SystemFlightError::invalid_system};
-  }
-  if (!find_local_system_planet(system, state.target)) {
-    return std::unexpected{SystemFlightError::unknown_target};
-  }
-  const auto forward = normalized(vec(state.forward));
-  const auto up = normalized(vec(state.up));
-  if (!bounded(vec(state.position), 1.0e16) ||
-      !bounded(vec(state.velocity), 1.0e9) || !forward || !up ||
-      std::abs(dot(*forward, *up)) > 0.999 || !valid_mode(state.mode) ||
-      !valid_scale(state.time_scale)) {
-    return std::unexpected{SystemFlightError::invalid_state};
-  }
+  const auto selected = ValidatedFlightTarget::prepare(system, state);
+  if (!selected) return std::unexpected{selected.error()};
   return {};
 }
 
 auto resolve_system_flight_guidance(const LocalSystemDescriptor& system,
                                     const SystemFlightState& state)
     -> std::expected<SystemFlightGuidance, SystemFlightError> {
-  if (auto valid = validate_system_flight_state(system, state); !valid) {
-    return std::unexpected{valid.error()};
-  }
-  return guidance(system, state);
+  const auto selected = ValidatedFlightTarget::prepare(system, state);
+  if (!selected) return std::unexpected{selected.error()};
+  return guidance(*selected, state);
 }
 
 auto advance_system_flight(const LocalSystemDescriptor& system,
                            SystemFlightState& state,
                            std::span<const FlightCommand> commands)
     -> std::expected<void, SystemFlightError> {
-  if (auto valid = validate_system_flight_state(system, state); !valid) {
-    return std::unexpected{valid.error()};
-  }
+  const auto selected = ValidatedFlightTarget::prepare(system, state);
+  if (!selected) return std::unexpected{selected.error()};
   auto next = state;
   for (const auto& command : commands) {
     if (!valid_command(command.kind)) {
@@ -425,7 +450,7 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
     }
     apply_command(next, command.kind);
   }
-  const auto initial_guidance = guidance(system, next);
+  const auto initial_guidance = guidance(*selected, next);
   if (!initial_guidance) return std::unexpected{initial_guidance.error()};
   const SimulationTick steps = initial_guidance->inside_approach_boundary
                                    ? 1
@@ -440,10 +465,10 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
     return std::unexpected{SystemFlightError::tick_overflow};
   }
   for (SimulationTick step = 0; step < steps; ++step) {
-    if (auto advanced = advance_one_tick(system, next); !advanced) {
+    if (auto advanced = advance_one_tick(*selected, next); !advanced) {
       return std::unexpected{advanced.error()};
     }
-    const auto updated_guidance = guidance(system, next);
+    const auto updated_guidance = guidance(*selected, next);
     if (!updated_guidance) {
       return std::unexpected{updated_guidance.error()};
     }
@@ -459,17 +484,16 @@ auto advance_system_flight(const LocalSystemDescriptor& system,
 auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
                                 const SystemFlightState& state)
     -> std::expected<PlanetaryFlightState, SystemFlightError> {
-  const auto valid = validate_system_flight_state(system, state);
+  const auto valid = ValidatedFlightTarget::prepare(system, state);
   if (!valid) return std::unexpected{valid.error()};
-  const auto insertion = guidance(system, state);
+  const auto insertion = guidance(*valid, state);
   if (!insertion) return std::unexpected{insertion.error()};
   if (!insertion->orbit_insertion_ready) {
     return std::unexpected{SystemFlightError::orbit_insertion_refused};
   }
-  const auto body = find_local_system_planet(system, state.target);
-  const auto ephemeris = resolve_planet_ephemeris(
-      system, state.target, {.tick = state.tick, .sub_tick_fraction = 0.0});
-  if (!body || !ephemeris) {
+  const auto& body = valid->body();
+  const auto ephemeris = valid->ephemeris(state.tick);
+  if (!ephemeris) {
     return std::unexpected{SystemFlightError::ephemeris_failure};
   }
   const Vec3 relative_position =
@@ -488,9 +512,9 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       subtract(fixed_velocity, cross({0.0, 0.0, omega}, fixed_position));
   const PlanetFixedPositionMetres fixed{fixed_position.x, fixed_position.y,
                                         fixed_position.z};
-  const auto geodetic = geodetic_from_planet_fixed((*body)->descriptor, fixed);
+  const auto geodetic = geodetic_from_planet_fixed(body.descriptor, fixed);
   if (!geodetic) return std::unexpected{SystemFlightError::coordinate_failure};
-  const auto frame = make_local_tangent_frame((*body)->descriptor, *geodetic);
+  const auto frame = make_local_tangent_frame(body.descriptor, *geodetic);
   if (!frame) return std::unexpected{SystemFlightError::coordinate_failure};
   const auto component = [&](PlanetFixedDirection axis) {
     return fixed_velocity.x * axis.x + fixed_velocity.y * axis.y +
@@ -513,7 +537,7 @@ auto insert_system_flight_orbit(const LocalSystemDescriptor& system,
       .last_transition = std::nullopt,
       .thermal = {},
   };
-  if (!validate_planetary_flight_state((*body)->descriptor, result)) {
+  if (!validate_planetary_flight_state(body.descriptor, result)) {
     return std::unexpected{SystemFlightError::coordinate_failure};
   }
   return result;
