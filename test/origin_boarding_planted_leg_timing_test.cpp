@@ -471,7 +471,7 @@ auto public_controls() -> void {
         "Observed unchanged full/reverse recipe retains complete timing "
         "certification");
   reverses(full, reverse);
-  for (const auto interval :
+  for (const auto& interval :
        std::array{std::pair{0., .5}, std::pair{.5, 1.}, std::pair{.25, .5},
                   std::pair{.125, .875}}) {
     const auto forward = inspect(interval.first, interval.second),
@@ -517,8 +517,9 @@ auto speed_controls() -> void {
   check(valid(limit) && static_cast<long double>(limit.lower) <= exact_limit &&
             exact_limit <= static_cast<long double>(limit.upper),
         "Independent pi/6 oracle lies in compiled certified threshold bracket");
-  for (const auto signs : std::array{std::pair{1., 1.}, std::pair{-1., 1.},
-                                     std::pair{1., -1.}, std::pair{-1., -1.}}) {
+  for (const auto& signs :
+       std::array{std::pair{1., 1.}, std::pair{-1., 1.}, std::pair{1., -1.},
+                  std::pair{-1., -1.}}) {
     const auto good = detail::boarding_planted_leg_joint_speed(
         {signs.first * .2, signs.first * .2},
         {signs.second * .2, signs.second * .2});

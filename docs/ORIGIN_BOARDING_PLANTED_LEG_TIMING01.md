@@ -130,3 +130,8 @@ Full native builds pass on GCC and Clang, each with 53/53 tests (21.64s and
 the existing 31 justified suppression directives pass. No whole-body clearance, source-backed load transfer,
 seated endpoint, actor action, save phase, rendered capture or First Flight
 completion is granted by this timing cut.
+
+Publication CI GCC13 additionally diagnosed copies in two std::pair test loops.
+Using references changes no production arithmetic or fixture outcome. The
+repaired full native suites pass53/53 on both local compilers (GCC22.39s,
+Clang21.14s); remote GCC13 CI is the compatibility check for that diagnostic.
