@@ -235,3 +235,24 @@ about its outcome. No body/pressure/source fitting after refusal. Full native,
 pinned format/tidy and old snapshot gates follow implementation. Surface-only
 completion supplies no closed-volume, material, motion, dynamics, strength,
 route, actor, seat, save or FirstFlight permission.
+
+## Implementation accounting — before the first observation
+
+The compile-only GCC and Clang gates bind the actual payload to1032 bytes. The
+structured workspace is at most912 bytes, with1496 bytes of simultaneous nested
+arithmetic/proposal allowance,384 bytes for actual part/triangle/sole returns
+and the borrowed scan context/function/expected-return wrapper, and232 bytes
+for the existing immutable contact visitor or alternate crop helper. The full
+working/helper bound is3024 bytes, within the registered4096 ceiling. This
+reconciles implementation padding and existing helper frames through the
+original reserve; it adds no kernel, source, crop or work-cap change. It is a
+conservative live-storage bound, not process memory or a runtime measurement.
+The initial metadata return has its own scope and is not retained beside the
+later traversal return. Actual size assertions precede every surface query.
+
+The local sole-template control retains the literal original commonY.847 and
+term-.847, alongside halfY/term.05. Simultaneously changing both cancellation
+terms cannot inherit the fixed template even when their arithmetic cancels.
+This changes no original body coordinate and supplies no provider authority.
+
+No new surface outcome has been observed at this accounting checkpoint.
