@@ -2,6 +2,7 @@
 #include "apsis_drift/origin_boarding_source_endpoint.hpp"
 #include "apsis_drift/origin_boarding_source_endpoint_self.hpp"
 #include "origin_boarding_foot_sites_internal.hpp"
+#include "origin_boarding_lower_foot_transfer_internal.hpp"
 #include "origin_boarding_planted_legs_internal.hpp"
 #include "origin_boarding_self_model02_internal.hpp"
 #include "origin_boarding_source_endpoint_internal.hpp"
@@ -2308,5 +2309,775 @@ auto detail::boarding_source_endpoint_self_half_ray(
   if (!supported_environment())
     return BoardingSourceEndpointSelfHalfRayEvidence{};
   return self_half_ray(first_radius, second_radius, region_radius, cosine);
+}
+namespace {
+using TransferCell = BoardingLowerFootTransferCell;
+using TransferCondition = BoardingLowerFootTransferCondition;
+using TransferResult = detail::BoardingLowerFootTransferCellResult;
+using TransferLimits = detail::BoardingLowerFootTransferLimits;
+using TransferWork = BoardingLowerFootTransferCounters;
+using TransferRefusal = BoardingLowerFootTransferRefusal;
+struct TransferGraph {
+  TimingPoint root;
+  std::array<Point, 2> knee_from_hip{}, ankle_from_root{};
+  std::array<Interval, 2> knee_cosine{};
+  Interval arm;
+};
+static_assert(sizeof(TransferCell) <=
+              kBoardingLowerFootTransferMaximumCellBytes);
+static_assert(sizeof(TransferGraph) == 576);
+// One cell, retained same-expression graph, mutually exclusive main phase,
+// nested helper/return copies, eleven cover frames, all dispatcher/query
+// controls and the dedicated immutable scalar limits. Owned initial/output
+// storage is accounted separately. Explicit noinline phases preserve this
+// split.
+constexpr std::size_t transfer_main_phase_bytes{4096},
+    transfer_nested_helper_bytes{2048}, transfer_query_control_bytes{512};
+static_assert(sizeof(TransferCell) + sizeof(TransferGraph) +
+                  transfer_main_phase_bytes + transfer_nested_helper_bytes +
+                  11 * std::size_t{24} + transfer_query_control_bytes +
+                  sizeof(Limits) <=
+              kBoardingLowerFootTransferMaximumScratchBytes);
+
+auto transfer_refuse(TransferRefusal& out, TransferCondition condition,
+                     Interval limiting = {}) -> TransferResult {
+  out.condition = condition;
+  out.limiting_bound = limiting.supported ? bounds(limiting) : Bounds{};
+  return condition == TransferCondition::unsupported_arithmetic ||
+                 condition == TransferCondition::invalid_binding
+             ? TransferResult::unsupported
+             : TransferResult::unresolved;
+}
+auto transfer_small_root(Interval v) -> Interval {
+  return v.supported && v.low >= 0 && v.high <= 16384 ? self_root(v) : failed();
+}
+auto transfer_root_jet(const TimingScalar& v) -> TimingScalar {
+  if (!timing_supported(v) || v.value.low <= 0) return {};
+  const auto y = transfer_small_root(v.value), twice_y = multiply(point(2), y),
+             four_y3 = multiply(point(4), multiply(square(y), y));
+  return {
+      y, divide(v.first, twice_y),
+      subtract(divide(v.second, twice_y), divide(square(v.first), four_y3))};
+}
+auto transfer_limits() -> const Limits& {
+  // Dedicated small-root family; the old limits() accessor remains unchanged.
+  static const Limits selected{
+      transfer_small_root(point(3)), transfer_small_root(point(2)),
+      trig_constant(20, true),       trig_constant(20, false),
+      trig_constant(65, true),       trig_constant(65, false)};
+  return selected;
+}
+auto transfer_polynomial(double t) -> Interval {
+  if (t == 0 || t == 1) return point(t);
+  return multiply(multiply(square(point(t)), point(t)),
+                  add(subtract(point(10), multiply(point(15), point(t))),
+                      multiply(point(6), square(point(t)))));
+}
+[[gnu::noinline]] auto transfer_quintic(double first, double last)
+    -> TimingScalar {
+  const auto lo = transfer_polynomial(first), hi = transfer_polynomial(last);
+  const auto t = interval(first, last), one_minus = subtract(point(1), t);
+  auto rate = multiply(point(30), multiply(square(t), square(one_minus)));
+  auto second =
+      multiply(point(60), multiply(multiply(t, one_minus),
+                                   subtract(point(1), multiply(point(2), t))));
+  if (!lo.supported || !hi.supported || !rate.supported || !second.supported)
+    return {};
+  rate = interval(std::max(0., rate.low), std::min(15. / 8, rate.high));
+  second = interval(std::max(-6., second.low), std::min(6., second.high));
+  if (first == last && (first == 0 || first == 1)) rate = second = point(0);
+  return {interval(std::max(0., lo.low), std::min(1., hi.high)), rate, second};
+}
+auto transfer_physical_first(Interval value, bool reverse) -> Interval {
+  const auto scaled = divide(value, point(4));
+  return reverse ? negate(scaled) : scaled;
+}
+auto transfer_physical_second(Interval value) -> Interval {
+  return divide(value, point(16));
+}
+auto transfer_point_evidence(const TimingPoint& p, bool reverse,
+                             BodyPointEvidence& out) -> bool {
+  Point value{}, first{}, second{};
+  for (std::size_t i = 0; i < p.size(); ++i) {
+    if (!timing_supported(p[i]) || p[i].value.low < -8 || p[i].value.high > 8 ||
+        p[i].first.low < -4096 || p[i].first.high > 4096 ||
+        p[i].second.low < -4096 || p[i].second.high > 4096)
+      return false;
+    value[i] = p[i].value;
+    first[i] = transfer_physical_first(p[i].first, reverse);
+    second[i] = transfer_physical_second(p[i].second);
+  }
+  if (!self_point_supported(first) || !self_point_supported(second))
+    return false;
+  out = {point_bounds(value), {point_bounds(first), point_bounds(second)}};
+  return true;
+}
+auto transfer_angular(const AngularTiming& value, bool reverse)
+    -> BoardingPlantedLegAngularDerivatives {
+  return {bounds(transfer_physical_first(value.first, reverse)),
+          bounds(transfer_physical_second(value.second))};
+}
+auto transfer_norm(const Point& v) -> Interval {
+  auto total = add(add(square(v[0]), square(v[1])), square(v[2]));
+  if (!total.supported) return failed();
+  total.low = std::max(0., total.low);
+  return transfer_small_root(total);
+}
+struct TransferLegPacket {
+  TimingPoint d;
+  TimingScalar rho2, F1, G1, F2, G2;
+  Interval D, gamma2;
+};
+static_assert(sizeof(TransferLegPacket) == 624);
+// Geometry: hip/ankle/boot/d/q/knee, nine scalar jets, eight scalar values,
+// loop/reference controls, outward conversion copies and retained leg packet.
+// All three phases release these locals before the next phase is entered.
+constexpr std::size_t transfer_geometry_named_bytes =
+    6 * sizeof(TimingPoint) + 9 * sizeof(TimingScalar) + 8 * sizeof(Interval) +
+    32 * sizeof(std::size_t) + 2 * sizeof(BodyPointEvidence) +
+    2 * sizeof(TimingPoint) + sizeof(TransferLegPacket) + sizeof(TimingScalar);
+static_assert(transfer_geometry_named_bytes <= transfer_main_phase_bytes);
+// Self: relative points and two genuine per-pair primitives; ownership and
+// separator proposals are alternate paths. No complete static Self output.
+constexpr std::size_t transfer_self_named_bytes =
+    kBoardingPlantedBodyPointCount * sizeof(Point) +
+    2 * sizeof(EndpointSelfSolid) + 14 * sizeof(Vec) + 12 * sizeof(Interval) +
+    sizeof(BoardingSourceEndpointSelfHalfRayEvidence) +
+    32 * sizeof(std::size_t) + 2 * sizeof(Point);
+static_assert(transfer_self_named_bytes <= transfer_main_phase_bytes);
+// Deepest root-jet/support chains: by-value jet/point arguments and returns,
+// primitive copies/arrays, two nested root endpoints and the small3+3 residual.
+constexpr std::size_t transfer_helper_named_bytes =
+    8 * sizeof(TimingScalar) + 8 * sizeof(Point) + 12 * sizeof(Interval) +
+    2 * sizeof(SelfSquareScratch) + 16 * sizeof(double) +
+    16 * sizeof(std::size_t);
+static_assert(transfer_helper_named_bytes <= transfer_nested_helper_bytes);
+
+[[gnu::noinline]] auto transfer_leg_geometry(
+    std::size_t side, const TimingScalar& S, bool reverse, TransferGraph& graph,
+    TransferCell& out, TransferLegPacket& packet, TransferRefusal& refusal)
+    -> TransferResult {
+  refusal.side = side;
+  const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                         : BodyPointId::starboard_hip);
+  const auto plane = side == 0 ? endpoint_upper_plane : endpoint_lower_plane;
+  TimingPoint hip = graph.root;
+  hip[0] = timing_add(hip[0], timing_constant(side == 0 ? -.14 : .14));
+  const TimingPoint ankle{
+      timing_constant(add(point(.16), point(side == 0 ? -.14 : .14))),
+      timing_constant(subtract(add(point(plane), point(.1)), point(.847))),
+      timing_constant(side == 0 ? -.5 : -.8)};
+  TimingPoint boot = ankle;
+  boot[1] =
+      timing_constant(subtract(add(point(plane), point(.05)), point(.847)));
+  const TimingPoint d{timing_multiply(timing_constant(-.07), S),
+                      timing_subtract(ankle[1], hip[1]),
+                      timing_subtract(ankle[2], hip[2])};
+  const auto rho2 = timing_add(timing_square(d[0]), timing_square(d[1])),
+             D = timing_add(rho2, timing_square(d[2]));
+  if (!timing_supported(rho2) || !timing_supported(D))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  if (d[1].value.high >= 0)
+    return transfer_refuse(refusal, TransferCondition::forward_branch,
+                           d[1].value);
+  if (rho2.value.low <= 0 || D.value.low <= 0)
+    return transfer_refuse(refusal, TransferCondition::derivative_domain,
+                           rho2.value);
+  const auto l1 = point(thigh_length), l2 = point(shin_length),
+             l1sq = square(l1), l2sq = square(l2),
+             maximum = square(add(l1, l2)), minimum = square(subtract(l1, l2));
+  if (!maximum.supported || !minimum.supported)
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  if (D.value.high > maximum.low || D.value.low < minimum.high)
+    return transfer_refuse(refusal, TransferCondition::reach, D.value);
+  const auto rho = transfer_root_jet(rho2);
+  const auto alpha =
+      timing_divide(timing_add(timing_constant(subtract(l1sq, l2sq)), D),
+                    timing_multiply(timing_constant(2), D));
+  auto outer = timing_subtract(timing_constant(maximum), D),
+       inner = timing_subtract(D, timing_constant(minimum));
+  if (!timing_supported(outer) || !timing_supported(inner))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  outer.value.low = std::max(0., outer.value.low);
+  inner.value.low = std::max(0., inner.value.low);
+  const auto gamma2 =
+      timing_divide(timing_multiply(outer, inner),
+                    timing_multiply(timing_constant(4), timing_square(D)));
+  if (!timing_supported(gamma2))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  if (gamma2.value.low <= 0)
+    return transfer_refuse(refusal, TransferCondition::derivative_domain,
+                           gamma2.value);
+  const auto gamma = transfer_root_jet(gamma2);
+  if (!timing_supported(rho) || !timing_supported(alpha) ||
+      !timing_supported(gamma))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  const TimingPoint q{timing_divide(timing_multiply(d[0], d[2]), rho),
+                      timing_divide(timing_multiply(d[1], d[2]), rho),
+                      timing_negate(rho)};
+  TimingPoint knee;
+  for (std::size_t i = 0; i < knee.size(); ++i) {
+    const auto link =
+        timing_add(timing_multiply(alpha, d[i]), timing_multiply(gamma, q[i]));
+    graph.knee_from_hip[side][i] = link.value;
+    graph.ankle_from_root[side][i] =
+        i == 0 ? add(d[i].value, point(side == 0 ? -.14 : .14)) : d[i].value;
+    knee[i] = timing_add(hip[i], link);
+  }
+  if (!transfer_point_evidence(hip, reverse, out.points[base]) ||
+      !transfer_point_evidence(knee, reverse, out.points[base + 1]) ||
+      !transfer_point_evidence(ankle, reverse, out.points[base + 2]) ||
+      !transfer_point_evidence(boot, reverse, out.points[base + 3]))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  const auto complement = timing_subtract(timing_constant(1), alpha);
+  packet.F1 =
+      timing_add(timing_multiply(alpha, rho), timing_multiply(gamma, d[2]));
+  packet.G1 = timing_subtract(timing_multiply(gamma, rho),
+                              timing_multiply(alpha, d[2]));
+  packet.F2 = timing_subtract(timing_multiply(complement, rho),
+                              timing_multiply(gamma, d[2]));
+  packet.G2 = timing_negate(timing_add(timing_multiply(complement, d[2]),
+                                       timing_multiply(gamma, rho)));
+  graph.knee_cosine[side] = divide(subtract(subtract(D.value, l1sq), l2sq),
+                                   multiply(point(2), multiply(l1, l2)));
+  packet.d = d;
+  packet.rho2 = rho2;
+  packet.D = D.value;
+  packet.gamma2 = gamma2.value;
+  return TransferResult::accepted;
+}
+[[gnu::noinline]] auto transfer_leg_predicates(std::size_t side, bool reverse,
+                                               const TransferGraph& graph,
+                                               const TransferLegPacket& packet,
+                                               TransferCell& out,
+                                               TransferRefusal& refusal)
+    -> TransferResult {
+  auto& leg = out.legs[side];
+  const auto& d = packet.d;
+  const auto& rho2 = packet.rho2;
+  const auto& F1 = packet.F1;
+  const auto& G1 = packet.G1;
+  const auto& F2 = packet.F2;
+  const auto& G2 = packet.G2;
+  const auto l1sq = square(point(thigh_length)),
+             l2sq = square(point(shin_length));
+  const auto& selected = transfer_limits();
+  const auto roll = subtract(multiply(negate(d[1].value),
+                                      subtract(point(2), selected.sqrt3)),
+                             absolute(d[0].value)),
+             hip_lower = add(multiply(G1.value, selected.cos20),
+                             multiply(F1.value, selected.sin20)),
+             hip_upper = subtract(multiply(F1.value, selected.sin65),
+                                  multiply(G1.value, selected.cos65)),
+             knee_margin =
+                 add(graph.knee_cosine[side], divide(selected.sqrt2, point(2))),
+             ankle_margin =
+                 subtract(multiply(F2.value, point(.5)),
+                          multiply(absolute(G2.value),
+                                   divide(selected.sqrt3, point(2))));
+  const std::array margins{roll,         hip_lower,  hip_upper, knee_margin,
+                           ankle_margin, rho2.value, packet.D,  packet.gamma2};
+  if (!std::ranges::all_of(margins, [](Interval v) { return v.supported; }) ||
+      !timing_supported(F1) || !timing_supported(G1) || !timing_supported(F2) ||
+      !timing_supported(G2))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  for (std::size_t i = 0; i < margins.size(); ++i)
+    leg.margins[i] = bounds(margins[i]);
+  if (F1.value.low <= 0 || F2.value.low <= 0 ||
+      std::ranges::any_of(margins, [](Interval v) { return v.low < 0; }))
+    return transfer_refuse(refusal, TransferCondition::joint_sector);
+  const auto hip_pitch = pitch_derivatives(F1, G1, l1sq),
+             shin_pitch = pitch_derivatives(F2, G2, l2sq);
+  const AngularTiming knee_flex{subtract(hip_pitch.first, shin_pitch.first),
+                                subtract(hip_pitch.second, shin_pitch.second)};
+  const auto F = timing_negate(d[1]), G = d[0];
+  const auto numerator =
+      subtract(multiply(F.value, G.first), multiply(G.value, F.first));
+  const AngularTiming phi{
+      divide(numerator, rho2.value),
+      subtract(divide(subtract(multiply(F.value, G.second),
+                               multiply(G.value, F.second)),
+                      rho2.value),
+               divide(multiply(numerator, rho2.first), square(rho2.value)))};
+  const std::array angular{hip_pitch, shin_pitch, knee_flex, phi};
+  if (!std::ranges::all_of(angular, [](const AngularTiming& a) {
+        return a.first.supported && a.second.supported;
+      }))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  leg.hip_pitch = transfer_angular(hip_pitch, reverse);
+  leg.shin_pitch = transfer_angular(shin_pitch, reverse);
+  leg.knee_flex = transfer_angular(knee_flex, reverse);
+  leg.ankle_pitch = transfer_angular(negate_angular(shin_pitch), reverse);
+  leg.hip_abduction =
+      transfer_angular(side == 0 ? negate_angular(phi) : phi, reverse);
+  leg.ankle_roll = transfer_angular(negate_angular(phi), reverse);
+  const auto phi_rate = transfer_physical_first(phi.first, reverse);
+  const std::array pitches{hip_pitch.first, knee_flex.first, shin_pitch.first};
+  const auto threshold = square(speed_threshold());
+  for (std::size_t i = 0; i < pitches.size(); ++i) {
+    const auto pitch = transfer_physical_first(pitches[i], reverse);
+    auto squared = add(square(i == 1 ? point(0) : phi_rate), square(pitch));
+    if (!squared.supported || !threshold.supported)
+      return transfer_refuse(refusal,
+                             TransferCondition::unsupported_arithmetic);
+    squared.low = std::max(0., squared.low);
+    const auto speed = transfer_small_root(squared);
+    if (!speed.supported)
+      return transfer_refuse(refusal,
+                             TransferCondition::unsupported_arithmetic);
+    leg.joint_speeds[i] = bounds(speed);
+    if (squared.high > threshold.low)
+      return transfer_refuse(refusal, TransferCondition::joint_speed, speed);
+  }
+  leg.link_identities = leg.plane_identity = leg.branch_certified =
+      leg.joint_sectors_certified = leg.derivative_domains_certified =
+          leg.joint_speeds_certified = true;
+  return TransferResult::accepted;
+}
+[[gnu::noinline]] auto transfer_leg(std::size_t side, const TimingScalar& S,
+                                    bool reverse, TransferGraph& graph,
+                                    TransferCell& out, TransferRefusal& refusal)
+    -> TransferResult {
+  TransferLegPacket packet;
+  const auto result =
+      transfer_leg_geometry(side, S, reverse, graph, out, packet, refusal);
+  return result == TransferResult::accepted
+             ? transfer_leg_predicates(side, reverse, graph, packet, out,
+                                       refusal)
+             : result;
+}
+// Keep the three scratch-heavy phases in distinct call frames. No phase owns
+// a second cell or overlaps another phase's jet/support workspace.
+[[gnu::noinline]] auto transfer_initialize(const TimingScalar& S, bool reverse,
+                                           TransferGraph& graph,
+                                           TransferCell& out,
+                                           TransferRefusal& refusal)
+    -> TransferResult {
+  graph.root = {timing_add(timing_constant(.16),
+                           timing_multiply(timing_constant(.07), S)),
+                timing_multiply(timing_constant(.012), S),
+                timing_subtract(timing_constant(-.55),
+                                timing_multiply(timing_constant(.04), S))};
+  graph.arm = negate(multiply(point(.35898), transfer_small_root(point(.5))));
+  auto& root_point = out.points[body_index(BodyPointId::root)];
+  if (!graph.arm.supported ||
+      !transfer_point_evidence(graph.root, reverse, root_point))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  bool supported{true};
+  const auto offset = [&](BodyPointId id, const Point& value) {
+    out.points[body_index(id)] = body_offset(root_point, value, supported);
+  };
+  offset(BodyPointId::trunk_center, {point(0), point(.3495), point(0)});
+  offset(BodyPointId::helmet_center, {point(0), point(.70237), point(0)});
+  offset(BodyPointId::eye, {point(0), point(.65237), point(0)});
+  return supported ? TransferResult::accepted
+                   : transfer_refuse(refusal,
+                                     TransferCondition::unsupported_arithmetic);
+}
+[[gnu::noinline]] auto transfer_finish_body(
+    const TimingScalar& S, const BodyParts& parts, const TransferGraph& graph,
+    TransferCell& out, TransferRefusal& refusal) -> TransferResult {
+  bool supported{true};
+  const auto& root_point = out.points[body_index(BodyPointId::root)];
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                           : BodyPointId::starboard_hip);
+    out.points[base + 4] = body_offset(
+        root_point,
+        {point(side == 0 ? -.20265 : .20265), point(.579), point(0)},
+        supported);
+    out.points[base + 5] = body_offset(
+        out.points[base + 4], {point(0), graph.arm, graph.arm}, supported);
+    out.points[base + 6] = body_offset(
+        out.points[base + 5], {point(0), point(.386), point(0)}, supported);
+  }
+  if (!supported)
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  // The original table defines every midpoint and all1200 mass units.
+  Point weighted{point(0), point(0), point(0)};
+  for (std::size_t i = 0; i < parts.size(); ++i) {
+    const auto& mass = parts[i].mass;
+    const auto& a = out.points[body_index(mass.first)];
+    const auto& b = out.points[body_index(mass.second)];
+    out.mass_points[i] =
+        mass.first == mass.second ? a : body_midpoint(a, b, supported);
+    const auto value = body_intervals(out.mass_points[i].value);
+    for (std::size_t axis = 0; axis < value.size(); ++axis)
+      weighted[axis] =
+          add(weighted[axis], multiply(point(mass.weight), value[axis]));
+  }
+  for (auto& v : weighted)
+    v = divide(v, point(kBoardingBodyMassDenominator));
+  out.center_of_mass.value = body_bounds(weighted, supported);
+  const auto derivative = [&](bool second) {
+    const auto& r = root_point.derivatives;
+    const auto& p = out.points[body_index(BodyPointId::port_knee)].derivatives;
+    const auto& s =
+        out.points[body_index(BodyPointId::starboard_knee)].derivatives;
+    auto selected = body_intervals(second ? r.acceleration : r.velocity);
+    const auto a = body_intervals(second ? p.acceleration : p.velocity);
+    const auto b = body_intervals(second ? s.acceleration : s.velocity);
+    for (std::size_t i = 0; i < selected.size(); ++i)
+      selected[i] = divide(add(multiply(point(960), selected[i]),
+                               multiply(point(84), add(a[i], b[i]))),
+                           point(1200));
+    return body_bounds(selected, supported);
+  };
+  out.center_of_mass.derivatives = {derivative(false), derivative(true)};
+  const auto speed =
+                 transfer_norm(body_intervals(root_point.derivatives.velocity)),
+             acceleration = transfer_norm(
+                 body_intervals(root_point.derivatives.acceleration));
+  if (!supported || !speed.supported || !acceleration.supported ||
+      !std::ranges::all_of(out.points, body_supported) ||
+      !std::ranges::all_of(out.mass_points, body_supported) ||
+      !body_supported(out.center_of_mass))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  out.root_speed = bounds(speed);
+  out.root_acceleration = bounds(acceleration);
+  out.port_reaction_fraction =
+      bounds(subtract(point(.5), multiply(point(.25), S.value)));
+  if (speed.high > .25)
+    return transfer_refuse(refusal, TransferCondition::root_speed, speed);
+  if (acceleration.high > .10)
+    return transfer_refuse(refusal, TransferCondition::root_acceleration,
+                           acceleration);
+  out.arithmetic_supported = out.kinematics_complete = out.timing_complete =
+      true;
+  refusal.side.reset();
+  refusal.condition = TransferCondition::none;
+  return TransferResult::accepted;
+}
+[[gnu::noinline]] auto transfer_reset(double first, double last,
+                                      TransferCell& out,
+                                      TransferRefusal& refusal) -> void {
+  out.first = refusal.first = first;
+  out.last = refusal.last = last;
+  out.arithmetic_supported = out.kinematics_complete = out.timing_complete =
+      out.self_complete = out.positive_reactions =
+          out.nominal_vertical_equilibrium_complete =
+              out.finite_pressure_complete = out.complete = false;
+  out.pair_certificates.fill(SelfCert::none);
+  out.certificate_counts.fill(0);
+  for (auto& owner : out.owners)
+    owner = {};
+  for (auto& pressure : out.pressures)
+    pressure = {};
+  for (auto& leg : out.legs)
+    leg.link_identities = leg.plane_identity = leg.branch_certified =
+        leg.joint_sectors_certified = leg.derivative_domains_certified =
+            leg.joint_speeds_certified = false;
+  refusal.condition = TransferCondition::none;
+  refusal.side.reset();
+  refusal.pair.reset();
+  refusal.partition.reset();
+}
+[[gnu::noinline]] auto transfer_body(double first, double last, bool reverse,
+                                     const BodyParts& parts,
+                                     TransferGraph& graph, TransferCell& out,
+                                     TransferRefusal& refusal)
+    -> TransferResult {
+  transfer_reset(first, last, out, refusal);
+  if (!supported_environment() || !std::isfinite(first) ||
+      !std::isfinite(last) || first < 0 || first > last || last > 1)
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  const auto S = transfer_quintic(first, last);
+  if (!timing_supported(S))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  auto result = transfer_initialize(S, reverse, graph, out, refusal);
+  if (result != TransferResult::accepted) return result;
+  for (std::size_t side = 0; side < 2; ++side) {
+    result = transfer_leg(side, S, reverse, graph, out, refusal);
+    if (result != TransferResult::accepted) return result;
+  }
+  return transfer_finish_body(S, parts, graph, out, refusal);
+}
+auto transfer_relative_points(
+    const TransferGraph& graph,
+    std::array<Point, kBoardingPlantedBodyPointCount>& p) -> bool {
+  p[body_index(BodyPointId::root)] = {point(0), point(0), point(0)};
+  p[body_index(BodyPointId::trunk_center)] = {point(0), point(.3495), point(0)};
+  p[body_index(BodyPointId::helmet_center)] = {point(0), point(.70237),
+                                               point(0)};
+  p[body_index(BodyPointId::eye)] = {point(0), point(.65237), point(0)};
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                           : BodyPointId::starboard_hip);
+    p[base] = {point(side == 0 ? -.14 : .14), point(0), point(0)};
+    p[base + 1] = self_offset(p[base], graph.knee_from_hip[side]);
+    p[base + 2] = graph.ankle_from_root[side];
+    p[base + 3] = self_offset(p[base + 2], {point(0), point(-.05), point(0)});
+    p[base + 4] = {point(side == 0 ? -.20265 : .20265), point(.579), point(0)};
+    p[base + 5] = self_offset(p[base + 4], {point(0), graph.arm, graph.arm});
+    p[base + 6] = self_offset(p[base + 5], {point(0), point(.386), point(0)});
+  }
+  return std::ranges::all_of(p, self_point_supported);
+}
+auto transfer_solid(const BoardingPlantedBodyPartBinding& part,
+                    const std::array<Point, kBoardingPlantedBodyPointCount>& p)
+    -> EndpointSelfSolid {
+  EndpointSelfSolid solid;
+  if (const auto* box =
+          std::get_if<BoardingPlantedBodyBoxBinding>(&part.reservation)) {
+    solid.shape = part.id == PartId::trunk || part.id == PartId::helmet
+                      ? SelfShape::ellipsoid
+                      : SelfShape::box;
+    solid.first = p[body_index(box->center)];
+    solid.second = solid.first;
+    solid.half = box->half_size_metres;
+  } else {
+    const auto& capsule =
+        std::get<BoardingPlantedBodyCapsuleBinding>(part.reservation);
+    solid.shape = SelfShape::capsule;
+    solid.first = p[body_index(capsule.start)];
+    solid.second = p[body_index(capsule.end)];
+    solid.radius = capsule.radius_metres;
+  }
+  return solid;
+}
+[[gnu::noinline]] auto transfer_owner(const TransferGraph& graph,
+                                      const SelfRegion& region,
+                                      BoardingLowerFootTransferOwner& out)
+    -> void {
+  Interval extent, limit, secondary = point(0);
+  auto certificate = SelfCert::none;
+  const auto second = static_cast<std::size_t>(region.second);
+  const auto side = second >= 9 ? std::size_t{1} : std::size_t{0};
+  bool identity{true};
+  switch (region.junction) {
+    case Junction::waist:
+      extent = point(.12);
+      limit = point(region.limit_metres);
+      certificate = SelfCert::cap_partner_support;
+      break;
+    case Junction::neck:
+      extent = limit = point(.2695);
+      certificate = SelfCert::cap_partner_support;
+      break;
+    case Junction::hip: {
+      Point u;
+      for (std::size_t i = 0; i < u.size(); ++i)
+        u[i] = divide(graph.knee_from_hip[side][i], point(thigh_length));
+      const auto sign = side == 0 ? -1. : 1.;
+      extent = add(add(subtract(multiply(point(.24), absolute(u[0])),
+                                multiply(point(sign * .14), u[0])),
+                       multiply(point(.12), absolute(u[1]))),
+                   multiply(point(.18), absolute(u[2])));
+      limit = point(region.limit_metres);
+      certificate = SelfCert::original_axis_box_support;
+      break;
+    }
+    case Junction::ankle: {
+      Point u;
+      for (std::size_t i = 0; i < u.size(); ++i) {
+        const auto hip = i == 0 ? point(side == 0 ? -.14 : .14) : point(0);
+        u[i] = divide(subtract(add(hip, graph.knee_from_hip[side][i]),
+                               graph.ankle_from_root[side][i]),
+                      point(shin_length));
+      }
+      extent = add(add(multiply(point(.06), absolute(u[0])),
+                       multiply(point(.14), absolute(u[2]))),
+                   u[1].supported && u[1].low >= 0
+                       ? point(0)
+                       : subtract(multiply(point(.05), absolute(u[1])),
+                                  multiply(point(.05), u[1])));
+      limit = point(region.limit_metres);
+      identity = u[1].supported && u[1].low >= 0;
+      certificate = SelfCert::original_axis_box_support;
+      if (.075 > region.limit_metres || region.limit_metres >= shin_length)
+        return;
+      break;
+    }
+    case Junction::wrist:
+      if (.055 > region.limit_metres || region.limit_metres >= .386) return;
+      extent = point(.05);
+      limit = point(region.limit_metres);
+      certificate = SelfCert::original_axis_box_support;
+      break;
+    case Junction::knee:
+    case Junction::elbow: {
+      const auto cosine = region.junction == Junction::knee
+                              ? negate(graph.knee_cosine[side])
+                              : transfer_small_root(point(.5));
+      const auto first_radius = region.junction == Junction::knee ? .105 : .065;
+      const auto second_radius =
+          region.junction == Junction::knee ? .075 : .055;
+      const auto proof = self_half_ray(first_radius, second_radius,
+                                       region.limit_metres, cosine);
+      if (!proof.arithmetic_supported) return;
+      extent = square(point(std::max(first_radius, second_radius)));
+      limit = multiply(
+          square(point(region.limit_metres)),
+          interval(proof.sine_squared.lower, proof.sine_squared.upper));
+      certificate = SelfCert::half_ray_angle_bound;
+      break;
+    }
+    case Junction::shoulder: {
+      if (.065 > region.limit_metres) return;
+      const auto c = transfer_small_root(point(.5));
+      const auto threshold = transfer_small_root(
+          subtract(square(point(region.limit_metres)), square(point(.065))));
+      extent = add(negate(multiply(threshold, c)), multiply(point(.065), c));
+      secondary = add(negate(multiply(point(.35898), c)), point(.065));
+      limit = point(-.18);
+      certificate = SelfCert::shoulder_split;
+      break;
+    }
+  }
+  const auto gap = subtract(limit, extent);
+  out.arithmetic_supported = extent.supported && limit.supported &&
+                             secondary.supported && gap.supported;
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(secondary);
+  out.structural_identity = identity;
+  out.certificate = certificate;
+  out.certified = region.junction == Junction::shoulder
+                      ? extent.high < limit.low && secondary.high < limit.low
+                      : gap.low >= 0;
+}
+auto transfer_capacity(TransferRefusal& refusal, TransferCondition condition)
+    -> TransferResult {
+  refusal.condition = condition;
+  return TransferResult::capacity;
+}
+[[gnu::noinline]] auto transfer_separate(const EndpointSelfSolid& a,
+                                         const EndpointSelfSolid& b,
+                                         const TransferLimits& limits,
+                                         TransferWork& work,
+                                         TransferRefusal& refusal)
+    -> TransferResult {
+  const auto world_axis = [](std::size_t i) -> Vec {
+    return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+  };
+  const auto count = std::size_t{4} + (a.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape == SelfShape::capsule ? 2 : 3);
+  // Preserve the inherited proposal order, but generate each direction only
+  // after its capacity check. A zero cap performs no hidden proposal work.
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3) return world_axis(i);
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b)),
+                             self_reporting(self_center(a)));
+    i -= 4;
+    for (const auto* solid : {&a, &b})
+      if (solid->shape != SelfShape::capsule) {
+        if (i < 3) return world_axis(i);
+        i -= 3;
+      }
+    for (const auto* solid : {&a, &b})
+      if (solid->shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = solid == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? solid->first : solid->second),
+              self_reporting(self_center(other)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  for (std::size_t i = 0; i < count; ++i) {
+    if (work.proposed_axes >= limits.proposed_axes)
+      return transfer_capacity(refusal, TransferCondition::axis_capacity);
+    ++work.proposed_axes;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (const auto direction : {axis, self_negate(axis)}) {
+      if (work.signed_trials >= limits.signed_trials)
+        return transfer_capacity(refusal,
+                                 TransferCondition::signed_trial_capacity);
+      ++work.signed_trials;
+      const auto sum = add(self_support(a, direction),
+                           self_support(b, self_negate(direction)));
+      if (!sum.supported)
+        return transfer_refuse(refusal,
+                               TransferCondition::unsupported_arithmetic);
+      if (sum.high <= 0) return TransferResult::accepted;
+    }
+  }
+  return transfer_refuse(refusal, TransferCondition::unresolved_self_pair);
+}
+[[gnu::noinline]] auto transfer_self(
+    const BoardingSourceEndpointLoadDiagnostic& initial,
+    const TransferGraph& graph, const TransferLimits& limits,
+    TransferWork& work, TransferCell& out, TransferRefusal& refusal)
+    -> TransferResult {
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  if (!transfer_relative_points(graph, relative))
+    return transfer_refuse(refusal, TransferCondition::unsupported_arithmetic);
+  const auto& parts = initial.self.endpoint.parts;
+  const auto& regions = initial.self.regions;
+  std::size_t pair_index{};
+  for (std::size_t a = 0; a < parts.size(); ++a)
+    for (std::size_t b = a + 1; b < parts.size(); ++b, ++pair_index) {
+      refusal.pair = pair_index;
+      if (work.self_pairs >= limits.self_pairs)
+        return transfer_capacity(refusal, TransferCondition::pair_capacity);
+      ++work.self_pairs;
+      auto certificate = SelfCert::none;
+      for (std::size_t r = 0; r < regions.size(); ++r)
+        if (static_cast<std::size_t>(regions[r].first) == a &&
+            static_cast<std::size_t>(regions[r].second) == b) {
+          transfer_owner(graph, regions[r], out.owners[r]);
+          if (!out.owners[r].arithmetic_supported)
+            return transfer_refuse(refusal,
+                                   TransferCondition::unsupported_arithmetic);
+          if (out.owners[r].certified) certificate = out.owners[r].certificate;
+          break;
+        }
+      if (certificate == SelfCert::none) {
+        const auto first = transfer_solid(parts[a], relative),
+                   second = transfer_solid(parts[b], relative);
+        const auto result =
+            transfer_separate(first, second, limits, work, refusal);
+        if (result != TransferResult::accepted) return result;
+        certificate = SelfCert::convex_support_plane;
+      }
+      out.pair_certificates[pair_index] = certificate;
+      ++out.certificate_counts[static_cast<std::size_t>(certificate)];
+    }
+  out.self_complete = pair_index == kBoardingBodyPairCount;
+  refusal.pair.reset();
+  return out.self_complete
+             ? TransferResult::accepted
+             : transfer_refuse(refusal, TransferCondition::invalid_binding);
+}
+} // namespace
+
+auto detail::boarding_lower_foot_transfer_kinematic_math(
+    double first, double last, bool reverse, TransferCell& out,
+    TransferRefusal& refusal) -> TransferResult {
+  TransferGraph graph;
+  const auto parts = body_parts();
+  return transfer_body(first, last, reverse, parts, graph, out, refusal);
+}
+auto detail::boarding_lower_foot_transfer_cell(
+    const BoardingSourceEndpointLoadDiagnostic& initial,
+    const BoardingLowerFootTransferPressureContext& pressure, double first,
+    double last, bool reverse, const TransferLimits& limits, TransferWork& work,
+    TransferCell& out, TransferRefusal& refusal) -> TransferResult {
+  if (pressure.initial_ != &initial || !initial.load.complete ||
+      !initial.self.complete) {
+    transfer_reset(first, last, out, refusal);
+    return transfer_refuse(refusal, TransferCondition::invalid_binding);
+  }
+  TransferGraph graph;
+  auto result = transfer_body(first, last, reverse, initial.self.endpoint.parts,
+                              graph, out, refusal);
+  if (result != TransferResult::accepted) return result;
+  result = transfer_self(initial, graph, limits, work, out, refusal);
+  if (result != TransferResult::accepted) return result;
+  result = boarding_lower_foot_transfer_pressure_cell(pressure, limits, work,
+                                                      out, refusal);
+  if (result != TransferResult::accepted) return result;
+  out.complete =
+      out.kinematics_complete && out.timing_complete && out.self_complete &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  refusal.condition = TransferCondition::none;
+  return out.complete
+             ? TransferResult::accepted
+             : transfer_refuse(refusal, TransferCondition::invalid_binding);
 }
 } // namespace apsis_drift

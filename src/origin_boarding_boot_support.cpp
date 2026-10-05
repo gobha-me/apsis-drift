@@ -1,5 +1,6 @@
 #include "apsis_drift/origin_boarding_boot_support.hpp"
 #include "origin_boarding_foot_sites_internal.hpp"
+#include "origin_boarding_lower_foot_transfer_internal.hpp"
 #include "origin_boarding_self_model02_internal.hpp"
 #include "origin_boarding_source_endpoint_load_internal.hpp"
 #include "origin_boarding_source_endpoint_self_internal.hpp"
@@ -1279,5 +1280,209 @@ auto assess_origin_boarding_source_endpoint_load(
     const OriginBoardingBootSupport& provider)
     -> std::expected<BoardingSourceEndpointLoadDiagnostic, std::string> {
   return detail::boarding_source_endpoint_load_bounded(provider);
+}
+namespace {
+using TransferCondition = BoardingLowerFootTransferCondition;
+using TransferResult = detail::BoardingLowerFootTransferCellResult;
+using TransferLimits = detail::BoardingLowerFootTransferLimits;
+using TransferWork = BoardingLowerFootTransferCounters;
+using TransferCell = BoardingLowerFootTransferCell;
+using TransferRefusal = BoardingLowerFootTransferRefusal;
+static_assert(sizeof(LoadScratch) + load_nested_scratch + 240 <= 2048);
+
+auto transfer_pressure_fail(TransferRefusal& refusal,
+                            TransferCondition condition,
+                            TransferResult result = TransferResult::unresolved)
+    -> TransferResult {
+  refusal.condition = condition;
+  return result;
+}
+auto transfer_pressure_edges(const std::array<Point, 4>& corners,
+                             Point pressure, const TransferLimits& limits,
+                             TransferWork& work,
+                             std::array<BoardingFootSiteEdgeEvidence, 4>& edges,
+                             bool& supported, TransferRefusal& refusal)
+    -> TransferResult {
+  const auto required = add(point(kBoardingBootPressureRadiusMetres),
+                            point(kBoardingBootDiskEdgeMarginMetres));
+  for (std::size_t i = 0; i < corners.size(); ++i) {
+    if (work.disk_edges >= limits.disk_edges)
+      return transfer_pressure_fail(refusal, TransferCondition::edge_capacity,
+                                    TransferResult::capacity);
+    ++work.disk_edges;
+    edges[i] = site_edge(corners[i], corners[(i + 1) % corners.size()],
+                         pressure, required, supported);
+    if (!supported)
+      return transfer_pressure_fail(refusal,
+                                    TransferCondition::unsupported_arithmetic,
+                                    TransferResult::unsupported);
+  }
+  return TransferResult::accepted;
+}
+auto transfer_pressure_candidate(const LoadCandidate& candidate)
+    -> BoardingLowerFootTransferPressureCandidate {
+  return {{candidate.minimum_signed_side.lower,
+           candidate.minimum_signed_side.upper},
+          {candidate.minimum_squared_gap.lower,
+           candidate.minimum_squared_gap.upper},
+          candidate.status,
+          candidate.arithmetic_supported,
+          candidate.quad_valid};
+}
+} // namespace
+
+auto detail::prepare_boarding_lower_foot_transfer_pressure(
+    const BoardingSourceEndpointLoadDiagnostic& initial)
+    -> std::expected<BoardingLowerFootTransferPressureContext, std::string> {
+  if (!initial.load.complete || !initial.load.bindings_complete ||
+      !initial.load.arithmetic_supported ||
+      !initial.load.placement_nonpenetrating ||
+      !initial.load.contact_supported ||
+      !initial.load.projected_margin_certified ||
+      initial.load.checked_quads != kBoardingBootSourcePartitionCount ||
+      !load_binding(initial.self) ||
+      !load_provider_valid(initial.self.endpoint.sites.source))
+    return std::unexpected(
+        "Transfer pressure requires unchanged genuine complete initial Load01");
+  if (!std::ranges::all_of(initial.load.source_quads, [](const LoadQuad& q) {
+        return q.valid && q.arithmetic_supported && q.horizontal && q.upward &&
+               q.convex && q.nondegenerate && q.checked_edges == 4 &&
+               q.checked_side_signs == 8;
+      }))
+    return std::unexpected(
+        "Transfer pressure requires ten once-owned complete source guards");
+  return BoardingLowerFootTransferPressureContext(initial);
+}
+auto detail::boarding_lower_foot_transfer_pressure_cell(
+    const BoardingLowerFootTransferPressureContext& context,
+    const TransferLimits& limits, TransferWork& work, TransferCell& out,
+    TransferRefusal& refusal) -> TransferResult {
+  out.complete = out.positive_reactions =
+      out.nominal_vertical_equilibrium_complete = out.finite_pressure_complete =
+          false;
+  if (!site_supported_environment() || !context.initial_ ||
+      !out.kinematics_complete || !out.arithmetic_supported) {
+    out.arithmetic_supported = false;
+    return transfer_pressure_fail(refusal,
+                                  TransferCondition::unsupported_arithmetic,
+                                  TransferResult::unsupported);
+  }
+  const auto& initial = *context.initial_;
+  const auto sources = initial.self.endpoint.sites.source.selected_partitions();
+  if (sources.size() != kBoardingBootSourcePartitionCount)
+    return transfer_pressure_fail(refusal, TransferCondition::invalid_binding,
+                                  TransferResult::unsupported);
+  const auto w = Interval{out.port_reaction_fraction.lower,
+                          out.port_reaction_fraction.upper};
+  const auto complement = subtract(point(1), w);
+  if (!finite(w) || !finite(complement) || w.low <= 0 || complement.low <= 0 ||
+      w.high >= 1 || complement.high >= 1)
+    return transfer_pressure_fail(refusal,
+                                  TransferCondition::unsupported_arithmetic,
+                                  TransferResult::unsupported);
+  LoadScratch scratch;
+  scratch.centers[0] = {add(point(.16), point(-.14)), point(-.5)};
+  scratch.centers[1] = {add(point(.16), point(.14)), point(-.8)};
+  scratch.com = {
+      {out.center_of_mass.value.lower.x, out.center_of_mass.value.upper.x},
+      {out.center_of_mass.value.lower.z, out.center_of_mass.value.upper.z}};
+  scratch.barycenter = {add(multiply(w, scratch.centers[0].x),
+                            multiply(complement, scratch.centers[1].x)),
+                        add(multiply(w, scratch.centers[0].z),
+                            multiply(complement, scratch.centers[1].z))};
+  scratch.delta = subtract(scratch.com, scratch.barycenter);
+  if (!finite(scratch.barycenter.x) || !finite(scratch.barycenter.z) ||
+      !finite(scratch.delta.x) || !finite(scratch.delta.z))
+    return transfer_pressure_fail(refusal,
+                                  TransferCondition::unsupported_arithmetic,
+                                  TransferResult::unsupported);
+  out.barycenter_xz = {{{scratch.barycenter.x.low, scratch.barycenter.x.high},
+                        {scratch.barycenter.z.low, scratch.barycenter.z.high}}};
+  out.common_pressure_delta_xz = {
+      {{scratch.delta.x.low, scratch.delta.x.high},
+       {scratch.delta.z.low, scratch.delta.z.high}}};
+  // Exact complementary weights and ONE shared delta prove vertical normalized
+  // force/moment balance in XZ at these unequal heights. No
+  // acceleration/friction force balance is asserted; this remains nominal
+  // quasi-static evidence.
+  out.positive_reactions = out.nominal_vertical_equilibrium_complete = true;
+  for (std::size_t site = 0; site < out.pressures.size(); ++site) {
+    refusal.side = site;
+    auto& record = out.pressures[site];
+    scratch.pressures[site] = {add(scratch.centers[site].x, scratch.delta.x),
+                               add(scratch.centers[site].z, scratch.delta.z)};
+    const auto pressure = scratch.pressures[site];
+    if (!finite(pressure.x) || !finite(pressure.z) || pressure.x.low < -8 ||
+        pressure.x.high > 8 || pressure.z.low < -8 || pressure.z.high > 8)
+      return transfer_pressure_fail(refusal,
+                                    TransferCondition::unsupported_arithmetic,
+                                    TransferResult::unsupported);
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+    record.arithmetic_supported = true;
+    scratch.sole = site_sole_corners(scratch.centers[site]);
+    auto result = transfer_pressure_edges(scratch.sole, pressure, limits, work,
+                                          scratch.edges,
+                                          record.arithmetic_supported, refusal);
+    if (result != TransferResult::accepted) return result;
+    const auto sole = load_summary(scratch.edges, record.arithmetic_supported);
+    record.sole_minimum_signed_side = {sole.minimum_signed_side.lower,
+                                       sole.minimum_signed_side.upper};
+    record.sole_minimum_squared_gap = {sole.minimum_squared_gap.lower,
+                                       sole.minimum_squared_gap.upper};
+    record.sole_disk_contained = sole.status == LoadStatus::contained;
+    if (!record.sole_disk_contained)
+      return transfer_pressure_fail(refusal,
+                                    TransferCondition::sole_disk_margin);
+    const auto plane = site == 0 ? site_upper_plane : site_transition_plane;
+    for (std::size_t p = 0; p < sources.size(); ++p) {
+      refusal.partition = p;
+      if (work.pressure_candidates >= limits.pressure_candidates)
+        return transfer_pressure_fail(refusal,
+                                      TransferCondition::pressure_capacity,
+                                      TransferResult::capacity);
+      ++work.pressure_candidates;
+      ++record.scanned_partitions;
+      const auto& quad = initial.load.source_quads[p];
+      auto& candidate = record.candidates[p];
+      candidate.quad_valid = quad.valid;
+      candidate.arithmetic_supported = quad.arithmetic_supported;
+      if (!quad.valid) {
+        candidate.status = LoadStatus::invalid_support;
+        record.arithmetic_supported =
+            record.arithmetic_supported && quad.arithmetic_supported;
+        continue;
+      }
+      if (sources[p].plane_metres != plane) {
+        candidate.status = LoadStatus::noncoplanar;
+        continue;
+      }
+      record.coplanar = true;
+      scratch.source = source_corners(sources[p]);
+      bool supported{true};
+      result = transfer_pressure_edges(scratch.source, pressure, limits, work,
+                                       scratch.edges, supported, refusal);
+      if (result != TransferResult::accepted) return result;
+      const auto summary = load_summary(scratch.edges, supported);
+      candidate = transfer_pressure_candidate(summary);
+      record.arithmetic_supported = record.arithmetic_supported && supported;
+      if (summary.status == LoadStatus::contained &&
+          record.source_partition == 65535)
+        record.source_partition = static_cast<std::uint16_t>(p);
+    }
+    record.coverage_complete = record.scanned_partitions == sources.size();
+    record.source_disk_contained = record.source_partition != 65535;
+    record.complete = record.arithmetic_supported &&
+                      record.sole_disk_contained && record.coverage_complete &&
+                      record.source_disk_contained;
+    if (!record.complete)
+      return transfer_pressure_fail(refusal,
+                                    TransferCondition::source_disk_margin);
+  }
+  out.finite_pressure_complete = true;
+  refusal.side.reset();
+  refusal.partition.reset();
+  refusal.condition = TransferCondition::none;
+  return TransferResult::accepted;
 }
 } // namespace apsis_drift
