@@ -691,6 +691,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME native-flight-session-contract COMMAND apsis-drift-native-flight-session-tests)
   set_tests_properties(native-flight-session-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-system-flight-validation-tests test/system_flight_validation_test.cpp)
+  target_link_libraries(apsis-drift-system-flight-validation-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-system-flight-validation-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
+  add_test(NAME system-flight-validation-contract COMMAND apsis-drift-system-flight-validation-tests)
+  set_tests_properties(system-flight-validation-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-station-geometry-tests test/station_geometry_test.cpp)
   target_link_libraries(apsis-drift-station-geometry-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-station-geometry-tests PRIVATE

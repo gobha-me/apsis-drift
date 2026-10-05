@@ -42,6 +42,8 @@ player's station-to-flight journey.
 - [Partial lower-foot transfer01](ORIGIN_BOARDING_LOWER_FOOT_TRANSFER01.md): continuous kinematic/self/nominal support preparation qualifies; movement remains open; the separate surface consumer is below.
 - [Partial transfer surface sweep01](ORIGIN_BOARDING_LOWER_FOOT_TRANSFER_SURFACE_SWEEP01.md): continuous source-triangle separation qualifies using the same owned body/source/cells; material volume and actor movement remain open.
 
+- [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
+
 ## Studies and history
 
 - [Native study 01](GODOT_STUDY_01.md) and [streaming study 04](GODOT_STUDY_04.md)
