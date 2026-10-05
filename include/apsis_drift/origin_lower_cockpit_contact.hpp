@@ -4,6 +4,9 @@
 #include <optional>
 #include <span>
 namespace apsis_drift {
+namespace detail {
+struct LowerCockpitContactAccess;
+}
 inline constexpr std::size_t kLowerCockpitMaximumDocumentBytes{
     std::size_t{2} * std::size_t{1024} * std::size_t{1024}};
 inline constexpr std::size_t kLowerCockpitMaximumPolicyBytes{std::size_t{16} *
@@ -85,6 +88,7 @@ class OriginLowerCockpitContact {
  private:
   explicit OriginLowerCockpitContact(std::shared_ptr<const Data>);
   std::shared_ptr<const Data> data_;
+  friend struct detail::LowerCockpitContactAccess;
   friend auto decode_origin_lower_cockpit_contact(
       std::string_view, std::string_view, const OriginCabinSeamGeometry&)
       -> std::expected<OriginLowerCockpitContact, std::string>;

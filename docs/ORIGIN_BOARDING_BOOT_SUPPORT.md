@@ -137,3 +137,8 @@ changes. The first pressure oracle exceeded its bounded 64-bit precision when
 combining tiny COM coordinates with full-size boot coordinates; its replacement
 accumulates the fixture dyadics exactly. Initial failures remain recorded. No
 frozen posture, body dimension, source face or contact tolerance changed.
+
+The [static world checkpoint](ORIGIN_BOARDING_WORLD_CHECKPOINT.md) consumes this
+provider/request and the same exact stance to check all 15 canonical
+reservations against selected craft surfaces. Boot diagnostics retain their
+separate contact/load meaning; combined world results belong to that query.

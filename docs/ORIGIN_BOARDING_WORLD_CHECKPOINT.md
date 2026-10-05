@@ -177,3 +177,70 @@ trunk, helmet or limbs near an actual obstacle. Report the actual prerequisite,
 coverage or source-surface outcome without tuning these offsets, body sizes,
 joint angles, source geometry or certificate axes. A source comparison refusal
 continues to mean no separation certificate, without claiming collision proof.
+
+## Runtime and initial geometry results
+
+`assess_origin_boarding_world_checkpoint(provider, request)` performs one fresh
+boot/self assessment, retains it unchanged, and applies the same exact stance
+to every canonical world box/capsule. Diagnostics separate coverage, attempted
+and certified pairs, completion and the combined supported checkpoint. An
+early refusal owns its source name and retains the exact part/key/object and
+source-face namespace. Empty or malformed handles/requests refuse at the API.
+
+The effective craft roster contains 408,339 surfaces: 398,731 retained original
+craft triangles, 8,100 additive halo triangles and 1,508 replacement triangles.
+The original craft has 399,187 triangles before the complete 456-face mask.
+The support catalog also describes 76,025 station triangles; craft-local
+contact excludes those station groups. This query claims only its declared
+craft crop and strict triangle surfaces.
+
+All six original frozen requests passed every one of the 6,125,085 part/surface
+comparisons in the initial GCC and Clang runs, retaining their foot/self/load
+results and exact stance. Initial test failures came from using the combined
+craft/station catalog count as the craft-only denominator; production counted
+its actual effective roster correctly. Those failures remain recorded, and
+the independent inventory now checks ownership and per-group retained counts.
+The separately registered lateral controls are recorded below; final compiler
+regression and pinned analysis checks accompany publication.
+
+Build the contract alongside the core:
+
+```sh
+cmake --build build --target apsis-drift-boarding-world-checkpoint-tests
+ctest --test-dir build -R '^boarding-world-checkpoint-contract$' --output-on-failure
+```
+
+## Lateral observations
+
+The same outcomes appeared under GCC and Clang. All six observations retain
+valid self, finite load and complete crop coverage. The neutral rootX -0.30
+request passes all 6,125,085 pairs. The other five stop at the following original
+craft faces; every earlier pair has a certificate, and the stopping pair is
+unresolved. These results are regression assertions without pose changes.
+
+| Request at upper Z -0.35 | Part | Original group/triangle | Source | Examined / certified |
+| --- | --- | --- | --- | --- |
+| Neutral dual, X +0.30 | Starboard boot | 0 / 208011 | WF02 deck flush pull 7 | 4,699,741 / 4,699,740 |
+| Neutral dual, X -0.45 | Port boot | 0 / 205513 | WF02 deck bay index 7 | 2,247,209 / 2,247,208 |
+| Neutral dual, X +0.45 | Starboard boot | 0 / 208063 | WF02 deck flush pull 7 | 4,699,793 / 4,699,792 |
+| Starboard-loaded, X -0.58 | Starboard boot | 0 / 205513 | WF02 deck bay index 7 | 4,697,243 / 4,697,242 |
+| Port-loaded, X +0.58 | Port boot | 0 / 208063 | WF02 deck flush pull 7 | 2,249,759 / 2,249,758 |
+
+Eligible floor pressure does not exempt these deck fittings. No result claims
+an interior collision witness: the static query reports its missing separation
+certificate with exact provenance and prefix counts. Continuous supported
+movement and seating remain the following work under #361.
+
+## Regression validation
+
+Complete native builds and all 51 tests pass under GCC and Clang, including
+3,268,200 world-checkpoint checks. The contract independently verifies catalog
+ownership and per-group retained counts, mask/namespace ordering, exact body
+and boot snapshots, actual-frame enclosing bounds, penetration/boundary
+controls, source-attributed stopping prefixes and owned diagnostic lifetime.
+The native bridge builds alongside the unchanged save/walk/flight contracts.
+No rendered capture or owner playtest is part of this checkpoint.
+
+Pinned clang-format 20, suppression policy and full clang-tidy 20 pass. The
+first analysis run flagged the deliberate moved-handle API tests; exact named
+local annotations document their contract. No production predicate changed.

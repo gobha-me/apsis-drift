@@ -115,8 +115,9 @@ the lower steps and occupied seat remain separate route qualification work.
 
 The [finite boarding boot provider](docs/ORIGIN_BOARDING_BOOT_SUPPORT.md) places
 an unchanged articulated body on actual upper-floor or transition faces and
-checks finite pressure/load support. These static checkpoints still need
-all-body obstacle clearance and a continuous route before actor boarding.
+checks finite pressure/load support. The [static craft checkpoint](docs/ORIGIN_BOARDING_WORLD_CHECKPOINT.md)
+checks the same placed body against every selected craft surface. Continuous
+supported movement and a seated endpoint remain before actor boarding.
 
 The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
 the existing seat and harness meshes while proving their complete render

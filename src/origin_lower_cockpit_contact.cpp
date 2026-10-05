@@ -2,6 +2,7 @@
 #include "apsis_drift/lower_cockpit_contact_data.hpp"
 #include "apsis_drift/stowed_contact_data.hpp"
 #include "origin_cabin_contact_internal.hpp"
+#include "origin_lower_cockpit_contact_internal.hpp"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -229,6 +230,93 @@ struct OriginLowerCockpitContact::Data {
   std::vector<LowerCockpitSourceObject> objects;
   std::vector<Obstacle> triangles;
 };
+namespace detail {
+auto LowerCockpitContactAccess::data(const OriginLowerCockpitContact& geometry)
+    -> const OriginLowerCockpitContact::Data* {
+  return geometry.data_.get();
+}
+auto visit_effective_lower_cockpit_contact(
+    const OriginLowerCockpitContact& geometry,
+    const std::function<bool(const LowerCockpitEffectiveTriangle&)>& visit)
+    -> std::expected<LowerCockpitEffectiveVisit, std::string> {
+  const auto* data = LowerCockpitContactAccess::data(geometry);
+  if (!data) return std::unexpected("Lower moved-from geometry");
+  if (!visit) return std::unexpected("Lower effective visitor required");
+  const auto originals = Access::obstacles(data->original);
+  const auto removed = [&](const Obstacle& triangle) {
+    if (!data->stowed) return false;
+    return std::ranges::any_of(
+        data->stowed->partition.removed(),
+        [&](const StowedContactSourceRange& row) {
+          return triangle.key.group == row.group &&
+                 triangle.key.triangle >= row.triangles.start &&
+                 triangle.key.triangle - row.triangles.start <
+                     row.triangles.count;
+        });
+  };
+  LowerCockpitEffectiveVisit result;
+  for (const auto& triangle : originals)
+    if (!removed(triangle)) ++result.total_triangles;
+  const auto add_count = [&](std::size_t count) {
+    if (count >
+        std::numeric_limits<std::size_t>::max() - result.total_triangles)
+      return false;
+    result.total_triangles += count;
+    return true;
+  };
+  if (!add_count(data->triangles.size()) ||
+      (data->stowed && !add_count(data->stowed->triangles.size())))
+    return std::unexpected("Lower effective triangle count overflow");
+  const auto traverse = [&](std::span<const Obstacle> triangles,
+                            LowerCockpitContactBuffer buffer) {
+    for (const auto& triangle : triangles) {
+      if (buffer == LowerCockpitContactBuffer::original && removed(triangle))
+        continue;
+      LowerCockpitEffectiveTriangle view;
+      view.obstacle = &triangle;
+      view.key = {buffer, triangle.key.group, triangle.key.triangle};
+      view.object = triangle.object;
+      if (buffer == LowerCockpitContactBuffer::original) {
+        view.source_object = data->original.support_catalog()
+                                 ->objects()[triangle.object]
+                                 .source_object;
+      } else {
+        const auto& object = buffer == LowerCockpitContactBuffer::halo
+                                 ? data->objects[triangle.object]
+                                 : data->stowed->objects[triangle.object];
+        view.source_object = object.source_object;
+        view.evaluated_source_triangle =
+            object.evaluated_source_triangles[triangle.key.triangle -
+                                              object.triangle_start];
+      }
+      ++result.visited_triangles;
+      if (!visit(view)) return false;
+    }
+    return true;
+  };
+  if (!traverse(originals, LowerCockpitContactBuffer::original) ||
+      !traverse(data->triangles, LowerCockpitContactBuffer::halo) ||
+      (data->stowed && !traverse(data->stowed->triangles,
+                                 LowerCockpitContactBuffer::replacement)))
+    return result;
+  result.complete = result.visited_triangles == result.total_triangles;
+  return result;
+}
+auto covers_lower_cockpit_bounds(const OriginLowerCockpitContact& geometry,
+                                 CabinContactBox bounds)
+    -> std::expected<bool, std::string> {
+  if (!LowerCockpitContactAccess::data(geometry))
+    return std::unexpected("Lower moved-from geometry");
+  const auto finite = [](RigidVector3 p) {
+    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+  };
+  if (!finite(bounds.low) || !finite(bounds.high) ||
+      bounds.low.x > bounds.high.x || bounds.low.y > bounds.high.y ||
+      bounds.low.z > bounds.high.z)
+    return std::unexpected("Lower finite ordered coverage bounds required");
+  return union_covers(bounds);
+}
+} // namespace detail
 OriginLowerCockpitContact::OriginLowerCockpitContact(
     std::shared_ptr<const Data> selected)
     : data_(std::move(selected)) {
@@ -642,51 +730,21 @@ auto assess_lower_cockpit_reservations(
     result.interior_clear = false;
     return result;
   }
-  const auto collect = [&](std::span<const Obstacle> obstacles,
-                           LowerCockpitContactBuffer buffer) {
-    for (const auto& triangle : obstacles) {
-      if (buffer == LowerCockpitContactBuffer::original &&
-          geometry.data_->stowed) {
-        // Admitted original obstacle keys are valid; membership is a whole
-        // range mask, never a coordinate match or source-face redirection.
-        const auto ranges = geometry.data_->stowed->partition.removed();
-        if (std::ranges::any_of(
-                ranges, [&](const StowedContactSourceRange& row) {
-                  return triangle.key.group == row.group &&
-                         triangle.key.triangle >= row.triangles.start &&
-                         triangle.key.triangle - row.triangles.start <
-                             row.triangles.count;
-                }))
-          continue;
-      }
-      for (std::size_t i = 0; i < 3; ++i)
-        if (auto contact = Access::intersection(triangle, swept[i])) {
-          std::optional<std::uint32_t> source;
-          if (buffer != LowerCockpitContactBuffer::original) {
-            const auto& o =
-                buffer == LowerCockpitContactBuffer::halo
-                    ? geometry.data_->objects[triangle.object]
-                    : geometry.data_->stowed->objects[triangle.object];
-            source = o.evaluated_source_triangles[triangle.key.triangle -
-                                                  o.triangle_start];
+  const auto visited = detail::visit_effective_lower_cockpit_contact(
+      geometry, [&](const detail::LowerCockpitEffectiveTriangle& triangle) {
+        for (std::size_t i = 0; i < swept.size(); ++i)
+          if (auto contact =
+                  Access::intersection(*triangle.obstacle, swept[i])) {
+            result.contacts.push_back({triangle.key, triangle.object,
+                                       triangle.evaluated_source_triangle,
+                                       static_cast<CabinProxyPart>(i),
+                                       *contact});
+            if (*contact == CabinIntersection::interior)
+              result.interior_clear = false;
           }
-          result.contacts.push_back(
-              {{buffer, triangle.key.group, triangle.key.triangle},
-               triangle.object,
-               source,
-               static_cast<CabinProxyPart>(i),
-               *contact});
-          if (*contact == CabinIntersection::interior)
-            result.interior_clear = false;
-        }
-    }
-  };
-  collect(Access::obstacles(geometry.data_->original),
-          LowerCockpitContactBuffer::original);
-  collect(geometry.data_->triangles, LowerCockpitContactBuffer::halo);
-  if (geometry.data_->stowed)
-    collect(geometry.data_->stowed->triangles,
-            LowerCockpitContactBuffer::replacement);
+        return true;
+      });
+  if (!visited) return std::unexpected(visited.error());
   return result;
 }
 auto assess_lower_cockpit_surface_point(
