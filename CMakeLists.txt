@@ -267,6 +267,7 @@ add_library(apsis_drift_core STATIC
   src/origin_boarding_support.cpp
   src/origin_cabin_seam.cpp
   src/origin_lower_cockpit_contact.cpp
+  src/origin_stowed_contact_partition.cpp
   src/origin_cabin_corridor.cpp
   src/origin_boarding_body.cpp
   src/origin_boarding_self_model02.cpp
@@ -482,6 +483,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-support-contract COMMAND apsis-drift-boarding-support-tests)
   set_tests_properties(boarding-support-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-stowed-contact-partition-tests test/origin_stowed_contact_partition_test.cpp)
+  target_link_libraries(apsis-drift-stowed-contact-partition-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-stowed-contact-partition-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME stowed-contact-partition-contract COMMAND apsis-drift-stowed-contact-partition-tests)
+  set_tests_properties(stowed-contact-partition-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-operating-motion-tests test/operating_motion_test.cpp)
   target_link_libraries(apsis-drift-operating-motion-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-operating-motion-tests PRIVATE

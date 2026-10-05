@@ -87,6 +87,10 @@ exact omitted static floor geometry for source-attributed collision queries.
 This closes a geometry gap; supported step transfers and sitting remain part
 of the boarding work.
 
+The [original cockpit source partition](docs/ORIGIN_STOWED_CONTACT_PARTITION.md)
+binds the eight restraint/manifold ranges needed for the parked replacement.
+It preserves every other original object; matched package integration follows.
+
 The [complete upper cabin corridor](docs/ORIGIN_CABIN_CORRIDOR.md) extends that
 support qualification across all eight center walking tiles over 4.19 metres.
 It retains the actual tile gaps, tapered surfaces and neighboring obstacles;
@@ -114,8 +118,12 @@ reconstruction of the original full report. A separately registered run returned
 certificates for all ten mutual connector pairs within their existing work
 allocation; its [accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5982901427)
 verifies those certificates.
-Old-material interior checks, exact K/material/source preservation, package
-admission and supported actor travel remain open before boarding or sitting.
+The selected old-material run also has an
+[accepted recorded audit](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-5986838132):
+seven chain checks, five interior seeds and all 35 bridge/old-material
+classifications completed within their work limits. Matched package,
+render/contact frame binding and supported actor travel still precede
+boarding or sitting.
 
 The [boarding body diagnostic](docs/ORIGIN_BOARDING_BODY.md) registers the fixed
 articulated proxy and reports strict self conflicts before further ship fits.
