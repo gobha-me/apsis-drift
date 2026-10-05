@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/origin_boarding_body.hpp"
 #include "apsis_drift/rigid_body.hpp"
 #include <array>
 #include <cstddef>
@@ -7,6 +8,7 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace apsis_drift {
@@ -155,4 +157,94 @@ struct BoardingPlantedLegTimingDiagnostic {
 [[nodiscard]] auto assess_origin_boarding_planted_legs_timing(double first = 0,
                                                               double last = 1)
     -> std::expected<BoardingPlantedLegTimingDiagnostic, std::string>;
+
+inline constexpr std::uint32_t kBoardingPlantedBodyRecipeVersion{1};
+inline constexpr std::size_t kBoardingPlantedBodyPointCount{18};
+inline constexpr std::size_t kBoardingPlantedBodyMaximumLeaves{4096};
+enum class BoardingPlantedBodyPointId : std::uint8_t {
+  root,
+  trunk_center,
+  helmet_center,
+  eye,
+  port_hip,
+  port_knee,
+  port_ankle,
+  port_boot_center,
+  port_shoulder,
+  port_elbow,
+  port_wrist,
+  starboard_hip,
+  starboard_knee,
+  starboard_ankle,
+  starboard_boot_center,
+  starboard_shoulder,
+  starboard_elbow,
+  starboard_wrist
+};
+struct BoardingPlantedBodyPointEvidence {
+  // Canonical values; the diagnostic's ONE common Y placement is not applied.
+  BoardingPlantedLegPointBounds value;
+  BoardingPlantedLegPointDerivatives derivatives;
+};
+struct BoardingPlantedBodyBoxBinding {
+  BoardingPlantedBodyPointId center{};
+  RigidVector3 half_size_metres;
+  BoardingBodyFrame frame;
+};
+struct BoardingPlantedBodyCapsuleBinding {
+  BoardingPlantedBodyPointId start{}, end{};
+  double radius_metres{};
+};
+struct BoardingPlantedBodyMassBinding {
+  // Equal IDs select that point; distinct IDs select the exact midpoint.
+  BoardingPlantedBodyPointId first{}, second{};
+  std::uint32_t weight{};
+};
+struct BoardingPlantedBodyPartBinding {
+  BoardingBodyPartId id{};
+  std::variant<BoardingPlantedBodyBoxBinding, BoardingPlantedBodyCapsuleBinding>
+      reservation;
+  BoardingPlantedBodyMassBinding mass;
+};
+struct BoardingPlantedBodyLeaf {
+  double first{}, last{};
+  std::array<BoardingPlantedBodyPointEvidence, kBoardingPlantedBodyPointCount>
+      points;
+  std::array<BoardingPlantedBodyPointEvidence, kBoardingBodyPartCount>
+      mass_points;
+  BoardingPlantedBodyPointEvidence center_of_mass;
+};
+enum class BoardingPlantedBodyCondition : std::uint8_t {
+  none,
+  unsupported_arithmetic,
+  timing_prerequisite,
+  invalid_binding,
+  body_capacity,
+  incomplete_cover
+};
+struct BoardingPlantedBodyRefusal {
+  BoardingPlantedBodyCondition condition{};
+  std::size_t leaf_index{};
+  double first{}, last{};
+};
+struct BoardingPlantedBodyDiagnostic {
+  std::uint32_t recipe_version{kBoardingPlantedBodyRecipeVersion};
+  // Owned without changing any closure/timing bounds, reports or counters.
+  BoardingPlantedLegTimingDiagnostic timing;
+  std::array<BoardingPlantedBodyPartBinding, kBoardingBodyPartCount> parts;
+  double common_translation_y_metres{.72};
+  std::size_t assembled_leaves{};
+  std::vector<BoardingPlantedBodyLeaf> leaves;
+  std::optional<BoardingPlantedBodyRefusal> first_refusal;
+  bool complete{}, reservations_complete{}, mass_model_complete{},
+      com_derivatives_complete{};
+  static constexpr bool self_qualified{false}, load_qualified{false},
+      world_qualified{false}, sweep_qualified{false}, dynamics_qualified{false},
+      route_qualified{false}, actor_qualified{false}, seat_qualified{false},
+      save_qualified{false}, free_foot_swing_qualified{false};
+};
+// Compiled 15-part body only; no caller geometry or additional adaptive cover.
+[[nodiscard]] auto assess_origin_boarding_planted_body(double first = 0,
+                                                       double last = 1)
+    -> std::expected<BoardingPlantedBodyDiagnostic, std::string>;
 } // namespace apsis_drift

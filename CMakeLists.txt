@@ -526,6 +526,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-planted-leg-timing-contract COMMAND apsis-drift-boarding-planted-leg-timing-tests)
   set_tests_properties(boarding-planted-leg-timing-contract PROPERTIES TIMEOUT 120)
+  add_executable(apsis-drift-boarding-planted-body-tests test/origin_boarding_planted_body_test.cpp)
+  target_link_libraries(apsis-drift-boarding-planted-body-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-planted-body-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-planted-body-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-planted-body-contract COMMAND apsis-drift-boarding-planted-body-tests)
+  set_tests_properties(boarding-planted-body-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-cabin-corridor-tests test/origin_cabin_corridor_test.cpp)
   target_link_libraries(apsis-drift-cabin-corridor-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_definitions(apsis-drift-cabin-corridor-tests PRIVATE

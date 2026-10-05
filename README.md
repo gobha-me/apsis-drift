@@ -127,6 +127,11 @@ The [timing bounds](docs/ORIGIN_BOARDING_PLANTED_LEG_TIMING01.md) retain the
 original movement clock and check root motion and physical joint speeds over
 complete intervals, with separate evidence for reverse and point requests.
 
+The [complete planted body recipe](docs/ORIGIN_BOARDING_PLANTED_BODY01.md)
+provides the fixed whole-body reservations and surrogate center-of-mass
+value, velocity and acceleration bounds on that same curve. Support and
+continuous clearance remain separate checks under #361.
+
 The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
 the existing seat and harness meshes while proving their complete render
 triangle union matches the original. Harness opening and supported seating
