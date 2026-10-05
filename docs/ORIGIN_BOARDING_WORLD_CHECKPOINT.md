@@ -159,3 +159,21 @@ The result certifies static source-triangle surface clearance under the existing
 strict policy; it does not classify source solid-volume containment or grant
 material, sweep, route, actor or seat authority. Existing source/material
 acceptance remains closed.
+
+## Separate lateral obstruction controls
+
+Registered 2026-10-05 before querying these controls. The six initial requests
+remain unchanged. To exercise source-attributed refusal independently, also
+observe the neutral folded-arm dual upper request at rootZ -0.35 and rootX
++0.30, -0.30, +0.45 and -0.45 metres. Its anchor remains port/partition8 and
+fraction .5. Separately observe the mirrored original single-foot upper requests
+with rootX +0.58 for the port-loaded request and -0.58 for the starboard-loaded
+request. All other pose, stance and source inputs remain unchanged.
+
+These are a fixed set of lateral observations, not a search or a declaration
+that each must collide. The existing floor partitions are wider than the feet;
+a side translation can preserve pressure support while bringing the larger
+trunk, helmet or limbs near an actual obstacle. Report the actual prerequisite,
+coverage or source-surface outcome without tuning these offsets, body sizes,
+joint angles, source geometry or certificate axes. A source comparison refusal
+continues to mean no separation certificate, without claiming collision proof.
