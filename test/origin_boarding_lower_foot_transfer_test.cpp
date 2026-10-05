@@ -1393,8 +1393,8 @@ auto set_stale_summaries(Cell& out) -> void {
 auto stale_output_controls(const Load& initial) -> void {
   const auto context =
       require(detail::prepare_boarding_lower_foot_transfer_pressure(initial));
-  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- A distinct
-  // owned instance exercises pressure-context identity refusal.
+  // A distinct owned instance exercises pressure-context identity refusal.
+  // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Identity.
   const auto distinct = initial;
   Cell out;
   set_stale_summaries(out);
