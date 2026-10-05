@@ -1,0 +1,19 @@
+#pragma once
+#include <array>
+#include <string_view>
+namespace apsis_drift::detail {
+inline constexpr std::size_t kStowedContactBytes{@APSIS_STOWED_CONTACT_BYTES@};
+inline constexpr std::array<std::string_view, @APSIS_STOWED_CONTACT_CHUNK_COUNT@> kStowedContactChunks{
+@APSIS_STOWED_CONTACT_CHUNKS@};
+inline constexpr std::string_view kStowedFrameJson{R"APSISSTFRAME(@APSIS_STOWED_FRAME_JSON@)APSISSTFRAME", @APSIS_STOWED_FRAME_BYTES@};
+inline constexpr std::string_view kStowedModelSha256{"d286dfd5174940ccd7e3db0cb023d3571ad460c6b22609c6f81208e16f06e2fc"};
+inline auto approved_stowed_contact_bytes(std::string_view input) -> bool {
+  if (input.size() != kStowedContactBytes) return false;
+  std::size_t offset{};
+  for (const auto chunk : kStowedContactChunks) {
+    if (input.substr(offset, chunk.size()) != chunk) return false;
+    offset += chunk.size();
+  }
+  return true;
+}
+} // namespace apsis_drift::detail

@@ -1,0 +1,20 @@
+{
+  "derived_files": {
+    "frame.json": {
+      "bytes": 494,
+      "sha256": "f98c50f69d71ecd38ca1d43d010f7b43ca300178dc25d40e170fd45fe5bc88a6"
+    },
+    "replacement-contact.json": {
+      "bytes": 72208,
+      "sha256": "62b4d493f2d74f59b81fd089873360b99e3bae9d17a6d90a00066e9440e44c4a"
+    }
+  },
+  "licenses": "../wayfarer-stowed-01/licenses",
+  "preparation_tool": "tools/prepare_wayfarer_stowed.py",
+  "qualification": "../wayfarer-stowed-01/qualification.json",
+  "runtime_actor_admitted": false,
+  "schema": "apsis.stowed-cockpit-contact-provenance/1",
+  "scope": "Static fixed-pose effective contact; live presentation and actor selection follow separately",
+  "source_package": "wayfarer-stowed-01",
+  "source_package_manifest_sha256": "9887edd264cc005099f201c3e14043c490884ca4fd37bd22688a977a27e8f9f2"
+}
