@@ -183,6 +183,18 @@ state before flattening. Require IEEEbinary64 RN, fegetround nearest, actual
 unit tie/three-quarter-ULP addition probes and preserved subnormal input/output.
 No new predicate relies on old unguarded linear_sign or old edge_distance sqrt.
 
+The implementation makes the mutually exclusive helper high-water bounds
+explicit before evaluation: 932 bytes for the disk path and 912 for the quad
+path, each within the same 1008-byte nested pool. The disk tally includes
+by-value Point arguments and retained arithmetic temporaries; the quad tally
+includes guard returns and one supplied/returned perimeter. One 128-byte corner
+array return can be live during construction, but does not nest inside a later
+disk edge call. The categories above are a shared accounting pool rather than
+separate stack allocations. Fixed working records are 800 bytes; the 240-byte
+reserve brings the registered additional scratch bound to 2048. Compile-time
+assertions check actual record sizes and both helper-pool bounds. This is a
+source working-storage upper bound, not an observed compiler stack-size claim.
+
 ## Frozen private seams and prefix semantics
 
     detail::boarding_source_endpoint_load_bounded(provider,
