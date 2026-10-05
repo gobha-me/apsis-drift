@@ -94,7 +94,7 @@ of the boarding work.
 
 The [original cockpit source partition](docs/ORIGIN_STOWED_CONTACT_PARTITION.md)
 binds the eight restraint/manifold ranges needed for the parked replacement.
-It preserves every other original object; matched package integration follows.
+It preserves every other original object in the selected parked assembly.
 
 The [static stowed asset delivery](docs/WAYFARER_STOWED_ASSETS.md) prepares the
 source-bound parked assembly offline, reproduces retained render attributes,
@@ -112,6 +112,11 @@ The [complete upper cabin corridor](docs/ORIGIN_CABIN_CORRIDOR.md) extends that
 support qualification across all eight center walking tiles over 4.19 metres.
 It retains the actual tile gaps, tapered surfaces and neighboring obstacles;
 the lower steps and occupied seat remain separate route qualification work.
+
+The [finite boarding boot provider](docs/ORIGIN_BOARDING_BOOT_SUPPORT.md) places
+an unchanged articulated body on actual upper-floor or transition faces and
+checks finite pressure/load support. These static checkpoints still need
+all-body obstacle clearance and a continuous route before actor boarding.
 
 The [closed-rest restraint exporter](docs/WAYFARER_RESTRAINT_EXPORT.md) separates
 the existing seat and harness meshes while proving their complete render

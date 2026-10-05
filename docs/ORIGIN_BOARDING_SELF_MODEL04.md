@@ -39,3 +39,8 @@ recomputed single-sole load margins are approximately55.714mm across and
 geometry only; forward-joint rounding does not establish exact source-plane
 contact. The straight-arm controls retain strict arm–trunk conflicts and their
 precise other refusal diagnostics. No pose or finite region was tuned.
+
+[Finite source boot support](ORIGIN_BOARDING_BOOT_SUPPORT.md) binds the same
+unchanged local records to one exact whole-body stance on selected upper-floor
+or transition faces. Its separate load witness does not establish all-body
+world clearance or qualify a swept transfer.
