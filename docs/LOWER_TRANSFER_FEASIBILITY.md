@@ -1,5 +1,37 @@
 # Lower transfer feasibility checkpoint
 
+## Current parked-source endpoint findings — 2026-10-05
+
+The admitted parked stowed assembly now replaces the historical closed
+restraints described below. Two bounded endpoint families have been checked
+against that **current effective source**, including all original, halo and
+replacement namespaces. The old closed-restraint refusal remains historical
+evidence; it is not the current obstacle roster.
+
+The second family tested 125 poses with boarding yaw 90 degrees, pelvis lean
+from -15 to +5 degrees, hip flexion `90 - pelvis lean`, knees at 90 degrees,
+and folded arms at shoulder 45/elbow 135 degrees. All 125 pass the complete
+static 105-pair self assessment. None clears all fifteen original rigid world
+reservations. No dimension, joint limit, source mask or contact allowance was
+changed after these results.
+
+At the central folded pose, fourteen parts clear the current source surfaces;
+the two stowed lap connectors penetrate the pelvis core by approximately
+23mm. Moving forward clears those connectors at one tested pose but crosses
+the nonselected pan upholstery seam by approximately 25mm. Further forward
+poses also encounter the crotch connector and nose skin. These are actual
+source-attributed strict-interior witnesses, corroborated by the C++ geometry
+predicates, rather than broad-phase overlaps. The external 5mm selected-pan
+skin cannot excuse them.
+
+This finite search does not prove every possible posture impossible. Further
+bounded fit and mechanical-source review remain open within #361. A successful
+endpoint would still need finite pan load, supported acquisition, continuous
+self/world clearance and explicit material membership before actor boarding.
+Independent flat-foot turning and the complete-source inventory are being
+implemented on the same grouped route branch. No new art or film work is
+required by these findings.
+
 The lower transfer in [#361](https://github.com/gobha-me/apsis-drift/issues/361)
 is **not qualified**. The 2026-10-02 investigation uses the dimensions registered
 in [policy 01](LOWER_TRANSFER_POLICY.md), without changing the body, joint limits,
