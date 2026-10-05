@@ -34,6 +34,10 @@ player's station-to-flight journey.
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)
 - [Boarding body](ORIGIN_BOARDING_BODY.md), [support](ORIGIN_BOARDING_SUPPORT.md)
   and [lower cockpit contact](LOWER_COCKPIT_CONTACT.md)
+- [Actual foot sites](ORIGIN_BOARDING_FOOT_SITES02.md),
+  [fixed body endpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT01.md) and
+  [complete static self check](ORIGIN_BOARDING_SOURCE_ENDPOINT_SELF01.md)
+- [Fixed endpoint vertical load](ORIGIN_BOARDING_SOURCE_ENDPOINT_LOAD01.md)
 
 ## Studies and history
 

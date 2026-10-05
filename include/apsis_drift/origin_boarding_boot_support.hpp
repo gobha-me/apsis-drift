@@ -3,6 +3,8 @@
 #include "apsis_drift/origin_boarding_self_model04.hpp"
 #include "apsis_drift/origin_cabin_corridor.hpp"
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -124,4 +126,80 @@ class OriginBoardingBootSupport {
 [[nodiscard]] auto assess_origin_boarding_boot_support(
     const OriginBoardingBootSupport&, const BoardingBootSupportRequest&)
     -> std::expected<BoardingBootSupportDiagnostic, std::string>;
+
+inline constexpr std::uint32_t kBoardingFootSitesVersion{2};
+struct BoardingFootSiteScalarBounds {
+  double lower{}, upper{};
+  bool supported{};
+};
+struct BoardingFootSiteOffsets {
+  // Private numeric controls only; public sites use all-zero offsets.
+  RigidVector3 center_metres;
+  std::array<double, 2> pressure_xz_metres{};
+};
+enum class BoardingFootSiteCondition : std::uint8_t {
+  unsupported_arithmetic,
+  numerical_unresolved,
+  incomplete_coverage,
+  plane_penetration,
+  sole_disk_margin,
+  source_disk_margin,
+  no_matching_plane
+};
+struct BoardingFootSiteRefusal {
+  std::size_t site{};
+  std::optional<std::size_t> partition;
+  BoardingFootSiteCondition condition{};
+};
+struct BoardingFootSiteEdgeEvidence {
+  BoardingFootSiteScalarBounds signed_side, edge_length_squared,
+      squared_margin_gap;
+  bool disk_contained{};
+};
+struct BoardingFootSitePartitionEvidence {
+  bool evaluated{}, footprint_overlap_possible{}, disk_contained{};
+  BoardingBootPlaneRelation plane_relation{
+      BoardingBootPlaneRelation::unresolved};
+  std::array<BoardingFootSiteEdgeEvidence, 4> edges{};
+};
+struct BoardingFootSiteEvidence {
+  // Center = exact sum of terms, never a newly rounded Box center.
+  std::array<double, 3> center_x_terms{}, center_y_terms{};
+  std::array<double, 2> center_z_terms{};
+  // X/Z offset terms are {compiled offset, private offset}.
+  std::array<std::array<double, 2>, 2> pressure_offset_terms{};
+  RigidVector3 half_size_metres{.06, .05, .14};
+  std::array<RigidVector3, 2> center_bounds_metres{}, pressure_bounds_metres{};
+  std::array<std::array<RigidVector3, 2>, 4> sole_corner_bounds_metres{};
+  std::array<BoardingFootSiteEdgeEvidence, 4> sole_edges{};
+  std::array<BoardingFootSitePartitionEvidence,
+             kBoardingBootSourcePartitionCount>
+      partitions{};
+  std::optional<std::size_t> source_partition;
+  std::size_t scanned_partitions{};
+  bool arithmetic_supported{}, coverage_complete{}, placement_nonpenetrating{},
+      sole_disk_contained{}, source_disk_contained{}, eligible{};
+  std::optional<BoardingFootSiteRefusal> first_refusal;
+};
+struct BoardingFootSitesDiagnostic {
+  // Owns the source faces/perimeters and their name views throughout result
+  // life.
+  OriginBoardingBootSupport source;
+  std::uint32_t sites_version{kBoardingFootSitesVersion};
+  std::array<BoardingFootSiteEvidence, 2> sites{};
+  std::array<double, 2> required_radius_margin_terms{
+      kBoardingBootPressureRadiusMetres, kBoardingBootDiskEdgeMarginMetres};
+  bool arithmetic_supported{}, coverage_complete{}, eligible{};
+  std::optional<BoardingFootSiteRefusal> first_refusal;
+  static constexpr bool body_qualified{false}, com_qualified{false},
+      force_qualified{false}, load_qualified{false}, self_qualified{false},
+      world_qualified{false}, crop_qualified{false}, sweep_qualified{false},
+      movement_qualified{false}, route_qualified{false}, actor_qualified{false},
+      seat_qualified{false}, save_qualified{false},
+      first_flight_qualified{false};
+};
+// Fixed upper/transition sites and pressure points only. No body or load model.
+[[nodiscard]] auto assess_origin_boarding_foot_sites(
+    const OriginBoardingBootSupport&)
+    -> std::expected<BoardingFootSitesDiagnostic, std::string>;
 } // namespace apsis_drift

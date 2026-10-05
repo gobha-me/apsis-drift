@@ -505,6 +505,34 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME boarding-boot-support-contract COMMAND apsis-drift-boarding-boot-support-tests)
   set_tests_properties(boarding-boot-support-contract PROPERTIES TIMEOUT 120)
+  add_executable(apsis-drift-boarding-foot-sites-tests test/origin_boarding_foot_sites_test.cpp)
+  target_link_libraries(apsis-drift-boarding-foot-sites-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-foot-sites-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-foot-sites-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-foot-sites-contract COMMAND apsis-drift-boarding-foot-sites-tests)
+  set_tests_properties(boarding-foot-sites-contract PROPERTIES TIMEOUT 120)
+  add_executable(apsis-drift-boarding-source-endpoint-tests test/origin_boarding_source_endpoint_test.cpp)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-source-endpoint-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-source-endpoint-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-source-endpoint-contract COMMAND apsis-drift-boarding-source-endpoint-tests)
+  set_tests_properties(boarding-source-endpoint-contract PROPERTIES TIMEOUT 120)
+  add_executable(apsis-drift-boarding-source-endpoint-self-tests test/origin_boarding_source_endpoint_self_test.cpp)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-self-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-source-endpoint-self-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-source-endpoint-self-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-source-endpoint-self-contract COMMAND apsis-drift-boarding-source-endpoint-self-tests)
+  set_tests_properties(boarding-source-endpoint-self-contract PROPERTIES TIMEOUT 120)
+  add_executable(apsis-drift-boarding-source-endpoint-load-tests test/origin_boarding_source_endpoint_load_test.cpp)
+  target_link_libraries(apsis-drift-boarding-source-endpoint-load-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-source-endpoint-load-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-source-endpoint-load-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-source-endpoint-load-contract COMMAND apsis-drift-boarding-source-endpoint-load-tests)
+  set_tests_properties(boarding-source-endpoint-load-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-world-checkpoint-tests test/origin_boarding_world_checkpoint_test.cpp)
   target_link_libraries(apsis-drift-boarding-world-checkpoint-tests PRIVATE apsis-drift::core)
   target_include_directories(apsis-drift-boarding-world-checkpoint-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -745,14 +773,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   set_tests_properties(godot-rotation-coast-contract PROPERTIES TIMEOUT 90)
 endif ()
 
-if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
-  add_executable(apsis-drift-tests test/test.cpp)
-  target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
-  target_include_directories(apsis-drift-tests
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_compile_definitions(apsis-drift-tests PRIVATE
-    APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
-  add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
+if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_executable(apsis-drift-asset-manifest-tests
     test/asset_manifest_test.cpp)
   target_link_libraries(apsis-drift-asset-manifest-tests
@@ -763,6 +784,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
     COMMAND apsis-drift-asset-validator
             --root "${CMAKE_CURRENT_SOURCE_DIR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/provenance.json")
+endif ()
+
+if (APSIS_DRIFT_TESTS AND BUILD_TESTING AND APSIS_DRIFT_TERMINAL)
+  add_executable(apsis-drift-tests test/test.cpp)
+  target_link_libraries(apsis-drift-tests PRIVATE apsis-drift::lib)
+  target_include_directories(apsis-drift-tests
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_definitions(apsis-drift-tests PRIVATE
+    APSIS_DRIFT_TEST_RTAUDIO_ENABLED=$<BOOL:${APSIS_DRIFT_RTAUDIO}>)
+  add_test(NAME apsis-drift-tests COMMAND apsis-drift-tests)
   add_executable(apsis-drift-midi-spike-tests
     test/midi_spike_test.cpp)
   target_include_directories(apsis-drift-midi-spike-tests PRIVATE
