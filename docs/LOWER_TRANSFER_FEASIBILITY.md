@@ -32,6 +32,8 @@ Independent flat-foot turning and the complete-source inventory are being
 implemented on the same grouped route branch. No new art or film work is
 required by these findings.
 
+## Historical closed-source investigation — 2026-10-02
+
 The lower transfer in [#361](https://github.com/gobha-me/apsis-drift/issues/361)
 is **not qualified**. The 2026-10-02 investigation uses the dimensions registered
 in [policy 01](LOWER_TRANSFER_POLICY.md), without changing the body, joint limits,
