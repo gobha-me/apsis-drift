@@ -38,6 +38,7 @@ player's station-to-flight journey.
   [fixed body endpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT01.md) and
   [complete static self check](ORIGIN_BOARDING_SOURCE_ENDPOINT_SELF01.md)
 - [Fixed endpoint vertical load](ORIGIN_BOARDING_SOURCE_ENDPOINT_LOAD01.md)
+- [Fixed endpoint surface checkpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT_SURFACE_CHECKPOINT01.md)
 
 ## Studies and history
 
