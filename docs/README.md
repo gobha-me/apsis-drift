@@ -41,6 +41,10 @@ player's station-to-flight journey.
 - [Fixed endpoint surface checkpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT_SURFACE_CHECKPOINT01.md)
 - [Partial lower-foot transfer01](ORIGIN_BOARDING_LOWER_FOOT_TRANSFER01.md): continuous kinematic/self/nominal support preparation qualifies; movement remains open; the separate surface consumer is below.
 - [Partial transfer surface sweep01](ORIGIN_BOARDING_LOWER_FOOT_TRANSFER_SURFACE_SWEEP01.md): continuous source-triangle separation qualifies using the same owned body/source/cells; material volume and actor movement remain open.
+- [Grouped supported route](ORIGIN_BOARDING_SUPPORTED_ROUTE.md) and
+  [independent-foot phase contract](ORIGIN_BOARDING_ROUTE_FOOT_PHASE01.md):
+  current development, fixed body geometry, source completion and remaining
+  supported movement checks.
 
 - [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
 
