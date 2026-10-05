@@ -9,7 +9,7 @@ This removes repeated whole-catalog validation from radius and ephemeris lookups
 It preserves the existing circular-orbit kernel, numerical operation order,
 120 Hz substeps, approach slowdown, command checks, failure atomicity and save
 versions. Public local-system queries keep their existing validation. This does
-not resolve the separate host-math compatibility work in #255.
+not resolve the separate [host-math compatibility work in #255](https://github.com/gobha-me/apsis-drift/issues/255).
 
 A local release comparison uses seed 42 in both procedural and origin systems.
 For each scale 1/4/16, initialize tick 600 at the first planet's position plus
@@ -34,3 +34,13 @@ non-target changes, error precedence, non-finite/bounded state, command and tick
 failures, mutations between calls, orbit insertion and independent compressed
 versus single-step replay. The final tests pass against both original and
 candidate implementations; full publication checks are recorded in #450.
+
+The local terminal system-flight matrix passes with both compilers. The
+intersystem, origin and onboarding matrices retain their existing reference
+failures. A controlled GCC comparison changes only the flight object among
+63 core objects: the original and optimized implementations produce identical
+intersystem non-timing fields and framebuffer bytes, and identical origin
+report and framebuffer bytes. The recovery checksum also matches the historical
+#255 finding. This establishes that these local differences predate the change;
+it does not identify the math-library cause of every origin difference. Golden
+references remain unchanged, and all eight hosted CI checks are required.
