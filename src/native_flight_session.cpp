@@ -14,6 +14,17 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<NativeStartingAssemblySelection> assembly;
+  if (auto* d = std::get_if<FreedomStartingAssemblySaveDocument>(
+          &selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Starting assembly requires Freedom"};
+    if (auto v = validate_freedom_starting_assembly_document(*d); !v)
+      return std::unexpected{v.error().detail};
+    assembly = d->starting_assembly;
+    auto journey = std::move(d->journey);
+    selected.document = std::move(journey);
+  }
   std::optional<OriginWalkerState> actor;
   if (selected.mode == NativeStartup::Mode::freedom &&
       std::holds_alternative<FreedomJourneySaveDocument>(selected.document)) {
@@ -54,6 +65,12 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
                                     std::move(selected.source_save)};
   result.docking_ = docking;
   result.actor_ = actor;
+  if (assembly) {
+    auto binding = make_native_starting_assembly_binding(*assembly);
+    if (!binding) return std::unexpected{binding.error()};
+    result.starting_assembly_ = assembly;
+    result.craft_binding_ = std::move(*binding);
+  }
   return result;
 }
 
@@ -267,6 +284,14 @@ auto NativeFreedomFlightSession::advance_walk(
       !valid)
     return std::unexpected{"Walking candidate refused: " +
                            valid.error().detail};
+  if (candidate.starting_assembly_) {
+    if (auto valid = validate_freedom_starting_assembly_document(
+            {{{candidate.document_, *candidate.docking_}, *candidate.actor_},
+             *candidate.starting_assembly_});
+        !valid)
+      return std::unexpected{"Starting assembly walking candidate refused: " +
+                             valid.error().detail};
+  }
   *this = std::move(candidate);
   return *flight;
 }
@@ -279,8 +304,11 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      actor_ ? write_freedom_journey_file_atomically(
-                   path, {{document_, *docking_}, *actor_})
+      starting_assembly_
+          ? write_freedom_starting_assembly_file_atomically(
+                path, {{{document_, *docking_}, *actor_}, *starting_assembly_})
+      : actor_ ? write_freedom_journey_file_atomically(
+                     path, {{document_, *docking_}, *actor_})
       : docking_
           ? write_freedom_docking_file_atomically(path, {document_, *docking_})
           : write_freedom_flight_file_atomically(path, document_);

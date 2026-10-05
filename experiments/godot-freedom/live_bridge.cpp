@@ -11,6 +11,7 @@
 
 #include <charconv>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <numbers>
 #include <stdexcept>
@@ -184,8 +185,20 @@ class FreedomBridge : public godot::RefCounted {
   godot::String last_error;
   std::unique_ptr<PlanetStream> stream;
   std::set<StreamKey> exported;
+  struct PendingFreedomStart {
+    std::string id;
+    std::unique_ptr<SavedFlightWorld> flight;
+    std::unique_ptr<NativeFreedomStationStart> station;
+    std::unique_ptr<PlanetStream> stream;
+  };
+  std::unique_ptr<PendingFreedomStart> pending;
+  std::uint64_t next_candidate_id{1};
 
   auto commit_freedom_start(NativeStartup selected) -> bool {
+    if (std::holds_alternative<FreedomStartingAssemblySaveDocument>(
+            selected.document))
+      throw std::invalid_argument(
+          "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomDockingSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomJourneySaveDocument>(selected.document)) {
@@ -199,6 +212,7 @@ class FreedomBridge : public godot::RefCounted {
       world.reset();
       native_start.reset();
       saved_flight = std::move(candidate);
+      pending.reset();
       last_error = godot::String{};
       return true;
     }
@@ -211,6 +225,7 @@ class FreedomBridge : public godot::RefCounted {
     world.reset();
     saved_flight.reset();
     native_start = std::move(candidate);
+    pending.reset();
     last_error = godot::String{};
     return true;
   }
@@ -225,6 +240,22 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("initialize_freedom_continue", "save_path"),
         &FreedomBridge::initialize_freedom_continue);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_new_game", "universe_seed"),
+        &FreedomBridge::stage_freedom_new_game);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_continue", "save_path"),
+        &FreedomBridge::stage_freedom_continue);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_pending_freedom_start"),
+                                &FreedomBridge::get_pending_freedom_start);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("commit_pending_freedom_start", "candidate_id"),
+        &FreedomBridge::commit_pending_freedom_start);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("discard_pending_freedom_start", "candidate_id"),
+        &FreedomBridge::discard_pending_freedom_start);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_craft_binding"),
+                                &FreedomBridge::get_freedom_craft_binding);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
                                 &FreedomBridge::get_freedom_start);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_walk_state"),
@@ -407,6 +438,189 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  static auto project_craft_binding(const NativeCraftBinding& binding)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto* selection = binding.selection();
+    result["profile"] = selection ? "wayfarer-stowed-01" : "legacy-original";
+    result["hardware_known"] = selection != nullptr;
+    result["operating_model_sha256"] =
+        selection ? godot::String{selection->operating_model_sha256.c_str()}
+                  : godot::String{"12db339e004fcfa6586f745597108a69009b6b8ebc08"
+                                  "8b5e4ff373dece656be8"};
+    result["stowed_model_sha256"] =
+        selection ? godot::String{selection->stowed_model_sha256.c_str()}
+                  : godot::String{};
+    result["frame_sha256"] =
+        selection ? godot::String{selection->frame_sha256.c_str()}
+                  : godot::String{};
+    result["contact_sha256"] =
+        selection ? godot::String{selection->contact_sha256.c_str()}
+                  : godot::String{};
+    godot::Array deltas;
+    const auto transform = [](const OperatingTransform& value) {
+      godot::Basis basis;
+      for (int i = 0; i < 3; ++i) {
+        const auto c = value.columns[static_cast<std::size_t>(i)];
+        basis.set_column(i, godot::Vector3(c.x, c.y, c.z));
+      }
+      const auto t = value.columns[3];
+      return godot::Transform3D{basis, godot::Vector3(t.x, t.y, t.z)};
+    };
+    if (const auto* pose = binding.pose())
+      for (const auto& delta : pose->craft_world_deltas)
+        deltas.append(transform(delta));
+    result["craft_world_deltas"] = deltas;
+    result["replacement_world_delta"] =
+        binding.pose() ? transform(binding.pose()->craft_world_deltas[10])
+                       : godot::Transform3D{};
+    result["operating_atlas_surface"] =
+        selection ? std::int64_t{14} : std::int64_t{18};
+    return result;
+  }
+  auto get_freedom_craft_binding() const -> godot::Dictionary {
+    if (saved_flight)
+      return project_craft_binding(saved_flight->session.craft_binding());
+    if (native_start) return project_craft_binding(NativeCraftBinding{});
+    return {};
+  }
+  auto stage_selected(NativeStartup selected) -> bool {
+    if (pending)
+      throw std::invalid_argument("A Freedom start is already pending");
+    if (next_candidate_id == std::numeric_limits<std::uint64_t>::max())
+      throw std::overflow_error("Freedom candidate identifiers exhausted");
+    auto candidate = std::make_unique<PendingFreedomStart>();
+    candidate->id = std::to_string(next_candidate_id);
+    if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomDockingSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomJourneySaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomStartingAssemblySaveDocument>(
+            selected.document)) {
+      auto opened = NativeFreedomFlightSession::open(std::move(selected));
+      if (!opened) throw std::runtime_error(opened.error());
+      const auto view = project_saved_flight(*opened);
+      candidate->flight = std::make_unique<SavedFlightWorld>(
+          SavedFlightWorld{std::move(*opened), {}, {}, 0});
+      if (project_flight_state(*candidate->flight).is_empty() ||
+          project_station_geometry(view.station).is_empty() ||
+          (candidate->flight->session.walker() &&
+           project_walk_state(*candidate->flight).is_empty()))
+        throw std::runtime_error("Pending Freedom presentation is unavailable");
+      candidate->stream = std::make_unique<PlanetStream>(view.planet, 8, 0);
+    } else {
+      auto start = prepare_native_freedom_station_start(std::move(selected));
+      if (!start) throw std::runtime_error(start.error());
+      candidate->station =
+          std::make_unique<NativeFreedomStationStart>(std::move(*start));
+      if (project_station_start(*candidate->station).is_empty() ||
+          project_station_geometry(candidate->station->station).is_empty())
+        throw std::runtime_error("Pending station presentation is unavailable");
+    }
+    pending = std::move(candidate);
+    ++next_candidate_id;
+    last_error = godot::String{};
+    return true;
+  }
+  auto stage_freedom_new_game(const godot::String& universe_seed) -> bool {
+    try {
+      if (pending)
+        throw std::invalid_argument("A Freedom start is already pending");
+      const auto utf8 = universe_seed.utf8();
+      const std::string digits{utf8.get_data(),
+                               static_cast<std::size_t>(utf8.length())};
+      Seed seed;
+      const auto read = std::from_chars(
+          digits.data(), digits.data() + digits.size(), seed.value);
+      if (digits.empty() || digits.size() > 20 ||
+          (digits.size() > 1 && digits.front() == '0') ||
+          read.ec != std::errc{} || read.ptr != digits.data() + digits.size())
+        throw std::invalid_argument("New Game requires canonical decimal seed");
+      auto selected = native_new_game(seed);
+      if (!selected) throw std::runtime_error(selected.error());
+      return stage_selected(std::move(*selected));
+    } catch (const std::exception& e) {
+      last_error = e.what();
+      return false;
+    }
+  }
+  auto stage_freedom_continue(const godot::String& save_path) -> bool {
+    try {
+      if (pending)
+        throw std::invalid_argument("A Freedom start is already pending");
+      const auto utf8 = save_path.utf8();
+      const std::string bytes{utf8.get_data(),
+                              static_cast<std::size_t>(utf8.length())};
+      const std::filesystem::path path{bytes};
+      if (bytes.empty() || bytes.size() > 4096 ||
+          bytes.find('\0') != std::string::npos || !path.is_absolute())
+        throw std::invalid_argument(
+            "Continue requires bounded absolute save path");
+      auto selected = native_continue(path);
+      if (!selected) throw std::runtime_error(selected.error());
+      return stage_selected(std::move(*selected));
+    } catch (const std::exception& e) {
+      last_error = e.what();
+      return false;
+    }
+  }
+  auto get_pending_freedom_start() const -> godot::Dictionary {
+    if (!pending) return {};
+    godot::Dictionary result;
+    result["candidate_id"] = godot::String{pending->id.c_str()};
+    result["streaming_ready"] = pending->stream != nullptr;
+    result["mode"] =
+        pending->flight ? (pending->flight->session.walker() ? "freedom_walk"
+                                                             : "freedom_flight")
+                        : "freedom";
+    result["craft_binding"] = project_craft_binding(
+        pending->flight ? pending->flight->session.craft_binding()
+                        : NativeCraftBinding{});
+    result["walk_state"] = pending->flight
+                               ? project_walk_state(*pending->flight)
+                               : godot::Dictionary{};
+    result["flight_state"] = pending->flight
+                                 ? project_flight_state(*pending->flight)
+                                 : godot::Dictionary{};
+    result["station_state"] = pending->station
+                                  ? project_station_start(*pending->station)
+                                  : godot::Dictionary{};
+    result["station_geometry"] =
+        pending->station ? project_station_geometry(pending->station->station)
+                         : project_station_geometry(generate_origin_station(
+                               pending->flight->session.document()
+                                   .origin.recipe.universe_seed));
+    return result;
+  }
+  auto matching_candidate(const godot::String& id) const -> bool {
+    const auto utf8 = id.utf8();
+    return pending &&
+           std::string_view{utf8.get_data(), static_cast<std::size_t>(
+                                                 utf8.length())} == pending->id;
+  }
+  auto commit_pending_freedom_start(const godot::String& id) -> bool {
+    if (!matching_candidate(id)) {
+      last_error = "Pending candidate identifier differs";
+      return false;
+    }
+    stream = std::move(pending->stream);
+    exported.clear();
+    world.reset();
+    saved_flight = std::move(pending->flight);
+    native_start = std::move(pending->station);
+    pending.reset();
+    last_error = godot::String{};
+    return true;
+  }
+  auto discard_pending_freedom_start(const godot::String& id) -> bool {
+    if (!matching_candidate(id)) {
+      last_error = "Pending candidate identifier differs";
+      return false;
+    }
+    pending.reset();
+    last_error = godot::String{};
+    return true;
+  }
+
   auto save_freedom_as(const godot::String& save_path) -> bool {
     try {
       if (!native_start && !saved_flight)
@@ -429,10 +643,9 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
-  auto get_freedom_start() const -> godot::Dictionary {
+  static auto project_station_start(const NativeFreedomStationStart& start)
+      -> godot::Dictionary {
     godot::Dictionary result;
-    if (!native_start) return result;
-    const auto& start = *native_start;
     const auto& save = std::get<FreedomSaveDocument>(start.selected.document);
     const auto coordinates = [](const auto& value) {
       godot::PackedFloat64Array array;
@@ -476,6 +689,11 @@ class FreedomBridge : public godot::RefCounted {
         coordinates(start.ephemeris.host_relative_velocity);
     result["station_phase_radians"] = start.ephemeris.phase_radians;
     return result;
+  }
+
+  auto get_freedom_start() const -> godot::Dictionary {
+    return native_start ? project_station_start(*native_start)
+                        : godot::Dictionary{};
   }
 
   auto advance_freedom_flight(double elapsed,
@@ -586,11 +804,12 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
-  auto get_freedom_walk_state() const -> godot::Dictionary {
+  static auto project_walk_state(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
     godot::Dictionary result;
-    if (!saved_flight || !saved_flight->session.walker()) return result;
+    if (!selected.session.walker()) return result;
     try {
-      const auto& session = saved_flight->session;
+      const auto& session = selected.session;
       const auto& actor = *session.walker();
       const auto& document = session.document();
       const auto view = project_saved_flight(session);
@@ -658,7 +877,7 @@ class FreedomBridge : public godot::RefCounted {
       result["actor_global_position_metres"] = coordinates(RigidVector3{
           ephemeris.position.x + foot.x, ephemeris.position.y + foot.y,
           ephemeris.position.z + foot.z});
-      result["dropped_seconds"] = saved_flight->dropped_seconds;
+      result["dropped_seconds"] = selected.dropped_seconds;
     } catch (const std::exception&) {
       // Read-only presentation queries do not overwrite a command refusal.
       result.clear();
@@ -666,11 +885,16 @@ class FreedomBridge : public godot::RefCounted {
     return result;
   }
 
-  auto get_freedom_flight_state() -> godot::Dictionary {
+  auto get_freedom_walk_state() const -> godot::Dictionary {
+    return saved_flight ? project_walk_state(*saved_flight)
+                        : godot::Dictionary{};
+  }
+
+  static auto project_flight_state(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
     godot::Dictionary result;
-    if (!saved_flight) return result;
     try {
-      const auto& session = saved_flight->session;
+      const auto& session = selected.session;
       const auto& document = session.document();
       const auto& body = document.flight;
       const auto view = project_saved_flight(session);
@@ -757,7 +981,7 @@ class FreedomBridge : public godot::RefCounted {
               : godot::Variant{};
       result["assistance"] = document.model.assistance;
       result["hold_enabled"] = document.model.hold.target.has_value();
-      result["dropped_seconds"] = saved_flight->dropped_seconds;
+      result["dropped_seconds"] = selected.dropped_seconds;
       result["attached"] = session.docking() && session.docking()->attached;
       result["target_port"] =
           session.docking()
@@ -788,10 +1012,9 @@ class FreedomBridge : public godot::RefCounted {
         docking["offset_body_metres"] = coordinates(offset);
       }
       result["docking"] = docking;
-      const auto force =
-          saved_flight->last_step
-              ? saved_flight->last_step->actuation.central.propulsion
-              : VacuumActuation{};
+      const auto force = selected.last_step
+                             ? selected.last_step->actuation.central.propulsion
+                             : VacuumActuation{};
       result["positive_force_body"] = coordinates(force.positive_force_newtons);
       result["negative_force_body"] = coordinates(force.negative_force_newtons);
       result["positive_torque_body"] =
@@ -815,11 +1038,15 @@ class FreedomBridge : public godot::RefCounted {
           star.x * tangent.up.x + star.y * tangent.up.y + star.z * tangent.up.z,
           -(star.x * tangent.north.x + star.y * tangent.north.y +
             star.z * tangent.north.z));
-    } catch (const std::exception& error) {
-      last_error = godot::String{error.what()};
+    } catch (const std::exception&) {
       result.clear();
     }
     return result;
+  }
+
+  auto get_freedom_flight_state() const -> godot::Dictionary {
+    return saved_flight ? project_flight_state(*saved_flight)
+                        : godot::Dictionary{};
   }
 
   auto get_wayfarer_frame() const -> godot::String {
@@ -827,14 +1054,9 @@ class FreedomBridge : public godot::RefCounted {
     return diagnostic ? godot::String{diagnostic->c_str()} : godot::String{};
   }
 
-  auto get_freedom_station_geometry() const -> godot::Dictionary {
+  static auto project_station_geometry(const OriginStationDescriptor& station)
+      -> godot::Dictionary {
     godot::Dictionary result;
-    if (!native_start && !saved_flight) return result;
-    const auto station =
-        native_start
-            ? native_start->station
-            : generate_origin_station(
-                  saved_flight->session.document().origin.recipe.universe_seed);
     const auto geometry = origin_station_geometry(station);
     if (!geometry) return result;
     const auto vector = [](RigidVector3 value) {
@@ -863,6 +1085,14 @@ class FreedomBridge : public godot::RefCounted {
     }
     result["ports"] = ports;
     return result;
+  }
+
+  auto get_freedom_station_geometry() const -> godot::Dictionary {
+    if (native_start) return project_station_geometry(native_start->station);
+    if (saved_flight)
+      return project_station_geometry(generate_origin_station(
+          saved_flight->session.document().origin.recipe.universe_seed));
+    return {};
   }
 
   auto get_sky_catalog() const -> godot::Array {
@@ -969,6 +1199,7 @@ class FreedomBridge : public godot::RefCounted {
       native_start.reset();
       saved_flight.reset();
       world = std::move(candidate);
+      pending.reset();
       last_error = godot::String{};
       return true;
     } catch (const std::exception& error) {
@@ -1382,6 +1613,13 @@ class FreedomBridge : public godot::RefCounted {
 
   auto enable_streaming() -> bool {
     try {
+      if (saved_flight && saved_flight->session.starting_assembly()) {
+        if (!stream)
+          throw std::runtime_error(
+              "Selected assembly requires staged streaming");
+        last_error = godot::String{};
+        return true;
+      }
       if (!world && !saved_flight)
         throw std::runtime_error("initialize C++ world first");
       stream =

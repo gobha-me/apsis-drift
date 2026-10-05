@@ -295,6 +295,8 @@ add_library(apsis_drift_core STATIC
   src/freedom_flight_save.cpp
   src/freedom_docking_save.cpp
   src/freedom_journey_save.cpp
+  src/freedom_starting_assembly_save.cpp
+  src/native_starting_assembly.cpp
   src/origin_walker.cpp
   src/operating_motion.cpp
   src/origin_boarding_support.cpp
@@ -552,6 +554,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME freedom-journey-save-contract COMMAND apsis-drift-freedom-journey-save-tests)
   set_tests_properties(freedom-journey-save-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-starting-assembly-save-tests test/freedom_starting_assembly_save_test.cpp)
+  target_link_libraries(apsis-drift-starting-assembly-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-starting-assembly-save-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME starting-assembly-save-contract COMMAND apsis-drift-starting-assembly-save-tests)
+  set_tests_properties(starting-assembly-save-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-freedom-docking-save-tests test/freedom_docking_save_test.cpp)
   target_link_libraries(apsis-drift-freedom-docking-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-docking-save-tests PRIVATE
