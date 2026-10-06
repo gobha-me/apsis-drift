@@ -1,0 +1,30 @@
+{
+  "schema": "apsis-drift-checkpoint-material-extension-provenance/1",
+  "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+  "source_package": "../wayfarer-operating-02",
+  "base_material_package": "../wayfarer-material-source-01",
+  "source_license": "LicenseRef-Apsis-Hopper-Meshy-Output",
+  "licenses": [
+    "../wayfarer-operating-02/licenses"
+  ],
+  "files": {
+    "completion.json": {
+      "bytes": 18777,
+      "sha256": "bbd9c53400d3d82f6bd90631178847467c9db15e297fbb42f627b6b419a9d069"
+    },
+    "geometry.bin": {
+      "path": "geometry.bin",
+      "bytes": 231972,
+      "sha256": "1bccd3451558ad0b6938ad74426746519983b59cf5d6222dd42843f849b45bb9",
+      "vertices": 3408,
+      "triangles": 5699
+    }
+  },
+  "capture_tool": "tools/boarding/checkpoint_material_extension.py",
+  "capture_helper_sha256": "b4dbd4800be1122aaf7251adc829292ef5454aba4acde6f3f21bb302e094e898",
+  "history_helper_sha256": "1ff8c7de423eeddf100f5a36e1f494225263c342e745361075dbef88c7215db1",
+  "master_unchanged": true,
+  "source_save_count": 0,
+  "material_permission": false,
+  "actor_permission": false
+}

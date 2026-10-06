@@ -73,6 +73,7 @@ jobs:
           python3 test/tools/material_inventory_test.py
           python3 test/material_source_completion_test.py
           python3 test/prepare_material_source_test.py
+          python3 test/prepare_checkpoint_material_extension_test.py
 
       - name: Check corrected-rest attribution and finite assembly proofs
         run: python3 test/wayfarer_corrected_rest_checks_test.py

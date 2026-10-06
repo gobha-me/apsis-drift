@@ -309,8 +309,29 @@ if (NOT APSIS_MATERIAL_PREPARATION_RESULT EQUAL 0)
   message(FATAL_ERROR "Complete material source preparation failed: ${APSIS_MATERIAL_PREPARATION_ERROR}")
 endif ()
 
+# Additive two-source completion: immutable public package only.
+set(APSIS_CHECKPOINT_MATERIAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/wayfarer-checkpoint-material-extension-01")
+set(APSIS_CHECKPOINT_MATERIAL_PREPARER "${CMAKE_CURRENT_SOURCE_DIR}/tools/boarding/prepare_checkpoint_material_extension.py")
+set(APSIS_CHECKPOINT_MATERIAL_PREPARED "${CMAKE_CURRENT_BINARY_DIR}/generated/origin_boarding_checkpoint_material_extension_prepared.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${APSIS_CHECKPOINT_MATERIAL_SOURCE_DIR}/completion.json"
+  "${APSIS_CHECKPOINT_MATERIAL_SOURCE_DIR}/geometry.bin"
+  "${APSIS_CHECKPOINT_MATERIAL_PREPARER}")
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" "${APSIS_CHECKPOINT_MATERIAL_PREPARER}"
+    "${APSIS_CHECKPOINT_MATERIAL_SOURCE_DIR}/completion.json"
+    "${APSIS_CHECKPOINT_MATERIAL_SOURCE_DIR}/geometry.bin"
+    "${APSIS_CHECKPOINT_MATERIAL_PREPARED}"
+  RESULT_VARIABLE APSIS_CHECKPOINT_MATERIAL_PREPARATION_RESULT
+  OUTPUT_VARIABLE APSIS_CHECKPOINT_MATERIAL_PREPARATION_OUTPUT
+  ERROR_VARIABLE APSIS_CHECKPOINT_MATERIAL_PREPARATION_ERROR)
+if (NOT APSIS_CHECKPOINT_MATERIAL_PREPARATION_RESULT EQUAL 0)
+  message(FATAL_ERROR "Checkpoint material extension preparation failed: ${APSIS_CHECKPOINT_MATERIAL_PREPARATION_ERROR}")
+endif ()
+
 add_library(apsis_drift_core STATIC
   "${APSIS_MATERIAL_PREPARED}"
+  "${APSIS_CHECKPOINT_MATERIAL_PREPARED}"
   src/celestial.cpp
   src/coordinates.cpp
   src/craft_frame.cpp
@@ -331,6 +352,7 @@ add_library(apsis_drift_core STATIC
   src/origin_boarding_route_body.cpp
   src/origin_boarding_route_foot_phase.cpp
   src/origin_boarding_initial_material.cpp
+  src/origin_boarding_checkpoint_material_extension.cpp
   src/origin_boarding_route_port_unload.cpp
   src/origin_boarding_route_checkpoint_unload.cpp
   src/origin_boarding_route_checkpoint_unload_self02.cpp
@@ -397,7 +419,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 # adds. Keep this local: legacy replay math has its own compatibility contract.
 set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_source_endpoint_surface_checkpoint.cpp src/origin_boarding_lower_foot_transfer.cpp src/origin_boarding_lower_foot_transfer_surface_sweep.cpp src/origin_boarding_planted_legs.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
-set_property(SOURCE src/origin_boarding_route_body.cpp src/origin_boarding_route_foot_phase.cpp src/origin_boarding_initial_material.cpp src/origin_boarding_route_port_unload.cpp src/origin_boarding_route_checkpoint_unload.cpp src/origin_boarding_route_checkpoint_unload_self02.cpp src/origin_boarding_route_checkpoint_world_material.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/origin_boarding_route_body.cpp src/origin_boarding_route_foot_phase.cpp src/origin_boarding_initial_material.cpp src/origin_boarding_checkpoint_material_extension.cpp src/origin_boarding_route_port_unload.cpp src/origin_boarding_route_checkpoint_unload.cpp src/origin_boarding_route_checkpoint_unload_self02.cpp src/origin_boarding_route_checkpoint_world_material.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -501,6 +523,22 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-boarding-checkpoint-material-extension-tests test/origin_boarding_checkpoint_material_extension_test.cpp)
+  target_link_libraries(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-checkpoint-material-extension-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-checkpoint-material-extension-contract COMMAND apsis-drift-boarding-checkpoint-material-extension-tests)
+  set_tests_properties(boarding-checkpoint-material-extension-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-boarding-route-checkpoint-world-material02-tests test/origin_boarding_route_checkpoint_world_material02_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-route-checkpoint-world-material02-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-checkpoint-world-material02-contract COMMAND apsis-drift-boarding-route-checkpoint-world-material02-tests)
+  set_tests_properties(boarding-route-checkpoint-world-material02-contract PROPERTIES TIMEOUT 90)
+
   add_executable(apsis-drift-boarding-route-checkpoint-world-material-tests test/origin_boarding_route_checkpoint_world_material_test.cpp)
   target_link_libraries(apsis-drift-boarding-route-checkpoint-world-material-tests PRIVATE apsis-drift::core)
   target_include_directories(apsis-drift-boarding-route-checkpoint-world-material-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
