@@ -516,3 +516,47 @@ Consumer73/raw40/six FIRST interval audits/onecreator/no extra phase poses are s
 
 <!-- END EXACT TEST MANIFEST -->
 
+
+## Measured implementation before FIRST — 2026-10-06
+
+The exact registration above remains unchanged. Both strict GCC16 and pinned
+Clang20 object/layout checks pass without running a layout executable. The
+actual Diagnostic is 1,448 bytes, Expected 1,456, Limits 120, optional case
+metadata 64, original PhaseCell 7,736, combined Summary 288 and Totals 84.
+Two Expected headers plus the one capacity-one phase allocation own 10,648
+bytes. No second phase allocation, copied report or source arena is retained.
+
+The complete original 32,768-byte graph proof is preserved. These source and
+complete physical bounds include callers, pending returns, the 4,096-byte source
+arena, the phase heap where constructed and mutable test metadata. Optimized
+stack frames do not replace the source proof; unused helper margin is separate
+from the named local, argument and pending-return inventories.
+
+| Stage | Source bytes | GCC physical bytes | Clang20 physical bytes |
+| --- | ---: | ---: | ---: |
+| Creator | 7,000 | 6,960 | 6,680 |
+| Preflight | 9,968 | 12,048 | 11,688 |
+| Source enrollment | 26,664 | 27,856 | 26,512 |
+| Phase reset | 27,224 | 27,152 | 26,776 |
+| Original graph | 43,938 | 34,360 | 33,352 |
+| Postgraph maximum | 32,864 | 28,024 | 27,512 |
+| FIRST interval audit | 26,488 | 18,520 | 18,056 |
+| Raw verification and audit | 20,800 | 8,016 | 7,744 |
+
+The creator remains below 8,192 bytes and every child stage below 49,152;
+owned output remains below 16,777,216. The raw physical row is the larger
+arithmetic-oracle stage; the smaller standalone verifier stages are also
+measured. All source factories, reset temporaries, solver and oracle lifetimes
+are staged around the original graph.
+
+Both complete native builds, pinned format20 and tidy20 across 201 translation
+units pass. All 849 original inputs and both allowed END prefixes pass; boot
+remains whole-byte unchanged. All 141 retained Godot inputs, including the
+rebuilt GCC bridge, are byte-identical. This reuses prior local evidence and
+makes no fresh visual or playable-boarding claim; fresh PR CI remains required.
+
+The source-only review and compile measurements have observed no new geometry
+outcome. All six classifications remain UNKNOWN. Numerical execution still
+requires the independently sealed actual-resource review and Root's immutable
+once-FIRST freeze. Full support/SELF/WORLD/material/HALO/route/seat/actor/save
+and First Flight remain unqualified by this diagnostic.
