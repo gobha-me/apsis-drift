@@ -404,6 +404,7 @@ add_library(apsis_drift_core STATIC
   src/origin_boarding_route_intermediate_support_self01.cpp
   src/origin_boarding_route_intermediate_hip_diagnostic01.cpp
   src/origin_boarding_route_intermediate_hip_diagnostic02.cpp
+  src/origin_boarding_intermediate_endpoint01.cpp
   src/origin_boarding_initial_material.cpp
   src/origin_boarding_checkpoint_material_extension.cpp
   src/origin_boarding_hatch_seal_material.cpp
@@ -477,6 +478,8 @@ set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_ro
 set_property(SOURCE src/origin_boarding_route_body.cpp src/origin_boarding_route_foot_phase.cpp src/origin_boarding_route_intermediate_step.cpp src/origin_boarding_route_intermediate_step02.cpp src/origin_boarding_intermediate_pause_support.cpp src/origin_boarding_intermediate_pause_envelope.cpp src/origin_boarding_intermediate_pause_support02.cpp src/origin_boarding_route_intermediate_load01.cpp src/origin_boarding_route_intermediate_unloaded01.cpp src/origin_boarding_route_intermediate_support01.cpp src/origin_boarding_route_intermediate_support_self01.cpp src/origin_boarding_route_intermediate_hip_diagnostic01.cpp src/origin_boarding_initial_material.cpp src/origin_boarding_checkpoint_material_extension.cpp src/origin_boarding_hatch_seal_material.cpp src/origin_boarding_separation_ring_material.cpp src/origin_boarding_route_port_unload.cpp src/origin_boarding_route_checkpoint_unload.cpp src/origin_boarding_route_checkpoint_unload_self02.cpp src/origin_boarding_route_checkpoint_world_material.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_route_intermediate_hip_diagnostic02.cpp APPEND PROPERTY COMPILE_OPTIONS
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
+set_property(SOURCE src/origin_boarding_intermediate_endpoint01.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -617,6 +620,16 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME boarding-route-intermediate-hip-diagnostic02-contract
     COMMAND apsis-drift-boarding-route-intermediate-hip-diagnostic02-tests)
   set_tests_properties(boarding-route-intermediate-hip-diagnostic02-contract PROPERTIES TIMEOUT 180)
+
+  add_executable(apsis-drift-boarding-intermediate-endpoint01-tests
+    test/origin_boarding_intermediate_endpoint01_test.cpp)
+  target_link_libraries(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-intermediate-endpoint01-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-intermediate-endpoint01-contract
+    COMMAND apsis-drift-boarding-intermediate-endpoint01-tests)
+  set_tests_properties(boarding-intermediate-endpoint01-contract PROPERTIES TIMEOUT 180)
 
   add_executable(apsis-drift-boarding-route-intermediate-unloaded01-tests
     test/origin_boarding_route_intermediate_unloaded01_test.cpp)
