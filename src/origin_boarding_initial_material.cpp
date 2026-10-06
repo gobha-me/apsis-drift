@@ -1162,3 +1162,359 @@ auto assess_origin_boarding_initial_material(
   return detail::boarding_initial_material_bounded(boot, source, {});
 }
 } // namespace apsis_drift
+
+// WORLD01 purpose-specific immutable access. The complete historical material
+// implementation above retains its original formulas, layout and work order.
+#include "origin_boarding_route_checkpoint_world_material_internal.hpp"
+namespace apsis_drift {
+namespace {
+using WorldContext = detail::BoardingRouteCheckpointWorldContext;
+using WorldDiagnostic = BoardingRouteCheckpointWorldMaterialDiagnostic;
+using WorldCondition = BoardingRouteCheckpointWorldCondition;
+[[gnu::noinline]] auto world_fresh_child(
+    const OriginBoardingBootSupport& boot, double first, double last,
+    const detail::BoardingRouteCheckpointWorldLimits& limits)
+    -> std::expected<
+        std::unique_ptr<BoardingRouteCheckpointUnloadSelf02Diagnostic>,
+        std::string> {
+  auto child = detail::boarding_route_checkpoint_unload_self02_bounded(
+      boot, first, last, limits.child);
+  if (!child) return std::unexpected(child.error());
+  return std::make_unique<BoardingRouteCheckpointUnloadSelf02Diagnostic>(
+      std::move(*child));
+}
+auto world_prepare_refuse(WorldDiagnostic& result, WorldCondition condition)
+    -> void {
+  result.world.complete = false;
+  result.world.first_refusal.emplace();
+  result.world.first_refusal->condition = condition;
+}
+auto world_prepare_output_bytes(const WorldDiagnostic& out) -> std::size_t {
+  auto bytes = sizeof(std::expected<WorldDiagnostic, std::string>);
+  if (out.child) {
+    bytes += sizeof(BoardingRouteCheckpointUnloadSelf02Diagnostic);
+    if (out.child->initial)
+      bytes += sizeof(BoardingSourceEndpointLoadDiagnostic);
+    bytes += out.child->cells.capacity() *
+             sizeof(BoardingRouteCheckpointUnloadSelf02Cell);
+  }
+  return bytes;
+}
+auto world_same_point_constant(const BoardingRoutePhasePointConstant& a,
+                               const BoardingRoutePhasePointConstant& b)
+    -> bool {
+  for (std::size_t i = 0; i < 3; ++i)
+    if (a.coordinates[i].count != b.coordinates[i].count ||
+        a.coordinates[i].terms != b.coordinates[i].terms)
+      return false;
+  return true;
+}
+auto world_same_control(const BoardingRouteFootPhaseRequest& a,
+                        const BoardingRouteFootPhaseRequest& b) -> bool {
+  if (a.root_yaw_half != b.root_yaw_half ||
+      a.torso_lean_half != b.torso_lean_half ||
+      a.port_reaction_fraction != b.port_reaction_fraction ||
+      a.seconds_per_parameter != b.seconds_per_parameter)
+    return false;
+  for (std::size_t side = 0; side < 2; ++side) {
+    if (!world_same_point_constant(a.root[side], b.root[side]) ||
+        a.feet[side].yaw_half != b.feet[side].yaw_half ||
+        a.feet[side].swing_height_metres != b.feet[side].swing_height_metres)
+      return false;
+    for (std::size_t endpoint = 0; endpoint < 2; ++endpoint)
+      if (!world_same_point_constant(a.feet[side].sole[endpoint],
+                                     b.feet[side].sole[endpoint]))
+        return false;
+  }
+  return true;
+}
+auto world_same_part(const BoardingRoutePhasePartBinding& a,
+                     const BoardingRoutePhasePartBinding& b) -> bool {
+  if (a.id != b.id || a.mass.first != b.mass.first ||
+      a.mass.second != b.mass.second || a.mass.weight != b.mass.weight ||
+      a.reservation.index() != b.reservation.index())
+    return false;
+  if (const auto* box =
+          std::get_if<BoardingRoutePhaseBoxBinding>(&a.reservation)) {
+    const auto* expected =
+        std::get_if<BoardingRoutePhaseBoxBinding>(&b.reservation);
+    return expected && box->center == expected->center &&
+           box->frame == expected->frame &&
+           box->half_size_metres == expected->half_size_metres;
+  }
+  const auto& c = std::get<BoardingPlantedBodyCapsuleBinding>(a.reservation);
+  const auto& expected =
+      std::get<BoardingPlantedBodyCapsuleBinding>(b.reservation);
+  return c.start == expected.start && c.end == expected.end &&
+         c.radius_metres == expected.radius_metres;
+}
+auto world_child_definition(
+    const BoardingRouteCheckpointUnloadSelf02Diagnostic& child, double first,
+    double last) -> bool {
+  if (child.self_policy_version !=
+          kBoardingRouteCheckpointUnloadSelf02Version ||
+      child.unload_version != kBoardingRouteCheckpointUnloadVersion ||
+      child.requested_first != first || child.requested_last != last ||
+      child.cells.size() > 1024)
+    return false;
+  for (std::size_t phase = 0; phase < 3; ++phase) {
+    const auto expected =
+        detail::boarding_route_checkpoint_unload_controls(phase);
+    if (!expected || !world_same_control(child.controls[phase], *expected))
+      return false;
+  }
+  const auto expected_parts = detail::boarding_route_foot_phase_parts();
+  for (std::size_t part = 0; part < 15; ++part)
+    if (!world_same_part(child.parts[part], expected_parts[part])) return false;
+  auto next = std::min(first, last);
+  for (const auto& cell : child.cells) {
+    const auto a = cell.global_first, b = cell.global_last;
+    const auto phase = a < .25 && b <= .25 ? 0U : a < .5 && b <= .5 ? 1U : 2U;
+    const auto local = [&](double g) {
+      return phase == 0 ? 4 * g : phase == 1 ? 4 * g - 1 : 2 * g - 1;
+    };
+    if (a != next || a > b || (a < .25 && b > .25) || (a < .5 && b > .5) ||
+        cell.phase_index != phase || cell.assessment.phase.first != local(a) ||
+        cell.assessment.phase.last != local(b))
+      return false;
+    next = b;
+  }
+  return next == std::max(first, last);
+}
+} // namespace
+namespace detail {
+auto BoardingRouteCheckpointWorldMaterialAccess::valid(const WorldContext& c)
+    -> bool {
+  return c.owner_ && c.child_ && c.material_ && c.cell_data_ &&
+         c.cell_count_ != 0 && c.owner_->child.get() == c.child_ &&
+         BoardingInitialMaterialAccess::data(c.owner_->source) == c.material_ &&
+         c.child_->initial && c.child_->cells.data() == c.cell_data_ &&
+         c.child_->cells.size() == c.cell_count_ &&
+         c.child_->self_policy_version ==
+             kBoardingRouteCheckpointUnloadSelf02Version &&
+         c.child_->unload_version == kBoardingRouteCheckpointUnloadVersion;
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::source_count(
+    const WorldContext& c) -> std::size_t {
+  return valid(c) ? c.material_->prepared.sources.size() : 0;
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::source(const WorldContext& c,
+                                                        std::size_t index)
+    -> const MaterialSourceRecord* {
+  return valid(c) && index < c.material_->prepared.sources.size()
+             ? &c.material_->prepared.sources[index]
+             : nullptr;
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::envelope(const WorldContext& c,
+                                                          std::size_t index)
+    -> std::optional<Bounds> {
+  if (!valid(c) || index >= c.material_->prepared.sources.size() ||
+      c.material_->prepared.sources[index].removed)
+    return {};
+  return c.material_->envelopes[index];
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::triangle_count(
+    const WorldContext& c, std::size_t index) -> std::size_t {
+  const auto* r = source(c, index);
+  if (!r || r->removed || r->relation != Relation::shell_sheet || r->mesh < 0 ||
+      static_cast<std::size_t>(r->mesh) >= c.material_->prepared.meshes.size())
+    return 0;
+  return c.material_->prepared.meshes[static_cast<std::size_t>(r->mesh)]
+      .triangles.size();
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::triangle(const WorldContext& c,
+                                                          std::size_t index,
+                                                          std::size_t ordinal,
+                                                          bool& collapsed)
+    -> std::expected<std::array<Vec, 3>, std::string> {
+  collapsed = false;
+  if (ordinal >= triangle_count(c, index))
+    return std::unexpected(
+        "WORLD original material triangle identity required");
+  const auto& r = c.material_->prepared.sources[index];
+  const auto& mesh =
+      c.material_->prepared.meshes[static_cast<std::size_t>(r.mesh)];
+  const auto& ids = mesh.triangles[ordinal].vertices;
+  for (const auto id : ids)
+    if (id >= mesh.quantized_vertices.size())
+      return std::unexpected(
+          "WORLD original material vertex identity required");
+  const auto &a = mesh.quantized_vertices[ids[0]],
+             &b = mesh.quantized_vertices[ids[1]],
+             &d = mesh.quantized_vertices[ids[2]];
+  collapsed = a.value == b.value || b.value == d.value || d.value == a.value;
+  return std::array{qpoint(a), qpoint(b), qpoint(d)};
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::encloser_count(
+    const WorldContext& c, std::size_t index) -> std::size_t {
+  const auto* r = source(c, index);
+  if (!r || r->removed) return 0;
+  if (r->relation == Relation::service_enclosure)
+    return static_cast<std::size_t>(
+        std::ranges::count_if(c.material_->segments, [&](const auto& s) {
+          return s.source == index;
+        }));
+  if (r->relation == Relation::support_enclosure)
+    return static_cast<std::size_t>(
+        std::ranges::count_if(c.material_->supports, [&](const auto& s) {
+          return s.source == index;
+        }));
+  return 0;
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::enclosure(
+    const WorldContext& c, std::size_t index, std::size_t ordinal,
+    const BoardingRouteCheckpointWorldProxy& proxy, std::size_t axes)
+    -> std::expected<Evidence, std::string> {
+  const auto* r = source(c, index);
+  if (!r || r->removed || !proxy.original_world_identity ||
+      !proxy.arithmetic_supported || axes > 16)
+    return std::unexpected(
+        "WORLD original material enclosure binding required");
+  if (r->relation == Relation::service_enclosure) {
+    for (const auto& s : c.material_->segments)
+      if (s.source == index) {
+        if (ordinal-- == 0)
+          return initial_material_capsule_math(proxy.solid, 0, s.first,
+                                               s.second, s.radius, axes);
+      }
+  } else if (r->relation == Relation::support_enclosure) {
+    for (const auto& s : c.material_->supports)
+      if (s.source == index) {
+        if (ordinal-- == 0)
+          return initial_material_primitive_math(proxy.solid, 0, s.planes,
+                                                 axes);
+      }
+  }
+  return std::unexpected("WORLD selected finite constructor ordinal required");
+}
+auto BoardingRouteCheckpointWorldMaterialAccess::sole_volume_clear(
+    const WorldContext& c, std::size_t part, std::size_t index) -> bool {
+  if (!valid(c) || (part != 5 && part != 11)) return false;
+  const auto side = part == 5 ? 0U : 1U;
+  const auto* r = source(c, index);
+  return r && r->relation == Relation::support_enclosure &&
+         c.sole_sources_[side] == index && c.sole_object_clear_[side];
+}
+auto prepare_boarding_route_checkpoint_world(
+    const OriginBoardingBootSupport& boot,
+    const OriginBoardingInitialMaterial& material, double first, double last,
+    const BoardingRouteCheckpointWorldLimits& limits, WorldDiagnostic& out)
+    -> std::expected<WorldContext, std::string> {
+  out.world = {};
+  out.world.output_capacity_bytes = world_prepare_output_bytes(out);
+  if (!boarding_route_checkpoint_world_limits_valid(limits) ||
+      !std::isfinite(first) || !std::isfinite(last) || first < 0 || first > 1 ||
+      last < 0 || last > 1)
+    return std::unexpected(
+        "WORLD lowered registered capacities and endpoints required");
+  constexpr std::size_t fixed =
+      sizeof(std::expected<WorldDiagnostic, std::string>) +
+      sizeof(BoardingRouteCheckpointUnloadSelf02Diagnostic) +
+      sizeof(BoardingSourceEndpointLoadDiagnostic);
+  const auto reserve = first == last
+                           ? std::min(std::size_t{1}, limits.child.phase.leaves)
+                           : limits.child.phase.leaves;
+  if (fixed > limits.output_bytes ||
+      reserve > (limits.output_bytes - fixed) /
+                    sizeof(BoardingRouteCheckpointUnloadSelf02Cell)) {
+    world_prepare_refuse(out, WorldCondition::output_capacity);
+    return std::unexpected(
+        "WORLD owned output capacity before child allocation");
+  }
+  const auto* data = BoardingInitialMaterialAccess::data(material);
+  if (!data || BoardingInitialMaterialAccess::data(out.source) != data ||
+      out.child)
+    return std::unexpected(
+        "WORLD fresh output and retained immutable material required");
+  auto fresh = world_fresh_child(boot, first, last, limits);
+  if (!fresh) return std::unexpected(fresh.error());
+  out.child = std::move(*fresh);
+  out.world.output_capacity_bytes = world_prepare_output_bytes(out);
+  out.world.source = data->summary;
+  out.world.arithmetic_supported = environment();
+  if (!out.world.arithmetic_supported) {
+    world_prepare_refuse(out, WorldCondition::unsupported_arithmetic);
+    return std::unexpected("WORLD arithmetic unsupported");
+  }
+  if (!out.child->complete || !out.child->initial || out.child->cells.empty()) {
+    world_prepare_refuse(out, WorldCondition::child_prerequisite);
+    return std::unexpected("WORLD complete original Self02 cover required");
+  }
+  if (!world_child_definition(*out.child, first, last)) {
+    world_prepare_refuse(out, WorldCondition::invalid_binding);
+    return std::unexpected(
+        "WORLD original fixed controls/body/shared cover required");
+  }
+  const auto& e = out.child->initial->self.endpoint;
+  const auto* contact = e.sites.source.contact();
+  const auto* selected = data->binding.contact();
+  if (!contact || !selected ||
+      contact->original_geometry() != selected->original_geometry() ||
+      contact->stowed_partition() != selected->stowed_partition() ||
+      !data->binding.selection() ||
+      data->binding.selection()->hardware != OperatingProgress{1, 1, 1, 0}) {
+    world_prepare_refuse(out, WorldCondition::invalid_binding);
+    return std::unexpected(
+        "WORLD original source/removal/owner binding required");
+  }
+  WorldContext context(out, data);
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& leg = e.legs[side];
+    const auto& pressure = out.child->initial->load.pressures[side];
+    if (!leg.plane_identity ||
+        leg.boot_center_y_terms != std::array{leg.plane_metres, .05, -.847} ||
+        !pressure.complete || !e.sites.sites[side].source_partition ||
+        pressure.source_partition != e.sites.sites[side].source_partition) {
+      world_prepare_refuse(out, WorldCondition::invalid_binding);
+      return std::unexpected(
+          "WORLD unchanged initial sole expression required");
+    }
+    context.sole_planes_[side] = leg.plane_metres;
+    context.sole_sources_[side] = data->prepared.sources.size();
+    const auto key = pressure.source_keys[0];
+    for (const auto& support : data->supports) {
+      const auto& r = data->prepared.sources[support.source];
+      if (key.buffer != LowerCockpitContactBuffer::original ||
+          key.group != static_cast<std::uint32_t>(r.original_group) ||
+          key.triangle < r.original_start ||
+          key.triangle - r.original_start >= r.original_count)
+        continue;
+      if (r.mesh < 0 ||
+          static_cast<std::size_t>(r.mesh) >= data->prepared.meshes.size()) {
+        world_prepare_refuse(out, WorldCondition::source_identity);
+        return std::unexpected("WORLD selected complete support mesh required");
+      }
+      const auto& mesh =
+          data->prepared.meshes[static_cast<std::size_t>(r.mesh)];
+      if (mesh.quantized_vertices.size() != 96) {
+        world_prepare_refuse(out, WorldCondition::source_identity);
+        return std::unexpected("WORLD pinned support96 vertices required");
+      }
+      context.sole_sources_[side] = support.source;
+      context.sole_object_clear_[side] = true;
+      for (const auto& q : mesh.quantized_vertices) {
+        if (out.world.work.sole_vertex_guards >= limits.sole_vertex_guards) {
+          world_prepare_refuse(out, WorldCondition::sole_guard_capacity);
+          return std::unexpected("WORLD sole full-source vertex capacity");
+        }
+        ++out.world.work.sole_vertex_guards;
+        context.sole_object_clear_[side] &= qpoint(q).y <= leg.plane_metres;
+      }
+      break;
+    }
+    if (context.sole_sources_[side] == data->prepared.sources.size()) {
+      world_prepare_refuse(out, WorldCondition::invalid_binding);
+      return std::unexpected("WORLD original complete support owner required");
+    }
+  }
+  out.world.bindings_complete = true;
+  out.world.source_complete =
+      data->summary.bindings_complete && data->summary.constructors_complete;
+  if (!out.world.source_complete) {
+    world_prepare_refuse(out, WorldCondition::source_identity);
+    return std::unexpected("WORLD immutable constructor completeness required");
+  }
+  return context;
+}
+} // namespace detail
+} // namespace apsis_drift

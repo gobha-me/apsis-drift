@@ -1144,3 +1144,25 @@ auto boarding_lower_foot_transfer_surface_union_bounds_math(const Solid& solid,
 }
 } // namespace detail
 } // namespace apsis_drift
+
+namespace apsis_drift::detail {
+// This additional arithmetic entry retains the old pair kernel and its false
+// authority flags. Only source-coordinate admission differs from the original
+// bounded fixture entry; body/common/axis and safe-environment guards stay.
+auto boarding_checkpoint_world_finite_triangle_pair_math(
+    const Solid& solid, double common_y, const std::array<Vec, 3>& triangle,
+    std::size_t max_axes) -> std::expected<Pair, std::string> {
+  static_assert(sizeof(Workspace) + nested_scratch + sizeof(Pair) +
+                    sizeof(Solid) + sizeof(std::array<Vec, 3>) + 512 <=
+                4096);
+  if (!valid_solid(solid) || !bounded(common_y) || !finite_triangle(triangle) ||
+      max_axes > kBoardingSourceEndpointSurfaceMaximumAxes)
+    return std::unexpected("WORLD pair bounded body/common, finite source "
+                           "triangle and axes<=16 required");
+  if (!environment_supported()) return Pair{};
+  Workspace work;
+  work.part = numeric_part(solid); // No source or sole permission from numbers.
+  if (!enclosing_bounds(work, common_y)) return Pair{};
+  return pair_certificate(work, common_y, triangle, max_axes);
+}
+} // namespace apsis_drift::detail

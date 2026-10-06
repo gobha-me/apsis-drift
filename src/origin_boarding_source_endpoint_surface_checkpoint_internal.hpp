@@ -57,3 +57,15 @@ struct BoardingSourceEndpointSurfaceCheckpointSoleMathEvidence {
     -> std::expected<BoardingSourceEndpointSurfaceCheckpointSoleMathEvidence,
                      std::string>;
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+// Arithmetic-only bridge for finite authored source triangles beyond the old
+// fixture workspace. It enrolls neither a source, a body nor a sole. The WORLD
+// controller binds actual source occurrences and an authenticated child first.
+[[nodiscard]] auto boarding_checkpoint_world_finite_triangle_pair_math(
+    const BoardingSourceEndpointSurfaceCheckpointSolidBounds&, double common_y,
+    const std::array<RigidVector3, 3>& triangle,
+    std::size_t max_axes = kBoardingSourceEndpointSurfaceMaximumAxes)
+    -> std::expected<BoardingSourceEndpointSurfaceCheckpointPairMathEvidence,
+                     std::string>;
+} // namespace apsis_drift::detail
