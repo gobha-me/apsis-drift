@@ -342,3 +342,37 @@ fixture input, consumer roster, physical pose roster or resource ceiling. The
 original schema/manifest identities remain historical registrations; the exact
 operation counts above supersede their omitted gap-subtraction bookkeeping.
 The final public document identity must be recorded in the FIRST freeze.
+
+## Measured implementation before FIRST
+
+The implemented layouts, measured by object-only GCC and pinned Clang20 probes,
+are Diagnostic1512, Expected1520, Cell8888 (old PhaseCell7736; delta1152),
+Limits144, Refusal248, private AdmissionContext32 and private CurrentToken40
+bytes. The controller owns one staged Request680; its possible optional return
+is separately charged at688. GeometryInput168 and GeometryMath568 remain
+arithmetic-only. The compact test Summary336 contains both Baseline168 records;
+Totals112 and each Oracle8400 are measured separately. No numerical path ran to
+obtain these sizes.
+
+| Entire operation | Source bound (bytes) | GCC / Clang20 machine bound (bytes) | Ceiling (bytes) |
+| --- | ---: | ---: | ---: |
+| Original source creator, including one4096 arena and caller | 7000 | 6896 / 6632 | 8192 |
+| Shared-cover graph, including all controllers/callers/pending returns | 45776 | 37552 / 37160 | 49152 |
+| Fixed FIRST body corroboration, including two possible8400 Oracle records | 37144 | 32576 / 31552 | 49152 |
+| Raw geometry, including retained source arena/caller/pending returns | 14080 | at most12288 /12288 | 16384 |
+
+The sequential pregraph/catalog stage is bounded at24576, reset at29384 and
+postgraph projection/pressure/events at26680 source bytes. The last figure
+explicitly reserves a6144 canonical-factory pool with five optional request
+return/local slots, followed sequentially by the4096 pressure helper pool.
+Neither is co-live with the graph. One reserved cover owns at most
+`2*1520 + 1024*8888 = 9104352` bytes, below the16777216 ceiling; actual vector
+capacity is checked and no growth is allowed. No old proof/caller slack is
+subtracted and no return-elision assumption is needed. The complete old input
+prefixes and all837 pins remain unchanged except their declared end-only helpers.
+
+FIRST outcomes are still UNKNOWN here. Root must freeze the exact source,
+binaries, this document and final independent/resource/build/lint receipts
+before executing the registered finite roster. These measurements qualify
+storage and authority boundaries; they grant no motion/contact/WORLD/actor
+or First Flight success.

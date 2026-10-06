@@ -2650,3 +2650,728 @@ namespace apsis_drift {
   return d.state;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_unloaded01_internal.hpp"
+namespace apsis_drift {
+namespace {
+using UD = BoardingRouteIntermediateUnloaded01Diagnostic;
+using UC = BoardingRouteIntermediateUnloaded01Cell;
+using UR = BoardingRouteIntermediateUnloaded01Refusal;
+using UL = detail::BoardingRouteIntermediateUnloaded01Limits;
+using UW = BoardingRouteIntermediateUnloaded01Condition;
+using US = BoardingRouteIntermediateUnloaded01State;
+using UB = BoardingFootSiteScalarBounds;
+using UA = detail::BoardingIntermediatePauseSupportAccess;
+using UP = BoardingPlantedBodyPointId;
+using UClass = BoardingRouteIntermediateUnloaded01UpperClass;
+using GM = detail::BoardingRouteIntermediateUnloaded01GeometryMode;
+auto u_valid(UB b, double domain = 8) -> bool {
+  return b.supported && std::isfinite(b.lower) && std::isfinite(b.upper) &&
+         b.lower <= b.upper && std::abs(b.lower) <= domain &&
+         std::abs(b.upper) <= domain;
+}
+auto u_interval(UB b) -> Interval {
+  return {b.lower, b.upper};
+}
+auto u_bounds(Interval b) -> UB {
+  bool supported = true;
+  return site_bounds(b, supported);
+}
+auto u_hard(UW w) -> bool {
+  return w == UW::pressure_capacity || w == UW::edge_capacity ||
+         w == UW::event_guard_capacity || w == UW::upper_edge_capacity ||
+         w == UW::source_coordinate_capacity ||
+         w == UW::endpoint_operation_capacity || w == UW::definition_capacity;
+}
+auto u_refuse(UD& d, UR& r, UW w, UB b = {},
+              std::optional<std::size_t> edge = {}, bool source = false)
+    -> bool {
+  if (r.condition == UW::none) {
+    r.condition = r.predicate_condition = w;
+    r.limiting_bound = b;
+    r.edge = edge;
+    r.side =
+        source ? std::optional<std::size_t>{0} : std::optional<std::size_t>{1};
+    r.source_edge = source;
+  }
+  if (u_hard(w) || w == UW::unsupported_arithmetic) {
+    d.stop_condition = w;
+    d.state = u_hard(w) ? US::capacity : US::unsupported;
+    if (w == UW::unsupported_arithmetic) d.arithmetic_supported = false;
+  } else
+    d.state = US::unresolved;
+  return false;
+}
+auto u_charge(UD& d, UR& r, std::size_t& n, std::size_t cap, UW w) -> bool {
+  if (n >= cap) return u_refuse(d, r, w);
+  ++n;
+  return true;
+}
+template <class F>
+auto u_guard(UD& d, UC& c, const UL& l, UR& r, F f, UW w) -> bool {
+  return detail::boarding_route_intermediate_unloaded01_definition_charge(
+             d, c, l, r) &&
+         (f() || u_refuse(d, r, w));
+}
+// A strict point-side proof is not a zero-radius pressure-disk query.
+auto u_signed_side(Point a, Point b, Point center, bool& supported) -> UB {
+  return site_bounds(edge_side(a, b, center), supported);
+}
+template <class Charge>
+auto u_sides(const std::array<Vec, 4>& quad, Point center, Charge charge,
+             std::array<bool, 4>& mask, UB& minimum,
+             std::array<UB, 4>* saved = nullptr) -> bool {
+  bool supported = true;
+  for (std::size_t e = 0; e < 4; ++e) {
+    if (!charge(e)) return false;
+    mask[e] = true;
+    const auto b = u_signed_side(wide(quad[e]), wide(quad[(e + 1) % 4]), center,
+                                 supported);
+    if (saved) (*saved)[e] = b;
+    if (!supported) return false;
+    minimum = e == 0 ? b
+                     : UB{std::min(minimum.lower, b.lower),
+                          std::min(minimum.upper, b.upper), true};
+  }
+  return true;
+}
+template <class Op, class Coord>
+auto u_overlap(const std::array<Vec, 4>& quad, Point center, Op op,
+               Coord coordinate, std::array<std::array<UB, 2>, 2>& intersection,
+               std::array<bool, 2>& positive,
+               std::array<std::array<UB, 2>, 2>* sole_saved = nullptr,
+               std::array<std::array<UB, 2>, 2>* source_saved = nullptr)
+    -> bool {
+  std::array<std::array<UB, 2>, 2> sole, source;
+  for (std::size_t a = 0; a < 2; ++a)
+    for (std::size_t k = 0; k < 2; ++k) {
+      if (!op()) return false;
+      sole[a][k] =
+          u_bounds(add(a == 0 ? center.x : center.z,
+                       point((k == 0 ? -1 : 1) * (a == 0 ? .06 : .14))));
+      if (!u_valid(sole[a][k], 32)) return false;
+    }
+  for (std::size_t v = 0; v < 4; ++v)
+    for (std::size_t a = 0; a < 2; ++a) {
+      if (!coordinate(v, a)) return false;
+      const auto x = a == 0 ? quad[v].x : quad[v].z;
+      if (!std::isfinite(x) || std::abs(x) > 8) return false;
+      const UB b{x, x, true};
+      if (v == 0)
+        source[a] = {b, b};
+      else {
+        source[a][0] = {std::min(source[a][0].lower, x),
+                        std::min(source[a][0].upper, x), true};
+        source[a][1] = {std::max(source[a][1].lower, x),
+                        std::max(source[a][1].upper, x), true};
+      }
+    }
+  for (std::size_t a = 0; a < 2; ++a)
+    for (std::size_t k = 0; k < 2; ++k) {
+      if (!op()) return false;
+      intersection[a][k] =
+          k == 0 ? UB{std::max(sole[a][0].lower, source[a][0].lower),
+                      std::max(sole[a][0].upper, source[a][0].upper), true}
+                 : UB{std::min(sole[a][1].lower, source[a][1].lower),
+                      std::min(sole[a][1].upper, source[a][1].upper), true};
+      if (!u_valid(intersection[a][k], 32)) return false;
+    }
+  for (std::size_t a = 0; a < 2; ++a)
+    positive[a] = intersection[a][0].upper < intersection[a][1].lower;
+  if (sole_saved) *sole_saved = sole;
+  if (source_saved) *source_saved = source;
+  return true;
+}
+auto u_quad(const std::array<Vec, 4>& q, double plane, bool rectangle) -> bool {
+  if (!std::isfinite(plane) || std::abs(plane) > 8) return false;
+  for (const auto& p : q)
+    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
+        std::abs(p.x) > 8 || std::abs(p.z) > 8 || p.y != plane)
+      return false;
+  for (std::size_t e = 0; e < 4; ++e) {
+    const auto side =
+        edge_side(wide(q[e]), wide(q[(e + 1) % 4]), wide(q[(e + 2) % 4]));
+    if (!finite(side) || side.low <= 0) return false;
+  }
+  return !rectangle ||
+         (q[0].z == q[1].z && q[1].x == q[2].x && q[2].z == q[3].z &&
+          q[3].x == q[0].x && q[0].x > q[1].x && q[0].z < q[3].z);
+}
+auto u_min_z(const std::array<Vec, 4>& q) -> double {
+  double z = q[0].z;
+  for (std::size_t i = 1; i < 4; ++i)
+    z = std::min(z, q[i].z);
+  return z;
+}
+auto u_contains(const UC& c, double g) -> bool {
+  return c.global_first <= g && c.global_last >= g;
+}
+template <class Op>
+auto u_endpoint(const BoardingRoutePhasePointConstant& endpoint, Op op,
+                Point& center, Interval& y) -> bool {
+  for (std::size_t a = 0; a < 3; ++a) {
+    const auto& e = endpoint.coordinates[a];
+    if (e.count == 0 || e.count > 3) return false;
+    Interval sum = point(e.terms[0]);
+    for (std::size_t i = 1; i < e.count; ++i) {
+      if (!op()) return false;
+      sum = add(sum, point(e.terms[i]));
+    }
+    if (a == 0)
+      center.x = sum;
+    else if (a == 2)
+      center.z = sum;
+    else {
+      if (!op()) return false;
+      y = add(sum, point(.05));
+    }
+    if (!finite(sum)) return false;
+  }
+  return finite(center.x) && finite(center.z) && finite(y);
+}
+auto u_consistent(Point center, Interval y,
+                  const BoardingPlantedLegPointBounds& actual) -> bool {
+  return center.x.low <= actual.upper.x && center.x.high >= actual.lower.x &&
+         center.z.low <= actual.upper.z && center.z.high >= actual.lower.z &&
+         y.low <= actual.upper.y && y.high >= actual.lower.y;
+}
+} // namespace
+[[gnu::noinline]] auto detail::
+    boarding_route_intermediate_unloaded01_geometry_math(
+        const BoardingRouteIntermediateUnloaded01GeometryInput& i,
+        BoardingRouteIntermediateUnloaded01GeometryLimits l)
+        -> BoardingRouteIntermediateUnloaded01GeometryMath {
+  BoardingRouteIntermediateUnloaded01GeometryMath r;
+  r.mode = i.mode;
+  r.center_xz = i.center_xz;
+  using Mode = BoardingRouteIntermediateUnloaded01GeometryMode;
+  const auto reject = [&](UW w, US s) {
+    r.condition = w;
+    r.state = s;
+  };
+  if (l.upper_edges > 8 || l.source_coordinates > 8 || l.operations > 12 ||
+      static_cast<std::size_t>(i.mode) > 3) {
+    reject(UW::invalid_limits, US::unresolved);
+    return r;
+  }
+  ++r.work.validation_guards;
+  r.input_validation_evaluated[0] = true;
+  if (!boarding_route_foot_phase_environment()) {
+    reject(UW::unsupported_arithmetic, US::unsupported);
+    return r;
+  }
+  r.arithmetic_supported = true;
+  ++r.work.validation_guards;
+  r.input_validation_evaluated[1] = true;
+  if (!u_quad(i.source_vertices, i.source_plane,
+              i.mode == Mode::intermediate_overlap)) {
+    reject(UW::source_rectangle, US::unresolved);
+    return r;
+  }
+  ++r.work.validation_guards;
+  r.input_validation_evaluated[2] = true;
+  if (!u_valid(i.center_xz[0]) || !u_valid(i.center_xz[1]) ||
+      !std::isfinite(i.sole_plane) || std::abs(i.sole_plane) > 8 ||
+      i.sole_plane != i.source_plane) {
+    reject(UW::sole_plane, US::unresolved);
+    return r;
+  }
+  r.input_validated = true;
+  const auto op = [&]() {
+    if (r.work.operations >= l.operations) {
+      reject(UW::endpoint_operation_capacity, US::capacity);
+      return false;
+    }
+    r.operation_evaluated[r.work.operations++] = true;
+    return true;
+  };
+  const auto coordinate = [&](std::size_t v, std::size_t a) {
+    if (r.work.source_coordinates >= l.source_coordinates) {
+      reject(UW::source_coordinate_capacity, US::capacity);
+      return false;
+    }
+    ++r.work.source_coordinates;
+    r.source_coordinate_evaluated[2 * v + a] = true;
+    return true;
+  };
+  const auto edge = [&](std::size_t) {
+    if (r.work.upper_edges >= l.upper_edges) {
+      reject(UW::upper_edge_capacity, US::capacity);
+      return false;
+    }
+    ++r.work.upper_edges;
+    return true;
+  };
+  const Point center{u_interval(i.center_xz[0]), u_interval(i.center_xz[1])};
+  if (i.mode == Mode::intermediate_overlap) {
+    if (!u_overlap(i.source_vertices, center, op, coordinate, r.intersection,
+                   r.positive_overlap, &r.sole_extrema, &r.source_extrema)) {
+      if (r.condition == UW::none)
+        reject(UW::unsupported_arithmetic, US::unsupported);
+      return r;
+    }
+    r.complete = r.positive_overlap[0] && r.positive_overlap[1];
+    r.state = r.complete ? US::accepted : US::unresolved;
+    if (!r.complete) r.condition = UW::endpoint_overlap;
+    return r;
+  }
+  if (i.mode != Mode::upper_departure) {
+    if (!u_sides(i.source_vertices, center, edge, r.side_evaluated,
+                 r.minimum_signed_side, &r.signed_sides)) {
+      if (r.condition == UW::none)
+        reject(UW::unsupported_arithmetic, US::unsupported);
+      return r;
+    }
+    if (r.minimum_signed_side.lower > 0) {
+      r.complete = true;
+      r.state = US::accepted;
+      r.classification = UClass::strict_center_overlap;
+      return r;
+    }
+    if (i.mode == Mode::upper_point) {
+      r.state = r.minimum_signed_side.upper <= 0 ? US::witness_refused
+                                                 : US::unresolved;
+      r.condition = UW::upper_start_witness;
+      return r;
+    }
+  }
+  if (!op()) return r;
+  const auto maximum = u_bounds(add(center.z, point(.14)));
+  if (!u_valid(maximum, 32)) {
+    reject(UW::unsupported_arithmetic, US::unsupported);
+    return r;
+  }
+  const auto minimum = u_min_z(i.source_vertices);
+  if (!op()) return r;
+  r.departure_gap = u_bounds(subtract(point(minimum), u_interval(maximum)));
+  if (!u_valid(r.departure_gap, 32)) {
+    reject(UW::unsupported_arithmetic, US::unsupported);
+    return r;
+  }
+  const bool disjoint = maximum.upper < minimum;
+  if (i.mode == Mode::upper_cell) {
+    r.complete = true;
+    r.state = US::accepted;
+    r.classification = disjoint ? UClass::strict_Z_disjoint
+                                : UClass::mixed_possible_transition;
+  } else {
+    r.complete = disjoint;
+    r.state = disjoint ? US::accepted : US::unresolved;
+    r.condition = disjoint ? UW::none : UW::upper_departure;
+    r.classification = disjoint ? UClass::strict_Z_disjoint
+                                : UClass::mixed_possible_transition;
+  }
+  return r;
+}
+[[gnu::noinline]] auto detail::
+    boarding_route_intermediate_unloaded01_pressure_bridge(
+        const BoardingRouteIntermediateUnloaded01CurrentCellToken& token, UD& d,
+        UC& c, const UL& l, UR& r) -> US {
+  const auto* ctx = token.context_;
+  if (!ctx || ctx->owner_ != &d || token.owner_ != &d || token.cell_ != &c ||
+      token.request_ != ctx->request_ || ctx->parts_ != &d.parts ||
+      !UA::valid(d.source) || ctx->data_ != UA::data(d.source) ||
+      token.data_ != ctx->data_) {
+    u_refuse(d, r, UW::invalid_binding);
+    return d.state;
+  }
+  const auto& request = *token.request_;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            return u_charge(d, r, d.work.pressure_candidates,
+                            l.pressure_candidates, UW::pressure_capacity);
+          },
+          UW::pressure_capacity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            const auto& v = c.phase.center_of_mass.value;
+            c.com_xz = {UB{v.lower.x, v.upper.x, true},
+                        UB{v.lower.z, v.upper.z, true}};
+            return u_valid(c.com_xz[0]) && u_valid(c.com_xz[1]);
+          },
+          UW::unsupported_arithmetic))
+    return d.state;
+  Point starcenter;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            const auto& v =
+                c.phase
+                    .points[static_cast<std::size_t>(UP::starboard_boot_center)]
+                    .value;
+            starcenter = {{v.lower.x, v.upper.x}, {v.lower.z, v.upper.z}};
+            return u_valid(u_bounds(starcenter.x)) &&
+                   u_valid(u_bounds(starcenter.z));
+          },
+          UW::unsupported_arithmetic))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            c.starcop_xz = c.com_xz;
+            return c.projection_complete;
+          },
+          UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            return c.port_share.lower == 0 && c.port_share.upper == 0 &&
+                   c.star_share.lower == 1 && c.star_share.upper == 1;
+          },
+          UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            c.nominal_equilibrium = c.port_zero_only && c.projection_complete;
+            return c.nominal_equilibrium;
+          },
+          UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [] {
+            return kBoardingBootPressureRadiusMetres == .020 &&
+                   kBoardingBootDiskEdgeMarginMetres == .010;
+          },
+          UW::event_identity))
+    return d.state;
+  const BoardingBootSourcePartition* star = nullptr;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            star = UA::partition(d.source, 1);
+            const auto* s = d.source.summary();
+            return star && s && s->quads[1].complete;
+          },
+          UW::source_identity))
+    return d.state;
+  const Point pressure{u_interval(c.com_xz[0]), u_interval(c.com_xz[1])};
+  const auto required = add(point(.020), point(.010));
+  bool supported = true;
+  bool ordinary = false;
+  const auto runedges = [&](bool source) {
+    if (!boarding_route_intermediate_unloaded01_definition_charge(d, c, l, r))
+      return false;
+    const auto corners =
+        source ? source_corners(*star) : site_sole_corners(starcenter);
+    for (std::size_t e = 0; e < 4; ++e) {
+      if (!u_charge(d, r, d.work.disk_edges, l.disk_edges, UW::edge_capacity))
+        return false;
+      auto& mask =
+          source ? c.star_site.source_evaluated : c.star_site.sole_evaluated;
+      auto& edges = source ? c.star_site.source_edges : c.star_site.sole_edges;
+      mask[e] = true;
+      edges[e] = site_edge(corners[e], corners[(e + 1) % 4], pressure, required,
+                           supported);
+      if (!supported) {
+        u_refuse(d, r, UW::unsupported_arithmetic);
+        return false;
+      }
+      const auto& b = edges[e];
+      if (!b.disk_contained) {
+        ordinary = true;
+        const bool first_finding = r.condition == UW::none;
+        u_refuse(d, r, source ? UW::source_disk : UW::sole_disk,
+                 b.signed_side.lower <= 0 ? b.signed_side
+                                          : b.squared_margin_gap,
+                 e, source);
+        if (first_finding) {
+          r.side = 1;
+          if (source) {
+            const auto& face = star->faces[e < 2 ? 0 : 1];
+            r.source_key = face.key;
+            r.source_name = face.source_object;
+          }
+        }
+      }
+    }
+    return true;
+  };
+  if (!runedges(false) || !runedges(true)) return d.state;
+  if (!u_guard(d, c, l, r, [&] { return !ordinary; }, UW::sole_disk)) {
+    const auto a = pause_edge_status(c.star_site.sole_edges);
+    const auto b = pause_edge_status(c.star_site.source_edges);
+    c.star_site.sole_status = a;
+    c.star_site.source_status = b;
+    d.state = (a == BoardingIntermediatePauseDiskStatus::refuted ||
+               b == BoardingIntermediatePauseDiskStatus::refuted)
+                  ? US::witness_refused
+                  : US::unresolved;
+    return d.state;
+  }
+  c.star_site.loaded = true;
+  c.star_site.plane_identity = true;
+  c.star_site.evaluated = true;
+  c.star_site.complete = true;
+  c.star_site.sole_status = c.star_site.source_status =
+      BoardingIntermediatePauseDiskStatus::contained;
+  c.star_site.pressure_xz = {
+      BoardingPlantedLegScalarBounds{c.com_xz[0].lower, c.com_xz[0].upper},
+      BoardingPlantedLegScalarBounds{c.com_xz[1].lower, c.com_xz[1].upper}};
+  c.star_support = true;
+  if (!u_guard(
+          d, c, l, r, [&] { return c.phase_index < 3; }, UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            return request.feet[0].yaw_half == std::array<double, 2>{0, 0} &&
+                   request.feet[1].yaw_half == std::array<double, 2>{0, 0};
+          },
+          UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            return request.feet[0].swing_height_metres ==
+                   (c.phase_index == 1 ? .010 : 0);
+          },
+          UW::event_identity))
+    return d.state;
+  const BoardingBootSourcePartition *upper = nullptr, *port = nullptr;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            upper = boarding_route_intermediate_unloaded01_upper_partition(
+                d.source);
+            port = UA::partition(d.source, 0);
+            return upper && port;
+          },
+          UW::source_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r, [&] { return c.phase.target_sole_identities; },
+          UW::event_identity))
+    return d.state;
+  if (!boarding_route_intermediate_unloaded01_definition_charge(d, c, l, r))
+    return d.state;
+  const auto op = [&]() {
+    if (!u_charge(d, r, d.work.endpoint_operations, l.endpoint_operations,
+                  UW::endpoint_operation_capacity))
+      return false;
+    if (c.endpoint_operation_count >= c.endpoint_operation_evaluated.size())
+      return u_refuse(d, r, UW::endpoint_operation_capacity);
+    c.endpoint_operation_evaluated[c.endpoint_operation_count++] = true;
+    return true;
+  };
+  const auto coordinate = [&](std::size_t v, std::size_t a) {
+    if (!u_charge(d, r, d.work.intermediate_coordinates,
+                  l.intermediate_coordinates, UW::source_coordinate_capacity))
+      return false;
+    c.intermediate_coordinate_evaluated[2 * v + a] = true;
+    return true;
+  };
+  std::array<UB, 4> upper_endpoint_sides{};
+  const auto sides = [&](std::size_t index, Point center) {
+    const auto edge = [&](std::size_t) {
+      return u_charge(d, r, d.work.upper_geometry_edges, l.upper_geometry_edges,
+                      UW::upper_edge_capacity);
+    };
+    return u_sides(upper->perimeter_metres, center, edge,
+                   c.upper_side_evaluated[index],
+                   c.upper_minimum_signed_side[index],
+                   index == 0 ? &upper_endpoint_sides : nullptr);
+  };
+  const auto& actual =
+      c.phase.points[static_cast<std::size_t>(UP::port_boot_center)].value;
+  for (std::size_t e = 0; e < 16; ++e) {
+    if (!u_charge(d, r, d.work.event_guards, l.event_guards,
+                  UW::event_guard_capacity))
+      return d.state;
+    c.event_evaluated[e] = true;
+    bool good = true;
+    switch (e) {
+      case 0: good = c.phase_index < 3; break;
+      case 1: good = c.phase.first >= 0 && c.phase.last <= 1; break;
+      case 2: break;
+      case 3: good = c.port_zero_only && !c.port_loaded; break;
+      case 4: {
+        using PE = BoardingRouteIntermediateUnloaded01PlaneEvent;
+        const bool singleton = c.phase.first == c.phase.last;
+        c.upper_plane_event =
+            (c.phase_index == 0 ||
+             (singleton && ((c.phase_index == 1 &&
+                             (c.phase.first == 0 || c.phase.first == 1)) ||
+                            (c.phase_index == 2 && c.phase.first == 0))))
+                ? PE::equal
+            : c.phase_index == 1
+                ? (c.phase.first == 0 || c.phase.last == 1
+                       ? PE::equal_boundary_above_interior
+                       : PE::above)
+                : (c.phase.first == 0 ? PE::equal_boundary_below_interior
+                                      : PE::below);
+        break;
+      }
+      case 5: {
+        using PE = BoardingRouteIntermediateUnloaded01PlaneEvent;
+        c.intermediate_plane_event =
+            c.phase_index == 2 && c.phase.first == 1 && c.phase.last == 1
+                ? PE::equal
+            : c.phase_index < 2 ? PE::above
+            : c.phase.last == 1 ? PE::equal_boundary_above_interior
+                                : PE::above;
+        break;
+      }
+      case 6:
+        good = c.phase.target_sole_identities &&
+               request.feet[0].yaw_half == std::array<double, 2>{0, 0};
+        break;
+      case 7:
+      case 8:
+      case 9:
+        c.endpoint_scope[e - 7] = u_contains(c, e == 7   ? 0
+                                                : e == 8 ? .125
+                                                         : .5);
+        break;
+      case 10:
+        if (c.endpoint_scope[0]) {
+          c.endpoint_evaluated[0] = true;
+          Point center;
+          Interval y;
+          if (!u_endpoint(request.feet[0].sole[0], op, center, y))
+            return d.state;
+          if (!u_consistent(center, y, actual)) {
+            u_refuse(d, r, UW::endpoint_consistency);
+            return d.state;
+          }
+          if (!sides(0, center)) {
+            if (d.stop_condition == UW::none)
+              u_refuse(d, r, UW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.upper_minimum_signed_side[0].lower <= 0) {
+            for (std::size_t edge = 0; edge < 4; ++edge)
+              if (upper_endpoint_sides[edge].lower <= 0) {
+                u_refuse(d, r, UW::upper_start_witness,
+                         upper_endpoint_sides[edge], edge, true);
+                if (upper_endpoint_sides[edge].upper <= 0)
+                  d.state = US::witness_refused;
+                break;
+              }
+            return d.state;
+          }
+          c.endpoint_earned[0] = true;
+        }
+        break;
+      case 11:
+        if (c.endpoint_scope[1]) {
+          c.endpoint_evaluated[1] = true;
+          Point center;
+          Interval y;
+          const auto& endpoint =
+              request.feet[0].sole[c.phase_index == 0 ? 1 : 0];
+          if (!u_endpoint(endpoint, op, center, y)) return d.state;
+          if (!u_consistent(center, y, actual)) {
+            u_refuse(d, r, UW::endpoint_consistency);
+            return d.state;
+          }
+          if (!op()) return d.state;
+          const auto maximum = add(center.z, point(.14));
+          if (!u_valid(u_bounds(maximum), 32)) {
+            u_refuse(d, r, UW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!op()) return d.state;
+          const auto gap = u_bounds(
+              subtract(point(u_min_z(upper->perimeter_metres)), maximum));
+          if (!u_valid(u_bounds(maximum), 32) || !u_valid(gap, 32)) {
+            u_refuse(d, r, UW::unsupported_arithmetic);
+            return d.state;
+          }
+          c.departure_gap = gap;
+          if (maximum.high >= u_min_z(upper->perimeter_metres)) {
+            u_refuse(d, r, UW::upper_departure, c.departure_gap);
+            return d.state;
+          }
+          c.endpoint_earned[1] = true;
+        }
+        break;
+      case 12:
+        if (c.endpoint_scope[2]) {
+          c.endpoint_evaluated[2] = true;
+          Point center;
+          Interval y;
+          if (!u_endpoint(request.feet[0].sole[1], op, center, y))
+            return d.state;
+          if (!u_consistent(center, y, actual)) {
+            u_refuse(d, r, UW::endpoint_consistency);
+            return d.state;
+          }
+          if (!u_overlap(port->perimeter_metres, center, op, coordinate,
+                         c.intermediate_intersection, c.positive_overlap)) {
+            if (d.stop_condition == UW::none)
+              u_refuse(d, r, UW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!c.positive_overlap[0] || !c.positive_overlap[1]) {
+            u_refuse(d, r, UW::endpoint_overlap);
+            return d.state;
+          }
+          c.endpoint_earned[2] = true;
+        }
+        break;
+      case 13:
+        if (c.phase_index == 0) {
+          const Point center{{actual.lower.x, actual.upper.x},
+                             {actual.lower.z, actual.upper.z}};
+          if (!sides(1, center)) {
+            if (d.stop_condition == UW::none)
+              u_refuse(d, r, UW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.upper_minimum_signed_side[1].lower > 0)
+            c.upper_class = UClass::strict_center_overlap;
+          else {
+            if (!op()) return d.state;
+            const auto maximum = add(center.z, point(.14));
+            if (!u_valid(u_bounds(maximum), 32)) {
+              u_refuse(d, r, UW::unsupported_arithmetic);
+              return d.state;
+            }
+            c.upper_class = maximum.high < u_min_z(upper->perimeter_metres)
+                                ? UClass::strict_Z_disjoint
+                                : UClass::mixed_possible_transition;
+          }
+        }
+        break;
+      case 14:
+        for (std::size_t k = 0; k < 3; ++k)
+          good = good && (!c.endpoint_scope[k] || c.endpoint_earned[k]);
+        break;
+      case 15: break;
+      default: good = false; break;
+    }
+    if (!good) {
+      u_refuse(d, r, UW::event_identity);
+      return d.state;
+    }
+  }
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            return c.phase_index != 0 || c.upper_class != UClass::not_run;
+          },
+          UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r, [&] { return c.nominal_equilibrium && c.port_zero_only; },
+          UW::event_identity))
+    return d.state;
+  if (!u_guard(
+          d, c, l, r,
+          [&] {
+            c.port_zero_geometry = true;
+            return c.star_support && c.projection_complete;
+          },
+          UW::event_identity))
+    return d.state;
+  c.complete = true;
+  c.state = d.state = US::accepted;
+  return d.state;
+}
+} // namespace apsis_drift

@@ -554,3 +554,18 @@ auto assess_origin_boarding_intermediate_pause_support(
   return detail::intermediate_pause_support_bounded(p, reverse);
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_unloaded01_internal.hpp"
+namespace apsis_drift::detail {
+auto boarding_route_intermediate_unloaded01_upper_partition(
+    const OriginBoardingIntermediatePauseSupport& provider)
+    -> const BoardingBootSourcePartition* {
+  if (!BoardingIntermediatePauseSupportAccess::valid(provider)) return nullptr;
+  const auto* data = BoardingIntermediatePauseSupportAccess::data(provider);
+  if (!data || !data->boots.contact() ||
+      LowerCockpitContactAccess::data(*data->boots.contact()) != data->lower)
+    return nullptr;
+  const auto partitions = data->boots.selected_partitions();
+  return partitions.size() == 10 ? &partitions[8] : nullptr;
+}
+} // namespace apsis_drift::detail
