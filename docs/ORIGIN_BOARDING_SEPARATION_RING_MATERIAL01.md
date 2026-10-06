@@ -70,3 +70,18 @@ invocation is `blender --background --python tools/boarding/separation_ring_mate
 --output assets/native/wayfarer-separation-ring-material-01` with each input
 matching the fixed hashes above. Output must be absent before execution.
 This grants no source save or observed issuer/WORLD outcome.
+
+## Captured source before material execution
+
+The one frozen capture completed with source saves0/master unchanged. Current
+constructor is a noncyclic nine-point3D POLY, ROUND/FULL bevel resolution3,
+depth0.017999999225139618m, MINIMUM twist, no authored caps, no modifiers or
+bevel/taper dependencies, zero offset/extrude, unit point radii and zero tilts.
+Metadata9177B SHA256
+`b6c32fe706808ec6d07a1e8147df5af78e2188f9ea648486519a5be8cbd72f52`
+and geometry6240B SHA256
+`2c034c5e0505bed90cf9881c694604620801b6d2178c10805091a24fe6c9c9bb`
+match the original complete90/160 fingerprints. Inherited60crop attribution
+remains unchanged; new crop replay0. Aggregate package17000B fits73728B.
+Current settings are now known; raw/grid containment, issuer and WORLD04
+outcomes remain **UNKNOWN**.
