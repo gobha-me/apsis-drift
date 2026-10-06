@@ -4984,3 +4984,504 @@ auto detail::boarding_route_checkpoint_world_signed_z_support(
   return out;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_support_self01_internal.hpp"
+namespace apsis_drift {
+namespace {
+using SSD = BoardingRouteIntermediateSupportSelf01Diagnostic;
+using SSC = BoardingRouteIntermediateSupportSelf01Cell;
+using SSR = BoardingRouteIntermediateSupportSelf01Refusal;
+using SSW = BoardingRouteIntermediateSupportSelf01Condition;
+using SSS = BoardingRouteIntermediateSupportSelf01State;
+using SSL = detail::BoardingRouteIntermediateSupportSelf01Limits;
+using SSStage = BoardingRouteIntermediateSupportSelf01SelfStage;
+using SSCert = BoardingRouteIntermediateSupportSelf01Certificate;
+auto ss_fail(SSD& d, SSR& r, SSW why) -> bool {
+  if (r.condition == SSW::none) r.condition = r.predicate_condition = why;
+  const bool cap =
+      why == SSW::source_guard_capacity || why == SSW::self_body_capacity ||
+      why == SSW::self_pair_capacity || why == SSW::self_axis_capacity ||
+      why == SSW::self_signed_capacity || why == SSW::self_owner_capacity ||
+      why == SSW::self_hip_capacity;
+  if (cap || why == SSW::unsupported_arithmetic) {
+    d.stop_condition = why;
+    d.state = cap ? SSS::capacity : SSS::unsupported;
+    if (!cap) d.arithmetic_supported = false;
+  } else if (d.state != SSS::capacity && d.state != SSS::unsupported)
+    d.state = SSS::unresolved;
+  return false;
+}
+auto ss_charge(SSD& d, SSR& r, std::size_t& work, std::size_t cap, SSW why)
+    -> bool {
+  if (work >= cap) return ss_fail(d, r, why);
+  ++work;
+  return true;
+}
+auto ss_valid(Interval x, double domain) -> bool {
+  return x.supported && std::isfinite(x.low) && std::isfinite(x.high) &&
+         x.low <= x.high && std::abs(x.low) <= domain &&
+         std::abs(x.high) <= domain;
+}
+auto ss_point_valid(const Point& x, double domain) -> bool {
+  return std::ranges::all_of(
+      x, [domain](Interval v) { return ss_valid(v, domain); });
+}
+// One literal row at a time; no second full body catalog or persistent cache.
+auto ss_part(std::size_t i) -> BoardingRoutePhasePartBinding {
+  using P = BodyPointId;
+  using F = BoardingRoutePhaseFrame;
+  const auto box = [i](P p, RigidVector3 half, F frame, std::uint32_t mass) {
+    return BoardingRoutePhasePartBinding{
+        static_cast<PartId>(i),
+        BoardingRoutePhaseBoxBinding{p, half, frame},
+        {p, p, mass}};
+  };
+  if (i == 0) return box(P::root, {.24, .12, .18}, F::root, 144);
+  if (i == 1) return box(P::trunk_center, {.26, .2695, .18}, F::trunk, 540);
+  if (i == 2) return box(P::helmet_center, {.16, .18, .18}, F::trunk, 96);
+  const auto offset = (i - 3) % 6;
+  const auto base =
+      i < 9 ? body_index(P::port_hip) : body_index(P::starboard_hip);
+  const auto p = [base](std::size_t n) { return static_cast<P>(base + n); };
+  if (offset == 2)
+    return box(p(3), {.06, .05, .14}, i < 9 ? F::port_sole : F::starboard_sole,
+               12);
+  if (offset == 5) return box(p(6), {.04, .05, .02}, F::trunk, 5);
+  const auto first = offset < 2 ? p(offset) : p(offset + 1);
+  const auto last = offset < 2 ? p(offset + 1) : p(offset + 2);
+  const auto radius = offset == 0   ? .105
+                      : offset == 1 ? .075
+                      : offset == 3 ? .065
+                                    : .055;
+  const std::uint32_t mass = offset == 0   ? 120
+                             : offset == 1 ? 48
+                             : offset == 3 ? 15
+                                           : 10;
+  return {static_cast<PartId>(i),
+          BoardingPlantedBodyCapsuleBinding{first, last, radius},
+          {first, last, mass}};
+}
+auto ss_same_part(const BoardingRoutePhasePartBinding& a,
+                  const BoardingRoutePhasePartBinding& b) -> bool {
+  if (a.id != b.id || a.mass.first != b.mass.first ||
+      a.mass.second != b.mass.second || a.mass.weight != b.mass.weight ||
+      a.reservation.index() != b.reservation.index())
+    return false;
+  if (const auto* x =
+          std::get_if<BoardingRoutePhaseBoxBinding>(&a.reservation)) {
+    const auto& y = std::get<BoardingRoutePhaseBoxBinding>(b.reservation);
+    return x->center == y.center && x->frame == y.frame &&
+           x->half_size_metres == y.half_size_metres;
+  }
+  const auto& x = std::get<BoardingPlantedBodyCapsuleBinding>(a.reservation);
+  const auto& y = std::get<BoardingPlantedBodyCapsuleBinding>(b.reservation);
+  return x.start == y.start && x.end == y.end &&
+         x.radius_metres == y.radius_metres;
+}
+auto ss_region(std::size_t i) -> SelfRegion {
+  using P = BodyPointId;
+  switch (i) {
+    case 0:
+      return {PartId::pelvis, PartId::trunk,   Junction::waist,
+              P::root,        P::trunk_center, kBoardingSelfWaistLimitMetres};
+    case 1:
+      return {PartId::pelvis, PartId::port_thigh, Junction::hip,
+              P::port_hip,    P::port_knee,       kBoardingSelfHipLengthMetres};
+    case 2:
+      return {PartId::pelvis,    PartId::starboard_thigh,
+              Junction::hip,     P::starboard_hip,
+              P::starboard_knee, kBoardingSelfHipLengthMetres};
+    case 3:
+      return {PartId::trunk,   PartId::helmet,   Junction::neck,
+              P::trunk_center, P::helmet_center, .2695};
+    case 4:
+      return {PartId::trunk,      PartId::port_upper_arm,
+              Junction::shoulder, P::port_shoulder,
+              P::port_elbow,      kBoardingSelfShoulderRadiusMetres};
+    case 5:
+      return {PartId::trunk,      PartId::starboard_upper_arm,
+              Junction::shoulder, P::starboard_shoulder,
+              P::starboard_elbow, kBoardingSelfShoulderRadiusMetres};
+    case 6:
+      return {PartId::port_thigh, PartId::port_shin,
+              Junction::knee,     P::port_knee,
+              P::port_hip,        kBoardingSelfKneeRadiusMetres};
+    case 7:
+      return {PartId::port_shin, PartId::port_boot,
+              Junction::ankle,   P::port_ankle,
+              P::port_knee,      kBoardingSelfAnkleLengthMetres};
+    case 8:
+      return {PartId::port_upper_arm, PartId::port_forearm,
+              Junction::elbow,        P::port_elbow,
+              P::port_shoulder,       kBoardingSelfElbowRadiusMetres};
+    case 9:
+      return {PartId::port_forearm, PartId::port_hand,
+              Junction::wrist,      P::port_wrist,
+              P::port_elbow,        kBoardingSelfWristLengthMetres};
+    case 10:
+      return {PartId::starboard_thigh, PartId::starboard_shin,
+              Junction::knee,          P::starboard_knee,
+              P::starboard_hip,        kBoardingSelfKneeRadiusMetres};
+    case 11:
+      return {PartId::starboard_shin, PartId::starboard_boot,
+              Junction::ankle,        P::starboard_ankle,
+              P::starboard_knee,      kBoardingSelfAnkleLengthMetres};
+    case 12:
+      return {PartId::starboard_upper_arm,
+              PartId::starboard_forearm,
+              Junction::elbow,
+              P::starboard_elbow,
+              P::starboard_shoulder,
+              kBoardingSelfElbowRadiusMetres};
+    default:
+      return {PartId::starboard_forearm, PartId::starboard_hand,
+              Junction::wrist,           P::starboard_wrist,
+              P::starboard_elbow,        kBoardingSelfWristLengthMetres};
+  }
+}
+auto ss_same_region(const SelfRegion& a, const SelfRegion& b) -> bool {
+  return a.first == b.first && a.second == b.second &&
+         a.junction == b.junction && a.root == b.root && a.toward == b.toward &&
+         a.limit_metres == b.limit_metres;
+}
+auto ss_leg(const BoardingRouteFootPhaseLeg& x) -> bool {
+  return x.nominal_links && x.target_sole_identity && x.joint_sectors &&
+         x.derivative_domains && x.timing_complete;
+}
+[[gnu::noinline]] auto ss_owner(
+    const BoardingRouteFootPhaseCell& phase,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& relative,
+    const SelfRegion& region, BoardingLowerFootTransferOwner& out) -> void {
+  if (region.junction != Junction::waist) {
+    unload_owner(phase, relative, region, out);
+    return;
+  }
+  // This is the full pelvis support in the ACTUAL nominal trunk axial frame.
+  // Proper-frame identities are compiler provenance, never midpoint tests.
+  const auto y = body_intervals(phase.frames[1].columns[1].value);
+  const auto extent = add(
+      add(multiply(point(.24),
+                   absolute(unload_frame_dot(phase.frames[0], 0, y))),
+          multiply(point(.12),
+                   absolute(unload_frame_dot(phase.frames[0], 1, y)))),
+      multiply(point(.18), absolute(unload_frame_dot(phase.frames[0], 2, y))));
+  const auto limit = point(region.limit_metres), gap = subtract(limit, extent);
+  out.arithmetic_supported =
+      extent.supported && limit.supported && gap.supported &&
+      std::isfinite(extent.low) && std::isfinite(extent.high) &&
+      extent.low <= extent.high && std::isfinite(limit.low) &&
+      std::isfinite(limit.high) && limit.low <= limit.high &&
+      std::isfinite(gap.low) && std::isfinite(gap.high) && gap.low <= gap.high;
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(point(0));
+  out.structural_identity = true;
+  out.certificate = SelfCert::cap_partner_support;
+  out.certified = gap.low >= 0;
+}
+[[gnu::noinline]] auto ss_separate(const UnloadSolid& a, const UnloadSolid& b,
+                                   SSD& d, SSC& c, const SSL& l, SSR& r,
+                                   std::size_t pair) -> bool {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  r.self_stage = SSStage::separation;
+  for (std::size_t i = 0; i < count; ++i) {
+    r.self_axis = static_cast<std::uint8_t>(i);
+    r.self_sign = 255;
+    if (!ss_charge(d, r, d.work.self_axes, l.self_axes,
+                   SSW::self_axis_capacity))
+      return false;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (std::size_t sign = 0; sign < 2; ++sign) {
+      r.self_sign = static_cast<std::uint8_t>(sign);
+      if (!ss_charge(d, r, d.work.self_signed_trials, l.self_signed_trials,
+                     SSW::self_signed_capacity))
+        return false;
+      const auto n = sign == 0 ? axis : self_negate(axis);
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported || !std::isfinite(total.low) ||
+          !std::isfinite(total.high))
+        return ss_fail(d, r, SSW::unsupported_arithmetic);
+      if (total.high <= 0) {
+        c.self_axes[pair] = static_cast<std::uint8_t>(i | (sign == 0 ? 0 : 16));
+        return true;
+      }
+    }
+  }
+  return ss_fail(d, r, SSW::unresolved_self_pair);
+}
+} // namespace
+
+auto detail::boarding_route_intermediate_support_self01_enroll_self_source(
+    SSD& d, const SSL& l, SSR& r) -> bool {
+  const auto source = [&](std::size_t i, auto predicate) {
+    if (!ss_charge(d, r, d.work.source_guards, l.source_guards,
+                   SSW::source_guard_capacity))
+      return false;
+    d.source_evaluated[i] = true;
+    return predicate() || ss_fail(d, r, SSW::source_identity);
+  };
+  for (std::size_t i = 0; i < 15; ++i)
+    if (!source(36 + i, [&] { return ss_same_part(d.parts[i], ss_part(i)); }))
+      return false;
+  // Materialize only AFTER the first region record charge, before any graph.
+  SelfRegions regions{};
+  for (std::size_t i = 0; i < 14; ++i)
+    if (!source(51 + i, [&] {
+          if (i == 0) regions = self_regions();
+          return ss_same_region(regions[i], ss_region(i));
+        }))
+      return false;
+  if (!source(65, [&] {
+        return kBoardingRouteFootPhaseVersion == 1 && thigh_length == .47285 &&
+               shin_length == .47478 && d.parts[0].id == PartId::pelvis;
+      }))
+    return false;
+  // The frozen nominal compiler composes proper rational rotations and exact
+  // local offsets. Stored interval columns are enclosures, not affine claims.
+  return source(66, [&] {
+    return kBoardingRouteFootPhaseVersion == 1 &&
+           d.parts[1].id == PartId::trunk && d.parts[2].id == PartId::helmet &&
+           d.parts[6].id == PartId::port_upper_arm &&
+           d.parts[12].id == PartId::starboard_upper_arm;
+  });
+}
+
+auto detail::boarding_route_intermediate_support_self01_self_bridge(
+    const BoardingRouteIntermediateSupportSelf01CurrentCellToken& token, SSD& d,
+    SSC& c, const SSL& l, SSR& r) -> SSS {
+  std::size_t body_index_record{};
+  const auto body = [&](auto predicate, SSW why = SSW::self_body_identity) {
+    r.self_stage = SSStage::body;
+    r.operation = body_index_record;
+    if (!ss_charge(d, r, d.work.self_body_guards, l.self_body_guards,
+                   SSW::self_body_capacity))
+      return false;
+    c.self_body_evaluated |= std::uint64_t{1} << body_index_record++;
+    return predicate() || ss_fail(d, r, why);
+  };
+  if (!body([&] {
+        return token.context_ && token.owner_ == &d && token.cell_ == &c &&
+               token.request_ && token.context_->owner_ == &d &&
+               token.context_->parts_ == &d.parts &&
+               token.context_->request_ == token.request_ &&
+               BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+               token.data_ ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+               token.context_->data_ == token.data_;
+      }))
+    return d.state;
+  if (!body([&] { return boarding_route_foot_phase_environment(); },
+            SSW::unsupported_arithmetic))
+    return d.state;
+  const auto& p = c.phase;
+  if (!body([&] {
+        return p.complete && p.arithmetic_supported && p.nominal_links &&
+               p.target_sole_identities && p.joint_sectors &&
+               p.derivative_domains && p.timing_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.phase_index < 5 &&
+               p.first == boarding_route_intermediate_support_self01_local(
+                              c.phase_index, c.global_first) &&
+               p.last == boarding_route_intermediate_support_self01_local(
+                             c.phase_index, c.global_last) &&
+               token.request_->seconds_per_parameter ==
+                   (c.phase_index == 4 ? 2 : 12) &&
+               c.projection_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_enrolled && d.self_version == 1 &&
+               std::ranges::all_of(d.source_evaluated,
+                                   [](bool x) { return x; });
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_evaluated[65] && p.nominal_links &&
+               p.target_sole_identities;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_evaluated[66] && p.arithmetic_supported &&
+               c.projected_carrier_complete[0];
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.nominal_support_complete && c.nominal_equilibrium &&
+               c.star_support && d.stop_condition == SSW::none;
+      }))
+    return d.state;
+  for (std::size_t i = 0; i < 18; ++i)
+    if (!body(
+            [&] {
+              return ss_point_valid(body_intervals(p.points[i].value), 8);
+            },
+            SSW::unsupported_arithmetic))
+      return d.state;
+  for (std::size_t f = 0; f < 4; ++f)
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!body(
+              [&] {
+                return ss_point_valid(
+                    body_intervals(p.frames[f].columns[j].value), 8);
+              },
+              SSW::unsupported_arithmetic))
+        return d.state;
+  for (std::size_t side = 0; side < 2; ++side)
+    if (!body([&] { return ss_leg(p.legs[side]) && d.source_evaluated[65]; }))
+      return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[0], ss_part(0)) &&
+               ss_same_part(d.parts[1], ss_part(1)) && d.source_evaluated[51];
+      }))
+    return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[2], ss_part(2)) && d.source_evaluated[54] &&
+               d.source_evaluated[66];
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_evaluated[66] && ss_same_part(d.parts[6], ss_part(6)) &&
+               ss_same_part(d.parts[12], ss_part(12));
+      }))
+    return d.state;
+  SelfRegions regions{};
+  if (!body([&] {
+        regions = self_regions();
+        for (std::size_t i = 0; i < 14; ++i)
+          if (!ss_same_region(regions[i], ss_region(i))) return false;
+        return true;
+      }))
+    return d.state;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  if (!body([&] {
+        relative[0] = {point(0), point(0), point(0)};
+        return true;
+      }))
+    return d.state;
+  for (std::size_t i = 1; i < 18; ++i)
+    if (!body(
+            [&] {
+              relative[i] =
+                  unload_difference(body_intervals(p.points[i].value),
+                                    body_intervals(p.points[0].value));
+              return ss_point_valid(relative[i], 16);
+            },
+            SSW::unsupported_arithmetic))
+      return d.state;
+  if (!body([&] {
+        return body_index_record == 63 &&
+               c.self_body_evaluated ==
+                   kBoardingRouteIntermediateSupportSelf01BodyMask &&
+               token.owner_ == &d && token.cell_ == &c &&
+               token.data_ ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source);
+      }))
+    return d.state;
+  c.self_body_complete = true;
+  std::size_t pair{};
+  for (std::size_t a = 0; a < 15; ++a)
+    for (std::size_t b = a + 1; b < 15; ++b, ++pair) {
+      r.operation.reset();
+      r.self_stage = SSStage::not_run;
+      r.self_pair = static_cast<std::uint16_t>(pair);
+      r.self_region = 255;
+      r.self_axis = 255;
+      r.self_sign = 255;
+      if (!ss_charge(d, r, d.work.self_pairs, l.self_pairs,
+                     SSW::self_pair_capacity))
+        return d.state;
+      ++c.examined_pairs;
+      auto certificate = SSCert::not_run;
+      for (std::size_t region = 0; region < 14; ++region)
+        if (static_cast<std::size_t>(regions[region].first) == a &&
+            static_cast<std::size_t>(regions[region].second) == b) {
+          r.self_stage = SSStage::owner;
+          r.self_region = static_cast<std::uint8_t>(region);
+          if (!ss_charge(d, r, d.work.self_owners, l.self_owners,
+                         SSW::self_owner_capacity))
+            return d.state;
+          c.owner_attempted_mask |=
+              static_cast<std::uint16_t>(std::uint16_t{1} << region);
+          ss_owner(p, relative, regions[region], c.owners[region]);
+          if (!c.owners[region].arithmetic_supported) {
+            ss_fail(d, r, SSW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.owners[region].certified)
+            certificate = static_cast<SSCert>(c.owners[region].certificate);
+          else if (regions[region].junction == Junction::hip) {
+            r.self_stage = SSStage::hip;
+            if (!ss_charge(d, r, d.work.self_hip_complements,
+                           l.self_hip_complements, SSW::self_hip_capacity))
+              return d.state;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            self02_hip_complement(p, relative, regions[region], region, pair,
+                                  c.hip_complements[side]);
+            if (!c.hip_complements[side].arithmetic_supported) {
+              ss_fail(d, r, SSW::unsupported_arithmetic);
+              return d.state;
+            }
+            if (c.hip_complements[side].certified)
+              certificate = SSCert::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (certificate == SSCert::not_run) {
+        const auto first = unload_solid(d.parts[a], relative, p),
+                   second = unload_solid(d.parts[b], relative, p);
+        if (!ss_separate(first, second, d, c, l, r, pair)) return d.state;
+        certificate = SSCert::convex_support_plane;
+      }
+      c.self_certificates[pair] = certificate;
+      ++c.self_certificate_counts[static_cast<std::size_t>(certificate)];
+      ++c.accepted_pairs;
+    }
+  c.self_complete = pair == 105 && c.accepted_pairs == 105;
+  if (!c.self_complete) {
+    ss_fail(d, r, SSW::self_incomplete);
+    return d.state;
+  }
+  r.self_pair = 65535;
+  r.self_region = 255;
+  r.self_axis = 255;
+  r.self_sign = 255;
+  r.self_stage = SSStage::complete;
+  c.complete = true;
+  c.state = d.state = SSS::accepted;
+  return d.state;
+}
+} // namespace apsis_drift
