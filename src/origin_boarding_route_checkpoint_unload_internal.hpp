@@ -37,6 +37,13 @@ class BoardingRouteCheckpointUnloadCellToken {
   const BoardingRoutePortUnloadContext* context_;
   const BoardingRoutePortUnloadCell* cell_;
   std::size_t phase_index_;
+  friend auto boarding_route_checkpoint_unload_self02_cell(
+      const BoardingRoutePortUnloadContext&, std::size_t, double, double, bool,
+      const BoardingRouteCheckpointUnloadSelf02Limits&,
+      BoardingRoutePortUnloadCounters&, std::uint64_t&,
+      BoardingRouteCheckpointUnloadSelf02Cell&,
+      BoardingRouteCheckpointUnloadSelf02CellRefusal&)
+      -> BoardingRoutePortUnloadCellResult;
   friend auto boarding_route_checkpoint_unload_cell(
       const BoardingRoutePortUnloadContext&, std::size_t, double, double, bool,
       const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,

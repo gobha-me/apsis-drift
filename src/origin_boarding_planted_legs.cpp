@@ -4377,3 +4377,282 @@ auto detail::boarding_route_checkpoint_unload_cell(
                       : unload_refuse(reason, UnloadWhy::incomplete_cover);
 }
 } // namespace apsis_drift
+#include "origin_boarding_route_checkpoint_unload_self02_internal.hpp"
+namespace apsis_drift {
+namespace {
+using Self02Cell = BoardingRouteCheckpointUnloadSelf02Cell;
+using Self02Limits = detail::BoardingRouteCheckpointUnloadSelf02Limits;
+using Self02Reason = detail::BoardingRouteCheckpointUnloadSelf02CellRefusal;
+using Self02Certificate = BoardingRouteCheckpointUnloadSelf02Certificate;
+using Self02HipMath = detail::BoardingRouteCheckpointUnloadSelf02HipMath;
+// Two selected policies may retain both immutable part/region caches. The
+// shared phase leg's original8192 nested budget plus both1184 caches/scalars
+// and this value-only expression's temporaries fits the same12288 reserve.
+static_assert(std::size_t{8192} +
+                  2 * (sizeof(std::array<BoardingRoutePhasePartBinding,
+                                         kBoardingBodyPartCount>) +
+                       sizeof(SelfRegions)) +
+                  std::size_t{144} + 8 * sizeof(Interval) + 2 * sizeof(Point) +
+                  sizeof(Self02HipMath) <=
+              12288);
+static_assert(
+    sizeof(Self02Cell) + sizeof(PhaseGraph) +
+        sizeof(std::optional<PhaseRequest>) +
+        sizeof(detail::BoardingRouteCheckpointUnloadContext) +
+        11 * std::size_t{24} + std::size_t{12288} +
+        sizeof(std::expected<BoardingRouteCheckpointUnloadSelf02Diagnostic,
+                             std::string>) +
+        std::size_t{8192} + std::size_t{512} <=
+    kBoardingRouteCheckpointUnloadMaximumScratchBytes);
+
+// Reset's large temporary is released before the phase graph is entered.
+[[gnu::noinline]] auto self02_reset(Self02Cell& cell) -> void {
+  cell.assessment = {};
+  cell.self02_certificates = {};
+  cell.self02_certificate_counts = {};
+  cell.hip_complements = {};
+}
+auto self02_hip_expression(const Point& u, double radius, double axial_limit,
+                           double bottom) -> Self02HipMath {
+  Self02HipMath result;
+  const auto transverse = transfer_small_root(add(square(u[0]), square(u[2])));
+  const auto extent = add(multiply(point(axial_limit), u[1]),
+                          multiply(point(radius), transverse));
+  const auto limit = point(bottom), gap = subtract(limit, extent);
+  result.arithmetic_supported = u[0].supported && u[1].supported &&
+                                u[2].supported && transverse.supported &&
+                                extent.supported && limit.supported &&
+                                gap.supported;
+  if (!result.arithmetic_supported) return result;
+  result.transverse = bounds(transverse);
+  result.extent = bounds(extent);
+  result.limit = bounds(limit);
+  result.strict_gap = bounds(gap);
+  result.negative_axis = u[1].high < 0;
+  result.strict_extent_below_bottom = extent.high < limit.low;
+  return result;
+}
+[[gnu::noinline]] auto self02_hip_complement(
+    const BoardingRouteFootPhaseCell& phase,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& relative,
+    const SelfRegion& region, std::size_t region_index, std::size_t pair,
+    BoardingRouteCheckpointUnloadHipComplement& result) -> void {
+  result.attempted = true;
+  result.region = region_index;
+  result.pair = pair;
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  result.side = side;
+  result.slab_limit_metres = region.limit_metres;
+  const auto hip =
+      side == 0 ? BodyPointId::port_hip : BodyPointId::starboard_hip;
+  const auto knee =
+      side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+  const auto thigh = side == 0 ? PartId::port_thigh : PartId::starboard_thigh;
+  if (!phase.complete || !phase.nominal_links || !phase.derivative_domains ||
+      !phase.legs[side].nominal_links || !phase.legs[side].derivative_domains ||
+      region.junction != Junction::hip || region.first != PartId::pelvis ||
+      region.second != thigh || region.root != hip || region.toward != knee ||
+      region.limit_metres != kBoardingSelfHipLengthMetres ||
+      .105 > region.limit_metres || region.limit_metres >= thigh_length)
+    return;
+  // Only the privately compiled upright, yaw-only phase graph reaches here.
+  // H-ROOT=side*.14*Rroot.X and Rroot.Y=WORLDY give exact pelvis bottom -.12.
+  result.nominal_unit_identity = result.upright_pelvis_identity =
+      result.original_slab_identity = true;
+  const auto u = unload_scale(
+      unload_difference(relative[body_index(knee)], relative[body_index(hip)]),
+      thigh_length);
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!u[i].supported) return;
+    result.axis[i] = bounds(u[i]);
+  }
+  if (u[1].high >= 0) {
+    result.arithmetic_supported = true;
+    return;
+  }
+  result.extent_evaluated = true;
+  const auto proof = self02_hip_expression(u, .105, region.limit_metres, -.12);
+  result.arithmetic_supported = proof.arithmetic_supported;
+  if (!proof.arithmetic_supported) return;
+  result.transverse = proof.transverse;
+  result.extent = proof.extent;
+  result.limit = proof.limit;
+  result.strict_gap = proof.strict_gap;
+  result.certified = proof.negative_axis && proof.strict_extent_below_bottom;
+}
+[[gnu::noinline]] auto self02_self(const Self02Limits& caps, UnloadWork& work,
+                                   std::uint64_t& hip_attempts,
+                                   Self02Cell& cell, Self02Reason& reason)
+    -> UnloadState {
+  static const auto parts = detail::boarding_route_foot_phase_parts();
+  static const auto regions = self_regions();
+  auto& out = cell.assessment;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  const auto root = body_intervals(out.phase.points[0].value);
+  for (std::size_t i = 0; i < relative.size(); ++i) {
+    relative[i] = i == 0 ? Point{point(0), point(0), point(0)}
+                         : unload_difference(
+                               body_intervals(out.phase.points[i].value), root);
+    if (!self_point_supported(relative[i]))
+      return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  std::size_t index{};
+  for (std::size_t a = 0; a < parts.size(); ++a)
+    for (std::size_t b = a + 1; b < parts.size(); ++b, ++index) {
+      reason.pair = index;
+      if (!unload_charge(work.contact.self_pairs, caps.pairs,
+                         UnloadWhy::pair_capacity, reason))
+        return UnloadState::capacity;
+      auto original = SelfCert::none;
+      auto selected = Self02Certificate::none;
+      for (std::size_t r = 0; r < regions.size(); ++r)
+        if (static_cast<std::size_t>(regions[r].first) == a &&
+            static_cast<std::size_t>(regions[r].second) == b) {
+          if (!unload_charge(work.ownership_attempts, caps.owners,
+                             UnloadWhy::ownership_capacity, reason))
+            return UnloadState::capacity;
+          unload_owner(out.phase, relative, regions[r], out.owners[r]);
+          if (!out.owners[r].arithmetic_supported)
+            return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+          if (out.owners[r].certified) {
+            original = out.owners[r].certificate;
+            selected = static_cast<Self02Certificate>(original);
+          } else if (regions[r].junction == Junction::hip) {
+            if (hip_attempts >= caps.hip_complement_attempts) {
+              reason.condition = UnloadWhy::ownership_capacity;
+              reason.hip_complement_capacity = true;
+              return UnloadState::capacity;
+            }
+            ++hip_attempts;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            self02_hip_complement(out.phase, relative, regions[r], r, index,
+                                  cell.hip_complements[side]);
+            if (!cell.hip_complements[side].arithmetic_supported)
+              return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+            if (cell.hip_complements[side].certified)
+              selected = Self02Certificate::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (selected == Self02Certificate::none) {
+        const auto first = unload_solid(parts[a], relative, out.phase),
+                   second = unload_solid(parts[b], relative, out.phase);
+        const auto state = unload_separate(first, second, caps, work, reason);
+        if (state != UnloadState::accepted) return state;
+        original = SelfCert::convex_support_plane;
+        selected = Self02Certificate::convex_support_plane;
+      }
+      out.pair_certificates[index] = original;
+      if (original != SelfCert::none)
+        ++out.certificate_counts[static_cast<std::size_t>(original)];
+      cell.self02_certificates[index] = selected;
+      ++cell.self02_certificate_counts[static_cast<std::size_t>(selected)];
+    }
+  out.self_complete = index == kBoardingBodyPairCount;
+  reason.pair.reset();
+  return UnloadState::accepted;
+}
+} // namespace
+auto detail::boarding_route_checkpoint_unload_self02_cell(
+    const BoardingRoutePortUnloadContext& context, std::size_t phase_index,
+    double first, double last, bool reverse, const Self02Limits& caps,
+    UnloadWork& work, std::uint64_t& hip_attempts, Self02Cell& cell,
+    Self02Reason& reason) -> UnloadState {
+  self02_reset(cell);
+  reason = {};
+  auto& out = cell.assessment;
+  out.phase.first = first;
+  out.phase.last = last;
+  const UnloadLimits original;
+  if (phase_index > 2 || !std::isfinite(first) || !std::isfinite(last) ||
+      first < 0 || last > 1 || first > last ||
+      caps.hip_complement_attempts >
+          kBoardingRouteCheckpointUnloadSelf02MaximumHipAttempts ||
+      caps.pairs > original.pairs || caps.axes > original.axes ||
+      caps.signed_trials > original.signed_trials ||
+      caps.owners > original.owners || caps.candidates > original.candidates ||
+      caps.edges > original.edges ||
+      caps.initial_source_partitions > original.initial_source_partitions ||
+      caps.initial_body_records > original.initial_body_records ||
+      caps.initial_self_pairs > original.initial_self_pairs ||
+      caps.initial_self_axes > original.initial_self_axes ||
+      caps.initial_pressure_partitions > original.initial_pressure_partitions ||
+      caps.output_bytes > original.output_bytes || !context.source_.contact() ||
+      context.source_.selected_partitions().size() != 10)
+    return unload_refuse(reason, UnloadWhy::invalid_binding);
+  if (hip_attempts > caps.hip_complement_attempts) {
+    reason.condition = UnloadWhy::ownership_capacity;
+    reason.hip_complement_capacity = true;
+    return UnloadState::capacity;
+  }
+  const std::array incoming{
+      work.contact.self_pairs,          work.contact.proposed_axes,
+      work.contact.signed_trials,       work.ownership_attempts,
+      work.contact.pressure_candidates, work.contact.disk_edges};
+  const std::array ceilings{caps.pairs,  caps.axes,       caps.signed_trials,
+                            caps.owners, caps.candidates, caps.edges};
+  const std::array failures{
+      UnloadWhy::pair_capacity,         UnloadWhy::axis_capacity,
+      UnloadWhy::signed_trial_capacity, UnloadWhy::ownership_capacity,
+      UnloadWhy::pressure_capacity,     UnloadWhy::edge_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return UnloadState::capacity;
+    }
+  const auto request = boarding_route_checkpoint_unload_controls(phase_index);
+  if (!request) return unload_refuse(reason, UnloadWhy::invalid_binding);
+  BoardingRouteFootPhaseRefusal phase_reason;
+  auto state =
+      boarding_route_foot_phase_cell(*request, first, last, reverse, caps.phase,
+                                     work.phase, out.phase, phase_reason);
+  if (state != UnloadState::accepted) {
+    reason.condition = UnloadWhy::phase_predicate;
+    reason.phase_condition = phase_reason.condition;
+    reason.side = phase_reason.side;
+    reason.limiting_bound = phase_reason.limiting_bound;
+    return state;
+  }
+  out.arithmetic_supported = true;
+  state = self02_self(caps, work, hip_attempts, cell, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  const BoardingRouteCheckpointUnloadCellToken token(context, out, phase_index);
+  state =
+      boarding_route_checkpoint_unload_pressure(token, caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  out.complete =
+      out.phase.complete && out.self_complete && out.nonnegative_reactions &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  reason = {};
+  return out.complete ? UnloadState::accepted
+                      : unload_refuse(reason, UnloadWhy::incomplete_cover);
+}
+auto detail::boarding_route_checkpoint_unload_self02_hip_math(
+    std::array<Bounds, 3> axis, double radius, double axial_limit,
+    double bottom) -> std::expected<Self02HipMath, std::string> {
+  if (!std::isfinite(radius) || !std::isfinite(axial_limit) ||
+      !std::isfinite(bottom) || radius <= 0 || radius > axial_limit ||
+      axial_limit > 8 || std::abs(bottom) > 8)
+    return std::unexpected("Hip expression requires positive radius<=limit<=8 "
+                           "and finite bottom abs<=8");
+  Point u;
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!std::isfinite(axis[i].lower) || !std::isfinite(axis[i].upper) ||
+        axis[i].lower > axis[i].upper || axis[i].lower < -1 ||
+        axis[i].upper > 1)
+      return std::unexpected("Hip expression requires finite ordered raw axis "
+                             "components in[-1,1]");
+    u[i] = interval(axis[i].lower, axis[i].upper);
+  }
+  if (!boarding_route_foot_phase_environment()) return Self02HipMath{};
+  return self02_hip_expression(u, radius, axial_limit, bottom);
+}
+} // namespace apsis_drift

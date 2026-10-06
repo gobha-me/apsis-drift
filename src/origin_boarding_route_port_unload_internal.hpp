@@ -1,6 +1,9 @@
 #pragma once
 #include "apsis_drift/origin_boarding_route_port_unload.hpp"
 #include "origin_boarding_route_foot_phase_internal.hpp"
+namespace apsis_drift {
+struct BoardingRouteCheckpointUnloadSelf02Cell;
+}
 namespace apsis_drift::detail {
 struct BoardingRoutePortUnloadLimits {
   BoardingRouteFootPhaseLimits phase;
@@ -13,6 +16,8 @@ struct BoardingRoutePortUnloadLimits {
       owners{28658}, candidates{40940}, edges{180136};
 };
 using BoardingRoutePortUnloadCellResult = BoardingRouteFootPhaseCellResult;
+struct BoardingRouteCheckpointUnloadSelf02Limits;
+struct BoardingRouteCheckpointUnloadSelf02CellRefusal;
 class BoardingRoutePortUnloadContext;
 class BoardingRoutePortUnloadCellToken;
 class BoardingRouteCheckpointUnloadCellToken;
@@ -25,6 +30,13 @@ class BoardingRouteCheckpointUnloadCellToken;
     const BoardingRouteCheckpointUnloadCellToken&,
     const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,
     BoardingRoutePortUnloadCell&, BoardingRoutePortUnloadRefusal&)
+    -> BoardingRoutePortUnloadCellResult;
+[[nodiscard]] auto boarding_route_checkpoint_unload_self02_cell(
+    const BoardingRoutePortUnloadContext&, std::size_t, double, double, bool,
+    const BoardingRouteCheckpointUnloadSelf02Limits&,
+    BoardingRoutePortUnloadCounters&, std::uint64_t&,
+    BoardingRouteCheckpointUnloadSelf02Cell&,
+    BoardingRouteCheckpointUnloadSelf02CellRefusal&)
     -> BoardingRoutePortUnloadCellResult;
 [[nodiscard]] auto boarding_route_port_unload_controls()
     -> BoardingRouteFootPhaseRequest;
@@ -64,6 +76,13 @@ class BoardingRoutePortUnloadContext {
         guards_(initial.load.source_quads) {}
   OriginBoardingBootSupport source_;
   std::array<BoardingSourceEndpointLoadQuadMathEvidence, 10> guards_;
+  friend auto boarding_route_checkpoint_unload_self02_cell(
+      const BoardingRoutePortUnloadContext&, std::size_t, double, double, bool,
+      const BoardingRouteCheckpointUnloadSelf02Limits&,
+      BoardingRoutePortUnloadCounters&, std::uint64_t&,
+      BoardingRouteCheckpointUnloadSelf02Cell&,
+      BoardingRouteCheckpointUnloadSelf02CellRefusal&)
+      -> BoardingRoutePortUnloadCellResult;
   friend auto prepare_boarding_route_port_unload(
       const OriginBoardingBootSupport&, const BoardingRoutePortUnloadLimits&,
       BoardingRoutePortUnloadDiagnostic&)

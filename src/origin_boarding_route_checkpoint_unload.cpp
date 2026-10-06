@@ -1,5 +1,6 @@
 #include "apsis_drift/origin_boarding_route_checkpoint_unload.hpp"
 #include "origin_boarding_route_checkpoint_unload_internal.hpp"
+#include "origin_boarding_route_checkpoint_unload_self02_internal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <new>
@@ -57,7 +58,8 @@ auto checkpoint_mandatory_join(CheckPending p) -> std::optional<double> {
   if (p.first < .25 && p.last > .25) return .25;
   return {};
 }
-auto checkpoint_refuse(CheckDiagnostic& d, CheckPending p, CheckWhy why,
+template <class Diagnostic>
+auto checkpoint_refuse(Diagnostic& d, CheckPending p, CheckWhy why,
                        std::optional<std::size_t> phase = {}) -> void {
   d.first_refusal = CheckReason{.first = p.first,
                                 .last = p.last,
@@ -95,7 +97,8 @@ auto checkpoint_join_identity(const BoardingRouteFootPhaseRequest& a,
       return false;
   return true;
 }
-auto checkpoint_covered(const CheckDiagnostic& d, double first, double last)
+template <class Diagnostic>
+auto checkpoint_covered(const Diagnostic& d, double first, double last)
     -> bool {
   if (d.cells.empty()) return false;
   auto next = first;
@@ -116,7 +119,8 @@ auto checkpoint_covered(const CheckDiagnostic& d, double first, double last)
   }
   return next == last;
 }
-auto checkpoint_qualify_joins(CheckDiagnostic& d) -> void {
+template <class Diagnostic>
+auto checkpoint_qualify_joins(Diagnostic& d) -> void {
   if (d.cells.size() < 2) return;
   const auto& left = d.cells[d.cells.size() - 2];
   const auto& right = d.cells.back();
@@ -132,6 +136,77 @@ auto checkpoint_qualify_joins(CheckDiagnostic& d) -> void {
       d.qualified_joins[j] = true;
   }
 }
+struct CheckPolicy01 {
+  using Diagnostic = BoardingRouteCheckpointUnloadDiagnostic;
+  using Cell = BoardingRouteCheckpointUnloadCell;
+  using Limits = detail::BoardingRouteCheckpointUnloadLimits;
+  using CellRefusal = BoardingRoutePortUnloadRefusal;
+  static auto valid(const Limits& limits) -> bool {
+    return checkpoint_valid_limits(limits);
+  }
+  static auto prepare(const OriginBoardingBootSupport& source,
+                      const Limits& limits, Diagnostic& d)
+      -> std::expected<detail::BoardingRouteCheckpointUnloadContext,
+                       std::string> {
+    return detail::prepare_boarding_route_checkpoint_unload(source, limits, d);
+  }
+  static auto cell(const detail::BoardingRouteCheckpointUnloadContext& context,
+                   std::size_t phase, double first, double last, bool reverse,
+                   const Limits& limits, Diagnostic& d, Cell& c, CellRefusal& r)
+      -> CheckState {
+    return detail::boarding_route_checkpoint_unload_cell(
+        context, phase, first, last, reverse, limits, d.work, c.assessment, r);
+  }
+  static auto assign_refusal(Diagnostic& d, const CheckReason& r,
+                             const CellRefusal&) -> void {
+    d.first_refusal = r;
+  }
+};
+struct CheckPolicy02 {
+  using Diagnostic = BoardingRouteCheckpointUnloadSelf02Diagnostic;
+  using Cell = BoardingRouteCheckpointUnloadSelf02Cell;
+  using Limits = detail::BoardingRouteCheckpointUnloadSelf02Limits;
+  using CellRefusal = detail::BoardingRouteCheckpointUnloadSelf02CellRefusal;
+  static auto valid(const Limits& limits) -> bool {
+    return checkpoint_valid_limits(limits) &&
+           limits.hip_complement_attempts <=
+               kBoardingRouteCheckpointUnloadSelf02MaximumHipAttempts;
+  }
+  [[gnu::noinline]] static auto prepare(const OriginBoardingBootSupport& source,
+                                        const Limits& limits, Diagnostic& d)
+      -> std::expected<detail::BoardingRouteCheckpointUnloadContext,
+                       std::string> {
+    BoardingRouteCheckpointUnloadDiagnostic staged;
+    auto prepared = detail::prepare_boarding_route_checkpoint_unload(
+        source, limits, staged);
+    d.initial = std::move(staged.initial);
+    if (!prepared) return std::unexpected(prepared.error());
+    return std::move(*prepared);
+  }
+  static auto cell(const detail::BoardingRouteCheckpointUnloadContext& context,
+                   std::size_t phase, double first, double last, bool reverse,
+                   const Limits& limits, Diagnostic& d, Cell& c, CellRefusal& r)
+      -> CheckState {
+    return detail::boarding_route_checkpoint_unload_self02_cell(
+        context, phase, first, last, reverse, limits, d.work,
+        d.hip_complement_attempts, c, r);
+  }
+  static auto assign_refusal(Diagnostic& d, const CheckReason& r,
+                             const CellRefusal& c) -> void {
+    BoardingRouteCheckpointUnloadSelf02Refusal out(r);
+    if (c.hip_complement_capacity)
+      out.self02_condition =
+          BoardingRouteCheckpointUnloadSelf02Condition::hip_complement_capacity;
+    d.first_refusal = out;
+  }
+};
+static_assert(sizeof(CheckPolicy02::Cell) <=
+              kBoardingRouteCheckpointUnloadMaximumCellBytes);
+static_assert(sizeof(std::expected<CheckPolicy02::Diagnostic, std::string>) +
+                  sizeof(BoardingSourceEndpointLoadDiagnostic) +
+                  1024 * sizeof(CheckPolicy02::Cell) <=
+              kBoardingRouteCheckpointUnloadMaximumOutputBytes);
+
 } // namespace
 auto detail::boarding_route_checkpoint_unload_controls(std::size_t phase)
     -> std::optional<BoardingRouteFootPhaseRequest> {
@@ -157,14 +232,22 @@ auto detail::boarding_route_checkpoint_unload_controls(std::size_t phase)
 auto detail::boarding_route_checkpoint_unload_clock(double g) -> double {
   return g <= .25 ? 48 * g : g <= .5 ? 12 + 48 * (g - .25) : 24 + 24 * (g - .5);
 }
-auto detail::boarding_route_checkpoint_unload_bounded(
-    const OriginBoardingBootSupport& source, double first, double last,
-    CheckLimits limits) -> std::expected<CheckDiagnostic, std::string> {
+namespace detail {
+template <class Policy>
+auto checkpoint_unload_selected(const OriginBoardingBootSupport& source,
+                                double first, double last,
+                                typename Policy::Limits limits)
+    -> std::expected<typename Policy::Diagnostic, std::string> {
+  using Diagnostic = typename Policy::Diagnostic;
+  using Cell = typename Policy::Cell;
+  constexpr std::size_t fixed_output =
+      sizeof(std::expected<Diagnostic, std::string>) +
+      sizeof(BoardingSourceEndpointLoadDiagnostic);
   if (!std::isfinite(first) || !std::isfinite(last) || first < 0 || first > 1 ||
-      last < 0 || last > 1 || !checkpoint_valid_limits(limits))
+      last < 0 || last > 1 || !Policy::valid(limits))
     return std::unexpected(
         "Checkpoint unload requires finite [0,1] endpoints and lowered caps");
-  CheckDiagnostic result;
+  Diagnostic result;
   for (std::size_t i = 0; i < 3; ++i)
     result.controls[i] = *boarding_route_checkpoint_unload_controls(i);
   result.parts = boarding_route_foot_phase_parts();
@@ -178,12 +261,11 @@ auto detail::boarding_route_checkpoint_unload_bounded(
     result.join_expression_identity[j] =
         checkpoint_join_identity(result.controls[j], result.controls[j + 1]);
   const CheckPending requested{std::min(first, last), std::max(first, last), 0};
-  if (limits.output_bytes < checkpoint_fixed_output) {
+  if (limits.output_bytes < fixed_output) {
     checkpoint_refuse(result, requested, CheckWhy::output_capacity);
     return result;
   }
-  auto prepared =
-      prepare_boarding_route_checkpoint_unload(source, limits, result);
+  auto prepared = Policy::prepare(source, limits, result);
   if (result.initial) {
     result.owned_initial_quad_guards = result.initial->load.checked_quads;
     for (const auto& q : result.initial->load.source_quads) {
@@ -211,8 +293,7 @@ auto detail::boarding_route_checkpoint_unload_bounded(
   const auto capacity = first == last
                             ? std::min(std::size_t{1}, limits.phase.leaves)
                             : limits.phase.leaves;
-  if (capacity >
-      (limits.output_bytes - checkpoint_fixed_output) / sizeof(CheckCell)) {
+  if (capacity > (limits.output_bytes - fixed_output) / sizeof(Cell)) {
     checkpoint_refuse(result, requested, CheckWhy::output_capacity);
     return result;
   }
@@ -222,16 +303,16 @@ auto detail::boarding_route_checkpoint_unload_bounded(
     return std::unexpected("Checkpoint unload cell allocation failed");
   }
   if (result.cells.capacity() >
-      (limits.output_bytes - checkpoint_fixed_output) / sizeof(CheckCell)) {
+      (limits.output_bytes - fixed_output) / sizeof(Cell)) {
     checkpoint_refuse(result, requested, CheckWhy::output_capacity);
     return result;
   }
   result.output_capacity_bytes =
-      checkpoint_fixed_output + result.cells.capacity() * sizeof(CheckCell);
+      fixed_output + result.cells.capacity() * sizeof(Cell);
   std::array<CheckPending, 11> pending{};
   pending[0] = requested;
   std::size_t count{1};
-  CheckCell cell;
+  Cell cell;
   while (count != 0) {
     const auto p = pending[--count];
     if (result.examined_nodes >= limits.phase.nodes) {
@@ -262,11 +343,11 @@ auto detail::boarding_route_checkpoint_unload_bounded(
     cell.global_first = p.first;
     cell.global_last = p.last;
     cell.phase_index = phase;
-    BoardingRoutePortUnloadRefusal reason;
-    const auto state = boarding_route_checkpoint_unload_cell(
-        *prepared, phase, checkpoint_local(phase, p.first),
-        checkpoint_local(phase, p.last), result.reverse, limits, result.work,
-        cell.assessment, reason);
+    typename Policy::CellRefusal reason;
+    const auto state =
+        Policy::cell(*prepared, phase, checkpoint_local(phase, p.first),
+                     checkpoint_local(phase, p.last), result.reverse, limits,
+                     result, cell, reason);
     if (state == CheckState::accepted) {
       if (!cell.assessment.complete ||
           cell.assessment.phase.first != checkpoint_local(phase, p.first) ||
@@ -295,7 +376,7 @@ auto detail::boarding_route_checkpoint_unload_bounded(
                         .limiting_bound = reason.limiting_bound};
     if (state == CheckState::unsupported || state == CheckState::capacity) {
       result.arithmetic_supported = state != CheckState::unsupported;
-      result.first_refusal = refusal;
+      Policy::assign_refusal(result, refusal, reason);
       return result;
     }
     if (p.first == p.last)
@@ -311,7 +392,7 @@ auto detail::boarding_route_checkpoint_unload_bounded(
       }
       refusal.condition = CheckWhy::unsplittable_interval;
     }
-    result.first_refusal = refusal;
+    Policy::assign_refusal(result, refusal, reason);
     return result;
   }
   result.complete = checkpoint_covered(result, requested.first, requested.last);
@@ -325,6 +406,20 @@ auto detail::boarding_route_checkpoint_unload_bounded(
     checkpoint_refuse(result, requested, CheckWhy::incomplete_cover);
   return result;
 }
+} // namespace detail
+auto detail::boarding_route_checkpoint_unload_bounded(
+    const OriginBoardingBootSupport& source, double first, double last,
+    CheckLimits limits) -> std::expected<CheckDiagnostic, std::string> {
+  return checkpoint_unload_selected<CheckPolicy01>(source, first, last, limits);
+}
+auto detail::boarding_route_checkpoint_unload_self02_bounded(
+    const OriginBoardingBootSupport& source, double first, double last,
+    BoardingRouteCheckpointUnloadSelf02Limits limits)
+    -> std::expected<BoardingRouteCheckpointUnloadSelf02Diagnostic,
+                     std::string> {
+  return checkpoint_unload_selected<CheckPolicy02>(source, first, last, limits);
+}
+
 auto assess_origin_boarding_route_checkpoint_unload(
     const OriginBoardingBootSupport& source, double first, double last)
     -> std::expected<BoardingRouteCheckpointUnloadDiagnostic, std::string> {
