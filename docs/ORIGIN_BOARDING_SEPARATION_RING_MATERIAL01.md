@@ -57,3 +57,16 @@ Preserve WORLD16384B/co-live child49152B/owned output16777216B ceilings. Forecas
 - All earlier mandatory WORLD03 observations stay unchanged, including source1589/part12/cell137/phase2/global[.8203125,.828125] whole refusal; no collision claim from unknown relation.
 
 Commit this registration before helper/code/capture. Freeze source/live accounting before FIRST issuer and all8 WORLD04 requests on GCC/pinnedClang20. Retain first logs before mandatory outcomes. No method/geometry fitting after refusal. Parent#361, actual seated endpoint, actor/save and First Flight remain open until independently qualified.
+
+## Capture helper freeze
+
+Before the single load, freeze `tools/boarding/separation_ring_material.py`
+SHA256 `382e338e7a21890cfa58c7a65b1b0f0fa8789ccd4ab6c17d52f40bc6c345ab8a`.
+Exact argument-vector receipt is retained with local validation; portable
+invocation is `blender --background --python tools/boarding/separation_ring_material.py
+-- --source "$SOURCE_MASTER" --history-lifeboat "$HISTORY_LIFEBOAT"
+--history-finish "$HISTORY_FINISH" --capture-sha256
+382e338e7a21890cfa58c7a65b1b0f0fa8789ccd4ab6c17d52f40bc6c345ab8a
+--output assets/native/wayfarer-separation-ring-material-01` with each input
+matching the fixed hashes above. Output must be absent before execution.
+This grants no source save or observed issuer/WORLD outcome.
