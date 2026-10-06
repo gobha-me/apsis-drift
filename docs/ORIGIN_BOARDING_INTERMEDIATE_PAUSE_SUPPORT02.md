@@ -264,3 +264,28 @@ Apositive would qualify THIS source-backed nonzero static2s pause/constructiveal
 4 Confirmallocation axismajor3operations/division andsource vertexmajor8reads forM15/M16 exactprefix meaning.
 5 Rawnonrectangle M09 only tests extents/lastread and cannotassertauthenticrectangle geometry; genuine production rectangle pins mandatory.
 6 Baddivisor/sourceownerinjection unavailable throughimmutablepublicAPI, explicitlyunclaimed. Preserve oldinputnegative tests instead of manufacturingauthority.
+
+
+## Measured implementation gate before FIRST (2026-10-06)
+
+The registered method and literal roster are unchanged. Final strict object-only
+compiles on GCC16 and Clang20 measure Diagnostic2488, Expected2496, Limits112,
+Request680, Token32, Math784, Input288 and MathLimits48 bytes. Output2496 fits
+4096. No source creator, graph, pressure, fixture, test or oracle was executed
+to obtain these measurements.
+
+The source graph bound is **45,168 <=49,152**: the whole original32768 proof,
+two actual expected returns4992, one existing arena4096, request680, four limits448,
+phase limits72, phase refusal64 and controller/caller/error reserve2048. Optional
+request control and token metadata are charged in that reserve; factory copies
+are staged before the graph. Separate complete source bounds are request
+factory16,088, postgraph catalog/pressure27,984, raw16,640 and oracle25,632 bytes.
+The complete old boot prefix108954 bytes remains exact; the new tail is6881 bytes.
+
+Measured full graph machine chains are38,000 /35,320 bytes on GCC/Clang, including
+explicit pending return and arena. The entire unchanged public source-creator
+chain is7,008 /6,696 bytes, including the4096-byte arena and512-byte allocator/error
+allowance, below8192. No graph reserve, caller slack or return elision supplies
+space for new records. The earlier quarter-load results and all other original
+inputs remain unchanged. The new numerical outcome is still unknown before the
+frozen first execution.
