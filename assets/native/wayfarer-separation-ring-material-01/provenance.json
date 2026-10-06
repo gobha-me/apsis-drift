@@ -1,0 +1,31 @@
+{
+  "schema": "apsis-drift-separation-ring-material-provenance/1",
+  "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+  "source_package": "../wayfarer-operating-02",
+  "base_material_package": "../wayfarer-material-source-01",
+  "source_license": "LicenseRef-Apsis-Hopper-Meshy-Output",
+  "licenses": [
+    "../wayfarer-operating-02/licenses"
+  ],
+  "files": {
+    "completion.json": {
+      "bytes": 9177,
+      "sha256": "b6c32fe706808ec6d07a1e8147df5af78e2188f9ea648486519a5be8cbd72f52"
+    },
+    "geometry.bin": {
+      "path": "geometry.bin",
+      "bytes": 6240,
+      "sha256": "2c034c5e0505bed90cf9881c694604620801b6d2178c10805091a24fe6c9c9bb",
+      "vertices": 90,
+      "triangles": 160
+    }
+  },
+  "capture_tool": "tools/boarding/separation_ring_material.py",
+  "capture_helper_sha256": "382e338e7a21890cfa58c7a65b1b0f0fa8789ccd4ab6c17d52f40bc6c345ab8a",
+  "history_lifeboat_sha256": "1ff8c7de423eeddf100f5a36e1f494225263c342e745361075dbef88c7215db1",
+  "history_finish_sha256": "8c9fe3208c3360c5d96d2fd38847674c5875289e171ea9ca232031b33d78f38f",
+  "master_unchanged": true,
+  "source_save_count": 0,
+  "material_permission": false,
+  "actor_permission": false
+}
