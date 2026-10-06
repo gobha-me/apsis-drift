@@ -719,6 +719,68 @@ void print_report(std::size_t ordinal,
     }
   }
 }
+// Mandatory regressions follow the preserved, initially unknown FIRST logs.
+[[gnu::noinline]] void observed_constructor(bool admitted, const Evidence& e) {
+  check(admitted && e.complete && e.arithmetic_supported && e.version == 1 &&
+            e.condition == Condition::none && !e.side &&
+            e.required_source_bytes == 4096 && e.actual_source_bytes == 4096 &&
+            counts(e) == std::array<std::size_t, 12>{4096, 21, 1, 2, 2, 8, 16,
+                                                     12, 28, 4, 8, 2},
+        "Observed genuine issuer admits both finite source quads with exact "
+        "work");
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& q = e.quads[side];
+    check(
+        e.identity_checked[side] && e.identity_valid[side] &&
+            e.geometry_evaluated[side] && q.complete && q.horizontal &&
+            q.convex && q.nondegenerate && q.upward && q.corner_membership &&
+            q.distinct_face_vertices && q.incidence_valid && q.diagonal_valid &&
+            q.checked_edges == 4 && q.checked_sides == 8 &&
+            q.checked_vertices == 6 && q.checked_windings == 2 &&
+            q.checked_incidence == 4,
+        "Observed paired source quads retain their complete geometry evidence");
+  }
+}
+[[gnu::noinline]] void observed_assessment(const Diagnostic& d) {
+  check(d.arithmetic_supported && d.kinematic_complete && d.constant_state &&
+            d.projection_complete && d.nominal_equilibrium &&
+            !d.finite_contact_supported && !d.nominal_load_supported &&
+            !d.complete && d.stop_condition == Condition::none &&
+            d.duration_seconds == 2 && d.work.phase_calls == 1 &&
+            counts(d) ==
+                std::array<std::uint64_t, 9>{1, 2, 1, 3, 6, 251, 2, 16, 2552},
+        "Observed constant hold completes graph and equilibrium but refuses "
+        "contact");
+  check(d.first_refusal && d.first_refusal->condition == Condition::sole_disk &&
+            d.first_refusal->side == 0 && d.first_refusal->edge == 2 &&
+            !d.first_refusal->source_edge &&
+            d.first_refusal->phase.condition ==
+                BoardingRouteFootPhaseCondition::none &&
+            d.first_refusal->limiting_bound.upper < 0,
+        "Observed first refusal is the strict port sole edge-two disk witness");
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& site = d.sites[side];
+    check(site.loaded && site.plane_identity && site.evaluated &&
+              site.sole_status == Status::refuted &&
+              site.source_status ==
+                  (side == 0 ? Status::refuted : Status::contained),
+          "Observed sole and finite-source disk statuses remain distinct");
+    for (std::size_t edge = 0; edge < 4; ++edge)
+      check(site.sole_evaluated[edge] && site.source_evaluated[edge],
+            "Physical contact refusal preserves all sixteen evaluated edges");
+  }
+  const auto& edge = d.sites[0].sole_edges[2];
+  check(edge.signed_side.lower > 0 && edge.squared_margin_gap.upper < 0 &&
+            !edge.disk_contained,
+        "Port pressure is on the inner side but its required disk crosses the "
+        "sole margin");
+  if (d.first_refusal)
+    check(d.first_refusal->limiting_bound.lower ==
+                  edge.squared_margin_gap.lower &&
+              d.first_refusal->limiting_bound.upper ==
+                  edge.squared_margin_gap.upper,
+          "Observed refusal retains the actual port edge gap enclosure");
+}
 [[gnu::noinline]] void first_constructor(const NativeCraftBinding& binding,
                                          const OriginBoardingBootSupport& boots,
                                          std::optional<Provider>& provider,
@@ -728,6 +790,7 @@ void print_report(std::size_t ordinal,
   auto result = Access::make(binding, boots, {}, &evidence);
   print_constructor(result.has_value(),
                     result ? std::string_view{} : result.error(), evidence);
+  observed_constructor(result.has_value(), evidence);
   constructor_accounting(evidence, {});
   baseline = {counts(evidence), evidence.condition, evidence.complete,
               result.has_value()};
@@ -746,7 +809,10 @@ void print_report(std::size_t ordinal,
   const auto result =
       assess_origin_boarding_intermediate_pause_support(provider, reverse);
   print_report(reverse ? 2U : 1U, result);
+  check(result.has_value(),
+        "Observed forward and reverse pause assessments return evidence");
   if (!result) return;
+  observed_assessment(*result);
   report_accounting(*result, {});
   first_oracle(*result);
   baseline = summarize(*result);
@@ -861,20 +927,6 @@ constexpr std::array<Condition, 12> constructor_capacity{
     check(retained.selected_partitions().size() == 10,
           "Moving boots preserves ten legacy partitions");
   }
-  { // C60; one public wrapper call, no private retry.
-    const auto other = make_native_starting_assembly_binding(
-        NativeStartingAssemblySelection{});
-    if (!other) throw std::runtime_error(other.error());
-    check(other->contact() && binding.contact() &&
-              other->contact()->original_geometry() !=
-                  binding.contact()->original_geometry(),
-          "Mismatch control uses independently owned genuine original source");
-    charge(totals.constructors, 64);
-    const auto result =
-        make_origin_boarding_intermediate_pause_support(*other, boots);
-    check(!result,
-          "Public issuer rejects differently owned genuine source identity");
-  }
   for (std::size_t i = 0; i < 4; ++i) { // C61–C64, existing input API only.
     NativeStartingAssemblySelection selection;
     if (i == 0) selection.hardware.roof_transfer = 0;
@@ -889,6 +941,27 @@ constexpr std::array<Condition, 12> constructor_capacity{
           !wrong.error().empty(),
           "Invalid hardware prerequisite refuses without forged issuer input");
   }
+}
+// Post-FIRST C60 amendment: the only genuine native factory shares its cached
+// source. Distinct-owner admission remains unavailable until a second genuine
+// assembly constructor exists. This small stage keeps allocating admission
+// outside the larger invalid-binding roster frame.
+[[gnu::noinline]] void cached_source_control(
+    const NativeCraftBinding& binding, const OriginBoardingBootSupport& boots) {
+  const auto alias =
+      make_native_starting_assembly_binding(NativeStartingAssemblySelection{});
+  if (!alias) throw std::runtime_error(alias.error());
+  check(alias->contact() && binding.contact() &&
+            alias->contact() == binding.contact() &&
+            alias->contact()->original_geometry() ==
+                binding.contact()->original_geometry(),
+        "Native factory reuses its genuine cached source owner");
+  charge(totals.constructors, 64);
+  const auto result =
+      make_origin_boarding_intermediate_pause_support(*alias, boots); // C60.
+  check(result && Access::valid(*result) && result->summary() &&
+            result->summary()->complete,
+        "Public issuer admits a genuine same-owner native alias");
 }
 constexpr std::array<BoardingRouteFootPhaseCondition, 5> phase_capacity{
     BoardingRouteFootPhaseCondition::graph_capacity,
@@ -1387,8 +1460,9 @@ int main() {
     math_roster(*boots,
                 provider); // Releases FIRST arena before raw proofs/replays.
     constructor_roster(*binding, *boots, summary.constructor); // C02–C56.
+    cached_source_control(*binding, *boots); // Amended C60, one public call.
     constructor_binding_roster(*binding, *boots,
-                               summary.constructor); // C58–C64.
+                               summary.constructor); // C58/C59/C61–C64.
     constexpr std::array<std::uint64_t, 8> aggregate{64,  128,   64,  192,
                                                      384, 16384, 128, 1024};
     for (std::size_t i = 0; i < 8; ++i)
