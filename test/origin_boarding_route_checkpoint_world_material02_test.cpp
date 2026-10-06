@@ -761,6 +761,34 @@ int main() {
             "Unavailable constructor is preserved; no fake extension mints "
             "WORLD permission");
     }
+    detail::BoardingCheckpointMaterialExtensionConstructorMath union_evidence;
+    const auto union_admission =
+        ExtensionAccess::make_union02(binding, base, {}, &union_evidence);
+    std::cout << "WORLD02_UNION02_EXTENSION_ADMISSION accepted="
+              << union_admission.has_value() << " condition="
+              << static_cast<unsigned>(union_evidence.condition)
+              << " version=" << union_evidence.work.extension_version
+              << " pairs=" << union_evidence.adjacent_pair_attempts
+              << " raw=" << union_evidence.work.raw_plane_guards
+              << " quantized=" << union_evidence.work.quantized_plane_guards;
+    if (!union_admission) std::cout << " error=" << union_admission.error();
+    std::cout << '\n' << std::flush;
+    if (union_admission) {
+      const auto& extension = *union_admission;
+      check(extension.summary() && extension.summary()->extension_version == 2,
+            "Only explicit genuinely admitted Union02 capability starts the "
+            "new consumer observation");
+      invalid_controls(binding, boot, base, extension);
+      observe(boot, base, extension);
+    } else {
+      std::cout << "CHECKPOINT_WORLD_MATERIAL02_UNAVAILABLE "
+                   "reason=union02_constructor clearance_observed=0\n"
+                << std::flush;
+      check(!union_evidence.complete &&
+                !union_evidence.work.constructors_complete,
+            "Refused Union02 retains no source handle and no WORLD clearance "
+            "observation");
+    }
   } catch (const std::exception& e) {
     ++failures;
     std::cerr << "EXCEPTION: " << e.what() << '\n';

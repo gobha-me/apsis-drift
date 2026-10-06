@@ -703,6 +703,293 @@ void admitted_controls(const NativeCraftBinding& binding,
   check(Access::valid(cap, base_retained),
         "Copies preserve genuine immutable base identity");
 }
+using Planes = std::array<detail::MaterialPlane, 6>;
+auto split_planes(bool right) -> Planes {
+  Planes p{{{{0, -1, 0}, {1, 1, true}},
+            {{0, 1, 0}, {1, 1, true}},
+            {{right ? 1. : -1., 0, 0}, {1, 1, true}},
+            {{1, 0, 0}, {0, 0, true}},
+            {{0, 0, -1}, {1, 1, true}},
+            {{0, 0, 1}, {1, 1, true}}}};
+  if (right) {
+    p[3] = {{0, 0, -1}, {1, 1, true}};
+    p[4] = {{0, 0, 1}, {1, 1, true}};
+    p[5] = {{-1, 0, 0}, {0, 0, true}};
+  }
+  return p;
+}
+auto vertex_inside(const Planes& p, RigidVector3 v) -> bool {
+  return std::ranges::all_of(p, [&](const auto& plane) {
+    return dot(v, plane.normal) <= plane.maximum.lower;
+  });
+}
+void adjacent_controls(View view) {
+  const auto a = split_planes(false), b = split_planes(true);
+  const Triangle cross{{{-.5, 0, .1}, {.5, .1, 0}, {0, -.1, -.1}}};
+  auto certificate = require(
+      detail::checkpoint_material_extension_adjacent_union_math(a, b, cross));
+  no_authority(certificate);
+  check(certificate.complete && certificate.work.arithmetic_supported &&
+            certificate.adjacent_pair_attempts == 1 &&
+            certificate.work.raw_plane_guards == 30 &&
+            certificate.work.quantized_plane_guards == 0,
+        "Complementary shared seam proves the entire crossing triangle using "
+        "all nonseam predicates");
+  for (const auto& v : cross)
+    check(vertex_inside(a, v) || vertex_inside(b, v),
+          "Independent exact fixture vertices belong to the closed adjacent "
+          "union");
+  for (int which = 0; which < 3; ++which) {
+    const auto used = which == 0   ? certificate.work.base_guards
+                      : which == 1 ? certificate.work.raw_plane_guards
+                                   : certificate.adjacent_pair_attempts;
+    for (int mode = 0; mode < 3; ++mode) {
+      Limits l{};
+      const auto n = mode == 0 ? 0 : mode == 1 ? used : used - 1;
+      if (which == 0) l.base_guards = n;
+      if (which == 1) l.plane_guards = n;
+      if (which == 2) l.adjacent_pair_attempts = n;
+      const auto r =
+          require(detail::checkpoint_material_extension_adjacent_union_math(
+              a, b, cross, false, l));
+      no_authority(r);
+      check(r.work.base_guards <= l.base_guards &&
+                r.work.raw_plane_guards <= l.plane_guards &&
+                r.adjacent_pair_attempts <= l.adjacent_pair_attempts,
+            "Numeric seam stops before its lowered next operation");
+      if (mode == 1)
+        check(r.complete, "Exact actual seam/base/plane work budget retains "
+                          "full arithmetic certificate");
+      else
+        check(!r.complete &&
+                  r.condition == (which == 0   ? Condition::base_capacity
+                                  : which == 1 ? Condition::plane_capacity
+                                               : Condition::pair_capacity),
+              "Zero and one-less reached seam/base/plane capacity preserves "
+              "exact refusal cause");
+    }
+  }
+  auto over = Limits{};
+  ++over.adjacent_pair_attempts;
+  check(!detail::checkpoint_material_extension_adjacent_union_math(a, b, cross,
+                                                                   false, over),
+        "Numeric seam cannot raise pair-attempt ceiling8192");
+  const auto q =
+      require(detail::checkpoint_material_extension_adjacent_union_math(
+          a, b, cross, true));
+  no_authority(q);
+  check(
+      q.complete && q.work.raw_plane_guards == 0 &&
+          q.work.quantized_plane_guards == 30,
+      "Quantized adjacent proof counts only its own supplied-plane predicates");
+  auto asymmetric = b;
+  asymmetric[0].maximum = {0, 0, true};
+  asymmetric[1].maximum = {2, 2, true};
+  const Triangle nonconvex{{{-.75, -.75, 0}, {.75, .25, 0}, {.75, 1.75, 0}}};
+  for (const auto& v : nonconvex)
+    check(vertex_inside(a, v) || vertex_inside(asymmetric, v),
+          "Nonconvex counterexample vertices each fit a genuine half of the "
+          "union");
+  const auto hole =
+      add(scale(nonconvex[0], .4375),
+          add(scale(nonconvex[1], .5), scale(nonconvex[2], .0625)));
+  check(hole.x == .09375 && hole.y == -.09375 && !vertex_inside(a, hole) &&
+            !vertex_inside(asymmetric, hole),
+        "Independent positive dyadic barycentric interior witness crosses the "
+        "missing nonconvex region");
+  const auto cavity =
+      require(detail::checkpoint_material_extension_adjacent_union_math(
+          a, asymmetric, nonconvex));
+  no_authority(cavity);
+  check(!cavity.complete, "Union membership of vertices cannot certify an "
+                          "interior crossing the aperture");
+  auto exterior = cross;
+  exterior[0].z = 1.01;
+  check(!require(detail::checkpoint_material_extension_adjacent_union_math(
+                     a, b, exterior))
+             .complete,
+        "Crossing an exterior nonseam plane refuses the whole triangle");
+  for (int which = 0; which < 6; ++which) {
+    auto changed = b;
+    if (which == 0) changed[5].normal.x = std::nextafter(-1., 0.);
+    if (which == 1) changed[5].maximum = {-.01, -.01, true};
+    if (which == 2) changed[5].normal = {};
+    if (which == 3) changed[2].maximum.supported = false;
+    if (which == 4)
+      changed[2].normal.z = std::numeric_limits<double>::quiet_NaN();
+    if (which == 5) changed[2].maximum = {2, 1, true};
+    const auto r = detail::checkpoint_material_extension_adjacent_union_math(
+        a, changed, cross);
+    check(!r || !r->complete, "Noncomplementary, gapped, zero, unsupported, "
+                              "nonfinite and malformed seams cannot certify");
+    if (r) no_authority(*r);
+  }
+  const auto short_packet =
+      detail::checkpoint_material_extension_adjacent_union_math(
+          std::span(a).first(5), b, cross);
+  check(!short_packet || !short_packet->complete,
+        "Adjacent-band proof requires both complete six-plane packets");
+  auto raw_cross = cross;
+  raw_cross[0].z = 1. + 1.e-7;
+  const auto raw_negative =
+      require(detail::checkpoint_material_extension_adjacent_union_math(
+          a, b, raw_cross));
+  check(!raw_negative.complete && !raw_negative.quantized,
+        "Raw protrusion cannot use a separately quantization-expanded "
+        "certificate");
+  auto qa = a, qb = b;
+  for (auto* packet : std::array{&qa, &qb})
+    for (auto& plane : *packet) {
+      const double allowance =
+          1.e-6 * (std::abs(plane.normal.x) + std::abs(plane.normal.y) +
+                   std::abs(plane.normal.z));
+      plane.maximum.lower += allowance;
+      plane.maximum.upper += allowance;
+    }
+  const auto expanded =
+      require(detail::checkpoint_material_extension_adjacent_union_math(
+          qa, qb, raw_cross, true));
+  no_authority(expanded);
+  check(expanded.complete && expanded.quantized &&
+            expanded.work.raw_plane_guards == 0,
+        "A q-only arithmetic allowance cannot replace the independently failed "
+        "raw proof or enroll material");
+  const auto& mesh = view.meshes[0];
+  Triangle source_triangle{};
+  for (std::size_t v = 0; v < 3; ++v)
+    source_triangle[v] = mesh.raw_vertices[mesh.triangles[2].vertices[v]];
+  bool any_certificate = false;
+  for (std::size_t sector = 0; sector < 8; ++sector) {
+    const auto p = require(
+        detail::checkpoint_material_extension_prism_math(*view.frame, sector));
+    const auto next = require(detail::checkpoint_material_extension_prism_math(
+        *view.frame, (sector + 1) % 8));
+    const auto result =
+        require(detail::checkpoint_material_extension_adjacent_union_math(
+            p.raw_planes, next.raw_planes, source_triangle));
+    no_authority(result);
+    if (result.complete) {
+      any_certificate = true;
+      for (auto vertex : source_triangle)
+        for (std::size_t k = 0; k < 6; ++k) {
+          if (k != 3)
+            check(dot(vertex, p.raw_planes[k].normal) <=
+                      p.raw_planes[k].maximum.lower,
+                  "Observed triangle2 whole-union certificate independently "
+                  "satisfies every A nonseam plane");
+          if (k != 5)
+            check(dot(vertex, next.raw_planes[k].normal) <=
+                      next.raw_planes[k].maximum.lower,
+                  "Observed triangle2 whole-union certificate independently "
+                  "satisfies every B nonseam plane");
+        }
+    }
+  }
+  std::cout << "UNION02_TRIANGLE2_NUMERIC certified=" << any_certificate << '\n'
+            << std::flush;
+  const auto old = std::fegetround();
+  if (std::fesetround(FE_DOWNWARD) == 0) {
+    const auto unsupported =
+        detail::checkpoint_material_extension_adjacent_union_math(a, b, cross);
+    check(!unsupported || (!unsupported->complete &&
+                           !unsupported->work.arithmetic_supported),
+          "Unsafe FP cannot certify adjacent union geometry");
+  }
+  check(std::fesetround(old) == 0,
+        "Restore rounding after adjacent numeric control");
+}
+void union02_controls(View view, const NativeCraftBinding& binding,
+                      const OriginBoardingInitialMaterial& base) {
+  check(!make_origin_boarding_checkpoint_material_extension_union02(
+            NativeCraftBinding{}, base),
+        "Unbound native hardware cannot issue separately named Union02 "
+        "capability");
+  const auto admission =
+      make_origin_boarding_checkpoint_material_extension_union02(binding, base);
+  std::cout << "FIRST_PUBLIC_CHECKPOINT_MATERIAL_UNION02 accepted="
+            << admission.has_value();
+  if (!admission) std::cout << " error=" << admission.error();
+  std::cout << '\n' << std::flush;
+  Evidence e;
+  const auto detailed = Access::make_union02(binding, base, {}, &e);
+  log_evidence("FIRST_CHECKPOINT_MATERIAL_UNION02_CONSTRUCTOR", e);
+  std::cout << "UNION02_PAIR_ATTEMPTS " << e.adjacent_pair_attempts << '\n'
+            << std::flush;
+  check(admission.has_value() == detailed.has_value(),
+        "Public Union02 and authentic detailed issuer agree without "
+        "preselecting their outcome");
+  accounting(e);
+  check(e.work.extension_version == 2,
+        "Separately selected Union02 evidence explicitly retains version2 even "
+        "on refusal");
+  check(e.adjacent_pair_attempts <= 8192,
+        "Actual adjacent fallback attempts remain independently bounded");
+  const auto numeric =
+      detail::checkpoint_material_extension_union02_constructor_math(view);
+  check(numeric.has_value(),
+        "Union02 arithmetic retains authentic full-source outcome evidence");
+  if (numeric) {
+    no_authority(*numeric);
+    check(
+        numeric->complete == e.complete && numeric->condition == e.condition &&
+            numeric->source == e.source && numeric->triangle == e.triangle &&
+            numeric->sector == e.sector && numeric->plane == e.plane &&
+            numeric->vertex == e.vertex && numeric->quantized == e.quantized &&
+            numeric->adjacent_pair_attempts == e.adjacent_pair_attempts,
+        "Arithmetic Union02 fixture preserves actual authentic "
+        "source-attributed result and attempts");
+  }
+  for (int which = 0; which < 2; ++which) {
+    const auto used =
+        which == 0 ? e.work.raw_plane_guards + e.work.quantized_plane_guards
+                   : e.adjacent_pair_attempts;
+    if (used == 0) continue;
+    for (int mode = 0; mode < 3; ++mode) {
+      Limits l{};
+      const auto n = mode == 0 ? 0 : mode == 1 ? used : used - 1;
+      if (which == 0)
+        l.plane_guards = n;
+      else
+        l.adjacent_pair_attempts = n;
+      Evidence retained;
+      const auto r = Access::make_union02(binding, base, l, &retained);
+      accounting(retained, l);
+      check(retained.adjacent_pair_attempts <= l.adjacent_pair_attempts,
+            "Authentic fallback stops before next lowered pair attempt");
+      if (mode == 1)
+        check(r.has_value() == admission.has_value() &&
+                  retained.condition == e.condition &&
+                  retained.triangle == e.triangle,
+              "Exact actual Union02 plane/pair budget preserves observed "
+              "admission or refusal");
+      else
+        check(!r &&
+                  retained.condition == (which == 0 ? Condition::plane_capacity
+                                                    : Condition::pair_capacity),
+              "Authentic zero/one-less reached Union02 plane/pair cap refuses "
+              "without geometry tuning");
+    }
+  }
+  adjacent_controls(view);
+  if (admission) {
+    check(admission->summary() && admission->summary()->extension_version == 2,
+          "Genuine Union02 capability explicitly retains proof version2");
+    admitted_controls(binding, base, *admission, view);
+  }
+  const auto old = std::fegetround();
+  if (std::fesetround(FE_UPWARD) == 0) {
+    check(!make_origin_boarding_checkpoint_material_extension_union02(binding,
+                                                                      base),
+          "Unsafe FP cannot issue Union02 source authority");
+    const auto unsupported =
+        detail::checkpoint_material_extension_union02_constructor_math(view);
+    check(!unsupported || (!unsupported->complete &&
+                           !unsupported->work.arithmetic_supported),
+          "Unsafe FP refuses full-source Union02 proof");
+  }
+  check(std::fesetround(old) == 0,
+        "Restore rounding after Union02 issuer control");
+}
 } // namespace
 int main() {
   try {
@@ -754,7 +1041,9 @@ int main() {
               evidence.work.quantized_plane_guards == 36 &&
               evidence.work.bindings_complete &&
               evidence.work.arithmetic_supported &&
-              !evidence.work.constructors_complete,
+              !evidence.work.constructors_complete &&
+              evidence.work.extension_version == 1 &&
+              evidence.adjacent_pair_attempts == 0,
           "Frozen constructor refusal retains exact completed guards and "
           "separate raw/quantized attempted work");
     check(admission.has_value() == detailed.has_value(),
@@ -792,6 +1081,7 @@ int main() {
     numerical_constructor_controls(view);
     unsafe(view, binding, base);
     if (admission) admitted_controls(binding, base, *admission, view);
+    union02_controls(view, binding, base);
     check(summary_bits(*base.summary()) == before,
           "Extension admission and controls preserve every old material "
           "summary field");

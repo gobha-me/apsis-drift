@@ -21,18 +21,21 @@ enum class BoardingCheckpointMaterialExtensionCondition : std::uint8_t {
   plane_capacity,
   base_geometry,
   raw_containment,
-  quantized_containment
+  quantized_containment,
+  pair_capacity
 };
 struct BoardingCheckpointMaterialExtensionLimits {
   std::size_t source_bytes{
       kBoardingCheckpointMaterialExtensionMaximumSourceBytes};
   std::uint64_t base_guards{4096}, vertex_guards{20448}, index_guards{17097},
       plane_guards{147456};
+  std::uint64_t adjacent_pair_attempts{8192};
 };
 struct BoardingCheckpointMaterialExtensionConstructorMath {
   BoardingCheckpointMaterialExtensionSummary work;
   BoardingCheckpointMaterialExtensionCondition condition{};
   std::optional<std::size_t> source, triangle, sector, vertex, plane;
+  std::uint64_t adjacent_pair_attempts{};
   bool quantized{}, complete{};
   static constexpr bool source_qualified{false}, material_qualified{false},
       world_qualified{false}, body_qualified{false}, actor_qualified{false};
@@ -51,6 +54,11 @@ struct BoardingCheckpointMaterialExtensionAccess {
       const OriginBoardingCheckpointMaterialExtension&,
       const OriginBoardingInitialMaterial&) -> bool;
   [[nodiscard]] static auto make(
+      const NativeCraftBinding&, const OriginBoardingInitialMaterial&,
+      BoardingCheckpointMaterialExtensionLimits,
+      BoardingCheckpointMaterialExtensionConstructorMath* evidence = nullptr)
+      -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string>;
+  [[nodiscard]] static auto make_union02(
       const NativeCraftBinding&, const OriginBoardingInitialMaterial&,
       BoardingCheckpointMaterialExtensionLimits,
       BoardingCheckpointMaterialExtensionConstructorMath* evidence = nullptr)
@@ -83,4 +91,16 @@ struct BoardingCheckpointMaterialExtensionAccess {
 [[nodiscard]] auto checkpoint_material_extension_prism_math(
     const CheckpointMaterialExtensionFrameRecord&, std::size_t sector)
     -> std::expected<BoardingCheckpointMaterialExtensionPrismMath, std::string>;
+[[nodiscard]] auto checkpoint_material_extension_union02_constructor_math(
+    const CheckpointMaterialExtensionPreparedView&,
+    BoardingCheckpointMaterialExtensionLimits = {})
+    -> std::expected<BoardingCheckpointMaterialExtensionConstructorMath,
+                     std::string>;
+// Arithmetic-only adjacent-band proof; no caller planes mint a capability.
+[[nodiscard]] auto checkpoint_material_extension_adjacent_union_math(
+    std::span<const MaterialPlane> a, std::span<const MaterialPlane> b,
+    const std::array<RigidVector3, 3>& triangle, bool quantized = false,
+    BoardingCheckpointMaterialExtensionLimits = {})
+    -> std::expected<BoardingCheckpointMaterialExtensionConstructorMath,
+                     std::string>;
 } // namespace apsis_drift::detail

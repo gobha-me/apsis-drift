@@ -112,7 +112,8 @@ auto valid_limits(const Limits& c) -> bool {
          c.base_guards <= top.base_guards &&
          c.vertex_guards <= top.vertex_guards &&
          c.index_guards <= top.index_guards &&
-         c.plane_guards <= top.plane_guards;
+         c.plane_guards <= top.plane_guards &&
+         c.adjacent_pair_attempts <= top.adjacent_pair_attempts;
 }
 auto hash(std::string_view s) -> bool {
   return s.size() == 64 && std::ranges::all_of(s, [](char c) {
@@ -438,6 +439,174 @@ auto coordinates(const View& v, Proof& p, const Limits& c) -> bool {
   p.complete = true;
   return true;
 }
+// For A=R_A intersect {n.x<=a}, B=R_B intersect {-n.x<=b},
+// a.lower>=-b.lower proves the seam halfspaces cover all points. All three
+// triangle vertices inside the ten nonseam planes prove the whole triangle
+// lies in R_A intersect R_B by convexity, hence in A union B.
+[[gnu::noinline]] auto authenticate_adjacent(std::span<const Plane> a,
+                                             std::span<const Plane> b,
+                                             const Limits& caps, Proof& p)
+    -> bool {
+  if (a.size() != 6 || b.size() != 6) return fail(p, Why::base_geometry);
+  for (const auto planes : {a, b}) {
+    for (const auto& plane : planes) {
+      if (!base_charge(p, caps)) return false;
+      if (!std::isfinite(plane.normal.x) || !std::isfinite(plane.normal.y) ||
+          !std::isfinite(plane.normal.z) || !plane.maximum.supported ||
+          !std::isfinite(plane.maximum.lower) ||
+          !std::isfinite(plane.maximum.upper) ||
+          plane.maximum.lower > plane.maximum.upper)
+        return fail(p, Why::base_geometry);
+    }
+  }
+  for (std::size_t axis = 0; axis < 3; ++axis) {
+    if (!base_charge(p, caps)) return false;
+    if (component(a[3].normal, axis) != -component(b[5].normal, axis))
+      return fail(p, Why::base_geometry);
+  }
+  if (!base_charge(p, caps)) return false;
+  if (a[3].normal == Vec{}) return fail(p, Why::base_geometry);
+  if (!base_charge(p, caps)) return false;
+  // Unary sign is exact; do not round a sum near a zero-width seam.
+  if (a[3].maximum.lower < -b[5].maximum.lower)
+    return fail(p, Why::base_geometry);
+  return true;
+}
+template <typename Points>
+[[gnu::noinline]] auto adjacent_contains(std::span<const Plane> a,
+                                         std::span<const Plane> b,
+                                         const Points& point, std::size_t first,
+                                         std::size_t second, const Limits& caps,
+                                         Proof& p) -> bool {
+  if (!charge(p.adjacent_pair_attempts, caps.adjacent_pair_attempts, p,
+              Why::pair_capacity))
+    return false;
+  for (std::size_t n = 0; n < 3; ++n) {
+    const auto vertex = point(n);
+    for (unsigned side = 0; side < 2; ++side) {
+      p.sector = side == 0 ? first : second;
+      const auto planes = side == 0 ? a : b;
+      for (std::size_t k = 0; k < 6; ++k) {
+        if (k == (side == 0 ? 3 : 5)) continue;
+        p.plane = k;
+        if (p.work.raw_plane_guards + p.work.quantized_plane_guards >=
+            caps.plane_guards)
+          return fail(p, Why::plane_capacity);
+        ++(p.quantized ? p.work.quantized_plane_guards
+                       : p.work.raw_plane_guards);
+        const auto h = dot(vertex, planes[k].normal);
+        if (!h.supported) return fail(p, Why::unsupported_arithmetic);
+        if (h.upper > planes[k].maximum.lower) return false;
+      }
+    }
+  }
+  return true;
+}
+[[gnu::noinline]] auto union02_triangles(const View& v, const Limits& caps,
+                                         const Prisms& store, Proof& p)
+    -> bool {
+  // This phase starts AFTER the prism builder returns; no plane packets copy.
+  std::array<std::array<bool, 8>, 2> seams{};
+  for (unsigned representation = 0; representation < 2; ++representation) {
+    p.quantized = representation != 0;
+    for (std::size_t sector = 0; sector < 8; ++sector) {
+      p.sector = sector;
+      const auto next = (sector + 1) % 8;
+      seams[representation][sector] =
+          authenticate_adjacent(representation == 0 ? store[sector].raw_planes
+                                                    : store[sector].game_planes,
+                                representation == 0 ? store[next].raw_planes
+                                                    : store[next].game_planes,
+                                caps, p);
+      if (!seams[representation][sector]) return false;
+    }
+  }
+  p.work.bindings_complete = true;
+  p.source = 1436;
+  const auto& mesh = v.meshes[0];
+  for (std::size_t t = 0; t < mesh.triangles.size(); ++t) {
+    p.triangle = t;
+    for (unsigned representation = 0; representation < 2; ++representation) {
+      p.quantized = representation != 0;
+      bool contained = false;
+      for (std::size_t sector = 0; sector < 8 && !contained; ++sector) {
+        p.sector = sector;
+        contained = true;
+        const auto& planes = representation == 0 ? store[sector].raw_planes
+                                                 : store[sector].game_planes;
+        for (std::size_t n = 0; n < 3 && contained; ++n) {
+          p.vertex = mesh.triangles[t].vertices[n];
+          const auto point = representation == 0
+                                 ? mesh.raw_vertices[*p.vertex]
+                                 : qpoint(mesh.quantized_vertices[*p.vertex]);
+          for (std::size_t k = 0; k < 6; ++k) {
+            p.plane = k;
+            if (p.work.raw_plane_guards + p.work.quantized_plane_guards >=
+                caps.plane_guards)
+              return fail(p, Why::plane_capacity);
+            ++(representation == 0 ? p.work.raw_plane_guards
+                                   : p.work.quantized_plane_guards);
+            const auto h = dot(point, planes[k].normal);
+            if (!h.supported) return fail(p, Why::unsupported_arithmetic);
+            if (h.upper > planes[k].maximum.lower) {
+              contained = false;
+              break;
+            }
+          }
+        }
+      }
+      if (!contained) {
+        for (std::size_t sector = 0; sector < 8 && !contained; ++sector) {
+          if (!seams[representation][sector])
+            return fail(p, Why::base_geometry);
+          const auto next = (sector + 1) % 8;
+          const auto& a = representation == 0 ? store[sector].raw_planes
+                                              : store[sector].game_planes;
+          const auto& b = representation == 0 ? store[next].raw_planes
+                                              : store[next].game_planes;
+          const auto point = [&](std::size_t n) {
+            p.vertex = mesh.triangles[t].vertices[n];
+            return representation == 0
+                       ? mesh.raw_vertices[*p.vertex]
+                       : qpoint(mesh.quantized_vertices[*p.vertex]);
+          };
+          contained = adjacent_contains(a, b, point, sector, next, caps, p);
+          if (p.condition != Why::none) return false;
+        }
+      }
+      if (!contained)
+        return fail(p, representation == 0 ? Why::raw_containment
+                                           : Why::quantized_containment);
+    }
+  }
+  p.source.reset();
+  p.triangle.reset();
+  p.sector.reset();
+  p.vertex.reset();
+  p.plane.reset();
+  p.quantized = false;
+  p.work.sources = 2;
+  p.work.vertices = 3408;
+  p.work.triangles = 5699;
+  p.work.prisms = 8;
+  p.work.constructors_complete = true;
+  p.complete = true;
+  return true;
+}
+[[gnu::noinline]] auto construct_union02(const View& v, const Limits& caps,
+                                         Prisms& store, Proof& p) -> bool {
+  p = {};
+  p.work.extension_version = kBoardingCheckpointMaterialUnion02Version;
+  p.work.arithmetic_supported = environment();
+  if (!p.work.arithmetic_supported) return fail(p, Why::unsupported_arithmetic);
+  if (!metadata(v, p, caps) || !coordinates(v, p, caps)) return false;
+  p.source = 1436;
+  for (std::size_t sector = 0; sector < 8; ++sector) {
+    p.sector = sector;
+    if (!build_prism(*v.frame, sector, p, caps, store[sector])) return false;
+  }
+  return union02_triangles(v, caps, store, p);
+}
 [[gnu::noinline]] auto constructor_error(const Proof& proof) -> std::string {
   return "Extension constructor refused condition=" +
          std::to_string(static_cast<unsigned>(proof.condition)) + " triangle=" +
@@ -468,9 +637,11 @@ auto required_source_bytes(const View& view) -> std::size_t {
 }
 } // namespace
 static_assert(sizeof(OriginBoardingCheckpointMaterialExtension::Data) +
-                  sizeof(Proof) + sizeof(Prism) + 1024 + 1024 <=
+                  sizeof(Proof) + sizeof(Prism) + sizeof(Limits) + 16 + 1024 +
+                  1024 <=
               8192);
-static_assert(sizeof(Prisms) + sizeof(Proof) + sizeof(Prism) + 1024 + 1024 <=
+static_assert(sizeof(Prisms) + sizeof(Proof) + sizeof(Prism) + sizeof(Limits) +
+                  16 + 1024 + 1024 <=
               8192);
 OriginBoardingCheckpointMaterialExtension::
     OriginBoardingCheckpointMaterialExtension(std::shared_ptr<const Data> data)
@@ -490,7 +661,12 @@ auto BoardingCheckpointMaterialExtensionAccess::valid(
     const OriginBoardingCheckpointMaterialExtension& source,
     const OriginBoardingInitialMaterial& base) -> bool {
   const auto* d = data(source);
-  return d && d->summary.constructors_complete && d->base_identity &&
+  return d && d->summary.constructors_complete &&
+         (d->summary.extension_version ==
+              kBoardingCheckpointMaterialExtensionVersion ||
+          d->summary.extension_version ==
+              kBoardingCheckpointMaterialUnion02Version) &&
+         d->base_identity &&
          BoardingInitialMaterialAccess::data(base) == d->base_identity &&
          BoardingInitialMaterialAccess::data(d->base) == d->base_identity &&
          initial_material_extension_binding_matches(d->binding, base);
@@ -522,6 +698,40 @@ auto BoardingCheckpointMaterialExtensionAccess::make(
                                                                         base);
   owned->prepared = view;
   const bool complete = construct(view, limits, owned->prisms, proof);
+  proof.work.source_bytes = required_source_bytes(view);
+  if (!complete) return std::unexpected(constructor_error(proof));
+  proof.work.source_bytes = required_source_bytes(view);
+  owned->summary = proof.work;
+  return OriginBoardingCheckpointMaterialExtension{std::move(owned)};
+}
+auto BoardingCheckpointMaterialExtensionAccess::make_union02(
+    const NativeCraftBinding& binding,
+    const OriginBoardingInitialMaterial& base, Limits limits, Proof* evidence)
+    -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string> {
+  if (!valid_limits(limits))
+    return std::unexpected("Extension lowered registered capacities required");
+  Proof local;
+  auto& proof = evidence ? *evidence : local;
+  proof = {};
+  proof.work.extension_version = kBoardingCheckpointMaterialUnion02Version;
+  const auto view = origin_boarding_checkpoint_material_extension_prepared();
+  proof.work.source_bytes = required_source_bytes(view);
+  if (view.storage_bytes > limits.source_bytes ||
+      sizeof(OriginBoardingCheckpointMaterialExtension::Data) + 64 >
+          limits.source_bytes - view.storage_bytes) {
+    fail(proof, Why::source_capacity);
+    return std::unexpected("Extension source capacity before allocation");
+  }
+  if (!initial_material_extension_binding_matches(binding, base)) {
+    fail(proof, Why::invalid_binding);
+    return std::unexpected(
+        "Extension genuine same-base original native binding required");
+  }
+  auto owned =
+      std::make_shared<OriginBoardingCheckpointMaterialExtension::Data>(binding,
+                                                                        base);
+  owned->prepared = view;
+  const bool complete = construct_union02(view, limits, owned->prisms, proof);
   proof.work.source_bytes = required_source_bytes(view);
   if (!complete) return std::unexpected(constructor_error(proof));
   proof.work.source_bytes = required_source_bytes(view);
@@ -588,6 +798,52 @@ auto checkpoint_material_extension_constructor_math(const View& v, Limits caps)
   out.work.source_bytes = required;
   return out;
 }
+auto checkpoint_material_extension_union02_constructor_math(const View& v,
+                                                            Limits caps)
+    -> std::expected<Proof, std::string> {
+  if (!valid_limits(caps))
+    return std::unexpected(
+        "Extension arithmetic lowered registered capacities required");
+  Proof out;
+  out.work.extension_version = kBoardingCheckpointMaterialUnion02Version;
+  const auto required = required_source_bytes(v);
+  out.work.source_bytes = required;
+  if (v.storage_bytes > caps.source_bytes ||
+      sizeof(OriginBoardingCheckpointMaterialExtension::Data) + 64 >
+          caps.source_bytes - v.storage_bytes) {
+    fail(out, Why::source_capacity);
+    return out;
+  }
+  Prisms prisms;
+  static_cast<void>(construct_union02(v, caps, prisms, out));
+  out.work.source_bytes = required;
+  return out;
+}
+auto checkpoint_material_extension_adjacent_union_math(
+    std::span<const Plane> a, std::span<const Plane> b,
+    const std::array<Vec, 3>& triangle, bool quantized, Limits caps)
+    -> std::expected<Proof, std::string> {
+  if (!valid_limits(caps))
+    return std::unexpected(
+        "Extension arithmetic lowered registered capacities required");
+  Proof out;
+  out.work.extension_version = kBoardingCheckpointMaterialUnion02Version;
+  out.quantized = quantized;
+  out.work.arithmetic_supported = environment();
+  if (!out.work.arithmetic_supported) {
+    fail(out, Why::unsupported_arithmetic);
+    return out;
+  }
+  if (!authenticate_adjacent(a, b, caps, out)) return out;
+  const auto point = [&](std::size_t n) {
+    out.vertex = n;
+    return triangle[n];
+  };
+  out.complete = adjacent_contains(a, b, point, 0, 1, caps, out);
+  if (!out.complete && out.condition == Why::none)
+    fail(out, quantized ? Why::quantized_containment : Why::raw_containment);
+  return out;
+}
 auto checkpoint_material_extension_prism_math(const Frame& frame,
                                               std::size_t sector)
     -> std::expected<Prism, std::string> {
@@ -611,5 +867,12 @@ auto make_origin_boarding_checkpoint_material_extension(
     -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string> {
   return detail::BoardingCheckpointMaterialExtensionAccess::make(binding, base,
                                                                  {}, nullptr);
+}
+auto make_origin_boarding_checkpoint_material_extension_union02(
+    const NativeCraftBinding& binding,
+    const OriginBoardingInitialMaterial& base)
+    -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string> {
+  return detail::BoardingCheckpointMaterialExtensionAccess::make_union02(
+      binding, base, {}, nullptr);
 }
 } // namespace apsis_drift

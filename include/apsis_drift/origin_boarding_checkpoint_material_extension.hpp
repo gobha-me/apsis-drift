@@ -5,6 +5,7 @@ namespace detail {
 struct BoardingCheckpointMaterialExtensionAccess;
 }
 inline constexpr std::uint32_t kBoardingCheckpointMaterialExtensionVersion{1};
+inline constexpr std::uint32_t kBoardingCheckpointMaterialUnion02Version{2};
 inline constexpr std::size_t
     kBoardingCheckpointMaterialExtensionMaximumSourceBytes{256 *
                                                            std::size_t{1024}};
@@ -36,6 +37,9 @@ class OriginBoardingCheckpointMaterialExtension {
   friend struct detail::BoardingCheckpointMaterialExtensionAccess;
 };
 [[nodiscard]] auto make_origin_boarding_checkpoint_material_extension(
+    const NativeCraftBinding&, const OriginBoardingInitialMaterial&)
+    -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string>;
+[[nodiscard]] auto make_origin_boarding_checkpoint_material_extension_union02(
     const NativeCraftBinding&, const OriginBoardingInitialMaterial&)
     -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string>;
 } // namespace apsis_drift
