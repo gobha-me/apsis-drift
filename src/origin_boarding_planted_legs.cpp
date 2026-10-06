@@ -3081,3 +3081,1578 @@ auto detail::boarding_lower_foot_transfer_cell(
              : transfer_refuse(refusal, TransferCondition::invalid_binding);
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_foot_phase_internal.hpp"
+
+namespace apsis_drift {
+namespace {
+using PhaseRequest = BoardingRouteFootPhaseRequest;
+using PhaseCell = BoardingRouteFootPhaseCell;
+using PhaseReason = BoardingRouteFootPhaseRefusal;
+using PhaseCondition = BoardingRouteFootPhaseCondition;
+using PhaseState = detail::BoardingRouteFootPhaseCellResult;
+using PhaseLimits = detail::BoardingRouteFootPhaseLimits;
+using PhaseWork = BoardingRouteFootPhaseCounters;
+using PhaseFrame = std::array<TimingPoint, 3>;
+struct PhaseGraph {
+  std::array<TimingPoint, kBoardingPlantedBodyPointCount> points;
+  std::array<PhaseFrame, 4> frames;
+  std::array<TimingPoint, 2> soles;
+  AngularTiming root_yaw, torso;
+  std::array<AngularTiming, 2> sole_yaw;
+  TimingScalar S, share;
+};
+static_assert(sizeof(PhaseCell) <= kBoardingRouteFootPhaseMaximumCellBytes);
+static_assert(sizeof(PhaseGraph) + sizeof(PhaseCell) + sizeof(PhaseRequest) +
+                  11 * std::size_t{24} + std::size_t{8192} + std::size_t{6144} +
+                  std::size_t{512} <=
+              kBoardingRouteFootPhaseMaximumScratchBytes);
+// At most four exact addends; no inherited 256-term expansion/root path.
+auto phase_sum_sign(const std::array<double, 4>& terms) -> Sign {
+  std::array<double, 4> values{}, next{};
+  std::size_t size{};
+  for (const auto term : terms) {
+    if (!std::isfinite(term)) return Sign::unsupported;
+    auto carry = term;
+    std::size_t count{};
+    for (std::size_t i = 0; i < size; ++i) {
+      const auto high = carry + values[i], bv = high - carry, av = high - bv;
+      const auto low = (carry - av) + (values[i] - bv);
+      if (!std::isfinite(high) || !std::isfinite(low)) return Sign::unsupported;
+      if (low != 0) {
+        if (count == next.size()) return Sign::unsupported;
+        next[count++] = low;
+      }
+      carry = high;
+    }
+    if (carry != 0) {
+      if (count == next.size()) return Sign::unsupported;
+      next[count++] = carry;
+    }
+    values = next;
+    size = count;
+  }
+  return size == 0              ? Sign::zero
+         : values[size - 1] < 0 ? Sign::negative
+                                : Sign::positive;
+}
+auto phase_constant(const BoardingRoutePhaseConstant& c) -> Interval {
+  if (c.count == 0 || c.count > c.terms.size()) return failed();
+  std::array<double, 4> terms{};
+  auto value = point(0);
+  for (std::size_t i = 0; i < c.terms.size(); ++i) {
+    if (!bounded(c.terms[i], 8) || (i >= c.count && c.terms[i] != 0))
+      return failed();
+    if (i < c.count) {
+      terms[i] = c.terms[i];
+      value = add(value, point(c.terms[i]));
+    }
+  }
+  terms[3] = 8;
+  const auto lower = phase_sum_sign(terms);
+  terms[3] = -8;
+  const auto upper = phase_sum_sign(terms);
+  if (lower == Sign::negative || upper == Sign::positive ||
+      lower == Sign::unsupported || upper == Sign::unsupported ||
+      !value.supported)
+    return failed();
+  value.low = std::max(-8., value.low);
+  value.high = std::min(8., value.high);
+  return value;
+}
+auto phase_carrier(double a, double b, const TimingScalar& S) -> TimingScalar {
+  if (a == b) return timing_constant(a);
+  return timing_add(
+      timing_constant(a),
+      timing_multiply(timing_constant(subtract(point(b), point(a))), S));
+}
+auto phase_carrier(const BoardingRoutePhaseConstant& a,
+                   const BoardingRoutePhaseConstant& b, const TimingScalar& S)
+    -> TimingScalar {
+  const auto start = phase_constant(a);
+  if (a.count == b.count && a.terms == b.terms) return timing_constant(start);
+  return timing_add(
+      timing_constant(start),
+      timing_multiply(timing_constant(subtract(phase_constant(b), start)), S));
+}
+auto phase_point(const std::array<BoardingRoutePhasePointConstant, 2>& c,
+                 const TimingScalar& S) -> TimingPoint {
+  TimingPoint result;
+  for (std::size_t i = 0; i < 3; ++i)
+    result[i] = phase_carrier(c[0].coordinates[i], c[1].coordinates[i], S);
+  return result;
+}
+auto phase_hump_value(double u) -> Interval {
+  if (u == 0 || u == 1) return point(0);
+  if (u == .5) return point(1);
+  const auto t = point(u), v = subtract(point(1), t);
+  return multiply(point(64),
+                  multiply(multiply(square(t), t), multiply(square(v), v)));
+}
+auto phase_hump(double first, double last) -> TimingScalar {
+  const auto a = phase_hump_value(first), b = phase_hump_value(last);
+  const auto u = interval(first, last), v = subtract(point(1), u),
+             uv = multiply(u, v);
+  auto value = interval(
+      std::max(0., std::min(a.low, b.low)),
+      first <= .5 && last >= .5 ? 1 : std::min(1., std::max(a.high, b.high)));
+  auto rate =
+      multiply(point(192),
+               multiply(square(uv), subtract(point(1), multiply(point(2), u))));
+  auto second = multiply(
+      point(384), multiply(uv, add(subtract(point(1), multiply(point(5), u)),
+                                   multiply(point(5), square(u)))));
+  if (first == last && (first == 0 || first == 1)) rate = second = point(0);
+  if (!a.supported || !b.supported) return {};
+  return {value, rate, second};
+}
+auto phase_add(const TimingPoint& a, const TimingPoint& b) -> TimingPoint {
+  TimingPoint result;
+  for (std::size_t i = 0; i < 3; ++i)
+    result[i] = timing_add(a[i], b[i]);
+  return result;
+}
+auto phase_sub(const TimingPoint& a, const TimingPoint& b) -> TimingPoint {
+  TimingPoint result;
+  for (std::size_t i = 0; i < 3; ++i)
+    result[i] = timing_subtract(a[i], b[i]);
+  return result;
+}
+auto phase_scale(const TimingPoint& a, const TimingScalar& b) -> TimingPoint {
+  TimingPoint result;
+  for (std::size_t i = 0; i < 3; ++i)
+    result[i] = timing_multiply(a[i], b);
+  return result;
+}
+auto phase_vector(Vec v) -> TimingPoint {
+  return {timing_constant(v.x), timing_constant(v.y), timing_constant(v.z)};
+}
+auto phase_rotate(const PhaseFrame& f, const TimingPoint& p) -> TimingPoint {
+  return phase_add(phase_add(phase_scale(f[0], p[0]), phase_scale(f[1], p[1])),
+                   phase_scale(f[2], p[2]));
+}
+auto phase_dot(const TimingPoint& a, const TimingPoint& b) -> TimingScalar {
+  return timing_add(
+      timing_add(timing_multiply(a[0], b[0]), timing_multiply(a[1], b[1])),
+      timing_multiply(a[2], b[2]));
+}
+auto phase_local(const PhaseFrame& f, const TimingPoint& p) -> TimingPoint {
+  return {phase_dot(f[0], p), phase_dot(f[1], p), phase_dot(f[2], p)};
+}
+auto phase_rotation(const TimingScalar& k, bool yaw) -> PhaseFrame {
+  const auto k2 = timing_square(k), den = timing_add(timing_constant(1), k2);
+  const auto c = timing_divide(timing_subtract(timing_constant(1), k2), den),
+             s = timing_divide(timing_multiply(timing_constant(2), k), den),
+             z = timing_constant(0), one = timing_constant(1);
+  if (yaw) return {{{c, z, timing_negate(s)}, {z, one, z}, {s, z, c}}};
+  return {{{one, z, z}, {z, c, s}, {z, timing_negate(s), c}}};
+}
+auto phase_angle(const TimingScalar& k) -> AngularTiming {
+  const auto den = add(point(1), square(k.value));
+  return {
+      divide(multiply(point(2), k.first), den),
+      subtract(divide(multiply(point(2), k.second), den),
+               divide(multiply(point(4), multiply(k.value, square(k.first))),
+                      square(den)))};
+}
+auto phase_angular(const AngularTiming& a, double T, bool reverse)
+    -> BoardingPlantedLegAngularDerivatives {
+  auto first = divide(a.first, point(T));
+  if (reverse) first = negate(first);
+  return {bounds(first), bounds(divide(a.second, square(point(T))))};
+}
+auto phase_evidence(const TimingPoint& p, double T, bool reverse,
+                    BodyPointEvidence& out, bool workspace = true) -> bool {
+  Point value{}, first{}, second{};
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!timing_supported(p[i]) ||
+        (workspace && (p[i].value.low < -8 || p[i].value.high > 8)))
+      return false;
+    value[i] = p[i].value;
+    first[i] = divide(p[i].first, point(T));
+    if (reverse) first[i] = negate(first[i]);
+    second[i] = divide(p[i].second, square(point(T)));
+  }
+  if (!self_point_supported(first) || !self_point_supported(second))
+    return false;
+  out = {point_bounds(value), {point_bounds(first), point_bounds(second)}};
+  return true;
+}
+auto phase_norm(const Point& v) -> Interval {
+  auto sum = add(add(square(v[0]), square(v[1])), square(v[2]));
+  if (!sum.supported) return failed();
+  sum.low = std::max(0., sum.low);
+  return transfer_small_root(sum);
+}
+auto phase_derivative_norm(const TimingPoint& p, double T, bool second = false)
+    -> Interval {
+  Point v;
+  const auto den = second ? square(point(T)) : point(T);
+  for (std::size_t i = 0; i < 3; ++i)
+    v[i] = divide(second ? p[i].second : p[i].first, den);
+  return phase_norm(v);
+}
+auto phase_refuse(PhaseReason& out, PhaseCondition why, Interval limit = {})
+    -> PhaseState {
+  out.condition = why;
+  out.limiting_bound = limit.supported ? bounds(limit) : Bounds{};
+  return why == PhaseCondition::unsupported_arithmetic ? PhaseState::unsupported
+                                                       : PhaseState::unresolved;
+}
+auto phase_charge(std::uint64_t& work, std::uint64_t cap, PhaseCondition reason,
+                  PhaseReason& out) -> bool {
+  if (work >= cap) {
+    out.condition = reason;
+    return false;
+  }
+  ++work;
+  return true;
+}
+struct PhaseScalarLimits {
+  Interval sqrt3, sqrt2, sin20, cos20, cos35, arm;
+};
+auto phase_scalar_limits() -> const PhaseScalarLimits& {
+  static const PhaseScalarLimits result{
+      transfer_small_root(point(3)), transfer_small_root(point(2)),
+      trig_constant(20, true),       trig_constant(20, false),
+      trig_constant(35, false),      transfer_small_root(point(.5))};
+  return result;
+}
+auto phase_hip_sector(Interval F, Interval G)
+    -> detail::BoardingRoutePhaseHipSectorEvidence;
+auto phase_hip_speed(Interval axial, Interval roll_rate, Interval pitch,
+                     Interval sine) -> BoardingPlantedLegSpeedEvidence;
+} // namespace
+
+auto detail::boarding_route_foot_phase_environment() -> bool {
+  return supported_environment();
+}
+auto detail::boarding_route_foot_phase_request_valid(const PhaseRequest& r)
+    -> std::expected<void, std::string> {
+  auto valid_constant = [](const BoardingRoutePhaseConstant& c) {
+    if (c.count == 0 || c.count > c.terms.size()) return false;
+    for (std::size_t i = 0; i < c.terms.size(); ++i)
+      if (!bounded(c.terms[i], 8) || (i >= c.count && c.terms[i] != 0))
+        return false;
+    return !supported_environment() || phase_constant(c).supported;
+  };
+  for (const auto& p : r.root)
+    for (const auto& c : p.coordinates)
+      if (!valid_constant(c))
+        return std::unexpected(
+            "Phase root constant requires1..3 finite terms with sum in[-8,8]");
+  for (const auto& f : r.feet) {
+    for (const auto& p : f.sole)
+      for (const auto& c : p.coordinates)
+        if (!valid_constant(c))
+          return std::unexpected("Phase sole constant requires1..3 finite "
+                                 "terms with sum in[-8,8]");
+    for (const auto k : f.yaw_half)
+      if (!bounded(k, 1))
+        return std::unexpected(
+            "Phase sole yaw carrier must be finite in[-1,1]");
+    if (!std::isfinite(f.swing_height_metres) || f.swing_height_metres < 0 ||
+        f.swing_height_metres > .25)
+      return std::unexpected("Phase swing height must be finite in[0,.25]");
+  }
+  for (const auto k : r.root_yaw_half)
+    if (!bounded(k, 1))
+      return std::unexpected("Phase root yaw carrier must be finite in[-1,1]");
+  for (const auto k : r.torso_lean_half)
+    if (!bounded(k, 1))
+      return std::unexpected("Phase torso carrier must be finite in[-1,1]");
+  for (const auto w : r.port_reaction_fraction)
+    if (!std::isfinite(w) || w < 0 || w > 1)
+      return std::unexpected("Phase reaction cue must be finite in[0,1]");
+  if (!std::isfinite(r.seconds_per_parameter) || r.seconds_per_parameter < 1 ||
+      r.seconds_per_parameter > 120)
+    return std::unexpected("Phase physical duration must be finite in[1,120]");
+  return {};
+}
+auto detail::boarding_route_foot_phase_parts()
+    -> std::array<BoardingRoutePhasePartBinding, kBoardingBodyPartCount> {
+  const auto old = body_parts();
+  std::array<BoardingRoutePhasePartBinding, kBoardingBodyPartCount> result;
+  for (std::size_t i = 0; i < old.size(); ++i) {
+    result[i].id = old[i].id;
+    result[i].mass = old[i].mass;
+    if (const auto* box =
+            std::get_if<BoardingPlantedBodyBoxBinding>(&old[i].reservation)) {
+      auto frame = BoardingRoutePhaseFrame::trunk;
+      if (i == 0) frame = BoardingRoutePhaseFrame::root;
+      if (i == 5) frame = BoardingRoutePhaseFrame::port_sole;
+      if (i == 11) frame = BoardingRoutePhaseFrame::starboard_sole;
+      result[i].reservation = BoardingRoutePhaseBoxBinding{
+          box->center, box->half_size_metres, frame};
+    } else
+      result[i].reservation =
+          std::get<BoardingPlantedBodyCapsuleBinding>(old[i].reservation);
+  }
+  return result;
+}
+namespace {
+[[gnu::noinline]] auto phase_graph(const PhaseRequest& r, double first,
+                                   double last, PhaseGraph& g,
+                                   PhaseReason& reason) -> PhaseState {
+  g.S = transfer_quintic(first, last);
+  g.share = phase_carrier(r.port_reaction_fraction[0],
+                          r.port_reaction_fraction[1], g.S);
+  g.points[0] = phase_point(r.root, g.S);
+  const auto k = phase_carrier(r.root_yaw_half[0], r.root_yaw_half[1], g.S),
+             torso =
+                 phase_carrier(r.torso_lean_half[0], r.torso_lean_half[1], g.S);
+  g.frames[0] = phase_rotation(k, true);
+  const auto relative = phase_rotation(torso, false);
+  for (std::size_t i = 0; i < 3; ++i)
+    g.frames[1][i] = phase_rotate(g.frames[0], relative[i]);
+  g.root_yaw = phase_angle(k);
+  g.torso = phase_angle(torso);
+  const auto hump = phase_hump(first, last);
+  for (std::size_t side = 0; side < 2; ++side) {
+    g.soles[side] = phase_point(r.feet[side].sole, g.S);
+    g.soles[side][1] = timing_add(
+        g.soles[side][1],
+        timing_multiply(timing_constant(r.feet[side].swing_height_metres),
+                        hump));
+    const auto fk =
+        phase_carrier(r.feet[side].yaw_half[0], r.feet[side].yaw_half[1], g.S);
+    g.frames[side + 2] = phase_rotation(fk, true);
+    g.sole_yaw[side] = phase_angle(fk);
+  }
+  if (!timing_supported(g.S) || !timing_supported(g.share))
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  return PhaseState::accepted;
+}
+[[gnu::noinline]] auto phase_leg(const PhaseRequest& r, std::size_t side,
+                                 bool reverse, PhaseGraph& g, PhaseCell& out,
+                                 const PhaseLimits& caps, PhaseWork& work,
+                                 PhaseReason& reason) -> PhaseState {
+  reason.side = side;
+  const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                         : BodyPointId::starboard_hip);
+  const auto sign = side == 0 ? -1. : 1.;
+  const auto hip = phase_add(
+      g.points[0], phase_rotate(g.frames[0], phase_vector({sign * .14, 0, 0})));
+  const auto ankle = phase_add(g.soles[side], phase_vector({0, .1, 0}));
+  const auto boot = phase_add(g.soles[side], phase_vector({0, .05, 0}));
+  const auto d = phase_local(g.frames[side + 2], phase_sub(ankle, hip));
+  const auto rho2 = timing_add(timing_square(d[0]), timing_square(d[1])),
+             D = timing_add(rho2, timing_square(d[2]));
+  if (!timing_supported(D) || !timing_supported(rho2))
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  if (d[1].value.high >= 0)
+    return phase_refuse(reason, PhaseCondition::forward_branch, d[1].value);
+  if (rho2.value.low <= 0 || D.value.low <= 0)
+    return phase_refuse(reason, PhaseCondition::derivative_domain, rho2.value);
+  const auto l1 = point(thigh_length), l2 = point(shin_length),
+             l1sq = square(l1), l2sq = square(l2),
+             maximum = square(add(l1, l2)), minimum = square(subtract(l1, l2));
+  if (D.value.high > maximum.low || D.value.low < minimum.high)
+    return phase_refuse(reason, PhaseCondition::reach, D.value);
+  const auto rho = transfer_root_jet(rho2),
+             alpha = timing_divide(
+                 timing_add(timing_constant(subtract(l1sq, l2sq)), D),
+                 timing_multiply(timing_constant(2), D));
+  const auto outer = timing_subtract(timing_constant(maximum), D),
+             inner = timing_subtract(D, timing_constant(minimum));
+  const auto gamma2 =
+      timing_divide(timing_multiply(outer, inner),
+                    timing_multiply(timing_constant(4), timing_square(D)));
+  if (!timing_supported(gamma2))
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  if (gamma2.value.low <= 0)
+    return phase_refuse(reason, PhaseCondition::derivative_domain,
+                        gamma2.value);
+  const auto gamma = transfer_root_jet(gamma2);
+  if (!timing_supported(rho) || !timing_supported(alpha) ||
+      !timing_supported(gamma))
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const TimingPoint q{timing_divide(timing_multiply(d[0], d[2]), rho),
+                      timing_divide(timing_multiply(d[1], d[2]), rho),
+                      timing_negate(rho)};
+  const auto knee = phase_add(
+      hip, phase_rotate(g.frames[side + 2], phase_add(phase_scale(d, alpha),
+                                                      phase_scale(q, gamma))));
+  g.points[base] = hip;
+  g.points[base + 1] = knee;
+  g.points[base + 2] = ankle;
+  g.points[base + 3] = boot;
+  const auto complement = timing_subtract(timing_constant(1), alpha),
+             F1 = timing_add(timing_multiply(alpha, rho),
+                             timing_multiply(gamma, d[2])),
+             G1 = timing_subtract(timing_multiply(gamma, rho),
+                                  timing_multiply(alpha, d[2])),
+             F2 = timing_subtract(timing_multiply(complement, rho),
+                                  timing_multiply(gamma, d[2])),
+             G2 = timing_negate(timing_add(timing_multiply(complement, d[2]),
+                                           timing_multiply(gamma, rho)));
+  if (!timing_supported(F1) || !timing_supported(G1) || !timing_supported(F2) ||
+      !timing_supported(G2))
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  auto& leg = out.legs[side];
+  leg.distance_squared = bounds(D.value);
+  leg.rho_squared = bounds(rho2.value);
+  leg.gamma_squared = bounds(gamma2.value);
+  leg.alpha = bounds(alpha.value);
+  leg.gamma = bounds(gamma.value);
+  const auto hp = pitch_derivatives(F1, G1, l1sq),
+             sp = pitch_derivatives(F2, G2, l2sq);
+  const AngularTiming kp{subtract(hp.first, sp.first),
+                         subtract(hp.second, sp.second)};
+  const auto phinumerator = subtract(multiply(negate(d[1].value), d[0].first),
+                                     multiply(d[0].value, negate(d[1].first)));
+  const AngularTiming phi{
+      divide(phinumerator, rho2.value),
+      subtract(divide(subtract(multiply(negate(d[1].value), d[0].second),
+                               multiply(d[0].value, negate(d[1].second))),
+                      rho2.value),
+               divide(multiply(phinumerator, rho2.first), square(rho2.value)))};
+  const AngularTiming axial{
+      subtract(g.sole_yaw[side].first, g.root_yaw.first),
+      subtract(g.sole_yaw[side].second, g.root_yaw.second)};
+  const std::array angles{hp, sp, kp, phi, axial};
+  for (const auto& angle : angles)
+    if (!angle.first.supported || !angle.second.supported)
+      return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const auto T = r.seconds_per_parameter;
+  leg.hip_pitch = phase_angular(hp, T, reverse);
+  leg.shin_pitch = phase_angular(sp, T, reverse);
+  leg.knee_flex = phase_angular(kp, T, reverse);
+  leg.hip_axial = phase_angular(axial, T, reverse);
+  leg.hip_abduction =
+      phase_angular(side == 0 ? negate_angular(phi) : phi, T, reverse);
+  leg.ankle_pitch = phase_angular(negate_angular(sp), T, reverse);
+  leg.ankle_roll = phase_angular(negate_angular(phi), T, reverse);
+  if (!phase_charge(work.sectors, caps.sectors, PhaseCondition::sector_capacity,
+                    reason))
+    return PhaseState::capacity;
+  const auto& limits = phase_scalar_limits();
+  const auto hip_sector = phase_hip_sector(F1.value, G1.value);
+  if (!hip_sector.arithmetic_supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const auto rollmargin = subtract(
+                 multiply(negate(d[1].value), subtract(point(2), limits.sqrt3)),
+                 absolute(d[0].value)),
+             lower = interval(hip_sector.margins[0].lower,
+                              hip_sector.margins[0].upper),
+             upper = interval(hip_sector.margins[1].lower,
+                              hip_sector.margins[1].upper),
+             knee_cos = divide(subtract(subtract(D.value, l1sq), l2sq),
+                               multiply(point(2), multiply(l1, l2))),
+             kneemargin = add(knee_cos, divide(limits.sqrt2, point(2))),
+             anklemargin = subtract(
+                 multiply(F2.value, point(.5)),
+                 multiply(absolute(G2.value), divide(limits.sqrt3, point(2)))),
+             relativecos =
+                 phase_dot(g.frames[0][0], g.frames[side + 2][0]).value,
+             axialmargin =
+                 subtract(relativecos, divide(limits.sqrt2, point(2)));
+  const std::array margins{rollmargin, lower,       upper,
+                           kneemargin, anklemargin, axialmargin};
+  for (std::size_t i = 0; i < margins.size(); ++i) {
+    leg.sector_margins[i] = bounds(margins[i]);
+    if (!margins[i].supported)
+      return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+    if (margins[i].low < 0)
+      return phase_refuse(reason, PhaseCondition::joint_sector, margins[i]);
+  }
+  if (F2.value.low <= 0)
+    return phase_refuse(reason, PhaseCondition::joint_sector, F2.value);
+  leg.nominal_links = leg.target_sole_identity = leg.derivative_domains =
+      leg.joint_sectors = true;
+  if (!phase_charge(work.timing, caps.timing, PhaseCondition::timing_capacity,
+                    reason))
+    return PhaseState::capacity;
+  const auto delta = divide(axial.first, point(T)),
+             phidot = divide(phi.first, point(T)),
+             hipdot = divide(hp.first, point(T)),
+             shindot = divide(sp.first, point(T)),
+             kneedot = divide(kp.first, point(T)),
+             sinphi = divide(d[0].value, rho.value);
+  const auto hip_speed = phase_hip_speed(delta, phidot, hipdot, sinphi);
+  const auto anklesquared = add(square(shindot), square(phidot));
+  if (!hip_speed.supported || !anklesquared.supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const std::array speeds{
+      interval(hip_speed.speed_radians_per_second.lower,
+               hip_speed.speed_radians_per_second.upper),
+      absolute(kneedot),
+      transfer_small_root(
+          interval(std::max(0., anklesquared.low), anklesquared.high))};
+  for (std::size_t i = 0; i < speeds.size(); ++i) {
+    leg.joint_speeds[i] = bounds(speeds[i]);
+    if (!speeds[i].supported)
+      return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+    if ((i == 0 && !hip_speed.certified) ||
+        (i != 0 && speeds[i].high > speed_threshold().low))
+      return phase_refuse(reason, PhaseCondition::joint_speed, speeds[i]);
+  }
+  leg.timing_complete = true;
+  return PhaseState::accepted;
+}
+[[gnu::noinline]] auto phase_body(const PhaseRequest& r, bool reverse,
+                                  PhaseGraph& g, PhaseCell& out,
+                                  PhaseReason& reason) -> PhaseState {
+  const auto offset = [&](const TimingPoint& p, Vec v) {
+    return phase_add(p, phase_rotate(g.frames[1], phase_vector(v)));
+  };
+  g.points[1] = offset(g.points[0], {0, .3495, 0});
+  g.points[2] = offset(g.points[0], {0, .70237, 0});
+  g.points[3] = offset(g.points[0], {0, .65237, 0});
+  const auto c = phase_scalar_limits().arm;
+  if (!c.supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const TimingPoint elbow_delta{
+      timing_constant(0), timing_constant(negate(multiply(point(.35898), c))),
+      timing_constant(negate(multiply(point(.35898), c)))};
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                           : BodyPointId::starboard_hip);
+    g.points[base + 4] =
+        offset(g.points[0], {side == 0 ? -.20265 : .20265, .579, 0});
+    g.points[base + 5] =
+        phase_add(g.points[base + 4], phase_rotate(g.frames[1], elbow_delta));
+    g.points[base + 6] = offset(g.points[base + 5], {0, .386, 0});
+  }
+  for (std::size_t i = 0; i < g.points.size(); ++i)
+    if (!phase_evidence(g.points[i], r.seconds_per_parameter, reverse,
+                        out.points[i]))
+      return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  for (std::size_t frame = 0; frame < g.frames.size(); ++frame)
+    for (std::size_t column = 0; column < 3; ++column)
+      if (!phase_evidence(g.frames[frame][column], r.seconds_per_parameter,
+                          reverse, out.frames[frame].columns[column], false))
+        return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const auto parts = body_parts();
+  auto sum = phase_vector({0, 0, 0});
+  for (std::size_t i = 0; i < parts.size(); ++i) {
+    const auto& m = parts[i].mass;
+    const auto a = body_index(m.first), b = body_index(m.second);
+    const auto p = a == b ? g.points[a]
+                          : phase_scale(phase_add(g.points[a], g.points[b]),
+                                        timing_constant(.5));
+    if (!phase_evidence(p, r.seconds_per_parameter, reverse,
+                        out.mass_points[i]))
+      return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+    sum = phase_add(
+        sum, phase_scale(p, timing_constant(static_cast<double>(m.weight))));
+  }
+  if (!phase_evidence(
+          phase_scale(sum, timing_constant(divide(point(1), point(1200)))),
+          r.seconds_per_parameter, reverse, out.center_of_mass))
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  return PhaseState::accepted;
+}
+[[gnu::noinline]] auto phase_other_predicates(
+    const PhaseRequest& r, const PhaseLimits& caps, PhaseWork& work,
+    const PhaseGraph& g, PhaseCell& out, PhaseReason& reason) -> PhaseState {
+  reason.side.reset();
+  if (!phase_charge(work.sectors, caps.sectors, PhaseCondition::sector_capacity,
+                    reason))
+    return PhaseState::capacity;
+  const auto torso_cos =
+      phase_rotation(
+          phase_carrier(r.torso_lean_half[0], r.torso_lean_half[1], g.S),
+          false)[1][1]
+          .value;
+  const auto torso_margin = subtract(torso_cos, phase_scalar_limits().cos35);
+  if (!torso_margin.supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  if (torso_margin.low < 0)
+    return phase_refuse(reason, PhaseCondition::joint_sector, torso_margin);
+  const auto T = r.seconds_per_parameter;
+  if (!phase_charge(work.timing, caps.timing, PhaseCondition::timing_capacity,
+                    reason))
+    return PhaseState::capacity;
+  const auto rs = phase_derivative_norm(g.points[0], T),
+             ra = phase_derivative_norm(g.points[0], T, true),
+             yaw = absolute(divide(g.root_yaw.first, point(T)));
+  out.root_speed = bounds(rs);
+  out.root_acceleration = bounds(ra);
+  out.root_yaw_speed = bounds(yaw);
+  if (!rs.supported || !ra.supported || !yaw.supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  if (rs.high > .25)
+    return phase_refuse(reason, PhaseCondition::root_speed, rs);
+  if (ra.high > .10)
+    return phase_refuse(reason, PhaseCondition::root_acceleration, ra);
+  if (yaw.high > speed_threshold().low)
+    return phase_refuse(reason, PhaseCondition::joint_speed, yaw);
+  if (!phase_charge(work.timing, caps.timing, PhaseCondition::timing_capacity,
+                    reason))
+    return PhaseState::capacity;
+  const auto torso = absolute(divide(g.torso.first, point(T)));
+  out.torso_joint_speed = bounds(torso);
+  if (!torso.supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  if (torso.high > speed_threshold().low)
+    return phase_refuse(reason, PhaseCondition::joint_speed, torso);
+  const auto sole_radius =
+      transfer_small_root(add(square(point(.06)), square(point(.14))));
+  if (!sole_radius.supported)
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  for (std::size_t side = 0; side < 2; ++side) {
+    reason.side = side;
+    if (!phase_charge(work.timing, caps.timing, PhaseCondition::timing_capacity,
+                      reason))
+      return PhaseState::capacity;
+    const auto center = phase_derivative_norm(g.soles[side], T),
+               spin = absolute(divide(g.sole_yaw[side].first, point(T))),
+               whole = add(center, multiply(sole_radius, spin));
+    out.sole_center_speed[side] = bounds(center);
+    out.sole_yaw_speed[side] = bounds(spin);
+    out.whole_sole_speed[side] = bounds(whole);
+    if (!center.supported || !spin.supported || !whole.supported)
+      return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+    if (whole.high > .35)
+      return phase_refuse(reason, PhaseCondition::sole_speed, whole);
+  }
+  reason.side.reset();
+  return PhaseState::accepted;
+}
+} // namespace
+
+auto detail::boarding_route_foot_phase_cell(const PhaseRequest& r, double first,
+                                            double last, bool reverse,
+                                            const PhaseLimits& caps,
+                                            PhaseWork& work, PhaseCell& out,
+                                            PhaseReason& reason) -> PhaseState {
+  out = {};
+  reason = {};
+  out.first = first;
+  out.last = last;
+  const PhaseLimits original;
+  if (!std::isfinite(first) || !std::isfinite(last) || first < 0 || last > 1 ||
+      first > last || caps.depth > original.depth ||
+      caps.nodes > original.nodes || caps.leaves > original.leaves ||
+      caps.output_bytes > original.output_bytes ||
+      caps.graphs > original.graphs || caps.legs > original.legs ||
+      caps.bodies > original.bodies || caps.sectors > original.sectors ||
+      caps.timing > original.timing ||
+      !boarding_route_foot_phase_request_valid(r) || !supported_environment())
+    return phase_refuse(reason, PhaseCondition::unsupported_arithmetic);
+  const std::array incoming{work.graphs, work.legs, work.bodies, work.sectors,
+                            work.timing};
+  const std::array ceilings{caps.graphs, caps.legs, caps.bodies, caps.sectors,
+                            caps.timing};
+  const std::array failures{
+      PhaseCondition::graph_capacity, PhaseCondition::leg_capacity,
+      PhaseCondition::body_capacity, PhaseCondition::sector_capacity,
+      PhaseCondition::timing_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return PhaseState::capacity;
+    }
+  if (!phase_charge(work.graphs, caps.graphs, PhaseCondition::graph_capacity,
+                    reason))
+    return PhaseState::capacity;
+  PhaseGraph g;
+  auto state = phase_graph(r, first, last, g, reason);
+  if (state != PhaseState::accepted) return state;
+  out.port_reaction_fraction = bounds(g.share.value);
+  for (std::size_t side = 0; side < 2; ++side) {
+    reason.side = side;
+    if (!phase_charge(work.legs, caps.legs, PhaseCondition::leg_capacity,
+                      reason))
+      return PhaseState::capacity;
+    state = phase_leg(r, side, reverse, g, out, caps, work, reason);
+    if (state != PhaseState::accepted) return state;
+  }
+  reason.side.reset();
+  if (!phase_charge(work.bodies, caps.bodies, PhaseCondition::body_capacity,
+                    reason))
+    return PhaseState::capacity;
+  state = phase_body(r, reverse, g, out, reason);
+  if (state != PhaseState::accepted) return state;
+  state = phase_other_predicates(r, caps, work, g, out, reason);
+  if (state != PhaseState::accepted) return state;
+  out.arithmetic_supported = out.nominal_links = out.target_sole_identities =
+      out.joint_sectors = out.derivative_domains = out.timing_complete =
+          out.complete = true;
+  reason = {};
+  return PhaseState::accepted;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+auto phase_numeric_interval(Bounds b, double maximum) -> Interval {
+  return std::isfinite(b.lower) && std::isfinite(b.upper) &&
+                 b.lower >= -maximum && b.upper <= maximum
+             ? interval(b.lower, b.upper)
+             : failed();
+}
+auto phase_hip_sector(Interval F, Interval G)
+    -> detail::BoardingRoutePhaseHipSectorEvidence {
+  detail::BoardingRoutePhaseHipSectorEvidence out;
+  if (!supported_environment()) return out;
+  const auto& constants = phase_scalar_limits();
+  const std::array margins{
+      add(multiply(G, constants.cos20), multiply(F, constants.sin20)),
+      add(multiply(F, divide(constants.sqrt3, point(2))),
+          multiply(G, point(.5)))};
+  for (std::size_t i = 0; i < margins.size(); ++i) {
+    if (!margins[i].supported) return out;
+    out.margins[i] = bounds(margins[i]);
+  }
+  out.arithmetic_supported = true;
+  out.certified = margins[0].low >= 0 && margins[1].low >= 0;
+  return out;
+}
+auto phase_hip_speed(Interval axial, Interval roll_rate, Interval pitch,
+                     Interval sine) -> BoardingPlantedLegSpeedEvidence {
+  BoardingPlantedLegSpeedEvidence result;
+  if (!supported_environment()) return result;
+  auto squared =
+      add(add(add(square(axial), square(roll_rate)), square(pitch)),
+          multiply(point(2), multiply(multiply(axial, pitch), sine)));
+  if (!squared.supported) return result;
+  squared.low = std::max(0., squared.low);
+  const auto norm = transfer_small_root(squared);
+  if (!norm.supported) return result;
+  result.speed_radians_per_second = bounds(norm);
+  result.supported = true;
+  result.certified = squared.high <= square(speed_threshold()).low;
+  return result;
+}
+} // namespace
+
+auto detail::boarding_route_phase_yaw_numeric(BoardingRoutePhaseScalarJet input,
+                                              double T, bool reverse)
+    -> std::expected<BoardingRoutePhaseYawEvidence, std::string> {
+  const TimingScalar k{phase_numeric_interval(input.value, 1),
+                       phase_numeric_interval(input.first, 4096),
+                       phase_numeric_interval(input.second, 4096)};
+  if (!timing_supported(k) || !std::isfinite(T) || T < 1 || T > 120)
+    return std::unexpected(
+        "Numeric phase yaw requires ordered finite bounds and T in[1,120]");
+  BoardingRoutePhaseYawEvidence result;
+  if (!supported_environment()) return result;
+  const auto frame = phase_rotation(k, true);
+  const auto angle = phase_angle(k);
+  for (std::size_t i = 0; i < 3; ++i)
+    if (!phase_evidence(frame[i], T, reverse, result.frame.columns[i], false))
+      return result;
+  if (!angle.first.supported || !angle.second.supported) return result;
+  result.angle = phase_angular(angle, T, reverse);
+  result.arithmetic_supported = true;
+  return result;
+}
+auto detail::boarding_route_phase_hip_sector_numeric(Bounds F, Bounds G)
+    -> std::expected<BoardingRoutePhaseHipSectorEvidence, std::string> {
+  const auto f = phase_numeric_interval(F, 8), g = phase_numeric_interval(G, 8);
+  if (!f.supported || !g.supported)
+    return std::unexpected(
+        "Numeric hip sector requires ordered finite components abs<=8");
+  return phase_hip_sector(f, g);
+}
+auto detail::boarding_route_phase_hip_speed_numeric(Bounds axial,
+                                                    Bounds roll_rate,
+                                                    Bounds pitch, Bounds sine)
+    -> std::expected<BoardingPlantedLegSpeedEvidence, std::string> {
+  const auto a = phase_numeric_interval(axial, 4096),
+             r = phase_numeric_interval(roll_rate, 4096),
+             p = phase_numeric_interval(pitch, 4096),
+             s = phase_numeric_interval(sine, 1);
+  if (!a.supported || !r.supported || !p.supported || !s.supported)
+    return std::unexpected("Numeric hip speed requires ordered finite rates "
+                           "abs<=4096 and sine in[-1,1]");
+  return phase_hip_speed(a, r, p, s);
+}
+} // namespace apsis_drift
+
+#include "origin_boarding_route_port_unload_internal.hpp"
+namespace apsis_drift {
+namespace {
+using UnloadCell = BoardingRoutePortUnloadCell;
+using UnloadReason = BoardingRoutePortUnloadRefusal;
+using UnloadWhy = BoardingRoutePortUnloadCondition;
+using UnloadState = detail::BoardingRoutePortUnloadCellResult;
+using UnloadLimits = detail::BoardingRoutePortUnloadLimits;
+using UnloadWork = BoardingRoutePortUnloadCounters;
+struct UnloadSolid {
+  EndpointSelfSolid shape;
+  const BoardingRoutePhaseFrameEvidence* frame{};
+};
+static_assert(sizeof(UnloadCell) <= kBoardingRoutePortUnloadMaximumCellBytes);
+static_assert(sizeof(UnloadCell) + sizeof(PhaseGraph) + sizeof(PhaseRequest) +
+                  sizeof(detail::BoardingRoutePortUnloadContext) +
+                  11 * std::size_t{24} + std::size_t{12288} +
+                  std::size_t{8192} + std::size_t{512} <=
+              kBoardingRoutePortUnloadMaximumScratchBytes);
+auto unload_refuse(UnloadReason& r, UnloadWhy why, Interval limit = {})
+    -> UnloadState {
+  r.condition = why;
+  r.limiting_bound = limit.supported ? bounds(limit) : Bounds{};
+  return why == UnloadWhy::unsupported_arithmetic ||
+                 why == UnloadWhy::invalid_binding
+             ? UnloadState::unsupported
+             : UnloadState::unresolved;
+}
+auto unload_charge(std::uint64_t& count, std::uint64_t cap, UnloadWhy why,
+                   UnloadReason& r) -> bool {
+  if (count >= cap) {
+    r.condition = why;
+    return false;
+  }
+  ++count;
+  return true;
+}
+auto unload_difference(const Point& a, const Point& b) -> Point {
+  Point p;
+  for (std::size_t i = 0; i < 3; ++i)
+    p[i] = subtract(a[i], b[i]);
+  return p;
+}
+auto unload_scale(Point p, double scale) -> Point {
+  for (auto& v : p)
+    v = divide(v, point(scale));
+  return p;
+}
+auto unload_frame_dot(const BoardingRoutePhaseFrameEvidence& f, std::size_t i,
+                      const Point& u) -> Interval {
+  const auto c = body_intervals(f.columns[i].value);
+  return add(add(multiply(c[0], u[0]), multiply(c[1], u[1])),
+             multiply(c[2], u[2]));
+}
+auto unload_solid(const BoardingRoutePhasePartBinding& binding,
+                  const std::array<Point, kBoardingPlantedBodyPointCount>& p,
+                  const BoardingRouteFootPhaseCell& cell) -> UnloadSolid {
+  UnloadSolid out;
+  if (const auto* box =
+          std::get_if<BoardingRoutePhaseBoxBinding>(&binding.reservation)) {
+    out.shape.shape =
+        binding.id == PartId::trunk || binding.id == PartId::helmet
+            ? SelfShape::ellipsoid
+            : SelfShape::box;
+    out.shape.first = out.shape.second = p[body_index(box->center)];
+    out.shape.half = box->half_size_metres;
+    out.frame = &cell.frames[static_cast<std::size_t>(box->frame)];
+  } else {
+    const auto& c =
+        std::get<BoardingPlantedBodyCapsuleBinding>(binding.reservation);
+    out.shape.shape = SelfShape::capsule;
+    out.shape.first = p[body_index(c.start)];
+    out.shape.second = p[body_index(c.end)];
+    out.shape.radius = c.radius_metres;
+  }
+  return out;
+}
+auto unload_support(const UnloadSolid& solid, Vec n) -> Interval {
+  const auto& s = solid.shape;
+  if (!self_point_supported(s.first)) return failed();
+  const auto center = self_dot(s.first, n);
+  if (s.shape == SelfShape::capsule)
+    return add(self_maximum(center, self_dot(s.second, n)),
+               multiply(point(s.radius),
+                        transfer_small_root(
+                            add(add(square(point(n.x)), square(point(n.y))),
+                                square(point(n.z))))));
+  if (!solid.frame) return failed();
+  const std::array half{s.half.x, s.half.y, s.half.z};
+  auto extent = point(0);
+  for (std::size_t j = 0; j < 3; ++j) {
+    const auto column = body_intervals(solid.frame->columns[j].value);
+    const auto term = multiply(point(half[j]), absolute(self_dot(column, n)));
+    extent = add(extent, s.shape == SelfShape::box ? term : square(term));
+  }
+  if (s.shape == SelfShape::ellipsoid) extent = transfer_small_root(extent);
+  return add(center, extent);
+}
+[[gnu::noinline]] auto unload_owner(
+    const BoardingRouteFootPhaseCell& cell,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& p,
+    const SelfRegion& r, BoardingLowerFootTransferOwner& out) -> void {
+  const auto second = static_cast<std::size_t>(r.second),
+             side = second >= 9 ? std::size_t{1} : std::size_t{0};
+  const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                         : BodyPointId::starboard_hip);
+  auto extent = point(0), limit = point(r.limit_metres), secondary = point(0);
+  auto kind = SelfCert::none;
+  switch (r.junction) {
+    case Junction::waist:
+      extent = point(.12);
+      kind = SelfCert::cap_partner_support;
+      break;
+    case Junction::neck:
+      extent = limit = point(.2695);
+      kind = SelfCert::cap_partner_support;
+      break;
+    case Junction::hip: {
+      const auto u =
+          unload_scale(unload_difference(p[base + 1], p[base]), thigh_length);
+      const auto x = unload_frame_dot(cell.frames[0], 0, u),
+                 y = unload_frame_dot(cell.frames[0], 1, u),
+                 z = unload_frame_dot(cell.frames[0], 2, u);
+      extent = add(add(subtract(multiply(point(.24), absolute(x)),
+                                multiply(point(side == 0 ? -.14 : .14), x)),
+                       multiply(point(.12), absolute(y))),
+                   multiply(point(.18), absolute(z)));
+      kind = SelfCert::original_axis_box_support;
+      break;
+    }
+    case Junction::ankle: {
+      if (.075 > r.limit_metres || r.limit_metres >= shin_length) return;
+      const auto u = unload_scale(unload_difference(p[base + 1], p[base + 2]),
+                                  shin_length);
+      const auto x = unload_frame_dot(cell.frames[side + 2], 0, u), y = u[1],
+                 z = unload_frame_dot(cell.frames[side + 2], 2, u);
+      if (!y.supported) return;
+      if (y.low < 0) {
+        out.arithmetic_supported = true;
+        return;
+      }
+      extent = add(multiply(point(.06), absolute(x)),
+                   multiply(point(.14), absolute(z)));
+      kind = SelfCert::original_axis_box_support;
+      break;
+    }
+    case Junction::wrist:
+      if (.055 > r.limit_metres || r.limit_metres >= .386) return;
+      extent = point(.05);
+      kind = SelfCert::original_axis_box_support;
+      break;
+    case Junction::knee:
+    case Junction::elbow: {
+      const auto l1 = point(thigh_length), l2 = point(shin_length);
+      const auto cosine =
+          r.junction == Junction::knee
+              ? negate(divide(
+                    subtract(
+                        subtract(
+                            interval(cell.legs[side].distance_squared.lower,
+                                     cell.legs[side].distance_squared.upper),
+                            square(l1)),
+                        square(l2)),
+                    multiply(point(2), multiply(l1, l2))))
+              : transfer_small_root(point(.5));
+      const auto a = r.junction == Junction::knee ? .105 : .065,
+                 b = r.junction == Junction::knee ? .075 : .055;
+      const auto proof = self_half_ray(a, b, r.limit_metres, cosine);
+      if (!proof.arithmetic_supported) return;
+      extent = square(point(std::max(a, b)));
+      limit = multiply(
+          square(point(r.limit_metres)),
+          interval(proof.sine_squared.lower, proof.sine_squared.upper));
+      kind = SelfCert::half_ray_angle_bound;
+      break;
+    }
+    case Junction::shoulder: {
+      if (.065 > r.limit_metres) return;
+      const auto c = transfer_small_root(point(.5)),
+                 threshold = transfer_small_root(subtract(
+                     square(point(r.limit_metres)), square(point(.065))));
+      extent = add(negate(multiply(threshold, c)), multiply(point(.065), c));
+      secondary = add(negate(multiply(point(.35898), c)), point(.065));
+      limit = point(-.18);
+      kind = SelfCert::shoulder_split;
+      break;
+    }
+  }
+  const auto gap = subtract(limit, extent);
+  out.arithmetic_supported = extent.supported && limit.supported &&
+                             secondary.supported && gap.supported;
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(secondary);
+  out.structural_identity = true;
+  out.certificate = kind;
+  out.certified = r.junction == Junction::shoulder
+                      ? extent.high < limit.low && secondary.high < limit.low
+                      : gap.low >= 0;
+}
+[[gnu::noinline]] auto unload_separate(const UnloadSolid& a,
+                                       const UnloadSolid& b,
+                                       const UnloadLimits& caps,
+                                       UnloadWork& work, UnloadReason& reason)
+    -> UnloadState {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  for (std::size_t i = 0; i < count; ++i) {
+    if (!unload_charge(work.contact.proposed_axes, caps.axes,
+                       UnloadWhy::axis_capacity, reason))
+      return UnloadState::capacity;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (const auto n : {axis, self_negate(axis)}) {
+      if (!unload_charge(work.contact.signed_trials, caps.signed_trials,
+                         UnloadWhy::signed_trial_capacity, reason))
+        return UnloadState::capacity;
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported)
+        return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+      if (total.high <= 0) return UnloadState::accepted;
+    }
+  }
+  return unload_refuse(reason, UnloadWhy::unresolved_self_pair);
+}
+[[gnu::noinline]] auto unload_self(const UnloadLimits& caps, UnloadWork& work,
+                                   UnloadCell& out, UnloadReason& reason)
+    -> UnloadState {
+  static const auto parts = detail::boarding_route_foot_phase_parts();
+  static const auto regions = self_regions();
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  const auto root = body_intervals(out.phase.points[0].value);
+  for (std::size_t i = 0; i < relative.size(); ++i) {
+    relative[i] = i == 0 ? Point{point(0), point(0), point(0)}
+                         : unload_difference(
+                               body_intervals(out.phase.points[i].value), root);
+    if (!self_point_supported(relative[i]))
+      return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  std::size_t index{};
+  for (std::size_t a = 0; a < parts.size(); ++a)
+    for (std::size_t b = a + 1; b < parts.size(); ++b, ++index) {
+      reason.pair = index;
+      if (!unload_charge(work.contact.self_pairs, caps.pairs,
+                         UnloadWhy::pair_capacity, reason))
+        return UnloadState::capacity;
+      auto certificate = SelfCert::none;
+      for (std::size_t r = 0; r < regions.size(); ++r)
+        if (static_cast<std::size_t>(regions[r].first) == a &&
+            static_cast<std::size_t>(regions[r].second) == b) {
+          if (!unload_charge(work.ownership_attempts, caps.owners,
+                             UnloadWhy::ownership_capacity, reason))
+            return UnloadState::capacity;
+          unload_owner(out.phase, relative, regions[r], out.owners[r]);
+          if (!out.owners[r].arithmetic_supported)
+            return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+          if (out.owners[r].certified) certificate = out.owners[r].certificate;
+          break;
+        }
+      if (certificate == SelfCert::none) {
+        const auto first = unload_solid(parts[a], relative, out.phase),
+                   second = unload_solid(parts[b], relative, out.phase);
+        const auto result = unload_separate(first, second, caps, work, reason);
+        if (result != UnloadState::accepted) return result;
+        certificate = SelfCert::convex_support_plane;
+      }
+      out.pair_certificates[index] = certificate;
+      ++out.certificate_counts[static_cast<std::size_t>(certificate)];
+    }
+  out.self_complete = index == kBoardingBodyPairCount;
+  reason.pair.reset();
+  return UnloadState::accepted;
+}
+} // namespace
+auto detail::boarding_route_port_unload_cell(
+    const BoardingRoutePortUnloadContext& context, double first, double last,
+    bool reverse, const UnloadLimits& caps, UnloadWork& work, UnloadCell& out,
+    UnloadReason& reason) -> UnloadState {
+  out = {};
+  reason = {};
+  out.phase.first = first;
+  out.phase.last = last;
+  const UnloadLimits original;
+  if (!std::isfinite(first) || !std::isfinite(last) || first < 0 || last > 1 ||
+      first > last || caps.pairs > original.pairs ||
+      caps.axes > original.axes ||
+      caps.signed_trials > original.signed_trials ||
+      caps.owners > original.owners || caps.candidates > original.candidates ||
+      caps.edges > original.edges ||
+      caps.initial_source_partitions > original.initial_source_partitions ||
+      caps.initial_body_records > original.initial_body_records ||
+      caps.initial_self_pairs > original.initial_self_pairs ||
+      caps.initial_self_axes > original.initial_self_axes ||
+      caps.initial_pressure_partitions > original.initial_pressure_partitions ||
+      caps.output_bytes > original.output_bytes || !context.source_.contact() ||
+      context.source_.selected_partitions().size() != 10)
+    return unload_refuse(reason, UnloadWhy::invalid_binding);
+  const std::array incoming{
+      work.contact.self_pairs,          work.contact.proposed_axes,
+      work.contact.signed_trials,       work.ownership_attempts,
+      work.contact.pressure_candidates, work.contact.disk_edges};
+  const std::array ceilings{caps.pairs,  caps.axes,       caps.signed_trials,
+                            caps.owners, caps.candidates, caps.edges};
+  const std::array failures{
+      UnloadWhy::pair_capacity,         UnloadWhy::axis_capacity,
+      UnloadWhy::signed_trial_capacity, UnloadWhy::ownership_capacity,
+      UnloadWhy::pressure_capacity,     UnloadWhy::edge_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return UnloadState::capacity;
+    }
+  const auto request = boarding_route_port_unload_controls();
+  BoardingRouteFootPhaseRefusal phase_reason;
+  auto state =
+      boarding_route_foot_phase_cell(request, first, last, reverse, caps.phase,
+                                     work.phase, out.phase, phase_reason);
+  if (state != UnloadState::accepted) {
+    reason.condition = UnloadWhy::phase_predicate;
+    reason.phase_condition = phase_reason.condition;
+    reason.side = phase_reason.side;
+    reason.limiting_bound = phase_reason.limiting_bound;
+    return state;
+  }
+  out.arithmetic_supported = true;
+  state = unload_self(caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  const BoardingRoutePortUnloadCellToken token(context, out);
+  state = boarding_route_port_unload_pressure(token, caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  out.complete =
+      out.phase.complete && out.self_complete && out.nonnegative_reactions &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  reason = {};
+  return out.complete ? UnloadState::accepted
+                      : unload_refuse(reason, UnloadWhy::incomplete_cover);
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+auto detail::boarding_route_port_unload_support_math(
+    const BoardingRoutePortUnloadNumericSolid& input, Vec direction)
+    -> std::expected<BoardingRoutePortUnloadSupportMath, std::string> {
+  const auto convert = [](BoardingPlantedLegPointBounds b,
+                          double maximum) -> Point {
+    return {phase_numeric_interval({b.lower.x, b.upper.x}, maximum),
+            phase_numeric_interval({b.lower.y, b.upper.y}, maximum),
+            phase_numeric_interval({b.lower.z, b.upper.z}, maximum)};
+  };
+  if (input.shape != SelfShape::box && input.shape != SelfShape::ellipsoid &&
+      input.shape != SelfShape::capsule)
+    return std::unexpected("Numeric unload solid shape is invalid");
+  UnloadSolid solid;
+  solid.shape.shape = input.shape;
+  solid.shape.first = convert(input.first, 8);
+  solid.shape.second = convert(input.second, 8);
+  solid.shape.half = input.half_size_metres;
+  solid.shape.radius = input.radius_metres;
+  if (!self_point_supported(solid.shape.first) ||
+      !self_point_supported(solid.shape.second) || !self_direction(direction))
+    return std::unexpected("Numeric unload support requires ordered finite "
+                           "points and nonzero bounded direction");
+  BoardingRoutePhaseFrameEvidence frame;
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!self_point_supported(convert(input.columns[i], 1)))
+      return std::unexpected(
+          "Numeric unload columns require ordered bounds in[-1,1]");
+    frame.columns[i].value = input.columns[i];
+  }
+  if (input.shape == SelfShape::capsule) {
+    if (!bounded(input.radius_metres, 8) || input.radius_metres <= 0)
+      return std::unexpected(
+          "Numeric unload radius must be finite positive abs<=8");
+  } else
+    for (const auto half : {input.half_size_metres.x, input.half_size_metres.y,
+                            input.half_size_metres.z})
+      if (!bounded(half, 8) || half <= 0)
+        return std::unexpected(
+            "Numeric unload halves must be finite positive abs<=8");
+  if (!bounded(input.radius_metres, 8) || input.radius_metres < 0 ||
+      !bounded(input.half_size_metres.x, 8) ||
+      !bounded(input.half_size_metres.y, 8) ||
+      !bounded(input.half_size_metres.z, 8))
+    return std::unexpected(
+        "Numeric unload dimensions must be finite bounded values");
+  BoardingRoutePortUnloadSupportMath out;
+  if (!supported_environment()) return out;
+  solid.frame = &frame;
+  const auto support = unload_support(solid, direction);
+  if (support.supported) {
+    out.support = bounds(support);
+    out.arithmetic_supported = true;
+  }
+  return out;
+}
+} // namespace apsis_drift
+
+#include "origin_boarding_route_checkpoint_unload_internal.hpp"
+namespace apsis_drift {
+static_assert(sizeof(BoardingRouteCheckpointUnloadCell) + sizeof(PhaseGraph) +
+                  sizeof(std::optional<PhaseRequest>) +
+                  sizeof(detail::BoardingRouteCheckpointUnloadContext) +
+                  11 * std::size_t{24} + std::size_t{12288} +
+                  sizeof(std::expected<BoardingRouteCheckpointUnloadDiagnostic,
+                                       std::string>) +
+                  std::size_t{8192} + std::size_t{512} <=
+              kBoardingRouteCheckpointUnloadMaximumScratchBytes);
+auto detail::boarding_route_checkpoint_unload_cell(
+    const BoardingRoutePortUnloadContext& context, std::size_t phase_index,
+    double first, double last, bool reverse, const UnloadLimits& caps,
+    UnloadWork& work, UnloadCell& out, UnloadReason& reason) -> UnloadState {
+  out = {};
+  reason = {};
+  out.phase.first = first;
+  out.phase.last = last;
+  const UnloadLimits original;
+  if (phase_index > 2 || !std::isfinite(first) || !std::isfinite(last) ||
+      first < 0 || last > 1 || first > last || caps.pairs > original.pairs ||
+      caps.axes > original.axes ||
+      caps.signed_trials > original.signed_trials ||
+      caps.owners > original.owners || caps.candidates > original.candidates ||
+      caps.edges > original.edges ||
+      caps.initial_source_partitions > original.initial_source_partitions ||
+      caps.initial_body_records > original.initial_body_records ||
+      caps.initial_self_pairs > original.initial_self_pairs ||
+      caps.initial_self_axes > original.initial_self_axes ||
+      caps.initial_pressure_partitions > original.initial_pressure_partitions ||
+      caps.output_bytes > original.output_bytes || !context.source_.contact() ||
+      context.source_.selected_partitions().size() != 10)
+    return unload_refuse(reason, UnloadWhy::invalid_binding);
+  const std::array incoming{
+      work.contact.self_pairs,          work.contact.proposed_axes,
+      work.contact.signed_trials,       work.ownership_attempts,
+      work.contact.pressure_candidates, work.contact.disk_edges};
+  const std::array ceilings{caps.pairs,  caps.axes,       caps.signed_trials,
+                            caps.owners, caps.candidates, caps.edges};
+  const std::array failures{
+      UnloadWhy::pair_capacity,         UnloadWhy::axis_capacity,
+      UnloadWhy::signed_trial_capacity, UnloadWhy::ownership_capacity,
+      UnloadWhy::pressure_capacity,     UnloadWhy::edge_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return UnloadState::capacity;
+    }
+  const auto request = boarding_route_checkpoint_unload_controls(phase_index);
+  if (!request) return unload_refuse(reason, UnloadWhy::invalid_binding);
+  BoardingRouteFootPhaseRefusal phase_reason;
+  auto state =
+      boarding_route_foot_phase_cell(*request, first, last, reverse, caps.phase,
+                                     work.phase, out.phase, phase_reason);
+  if (state != UnloadState::accepted) {
+    reason.condition = UnloadWhy::phase_predicate;
+    reason.phase_condition = phase_reason.condition;
+    reason.side = phase_reason.side;
+    reason.limiting_bound = phase_reason.limiting_bound;
+    return state;
+  }
+  out.arithmetic_supported = true;
+  state = unload_self(caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  const BoardingRouteCheckpointUnloadCellToken token(context, out, phase_index);
+  state =
+      boarding_route_checkpoint_unload_pressure(token, caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  out.complete =
+      out.phase.complete && out.self_complete && out.nonnegative_reactions &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  reason = {};
+  return out.complete ? UnloadState::accepted
+                      : unload_refuse(reason, UnloadWhy::incomplete_cover);
+}
+} // namespace apsis_drift
+#include "origin_boarding_route_checkpoint_unload_self02_internal.hpp"
+namespace apsis_drift {
+namespace {
+using Self02Cell = BoardingRouteCheckpointUnloadSelf02Cell;
+using Self02Limits = detail::BoardingRouteCheckpointUnloadSelf02Limits;
+using Self02Reason = detail::BoardingRouteCheckpointUnloadSelf02CellRefusal;
+using Self02Certificate = BoardingRouteCheckpointUnloadSelf02Certificate;
+using Self02HipMath = detail::BoardingRouteCheckpointUnloadSelf02HipMath;
+// Two selected policies may retain both immutable part/region caches. The
+// shared phase leg's original8192 nested budget plus both1184 caches/scalars
+// and this value-only expression's temporaries fits the same12288 reserve.
+static_assert(std::size_t{8192} +
+                  2 * (sizeof(std::array<BoardingRoutePhasePartBinding,
+                                         kBoardingBodyPartCount>) +
+                       sizeof(SelfRegions)) +
+                  std::size_t{144} + 8 * sizeof(Interval) + 2 * sizeof(Point) +
+                  sizeof(Self02HipMath) <=
+              12288);
+static_assert(
+    sizeof(Self02Cell) + sizeof(PhaseGraph) +
+        sizeof(std::optional<PhaseRequest>) +
+        sizeof(detail::BoardingRouteCheckpointUnloadContext) +
+        11 * std::size_t{24} + std::size_t{12288} +
+        sizeof(std::expected<BoardingRouteCheckpointUnloadSelf02Diagnostic,
+                             std::string>) +
+        std::size_t{8192} + std::size_t{512} <=
+    kBoardingRouteCheckpointUnloadMaximumScratchBytes);
+
+// Reset's large temporary is released before the phase graph is entered.
+[[gnu::noinline]] auto self02_reset(Self02Cell& cell) -> void {
+  cell.assessment = {};
+  cell.self02_certificates = {};
+  cell.self02_certificate_counts = {};
+  cell.hip_complements = {};
+}
+auto self02_hip_expression(const Point& u, double radius, double axial_limit,
+                           double bottom) -> Self02HipMath {
+  Self02HipMath result;
+  const auto transverse = transfer_small_root(add(square(u[0]), square(u[2])));
+  const auto extent = add(multiply(point(axial_limit), u[1]),
+                          multiply(point(radius), transverse));
+  const auto limit = point(bottom), gap = subtract(limit, extent);
+  result.arithmetic_supported = u[0].supported && u[1].supported &&
+                                u[2].supported && transverse.supported &&
+                                extent.supported && limit.supported &&
+                                gap.supported;
+  if (!result.arithmetic_supported) return result;
+  result.transverse = bounds(transverse);
+  result.extent = bounds(extent);
+  result.limit = bounds(limit);
+  result.strict_gap = bounds(gap);
+  result.negative_axis = u[1].high < 0;
+  result.strict_extent_below_bottom = extent.high < limit.low;
+  return result;
+}
+[[gnu::noinline]] auto self02_hip_complement(
+    const BoardingRouteFootPhaseCell& phase,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& relative,
+    const SelfRegion& region, std::size_t region_index, std::size_t pair,
+    BoardingRouteCheckpointUnloadHipComplement& result) -> void {
+  result.attempted = true;
+  result.region = region_index;
+  result.pair = pair;
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  result.side = side;
+  result.slab_limit_metres = region.limit_metres;
+  const auto hip =
+      side == 0 ? BodyPointId::port_hip : BodyPointId::starboard_hip;
+  const auto knee =
+      side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+  const auto thigh = side == 0 ? PartId::port_thigh : PartId::starboard_thigh;
+  if (!phase.complete || !phase.nominal_links || !phase.derivative_domains ||
+      !phase.legs[side].nominal_links || !phase.legs[side].derivative_domains ||
+      region.junction != Junction::hip || region.first != PartId::pelvis ||
+      region.second != thigh || region.root != hip || region.toward != knee ||
+      region.limit_metres != kBoardingSelfHipLengthMetres ||
+      .105 > region.limit_metres || region.limit_metres >= thigh_length)
+    return;
+  // Only the privately compiled upright, yaw-only phase graph reaches here.
+  // H-ROOT=side*.14*Rroot.X and Rroot.Y=WORLDY give exact pelvis bottom -.12.
+  result.nominal_unit_identity = result.upright_pelvis_identity =
+      result.original_slab_identity = true;
+  const auto u = unload_scale(
+      unload_difference(relative[body_index(knee)], relative[body_index(hip)]),
+      thigh_length);
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!u[i].supported) return;
+    result.axis[i] = bounds(u[i]);
+  }
+  if (u[1].high >= 0) {
+    result.arithmetic_supported = true;
+    return;
+  }
+  result.extent_evaluated = true;
+  const auto proof = self02_hip_expression(u, .105, region.limit_metres, -.12);
+  result.arithmetic_supported = proof.arithmetic_supported;
+  if (!proof.arithmetic_supported) return;
+  result.transverse = proof.transverse;
+  result.extent = proof.extent;
+  result.limit = proof.limit;
+  result.strict_gap = proof.strict_gap;
+  result.certified = proof.negative_axis && proof.strict_extent_below_bottom;
+}
+[[gnu::noinline]] auto self02_self(const Self02Limits& caps, UnloadWork& work,
+                                   std::uint64_t& hip_attempts,
+                                   Self02Cell& cell, Self02Reason& reason)
+    -> UnloadState {
+  static const auto parts = detail::boarding_route_foot_phase_parts();
+  static const auto regions = self_regions();
+  auto& out = cell.assessment;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  const auto root = body_intervals(out.phase.points[0].value);
+  for (std::size_t i = 0; i < relative.size(); ++i) {
+    relative[i] = i == 0 ? Point{point(0), point(0), point(0)}
+                         : unload_difference(
+                               body_intervals(out.phase.points[i].value), root);
+    if (!self_point_supported(relative[i]))
+      return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  std::size_t index{};
+  for (std::size_t a = 0; a < parts.size(); ++a)
+    for (std::size_t b = a + 1; b < parts.size(); ++b, ++index) {
+      reason.pair = index;
+      if (!unload_charge(work.contact.self_pairs, caps.pairs,
+                         UnloadWhy::pair_capacity, reason))
+        return UnloadState::capacity;
+      auto original = SelfCert::none;
+      auto selected = Self02Certificate::none;
+      for (std::size_t r = 0; r < regions.size(); ++r)
+        if (static_cast<std::size_t>(regions[r].first) == a &&
+            static_cast<std::size_t>(regions[r].second) == b) {
+          if (!unload_charge(work.ownership_attempts, caps.owners,
+                             UnloadWhy::ownership_capacity, reason))
+            return UnloadState::capacity;
+          unload_owner(out.phase, relative, regions[r], out.owners[r]);
+          if (!out.owners[r].arithmetic_supported)
+            return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+          if (out.owners[r].certified) {
+            original = out.owners[r].certificate;
+            selected = static_cast<Self02Certificate>(original);
+          } else if (regions[r].junction == Junction::hip) {
+            if (hip_attempts >= caps.hip_complement_attempts) {
+              reason.condition = UnloadWhy::ownership_capacity;
+              reason.hip_complement_capacity = true;
+              return UnloadState::capacity;
+            }
+            ++hip_attempts;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            self02_hip_complement(out.phase, relative, regions[r], r, index,
+                                  cell.hip_complements[side]);
+            if (!cell.hip_complements[side].arithmetic_supported)
+              return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+            if (cell.hip_complements[side].certified)
+              selected = Self02Certificate::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (selected == Self02Certificate::none) {
+        const auto first = unload_solid(parts[a], relative, out.phase),
+                   second = unload_solid(parts[b], relative, out.phase);
+        const auto state = unload_separate(first, second, caps, work, reason);
+        if (state != UnloadState::accepted) return state;
+        original = SelfCert::convex_support_plane;
+        selected = Self02Certificate::convex_support_plane;
+      }
+      out.pair_certificates[index] = original;
+      if (original != SelfCert::none)
+        ++out.certificate_counts[static_cast<std::size_t>(original)];
+      cell.self02_certificates[index] = selected;
+      ++cell.self02_certificate_counts[static_cast<std::size_t>(selected)];
+    }
+  out.self_complete = index == kBoardingBodyPairCount;
+  reason.pair.reset();
+  return UnloadState::accepted;
+}
+} // namespace
+auto detail::boarding_route_checkpoint_unload_self02_cell(
+    const BoardingRoutePortUnloadContext& context, std::size_t phase_index,
+    double first, double last, bool reverse, const Self02Limits& caps,
+    UnloadWork& work, std::uint64_t& hip_attempts, Self02Cell& cell,
+    Self02Reason& reason) -> UnloadState {
+  self02_reset(cell);
+  reason = {};
+  auto& out = cell.assessment;
+  out.phase.first = first;
+  out.phase.last = last;
+  const UnloadLimits original;
+  if (phase_index > 2 || !std::isfinite(first) || !std::isfinite(last) ||
+      first < 0 || last > 1 || first > last ||
+      caps.hip_complement_attempts >
+          kBoardingRouteCheckpointUnloadSelf02MaximumHipAttempts ||
+      caps.pairs > original.pairs || caps.axes > original.axes ||
+      caps.signed_trials > original.signed_trials ||
+      caps.owners > original.owners || caps.candidates > original.candidates ||
+      caps.edges > original.edges ||
+      caps.initial_source_partitions > original.initial_source_partitions ||
+      caps.initial_body_records > original.initial_body_records ||
+      caps.initial_self_pairs > original.initial_self_pairs ||
+      caps.initial_self_axes > original.initial_self_axes ||
+      caps.initial_pressure_partitions > original.initial_pressure_partitions ||
+      caps.output_bytes > original.output_bytes || !context.source_.contact() ||
+      context.source_.selected_partitions().size() != 10)
+    return unload_refuse(reason, UnloadWhy::invalid_binding);
+  if (hip_attempts > caps.hip_complement_attempts) {
+    reason.condition = UnloadWhy::ownership_capacity;
+    reason.hip_complement_capacity = true;
+    return UnloadState::capacity;
+  }
+  const std::array incoming{
+      work.contact.self_pairs,          work.contact.proposed_axes,
+      work.contact.signed_trials,       work.ownership_attempts,
+      work.contact.pressure_candidates, work.contact.disk_edges};
+  const std::array ceilings{caps.pairs,  caps.axes,       caps.signed_trials,
+                            caps.owners, caps.candidates, caps.edges};
+  const std::array failures{
+      UnloadWhy::pair_capacity,         UnloadWhy::axis_capacity,
+      UnloadWhy::signed_trial_capacity, UnloadWhy::ownership_capacity,
+      UnloadWhy::pressure_capacity,     UnloadWhy::edge_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return UnloadState::capacity;
+    }
+  const auto request = boarding_route_checkpoint_unload_controls(phase_index);
+  if (!request) return unload_refuse(reason, UnloadWhy::invalid_binding);
+  BoardingRouteFootPhaseRefusal phase_reason;
+  auto state =
+      boarding_route_foot_phase_cell(*request, first, last, reverse, caps.phase,
+                                     work.phase, out.phase, phase_reason);
+  if (state != UnloadState::accepted) {
+    reason.condition = UnloadWhy::phase_predicate;
+    reason.phase_condition = phase_reason.condition;
+    reason.side = phase_reason.side;
+    reason.limiting_bound = phase_reason.limiting_bound;
+    return state;
+  }
+  out.arithmetic_supported = true;
+  state = self02_self(caps, work, hip_attempts, cell, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  const BoardingRouteCheckpointUnloadCellToken token(context, out, phase_index);
+  state =
+      boarding_route_checkpoint_unload_pressure(token, caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  out.complete =
+      out.phase.complete && out.self_complete && out.nonnegative_reactions &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  reason = {};
+  return out.complete ? UnloadState::accepted
+                      : unload_refuse(reason, UnloadWhy::incomplete_cover);
+}
+auto detail::boarding_route_checkpoint_unload_self02_hip_math(
+    std::array<Bounds, 3> axis, double radius, double axial_limit,
+    double bottom) -> std::expected<Self02HipMath, std::string> {
+  if (!std::isfinite(radius) || !std::isfinite(axial_limit) ||
+      !std::isfinite(bottom) || radius <= 0 || radius > axial_limit ||
+      axial_limit > 8 || std::abs(bottom) > 8)
+    return std::unexpected("Hip expression requires positive radius<=limit<=8 "
+                           "and finite bottom abs<=8");
+  Point u;
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!std::isfinite(axis[i].lower) || !std::isfinite(axis[i].upper) ||
+        axis[i].lower > axis[i].upper || axis[i].lower < -1 ||
+        axis[i].upper > 1)
+      return std::unexpected("Hip expression requires finite ordered raw axis "
+                             "components in[-1,1]");
+    u[i] = interval(axis[i].lower, axis[i].upper);
+  }
+  if (!boarding_route_foot_phase_environment()) return Self02HipMath{};
+  return self02_hip_expression(u, radius, axial_limit, bottom);
+}
+} // namespace apsis_drift

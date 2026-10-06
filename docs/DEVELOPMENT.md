@@ -8,7 +8,7 @@ study modes. The [terminal guide](TERMINAL.md) covers the retained frontend.
 ## Requirements
 
 - CMake 3.28+, Git and a C++23 compiler (GCC 13+ or Clang 19+ recommended).
-- Python 3 for native test runners and asset preparation tools.
+- Python 3.10+ for build-time source preparation, native test runners and asset tools.
 - Godot 4.7.2 for the currently qualified native runtime checks; use an installed
   executable or set `GODOT_BIN` to its executable path.
 - clang-format 20, clang-tidy 20 and Clang 20 for repository quality checks.

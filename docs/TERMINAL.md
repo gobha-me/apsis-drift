@@ -8,7 +8,7 @@ See [ownership](GODOT_ADOPTION.md) and [native setup](DEVELOPMENT.md).
 
 ## Build
 
-Use CMake 3.28+, Git and a C++23 compiler. The default configuration includes the
+Use CMake 3.28+, Python 3.10+, Git and a C++23 compiler. The default configuration includes the
 terminal application. It finds a compatible TermForge package or sibling checkout,
 otherwise fetches pinned TermForge v0.57.23. RtAudio 6.0.1 is enabled by default;
 its platform headers are needed for device output (`libasound2-dev` on Linux).

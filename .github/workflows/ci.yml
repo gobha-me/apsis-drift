@@ -68,6 +68,12 @@ jobs:
       - name: Check boarding contact qualification policy
         run: python3 test/boarding_contact_policy_test.py
 
+      - name: Check complete-source material inventory bounds and fingerprints
+        run: |
+          python3 test/tools/material_inventory_test.py
+          python3 test/material_source_completion_test.py
+          python3 test/prepare_material_source_test.py
+
       - name: Check corrected-rest attribution and finite assembly proofs
         run: python3 test/wayfarer_corrected_rest_checks_test.py
 
@@ -147,7 +153,8 @@ jobs:
           -DAPSIS_DRIFT_GODOT_SPIKE=ON
 
       - name: Build
-        run: cmake --build build --parallel
+        # Bound compiler concurrency: the material TU and Godot headers are large.
+        run: cmake --build build --parallel 4
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --parallel 2
@@ -190,7 +197,8 @@ jobs:
           -DAPSIS_DRIFT_GODOT_LIVE=ON
 
       - name: Build native core, live Godot bridge and headless targets
-        run: cmake --build build-core --parallel
+        # Use the same bounded compiler concurrency as the terminal/native builds.
+        run: cmake --build build-core --parallel 4
 
       - name: Test native and headless targets
         run: ctest --test-dir build-core --output-on-failure

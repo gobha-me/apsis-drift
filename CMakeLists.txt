@@ -287,7 +287,30 @@ configure_file(include/apsis_drift/stowed_contact_data.hpp.in
 unset(APSIS_STOWED_CONTACT_JSON)
 unset(APSIS_STOWED_FRAME_JSON)
 
+# Complete material inputs are prepared into one immutable translation unit.
+# The preparer authenticates exact bytes; no authoring master is a build input.
+find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+set(APSIS_MATERIAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets/native/wayfarer-material-source-01")
+set(APSIS_MATERIAL_PREPARER "${CMAKE_CURRENT_SOURCE_DIR}/tools/boarding/prepare_material_source.py")
+set(APSIS_MATERIAL_PREPARED "${CMAKE_CURRENT_BINARY_DIR}/generated/origin_boarding_initial_material_prepared.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${APSIS_MATERIAL_SOURCE_DIR}/completion.json"
+  "${APSIS_MATERIAL_SOURCE_DIR}/geometry.bin"
+  "${APSIS_MATERIAL_PREPARER}")
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" "${APSIS_MATERIAL_PREPARER}"
+    "${APSIS_MATERIAL_SOURCE_DIR}/completion.json"
+    "${APSIS_MATERIAL_SOURCE_DIR}/geometry.bin"
+    "${APSIS_MATERIAL_PREPARED}"
+  RESULT_VARIABLE APSIS_MATERIAL_PREPARATION_RESULT
+  OUTPUT_VARIABLE APSIS_MATERIAL_PREPARATION_OUTPUT
+  ERROR_VARIABLE APSIS_MATERIAL_PREPARATION_ERROR)
+if (NOT APSIS_MATERIAL_PREPARATION_RESULT EQUAL 0)
+  message(FATAL_ERROR "Complete material source preparation failed: ${APSIS_MATERIAL_PREPARATION_ERROR}")
+endif ()
+
 add_library(apsis_drift_core STATIC
+  "${APSIS_MATERIAL_PREPARED}"
   src/celestial.cpp
   src/coordinates.cpp
   src/craft_frame.cpp
@@ -305,6 +328,12 @@ add_library(apsis_drift_core STATIC
   src/origin_stowed_contact_partition.cpp
   src/origin_cabin_corridor.cpp
   src/origin_boarding_body.cpp
+  src/origin_boarding_route_body.cpp
+  src/origin_boarding_route_foot_phase.cpp
+  src/origin_boarding_initial_material.cpp
+  src/origin_boarding_route_port_unload.cpp
+  src/origin_boarding_route_checkpoint_unload.cpp
+  src/origin_boarding_route_checkpoint_unload_self02.cpp
   src/origin_boarding_boot_support.cpp
   src/origin_boarding_world_checkpoint.cpp
   src/origin_boarding_source_endpoint_surface_checkpoint.cpp
@@ -366,6 +395,8 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
 set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_source_endpoint_surface_checkpoint.cpp src/origin_boarding_lower_foot_transfer.cpp src/origin_boarding_lower_foot_transfer_surface_sweep.cpp src/origin_boarding_planted_legs.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
+set_property(SOURCE src/origin_boarding_route_body.cpp src/origin_boarding_route_foot_phase.cpp src/origin_boarding_initial_material.cpp src/origin_boarding_route_port_unload.cpp src/origin_boarding_route_checkpoint_unload.cpp src/origin_boarding_route_checkpoint_unload_self02.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -469,6 +500,53 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-boarding-route-checkpoint-unload-self02-tests test/origin_boarding_route_checkpoint_unload_self02_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-route-checkpoint-unload-self02-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-checkpoint-unload-self02-contract COMMAND apsis-drift-boarding-route-checkpoint-unload-self02-tests)
+  set_tests_properties(boarding-route-checkpoint-unload-self02-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-boarding-route-checkpoint-unload-tests test/origin_boarding_route_checkpoint_unload_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-route-checkpoint-unload-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-checkpoint-unload-contract COMMAND apsis-drift-boarding-route-checkpoint-unload-tests)
+  set_tests_properties(boarding-route-checkpoint-unload-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-boarding-route-port-unload-tests test/origin_boarding_route_port_unload_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-port-unload-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-port-unload-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-route-port-unload-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-port-unload-contract COMMAND apsis-drift-boarding-route-port-unload-tests)
+  set_tests_properties(boarding-route-port-unload-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-boarding-initial-material-tests test/origin_boarding_initial_material_test.cpp)
+  target_link_libraries(apsis-drift-boarding-initial-material-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-initial-material-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-initial-material-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-initial-material-contract COMMAND apsis-drift-boarding-initial-material-tests)
+  set_tests_properties(boarding-initial-material-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-boarding-route-foot-phase-tests test/origin_boarding_route_foot_phase_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-foot-phase-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-foot-phase-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_options(apsis-drift-boarding-route-foot-phase-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-foot-phase-contract COMMAND apsis-drift-boarding-route-foot-phase-tests)
+  set_tests_properties(boarding-route-foot-phase-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-boarding-route-body-tests test/origin_boarding_route_body_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-body-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-boarding-route-body-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-body-contract COMMAND apsis-drift-boarding-route-body-tests)
+  set_tests_properties(boarding-route-body-contract PROPERTIES TIMEOUT 90)
+
   add_executable(apsis-drift-boarding-self-model03-tests test/origin_boarding_self_model03_test.cpp)
   target_link_libraries(apsis-drift-boarding-self-model03-tests PRIVATE apsis-drift::core)
   target_include_directories(apsis-drift-boarding-self-model03-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
