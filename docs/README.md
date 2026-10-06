@@ -70,7 +70,7 @@ player's station-to-flight journey.
 - [Constructive intermediate pause support02](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT02.md):
   registered lighter-load static witness, preserving the quarter-load refusal.
 - [Intermediate load acquisition01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_LOAD01.md):
-  registered continuous lighter-load segment and held endpoint.
+  qualified continuous lighter-load segment and held endpoint; full boarding remains open.
 - [IntermediateStep02 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP02.md):
   registered foot-preposition sequencing hypothesis under unchanged shared limits.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):

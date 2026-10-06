@@ -375,3 +375,80 @@ Oneownedoutputvector≤16MiB, one sourcearena4096, no twofullrouteoutputs. Main 
 FIRST10onlyprints compactstates/work/prefix/refusals; onlywholef/r prints twofullcontactfindings asspacepermits. Sharedstdout+stderr≤16384 mustfinishwithouttruncation. Eightfixedbodyoracles max144points/120masspoints/128edgecorroborations, conditionalrealretainedcoverage; no otherLD/querygrids. VersionedNEWendpointonlydimensionless policy doesn'tchange473 oranyhistorical quarter-load refusal. Source/inputpins andappendedbootprefixpubliclyfreeze withmethod BEFOREcode; exactsource/machine/resourcefreezebeforeFIRST. Publicregistrationrequired; allactualcandidateoutcomesUNKNOWN, noendingfallbackfamily orfit.
 
 Final schema companion: build-native/issue475-validation/load01-exact-schema-draft.md. All method choices above areclosed; implementationactualsizeof/source/machine gatesremainmandatorybeforeFIRST anddoNOT authorize additionalqueries. Testmanifest andschema mustbe copiedtogether intoRootpublicregistration.
+
+
+## Retained FIRST outcome — 2026-10-06
+
+The selected partial nominal load ramp **passes forward and backward**. This is
+continuous interval coverage of global[.5,1], not sampled qualification or a
+completed boarding route. It retains the existing body/feet/root/source controls
+and changes only the registered reaction endpoint to1/16.
+
+Public registration was commit `259454c74ccd30ca0d3365bc0cf64e0702a6e55e`.
+Implementation frozen before numerical execution:
+`0104c25c7525507535e564f577efb043d79244ea`,
+UTC `2026-10-06T12:32:45.643314+00:00`.
+Both GCC and pinned Clang20 FIRST logs are identical2745 bytes, SHA256
+`e391c341e0d229cf1f9927c54a0566d68d240df52134ee206c7c2536a2e4302b`.
+The unchanged public source creator admits its actual4096-byte arena once.
+
+| Registered request | Complete accepted cells | Original compiler calls | Join qualified |
+| --- | ---: | ---: | --- |
+| A01/A02 whole forward/reverse[.5,1] |7|12|Yes, two-sided positive-width coverage|
+| A03/A04 ramp forward/reverse[.5,.75] |6|11|Outside requested interior|
+| A05/A06 hold forward/reverse[.75,1] |1|1|Outside requested interior|
+| A07–A10 points.5,.75,1,.625 |1 each|1 each|Point alone grants no join|
+
+Whole forward/reverse navigation uses13 nodes, one mandatory split and depth4;
+all seven reported arithmetic/source/kinematic/reaction/equilibrium/contact/load
+flags are true. Each whole consumes old graph/leg/body/sector/timing work
+12/24/12/36/72 and new once-source/projection/definition/candidate/disk work
+18/3012/372/24/192. The five allocation stages total48/96/48/48/72,
+reaction36, quotient96 and fold144. Default owned output is9623184 bytes.
+The source-backed positive pause and both earlier quarter-load refutations are
+preserved unchanged.
+
+The initial processes exited1 on nine test assertions that demanded a physical
+duration on controls refused before admission completed. Duration is intentionally
+evaluated only after safe source enrollment, so those refusals retain zero and do
+not claim timing evaluation. The test-only correction asserts that staging and
+makes the observed FIRST outcomes mandatory on the existing request roster.
+Initial logs remain retained; candidate, source, arithmetic, limits, queries and
+oracle coordinates are unchanged. Final validation is recorded below separately.
+
+Before FIRST, both full native builds and pinned formatting passed. The full
+193-translation-unit tidy20 run found only widening arithmetic in twelve new
+header constants used by three units. Typing the multiplicands as size_t preserves
+all22 limits; all three affected units subsequently pass tidy20. Both independent
+strict compiler reviews agree on actual layouts and complete source/machine bounds:
+source creator7000<=8192, graph48528<=49152, oracle30320<=49152 and maximum owned
+output9623184<=16777216. The original833 input hashes and complete115835-byte boot
+prefix are unchanged; the sole bridge extension adds7816 bytes.
+
+The rebuilt GCC Godot bridge and all141 engine/project/exporter/fixture inputs
+match the retained five-contract report (SHA256
+`85384da6a1dca94ed31daf8863271c722fbebb85487fed483426e84a2a74c1f5`).
+Local engine evidence is explicitly reused, not a claimed fresh graphical run.
+Fresh exact-head PR CI remains required.
+
+Arrival, unloaded swing/descent/reacquisition, self/material/WORLD clearance,
+complete checkpoint travel, seat support, actor/save integration and First Flight
+remain open under parent462/361/352. No ordinary numerical division result or
+caller-constructed successful report can mint that authority.
+
+
+## Final local validation
+
+After the test-only staging correction and mandatory observed assertions, the
+complete native suites pass85/85 with GCC (74.96s) and pinned Clang20 (65.71s).
+The final new-contract outputs extracted from CTest, without another direct
+replay, are identical2052 bytes, SHA256
+`4f3837f35edbe3bd419aa2fcacd3fed2367dda12094af2820013f940bb5a5807`.
+The unchanged roster records one creator,96 consumers,339 original compiler
+calls,32 division literals, eight FIRST-only corroboration poses,12249 checks
+and zero failures. Final pinned format20 and the three changed tidy20 units
+pass. Independent final source/outcome/storage review passes; producer files
+remain byte-exact to frozen FIRST. Conservative final graph frame bounds are
+41680/41456 bytes and source creator bounds remain within8KiB. These are local
+numerical and compatibility checks; no controller playtest or completed physical
+boarding/seat/First Flight claim is made.

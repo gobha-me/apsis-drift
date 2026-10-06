@@ -560,13 +560,18 @@ void authority(const Diagnostic&) {
 [[gnu::noinline]] void accounting(const Diagnostic& d, const Limits& l) {
   authority(d);
   check(d.load_version == 1, "Immutable Load01 version");
-  check(
-      d.reporting_elapsed_seconds ==
-          std::abs(detail::boarding_route_intermediate_load01_clock(
-                       d.requested_last) -
-                   detail::boarding_route_intermediate_load01_clock(
-                       d.requested_first)),
-      "Original physical clock durations retained by every requested subrange");
+  if (d.source_enrolled)
+    check(d.reporting_elapsed_seconds ==
+              std::abs(detail::boarding_route_intermediate_load01_clock(
+                           d.requested_last) -
+                       detail::boarding_route_intermediate_load01_clock(
+                           d.requested_first)),
+          "Original physical clock assigned only after genuine once-source "
+          "enrollment");
+  else
+    check(d.reporting_elapsed_seconds == 0,
+          "Unenrolled refusal retains unassigned clock rather than invented "
+          "duration");
   if (d.source_enrolled)
     check(d.work.source_guards == 18 && mask_count(d.source_evaluated) == 18,
           "Genuine once-source enrollment retains all18 charged identities");
@@ -900,6 +905,107 @@ constexpr std::array<std::array<double, 2>, 16> requests{{{.5, 1},
                                                           {.5625, .5},
                                                           {.5625, .5625},
                                                           {.75, .875}}};
+// Frozen FIRST0104c25 established these outcomes before this regression was
+// added. It adds no requests, fixtures or oracle positions; the original FIRST
+// prints remain.
+[[gnu::noinline]] void observed_outcome(std::size_t slot, const Diagnostic& d) {
+  constexpr std::array<std::size_t, 10> graphs{12, 12, 11, 11, 1,
+                                               1,  1,  1,  1,  1};
+  constexpr std::array<std::size_t, 10> leaves{7, 7, 6, 6, 1, 1, 1, 1, 1, 1};
+  constexpr std::array<std::size_t, 10> nodes{13, 13, 11, 11, 1, 1, 1, 1, 1, 1};
+  constexpr std::array<std::size_t, 10> depths{4, 4, 3, 3, 0, 0, 0, 0, 0, 0};
+  const auto n = graphs[slot - 1];
+  check(d.state == State::accepted && d.complete && !d.first_refusal &&
+            d.stop_condition == Condition::none && d.arithmetic_supported &&
+            d.source_enrolled && d.kinematic_complete &&
+            d.nonnegative_reactions && d.nominal_equilibrium &&
+            d.finite_contact_complete && d.nominal_load_complete,
+        "Observed ten selected FIRST requests genuinely complete partial "
+        "nominal load");
+  check(d.cells.size() == leaves[slot - 1] &&
+            d.examined_nodes == nodes[slot - 1] &&
+            d.maximum_depth == depths[slot - 1] &&
+            d.mandatory_splits == (slot <= 2 ? 1U : 0U) &&
+            d.work.phase_calls == n,
+        "Frozen FIRST cell/navigation/original-call accounting retained");
+  check(d.work.phase.graphs == n && d.work.phase.legs == 2 * n &&
+            d.work.phase.bodies == n && d.work.phase.sectors == 3 * n &&
+            d.work.phase.timing == 6 * n,
+        "Frozen FIRST original compiler work retained across ramp, pause and "
+        "points");
+  const std::array<std::size_t, 13> expected{
+      18,    251 * n, 31 * n, 2 * n, 16 * n, 4 * n, 8 * n,
+      4 * n, 4 * n,   6 * n,  3 * n, 8 * n,  12 * n};
+  check(new_work(d.work) == expected && mask_count(d.source_evaluated) == 18,
+        "Frozen FIRST source/projection/allocation/reaction/division work "
+        "retained");
+  check(d.output_capacity_bytes == 9623184 && d.join_expression_identity &&
+            d.qualified_join == (slot <= 2),
+        "Observed output and two-sided join distinct from point or "
+        "single-phase expression identity");
+  std::size_t ramp{}, hold{}, boundary{}, zero{};
+  for (const auto& c : d.cells) {
+    ramp += c.phase_index == 3 ? 1U : 0U;
+    hold += c.phase_index == 4 ? 1U : 0U;
+    boundary +=
+        c.port_force_state == Force::zero_boundary_positive_interior ? 1U : 0U;
+    zero += c.port_force_state == Force::zero_only ? 1U : 0U;
+    check(mask_count(c.projected_carrier_complete) == 11 &&
+              mask_count(c.definition_evaluated) == 31 &&
+              mask_count(c.reaction_evaluated) == 3 &&
+              mask_count(c.sole_extrema_evaluated) == 4 &&
+              mask_count(c.source_coordinate_evaluated) == 8 &&
+              mask_count(c.intersection_evaluated) == 4 &&
+              mask_count(c.midpoint_evaluated) == 4 &&
+              mask_count(c.allocation_evaluated) == 6 &&
+              mask_count(c.division_quotient_evaluated) == 8 &&
+              mask_count(c.division_fold_evaluated) == 12 &&
+              mask_count(c.pressure_evaluated) == 2,
+          "Observed accepted cells retain every charged scalar/division mask");
+    check(c.port_contact_geometry && c.star_everywhere_positive &&
+              c.plane_identities && c.sites[0].complete &&
+              c.sites[1].complete &&
+              mask_count(c.sites[0].sole_evaluated) == 4 &&
+              mask_count(c.sites[0].source_evaluated) == 4 &&
+              mask_count(c.sites[1].sole_evaluated) == 4 &&
+              mask_count(c.sites[1].source_evaluated) == 4,
+          "Observed full sixteen-edge finite contact geometry includes "
+          "zero-force endpoint");
+    check(c.checkpoint_threshold_met ==
+              (c.phase_index == 4 ||
+               (c.global_first == .75 && c.global_last == .75)),
+          "Endpoint-only dimensionless checkpoint stays distinct from "
+          "positive-interior geometry");
+  }
+  check(boundary == (slot <= 4 ? 1U : 0U) && zero == (slot == 7 ? 1U : 0U),
+        "Observed force event topology distinguishes initial zero point, "
+        "boundary and positive interiors");
+  if (slot <= 2)
+    check(ramp == 6 && hold == 1, "Whole cover retains six ramp cells and one "
+                                  "supported hold on same shared cover");
+  else if (slot <= 4)
+    check(ramp == 6 && hold == 0,
+          "Ramp-only cover retains original six accepted ramp cells");
+  else
+    check(
+        ramp == ((slot == 5 || slot == 6 || slot == 9) ? 0U : 1U) &&
+            hold == ((slot == 5 || slot == 6 || slot == 9) ? 1U : 0U),
+        "Observed single-cell cases retain canonical preceding join ownership");
+  if (slot == 7)
+    check(d.cells.front().port_share.lower == 0 &&
+              d.cells.front().port_share.upper == 0 &&
+              d.cells.front().star_share.lower == 1 &&
+              d.cells.front().star_share.upper == 1 &&
+              !d.cells.front().sites[0].loaded,
+          "Observed exact unloaded port has no positive force while genuine "
+          "star carries all nominal weight");
+  if (slot == 8 || slot == 9)
+    check(d.cells.front().port_share.lower == .0625 &&
+              d.cells.front().port_share.upper == .0625 &&
+              d.cells.front().star_share.lower == .9375 &&
+              d.cells.front().star_share.upper == .9375,
+          "Observed endpoints retain exact proved dyadic forces");
+}
 [[gnu::noinline]] void first_one(const Provider& p, std::size_t slot,
                                  Baseline* baseline) {
   charge(totals.consumers, 96);
@@ -909,9 +1015,12 @@ constexpr std::array<std::array<double, 2>, 16> requests{{{.5, 1},
     std::cout << "FIRST_LOAD01 A" << slot << " API_ERROR=" << result.error()
               << '\n'
               << std::flush;
+    check(false,
+          "Frozen FIRST valid request must still admit its observed result");
     return;
   }
   print(slot, *result);
+  observed_outcome(slot, *result);
   accounting(*result, Limits{});
   if (baseline) *baseline = summarize(*result);
   if (slot <= 2) first_oracles(*result);
@@ -929,6 +1038,14 @@ constexpr std::array<std::array<double, 2>, 16> requests{{{.5, 1},
               << " bytes=" << s->actual_source_bytes
               << " condition=" << static_cast<unsigned>(s->condition);
   std::cout << '\n' << std::flush;
+  check(result.has_value(),
+        "Observed unchanged genuine public source issuer remains admitted");
+  if (result) {
+    const auto* source = result->summary();
+    check(source && source->complete && source->actual_source_bytes == 4096 &&
+              source->condition == BoardingIntermediatePauseCondition::none,
+          "Observed source admission retains genuine complete fixed4096 arena");
+  }
   if (result) {
     check(Access::valid(*result),
           "Only genuine unchanged source creator issues capability");
