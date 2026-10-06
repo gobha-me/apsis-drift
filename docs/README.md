@@ -75,6 +75,8 @@ player's station-to-flight journey.
   registered interior-mixture proposal; original geometry and full-interval verifiers preserved.
 - [Hip policy contract audit](ORIGIN_BOARDING_HIP_POLICY_CONTRACT_AUDIT.md):
   preserves finite ownership; a fresh intermediate endpoint prerequisite precedes another route.
+- [Registered static intermediate endpoint01](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT01.md):
+  one authored-descent midpoint candidate; outcome and actual resource admission pending.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
