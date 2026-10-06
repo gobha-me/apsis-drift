@@ -2453,3 +2453,200 @@ namespace apsis_drift {
   }
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_load01_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::
+    boarding_route_intermediate_load01_pressure_bridge(
+        const BoardingRouteIntermediateLoad01CurrentCellToken& token,
+        BoardingRouteIntermediateLoad01Diagnostic& d,
+        BoardingRouteIntermediateLoad01Cell& c,
+        const BoardingRouteIntermediateLoad01Limits& limits,
+        BoardingRouteIntermediateLoad01Refusal& refusal)
+        -> BoardingRouteIntermediateLoad01State {
+  using Why = BoardingRouteIntermediateLoad01Condition;
+
+  using State = BoardingRouteIntermediateLoad01State;
+
+  const auto stop = [&](Why why, std::optional<std::size_t> side = {},
+                        std::optional<std::size_t> edge = {},
+                        bool source_edge = false) {
+    d.stop_condition = why;
+    d.state = why == Why::edge_capacity            ? State::capacity
+              : why == Why::unsupported_arithmetic ? State::unsupported
+                                                   : State::unresolved;
+
+    if (why == Why::unsupported_arithmetic) d.arithmetic_supported = false;
+
+    if (refusal.condition == Why::none) {
+      refusal.condition = refusal.predicate_condition = why;
+      refusal.side = side;
+      refusal.edge = edge;
+      refusal.source_edge = source_edge;
+    }
+  };
+
+  // This context exists only inside the named consumer, after real S18; its
+  // owner and retained Data anchors precede EVERY borrowed request/cell access.
+  if (!token.context_ || token.owner_ != &d || token.cell_ != &c ||
+      !token.request_ ||
+      !BoardingIntermediatePauseSupportAccess::valid(d.source) ||
+      token.data_ != BoardingIntermediatePauseSupportAccess::data(d.source) ||
+      token.context_->owner_ != &d || token.context_->data_ != token.data_ ||
+      token.context_->controls_ != &d.controls ||
+      token.context_->parts_ != &d.parts || c.phase_index < 3 ||
+      c.phase_index > 4 || token.request_ != &d.controls[c.phase_index - 3]) {
+    stop(Why::invalid_binding);
+    return d.state;
+  }
+  if (!boarding_route_intermediate_load01_allocate(d, c, limits, refusal))
+    return d.state;
+
+  if (!boarding_route_intermediate_load01_definition_charge(d, c, limits,
+                                                            refusal))
+    return d.state;
+
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto* source =
+        BoardingIntermediatePauseSupportAccess::partition(d.source, side);
+
+    const auto& y = token.request_->feet[side].sole[0].coordinates[1];
+
+    if (!source || !c.sites[side].plane_identity || y.count != 1 ||
+        y.terms != std::array<double, 3>{source->plane_metres, 0, 0} ||
+        !c.pressure_evaluated[side] || !c.nominal_equilibrium) {
+      stop(Why::sole_plane, side);
+      return d.state;
+    }
+  }
+  c.plane_identities = true;
+
+  const auto required = add(point(.020), point(.010));
+
+  for (std::size_t side = 0; side < 2; ++side) {
+    auto& record = c.sites[side];
+
+    record.loaded =
+        side == 1 ||
+        c.port_force_state ==
+            BoardingRouteIntermediateLoad01PortForceState::everywhere_positive;
+
+    record.evaluated = true;
+
+    const Point pressure{
+        {c.pressure_xz[side][0].lower, c.pressure_xz[side][0].upper},
+        {c.pressure_xz[side][1].lower, c.pressure_xz[side][1].upper}};
+
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+
+    const auto& boot =
+        c.phase
+            .points[static_cast<std::size_t>(
+                side == 0 ? BoardingPlantedBodyPointId::port_boot_center
+                          : BoardingPlantedBodyPointId::starboard_boot_center)]
+            .value;
+
+    const Point center{{boot.lower.x, boot.upper.x},
+                       {boot.lower.z, boot.upper.z}};
+
+    const auto sole = site_sole_corners(center);
+
+    const auto* partition =
+        BoardingIntermediatePauseSupportAccess::partition(d.source, side);
+
+    if (!partition) {
+      stop(Why::invalid_binding, side);
+      return d.state;
+    }
+    const auto source = source_corners(*partition);
+
+    for (std::size_t which = 0; which < 2; ++which) {
+      const auto& corners = which == 0 ? sole : source;
+      auto& edges = which == 0 ? record.sole_edges : record.source_edges;
+      auto& evaluated =
+          which == 0 ? record.sole_evaluated : record.source_evaluated;
+
+      for (std::size_t edge = 0; edge < 4; ++edge) {
+        if (d.work.disk_edges >= limits.disk_edges) {
+          stop(Why::edge_capacity, side, edge, which != 0);
+          return d.state;
+        }
+        ++d.work.disk_edges;
+        evaluated[edge] = true;
+
+        edges[edge] = site_edge(corners[edge], corners[(edge + 1) % 4],
+                                pressure, required, d.arithmetic_supported);
+
+        if (!d.arithmetic_supported) {
+          stop(Why::unsupported_arithmetic, side, edge, which != 0);
+          return d.state;
+        }
+        if (!edges[edge].disk_contained && refusal.condition == Why::none) {
+          refusal.condition = refusal.predicate_condition =
+              which == 0 ? Why::sole_disk : Why::source_disk;
+          refusal.side = side;
+          refusal.edge = edge;
+          refusal.source_edge = which != 0;
+
+          const auto b = edges[edge].signed_side.lower <= 0
+                             ? edges[edge].signed_side
+                             : edges[edge].squared_margin_gap;
+          refusal.limiting_bound = {b.lower, b.upper, true};
+
+          const auto* summary = d.source.summary();
+          refusal.source_name = summary->sources[side].name;
+          if (which != 0) refusal.source_key = summary->sources[side].keys[0];
+        }
+      }
+      (which == 0 ? record.sole_status : record.source_status) =
+          pause_edge_status(edges);
+    }
+    record.complete = record.plane_identity &&
+                      record.sole_status == PauseStatus::contained &&
+                      record.source_status == PauseStatus::contained;
+  }
+  if (!boarding_route_intermediate_load01_definition_charge(d, c, limits,
+                                                            refusal))
+    return d.state;
+
+  if (!d.arithmetic_supported || d.stop_condition != Why::none ||
+      !std::all_of(c.sites.begin(), c.sites.end(), [](const auto& s) {
+        return std::all_of(s.sole_evaluated.begin(), s.sole_evaluated.end(),
+                           [](bool b) { return b; }) &&
+               std::all_of(s.source_evaluated.begin(), s.source_evaluated.end(),
+                           [](bool b) { return b; });
+      })) {
+    stop(Why::unsupported_arithmetic);
+    return d.state;
+  }
+  if (!boarding_route_intermediate_load01_definition_charge(d, c, limits,
+                                                            refusal))
+    return d.state;
+
+  c.port_contact_geometry = c.sites[0].complete;
+  c.finite_contact_complete = c.sites[0].complete && c.sites[1].complete;
+
+  c.nominal_load_complete =
+      c.nominal_equilibrium && c.finite_contact_complete &&
+      c.star_everywhere_positive &&
+      c.port_force_state !=
+          BoardingRouteIntermediateLoad01PortForceState::not_run;
+
+  c.complete = c.phase.complete && c.projection_complete &&
+               c.plane_identities && c.nominal_load_complete &&
+               refusal.condition == Why::none;
+
+  if (c.complete)
+    d.state = State::accepted;
+
+  else {
+    const bool refuted = c.sites[0].sole_status == PauseStatus::refuted ||
+                         c.sites[0].source_status == PauseStatus::refuted ||
+                         c.sites[1].sole_status == PauseStatus::refuted ||
+                         c.sites[1].source_status == PauseStatus::refuted;
+    d.state = refuted ? State::witness_refused : State::unresolved;
+  }
+  return d.state;
+}
+} // namespace apsis_drift
