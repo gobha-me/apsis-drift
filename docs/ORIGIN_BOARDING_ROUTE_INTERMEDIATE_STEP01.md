@@ -65,6 +65,28 @@ phases, endpoint/joins and pause results are retained on GCC/pinnedClang20
 before mandatory observations. Old phase/checkpoint/WORLD methods and source
 identities remain unchanged.
 
+## Compile-only resource measurements before FIRST
+
+GCC and pinned Clang20 agree on the actual layouts: expected result3936B,
+cell7760B, request680B, limits72B, new refusal96B and original15-part roster960B.
+Maximum owned output is3936+1024*7760=7,950,176B, below16MiB. The producer
+reports and checks the actual vector capacity, including refusal paths.
+
+The static compound bound is42,184B: the entire unchanged32,768B phase proof
+plus two new expected records7872B, limits72B, eleven pending records264B,
+new refusal96B, old refusal64B, wrapper-cell delta24B and1024B controller/error
+allowance. Initialization temporaries end before the graph cover. No part of
+the inherited caller allowance is subtracted to make this fit48KiB.
+
+Independent strict production O3/fPIC/no-FP-contract compile-only receipts
+confirm GCC public176/bounded4224/cover8480 and Clang20 public152/bounded4088/
+cover8296. The conservative deepest reachable GCC chain, including the
+unchanged cell/leg/rotation/arithmetic helpers and a separate pending expected
+return and a256B scalar-helper allowance, is32,032B, below48KiB; Clang20
+is31,040B. The unchanged graph retains
+its original32KiB proof. These are resource measurements, not candidate queries:
+all numerical/contact/support/clearance outcomes remain UNKNOWN before FIRST.
+
 ## Later support and world work is not selected by this preflight
 
 Even positive kinematics does not qualify intermediate contact/load, self,
