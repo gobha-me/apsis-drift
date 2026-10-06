@@ -238,3 +238,57 @@ Creator named1024 pool400Summary+176streams+128Totals+80native/bootExpected+24pr
 Creator entire old stage source forecast7000<=8192; main target<=1024 physical with helper separately staged. Old provider arena onlyone, no creator replay. Output forecast twoheaders3584+1024*Cell9784=10022400<=16777216, actual measuredsizeof formula governs final replay. Reset takes two fullCells only BEFORE graph, canonical factory packet staging BEFORE/AFTER graph; pressure/allocation/event helpers sequential. Separate Core stage forecasts: pregraph22768 within28672, reset31944 within36864, postgraph28344 within32768, oracle37920 within49152. Oracle forecast independently charges TWO Oracle<=16800 +TWO Expected3584 +arena4096 +FOUR actual Limits800 +current/pending Request1376 +caller2048 +utilities8192 +error/scalar1024; no original graph stack overlaps oracle. Shared stdout+stderr16384 includes errors/skips and truncation/streamstate audit, compact19FIRST lines only, no leafarchive.
 
 Canonical names now synchronized with complete-support01-exact-schema.md: public assess_origin_boarding_route_intermediate_support01(provider,first=0,last=1); private boarding_route_intermediate_support01_{bounded,controls,phase,local,clock,join_math,current_cell,definition_charge,pressure_bridge}; Diagnostic common Protocol distinguishes unloaded_prefix/load_acquisition, .prefix_endpoint_scope/.prefix_endpoint_earned[3], .join_expression_identity/.qualified_joins[4], .work source36/P251 and shared branch counts, .first_refusal distinct .stop_condition. Unsafe/input/upper-cap/fixedoutput preflight precedes retained report; early invalid provider charges S01 honestly, no clock/graph. Ordinary parent rejection may subdivide successfully and never become a terminal first_refusal; terminal hard stops preserve their state through ordinary wrappers. Failed or unevaluated old phase bounds stay unsupported. Final actual sizeof/resource objects still require independent review before FIRST; this file fixes the112/0/10 literal roster without asserting implementation-specific outcomes. Root owns final issue/publicregistration/selection.
+
+## Measured pre-FIRST resource admission
+
+Numerical outcomes remain UNKNOWN. Independent final source/method/resource
+review passed; numerical execution still requires Root source/binary/receipt
+freeze. Independent review JSON receipt SHA256:
+`7b2051e38740adb10441b4dd773402e55c1c435f756d7f1e406fb9555afb95ee`.
+Both complete native builds,
+pinned formatting and all197 static-analysis translation units pass. All841
+original input identities still pass, including the complete151067-byte boot
+prefix. The rebuilt GCC bridge and all141 Godot inputs match the retained five
+local contracts; this reuses exact existing evidence, with no fresh local
+engine run. Exact-head PR CI is still required for publication.
+
+Object-only GCC16/Clang20 probes agree on Diagnostic1576, Expected1584,
+Cell9624 (original PhaseCell7736, delta1888), Limits200, Refusal248, Context32,
+Token40, Request680 and optionalRequest688. Test Summary240 contains two
+Baseline120 records; Totals104 and both88-byte streams fit the named caller
+pools. The literal112/FIRST19/raw0/one-creator/max10-pose roster is unchanged.
+
+The complete source graph proof is46896 bytes, preserving the ENTIRE original
+32768-byte graph bound and separately charging the arena4096, TWO Expected3168,
+CellDelta1888, FOUR Limits800, caller2048, DFS264, old limits72/reason64,
+pending/current requests688+680, Refusal248, Context32, two pending48 and
+reserve32. Whole creator7000 includes the4096 arena and caller1024, under8192.
+Owned output is3168+1024*9624=9858144, under16777216.
+
+Other inactive-graph source stages are global admission/recipe24416,
+per-leaf request preparation29304, reset31208, projection/pressure27768 and
+oracle37504. The measured global/two-packet factory path conservatively charges
+EIGHT optional packet slots, and per-leaf preparation uses a separate7680-byte
+helper pool while its current Cell is live. Projection's SIX-slot canonical
+factory fits its6144-byte pool and completes before pressure/event helpers.
+These correct the historical five-slot forecast above without changing any
+selected controls, operation counts, arithmetic order or ceilings.
+
+Complete GCC/Clang20 machine chains corroborate graph37728/36856,
+creator6800/6536 including the arena, factory/post30192/29968 and
+oracle32864/31648 including separate pending8400-byte Oracle and1584-byte
+Expected slots. Source bounds remain primary; measured compiler slack is not
+subtracted from the original graph proof. No NRVO assumption admits storage.
+
+Held source ledger SHA256:
+`5e1854ba2edc6f64f90a079fcbd056394d9be23509586dfa100e8696fa54f21f`.
+Producer resource receipt SHA256:
+`e1cf16b39817b1885dba2417fe0653bf9e3eb2137bbc006c662fd3669bf73eb6`.
+Test resource receipt SHA256:
+`e752099cb818261edc062a6413c1953ba8dccc2efd3ec28009d47c812c843423`.
+
+Source review corrected two implementation errors before observation: prefix
+D23 now preserves capacity/unsupported before ordinary disk classification;
+endpoint operations explicitly validate finite/order/abs32 and attribute a
+non-cap arithmetic failure to unsupported. No candidate, geometry, source,
+load, margin, timing, query family or cap changed.
