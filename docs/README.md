@@ -55,6 +55,8 @@ player's station-to-flight journey.
   complement certificate for the same finite hip slab and supported path.
 - [Checkpoint WORLD/material01](ORIGIN_BOARDING_ROUTE_CHECKPOINT_WORLD_MATERIAL01.md):
   complete preparation clearance and named remaining material gaps.
+- [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
+  complete frame boundary and genuine body exterior witness registration.
 - [Checkpoint material Union02](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_UNION02.md):
   registered adjacent-band containment after the retained single-band refusal.
 - [Checkpoint material extension01](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_EXTENSION01.md):
