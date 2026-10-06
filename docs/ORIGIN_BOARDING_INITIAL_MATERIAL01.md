@@ -20,6 +20,16 @@ Authenticate the full 1,746-original roster and inventory identity, all six comp
 
 Use actual existing C++ OperatingProgress{1,1,1,0} group matrices to transform each moving full rest envelope conservatively once. Source posed bounds and delta columns are independent construction cross-checks; do not assert Blender/NumPy byte equivalence or copy a rest box as posed. Original rest quantized geometry uses the unchanged original point/matrix kernel, preserving old source-face expression order. Replacements are already world-baked REST float records and receive only the existing seat_lift owner/group delta once. Do not reapply source provenance matrices, remove the entire seat group, or re-add any of the eight removed original objects.
 
+Before the first assessment, the moving-envelope policy is fixed to the union
+of the authoritative C++ transformed rest envelope and the independently
+captured current posed raw/quantized envelope. Require finite captured delta
+columns, exact captured delta consistency within each original motion group,
+and closed overlap of the two envelopes before constructing that union.
+These are construction checks, not a proof of transform or numerical-library
+equivalence. The union conservatively increases the exclusion burden; it
+cannot substitute captured matrices for C++ ownership or introduce a pose
+tolerance. Replacements retain their existing once-only C++ owner transform.
+
 The source package is a private immutable capability created only from the exact pinned completion artifact and original owned binding. Public callers cannot supply vertices, claimed fingerprints, classification labels or witness flags. It owns names and arrays; copied handles share storage, moved-from handles refuse, and source views survive while a handle is retained. Expose lowered budgets and arithmetic fixtures privately with all permissions false.
 
 ## Algorithm and bounded storage

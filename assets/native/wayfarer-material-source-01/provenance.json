@@ -1,0 +1,43 @@
+{
+  "schema": "apsis-drift-complete-material-source-provenance/1",
+  "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+  "source_package": "../wayfarer-operating-02",
+  "replacement_package": "../wayfarer-stowed-01",
+  "source_license": "LicenseRef-Apsis-Hopper-Meshy-Output",
+  "licenses": [
+    "../wayfarer-operating-02/licenses",
+    "../wayfarer-stowed-01/licenses"
+  ],
+  "capture_tools": [
+    "tools/boarding/material_inventory.py",
+    "tools/boarding/material_source_completion.py"
+  ],
+  "preparation_tool": "tools/boarding/prepare_material_source.py",
+  "files": {
+    "completion.json": {
+      "bytes": 4308711,
+      "sha256": "09cd65c9d0080ab792b03ab458b597db71e5cb80c38184818a6ed69a3389f63c"
+    },
+    "geometry.bin": {
+      "bytes": 13238724,
+      "sha256": "2d6f51d7a7476d8fc0d140344f82eb8958c59e0ea3866053d99ef5cfb36840c4"
+    }
+  },
+  "scope": "Complete original object envelopes and selected full geometry for the initial boarding material assessment. Geometry is derived from the retained source without changes.",
+  "coordinate_contract": "Corrected-world raw binary64 and separately authenticated micrometre integer vertices; originals retain complete evaluated triangle ordinals. Replacement rest-world records are transformed by their existing owner once.",
+  "original_objects": 1746,
+  "effective_objects": 1751,
+  "selected_meshes": 19,
+  "vertices": 188535,
+  "triangles": 349087,
+  "master_unchanged": true,
+  "source_save_count": 0,
+  "material_permission": false,
+  "actor_permission": false,
+  "first_flight_qualified": false,
+  "tool_sha256": {
+    "tools/boarding/material_inventory.py": "df430228aef4e1527076353e20e03bda518a3f63abaa131d7a2f51e8953fdf22",
+    "tools/boarding/material_source_completion.py": "8fbb8a8bed5abcca57a2e8626966466d6cd4f5e8b89c0f2c0ee122dfc60eaceb",
+    "tools/boarding/prepare_material_source.py": "13a64f8a8fe440db369622df8093fdb7c4b487f9c43a7c9e5fb229b5c4d51987"
+  }
+}

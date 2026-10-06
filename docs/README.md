@@ -45,6 +45,8 @@ player's station-to-flight journey.
   [independent-foot phase contract](ORIGIN_BOARDING_ROUTE_FOOT_PHASE01.md):
   current development, fixed body geometry, source completion and remaining
   supported movement checks.
+- [Initial complete material assessment](ORIGIN_BOARDING_INITIAL_MATERIAL01.md):
+  full source envelopes, selected complete geometry and bounded material relations.
 
 - [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
 
