@@ -560,3 +560,49 @@ outcome. All six classifications remain UNKNOWN. Numerical execution still
 requires the independently sealed actual-resource review and Root's immutable
 once-FIRST freeze. Full support/SELF/WORLD/material/HALO/route/seat/actor/save
 and First Flight remain unqualified by this diagnostic.
+
+## Retained FIRST outcomes — 2026-10-06
+
+Root froze and publicly pushed `bffb5b4620e7549e0801ddffd74e8ab432996703`
+before the first numerical execution. The independently sealed complete
+resource review passed first. Both once-FIRST runs exit zero and produce
+byte-identical 2,481-byte logs, SHA-256
+`b6fdfc75108f5d34a862dba6fb70e5f61112981986d6c7f70cb2032f72e2b9b1`.
+
+| Case | Original scope | Result | Retained evidence |
+| --- | --- | --- | --- |
+| 0 | Point 0, phase 0 | Excluded | Dual state 84; gap `[0.10124933240599819, 0.10124933240601358]` |
+| 1 | Point .25, phase 1 end | Unresolved | All 162 states; `no_certificate` |
+| 2 | Point .5, phase 2 end | Unresolved | All 162 states; `no_certificate` |
+| 3 | Point .75, phase 3 end | Unresolved | All 162 states; `no_certificate` |
+| 4 | Point 1, phase 4 end | Unresolved | All 162 states; `no_certificate` |
+| 5 | Phase 1 global `[.1416015625, .142578125]` | Excluded | Dual state 93; gap `[0.010174418363653877, 0.03610771519398915]` |
+
+Both certificates exclude strict unowned port-thigh capsule interior
+intersecting the complete original pelvis box, outside the original finite
+axial owner. Case 5 covers the entire selected interval,
+with local `[.1328125, .140625]`; it is not an endpoint or midpoint sample.
+Every FIRST case has all 67 source, 32 current and 21 chart records and one
+original phase call. None earns full SELF or route permission.
+
+The four unresolved points produce neither clearance nor a strict unowned
+interior witness. Candidate exhaustion is not a collision or impossibility
+finding. The existing path, bodies, capsule caps, owner slab, controls, load,
+source and budgets remain unchanged; no new candidate is selected from these
+observations. The earlier generic SELF failure at Case 5 is now shown to be
+a sufficient-method limitation for this exact hip obligation.
+
+The retained roster executes one creator, 71 of 73 consumer slots, all 40 raw
+math slots and two authorized FIRST interval-certificate audits: 2,561 checks,
+zero failures. A37 and A39 honestly skip one-less graph/body controls whose
+actual counts are one; neither slot is replaced. Both complete native suites
+pass 89/89. Independent outcome review verifies the immutable 856 source, three
+binary, 21 receipt and 50 artifact bindings after FIRST. Root checks the same
+bindings after full CTest; the normal target outputs match FIRST exactly. Only
+this outcome append and its documentation index are published after FIRST;
+there is no post-observation C++ or numerical-method change.
+
+The preserved Godot evidence covers identical inputs only; publication still
+requires fresh exact-head CI. Parent #462, #361, #352 and First Flight remain
+open. Complete movement, support/SELF integration, material/WORLD/HALO, final
+pan-only seat support and actor/save integration remain unqualified.
