@@ -77,3 +77,22 @@ Before observing candidate outcome: invalid/nonfinite/global-domain/reversed/mov
 Test mandatory join splitting on full,mixed subinterval,straddling .25/.5,join-point and one-sided ranges; exact coverage uses globals with contiguous equality and correct local maps. Check .5-first priority,depth accounting,actual graphs vs mandatory split counters,global node0/1/2 caps before graph,one mandatory split's one-less cap,phase-local work exhaustion accumulated across joins,leaf/output actual capacities,no generated axis beyondcap,no per-phase reset. Verify physical elapsed for all three complete stages and mixed ranges; forward/reverse first-jet sign only,second unchanged,zero physical joins; no36g clock. Conditional outcome-independent tests validate every actually accepted prefix/refusal without presuming complete. Record FIRST whole GCC/Clang result before adding mandatory positive regression if accepted; retain all original straight negative/endpoint-positive evidence. Exact-full/one-less actual work replays need genuinely reachable stages, not unreachable nominal caps.
 
 Full-world/material/surface sweep,pan/seat,full-route,actor/save,FirstFlight,free-foot swing,force dynamics/friction/strength remain false. A complete candidate is a continuous bounded nominal supported self-qualified preparation/pivot/translation with genuine unloaded port endpoint. It does not authorize walking/seat use/live actor. A refusal is a concrete retained pathfinding outcome under frozen original body/source limits, not an instruction to create a fourth seated family or general dynamics engine.
+
+## Observed results — 2026-10-06
+
+The reviewed implementation uses 43,008 bytes of source-live storage and at
+most 9,982,592 bytes of owned output. GCC and pinned Clang20 agree on the first
+observation: 804,547 checks pass, preparation [0,.25] completes, but the full
+path refuses on [.4658203125,.466796875] during phase1. Its 104 accepted cells
+cover [0,.4658203125]; the first two-sided join qualifies, the second does not.
+Reverse requests preserve the same canonical refusal. Points0, .25 and1
+qualify; point.5 refuses in the right-hand phase2.
+
+The unresolved pair is pelvis–port thigh, under the original finite hip
+ownership region. At point.5, the whole-pelvis support bound exceeds the
+retained hip length by approximately1.2095mm. On the terminal interval its
+margin straddles zero. None of the selected separating directions qualifies.
+These are failed sufficient ownership/separation certificates; they do not
+establish penetration. Preserve this version1 candidate and its observed
+regressions. Any additional certificate requires separate registration and
+first evaluation under the unchanged body, source, region and path controls.

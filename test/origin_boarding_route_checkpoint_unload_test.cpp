@@ -941,6 +941,8 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
       require(assess_origin_boarding_route_checkpoint_unload(source, 0, 0));
   observe("POINT_BASE", base);
   accounting(base);
+  check(base.complete,
+        "Observed initial point remains complete nominal support");
   if (!base.complete) return;
   Limits exact;
   exact.phase.nodes = base.examined_nodes;
@@ -1038,6 +1040,7 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
   const auto preparation =
       require(assess_origin_boarding_route_checkpoint_unload(source, 0, .25));
   observe("PREPARATION_CAP_BASE", preparation);
+  check(preparation.complete, "Observed full preparation remains complete");
   if (preparation.complete && preparation.work.contact.self_pairs > 0) {
     auto l = Limits{};
     l.pairs = preparation.work.contact.self_pairs;
@@ -1158,6 +1161,41 @@ void joins_and_reverse(const OriginBoardingBootSupport& source) {
       }
   }
 }
+void observed_whole_refusal(const Diagnostic& d) {
+  check(!d.complete && d.first_refusal && !d.support_complete &&
+            !d.endpoint_zero_port_reaction,
+        "Observed whole candidate retains refusal without claiming supported "
+        "unload");
+  check(d.qualified_joins == std::array<bool, 2>{true, false},
+        "Actual preparation-to-pivot prefix join remains qualified while "
+        "second join stays unqualified");
+  if (!d.first_refusal) return;
+  const auto& r = *d.first_refusal;
+  check(r.condition == Condition::depth_capacity &&
+            r.predicate_condition == Condition::unresolved_self_pair &&
+            r.phase_index == 1 && r.first == .4658203125 &&
+            r.last == .466796875,
+        "Whole and reverse preserve exact canonical phase1 self-clearance "
+        "refusal");
+  check(!d.cells.empty() && d.cells.front().global_first == 0 &&
+            d.cells.back().global_last == .4658203125,
+        "Observed whole and reverse retain valid original supported prefix "
+        "through refusal start");
+}
+void observed_second_join_refusal(const Diagnostic& d) {
+  check(!d.complete && d.first_refusal && d.cells.empty() &&
+            d.qualified_joins == std::array<bool, 2>{false, false},
+        "Observed exact second join point remains refused without qualified "
+        "join proof");
+  if (d.first_refusal) {
+    const auto& r = *d.first_refusal;
+    check(r.condition == Condition::unsplittable_interval &&
+              r.predicate_condition == Condition::unresolved_self_pair &&
+              r.phase_index == 2 && r.first == .5 && r.last == .5,
+          "Canonical second join selects right phase2 and retains exact point "
+          "self-refusal");
+  }
+}
 void public_cases(const OriginBoardingBootSupport& source) {
   const auto old = child_fingerprint(
       require(assess_origin_boarding_source_endpoint_load(source)));
@@ -1170,6 +1208,9 @@ void public_cases(const OriginBoardingBootSupport& source) {
   const auto first = require(std::move(result));
   observe("FIRST_PUBLIC_CHECKPOINT_UNLOAD", first);
   accounting(first);
+  // Frozen first GCC/Clang20 observations preceded these outcome regressions.
+  // Preserve each fresh FIRST print before asserting its now-known result.
+  observed_whole_refusal(first);
   check(child_fingerprint(*first.initial) == old,
         "Candidate owns unchanged original source/body/self/load child without "
         "reconstruction");
@@ -1192,9 +1233,15 @@ void public_cases(const OriginBoardingBootSupport& source) {
     check(child_fingerprint(*d.initial) == old,
           "Every fresh reverse/sub/point retains the same original child "
           "contract");
-    if (first.complete)
-      check(d.complete, "Observed complete full path also covers valid "
-                        "requested reverse/sub/point");
+    if (range[0] == 1 && range[1] == 0) observed_whole_refusal(d);
+    if (range[0] == 0 && range[1] == .25)
+      check(d.complete,
+            "Observed full preparation remains completely supported");
+    if (range[0] == range[1] &&
+        (range[0] == 0 || range[0] == .25 || range[0] == 1))
+      check(d.complete, "Observed initial, first join and unloaded endpoint "
+                        "points remain complete");
+    if (range[0] == .5 && range[1] == .5) observed_second_join_refusal(d);
     if (d.complete && range[0] == 1 && range[1] == 1) {
       const auto& c = d.cells[0].assessment;
       check(
