@@ -59,3 +59,16 @@ Preserve constructor8KiB, WORLD16KiB, co-live child48KiB and owned output16MiB. 
 - Retain old observed source1441/part12 missing-material refusal as a regression; it is not a collision certificate. Preserve source1/Boundary03 outputs and original child fields.
 
 This registration is committed before helper/code/capture or issuer/WORLD execution. Freeze source/live accounting and both compiler FIRST outcomes before making observed success/refusal mandatory. No new capture/method fitting follows a refusal without another registration. Even successful source completion grants no actor, seat, save, complete #361 route or First Flight authority.
+
+## Capture helper freeze
+
+Before the single load, freeze `tools/boarding/hatch_seal_material.py` SHA256
+`56477bbb186fd939c04a8f48c24ad9d5f840c693c2cb1513967421dd16d3ca15`.
+The exact argument-vector receipt is retained with local validation; portable
+invocation is `blender --background --python tools/boarding/hatch_seal_material.py
+-- --source "$SOURCE_MASTER" --history-lifeboat "$HISTORY_LIFEBOAT"
+--history-finish "$HISTORY_FINISH" --capture-sha256
+56477bbb186fd939c04a8f48c24ad9d5f840c693c2cb1513967421dd16d3ca15
+--output assets/native/wayfarer-hatch-seal-material-01` with each input matching
+the fixed hashes above. Output must be absent before execution. This freeze
+adds no source save, material permission or observed issuer/WORLD outcome.
