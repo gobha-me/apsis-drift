@@ -1567,8 +1567,10 @@ int main() {
     if (!admitted) {
       std::cout << "MATERIAL_CAPABILITY API_ERROR=" << admitted.error() << '\n';
       std::cout.flush();
+      throw std::runtime_error("Required WORLD/material API refused: " +
+                               admitted.error());
     }
-    const auto material = require(std::move(admitted));
+    const auto& material = *admitted;
     invalid_controls(boot, material);
     unsafe_environment(boot, material);
     frame_controls();
