@@ -70,7 +70,7 @@ player's station-to-flight journey.
 - [Constructive intermediate pause support02](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT02.md):
   registered lighter-load static witness, preserving the quarter-load refusal.
 - [Unloaded intermediate approach01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_UNLOADED01.md):
-  registered star-only support and zero-force approach/contact events.
+  qualified continuous star-only support and zero-force approach/contact events; full boarding remains open.
 - [Intermediate load acquisition01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_LOAD01.md):
   qualified continuous lighter-load segment and held endpoint; full boarding remains open.
 - [IntermediateStep02 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP02.md):

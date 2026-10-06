@@ -2,7 +2,9 @@
 
 Register one source-backed36-second prerequisite to the already-qualified load
 ramp: unchanged original Step02 phases0–2/global[0,.5], port reaction0 and star1.
-This is child issue477 under462, after PR476. Its numerical outcome is unknown.
+This is child issue477 under462, after PR476. Both compiler suites now qualify
+the selected approach: all14 retained motion observations are positive and the
+final96-consumer/24-fixture test passes. Full boarding remains open.
 The exact selected controls and literal validation protocol follow below.
 
 Baseline: `460524938ee671b6dd398c3a39ce58ce40253563`. Preserve all837 original
@@ -20,8 +22,8 @@ under issue477 and the authorized development loop. Numerical execution remains
 prohibited until actual layout, complete source/caller/arena/pending/output
 bounds, strict GCC/Clang20 objects and independent pre-FIRST review pass.
 
-A positive would qualify only continuous nominal star support and the declared
-zero-force port geometry/events. It would not qualify self/material/WORLD,
+The positive qualifies only continuous nominal star support and the declared
+zero-force port geometry/events. It does not qualify self/material/WORLD,
 coherent whole boarding, final seated support, actor/save integration or First
 Flight. Earlier quarter-load refutations, static support and the positive load
 ramp remain immutable. No asset changes or source capture are required.
@@ -416,3 +418,35 @@ The retained positive result concerns continuous nominal star-only support and
 the declared zero-force port geometry/events over the selected approach only.
 It grants no self/full-material/WORLD/whole-route/seat/actor/save/dynamics or
 First Flight authority. Parent #462/#361/#352 remain open.
+
+## Final local acceptance — 2026-10-06
+
+Corrected source `ed0f806d9454b7f26fb4088ed68808b34793d18c` passes both complete
+86-test native suites: GCC76.40seconds and pinned Clang20 66.67seconds. The
+new contract has72560 checks and0 failures, using the same one creator,96
+consumer calls,24 raw fixtures and8 FIRST-only fixed poses. It makes3046
+compiler calls;11 spurious calls from the original terminal-state propagation
+bug are removed. All original source-admission and14 motion observation lines
+are byte-identical to FIRST, including the64-cell whole cover, actual work,
+joins, endpoints and physical clocks. Both final3260-byte output logs are
+byte-identical, SHA256
+`b2376a90b8f0d049f734c8103c8e624d278d0229b1f6ba6f1e7846ead4a5433f`.
+No candidate or mathematical expression was fitted or changed.
+
+Both complete builds, pinned format20 and the final changed-four-TU tidy20
+check pass. The full195-TU lint run had one boot lexer crash during an overlapping
+suffix update; its held-source four-TU rerun passes and all remaining191 files
+retain their successful checks. The122 suppression directives and10 policy
+self-tests pass. Independent corrected-source/resource review passes; the
+post-return regression helper adds no graph/caller/creator frame growth. All
+837 original inputs or registered full prefixes remain exact. Original FIRST
+logs, freeze and prequery receipts retain their exact identities separately
+from corrected-source/test receipts.
+
+The rebuilt GCC Godot bridge and all141 engine/project/exporter/fixture/helper
+inputs match the retained five walk/save/flight/start-staging/operating-motion
+contracts. This reuses identical local evidence; it is not a fresh local engine
+run. Fresh exact-head PR CI remains required before merge. The byte-identical
+presentation path gains no boarding/seat/actor or First Flight claim from this
+diagnostic. Complete five-phase coherent support and full self/WORLD checks
+remain separate open work.
