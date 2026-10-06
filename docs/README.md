@@ -50,7 +50,9 @@ player's station-to-flight journey.
 - [Supported port unload](ORIGIN_BOARDING_ROUTE_PORT_UNLOAD01.md):
   clear supported endpoints with a refused joint sector between them.
 - [Checkpoint unload](ORIGIN_BOARDING_ROUTE_CHECKPOINT_UNLOAD01.md):
-  registered preparation, held-root pivot and held-yaw translation candidate.
+  supported preparation and a retained unresolved hip-ownership interval.
+- [Checkpoint self02](ORIGIN_BOARDING_ROUTE_CHECKPOINT_UNLOAD_SELF02.md):
+  registered complement certificate for the same finite hip slab and path.
 
 - [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
 
