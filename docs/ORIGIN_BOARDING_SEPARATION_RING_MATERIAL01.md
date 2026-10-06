@@ -85,3 +85,22 @@ match the original complete90/160 fingerprints. Inherited60crop attribution
 remains unchanged; new crop replay0. Aggregate package17000B fits73728B.
 Current settings are now known; raw/grid containment, issuer and WORLD04
 outcomes remain **UNKNOWN**.
+
+## Frozen storage before FIRST
+
+Prepared immutable source9200B plus Data1104B/control64B gives10368B new
+authenticated source. Complete genuine constructor live6160B and numeric
+fixture5592B fit8192B, including caller/reset evidence, two limits, incoming
+arguments, pending returns and sequential helper/error reserves. Independent
+issuer source/live review passed. Final production O3 issuer inclusion chains4288B on GCC and3584B
+on pinnedClang20 include caller evidence and fit8192B; their receipts are
+retained before execution.
+
+WORLD04 expected1992B/stage80B gives sourceWORLD16312B/child48384B; old
+WORLD03 expected1960B remains unchanged. Final formatted production O3 GCC
+child chain49048B/face pair15400B and Clang20 child45272B/face pair13344B
+fit49152B/16384B. Maximum owned output10418776B fits16MiB; all handles,
+returns, controllers and error storage are charged. Independent shared-runner
+source/live review passed. Original initial/extension/seal files are preserved.
+No numerical issuer or WORLD04 outcome follows from these measurements.
+FIRST remains **UNKNOWN** at this freeze.
