@@ -4865,3 +4865,122 @@ auto detail::boarding_route_checkpoint_world_proxy(
   return out;
 }
 } // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+// Genuine support maxima use the original full oriented BOX/capsule before
+// the collision proxy inflates it to an axis-aligned enclosing box. An
+// enclosing box's support LOWER bound cannot witness an original body point.
+[[gnu::noinline]] auto world_signed_z_math(const UnloadSolid& input)
+    -> detail::BoardingRouteCheckpointWorldSignedZSupportMath {
+  detail::BoardingRouteCheckpointWorldSignedZSupportMath out;
+  const auto positive = unload_support(input, {0, 0, 1}),
+             negative = unload_support(input, {0, 0, -1});
+  if (!positive.supported || !negative.supported) return out;
+  out.positive = {positive.low, positive.high, positive.supported};
+  out.negative = {negative.low, negative.high, negative.supported};
+  out.arithmetic_supported = true;
+  return out;
+}
+static_assert(
+    sizeof(detail::BoardingRouteCheckpointWorldSignedZSupportMath) +
+        sizeof(detail::BoardingRouteCheckpointWorldSignedZSupport) +
+        sizeof(UnloadSolid) + sizeof(BoardingRoutePhaseFrameEvidence) +
+        sizeof(SelfSquareScratch) + 16 * sizeof(Interval) +
+        32 * sizeof(double) +
+        sizeof(std::expected<detail::BoardingRouteCheckpointWorldSignedZSupport,
+                             std::string>) <=
+    4096);
+} // namespace
+auto detail::boarding_route_checkpoint_world_frame_box_signed_z_support_math(
+    BoardingPlantedLegPointBounds center,
+    std::array<BoardingPlantedLegPointBounds, 3> columns, Vec half)
+    -> std::expected<detail::BoardingRouteCheckpointWorldSignedZSupportMath,
+                     std::string> {
+  const auto valid_point = [](const BoardingPlantedLegPointBounds& b) {
+    const auto p = body_intervals(b);
+    return std::ranges::all_of(p, [](Interval v) {
+      return v.supported && v.low >= -8 && v.high <= 8;
+    });
+  };
+  if (!valid_point(center))
+    return std::unexpected(
+        "WORLD box center requires finite ordered abs<=8 bounds");
+  for (const auto& column : columns)
+    if (!valid_point(column))
+      return std::unexpected(
+          "WORLD box columns require finite ordered abs<=8 bounds");
+  for (const auto value : {half.x, half.y, half.z})
+    if (!bounded(value, 8) || value <= 0)
+      return std::unexpected(
+          "WORLD box halves require finite positive abs<=8 values");
+  if (!supported_environment())
+    return detail::BoardingRouteCheckpointWorldSignedZSupportMath{};
+  BoardingRoutePhaseFrameEvidence frame;
+  for (std::size_t i = 0; i < 3; ++i)
+    frame.columns[i].value = columns[i];
+  UnloadSolid input;
+  input.shape.shape = SelfShape::box;
+  input.shape.first = input.shape.second = body_intervals(center);
+  input.shape.half = half;
+  input.frame = &frame;
+  return world_signed_z_math(input);
+}
+auto detail::boarding_route_checkpoint_world_signed_z_support(
+    const BoardingRouteCheckpointWorldContext& context, std::size_t part,
+    std::size_t cell)
+    -> std::expected<detail::BoardingRouteCheckpointWorldSignedZSupport,
+                     std::string> {
+  // Validate the owning report and its current child/source BEFORE reading any
+  // borrowed pointer: report moves and child reset otherwise leave a stale
+  // alias.
+  if (!BoardingRouteCheckpointWorldMaterialAccess::valid(context) ||
+      !context.child_->complete ||
+      context.child_->cells.data() != context.cell_data_ ||
+      context.child_->cells.size() != context.cell_count_ ||
+      cell >= context.cell_count_ || part >= kBoardingBodyPartCount ||
+      !context.child_->initial->self.endpoint.sites.source.contact())
+    return std::unexpected(
+        "WORLD proxy requires its genuine unmoved owned child");
+  const auto& child = *context.child_;
+  const auto& phase = context.cell_data_[cell].assessment.phase;
+  if (!phase.complete || !context.cell_data_[cell].assessment.complete)
+    return std::unexpected(
+        "WORLD proxy requires a complete retained child cell");
+  if (!supported_environment())
+    return detail::BoardingRouteCheckpointWorldSignedZSupport{};
+  const auto& binding = child.parts[part];
+  UnloadSolid input;
+  const auto* box =
+      std::get_if<BoardingRoutePhaseBoxBinding>(&binding.reservation);
+  if (box) {
+    const auto center = body_index(box->center);
+    const auto frame = static_cast<std::size_t>(box->frame);
+    if (center >= phase.points.size() || frame >= phase.frames.size())
+      return std::unexpected("WORLD box binding exceeds owned graph");
+    input.shape.shape = SelfShape::box;
+    input.shape.first = input.shape.second =
+        body_intervals(phase.points[center].value);
+    input.shape.half = box->half_size_metres;
+    input.frame = &phase.frames[frame];
+  } else {
+    const auto& capsule =
+        std::get<BoardingPlantedBodyCapsuleBinding>(binding.reservation);
+    const auto first = body_index(capsule.start),
+               last = body_index(capsule.end);
+    if (first >= phase.points.size() || last >= phase.points.size())
+      return std::unexpected("WORLD capsule binding exceeds owned graph");
+    input.shape.shape = SelfShape::capsule;
+    input.shape.first = body_intervals(phase.points[first].value);
+    input.shape.second = body_intervals(phase.points[last].value);
+    input.shape.radius = capsule.radius_metres;
+  }
+  const auto math = world_signed_z_math(input);
+  detail::BoardingRouteCheckpointWorldSignedZSupport out;
+  out.positive = math.positive;
+  out.negative = math.negative;
+  out.arithmetic_supported = math.arithmetic_supported;
+  out.original_world_identity = math.arithmetic_supported;
+  return out;
+}
+} // namespace apsis_drift

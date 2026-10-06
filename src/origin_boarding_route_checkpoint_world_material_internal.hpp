@@ -37,6 +37,16 @@ struct BoardingRouteCheckpointWorldProxyMath {
       world_qualified{false}, route_qualified{false}, actor_qualified{false},
       sole_qualified{false};
 };
+struct BoardingRouteCheckpointWorldSignedZSupport {
+  BoardingFootSiteScalarBounds positive, negative;
+  bool arithmetic_supported{}, original_world_identity{};
+};
+struct BoardingRouteCheckpointWorldSignedZSupportMath {
+  BoardingFootSiteScalarBounds positive, negative;
+  bool arithmetic_supported{};
+  static constexpr bool body_qualified{false}, source_qualified{false},
+      material_qualified{false}, world_qualified{false}, actor_qualified{false};
+};
 class BoardingRouteCheckpointWorldContext;
 struct BoardingRouteCheckpointWorldMaterialAccess;
 [[nodiscard]] auto prepare_boarding_route_checkpoint_world(
@@ -52,6 +62,16 @@ struct BoardingRouteCheckpointWorldMaterialAccess;
     BoardingPlantedLegPointBounds center,
     std::array<BoardingPlantedLegPointBounds, 3> columns, RigidVector3 half)
     -> std::expected<BoardingRouteCheckpointWorldProxyMath, std::string>;
+[[nodiscard]] auto boarding_route_checkpoint_world_signed_z_support(
+    const BoardingRouteCheckpointWorldContext&, std::size_t part,
+    std::size_t cell)
+    -> std::expected<BoardingRouteCheckpointWorldSignedZSupport, std::string>;
+[[nodiscard]] auto
+boarding_route_checkpoint_world_frame_box_signed_z_support_math(
+    BoardingPlantedLegPointBounds center,
+    std::array<BoardingPlantedLegPointBounds, 3> columns, RigidVector3 half)
+    -> std::expected<BoardingRouteCheckpointWorldSignedZSupportMath,
+                     std::string>;
 class BoardingRouteCheckpointWorldContext {
  public:
   BoardingRouteCheckpointWorldContext(
@@ -96,6 +116,9 @@ class BoardingRouteCheckpointWorldContext {
   friend auto boarding_route_checkpoint_world_proxy(
       const BoardingRouteCheckpointWorldContext&, std::size_t, std::size_t)
       -> std::expected<BoardingRouteCheckpointWorldProxy, std::string>;
+  friend auto boarding_route_checkpoint_world_signed_z_support(
+      const BoardingRouteCheckpointWorldContext&, std::size_t, std::size_t)
+      -> std::expected<BoardingRouteCheckpointWorldSignedZSupport, std::string>;
 };
 // Authenticated read-only source access, never caller geometry enrollment.
 struct BoardingRouteCheckpointWorldMaterialAccess {
@@ -140,7 +163,7 @@ struct BoardingRouteCheckpointWorldSweepMath {
 [[nodiscard]] auto boarding_route_checkpoint_world_sweep_math(
     std::span<const BoardingSourceEndpointSurfaceCheckpointSolidBounds> cells,
     std::span<const std::array<RigidVector3, 3>> triangles,
-    BoardingRouteCheckpointWorldLimits = {})
+    BoardingRouteCheckpointWorldLimits = {}, bool strict_boundary = false)
     -> std::expected<BoardingRouteCheckpointWorldSweepMath, std::string>;
 [[nodiscard]] auto boarding_route_checkpoint_world_domain_math(
     const OriginLowerCockpitContact&,

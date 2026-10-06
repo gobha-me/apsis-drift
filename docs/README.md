@@ -52,8 +52,15 @@ player's station-to-flight journey.
 - [Checkpoint unload](ORIGIN_BOARDING_ROUTE_CHECKPOINT_UNLOAD01.md):
   supported preparation and a retained unresolved hip-ownership interval.
 - [Checkpoint self02](ORIGIN_BOARDING_ROUTE_CHECKPOINT_UNLOAD_SELF02.md):
-- [Checkpoint WORLD/material01](ORIGIN_BOARDING_ROUTE_CHECKPOINT_WORLD_MATERIAL01.md): registered continuous full-material and halo clearance over the same supported cover.
-  registered complement certificate for the same finite hip slab and path.
+  complement certificate for the same finite hip slab and supported path.
+- [Checkpoint WORLD/material01](ORIGIN_BOARDING_ROUTE_CHECKPOINT_WORLD_MATERIAL01.md):
+  complete preparation clearance and named remaining material gaps.
+- [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
+  admitted frame/nose relations; remaining hatch seal material gap.
+- [Checkpoint material Union02](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_UNION02.md):
+  registered adjacent-band containment after the retained single-band refusal.
+- [Checkpoint material extension01](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_EXTENSION01.md):
+  registered two-source completion and same-cover WORLD02 consumer.
 
 - [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
 

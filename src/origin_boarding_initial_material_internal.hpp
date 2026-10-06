@@ -118,3 +118,10 @@ struct MaterialConstructorMathEvidence {
     std::span<const MaterialPlane>, std::size_t max_axes = 16)
     -> std::expected<MaterialEnclosureMathEvidence, std::string>;
 } // namespace apsis_drift::detail
+
+// Narrow immutable-base binding check for the named checkpoint extension
+// issuer.
+namespace apsis_drift::detail {
+[[nodiscard]] auto initial_material_extension_binding_matches(
+    const NativeCraftBinding&, const OriginBoardingInitialMaterial&) -> bool;
+} // namespace apsis_drift::detail

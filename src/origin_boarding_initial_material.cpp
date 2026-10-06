@@ -1518,3 +1518,24 @@ auto prepare_boarding_route_checkpoint_world(
 }
 } // namespace detail
 } // namespace apsis_drift
+
+// The named extension shares the admitted base rather than re-decoding it.
+namespace apsis_drift::detail {
+auto initial_material_extension_binding_matches(
+    const NativeCraftBinding& binding,
+    const OriginBoardingInitialMaterial& material) -> bool {
+  const auto* data = BoardingInitialMaterialAccess::data(material);
+  if (!data || !data->summary.bindings_complete ||
+      !data->summary.constructors_complete)
+    return false;
+  const auto* retained = data->binding.contact();
+  const auto* incoming = binding.contact();
+  const auto* retained_selection = data->binding.selection();
+  const auto* incoming_selection = binding.selection();
+  return retained && incoming && retained_selection && incoming_selection &&
+         retained->original_geometry() == incoming->original_geometry() &&
+         retained->stowed_partition() == incoming->stowed_partition() &&
+         retained_selection->hardware == OperatingProgress{1, 1, 1, 0} &&
+         incoming_selection->hardware == OperatingProgress{1, 1, 1, 0};
+}
+} // namespace apsis_drift::detail

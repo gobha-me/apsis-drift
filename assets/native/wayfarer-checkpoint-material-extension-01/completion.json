@@ -1,0 +1,783 @@
+{
+  "schema": "apsis-drift-checkpoint-material-extension/1",
+  "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+  "inventory_sha256": "a78800c6f5223323855aae1c37e1b40f7f83af76c709696b4eb0f08f3a9f55d8",
+  "base_completion_sha256": "09cd65c9d0080ab792b03ab458b597db71e5cb80c38184818a6ed69a3389f63c",
+  "history_helper_sha256": "1ff8c7de423eeddf100f5a36e1f494225263c342e745361075dbef88c7215db1",
+  "capture_helper_sha256": "b4dbd4800be1122aaf7251adc829292ef5454aba4acde6f3f21bb302e094e898",
+  "retained_helper_sha256": {
+    "material_inventory.py": "df430228aef4e1527076353e20e03bda518a3f63abaa131d7a2f51e8953fdf22",
+    "material_source_completion.py": "8fbb8a8bed5abcca57a2e8626966466d6cd4f5e8b89c0f2c0ee122dfc60eaceb",
+    "prepare_material_source.py": "13a64f8a8fe440db369622df8093fdb7c4b487f9c43a7c9e5fb229b5c4d51987"
+  },
+  "source_helper_sha256": {
+    "export_boarding_contact.py": "20353bd2f3ef5182a70339fb4a5ad1ae1c99874640aa38c0c95b0a6520f5201c",
+    "wayfarer_operating_blender.py": "00bd9327cea482518cf4bf5811f21a351b50309323d64a93c991d9356007e261",
+    "wayfarer_operating_spec.py": "41bc77dd225a059427525113da3cef46db3b794937f433af818d31f3bb2f3113"
+  },
+  "original_input_sha256": {
+    "operating_metadata": "db7b0a2de2516adf9925abe74133a6c523bd334062884a1bfc403448c2b1e72e",
+    "original_contact": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+    "boarding_support": "58694e671102f27df5f405478af43d00fd05b3aeaef34c612939af6fa548a8d3"
+  },
+  "blender_version": "5.2.2 LTS",
+  "objects": [
+    {
+      "source_index": 1436,
+      "identity": {
+        "source_object": "WF02 | CABIN emergency pressure frame",
+        "source_type": "MESH",
+        "source_parent": null,
+        "ancestry": [
+          "WF02 | CABIN emergency pressure frame"
+        ],
+        "motion_group": null,
+        "source_local_blender_to_corrected_world_columns": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "retained_contact_group": "craft_fixed",
+        "retained_original_contact_range": {
+          "group": "craft_fixed",
+          "object": 650,
+          "triangle_start": 188765,
+          "triangle_count": 296
+        },
+        "retained_quantized_triangles_verified": 296,
+        "absent_from_original_contact_crop": false,
+        "construction_context": {},
+        "modifier_context": [
+          {
+            "name": "Machined edge",
+            "type": "BEVEL",
+            "show_viewport": true,
+            "show_render": true,
+            "width": 0.006000000052154064,
+            "segments": 3
+          },
+          {
+            "name": "Surface normals",
+            "type": "WEIGHTED_NORMAL",
+            "show_viewport": true,
+            "show_render": true
+          }
+        ],
+        "evaluated_vertex_count": 256,
+        "evaluated_triangle_count": 512,
+        "evaluated_triangle_ordinal_range": [
+          0,
+          512
+        ],
+        "full_bounds_corrected_world_metres": [
+          [
+            -1.2999999523162842,
+            -0.5600000023841858,
+            -1.062999963760376
+          ],
+          [
+            1.2999999523162842,
+            2.5799999237060547,
+            -1.0069999694824219
+          ]
+        ],
+        "full_bounds_quantized_micrometres": [
+          [
+            -1300000,
+            -560000,
+            -1063000
+          ],
+          [
+            1300000,
+            2580000,
+            -1007000
+          ]
+        ],
+        "ordered_triangle_binary64_sha256": "0047c631d9b53d9f7d6d0955f99a546b9d2562f128748eecc12be818280ba9aa",
+        "ordered_triangle_micrometre_sha256": "789f5d12d72f9b9185a40e33bdcdb888df0a15f89083de3b1ddcb86738a75507"
+      },
+      "properties": {
+        "review02": true
+      },
+      "modifiers": [
+        {
+          "name": "Machined edge",
+          "type": "BEVEL",
+          "show_viewport": true,
+          "show_render": true,
+          "width": 0.006000000052154064,
+          "segments": 3,
+          "affect": "EDGES",
+          "offset_type": "OFFSET",
+          "limit_method": "ANGLE",
+          "angle_limit": 0.5235987901687622,
+          "profile": 0.5,
+          "use_clamp_overlap": true,
+          "loop_slide": true,
+          "miter_outer": "MITER_SHARP",
+          "miter_inner": "MITER_SHARP",
+          "harden_normals": false,
+          "mark_seam": false,
+          "mark_sharp": false,
+          "face_strength_mode": "FSTR_NONE",
+          "vmesh_method": "ADJ"
+        },
+        {
+          "name": "Surface normals",
+          "type": "WEIGHTED_NORMAL",
+          "show_viewport": true,
+          "show_render": true,
+          "keep_sharp": false,
+          "weight": 50,
+          "thresh": 0.009999999776482582,
+          "mode": "FACE_AREA",
+          "use_face_influence": false
+        }
+      ],
+      "corrected_world_columns": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "frame_base": {
+        "vertices_local": [
+          [
+            -1.2999999523162842,
+            1.0069999694824219,
+            -0.5600000023841858
+          ],
+          [
+            -1.2999999523162842,
+            1.0069999694824219,
+            1.649999976158142
+          ],
+          [
+            -1.1299999952316284,
+            1.0069999694824219,
+            2.200000047683716
+          ],
+          [
+            -0.7799999713897705,
+            1.0069999694824219,
+            2.5799999237060547
+          ],
+          [
+            0.7799999713897705,
+            1.0069999694824219,
+            2.5799999237060547
+          ],
+          [
+            1.1299999952316284,
+            1.0069999694824219,
+            2.200000047683716
+          ],
+          [
+            1.2999999523162842,
+            1.0069999694824219,
+            1.649999976158142
+          ],
+          [
+            1.2999999523162842,
+            1.0069999694824219,
+            -0.5600000023841858
+          ],
+          [
+            -0.6200000047683716,
+            1.0069999694824219,
+            -0.23000000417232513
+          ],
+          [
+            -0.6200000047683716,
+            1.0069999694824219,
+            1.659999966621399
+          ],
+          [
+            -0.6200000047683716,
+            1.0069999694824219,
+            1.9500000476837158
+          ],
+          [
+            -0.4000000059604645,
+            1.0069999694824219,
+            1.9500000476837158
+          ],
+          [
+            0.4000000059604645,
+            1.0069999694824219,
+            1.9500000476837158
+          ],
+          [
+            0.6200000047683716,
+            1.0069999694824219,
+            1.9500000476837158
+          ],
+          [
+            0.6200000047683716,
+            1.0069999694824219,
+            1.659999966621399
+          ],
+          [
+            0.6200000047683716,
+            1.0069999694824219,
+            -0.23000000417232513
+          ],
+          [
+            -1.2999999523162842,
+            1.062999963760376,
+            -0.5600000023841858
+          ],
+          [
+            -1.2999999523162842,
+            1.062999963760376,
+            1.649999976158142
+          ],
+          [
+            -1.1299999952316284,
+            1.062999963760376,
+            2.200000047683716
+          ],
+          [
+            -0.7799999713897705,
+            1.062999963760376,
+            2.5799999237060547
+          ],
+          [
+            0.7799999713897705,
+            1.062999963760376,
+            2.5799999237060547
+          ],
+          [
+            1.1299999952316284,
+            1.062999963760376,
+            2.200000047683716
+          ],
+          [
+            1.2999999523162842,
+            1.062999963760376,
+            1.649999976158142
+          ],
+          [
+            1.2999999523162842,
+            1.062999963760376,
+            -0.5600000023841858
+          ],
+          [
+            -0.6200000047683716,
+            1.062999963760376,
+            -0.23000000417232513
+          ],
+          [
+            -0.6200000047683716,
+            1.062999963760376,
+            1.659999966621399
+          ],
+          [
+            -0.6200000047683716,
+            1.062999963760376,
+            1.9500000476837158
+          ],
+          [
+            -0.4000000059604645,
+            1.062999963760376,
+            1.9500000476837158
+          ],
+          [
+            0.4000000059604645,
+            1.062999963760376,
+            1.9500000476837158
+          ],
+          [
+            0.6200000047683716,
+            1.062999963760376,
+            1.9500000476837158
+          ],
+          [
+            0.6200000047683716,
+            1.062999963760376,
+            1.659999966621399
+          ],
+          [
+            0.6200000047683716,
+            1.062999963760376,
+            -0.23000000417232513
+          ]
+        ],
+        "polygons": [
+          [
+            0,
+            8,
+            9,
+            1
+          ],
+          [
+            16,
+            17,
+            25,
+            24
+          ],
+          [
+            0,
+            1,
+            17,
+            16
+          ],
+          [
+            8,
+            24,
+            25,
+            9
+          ],
+          [
+            1,
+            9,
+            10,
+            2
+          ],
+          [
+            17,
+            18,
+            26,
+            25
+          ],
+          [
+            1,
+            2,
+            18,
+            17
+          ],
+          [
+            9,
+            25,
+            26,
+            10
+          ],
+          [
+            2,
+            10,
+            11,
+            3
+          ],
+          [
+            18,
+            19,
+            27,
+            26
+          ],
+          [
+            2,
+            3,
+            19,
+            18
+          ],
+          [
+            10,
+            26,
+            27,
+            11
+          ],
+          [
+            3,
+            11,
+            12,
+            4
+          ],
+          [
+            19,
+            20,
+            28,
+            27
+          ],
+          [
+            3,
+            4,
+            20,
+            19
+          ],
+          [
+            11,
+            27,
+            28,
+            12
+          ],
+          [
+            4,
+            12,
+            13,
+            5
+          ],
+          [
+            20,
+            21,
+            29,
+            28
+          ],
+          [
+            4,
+            5,
+            21,
+            20
+          ],
+          [
+            12,
+            28,
+            29,
+            13
+          ],
+          [
+            5,
+            13,
+            14,
+            6
+          ],
+          [
+            21,
+            22,
+            30,
+            29
+          ],
+          [
+            5,
+            6,
+            22,
+            21
+          ],
+          [
+            13,
+            29,
+            30,
+            14
+          ],
+          [
+            6,
+            14,
+            15,
+            7
+          ],
+          [
+            22,
+            23,
+            31,
+            30
+          ],
+          [
+            6,
+            7,
+            23,
+            22
+          ],
+          [
+            14,
+            30,
+            31,
+            15
+          ],
+          [
+            7,
+            15,
+            8,
+            0
+          ],
+          [
+            23,
+            16,
+            24,
+            31
+          ],
+          [
+            7,
+            0,
+            16,
+            23
+          ],
+          [
+            15,
+            31,
+            24,
+            8
+          ]
+        ]
+      },
+      "geometry": {
+        "vertices_binary64": {
+          "offset": 0,
+          "bytes": 6144,
+          "rows": 256,
+          "columns": 3,
+          "dtype": "<f8",
+          "sha256": "2259649f9aa24fe3e3b9e61a7ef5ad12f7af38aef5371e82908a58b73d58a630"
+        },
+        "vertices_quantized_micrometres": {
+          "offset": 6144,
+          "bytes": 6144,
+          "rows": 256,
+          "columns": 3,
+          "dtype": "<i8",
+          "sha256": "1fc8401e1d16fe1e1f4680e29bd640c3ba10a5e50131ddd09c9256b137048e2b"
+        },
+        "triangle_indices": {
+          "offset": 12288,
+          "bytes": 6144,
+          "rows": 512,
+          "columns": 3,
+          "dtype": "<i4",
+          "sha256": "763f64248339f19aa2043d5e04eba0738756a3c27ff5d5b93d0a11e64cec0b88"
+        },
+        "evaluated_vertex_count": 256,
+        "evaluated_triangle_count": 512,
+        "evaluated_triangle_ordinal_range": [
+          0,
+          512
+        ],
+        "full_bounds_corrected_world_metres": [
+          [
+            -1.2999999523162842,
+            -0.5600000023841858,
+            -1.062999963760376
+          ],
+          [
+            1.2999999523162842,
+            2.5799999237060547,
+            -1.0069999694824219
+          ]
+        ],
+        "full_bounds_quantized_micrometres": [
+          [
+            -1300000,
+            -560000,
+            -1063000
+          ],
+          [
+            1300000,
+            2580000,
+            -1007000
+          ]
+        ],
+        "ordered_triangle_binary64_sha256": "0047c631d9b53d9f7d6d0955f99a546b9d2562f128748eecc12be818280ba9aa",
+        "ordered_triangle_micrometre_sha256": "789f5d12d72f9b9185a40e33bdcdb888df0a15f89083de3b1ddcb86738a75507"
+      }
+    },
+    {
+      "source_index": 1574,
+      "identity": {
+        "source_object": "WF02 | retained nose joint backing",
+        "source_type": "MESH",
+        "source_parent": null,
+        "ancestry": [
+          "WF02 | retained nose joint backing"
+        ],
+        "motion_group": null,
+        "source_local_blender_to_corrected_world_columns": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "retained_contact_group": "craft_fixed",
+        "retained_original_contact_range": {
+          "group": "craft_fixed",
+          "object": 733,
+          "triangle_start": 341614,
+          "triangle_count": 2898
+        },
+        "retained_quantized_triangles_verified": 2898,
+        "absent_from_original_contact_crop": false,
+        "construction_context": {},
+        "modifier_context": [],
+        "evaluated_vertex_count": 3152,
+        "evaluated_triangle_count": 5187,
+        "evaluated_triangle_ordinal_range": [
+          0,
+          5187
+        ],
+        "full_bounds_corrected_world_metres": [
+          [
+            -1.399999976158142,
+            -1.2141309976577759,
+            -1.1200000047683716
+          ],
+          [
+            1.399999976158142,
+            2.6385865211486816,
+            -0.9465736150741577
+          ]
+        ],
+        "full_bounds_quantized_micrometres": [
+          [
+            -1400000,
+            -1214131,
+            -1120000
+          ],
+          [
+            1400000,
+            2638587,
+            -946574
+          ]
+        ],
+        "ordered_triangle_binary64_sha256": "983a916affe2927c3fc9f7b96e6d2102cb26bdcac80d7c27568fc57714801c5f",
+        "ordered_triangle_micrometre_sha256": "9731912e8929e9476f7a0aef3ae7badbd6c193489ac5493606fb542f6756d7ef"
+      },
+      "properties": {
+        "asset_generated_surface": true,
+        "retained_uvs_unchanged": "Surviving loops retained; cut edges interpolate source UVs",
+        "review02": true,
+        "source": "visual/hopper-meshy-ox-01"
+      },
+      "modifiers": [],
+      "corrected_world_columns": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "geometry": {
+        "vertices_binary64": {
+          "offset": 18432,
+          "bytes": 75648,
+          "rows": 3152,
+          "columns": 3,
+          "dtype": "<f8",
+          "sha256": "42a660e1bcb6f1e99259da111ce58b357d6b5157204bff794ef6784770c54758"
+        },
+        "vertices_quantized_micrometres": {
+          "offset": 94080,
+          "bytes": 75648,
+          "rows": 3152,
+          "columns": 3,
+          "dtype": "<i8",
+          "sha256": "75fbe4e0e3d48f2670a3616cb0963711dee41cb0e27801c89f96d34afa99f665"
+        },
+        "triangle_indices": {
+          "offset": 169728,
+          "bytes": 62244,
+          "rows": 5187,
+          "columns": 3,
+          "dtype": "<i4",
+          "sha256": "560d44c53e950c9b1b6224d5776de6dfd8868938d1c263062dce4e16ab4081bd"
+        },
+        "evaluated_vertex_count": 3152,
+        "evaluated_triangle_count": 5187,
+        "evaluated_triangle_ordinal_range": [
+          0,
+          5187
+        ],
+        "full_bounds_corrected_world_metres": [
+          [
+            -1.399999976158142,
+            -1.2141309976577759,
+            -1.1200000047683716
+          ],
+          [
+            1.399999976158142,
+            2.6385865211486816,
+            -0.9465736150741577
+          ]
+        ],
+        "full_bounds_quantized_micrometres": [
+          [
+            -1400000,
+            -1214131,
+            -1120000
+          ],
+          [
+            1400000,
+            2638587,
+            -946574
+          ]
+        ],
+        "ordered_triangle_binary64_sha256": "983a916affe2927c3fc9f7b96e6d2102cb26bdcac80d7c27568fc57714801c5f",
+        "ordered_triangle_micrometre_sha256": "9731912e8929e9476f7a0aef3ae7badbd6c193489ac5493606fb542f6756d7ef"
+      }
+    }
+  ],
+  "binary_payload": {
+    "path": "geometry.bin",
+    "bytes": 231972,
+    "sha256": "1bccd3451558ad0b6938ad74426746519983b59cf5d6222dd42843f849b45bb9",
+    "vertices": 3408,
+    "triangles": 5699
+  },
+  "work": {
+    "full_mesh_summaries": 2,
+    "ordered_triangle_hash_streams": 4,
+    "inherited_verified_crop_faces": [
+      296,
+      2898
+    ],
+    "new_crop_face_replays": 0
+  },
+  "caps": {
+    "decoded_source_bytes": 262144,
+    "metadata_bytes": 65536,
+    "numeric_scratch_bytes": 67108864
+  },
+  "master_unchanged": true,
+  "source_save_count": 0,
+  "material_permission": false,
+  "actor_permission": false
+}
