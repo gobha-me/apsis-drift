@@ -1052,6 +1052,7 @@ void boundary_accounting(const BoundaryEvidence& e, BoundaryLimits l = {}) {
 void closed_boundary_controls() {
   std::vector<RigidVector3> raw{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
   std::vector<detail::MaterialQuantizedPoint> q;
+  q.reserve(raw.size());
   for (auto v : raw)
     q.push_back(quantized_point(v));
   std::vector<detail::MaterialTriangle> faces{
