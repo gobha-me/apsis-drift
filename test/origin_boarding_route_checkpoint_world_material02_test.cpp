@@ -791,6 +791,47 @@ void signed_support_controls(const OriginBoardingBootSupport& boot,
       "Destroyed child rejects signed support before dereferencing stale "
       "borrowed geometry");
 }
+
+void observed_outcome(const Diagnostic& d, std::size_t request) {
+  const std::array<std::size_t, 8> cells{163, 163, 85, 9, 69, 84, 1, 1};
+  const std::array<std::uint64_t, 8> witness{154, 154, 0, 0, 154, 31, 0, 3};
+  const auto& p = d.result.world;
+  check(d.result.child && d.result.child->complete &&
+            d.result.child->cells.size() == cells[request],
+        "Frozen WORLD02 consumes the same complete original retained cover for "
+        "this request");
+  check(d.boundary_work.witness_attempts == witness[request] &&
+            d.boundary_work.signed_support_calls == 2 * witness[request] &&
+            d.boundary_work.width_attempts == 0,
+        "Frozen request retains its actual current-cell exterior "
+        "witness/support/width operations");
+  if (request == 2 || request == 3 || request == 5 || request == 6) {
+    check(p.complete && !p.first_refusal && p.bindings_complete &&
+              p.source_complete && p.arithmetic_supported &&
+              p.domain_complete && p.material_exclusion &&
+              p.halo_surface_exclusion,
+          "Frozen prep/pivot/subrange/point0 proves entire material and HALO "
+          "exclusion with original child and domain");
+  } else {
+    check(!p.complete && !p.material_exclusion && !p.halo_surface_exclusion &&
+              p.bindings_complete && p.arithmetic_supported &&
+              p.domain_complete && p.first_refusal.has_value(),
+          "Frozen later request remains explicit missing-relation refusal "
+          "without full material/HALO clearance");
+    if (p.first_refusal) {
+      const auto& r = *p.first_refusal;
+      const auto cell = request == 7 ? 0u : request == 4 ? 39u : 133u;
+      const double first = request == 7 ? 1. : .79296875,
+                   last = request == 7 ? 1. : .796875;
+      check(r.condition == Condition::missing_relation && r.source == 1441 &&
+                r.source_object == "WF02 | CABIN hatch perimeter seal" &&
+                r.part == 12 && r.cell == cell && r.phase_index == 2 &&
+                r.global_first == first && r.global_last == last,
+            "Frozen refusal retains authentic hatch seal, original starboard "
+            "upper arm and exact canonical cell/phase/closed interval");
+    }
+  }
+}
 void observe(const OriginBoardingBootSupport& boot,
              const OriginBoardingInitialMaterial& base,
              const OriginBoardingCheckpointMaterialExtension& extension) {
@@ -805,7 +846,8 @@ void observe(const OriginBoardingBootSupport& boot,
   }
   auto first = std::move(*first_result);
   print("FIRST_PUBLIC_CHECKPOINT_WORLD_MATERIAL02", first);
-  // The new consumer outcome is not assumed before its frozen first log.
+  // Retained FIRST03 receipt precedes mandatory observed-outcome checks.
+  observed_outcome(first, 0);
   accounting(first);
   boundary_budgets(boot, base, extension, first);
   signed_support_controls(boot, base);
@@ -828,6 +870,7 @@ void observe(const OriginBoardingBootSupport& boot,
         require(assess_origin_boarding_route_checkpoint_world_material02(
             boot, base, extension, a, b));
     print("WORLD02_REQUEST_" + std::to_string(i), result);
+    observed_outcome(result, i);
     accounting(result);
     boundary_budgets(boot, base, extension, result);
     const auto child = require(
@@ -1135,6 +1178,13 @@ int main() {
     if (!boundary_admission)
       std::cout << " error=" << boundary_admission.error();
     std::cout << '\n' << std::flush;
+    check(boundary_admission.has_value() && boundary_evidence.complete &&
+              boundary_evidence.work.extension_version == 3 &&
+              boundary_evidence.work.constructors_complete &&
+              boundary_evidence.condition ==
+                  detail::BoardingCheckpointMaterialBoundaryCondition::none,
+          "Frozen WORLD02 genuinely receives complete selected Boundary03 "
+          "source authority before clearance assessment");
     if (boundary_admission) {
       const auto& extension = *boundary_admission;
       check(extension.summary() && extension.summary()->extension_version == 3,

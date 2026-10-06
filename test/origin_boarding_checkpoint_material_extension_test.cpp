@@ -1170,9 +1170,32 @@ void boundary03_controls(View view, const NativeCraftBinding& binding,
   BoundaryEvidence baseline;
   const auto detailed = Access::make_boundary03(binding, base, {}, &baseline);
   boundary_log("FIRST_CHECKPOINT_MATERIAL_BOUNDARY03_CONSTRUCTOR", baseline);
+  // Preserve the original FIRST03 receipt before strengthening its observed
+  // complete admission into a mandatory regression.
+  check(admission.has_value() && detailed.has_value() && baseline.complete &&
+            baseline.condition == BoundaryCondition::none &&
+            baseline.input_condition == Condition::none &&
+            baseline.work.extension_version == 3 &&
+            baseline.work.bindings_complete &&
+            baseline.work.arithmetic_supported &&
+            baseline.work.constructors_complete,
+        "Frozen Boundary03 genuinely admits complete closed-frame material "
+        "with explicit version3 and all original input guards");
+  check(baseline.work.source_bytes == 240262 &&
+            baseline.work.base_guards == 327 &&
+            baseline.work.vertex_guards == 20448 &&
+            baseline.work.index_guards == 17097 &&
+            baseline.bound_coordinate_guards == 20448 &&
+            baseline.nondegenerate_triangles == 512 &&
+            baseline.edge_occurrences == 1536 &&
+            baseline.edge_comparisons == 2359296 && !baseline.source &&
+            !baseline.triangle && !baseline.edge && !baseline.other_triangle &&
+            !baseline.vertex && !baseline.axis,
+        "Frozen Boundary03 admission retains exact original source bytes, "
+        "completed bounded work and no stale refusal indices");
   boundary_accounting(baseline);
   check(admission.has_value() == detailed.has_value(),
-        "Public Boundary03 and authentic issuer preserve unknown first "
+        "Public Boundary03 and authentic issuer preserve frozen complete "
         "admission outcome");
   const auto numeric = require(
       detail::checkpoint_material_extension_boundary03_constructor_math(view));
