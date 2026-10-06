@@ -1486,3 +1486,299 @@ auto detail::boarding_lower_foot_transfer_pressure_cell(
   return TransferResult::accepted;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_port_unload_internal.hpp"
+namespace apsis_drift {
+namespace {
+using UnloadCell = BoardingRoutePortUnloadCell;
+using UnloadReason = BoardingRoutePortUnloadRefusal;
+using UnloadWhy = BoardingRoutePortUnloadCondition;
+using UnloadState = detail::BoardingRoutePortUnloadCellResult;
+using UnloadLimits = detail::BoardingRoutePortUnloadLimits;
+using UnloadWork = BoardingRoutePortUnloadCounters;
+static_assert(sizeof(detail::BoardingRoutePortUnloadContext) <= 1024);
+static_assert(sizeof(LoadScratch) + load_nested_scratch + std::size_t{512} <=
+              4096);
+auto unload_pressure_refuse(UnloadReason& r, UnloadWhy why) -> UnloadState {
+  r.condition = why;
+  return why == UnloadWhy::unsupported_arithmetic ||
+                 why == UnloadWhy::invalid_binding
+             ? UnloadState::unsupported
+             : UnloadState::unresolved;
+}
+auto unload_disk_edges(const std::array<Point, 4>& corners, Point pressure,
+                       const UnloadLimits& caps, UnloadWork& work,
+                       LoadScratch& scratch, bool& supported,
+                       UnloadReason& reason) -> UnloadState {
+  const auto required = add(point(.020), point(.010));
+  for (std::size_t i = 0; i < 4; ++i) {
+    if (work.contact.disk_edges >= caps.edges) {
+      reason.condition = UnloadWhy::edge_capacity;
+      return UnloadState::capacity;
+    }
+    ++work.contact.disk_edges;
+    scratch.edges[i] = site_edge(corners[i], corners[(i + 1) % 4], pressure,
+                                 required, supported);
+    if (!supported)
+      return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  return UnloadState::accepted;
+}
+auto unload_pressure_algebra(LoadScratch& s, Interval w) -> bool {
+  const auto other = subtract(point(1), w);
+  s.barycenter = {
+      add(multiply(w, s.centers[0].x), multiply(other, s.centers[1].x)),
+      add(multiply(w, s.centers[0].z), multiply(other, s.centers[1].z))};
+  s.delta = subtract(s.com, s.barycenter);
+  for (std::size_t i = 0; i < 2; ++i) {
+    s.pressures[i] = {add(s.centers[i].x, s.delta.x),
+                      add(s.centers[i].z, s.delta.z)};
+    if ((i == 1 && w.low == 0 && w.high == 0) ||
+        (i == 0 && w.low == 1 && w.high == 1))
+      s.pressures[i] = s.com;
+    if (!finite(s.pressures[i].x) || !finite(s.pressures[i].z)) return false;
+  }
+  return finite(s.barycenter.x) && finite(s.barycenter.z) &&
+         finite(s.delta.x) && finite(s.delta.z);
+}
+} // namespace
+[[gnu::noinline]] auto detail::prepare_boarding_route_port_unload(
+    const OriginBoardingBootSupport& source, const UnloadLimits& limits,
+    BoardingRoutePortUnloadDiagnostic& out)
+    -> std::expected<BoardingRoutePortUnloadContext, std::string> {
+  const UnloadLimits original;
+  if (limits.initial_source_partitions > original.initial_source_partitions ||
+      limits.initial_body_records > original.initial_body_records ||
+      limits.initial_self_pairs > original.initial_self_pairs ||
+      limits.initial_self_axes > original.initial_self_axes ||
+      limits.initial_pressure_partitions >
+          original.initial_pressure_partitions ||
+      limits.output_bytes > original.output_bytes ||
+      limits.pairs > original.pairs || limits.axes > original.axes ||
+      limits.signed_trials > original.signed_trials ||
+      limits.owners > original.owners ||
+      limits.candidates > original.candidates ||
+      limits.edges > original.edges ||
+      limits.phase.depth > original.phase.depth ||
+      limits.phase.nodes > original.phase.nodes ||
+      limits.phase.leaves > original.phase.leaves ||
+      limits.phase.output_bytes > original.phase.output_bytes ||
+      limits.phase.graphs > original.phase.graphs ||
+      limits.phase.legs > original.phase.legs ||
+      limits.phase.bodies > original.phase.bodies ||
+      limits.phase.sectors > original.phase.sectors ||
+      limits.phase.timing > original.phase.timing)
+    return std::unexpected("Port unload preparation permits only lowered caps");
+  if (limits.output_bytes <
+      sizeof(std::expected<BoardingRoutePortUnloadDiagnostic, std::string>) +
+          sizeof(BoardingSourceEndpointLoadDiagnostic))
+    return std::unexpected("Port unload initial output exceeds capacity");
+  auto initial = boarding_source_endpoint_load_bounded(
+      source, limits.initial_source_partitions, limits.initial_body_records,
+      limits.initial_self_pairs, limits.initial_self_axes,
+      limits.initial_pressure_partitions);
+  if (!initial) return std::unexpected(initial.error());
+  try {
+    out.initial = std::make_unique<BoardingSourceEndpointLoadDiagnostic>(
+        std::move(*initial));
+  } catch (const std::bad_alloc&) {
+    return std::unexpected("Port unload initial allocation failed");
+  }
+  const auto& owned = *out.initial;
+  if (!owned.load.complete || !owned.load.bindings_complete ||
+      !owned.load.arithmetic_supported ||
+      !owned.load.placement_nonpenetrating || !owned.load.contact_supported ||
+      !owned.load.projected_margin_certified ||
+      owned.load.checked_quads != 10 || !load_binding(owned.self) ||
+      !load_provider_valid(owned.self.endpoint.sites.source))
+    return std::unexpected(
+        "Port unload requires genuine complete original Load01");
+  if (!std::ranges::all_of(owned.load.source_quads, [](const LoadQuad& q) {
+        return q.valid && q.arithmetic_supported && q.horizontal && q.upward &&
+               q.convex && q.nondegenerate && q.checked_edges == 4 &&
+               q.checked_side_signs == 8;
+      }))
+    return std::unexpected(
+        "Port unload requires complete once-owned source guards");
+  return BoardingRoutePortUnloadContext(owned);
+}
+auto detail::boarding_route_port_unload_pressure(
+    const BoardingRoutePortUnloadCellToken& token, const UnloadLimits& caps,
+    UnloadWork& work, UnloadCell& out, UnloadReason& reason) -> UnloadState {
+  out.complete = out.nonnegative_reactions =
+      out.nominal_vertical_equilibrium_complete = out.finite_pressure_complete =
+          out.endpoint_zero_port_reaction = false;
+  if (!site_supported_environment() || !token.context_ || token.cell_ != &out ||
+      !out.phase.complete || !out.phase.arithmetic_supported ||
+      !out.self_complete) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  const auto& context = *token.context_;
+  const auto sources = context.source_.selected_partitions();
+  if (!load_provider_valid(context.source_) || sources.size() != 10) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::invalid_binding);
+  }
+  const UnloadLimits original;
+  if (caps.candidates > original.candidates || caps.edges > original.edges) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::invalid_binding);
+  }
+  if (work.contact.pressure_candidates > caps.candidates) {
+    reason.condition = UnloadWhy::pressure_capacity;
+    return UnloadState::capacity;
+  }
+  if (work.contact.disk_edges > caps.edges) {
+    reason.condition = UnloadWhy::edge_capacity;
+    return UnloadState::capacity;
+  }
+  // Exact named carrier .5*(1-S) proves [0,.5] before intersection.
+  const auto reported = out.phase.port_reaction_fraction;
+  if (!std::isfinite(reported.lower) || !std::isfinite(reported.upper) ||
+      reported.lower > reported.upper) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  auto w = Interval{std::max(0., reported.lower), std::min(.5, reported.upper)};
+  if (out.phase.first == out.phase.last && out.phase.first == 1)
+    w = point(0);
+  else if (out.phase.first == out.phase.last && out.phase.first == 0)
+    w = point(.5);
+  const auto other = subtract(point(1), w);
+  if (!finite(w) || !finite(other)) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  LoadScratch scratch;
+  scratch.centers[0] = {add(point(.16), point(-.14)), point(-.5)};
+  scratch.centers[1] = {add(point(.16), point(.14)), point(-.8)};
+  scratch.com = {{out.phase.center_of_mass.value.lower.x,
+                  out.phase.center_of_mass.value.upper.x},
+                 {out.phase.center_of_mass.value.lower.z,
+                  out.phase.center_of_mass.value.upper.z}};
+  if (!unload_pressure_algebra(scratch, w)) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  out.port_reaction_fraction = {w.low, w.high};
+  out.barycenter_xz = {{{scratch.barycenter.x.low, scratch.barycenter.x.high},
+                        {scratch.barycenter.z.low, scratch.barycenter.z.high}}};
+  out.common_pressure_delta_xz = {
+      {{scratch.delta.x.low, scratch.delta.x.high},
+       {scratch.delta.z.low, scratch.delta.z.high}}};
+  out.nonnegative_reactions = out.nominal_vertical_equilibrium_complete = true;
+  out.endpoint_zero_port_reaction = out.phase.last == 1;
+  for (std::size_t site = 0; site < 2; ++site) {
+    reason.side = site;
+    auto& record = out.pressures[site];
+    const auto pressure = scratch.pressures[site];
+    if (!finite(pressure.x) || !finite(pressure.z) || pressure.x.low < -8 ||
+        pressure.x.high > 8 || pressure.z.low < -8 || pressure.z.high > 8) {
+      out.arithmetic_supported = false;
+      return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+    }
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+    record.arithmetic_supported = true;
+    scratch.sole = site_sole_corners(scratch.centers[site]);
+    auto state = unload_disk_edges(scratch.sole, pressure, caps, work, scratch,
+                                   record.arithmetic_supported, reason);
+    if (state != UnloadState::accepted) return state;
+    const auto sole = load_summary(scratch.edges, record.arithmetic_supported);
+    record.sole_minimum_signed_side = {sole.minimum_signed_side.lower,
+                                       sole.minimum_signed_side.upper};
+    record.sole_minimum_squared_gap = {sole.minimum_squared_gap.lower,
+                                       sole.minimum_squared_gap.upper};
+    record.sole_disk_contained = sole.status == LoadStatus::contained;
+    if (!record.sole_disk_contained)
+      return unload_pressure_refuse(reason, UnloadWhy::sole_disk_margin);
+    const auto plane = site == 0 ? site_upper_plane : site_transition_plane;
+    for (std::size_t p = 0; p < sources.size(); ++p) {
+      reason.partition = p;
+      if (work.contact.pressure_candidates >= caps.candidates) {
+        reason.condition = UnloadWhy::pressure_capacity;
+        return UnloadState::capacity;
+      }
+      ++work.contact.pressure_candidates;
+      ++record.scanned_partitions;
+      const auto& quad = context.guards_[p];
+      auto& candidate = record.candidates[p];
+      candidate.quad_valid = quad.valid;
+      candidate.arithmetic_supported = quad.arithmetic_supported;
+      if (!quad.valid) {
+        candidate.status = LoadStatus::invalid_support;
+        continue;
+      }
+      if (sources[p].plane_metres != plane) {
+        candidate.status = LoadStatus::noncoplanar;
+        continue;
+      }
+      record.coplanar = true;
+      scratch.source = source_corners(sources[p]);
+      bool supported = true;
+      state = unload_disk_edges(scratch.source, pressure, caps, work, scratch,
+                                supported, reason);
+      if (state != UnloadState::accepted) return state;
+      const auto summary = load_summary(scratch.edges, supported);
+      candidate = transfer_pressure_candidate(summary);
+      record.arithmetic_supported = record.arithmetic_supported && supported;
+      if (summary.status == LoadStatus::contained &&
+          record.source_partition == 65535)
+        record.source_partition = static_cast<std::uint16_t>(p);
+    }
+    record.coverage_complete = record.scanned_partitions == 10;
+    record.source_disk_contained = record.source_partition != 65535;
+    record.complete = record.arithmetic_supported &&
+                      record.sole_disk_contained && record.coverage_complete &&
+                      record.source_disk_contained;
+    if (!record.complete)
+      return unload_pressure_refuse(reason, UnloadWhy::source_disk_margin);
+  }
+  out.finite_pressure_complete = true;
+  reason.side.reset();
+  reason.partition.reset();
+  return UnloadState::accepted;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+auto detail::boarding_route_port_unload_pressure_math(
+    std::array<BoardingPlantedLegScalarBounds, 2> com,
+    std::array<std::array<BoardingPlantedLegScalarBounds, 2>, 2> centers,
+    BoardingPlantedLegScalarBounds fraction, std::array<double, 2> planes,
+    double source_plane, std::size_t side)
+    -> std::expected<BoardingRoutePortUnloadPressureMath, std::string> {
+  if (!load_input_bound(com[0]) || !load_input_bound(com[1]) ||
+      !load_input_bound(fraction) || fraction.lower < 0 || fraction.upper > 1 ||
+      side > 1 || !load_finite(source_plane) || !load_finite(planes[0]) ||
+      !load_finite(planes[1]))
+    return std::unexpected("Numeric unload pressure requires ordered finite "
+                           "workspace and weight[0,1]");
+  for (const auto& c : centers)
+    for (const auto b : c)
+      if (!load_input_bound(b))
+        return std::unexpected(
+            "Numeric unload sole coordinates require ordered finite workspace");
+  BoardingRoutePortUnloadPressureMath out;
+  if (!site_supported_environment()) return out;
+  LoadScratch scratch;
+  scratch.com = {{com[0].lower, com[0].upper}, {com[1].lower, com[1].upper}};
+  for (std::size_t i = 0; i < 2; ++i)
+    scratch.centers[i] = {{centers[i][0].lower, centers[i][0].upper},
+                          {centers[i][1].lower, centers[i][1].upper}};
+  if (!unload_pressure_algebra(scratch, {fraction.lower, fraction.upper}))
+    return out;
+  out.barycenter_xz = {{{scratch.barycenter.x.low, scratch.barycenter.x.high},
+                        {scratch.barycenter.z.low, scratch.barycenter.z.high}}};
+  out.delta_xz = {{{scratch.delta.x.low, scratch.delta.x.high},
+                   {scratch.delta.z.low, scratch.delta.z.high}}};
+  for (std::size_t i = 0; i < 2; ++i)
+    out.pressure_xz[i] = {
+        {{scratch.pressures[i].x.low, scratch.pressures[i].x.high},
+         {scratch.pressures[i].z.low, scratch.pressures[i].z.high}}};
+  out.arithmetic_supported = true;
+  out.selected_plane_equal = planes[side] == source_plane;
+  return out;
+}
+} // namespace apsis_drift

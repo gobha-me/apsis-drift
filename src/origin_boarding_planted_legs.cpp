@@ -3861,3 +3861,436 @@ auto detail::boarding_route_phase_hip_speed_numeric(Bounds axial,
   return phase_hip_speed(a, r, p, s);
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_port_unload_internal.hpp"
+namespace apsis_drift {
+namespace {
+using UnloadCell = BoardingRoutePortUnloadCell;
+using UnloadReason = BoardingRoutePortUnloadRefusal;
+using UnloadWhy = BoardingRoutePortUnloadCondition;
+using UnloadState = detail::BoardingRoutePortUnloadCellResult;
+using UnloadLimits = detail::BoardingRoutePortUnloadLimits;
+using UnloadWork = BoardingRoutePortUnloadCounters;
+struct UnloadSolid {
+  EndpointSelfSolid shape;
+  const BoardingRoutePhaseFrameEvidence* frame{};
+};
+static_assert(sizeof(UnloadCell) <= kBoardingRoutePortUnloadMaximumCellBytes);
+static_assert(sizeof(UnloadCell) + sizeof(PhaseGraph) + sizeof(PhaseRequest) +
+                  sizeof(detail::BoardingRoutePortUnloadContext) +
+                  11 * std::size_t{24} + std::size_t{12288} +
+                  std::size_t{8192} + std::size_t{512} <=
+              kBoardingRoutePortUnloadMaximumScratchBytes);
+auto unload_refuse(UnloadReason& r, UnloadWhy why, Interval limit = {})
+    -> UnloadState {
+  r.condition = why;
+  r.limiting_bound = limit.supported ? bounds(limit) : Bounds{};
+  return why == UnloadWhy::unsupported_arithmetic ||
+                 why == UnloadWhy::invalid_binding
+             ? UnloadState::unsupported
+             : UnloadState::unresolved;
+}
+auto unload_charge(std::uint64_t& count, std::uint64_t cap, UnloadWhy why,
+                   UnloadReason& r) -> bool {
+  if (count >= cap) {
+    r.condition = why;
+    return false;
+  }
+  ++count;
+  return true;
+}
+auto unload_difference(const Point& a, const Point& b) -> Point {
+  Point p;
+  for (std::size_t i = 0; i < 3; ++i)
+    p[i] = subtract(a[i], b[i]);
+  return p;
+}
+auto unload_scale(Point p, double scale) -> Point {
+  for (auto& v : p)
+    v = divide(v, point(scale));
+  return p;
+}
+auto unload_frame_dot(const BoardingRoutePhaseFrameEvidence& f, std::size_t i,
+                      const Point& u) -> Interval {
+  const auto c = body_intervals(f.columns[i].value);
+  return add(add(multiply(c[0], u[0]), multiply(c[1], u[1])),
+             multiply(c[2], u[2]));
+}
+auto unload_solid(const BoardingRoutePhasePartBinding& binding,
+                  const std::array<Point, kBoardingPlantedBodyPointCount>& p,
+                  const BoardingRouteFootPhaseCell& cell) -> UnloadSolid {
+  UnloadSolid out;
+  if (const auto* box =
+          std::get_if<BoardingRoutePhaseBoxBinding>(&binding.reservation)) {
+    out.shape.shape =
+        binding.id == PartId::trunk || binding.id == PartId::helmet
+            ? SelfShape::ellipsoid
+            : SelfShape::box;
+    out.shape.first = out.shape.second = p[body_index(box->center)];
+    out.shape.half = box->half_size_metres;
+    out.frame = &cell.frames[static_cast<std::size_t>(box->frame)];
+  } else {
+    const auto& c =
+        std::get<BoardingPlantedBodyCapsuleBinding>(binding.reservation);
+    out.shape.shape = SelfShape::capsule;
+    out.shape.first = p[body_index(c.start)];
+    out.shape.second = p[body_index(c.end)];
+    out.shape.radius = c.radius_metres;
+  }
+  return out;
+}
+auto unload_support(const UnloadSolid& solid, Vec n) -> Interval {
+  const auto& s = solid.shape;
+  if (!self_point_supported(s.first)) return failed();
+  const auto center = self_dot(s.first, n);
+  if (s.shape == SelfShape::capsule)
+    return add(self_maximum(center, self_dot(s.second, n)),
+               multiply(point(s.radius),
+                        transfer_small_root(
+                            add(add(square(point(n.x)), square(point(n.y))),
+                                square(point(n.z))))));
+  if (!solid.frame) return failed();
+  const std::array half{s.half.x, s.half.y, s.half.z};
+  auto extent = point(0);
+  for (std::size_t j = 0; j < 3; ++j) {
+    const auto column = body_intervals(solid.frame->columns[j].value);
+    const auto term = multiply(point(half[j]), absolute(self_dot(column, n)));
+    extent = add(extent, s.shape == SelfShape::box ? term : square(term));
+  }
+  if (s.shape == SelfShape::ellipsoid) extent = transfer_small_root(extent);
+  return add(center, extent);
+}
+[[gnu::noinline]] auto unload_owner(
+    const BoardingRouteFootPhaseCell& cell,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& p,
+    const SelfRegion& r, BoardingLowerFootTransferOwner& out) -> void {
+  const auto second = static_cast<std::size_t>(r.second),
+             side = second >= 9 ? std::size_t{1} : std::size_t{0};
+  const auto base = body_index(side == 0 ? BodyPointId::port_hip
+                                         : BodyPointId::starboard_hip);
+  auto extent = point(0), limit = point(r.limit_metres), secondary = point(0);
+  auto kind = SelfCert::none;
+  switch (r.junction) {
+    case Junction::waist:
+      extent = point(.12);
+      kind = SelfCert::cap_partner_support;
+      break;
+    case Junction::neck:
+      extent = limit = point(.2695);
+      kind = SelfCert::cap_partner_support;
+      break;
+    case Junction::hip: {
+      const auto u =
+          unload_scale(unload_difference(p[base + 1], p[base]), thigh_length);
+      const auto x = unload_frame_dot(cell.frames[0], 0, u),
+                 y = unload_frame_dot(cell.frames[0], 1, u),
+                 z = unload_frame_dot(cell.frames[0], 2, u);
+      extent = add(add(subtract(multiply(point(.24), absolute(x)),
+                                multiply(point(side == 0 ? -.14 : .14), x)),
+                       multiply(point(.12), absolute(y))),
+                   multiply(point(.18), absolute(z)));
+      kind = SelfCert::original_axis_box_support;
+      break;
+    }
+    case Junction::ankle: {
+      if (.075 > r.limit_metres || r.limit_metres >= shin_length) return;
+      const auto u = unload_scale(unload_difference(p[base + 1], p[base + 2]),
+                                  shin_length);
+      const auto x = unload_frame_dot(cell.frames[side + 2], 0, u), y = u[1],
+                 z = unload_frame_dot(cell.frames[side + 2], 2, u);
+      if (!y.supported) return;
+      if (y.low < 0) {
+        out.arithmetic_supported = true;
+        return;
+      }
+      extent = add(multiply(point(.06), absolute(x)),
+                   multiply(point(.14), absolute(z)));
+      kind = SelfCert::original_axis_box_support;
+      break;
+    }
+    case Junction::wrist:
+      if (.055 > r.limit_metres || r.limit_metres >= .386) return;
+      extent = point(.05);
+      kind = SelfCert::original_axis_box_support;
+      break;
+    case Junction::knee:
+    case Junction::elbow: {
+      const auto l1 = point(thigh_length), l2 = point(shin_length);
+      const auto cosine =
+          r.junction == Junction::knee
+              ? negate(divide(
+                    subtract(
+                        subtract(
+                            interval(cell.legs[side].distance_squared.lower,
+                                     cell.legs[side].distance_squared.upper),
+                            square(l1)),
+                        square(l2)),
+                    multiply(point(2), multiply(l1, l2))))
+              : transfer_small_root(point(.5));
+      const auto a = r.junction == Junction::knee ? .105 : .065,
+                 b = r.junction == Junction::knee ? .075 : .055;
+      const auto proof = self_half_ray(a, b, r.limit_metres, cosine);
+      if (!proof.arithmetic_supported) return;
+      extent = square(point(std::max(a, b)));
+      limit = multiply(
+          square(point(r.limit_metres)),
+          interval(proof.sine_squared.lower, proof.sine_squared.upper));
+      kind = SelfCert::half_ray_angle_bound;
+      break;
+    }
+    case Junction::shoulder: {
+      if (.065 > r.limit_metres) return;
+      const auto c = transfer_small_root(point(.5)),
+                 threshold = transfer_small_root(subtract(
+                     square(point(r.limit_metres)), square(point(.065))));
+      extent = add(negate(multiply(threshold, c)), multiply(point(.065), c));
+      secondary = add(negate(multiply(point(.35898), c)), point(.065));
+      limit = point(-.18);
+      kind = SelfCert::shoulder_split;
+      break;
+    }
+  }
+  const auto gap = subtract(limit, extent);
+  out.arithmetic_supported = extent.supported && limit.supported &&
+                             secondary.supported && gap.supported;
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(secondary);
+  out.structural_identity = true;
+  out.certificate = kind;
+  out.certified = r.junction == Junction::shoulder
+                      ? extent.high < limit.low && secondary.high < limit.low
+                      : gap.low >= 0;
+}
+[[gnu::noinline]] auto unload_separate(const UnloadSolid& a,
+                                       const UnloadSolid& b,
+                                       const UnloadLimits& caps,
+                                       UnloadWork& work, UnloadReason& reason)
+    -> UnloadState {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  for (std::size_t i = 0; i < count; ++i) {
+    if (!unload_charge(work.contact.proposed_axes, caps.axes,
+                       UnloadWhy::axis_capacity, reason))
+      return UnloadState::capacity;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (const auto n : {axis, self_negate(axis)}) {
+      if (!unload_charge(work.contact.signed_trials, caps.signed_trials,
+                         UnloadWhy::signed_trial_capacity, reason))
+        return UnloadState::capacity;
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported)
+        return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+      if (total.high <= 0) return UnloadState::accepted;
+    }
+  }
+  return unload_refuse(reason, UnloadWhy::unresolved_self_pair);
+}
+[[gnu::noinline]] auto unload_self(const UnloadLimits& caps, UnloadWork& work,
+                                   UnloadCell& out, UnloadReason& reason)
+    -> UnloadState {
+  static const auto parts = detail::boarding_route_foot_phase_parts();
+  static const auto regions = self_regions();
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  const auto root = body_intervals(out.phase.points[0].value);
+  for (std::size_t i = 0; i < relative.size(); ++i) {
+    relative[i] = i == 0 ? Point{point(0), point(0), point(0)}
+                         : unload_difference(
+                               body_intervals(out.phase.points[i].value), root);
+    if (!self_point_supported(relative[i]))
+      return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  std::size_t index{};
+  for (std::size_t a = 0; a < parts.size(); ++a)
+    for (std::size_t b = a + 1; b < parts.size(); ++b, ++index) {
+      reason.pair = index;
+      if (!unload_charge(work.contact.self_pairs, caps.pairs,
+                         UnloadWhy::pair_capacity, reason))
+        return UnloadState::capacity;
+      auto certificate = SelfCert::none;
+      for (std::size_t r = 0; r < regions.size(); ++r)
+        if (static_cast<std::size_t>(regions[r].first) == a &&
+            static_cast<std::size_t>(regions[r].second) == b) {
+          if (!unload_charge(work.ownership_attempts, caps.owners,
+                             UnloadWhy::ownership_capacity, reason))
+            return UnloadState::capacity;
+          unload_owner(out.phase, relative, regions[r], out.owners[r]);
+          if (!out.owners[r].arithmetic_supported)
+            return unload_refuse(reason, UnloadWhy::unsupported_arithmetic);
+          if (out.owners[r].certified) certificate = out.owners[r].certificate;
+          break;
+        }
+      if (certificate == SelfCert::none) {
+        const auto first = unload_solid(parts[a], relative, out.phase),
+                   second = unload_solid(parts[b], relative, out.phase);
+        const auto result = unload_separate(first, second, caps, work, reason);
+        if (result != UnloadState::accepted) return result;
+        certificate = SelfCert::convex_support_plane;
+      }
+      out.pair_certificates[index] = certificate;
+      ++out.certificate_counts[static_cast<std::size_t>(certificate)];
+    }
+  out.self_complete = index == kBoardingBodyPairCount;
+  reason.pair.reset();
+  return UnloadState::accepted;
+}
+} // namespace
+auto detail::boarding_route_port_unload_cell(
+    const BoardingRoutePortUnloadContext& context, double first, double last,
+    bool reverse, const UnloadLimits& caps, UnloadWork& work, UnloadCell& out,
+    UnloadReason& reason) -> UnloadState {
+  out = {};
+  reason = {};
+  out.phase.first = first;
+  out.phase.last = last;
+  const UnloadLimits original;
+  if (!std::isfinite(first) || !std::isfinite(last) || first < 0 || last > 1 ||
+      first > last || caps.pairs > original.pairs ||
+      caps.axes > original.axes ||
+      caps.signed_trials > original.signed_trials ||
+      caps.owners > original.owners || caps.candidates > original.candidates ||
+      caps.edges > original.edges ||
+      caps.initial_source_partitions > original.initial_source_partitions ||
+      caps.initial_body_records > original.initial_body_records ||
+      caps.initial_self_pairs > original.initial_self_pairs ||
+      caps.initial_self_axes > original.initial_self_axes ||
+      caps.initial_pressure_partitions > original.initial_pressure_partitions ||
+      caps.output_bytes > original.output_bytes || !context.source_.contact() ||
+      context.source_.selected_partitions().size() != 10)
+    return unload_refuse(reason, UnloadWhy::invalid_binding);
+  const std::array incoming{
+      work.contact.self_pairs,          work.contact.proposed_axes,
+      work.contact.signed_trials,       work.ownership_attempts,
+      work.contact.pressure_candidates, work.contact.disk_edges};
+  const std::array ceilings{caps.pairs,  caps.axes,       caps.signed_trials,
+                            caps.owners, caps.candidates, caps.edges};
+  const std::array failures{
+      UnloadWhy::pair_capacity,         UnloadWhy::axis_capacity,
+      UnloadWhy::signed_trial_capacity, UnloadWhy::ownership_capacity,
+      UnloadWhy::pressure_capacity,     UnloadWhy::edge_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return UnloadState::capacity;
+    }
+  const auto request = boarding_route_port_unload_controls();
+  BoardingRouteFootPhaseRefusal phase_reason;
+  auto state =
+      boarding_route_foot_phase_cell(request, first, last, reverse, caps.phase,
+                                     work.phase, out.phase, phase_reason);
+  if (state != UnloadState::accepted) {
+    reason.condition = UnloadWhy::phase_predicate;
+    reason.phase_condition = phase_reason.condition;
+    reason.side = phase_reason.side;
+    reason.limiting_bound = phase_reason.limiting_bound;
+    return state;
+  }
+  out.arithmetic_supported = true;
+  state = unload_self(caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  const BoardingRoutePortUnloadCellToken token(context, out);
+  state = boarding_route_port_unload_pressure(token, caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  out.complete =
+      out.phase.complete && out.self_complete && out.nonnegative_reactions &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  reason = {};
+  return out.complete ? UnloadState::accepted
+                      : unload_refuse(reason, UnloadWhy::incomplete_cover);
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+auto detail::boarding_route_port_unload_support_math(
+    const BoardingRoutePortUnloadNumericSolid& input, Vec direction)
+    -> std::expected<BoardingRoutePortUnloadSupportMath, std::string> {
+  const auto convert = [](BoardingPlantedLegPointBounds b,
+                          double maximum) -> Point {
+    return {phase_numeric_interval({b.lower.x, b.upper.x}, maximum),
+            phase_numeric_interval({b.lower.y, b.upper.y}, maximum),
+            phase_numeric_interval({b.lower.z, b.upper.z}, maximum)};
+  };
+  if (input.shape != SelfShape::box && input.shape != SelfShape::ellipsoid &&
+      input.shape != SelfShape::capsule)
+    return std::unexpected("Numeric unload solid shape is invalid");
+  UnloadSolid solid;
+  solid.shape.shape = input.shape;
+  solid.shape.first = convert(input.first, 8);
+  solid.shape.second = convert(input.second, 8);
+  solid.shape.half = input.half_size_metres;
+  solid.shape.radius = input.radius_metres;
+  if (!self_point_supported(solid.shape.first) ||
+      !self_point_supported(solid.shape.second) || !self_direction(direction))
+    return std::unexpected("Numeric unload support requires ordered finite "
+                           "points and nonzero bounded direction");
+  BoardingRoutePhaseFrameEvidence frame;
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!self_point_supported(convert(input.columns[i], 1)))
+      return std::unexpected(
+          "Numeric unload columns require ordered bounds in[-1,1]");
+    frame.columns[i].value = input.columns[i];
+  }
+  if (input.shape == SelfShape::capsule) {
+    if (!bounded(input.radius_metres, 8) || input.radius_metres <= 0)
+      return std::unexpected(
+          "Numeric unload radius must be finite positive abs<=8");
+  } else
+    for (const auto half : {input.half_size_metres.x, input.half_size_metres.y,
+                            input.half_size_metres.z})
+      if (!bounded(half, 8) || half <= 0)
+        return std::unexpected(
+            "Numeric unload halves must be finite positive abs<=8");
+  if (!bounded(input.radius_metres, 8) || input.radius_metres < 0 ||
+      !bounded(input.half_size_metres.x, 8) ||
+      !bounded(input.half_size_metres.y, 8) ||
+      !bounded(input.half_size_metres.z, 8))
+    return std::unexpected(
+        "Numeric unload dimensions must be finite bounded values");
+  BoardingRoutePortUnloadSupportMath out;
+  if (!supported_environment()) return out;
+  solid.frame = &frame;
+  const auto support = unload_support(solid, direction);
+  if (support.supported) {
+    out.support = bounds(support);
+    out.arithmetic_supported = true;
+  }
+  return out;
+}
+} // namespace apsis_drift

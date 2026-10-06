@@ -949,6 +949,8 @@ void observe_and_controls(const OriginBoardingBootSupport& boot,
     std::cout << " name=" << p.first_refusal->source_object;
   }
   std::cout << '\n';
+  check(p.initial_material_exclusion,
+        "Observed complete initial material exclusion remains qualified");
   accounting(d);
   owned_body(d);
   check(snapshot(d.initial) == old,
@@ -1099,6 +1101,8 @@ void constructor_controls() {
               << " certified=" << (outcome && outcome->certified);
     if (!outcome) std::cout << " error=" << outcome.error();
     std::cout << '\n';
+    check(outcome.has_value(),
+          "Observed genuine curve enclosure remains admitted");
     if (!outcome) {
       constructors_complete = false;
       continue;
@@ -1194,6 +1198,8 @@ void constructor_controls() {
               << " certified=" << (outcome && outcome->certified);
     if (!outcome) std::cout << " error=" << outcome.error();
     std::cout << '\n';
+    check(outcome.has_value(),
+          "Observed genuine support enclosure remains admitted");
     if (!outcome) {
       constructors_complete = false;
       continue;
@@ -1367,8 +1373,10 @@ int main() {
               << admission.has_value();
     if (!admission) std::cout << " error=" << admission.error();
     std::cout << '\n';
-    // Genuine source constructor admission is itself an unknown first outcome.
-    // A refusal remains an honest receipt; no public material query can follow.
+    // Failed and corrected first-observation logs are retained separately;
+    // the now-observed complete admission must remain a positive regression.
+    check(admission.has_value(),
+          "Observed complete genuine material source remains admitted");
     if (admission) {
       const auto source = *admission;
       invalid_source_controls(binding, boot, source);
