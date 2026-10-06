@@ -800,6 +800,89 @@ void volume_controls() {
                                                last, .125, 17),
         "Raw capsule fixture cannot raise the original sixteen-axis ceiling");
 }
+void observed_outcome(const Diagnostic& d, std::size_t request) {
+  const auto& p = d.result.world;
+  constexpr std::array<std::size_t, 8> cells{163, 163, 85, 9, 69, 84, 1, 1};
+  constexpr std::array<std::array<std::uint64_t, 24>, 8> work{
+      {std::array<std::uint64_t, 24>{
+           1590,   1582, 23728, 2445,    15,  0,   20992, 7473,
+           352622, 0,    0,     5246877, 0,   90,  11074, 15906,
+           171968, 192,  0,     0,       326, 154, 308,   0},
+       std::array<std::uint64_t, 24>{
+           1590,   1582, 23728, 2445,    15,  0,   20992, 7473,
+           352622, 0,    0,     5246877, 0,   90,  11074, 15906,
+           171968, 192,  0,     0,       326, 154, 308,   0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  1275, 15,    0,
+                                     9220, 2635, 346923, 75,   8100,  5325345,
+                                     0,    66,   5310,   7226, 82240, 192,
+                                     0,    0,    170,    0,    0,     0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  135, 15,   0,
+                                     1035, 306,  352110, 75,  8100, 5340906,
+                                     0,    66,   594,    843, 9216, 192,
+                                     0,    0,    18,     0,   0,    0},
+       std::array<std::uint64_t, 24>{1590, 1582, 23728,  1035, 15,    0,
+                                     9354, 3149, 352622, 0,    0,     5246877,
+                                     0,    90,   5170,   7837, 80512, 192,
+                                     0,    0,    138,    154,  308,   0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  1260, 15,    0,
+                                     9886, 3192, 352622, 75,   8100,  5347629,
+                                     0,    66,   5434,   7677, 84256, 192,
+                                     0,    0,    168,    31,   62,    0},
+       std::array<std::uint64_t, 24>{
+           1759, 1751, 26265, 15, 15,  0,   106, 30, 346923, 75, 8100, 5325345,
+           0,    61,   61,    78, 944, 192, 0,   0,  2,      0,  0,    0},
+       std::array<std::uint64_t, 24>{
+           1590, 1582, 23728, 15,  15,   0,   151, 46, 352622, 0, 0, 5246877,
+           0,    90,   90,    139, 1408, 192, 0,   0,  2,      3, 6, 0}}};
+  constexpr std::array<bool, 8> complete{false, false, true, true,
+                                         false, true,  true, false};
+  check(request < cells.size(),
+        "Observed request has a registered FIRST record");
+  if (request >= cells.size()) return;
+  check(d.result.child && d.result.child->complete &&
+            d.result.child->cells.size() == cells[request] &&
+            p.world_version == 3 && p.bindings_complete && p.source_complete &&
+            p.arithmetic_supported && p.domain_complete,
+        "Frozen FIRST retains complete original child, source and "
+        "arithmetic/domain prerequisites");
+  check(p.complete == complete[request] &&
+            p.material_exclusion == complete[request] &&
+            p.halo_surface_exclusion == complete[request] &&
+            p.first_refusal.has_value() == !complete[request],
+        "Frozen FIRST request retains its exact material/HALO completion or "
+        "honest refusal");
+  std::array<std::uint64_t, 24> actual{};
+  for (std::size_t i = 0; i < caps.size(); ++i)
+    actual[i] = p.work.*caps[i].work;
+  actual[18] = p.work.collapsed_triangles;
+  actual[19] = p.work.sole_triangle_exclusions;
+  actual[20] = p.work.sole_volume_exclusions;
+  actual[21] = d.boundary_work.witness_attempts;
+  actual[22] = d.boundary_work.signed_support_calls;
+  actual[23] = d.boundary_work.width_attempts;
+  check(
+      actual == work[request],
+      "Frozen FIRST retains every observed actual WORLD and boundary counter");
+  check(p.output_capacity_bytes == (request >= 6 ? 49616u : 10418744u),
+        "Frozen FIRST retains actual owned output accounting");
+  check(!d.seal_segment, "Every normal FIRST request leaves seal attribution "
+                         "empty on complete/unrelated outcomes");
+  if (!complete[request] && p.first_refusal) {
+    const auto& r = *p.first_refusal;
+    check(r.condition == Condition::missing_relation && r.source == 1589 &&
+              r.part == 12 &&
+              r.source_object == "WF02 | separation load ring" &&
+              r.phase_index == 2 &&
+              r.cell == (request == 4   ? 43u
+                         : request == 7 ? 0u
+                                        : 137u) &&
+              r.global_first == (request == 7 ? 1. : .8203125) &&
+              r.global_last == (request == 7 ? 1. : .828125) && !r.triangle &&
+              !r.source_key,
+          "Frozen FIRST retains the exact original separation load ring "
+          "refusal and closed child interval");
+  }
+}
 void observe(const OriginBoardingBootSupport& boot,
              const OriginBoardingInitialMaterial& base,
              const OriginBoardingCheckpointMaterialExtension& extension,
@@ -815,7 +898,8 @@ void observe(const OriginBoardingBootSupport& boot,
   }
   auto first = std::move(*r);
   print("FIRST_PUBLIC_CHECKPOINT_WORLD_MATERIAL03", first);
-  // First genuine WORLD03 outcome is unknown until this retained observation.
+  // Preserve FIRST logging before mandatory regressions from frozen4e981a1.
+  observed_outcome(first, 0);
   accounting(first);
   const auto original =
       require(assess_origin_boarding_route_checkpoint_unload_self02(boot));
@@ -846,6 +930,7 @@ void observe(const OriginBoardingBootSupport& boot,
       continue;
     }
     print("WORLD03_REQUEST_" + std::to_string(i), *result);
+    observed_outcome(*result, i);
     accounting(*result);
     const auto child = require(
         assess_origin_boarding_route_checkpoint_unload_self02(boot, a, b));
@@ -920,6 +1005,13 @@ int main() {
     if (seal_evidence.strip) std::cout << " strip=" << *seal_evidence.strip;
     if (seal_evidence.vertex) std::cout << " vertex=" << *seal_evidence.vertex;
     std::cout << '\n' << std::flush;
+    check(seal.has_value() && seal_evidence.complete &&
+              seal_evidence.condition ==
+                  detail::BoardingHatchSealMaterialCondition::none &&
+              seal_evidence.work.raw_inclusions == 480 &&
+              seal_evidence.work.quantized_inclusions == 480,
+          "Frozen FIRST WORLD03 remains available through genuine completed "
+          "seal admission");
     if (seal) {
       invalid_controls(binding, boot, base, *extension, *seal);
       auto empty = *seal;

@@ -523,9 +523,29 @@ int main() {
     if (!admission) std::cout << " error=" << admission.error();
     std::cout << '\n' << std::flush;
     log("FIRST_HATCH_SEAL_CONSTRUCTOR", evidence);
-    // Genuine constructor outcome remains unknown before this retained
-    // observation.
+    // Preserve FIRST logging before mandatory regressions from frozen4e981a1.
     accounting(evidence);
+    const auto& w = evidence.work;
+    check(
+        public_admission.has_value() && admission.has_value() &&
+            evidence.complete && evidence.condition == Condition::none &&
+            w.version == 1 && w.bindings_complete && w.arithmetic_supported &&
+            w.constructors_complete,
+        "Frozen FIRST seal factory and authentic constructor remain complete");
+    check(w.source_bytes == 10388 && w.segments == 8 && w.base_guards == 43 &&
+              w.coordinate_guards == 540 && w.bound_guards == 540 &&
+              w.index_guards == 480 && w.strip_guards == 160 &&
+              w.raw_inclusions == 480 && w.quantized_inclusions == 480,
+          "Frozen FIRST constructor retains every observed actual source/work "
+          "count");
+    check(w.raw_radius == 0x1.aa03e80000001p-7 &&
+              w.game_radius == 0x1.aa126f8d005c9p-7,
+          "Frozen FIRST raw-storage and grid radii retain their exact observed "
+          "binary64 values");
+    check(!evidence.source && !evidence.triangle && !evidence.strip &&
+              !evidence.vertex && !evidence.axis && !evidence.quantized,
+          "Complete constructor retains no failed source/ordinal/predicate "
+          "attribution");
     check(public_admission.has_value() == admission.has_value(),
           "Public factory and independently replayed authentic detailed issuer "
           "agree");

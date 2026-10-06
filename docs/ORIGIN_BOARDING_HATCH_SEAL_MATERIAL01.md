@@ -1,6 +1,6 @@
 # Hatch-seal material SealSweep01
 
-**Registered before implementation or capture.** Continuing #457 after #458 merged at `aaec520`. Select a conditional, source-specific finite material completion; original source1, Boundary03, body/control/clock/hardware/save identities stay unchanged. Capture, issuer and WORLD outcomes are **UNKNOWN**.
+**Registered before implementation or capture.** Continuing #457 after #458 merged at `aaec520`. Select a conditional, source-specific finite material completion; original source1, Boundary03, body/control/clock/hardware/save identities stay unchanged. At registration, capture, issuer and WORLD outcomes were **UNKNOWN**; retained results are below.
 
 ## Fixed source and current-setting uncertainty
 
@@ -109,3 +109,33 @@ GCC child chain48904B and Clang45192B remain below49152B. Maximum owned output
 10418744B fits16MiB. Original source/header byte prefixes and old Boundary03
 implementation are preserved. No issuer/WORLD numerical outcome follows from
 these compile-only measurements; FIRST remains unknown at this freeze.
+
+## Retained FIRST results
+
+At frozen head `4e981a1c4d086f06e9901f43047ccf74c46c6f28`, first GCC and pinned
+Clang20 logs agree byte-for-byte. Genuine SealSweep01 is **admitted**, with
+10388B source, raw/game radii0.013000953942537309 /0.01300268599334488m,
+and actual work43base/540coordinates/540bounds/480indices/160strips/
+480raw+480grid inclusions/8segments. Both issuer tests pass3256checks.
+
+WORLD03 passes2480checks with one unchanged original cover. Preparation[0,.25]
+(85cells), pivot[.25,.5](9), subrange[.125,.75](84), and point0(1) complete
+material/domain/HALO exclusion. Whole/reverse(163cells), finish(69), and point1
+remain incomplete on **missing relation source1589** `WF02 | separation load
+ring`, starboard upper arm part12. Whole/reverse refusal is cell137/phase2/
+global[.8203125,.828125]; finish cell43; point1 cell0/global[1,1]. This is an
+unknown material relation, not an established collision. Seal segment attribution
+is empty in all eight normal requests because none refuses on a seal obligation.
+
+Whole actual work is1590roster/1582effective/23728union-envelope/2445union-proxy/
+15domain-union/0domain-cell/20992proxy/7473refined-envelope/352622material-triangle/
+0HALO-metadata/0HALO-triangle/5246877triangle-union/0refined-triangle/
+90base-enclosure/11074refined-enclosure/15906axes/171968prepared-directions/
+192sole-guards/0collapsed/0sole-triangle/326sole-volume. Boundary work stays
+154witness/308signed-support/0width. Whole output is10418744B; point output49616B.
+
+Original WORLD02 still refuses source1441/part12/cell133 at its historical
+interval; its policy was not silently replaced. Complete #361 transfer,
+actual seated endpoint, actor/save qualification and First Flight remain open.
+
+The remaining load-ring source completion is tracked in [#459](https://github.com/gobha-me/apsis-drift/issues/459).
