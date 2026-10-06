@@ -97,3 +97,15 @@ it empty; successful segment checks never set it. The old WORLD01/02 refusal
 layout remains unchanged. This diagnostic addition grants no material or actor
 authority and raises no source/work/live/output ceiling. Final sizeof/stack
 receipts include the new field and its borrowed stage pointer before FIRST.
+
+## Frozen storage before FIRST
+
+Prepared immutable source9220B plus Data1104B/control reserve64B gives10388B
+new authenticated source. Constructor live6160B fits8192B, independently
+reviewed with sequential helper/return/error lifetimes. Final production-flag
+O3 GCC inclusion chain4288B and pinnedClang20 chain3584B include caller evidence.
+WORLD03 expected1960B/stage64B give sourceWORLD16264B and co-live child48352B;
+GCC child chain48904B and Clang45192B remain below49152B. Maximum owned output
+10418744B fits16MiB. Original source/header byte prefixes and old Boundary03
+implementation are preserved. No issuer/WORLD numerical outcome follows from
+these compile-only measurements; FIRST remains unknown at this freeze.

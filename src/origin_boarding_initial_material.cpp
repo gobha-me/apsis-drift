@@ -1539,3 +1539,32 @@ auto initial_material_extension_binding_matches(
          incoming_selection->hardware == OperatingProgress{1, 1, 1, 0};
 }
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+auto initial_material_capsule_vertex_math(Bounds p, Bounds first, Bounds last,
+                                          double radius)
+    -> std::expected<MaterialConstructorMathEvidence, std::string> {
+  const auto valid_local = [](Bounds b) {
+    if (!valid(b)) return false;
+    for (std::size_t a = 0; a < 3; ++a)
+      if (std::abs(component(b.lower, a)) > 8 ||
+          std::abs(component(b.upper, a)) > 8)
+        return false;
+    return true;
+  };
+  if (!valid_local(p) || !valid_local(first) || !valid_local(last) ||
+      !std::isfinite(radius) || radius <= 0 || radius > 8)
+    return std::unexpected(
+        "Capsule vertex finite ordered eight-metre input required");
+  MaterialConstructorMathEvidence out;
+  if (!environment()) return out;
+  Scalar length = scalar(0);
+  for (std::size_t a = 0; a < 3; ++a)
+    length = add(length, square(sub(axis(last, a), axis(first, a))));
+  if (!length.supported || length.lower <= 0) return out;
+  out.arithmetic_supported = true;
+  out.inclusion_predicates = 1;
+  out.certified = contained_capsule(p, first, last, radius);
+  return out;
+}
+} // namespace apsis_drift::detail

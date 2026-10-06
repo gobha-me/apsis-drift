@@ -74,6 +74,8 @@ jobs:
           python3 test/material_source_completion_test.py
           python3 test/prepare_material_source_test.py
           python3 test/prepare_checkpoint_material_extension_test.py
+          python3 tools/boarding/prepare_hatch_seal_material.py --self-test
+          python3 test/prepare_hatch_seal_material_test.py
 
       - name: Check corrected-rest attribution and finite assembly proofs
         run: python3 test/wayfarer_corrected_rest_checks_test.py
