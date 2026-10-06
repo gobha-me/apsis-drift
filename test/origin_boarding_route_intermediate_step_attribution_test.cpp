@@ -367,6 +367,7 @@ void print_first(const Report& r) {
   std::cout << std::flush;
 }
 void point_oracles(const Report& r) {
+  std::array<bool, 2> coarse{};
   for (std::size_t i = 2; i < 8; ++i) {
     const auto& c = r.cases[i];
     const auto u = c.interval.local_first;
@@ -383,6 +384,9 @@ void point_oracles(const Report& r) {
     for (auto x : o.angles)
       std::cout << x << ',';
     std::cout << '\n';
+    if (i >= 6)
+      coarse[i - 6] = o.valid && o.F2 > 0 && o.margins[4] < 0 &&
+                      o.angles[5] > std::numbers::pi_v<long double> / 6;
     if (!c.closure.written) continue;
     check(side < 2 && o.valid, "Actually reached leg closure has independent "
                                "positive unfactored sphere solution");
@@ -404,6 +408,10 @@ void point_oracles(const Report& r) {
             "Strict forward-shin bound corroborates original F2");
   }
   std::cout << std::flush;
+  for (bool corroborated : coarse)
+    check(corroborated,
+          "Independent coarse-point oracle corroborates ankle pitch "
+          "beyond30degrees with positive forward-shin component");
 }
 [[gnu::noinline]] void static_guards() {
   const std::array<std::array<double, 2>, 8> locations{
@@ -536,6 +544,62 @@ void point_oracles(const Report& r) {
           "Raised driver ceiling refuses before any replay");
   }
 }
+// Added only after both frozen09f77bb FIRST logs agreed. These are retained
+// diagnostic outcomes, not a replacement path or continuous-motion proof.
+void observed_outcomes(const Report& r) {
+  check(r.complete_manifest && r.attempted_cases == 8 &&
+            r.output_capacity_bytes == 4672 && r.work.graphs == 8 &&
+            r.work.legs == 12 && r.work.bodies == 4 && r.work.sectors == 16 &&
+            r.work.timing == 24,
+        "Frozen diagnostic retains all eight actual calls and one original "
+        "aggregate work ledger");
+  const std::array<Bounds, 2> interval_bounds{
+      {{-5.457909659112304e-05, .00039041924679814049},
+       {-1.4626336539147469e-06, .00013341588569426579}}};
+  const std::array<Bounds, 2> violation_bounds{
+      {{-.0061777525694312893, -.0061777525694240712},
+       {-.024489139830267435, -.024489139830260211}}};
+  for (std::size_t i = 0; i < 8; ++i) {
+    const auto& c = r.cases[i];
+    check(c.closure.written && c.evidence_side == 0,
+          "Every recorded case reached authentic port-leg closure");
+    if (i >= 2 && i <= 5) {
+      check(c.state == State::accepted &&
+                c.reason.condition == Condition::none && !c.reason.side &&
+                !c.attribution.classified &&
+                c.attribution.sector == Sector::none &&
+                c.attribution.evaluated_mask == 63 && !c.point_violation,
+            "Four frozen early point replays pass original kinematics without "
+            "whole-interval authority");
+      for (auto margin : c.sector_margins)
+        check(margin.lower > 0, "All six original early point sectors have "
+                                "positive outward margin");
+      continue;
+    }
+    check(c.state == State::unresolved &&
+              c.reason.condition == Condition::joint_sector &&
+              c.reason.side == 0 && c.attribution.classified &&
+              c.attribution.sector == Sector::ankle_pitch &&
+              c.attribution.evaluated_mask == 31,
+          "Original first refusing obligation is port ankle pitch, not another "
+          "sector or strict F2 guard");
+    const auto bound = i < 2 ? interval_bounds[i] : violation_bounds[i - 6];
+    check(c.reason.limiting_bound.lower == bound.lower &&
+              c.reason.limiting_bound.upper == bound.upper &&
+              c.sector_margins[4].lower == bound.lower &&
+              c.sector_margins[4].upper == bound.upper,
+          "Frozen original ankle-sector bound remains unchanged");
+    if (i < 2)
+      check(bound.lower < 0 && bound.upper > 0 && !c.point_violation,
+            "Retained interval straddles remain unresolved without proving an "
+            "exact forbidden pose");
+    else
+      check(bound.upper < 0 && c.point_violation &&
+                c.interval.local_first == c.interval.local_last,
+            "Two preregistered coarse points have outward necessary "
+            "ankle-sector violations");
+  }
+}
 [[gnu::noinline]] auto first_observation() -> Summary {
   auto r = run_intermediate_sector_attribution();
   audit(r);
@@ -548,6 +612,7 @@ void point_oracles(const Report& r) {
   print_first(*r);
   point_oracles(*r);
   validate_report(*r);
+  observed_outcomes(*r);
   return summary(*r);
 }
 void same_work(const BoardingRouteFootPhaseCounters& a,

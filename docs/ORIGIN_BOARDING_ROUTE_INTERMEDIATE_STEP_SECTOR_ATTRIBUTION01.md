@@ -53,3 +53,42 @@ output does not silently overlap later query/pending returns. Independent
 oracle comparisons and bounded printing are staged after graph replay. Final
 actual caller/main/helper stack chains and summary bytes join the pre-FIRST
 ledger; source-level scopes alone do not replace compiler frame measurements.
+
+
+## Retained FIRST outcome
+
+Frozen executable/source09f77bbbc41a8de779177119155ece502766974e, before
+outcome regressions: GCC and pinnedClang20 both exit0 with byte-identical
+6,392B output, SHA256
+`0234d8e70408ce0f18a3f1693440cab0c590673f4838d870dd33504612e708ee`.
+726 checks passed;75 actual cell invocations include the fixed validation
+roster, below110. FIRST attempts all8 ordinary cases, work8/12/4/16/24
+(graph/leg/body/sector/timing).
+
+Both retained terminal intervals are port ankle-pitch30° refusals (original
+ordinal4, driver sector5, reached mask31). Their original bounds remain
+straddling, so neither interval refusal alone proves an actual pose failure.
+The four early points (cases2–5) are accepted; finite acceptance cannot qualify
+the surrounding intervals.
+
+|Fixed point|Original outward ankle-pitch margin|Independent approximate ankle pitch|Outcome|
+|---|---|---|---|
+|Local1/8, global1/32|[-0.0061777525694312893,-0.0061777525694240712]|30.746°|Necessary-sector violation witness|
+|Local1/4, global1/16|[-0.024489139830267435,-0.024489139830260211]|32.957°|Necessary-sector violation witness|
+
+Both point upper bounds are strictly negative. F2 remains positive; this is
+ankle pitch, not the separate strict forward-shin guard. Independent
+long-double positive-closure calculation corroborates the reached original
+point bounds. Later axial slots remain UNEVALUATED on each refusing packet.
+The unchanged trajectory has real point violations, so improving interval
+bounds alone cannot qualify it. This diagnostic chooses no replacement motion
+and grants no source, contact, load, self, material, WORLD, route, seat, actor,
+save or dynamics authority. #462/#361/FirstFlight remain open.
+
+
+Mandatory retained-outcome assertions were added after FIRST, without extra
+cell or oracle calls. Independent final O3 caller measurements are35,056B GCC
+and29,968B pinnedClang20; source-live45,600B and output4672B remain unchanged.
+The added assertions distinguish the straddling interval packets, positive
+early points and negative coarse point witnesses while preserving the exact
+original bounds and all false game-authority flags.

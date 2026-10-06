@@ -62,7 +62,7 @@ player's station-to-flight journey.
 - [IntermediateStep01 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP01.md):
   frozen moving-foot candidate, shared kinematic cover and retained joint-sector refusal.
 - [SectorAttribution01 diagnostic](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP_SECTOR_ATTRIBUTION01.md):
-  eight fixed replays to attribute the retained joint bound without changing motion.
+  eight fixed replays identify port ankle-pitch violations in the unchanged motion.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
   admitted frame/nose relations; remaining hatch seal material gap.
 - [Checkpoint material Union02](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_UNION02.md):
