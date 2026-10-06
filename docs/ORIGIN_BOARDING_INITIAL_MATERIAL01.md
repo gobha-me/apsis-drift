@@ -42,6 +42,15 @@ Input capture stays within approved 24MiB binary +8MiB metadata. Runtime decoded
 
 Result owns the original child and retains one source capability. Fixed output records the 15 certificate summaries, complete effective/source counts, actual work, first refusal source/part/stage, source/material recipe versions and named exclusions. Complete initial_material_exclusion can be true only after every effective object pair is certified. Continuous route, physical dynamics/strength, seat, actor/save and First Flight remain false. This gives a real initial world-material prerequisite that the eventual complete supported route can reuse. Future route unions intersecting uncompleted original object relations genuinely refuse and expand the next material shortlist; initial success is not a universe-wide volume claim.
 
+The retained directional support kernel encloses the support maximum `h(n)`.
+Its lower endpoint is not the minimum projection of a solid. Full projection
+uses `[-h(-n).upper, h(n).upper]`; a primitive plane exclusion requires the
+true minimum to exceed the enclosing plane. Both body and source use this
+signed relation in capsule separation. Work-capacity parameters remain distinct
+from geometric plane maxima. The first boundary controls exposed these two
+implementation errors before any public material assessment could run; their
+correction changes neither geometry nor the registered limits.
+
 ## Required controls before public assessment
 
 Independently check conservative encloser containment for actual POLY ring strips and evaluated support vertices; changing a point, bevel setting, source fingerprint or owner must refuse. Complete shell-sheet cavity positive control must pass with an interior body when no sheet intersects; a filled bounding hull is a negative implementation. A small body wholly inside an enclosing filled primitive with surface-clear boundaries must refuse acceptance. A curve bend/extra-cap false positive may refuse, but cannot claim actual material penetration. Test missing relations, retained moved/copy-source lifetimes, all165 moving matrices, duplicate/double transforms, eight exact removals, thirteen once-only replacements and absent-crop source inclusion.

@@ -588,6 +588,54 @@ void arithmetic_controls() {
             !detail::initial_material_primitive_math(body, 0, planes, 17),
         "Empty primitive and increased axis capacity refuse");
 }
+void signed_projection_regressions() {
+  const auto planes = cube_planes();
+  for (double sign : {-1., 1.}) {
+    // This off-center box spans [.7,1.1] (or its mirror): its maximum
+    // crossing a hull plane is not a separating minimum certificate.
+    const auto overlap = box({sign * .9, 0, 0}, {.2, .125, .125});
+    const auto primitive =
+        require(detail::initial_material_primitive_math(overlap, 0, planes));
+    check(primitive.arithmetic_supported && !primitive.certified,
+          "Off-center box overlapping filled prism cannot substitute positive "
+          "support for minimum projection");
+    numeric_denied(primitive);
+    const auto touching = box({sign * 1.25, 0, 0}, {.25, .125, .125});
+    check(!require(detail::initial_material_primitive_math(touching, 0, planes))
+               .certified,
+          "Off-center full reservation exactly touching filled prism remains "
+          "strict");
+    const Solid capsule{point({sign * .25, -.5, 0}),
+                        point({sign * .75, .5, 0}),
+                        {},
+                        .15,
+                        Shape::capsule};
+    check(!require(detail::initial_material_primitive_math(capsule, 0, planes))
+               .certified,
+          "Angled off-center capsule inside filled prism cannot gain "
+          "minimum-from-maximum exemption");
+    const auto source_first = point({sign * 1., -.5, 0}),
+               source_last = point({sign * 1., .5, 0});
+    const auto capsule_pair = require(detail::initial_material_capsule_math(
+        capsule, 0, source_first, source_last, .2));
+    // World point (+/-.875,.5,0) has distance .125 to both endpoint axes,
+    // strictly below the original .15 and .2 radii. It witnesses overlap.
+    check(.125 < .15 && .125 < .2 && !capsule_pair.certified &&
+              capsule_pair.arithmetic_supported,
+          "Asymmetric capsule enclosers with genuine common interior cannot "
+          "separate using maxima");
+    numeric_denied(capsule_pair);
+    const auto body = box({sign * 1.5, 0, 0}, {.4, .125, .125});
+    const auto box_pair = require(detail::initial_material_capsule_math(
+        body, 0, source_first, source_last, .2));
+    // (+/-1.15,0,0) is strictly inside both this full box and the source
+    // cylinder, regardless of their differing positive-axis maxima.
+    check(!box_pair.certified && box_pair.arithmetic_supported,
+          "Asymmetric full box and capsule with common interior retain both "
+          "signed support bounds");
+    numeric_denied(box_pair);
+  }
+}
 void source_summary(const OriginBoardingInitialMaterial& s) {
   const auto* p = s.summary();
   check(p && p->bindings_complete && p->constructors_complete,
@@ -1309,6 +1357,7 @@ int main() {
   try {
     static_assert(sizeof(Payload) <= 16384);
     arithmetic_controls();
+    signed_projection_regressions();
     constructor_controls();
     const auto binding = require(make_native_starting_assembly_binding(
         NativeStartingAssemblySelection{}));

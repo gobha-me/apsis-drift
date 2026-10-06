@@ -208,16 +208,36 @@ auto contained_capsule(Bounds p, Bounds first, Bounds last, double radius)
   const auto rr = square(scalar(radius));
   return distance.supported && rr.supported && distance.upper <= rr.lower;
 }
+// The old kernel encloses the support MAXIMUM h(n), not the projection
+// range. Use both signed supports to enclose every point of the solid:
+// [min dot(n,p), max dot(n,p)] is [-h(-n),h(n)]. In particular h(n).lower
+// must never be used as the minimum of a body or source projection.
+auto projection(const Solid& solid, double common, Vec n)
+    -> std::expected<Scalar, std::string> {
+  const auto positive =
+      detail::boarding_source_endpoint_surface_checkpoint_support_math(
+          solid, common, n);
+  if (!positive || !positive->supported)
+    return std::unexpected("Material positive support unsupported");
+  const Vec negative_direction{-n.x, -n.y, -n.z};
+  const auto negative =
+      detail::boarding_source_endpoint_surface_checkpoint_support_math(
+          solid, common, negative_direction);
+  if (!negative || !negative->supported)
+    return std::unexpected("Material negative support unsupported");
+  auto result = range(-negative->upper, positive->upper);
+  if (!result.supported)
+    return std::unexpected("Material signed projection unsupported");
+  return result;
+}
 auto world_bounds(const Solid& body, double common)
     -> std::expected<Bounds, std::string> {
   Bounds out;
   for (std::size_t a = 0; a < 3; ++a) {
     Vec n{};
     set(n, a, 1);
-    auto s = detail::boarding_source_endpoint_surface_checkpoint_support_math(
-        body, common, n);
-    if (!s || !s->supported)
-      return std::unexpected("Material full reservation support unsupported");
+    auto s = projection(body, common, n);
+    if (!s) return std::unexpected(s.error());
     set(out.lower, a, s->lower);
     set(out.upper, a, s->upper);
   }
@@ -226,9 +246,7 @@ auto world_bounds(const Solid& body, double common)
 auto support_source(Bounds first, Bounds second, double radius, Vec n)
     -> Scalar {
   const Solid source{first, second, {}, radius, Shape::capsule};
-  const auto support =
-      detail::boarding_source_endpoint_surface_checkpoint_support_math(source,
-                                                                       0, n);
+  const auto support = projection(source, 0, n);
   return support ? *support : Scalar{};
 }
 auto bounded_direction(Vec v) -> Vec {
@@ -282,8 +300,8 @@ static_assert(sizeof(BoardingSourceEndpointLoadDiagnostic) == 34136);
 static_assert(sizeof(BoardingInitialMaterialPayload) == 2264);
 static_assert(sizeof(Data) == 86816);
 // Both compilers' O3 stack reports audited before any producer observation:
-// GCC query39424 - separately owned child34136 + capsule1248 + old kernel4096
-// +1024 control/error/outgoing pool =11656. Clang's corresponding path is
+// GCC query39424 - separately owned child34136 + capsule1248 + projection224
+// +old kernel4096 +1024 control/error/outgoing pool =11880. Clang's path is
 // smaller. The phased initial_result may briefly move old child storage but
 // ends before new geometry math. Constructor admission's retained Data is
 // source ownership, not hidden numeric scratch; its nested path is <6KiB.
@@ -380,17 +398,17 @@ auto support_proof(const detail::MaterialSupportRecord& c,
     n = bounded_direction(n);
     if (n == Vec{})
       return std::unexpected("Material primitive degenerate face");
-    double maximum = -std::numeric_limits<double>::infinity();
+    double plane_support_bound = -std::numeric_limits<double>::infinity();
     for (const auto p : points) {
       auto s = dot(p, n);
       if (!s.supported)
         return std::unexpected("Material primitive support unsupported");
-      maximum = std::max(maximum, s.upper);
+      plane_support_bound = std::max(plane_support_bound, s.upper);
     }
     const auto allowance =
         mul(scalar(source_allowance),
             scalar(std::abs(n.x) + std::abs(n.y) + std::abs(n.z)));
-    support.planes[f] = {n, add(scalar(maximum), allowance)};
+    support.planes[f] = {n, add(scalar(plane_support_bound), allowance)};
     for (std::size_t v = 0; v < mesh.raw_vertices.size(); ++v)
       for (unsigned representation = 0; representation < 2; ++representation) {
         if (checked >= maximum)
@@ -762,8 +780,7 @@ auto initial_material_capsule_math(const Solid& body, double common,
     ++out.axes_examined;
     auto n = bounded_direction(directions[i]);
     if (n == Vec{}) continue;
-    auto s = boarding_source_endpoint_surface_checkpoint_support_math(
-        body, common, n);
+    auto s = projection(body, common, n);
     auto t = support_source(first, last, radius, n);
     if (!s || !s->supported || !t.supported) {
       out.arithmetic_supported = false;
@@ -792,13 +809,14 @@ auto initial_material_primitive_math(const Solid& body, double common,
         !valid(point(p.normal)) || p.normal == Vec{})
       return std::unexpected("Material finite supported plane required");
     ++out.axes_examined;
+    const Vec negative_direction{-p.normal.x, -p.normal.y, -p.normal.z};
     auto b = boarding_source_endpoint_surface_checkpoint_support_math(
-        body, common, p.normal);
+        body, common, negative_direction);
     if (!b || !b->supported) {
       out.arithmetic_supported = false;
       return out;
     }
-    if (b->lower > p.maximum.upper) {
+    if (-b->upper > p.maximum.upper) {
       out.certified = true;
       return out;
     }
