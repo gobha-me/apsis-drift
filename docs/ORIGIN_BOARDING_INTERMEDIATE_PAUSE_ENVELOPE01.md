@@ -1,5 +1,17 @@
 # Intermediate pause: fixed fore/aft support bound01
 
+The first forward and reverse runs **refute the fixed 25% port / 75% starboard
+nominal vertical load split**. Their strictly positive gap is
+`[0.038039693628896025, 0.038039693628901923]` metres. Moving the pressure
+resultants within the full actual soles and authenticated contact quads cannot
+balance this exact pose at that split. This does not establish a dynamic or
+friction result, or rule out a separately defined posture or load split.
+Boarding movement, contact support and actor integration remain open.
+
+The registration and forecasts below are retained as the method recorded before
+implementation. Measured resource limits and the first outcome follow them.
+
+
 Selected method for [#471](https://github.com/gobha-me/apsis-drift/issues/471), child of #462 after #469/PR#470 merged. This registration precedes code and every new source/candidate/graph/fixture/oracle query. The axis is +Z in the existing current lower-cockpit contact/pose frame. Source, body, immutable Step02 phase4 controls, T2 and .25/.75 reactions are unchanged.
 
 The previous common-offset disk allocation failed a strict finite edge. This method asks a different necessary question: whether ANY pair of nominal vertical pressure resultants confined to both full soles and their authentic finite source quads can balance this exact pose at its declared shares. Strict separation refutes only that selected static vertical model/share. Overlap supplies no support witness. No friction, dynamics or general physical-impossibility claim follows. All downstream qualification flags remain false and all parent issues stay open.
@@ -191,3 +203,42 @@ guard ceiling and 2/8/2/3/1 operation ceilings remain fixed.
 These are compile and lifetime measurements only. No new source creator,
 assessment, math fixture, test or oracle was executed before this gate. The
 first forward and reverse results remain unknown until the frozen binaries run.
+
+
+## Retained FIRST outcome (2026-10-06)
+
+Frozen implementation `eb41471ec3e1b7cde48c74a94f42003e5db8fdd2` ran once on
+GCC and Clang after independent pre-FIRST review. Both exited zero, and their
+2051-byte logs were identical, SHA256
+`e5ec6be9bc0fde66eceaebc283ec7237d2e9da3d767d811a212445af77c0756f`.
+
+| Quantity | Outward interval (metres, current contact-frame Z) |
+| --- | --- |
+| COM | [-0.75275030637110374, -0.75275030637109841] |
+| Port upper bound | [-1.18316, -1.18316] |
+| Starboard upper bound | [-0.66000000000000014, -0.65999999999999992] |
+| Weighted upper bound | [-0.79079000000000033, -0.79078999999999977] |
+| Gap | [0.038039693628896025, 0.038039693628901923] |
+
+Both traversals complete all 33 definition guards and new operations2/8/2/3/1.
+Each uses one unchanged old consumer with work1/2/1/3/6/251/2/16 and output2552;
+new output760. The earlier port sole-disk edge2 finding remains separate, with
+no child terminal stop. Each source perimeter uses all four genuine vertices;
+no disk erosion participates in this necessary bound.
+
+The complete fixed roster performs one public creator,47 consumers,32 old child
+calls,16 raw fixtures and two FIRST-only pose oracles. Its initial1344 checks
+pass. The 48-slot ceiling is preserved; skipped duplicate slots receive no
+replacement. All825 original inputs remain unchanged. No new source, load split,
+pressure allocation, position or oracle is sampled following this refusal.
+The next candidate requires separate registration. All support, self, WORLD,
+route, seat, actor, save and First Flight qualification flags remain false;
+parent issues stay open.
+
+
+Mandatory post-FIRST regression assertions preserve the production code, literal
+fixtures and query roster. Their final strict compile-only measurements include
+a 928 / 696-byte main frame. Conservative publication chains retain the slightly
+larger interim GCC measurement: graph39,984 /36,688 and entire creator7,056
+/6,616 bytes; the final measured chains are39,968 /36,688 and7,040 /6,616.
+The source-semantic graph bound48,488 and compact output760 are unchanged.

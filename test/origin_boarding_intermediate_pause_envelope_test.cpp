@@ -31,6 +31,7 @@ using MathInput = detail::BoardingIntermediatePauseEnvelopeMathInput;
 using Access = detail::BoardingIntermediatePauseSupportAccess;
 std::size_t checks{};
 int failures{};
+bool all_unsafe_available{true};
 void check(bool yes, std::string_view why) {
   ++checks;
   if (!yes) {
@@ -592,6 +593,99 @@ void print(const Diagnostic& d, std::size_t ordinal) {
           "enclosed");
   }
 }
+// These mandatory regressions follow the preserved initially unknown FIRST.
+[[gnu::noinline]] void observed_envelope(const Diagnostic& d) {
+  check(d.version == 1 &&
+            d.axis == BoardingIntermediatePauseEnvelopeAxis::
+                          current_contact_positive_z &&
+            d.state == State::necessary_refuted && d.arithmetic_supported &&
+            d.projection_available && d.envelope_assessed &&
+            d.necessary_refuted && !d.first_refusal && d.output_bytes == 760 &&
+            d.work.child_calls == 1 && d.work.pause.phase_calls == 1 &&
+            d.work.definition_guards == 33 &&
+            old_work(d) ==
+                std::array<std::uint64_t, 9>{1, 2, 1, 3, 6, 251, 2, 16, 2552} &&
+            stages(d.work) == std::array<std::size_t, 5>{2, 8, 2, 3, 1},
+        "Observed fresh fixed pause strictly refutes every selected nominal "
+        "vertical allocation");
+  check(d.com_z.lower == -0.75275030637110374 &&
+            d.com_z.upper == -0.75275030637109841 &&
+            d.weighted_upper_z.lower == -0.79079000000000033 &&
+            d.weighted_upper_z.upper == -0.79078999999999977 &&
+            d.gap_z.lower == 0.038039693628896025 &&
+            d.gap_z.upper == 0.038039693628901923,
+        "Observed current COM, full-patch weighted ceiling and strict gap "
+        "remain reproducible");
+  check(d.child_stop_condition == BoardingIntermediatePauseCondition::none &&
+            d.child_first_refusal &&
+            d.child_first_refusal->condition ==
+                BoardingIntermediatePauseCondition::sole_disk &&
+            d.child_first_refusal->side == 0 &&
+            d.child_first_refusal->edge == 2 &&
+            !d.child_first_refusal->source_edge,
+        "Necessary refutation preserves the earlier sufficient-witness port "
+        "sole finding");
+  check(std::all_of(d.definition_evaluated.begin(),
+                    d.definition_evaluated.end(), [](bool b) { return b; }) &&
+            std::all_of(d.weighted_evaluated.begin(),
+                        d.weighted_evaluated.end(), [](bool b) { return b; }) &&
+            d.gap_evaluated,
+        "Observed refutation retains all definition, weighted and gap masks");
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& site = d.sites[side];
+    check(site.sole_evaluated && site.minimum_evaluated &&
+              std::all_of(site.source_vertex_evaluated.begin(),
+                          site.source_vertex_evaluated.end(),
+                          [](bool b) { return b; }) &&
+              site.keys[0].group == 0 && site.keys[1].group == 0,
+          "Observed two full footprints retain all eight genuine source "
+          "vertices");
+  }
+  const auto& port = d.sites[0];
+  const auto& star = d.sites[1];
+  check(
+      port.name == "CRAFT | pilot transition intermediate step" &&
+          port.plane == static_cast<double>(-230000) * 1e-6 &&
+          port.keys[0].buffer == LowerCockpitContactBuffer::halo &&
+          port.keys[1].buffer == LowerCockpitContactBuffer::halo &&
+          port.keys[0].triangle == 662 && port.keys[1].triangle == 663 &&
+          port.sole_max_z.lower == -1 &&
+          port.sole_max_z.upper == -0.99999999999999978 &&
+          port.source_max_z.lower == -1.18316 &&
+          port.source_max_z.upper == -1.18316 &&
+          port.upper_z.lower == port.source_max_z.lower &&
+          port.upper_z.upper == port.source_max_z.upper,
+      "Observed port support ceiling is its authentic finite intermediate top");
+  check(star.name == "CABIN | cockpit transition step" &&
+            star.plane == static_cast<double>(-160000) * 1e-6 &&
+            star.keys[0].buffer == LowerCockpitContactBuffer::original &&
+            star.keys[1].buffer == LowerCockpitContactBuffer::original &&
+            star.keys[0].triangle == 62119 && star.keys[1].triangle == 62120 &&
+            star.sole_max_z.lower == -0.66000000000000014 &&
+            star.sole_max_z.upper == -0.65999999999999992 &&
+            star.source_max_z.lower == -0.61199999999999999 &&
+            star.source_max_z.upper == -0.61199999999999999 &&
+            star.upper_z.lower == star.sole_max_z.lower &&
+            star.upper_z.upper == star.sole_max_z.upper,
+        "Observed starboard support ceiling is its original unshrunk sole");
+}
+[[gnu::noinline]] void observed_source(const Provider& p) {
+  const auto* s = p.summary();
+  check(s && s->complete && s->arithmetic_supported && s->version == 1 &&
+            s->condition == BoardingIntermediatePauseCondition::none &&
+            s->required_source_bytes == 4096 && s->actual_source_bytes == 4096,
+        "Observed source admission retains the original complete allocation "
+        "proof");
+  if (!s) return;
+  const auto& w = s->work;
+  check(std::array<std::size_t, 11>{w.base_guards, w.metadata_rows,
+                                    w.face_reads, w.quad_records, w.quad_edges,
+                                    w.quad_sides, w.face_vertices,
+                                    w.corner_matches, w.face_windings,
+                                    w.incidence, w.diagonals} ==
+            std::array<std::size_t, 11>{21, 1, 2, 2, 8, 16, 12, 28, 4, 8, 2},
+        "Observed issuer work is unchanged by the necessary-envelope consumer");
+}
 [[gnu::noinline]] void create_source(const NativeCraftBinding& binding,
                                      const OriginBoardingBootSupport& boots,
                                      std::optional<Provider>& provider) {
@@ -614,7 +708,10 @@ void print(const Diagnostic& d, std::size_t ordinal) {
     }
   }
   std::cout << '\n' << std::flush;
+  check(result.has_value(),
+        "Observed public source creator admits the unchanged finite quads");
   if (result) {
+    observed_source(*result);
     check(Access::valid(*result),
           "Only genuine public creator supplies the source capability");
     provider.emplace(std::move(*result));
@@ -629,9 +726,12 @@ void print(const Diagnostic& d, std::size_t ordinal) {
     std::cout << "FIRST_PAUSE_ENVELOPE ordinal=" << (reverse ? 2 : 1)
               << " unavailable=" << result.error() << '\n'
               << std::flush;
+    check(false,
+          "Observed forward and reverse envelopes return assessed evidence");
     return;
   }
   print(*result, reverse ? 2U : 1U);
+  observed_envelope(*result);
   accounting(*result, {});
   first_oracle(*result);
   summary = summarize(*result);
@@ -724,7 +824,10 @@ void print(const Diagnostic& d, std::size_t ordinal) {
   } // A25-A33.
   for (std::size_t mode = 0; mode < 6; ++mode) {
     const Environment env(mode);
-    if (!env.available) continue;
+    if (!env.available) {
+      all_unsafe_available = false;
+      continue;
+    }
     assessment_one(p, false, {}, first, false, Condition::unsupported);
   } // A34-A39.
   {
@@ -972,6 +1075,20 @@ int main() {
               totals.oracles <= 2,
           "Exactly one creator, bounded48/16 roster and two FIRST-only "
           "candidate oracles");
+    check(
+        totals.child_calls == 32 && totals.math == 16 && totals.oracles == 2 &&
+            totals.old == std::array<std::uint64_t, 8>{30, 56, 26, 81, 158,
+                                                       6275, 48, 368} &&
+            std::equal(totals.stages.begin(), totals.stages.begin() + 5,
+                       std::array<std::size_t, 5>{41, 143, 32, 41, 12}.begin()),
+        "Observed fixed validation roster preserves its total actual child "
+        "and envelope work");
+#if defined(__SSE2__) && defined(__x86_64__)
+    if (all_unsafe_available)
+      check(totals.consumers == 47 && totals.stages[5] == 790,
+            "Observed supported-platform manifest "
+            "executes exactly forty-seven calls");
+#endif
     check(std::cout.good() && std::cerr.good() && !out.truncated &&
               !err.truncated && bytes <= 16128,
           "Complete shared execution stream remains below sixteen KiB with "
