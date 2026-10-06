@@ -1030,8 +1030,8 @@ constexpr std::array<BoardingRouteFootPhaseCondition, 5> phase_capacity{
   {
     std::optional<Provider> survivor;
     {
-      // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Copy an
-      // owner to test survival after its destruction.
+      // Destroy a copied owner before checking the surviving handle.
+      // NOLINTNEXTLINE(performance-unnecessary-copy-initialization) -- Lifetime
       const auto original = provider;
       survivor.emplace(original);
     }
