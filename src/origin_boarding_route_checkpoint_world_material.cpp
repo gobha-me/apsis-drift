@@ -1,6 +1,8 @@
 #include "apsis_drift/origin_boarding_route_checkpoint_world_material.hpp"
 #include "origin_boarding_checkpoint_material_extension_internal.hpp"
+#include "origin_boarding_hatch_seal_material_internal.hpp"
 #include "origin_boarding_route_checkpoint_world_material02_internal.hpp"
+#include "origin_boarding_route_checkpoint_world_material03_internal.hpp"
 #include "origin_boarding_route_checkpoint_world_material_internal.hpp"
 #include <algorithm>
 #include <cmath>
@@ -289,6 +291,13 @@ struct WorldStage {
   const OriginBoardingCheckpointMaterialExtension* extension{};
   BoundaryWork* boundary_work{};
   const BoundaryLimits* boundary_limits{};
+  const OriginBoardingHatchSealMaterial* seal{};
+  std::optional<std::size_t>* seal_segment{};
+  using SealAccess = detail::BoardingHatchSealMaterialAccess;
+  auto seal_relation(std::size_t source) const -> bool {
+    return seal &&
+           SealAccess::encloser_count(*seal, result.source, source) == 8;
+  }
   using ExtensionAccess = detail::BoardingCheckpointMaterialExtensionAccess;
   using ExtensionRelation = detail::BoardingCheckpointMaterialExtensionRelation;
   auto extension_relation(std::size_t source) const -> ExtensionRelation {
@@ -296,8 +305,19 @@ struct WorldStage {
                ? ExtensionAccess::relation(*extension, result.source, source)
                : ExtensionRelation::none;
   }
+  auto seal_enclosure(std::size_t source, std::size_t ordinal,
+                      const Proxy& proxy, std::size_t axes) const
+      -> std::expected<detail::MaterialEnclosureMathEvidence, std::string> {
+    const auto* capsule =
+        SealAccess::capsule(*seal, result.source, source, ordinal);
+    if (!capsule)
+      return std::unexpected("WORLD03 genuine seal capsule required");
+    return detail::initial_material_capsule_math(
+        proxy.solid, 0, capsule->first, capsule->second, capsule->radius, axes);
+  }
   auto encloser_count(std::size_t source) const -> std::size_t {
-    return extension_relation(source) == ExtensionRelation::frame_annulus
+    return seal_relation(source) || extension_relation(source) ==
+                                        ExtensionRelation::frame_annulus
                ? 8
                : Access::encloser_count(context, source);
   }
@@ -393,6 +413,17 @@ struct WorldStage {
   auto enclosure(std::size_t source, std::size_t part, std::size_t cell,
                  std::size_t ordinal,
                  const detail::MaterialSourceRecord& r) const -> bool {
+    const bool complete = enclosure_assess(source, part, cell, ordinal, r);
+    const auto& refusal = result.world.first_refusal;
+    if (!complete && seal_segment && ordinal < 8 && seal_relation(source) &&
+        refusal && refusal->source == source && refusal->part == part &&
+        refusal->cell == cell)
+      *seal_segment = ordinal;
+    return complete;
+  }
+  auto enclosure_assess(std::size_t source, std::size_t part, std::size_t cell,
+                        std::size_t ordinal,
+                        const detail::MaterialSourceRecord& r) const -> bool {
     auto& w = result.world.work;
     if (!charge(w.refined_enclosure_relations,
                 limits.refined_enclosure_relations)) {
@@ -410,7 +441,8 @@ struct WorldStage {
              part, source, cell, r.name, r.relation);
       return false;
     }
-    if (extension_relation(source) == ExtensionRelation::none &&
+    if (!seal_relation(source) &&
+        extension_relation(source) == ExtensionRelation::none &&
         p->sole_expression_identity &&
         Access::sole_volume_clear(context, part, source)) {
       ++w.sole_volume_exclusions;
@@ -423,7 +455,8 @@ struct WorldStage {
              r.relation);
       return false;
     }
-    const bool eager = r.relation == Relation::service_enclosure;
+    const bool hatch = seal_relation(source);
+    const bool eager = hatch || r.relation == Relation::service_enclosure;
     if (eager &&
         limits.direction_entries_prepared - w.direction_entries_prepared < 16) {
       refuse(result, Condition::preparation_capacity, part, source, cell,
@@ -433,7 +466,8 @@ struct WorldStage {
     // Every authentic safe capsule call prepares all sixteen entries before
     // trial/projection, including a subsequent arithmetic refusal.
     auto proof =
-        extension_relation(source) == ExtensionRelation::frame_annulus
+        hatch ? seal_enclosure(source, ordinal, *p, allowance)
+        : extension_relation(source) == ExtensionRelation::frame_annulus
             ? detail::initial_material_primitive_math(
                   p->solid, 0,
                   ExtensionAccess::planes(*extension, result.source, source,
@@ -570,13 +604,14 @@ auto material_assess(WorldStage& stage) -> bool {
       const auto enclosers = stage.encloser_count(source);
       const auto added = stage.extension_relation(source);
       const bool frame = added == WorldStage::ExtensionRelation::frame_annulus;
+      const bool hatch = stage.seal_relation(source);
       const bool boundary =
           added == WorldStage::ExtensionRelation::closed_frame_boundary;
       const bool sheet =
           r->relation == Relation::shell_sheet ||
           added == WorldStage::ExtensionRelation::retained_cut_skin;
       if (r->relation == Relation::service_enclosure ||
-          r->relation == Relation::support_enclosure || frame) {
+          r->relation == Relation::support_enclosure || frame || hatch) {
         if (enclosers == 0) {
           refuse(out, Condition::source_identity, part, source, {}, r->name,
                  r->relation);
@@ -609,7 +644,7 @@ auto material_assess(WorldStage& stage) -> bool {
           return false;
         }
         if (separated(p->bounds, *envelope)) continue;
-        if (!frame && !sheet && !boundary &&
+        if (!frame && !sheet && !boundary && !hatch &&
             (r->relation == Relation::unknown ||
              r->relation == Relation::stowed)) {
           refuse(out, Condition::missing_relation, part, source, cell, r->name,
@@ -791,7 +826,7 @@ auto owned_output_bytes(const Diagnostic& result) -> std::size_t {
 static_assert(sizeof(BoardingRouteCheckpointWorldPayload) <= 4096);
 static_assert(
     world_fixed_output +
-        sizeof(std::expected<BoardingRouteCheckpointWorldMaterial02Diagnostic,
+        sizeof(std::expected<BoardingRouteCheckpointWorldMaterial03Diagnostic,
                              std::string>) -
         sizeof(std::expected<Diagnostic, std::string>) +
         1024 * sizeof(BoardingRouteCheckpointUnloadSelf02Cell) <=
@@ -801,7 +836,7 @@ static_assert(
 // conservatively: proxy4096 and capsule+old finite support6144. The extra pool
 // covers union scan, callbacks, outgoing temporaries and new error characters.
 constexpr std::size_t world_live_bound =
-    sizeof(std::expected<BoardingRouteCheckpointWorldMaterial02Diagnostic,
+    sizeof(std::expected<BoardingRouteCheckpointWorldMaterial03Diagnostic,
                          std::string>) +
     2 * sizeof(Limits) + sizeof(std::expected<void, std::string>) +
     sizeof(std::expected<Context, std::string>) + sizeof(WorldStage) +
@@ -815,7 +850,7 @@ static_assert(world_live_bound <= 16384);
 // return staging and a2048B controller/error reserve are charged additionally.
 constexpr std::size_t world_child_live_bound =
     43456 +
-    sizeof(std::expected<BoardingRouteCheckpointWorldMaterial02Diagnostic,
+    sizeof(std::expected<BoardingRouteCheckpointWorldMaterial03Diagnostic,
                          std::string>) +
     2 * sizeof(Limits) + sizeof(std::expected<void, std::string>) +
     sizeof(std::expected<Context, std::string>) +
@@ -837,10 +872,14 @@ auto run_checkpoint_world(
     const Limits& limits, Diagnostic& result,
     const OriginBoardingCheckpointMaterialExtension* extension = nullptr,
     std::size_t extra_output = 0, BoundaryWork* boundary_work = nullptr,
-    const BoundaryLimits* boundary_limits = nullptr)
+    const BoundaryLimits* boundary_limits = nullptr,
+    const OriginBoardingHatchSealMaterial* seal = nullptr,
+    std::optional<std::size_t>* seal_segment = nullptr)
     -> std::expected<void, std::string> {
   if (extension)
-    result.world.world_version = kBoardingRouteCheckpointWorldMaterial02Version;
+    result.world.world_version =
+        seal ? kBoardingRouteCheckpointWorldMaterial03Version
+             : kBoardingRouteCheckpointWorldMaterial02Version;
   if (!valid_limits(limits,
                     extension
                         ? boarding_route_checkpoint_world_material02_limits()
@@ -872,7 +911,9 @@ auto run_checkpoint_world(
   auto prepared = prepare_boarding_route_checkpoint_world(
       boot, material, first, last, preparation_limits, result);
   if (extension)
-    result.world.world_version = kBoardingRouteCheckpointWorldMaterial02Version;
+    result.world.world_version =
+        seal ? kBoardingRouteCheckpointWorldMaterial03Version
+             : kBoardingRouteCheckpointWorldMaterial02Version;
   if (!prepared) {
     result.world.output_capacity_bytes =
         owned_output_bytes(result) + extra_output;
@@ -889,8 +930,8 @@ auto run_checkpoint_world(
   }
   result.world.output_capacity_bytes =
       owned_output_bytes(result) + extra_output;
-  WorldStage stage{result,    *prepared,     limits,
-                   extension, boundary_work, boundary_limits};
+  WorldStage stage{result,        *prepared,       limits, extension,
+                   boundary_work, boundary_limits, seal,   seal_segment};
   if (!prepare_unions(stage) || !material_assess(stage) || !halo_assess(stage))
     return {};
   for (auto& p : result.world.parts)
@@ -944,6 +985,38 @@ auto boarding_route_checkpoint_world_material02_bounded(
   auto ran = run_checkpoint_world(boot, material, first, last, limits,
                                   out.result, &out.extension, extra,
                                   &out.boundary_work, &boundary_limits);
+  if (!ran) return std::unexpected(ran.error());
+  return out;
+}
+auto boarding_route_checkpoint_world_material03_limits() -> Limits {
+  return boarding_route_checkpoint_world_material02_limits();
+}
+auto boarding_route_checkpoint_world_material03_bounded(
+    const OriginBoardingBootSupport& boot,
+    const OriginBoardingInitialMaterial& material,
+    const OriginBoardingCheckpointMaterialExtension& extension,
+    const OriginBoardingHatchSealMaterial& seal, double first, double last,
+    Limits limits, BoundaryLimits boundary_limits)
+    -> std::expected<BoardingRouteCheckpointWorldMaterial03Diagnostic,
+                     std::string> {
+  if (!BoardingCheckpointMaterialExtensionAccess::valid(extension, material) ||
+      BoardingCheckpointMaterialExtensionAccess::relation(extension, material,
+                                                          1436) !=
+          BoardingCheckpointMaterialExtensionRelation::closed_frame_boundary ||
+      !BoardingHatchSealMaterialAccess::valid(seal, material))
+    return std::unexpected("WORLD03 authenticated extension/seal for same "
+                           "immutable base required");
+  if (!boundary_limits_valid(boundary_limits))
+    return std::unexpected("WORLD03 lowered boundary capacities required");
+  BoardingRouteCheckpointWorldMaterial03Diagnostic out(material, extension,
+                                                       seal);
+  constexpr auto extra =
+      sizeof(std::expected<BoardingRouteCheckpointWorldMaterial03Diagnostic,
+                           std::string>) -
+      sizeof(std::expected<Diagnostic, std::string>);
+  auto ran = run_checkpoint_world(
+      boot, material, first, last, limits, out.result, &out.extension, extra,
+      &out.boundary_work, &boundary_limits, &out.seal, &out.seal_segment);
   if (!ran) return std::unexpected(ran.error());
   return out;
 }
@@ -1087,5 +1160,16 @@ auto assess_origin_boarding_route_checkpoint_world_material02(
   return detail::boarding_route_checkpoint_world_material02_bounded(
       boot, material, extension, first, last,
       detail::boarding_route_checkpoint_world_material02_limits());
+}
+auto assess_origin_boarding_route_checkpoint_world_material03(
+    const OriginBoardingBootSupport& boot,
+    const OriginBoardingInitialMaterial& material,
+    const OriginBoardingCheckpointMaterialExtension& extension,
+    const OriginBoardingHatchSealMaterial& seal, double first, double last)
+    -> std::expected<BoardingRouteCheckpointWorldMaterial03Diagnostic,
+                     std::string> {
+  return detail::boarding_route_checkpoint_world_material03_bounded(
+      boot, material, extension, seal, first, last,
+      detail::boarding_route_checkpoint_world_material03_limits());
 }
 } // namespace apsis_drift

@@ -125,3 +125,11 @@ namespace apsis_drift::detail {
 [[nodiscard]] auto initial_material_extension_binding_matches(
     const NativeCraftBinding&, const OriginBoardingInitialMaterial&) -> bool;
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+// Arithmetic-only vertex inclusion using the unchanged source capsule kernel.
+[[nodiscard]] auto initial_material_capsule_vertex_math(
+    BoardingPlantedLegPointBounds point, BoardingPlantedLegPointBounds first,
+    BoardingPlantedLegPointBounds second, double radius)
+    -> std::expected<MaterialConstructorMathEvidence, std::string>;
+} // namespace apsis_drift::detail

@@ -1,0 +1,335 @@
+{
+  "schema": "apsis-drift-hatch-seal-material/1",
+  "source_sha256": "87f4a1f0c584223aaec9b902f236ca9a9ea53924ae7bce4413cf150f61bad677",
+  "inventory_sha256": "a78800c6f5223323855aae1c37e1b40f7f83af76c709696b4eb0f08f3a9f55d8",
+  "base_completion_sha256": "09cd65c9d0080ab792b03ab458b597db71e5cb80c38184818a6ed69a3389f63c",
+  "history_lifeboat_sha256": "1ff8c7de423eeddf100f5a36e1f494225263c342e745361075dbef88c7215db1",
+  "history_finish_sha256": "8c9fe3208c3360c5d96d2fd38847674c5875289e171ea9ca232031b33d78f38f",
+  "capture_helper_sha256": "56477bbb186fd939c04a8f48c24ad9d5f840c693c2cb1513967421dd16d3ca15",
+  "retained_helper_sha256": {
+    "material_inventory.py": "df430228aef4e1527076353e20e03bda518a3f63abaa131d7a2f51e8953fdf22",
+    "material_source_completion.py": "8fbb8a8bed5abcca57a2e8626966466d6cd4f5e8b89c0f2c0ee122dfc60eaceb",
+    "prepare_material_source.py": "13a64f8a8fe440db369622df8093fdb7c4b487f9c43a7c9e5fb229b5c4d51987",
+    "checkpoint_material_extension.py": "b4dbd4800be1122aaf7251adc829292ef5454aba4acde6f3f21bb302e094e898"
+  },
+  "source_helper_sha256": {
+    "export_boarding_contact.py": "20353bd2f3ef5182a70339fb4a5ad1ae1c99874640aa38c0c95b0a6520f5201c",
+    "wayfarer_operating_blender.py": "00bd9327cea482518cf4bf5811f21a351b50309323d64a93c991d9356007e261",
+    "wayfarer_operating_spec.py": "41bc77dd225a059427525113da3cef46db3b794937f433af818d31f3bb2f3113"
+  },
+  "original_input_sha256": {
+    "operating_metadata": "db7b0a2de2516adf9925abe74133a6c523bd334062884a1bfc403448c2b1e72e",
+    "original_contact": "109e3f140f6865612118b2712021a71c0732200f6adc14ac2d4a1ce1d749657a",
+    "boarding_support": "58694e671102f27df5f405478af43d00fd05b3aeaef34c612939af6fa548a8d3"
+  },
+  "blender_version": "5.2.2 LTS",
+  "object": {
+    "source_index": 1441,
+    "identity": {
+      "source_object": "WF02 | CABIN hatch perimeter seal",
+      "source_type": "CURVE",
+      "source_parent": null,
+      "ancestry": [
+        "WF02 | CABIN hatch perimeter seal"
+      ],
+      "motion_group": null,
+      "source_local_blender_to_corrected_world_columns": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "retained_contact_group": "craft_fixed",
+      "retained_original_contact_range": {
+        "group": "craft_fixed",
+        "object": 655,
+        "triangle_start": 189501,
+        "triangle_count": 140
+      },
+      "retained_quantized_triangles_verified": 140,
+      "absent_from_original_contact_crop": false,
+      "construction_context": {},
+      "modifier_context": [],
+      "evaluated_vertex_count": 90,
+      "evaluated_triangle_count": 160,
+      "evaluated_triangle_ordinal_range": [
+        0,
+        160
+      ],
+      "full_bounds_corrected_world_metres": [
+        [
+          -0.6330000162124634,
+          -0.24300000071525574,
+          -1.085363745689392
+        ],
+        [
+          0.6330000162124634,
+          1.9630000591278076,
+          -1.0606361627578735
+        ]
+      ],
+      "full_bounds_quantized_micrometres": [
+        [
+          -633000,
+          -243000,
+          -1085364
+        ],
+        [
+          633000,
+          1963000,
+          -1060636
+        ]
+      ],
+      "ordered_triangle_binary64_sha256": "1c46cd423627cbdf9f94bb2cbc74f23befe9f8e5ac903d9be195b79d8c346e40",
+      "ordered_triangle_micrometre_sha256": "21c6d9c5dd54af597e8e04a65d9fda80c56c3fa97c45f9ad315c86de9bfbfce1"
+    },
+    "corrected_world_columns": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "curve_settings": {
+      "dimensions": "3D",
+      "resolution_u": 12,
+      "render_resolution_u": 0,
+      "bevel_depth": 0.013000000268220901,
+      "bevel_resolution": 3,
+      "bevel_mode": "ROUND",
+      "fill_mode": "FULL",
+      "use_fill_caps": false,
+      "twist_mode": "MINIMUM",
+      "twist_smooth": 0.0,
+      "bevel_factor_start": 0.0,
+      "bevel_factor_end": 1.0,
+      "bevel_factor_mapping_start": "RESOLUTION",
+      "bevel_factor_mapping_end": "RESOLUTION",
+      "extrude": 0.0,
+      "offset": 0.0,
+      "use_radius": true,
+      "use_deform_bounds": false,
+      "use_map_taper": false,
+      "taper_radius_mode": "OVERRIDE",
+      "bevel_object_absent": true,
+      "taper_object_absent": true
+    },
+    "spline": {
+      "type": "POLY",
+      "use_cyclic_u": false,
+      "resolution_u": 12,
+      "points": [
+        {
+          "co_homogeneous": [
+            -0.6200000047683716,
+            1.0729999542236328,
+            -0.23000000417232513,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            -0.6200000047683716,
+            1.0729999542236328,
+            1.659999966621399,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            -0.6200000047683716,
+            1.0729999542236328,
+            1.9500000476837158,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            -0.4000000059604645,
+            1.0729999542236328,
+            1.9500000476837158,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            0.4000000059604645,
+            1.0729999542236328,
+            1.9500000476837158,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            0.6200000047683716,
+            1.0729999542236328,
+            1.9500000476837158,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            0.6200000047683716,
+            1.0729999542236328,
+            1.659999966621399,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            0.6200000047683716,
+            1.0729999542236328,
+            -0.23000000417232513,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        },
+        {
+          "co_homogeneous": [
+            -0.6200000047683716,
+            1.0729999542236328,
+            -0.23000000417232513,
+            1.0
+          ],
+          "radius_factor": 1.0,
+          "tilt": 0.0
+        }
+      ]
+    },
+    "modifiers": [],
+    "properties": {
+      "review02": true
+    },
+    "geometry": {
+      "vertices_binary64": {
+        "offset": 0,
+        "bytes": 2160,
+        "rows": 90,
+        "columns": 3,
+        "dtype": "<f8",
+        "sha256": "5f7a0c85261f1552df2db8a9667c3c00459440cb6626c458faf5eb10477ba2fc"
+      },
+      "vertices_quantized_micrometres": {
+        "offset": 2160,
+        "bytes": 2160,
+        "rows": 90,
+        "columns": 3,
+        "dtype": "<i8",
+        "sha256": "3a2cda98fe97d12fe1ed27b0adf358ea9d4eff72298a71dd60017da7eb9031ab"
+      },
+      "triangle_indices": {
+        "offset": 4320,
+        "bytes": 1920,
+        "rows": 160,
+        "columns": 3,
+        "dtype": "<i4",
+        "sha256": "a6a4228b57258af53d6d9f1060dad24442f4f1501354512c69bbefda199de896"
+      },
+      "evaluated_vertex_count": 90,
+      "evaluated_triangle_count": 160,
+      "evaluated_triangle_ordinal_range": [
+        0,
+        160
+      ],
+      "full_bounds_corrected_world_metres": [
+        [
+          -0.6330000162124634,
+          -0.24300000071525574,
+          -1.085363745689392
+        ],
+        [
+          0.6330000162124634,
+          1.9630000591278076,
+          -1.0606361627578735
+        ]
+      ],
+      "full_bounds_quantized_micrometres": [
+        [
+          -633000,
+          -243000,
+          -1085364
+        ],
+        [
+          633000,
+          1963000,
+          -1060636
+        ]
+      ],
+      "ordered_triangle_binary64_sha256": "1c46cd423627cbdf9f94bb2cbc74f23befe9f8e5ac903d9be195b79d8c346e40",
+      "ordered_triangle_micrometre_sha256": "21c6d9c5dd54af597e8e04a65d9fda80c56c3fa97c45f9ad315c86de9bfbfce1"
+    }
+  },
+  "binary_payload": {
+    "path": "geometry.bin",
+    "bytes": 6240,
+    "sha256": "732771d076b0480d8c71ceb6585169488c51556f75be2c4a4aa45ac3641ff235",
+    "vertices": 90,
+    "triangles": 160
+  },
+  "work": {
+    "full_mesh_summaries": 1,
+    "ordered_triangle_hash_streams": 2,
+    "inherited_verified_crop_faces": 140,
+    "new_crop_face_replays": 0
+  },
+  "caps": {
+    "decoded_source_bytes": 65536,
+    "metadata_bytes": 65536,
+    "numeric_scratch_bytes": 67108864,
+    "splines": 1,
+    "points": 9,
+    "modifiers": 32,
+    "properties": 64,
+    "canonical_packet_bytes": 4096
+  },
+  "master_unchanged": true,
+  "source_save_count": 0,
+  "material_permission": false,
+  "actor_permission": false
+}
