@@ -64,8 +64,9 @@ player's station-to-flight journey.
 - [SectorAttribution01 diagnostic](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP_SECTOR_ATTRIBUTION01.md):
   eight fixed replays identify port ankle-pitch violations in the unchanged motion.
 - [Intermediate pause finite support](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT01.md):
-- [Intermediate pause fixed fore/aft envelope01](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_ENVELOPE01.md) — one necessary support bound at the unchanged load split.
   registered source contact and nominal load gate for the unchanged two-second pause.
+- [Intermediate pause fixed fore/aft envelope01](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_ENVELOPE01.md):
+  one necessary support bound at the unchanged load split.
 - [IntermediateStep02 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP02.md):
   registered foot-preposition sequencing hypothesis under unchanged shared limits.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
