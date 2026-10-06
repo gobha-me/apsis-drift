@@ -158,3 +158,8 @@ The unchanged phase cell owns boot-center and ankle points, rather than separate
 ### Fixed source allocation clarification before FIRST
 
 The immutable provider uses `allocate_shared` with a purpose-specific stateless allocator that requests one fixed4096-byte block for Data and its shared control record. The rebound typed request and alignment must fit that block before allocation. Required and actual owned source bytes are4096; no estimated control-block allowance is reported as actual allocation. The full4096-byte ownership is charged in the co-live ledger. Exact/one-less source controls therefore address this real fixed allocation. Constructor completion is set only after all final guards and allocation succeed; failed out-evidence remains incomplete. Error variants remain charged in the complete live-storage proof even when insufficient output refuses before constructing a Diagnostic.
+
+
+### Refusal and stop evidence before FIRST
+
+The diagnostic retains the earliest ordinary disk refusal even while evaluating the remaining registered edges. A separate `stop_condition` records a later capacity or unsupported-arithmetic terminal condition. Lowered-cap tests require that actual stopping evidence and the honest evaluated prefix while preserving any earlier physical witness refusal. Default completion requires both finite site predicates and no refusal/terminal stop. This changes no candidate, work cap or query roster.
