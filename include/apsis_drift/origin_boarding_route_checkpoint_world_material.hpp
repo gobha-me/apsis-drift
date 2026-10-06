@@ -24,7 +24,11 @@ enum class BoardingRouteCheckpointWorldCondition : std::uint8_t {
   missing_relation,
   enclosure_unresolved,
   sheet_unresolved,
-  source_identity
+  source_identity,
+  boundary_witness_capacity,
+  boundary_support_capacity,
+  boundary_width_capacity,
+  boundary_witness_unresolved
 };
 struct BoardingRouteCheckpointWorldCounters {
   std::uint64_t roster_entries{}, effective_sources{}, union_envelope_pairs{},

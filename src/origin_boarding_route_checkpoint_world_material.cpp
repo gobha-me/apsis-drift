@@ -18,6 +18,9 @@ using Diagnostic = BoardingRouteCheckpointWorldMaterialDiagnostic;
 using Access = detail::BoardingRouteCheckpointWorldMaterialAccess;
 using Context = detail::BoardingRouteCheckpointWorldContext;
 using Relation = BoardingInitialMaterialRelation;
+using BoundaryLimits = detail::BoardingRouteCheckpointBoundaryLimits;
+using BoundaryWork = BoardingRouteCheckpointBoundaryCounters;
+using Scalar = BoardingFootSiteScalarBounds;
 auto axis(Vec p, std::size_t a) -> double {
   return a == 0 ? p.x : a == 1 ? p.y : p.z;
 }
@@ -104,6 +107,46 @@ auto charge(std::uint64_t& value, std::uint64_t cap) -> bool {
   ++value;
   return true;
 }
+auto boundary_limits_valid(const BoundaryLimits& c) -> bool {
+  static constexpr BoundaryLimits maximum;
+  return c.witness_attempts <= maximum.witness_attempts &&
+         c.signed_support_calls <= maximum.signed_support_calls &&
+         c.width_attempts <= maximum.width_attempts;
+}
+auto reserve_boundary_support(BoundaryWork& work, const BoundaryLimits& caps)
+    -> Condition {
+  if (!charge(work.witness_attempts, caps.witness_attempts))
+    return Condition::boundary_witness_capacity;
+  if (work.signed_support_calls > caps.signed_support_calls ||
+      caps.signed_support_calls - work.signed_support_calls < 2)
+    return Condition::boundary_support_capacity;
+  work.signed_support_calls += 2;
+  return Condition::none;
+}
+auto boundary_witness(Scalar positive, Scalar negative, Bounds envelope,
+                      const BoundaryLimits& caps, BoundaryWork& work)
+    -> Condition {
+  const auto supported = [](Scalar s) {
+    return s.supported && std::isfinite(s.lower) && std::isfinite(s.upper) &&
+           s.lower <= s.upper;
+  };
+  if (!supported(positive) || !supported(negative) || !valid(envelope))
+    return Condition::unsupported_arithmetic;
+  if (positive.lower > envelope.upper.z || negative.lower > -envelope.lower.z)
+    return Condition::none;
+  if (!charge(work.width_attempts, caps.width_attempts))
+    return Condition::boundary_width_capacity;
+  const auto width_lower =
+      std::nextafter(positive.lower + negative.lower,
+                     -std::numeric_limits<double>::infinity());
+  const auto slab_upper =
+      std::nextafter(envelope.upper.z - envelope.lower.z,
+                     std::numeric_limits<double>::infinity());
+  if (!std::isfinite(width_lower) || !std::isfinite(slab_upper))
+    return Condition::unsupported_arithmetic;
+  return width_lower > slab_upper ? Condition::none
+                                  : Condition::boundary_witness_unresolved;
+}
 auto refuse(Diagnostic& out, Condition why,
             std::optional<std::size_t> part = {},
             std::optional<std::size_t> source = {},
@@ -179,12 +222,14 @@ auto triangle_assess(const std::array<Vec, 3>& triangle,
                      const Bounds& trajectory_union, std::size_t cells,
                      const Limits& limits, Work& work, CellProxy get,
                      PairKernel pair_kernel, Failure fail,
-                     bool allow_sole = true) -> bool {
+                     bool allow_sole = true, bool strict_boundary = false)
+    -> bool {
   if (!charge(work.triangle_union_pairs, limits.triangle_union_pairs)) {
     fail(Condition::pair_capacity, {});
     return false;
   }
-  if (separated(trajectory_union, triangle_bounds(triangle), true)) return true;
+  if (separated(trajectory_union, triangle_bounds(triangle), !strict_boundary))
+    return true;
   for (std::size_t cell = 0; cell < cells; ++cell) {
     if (!charge(work.refined_triangle_pairs, limits.refined_triangle_pairs)) {
       fail(Condition::pair_capacity, cell);
@@ -225,7 +270,10 @@ auto triangle_assess(const std::array<Vec, 3>& triangle,
       fail(Condition::unsupported_arithmetic, cell);
       return false;
     }
-    if (!proof->certified) {
+    if (!proof->certified ||
+        (strict_boundary && (!proof->certificate_gap.supported ||
+                             !std::isfinite(proof->certificate_gap.lower) ||
+                             proof->certificate_gap.lower <= 0))) {
       fail(proof->truncated ? Condition::axis_capacity
                             : Condition::sheet_unresolved,
            cell);
@@ -239,6 +287,8 @@ struct WorldStage {
   const Context& context;
   const Limits& limits;
   const OriginBoardingCheckpointMaterialExtension* extension{};
+  BoundaryWork* boundary_work{};
+  const BoundaryLimits* boundary_limits{};
   using ExtensionAccess = detail::BoardingCheckpointMaterialExtensionAccess;
   using ExtensionRelation = detail::BoardingCheckpointMaterialExtensionRelation;
   auto extension_relation(std::size_t source) const -> ExtensionRelation {
@@ -252,7 +302,9 @@ struct WorldStage {
                : Access::encloser_count(context, source);
   }
   auto triangle_count(std::size_t source) const -> std::size_t {
-    if (extension_relation(source) == ExtensionRelation::retained_cut_skin) {
+    if (extension_relation(source) == ExtensionRelation::retained_cut_skin ||
+        extension_relation(source) ==
+            ExtensionRelation::closed_frame_boundary) {
       const auto* mesh =
           ExtensionAccess::mesh(*extension, result.source, source);
       return mesh ? mesh->triangles.size() : 0;
@@ -261,10 +313,40 @@ struct WorldStage {
   }
   auto triangle(std::size_t source, std::size_t ordinal, bool& collapsed) const
       -> std::expected<std::array<Vec, 3>, std::string> {
-    return extension_relation(source) == ExtensionRelation::retained_cut_skin
+    return (extension_relation(source) ==
+                ExtensionRelation::retained_cut_skin ||
+            extension_relation(source) ==
+                ExtensionRelation::closed_frame_boundary)
                ? ExtensionAccess::triangle(*extension, result.source, source,
                                            ordinal, collapsed)
                : Access::triangle(context, source, ordinal, collapsed);
+  }
+  auto boundary_exterior(std::size_t source, std::size_t part, std::size_t cell,
+                         Bounds envelope,
+                         const detail::MaterialSourceRecord& record) -> bool {
+    if (!boundary_work || !boundary_limits) {
+      refuse(result, Condition::invalid_binding, part, source, cell,
+             record.name, record.relation);
+      return false;
+    }
+    auto condition = reserve_boundary_support(*boundary_work, *boundary_limits);
+    if (condition == Condition::none) {
+      const auto support =
+          detail::boarding_route_checkpoint_world_signed_z_support(context,
+                                                                   part, cell);
+      if (!support || !support->arithmetic_supported ||
+          !support->original_world_identity)
+        condition = Condition::unsupported_arithmetic;
+      else
+        condition =
+            boundary_witness(support->positive, support->negative, envelope,
+                             *boundary_limits, *boundary_work);
+    }
+    if (condition == Condition::none) return true;
+    if (condition == Condition::unsupported_arithmetic)
+      result.world.arithmetic_supported = false;
+    refuse(result, condition, part, source, cell, record.name, record.relation);
+    return false;
   }
   auto proxy(std::size_t part, std::size_t cell) const
       -> std::expected<Proxy, std::string> {
@@ -303,7 +385,10 @@ struct WorldStage {
     };
     return triangle_assess(triangle, result.world.parts[part].trajectory_union,
                            result.child->cells.size(), limits,
-                           result.world.work, get, kernel, failure, allow_sole);
+                           result.world.work, get, kernel, failure, allow_sole,
+                           source &&
+                               extension_relation(*source) ==
+                                   ExtensionRelation::closed_frame_boundary);
   }
   auto enclosure(std::size_t source, std::size_t part, std::size_t cell,
                  std::size_t ordinal,
@@ -485,6 +570,8 @@ auto material_assess(WorldStage& stage) -> bool {
       const auto enclosers = stage.encloser_count(source);
       const auto added = stage.extension_relation(source);
       const bool frame = added == WorldStage::ExtensionRelation::frame_annulus;
+      const bool boundary =
+          added == WorldStage::ExtensionRelation::closed_frame_boundary;
       const bool sheet =
           r->relation == Relation::shell_sheet ||
           added == WorldStage::ExtensionRelation::retained_cut_skin;
@@ -522,14 +609,17 @@ auto material_assess(WorldStage& stage) -> bool {
           return false;
         }
         if (separated(p->bounds, *envelope)) continue;
-        if (!frame && !sheet &&
+        if (!frame && !sheet && !boundary &&
             (r->relation == Relation::unknown ||
              r->relation == Relation::stowed)) {
           refuse(out, Condition::missing_relation, part, source, cell, r->name,
                  r->relation);
           return false;
         }
-        if (sheet) {
+        if (boundary &&
+            !stage.boundary_exterior(source, part, cell, *envelope, *r))
+          return false;
+        if (sheet || boundary) {
           pending[part] = true;
           continue;
         }
@@ -699,10 +789,13 @@ auto owned_output_bytes(const Diagnostic& result) -> std::size_t {
   return bytes;
 }
 static_assert(sizeof(BoardingRouteCheckpointWorldPayload) <= 4096);
-static_assert(world_fixed_output +
-                  sizeof(OriginBoardingCheckpointMaterialExtension) +
-                  1024 * sizeof(BoardingRouteCheckpointUnloadSelf02Cell) <=
-              kBoardingRouteCheckpointWorldMaximumOutputBytes);
+static_assert(
+    world_fixed_output +
+        sizeof(std::expected<BoardingRouteCheckpointWorldMaterial02Diagnostic,
+                             std::string>) -
+        sizeof(std::expected<Diagnostic, std::string>) +
+        1024 * sizeof(BoardingRouteCheckpointUnloadSelf02Cell) <=
+    kBoardingRouteCheckpointWorldMaximumOutputBytes);
 // Full new expected output/control is resident; child cells/source are borrowed
 // prior owned output, never copied. Two helper reserves deliberately overlap
 // conservatively: proxy4096 and capsule+old finite support6144. The extra pool
@@ -713,7 +806,9 @@ constexpr std::size_t world_live_bound =
     2 * sizeof(Limits) + sizeof(std::expected<void, std::string>) +
     sizeof(std::expected<Context, std::string>) + sizeof(WorldStage) +
     4 * sizeof(std::expected<Proxy, std::string>) + 15 * sizeof(Bounds) + 4096 +
-    6144 + 1024 + 512;
+    6144 + 1024 + 512 + 2 * sizeof(BoundaryLimits) +
+    sizeof(std::expected<detail::BoardingRouteCheckpointWorldSignedZSupport,
+                         std::string>);
 static_assert(world_live_bound <= 16384);
 // Existing Self02 source-live43456 already includes its3392B expected return.
 // No fresh graph/cell is live in the outer wrapper. All persistent new storage,
@@ -727,7 +822,7 @@ constexpr std::size_t world_child_live_bound =
     sizeof(std::expected<
            std::unique_ptr<BoardingRouteCheckpointUnloadSelf02Diagnostic>,
            std::string>) +
-    2048;
+    2048 + 2 * sizeof(BoundaryLimits);
 static_assert(world_child_live_bound <=
               kBoardingRouteCheckpointUnloadMaximumScratchBytes);
 } // namespace
@@ -741,7 +836,9 @@ auto run_checkpoint_world(
     const OriginBoardingInitialMaterial& material, double first, double last,
     const Limits& limits, Diagnostic& result,
     const OriginBoardingCheckpointMaterialExtension* extension = nullptr,
-    std::size_t extra_output = 0) -> std::expected<void, std::string> {
+    std::size_t extra_output = 0, BoundaryWork* boundary_work = nullptr,
+    const BoundaryLimits* boundary_limits = nullptr)
+    -> std::expected<void, std::string> {
   if (extension)
     result.world.world_version = kBoardingRouteCheckpointWorldMaterial02Version;
   if (!valid_limits(limits,
@@ -792,7 +889,8 @@ auto run_checkpoint_world(
   }
   result.world.output_capacity_bytes =
       owned_output_bytes(result) + extra_output;
-  WorldStage stage{result, *prepared, limits, extension};
+  WorldStage stage{result,    *prepared,     limits,
+                   extension, boundary_work, boundary_limits};
   if (!prepare_unions(stage) || !material_assess(stage) || !halo_assess(stage))
     return {};
   for (auto& p : result.world.parts)
@@ -830,25 +928,50 @@ auto boarding_route_checkpoint_world_material02_bounded(
     const OriginBoardingBootSupport& boot,
     const OriginBoardingInitialMaterial& material,
     const OriginBoardingCheckpointMaterialExtension& extension, double first,
-    double last, Limits limits)
+    double last, Limits limits, BoundaryLimits boundary_limits)
     -> std::expected<BoardingRouteCheckpointWorldMaterial02Diagnostic,
                      std::string> {
   if (!BoardingCheckpointMaterialExtensionAccess::valid(extension, material))
     return std::unexpected(
         "WORLD02 authenticated extension for same immutable base required");
+  if (!boundary_limits_valid(boundary_limits))
+    return std::unexpected("WORLD02 lowered boundary capacities required");
   BoardingRouteCheckpointWorldMaterial02Diagnostic out(material, extension);
   constexpr auto extra =
       sizeof(std::expected<BoardingRouteCheckpointWorldMaterial02Diagnostic,
                            std::string>) -
       sizeof(std::expected<Diagnostic, std::string>);
   auto ran = run_checkpoint_world(boot, material, first, last, limits,
-                                  out.result, &out.extension, extra);
+                                  out.result, &out.extension, extra,
+                                  &out.boundary_work, &boundary_limits);
   if (!ran) return std::unexpected(ran.error());
+  return out;
+}
+auto boarding_route_checkpoint_boundary_witness_math(Scalar positive,
+                                                     Scalar negative,
+                                                     Bounds envelope,
+                                                     BoundaryLimits caps)
+    -> std::expected<BoardingRouteCheckpointBoundaryWitnessMath, std::string> {
+  if (!boundary_limits_valid(caps))
+    return std::unexpected("Boundary witness lowered capacities required");
+  BoardingRouteCheckpointBoundaryWitnessMath out;
+  out.arithmetic_supported = boarding_route_foot_phase_environment();
+  if (!out.arithmetic_supported) {
+    out.condition = Condition::unsupported_arithmetic;
+    return out;
+  }
+  out.condition = reserve_boundary_support(out.work, caps);
+  if (out.condition == Condition::none)
+    out.condition =
+        boundary_witness(positive, negative, envelope, caps, out.work);
+  if (out.condition == Condition::unsupported_arithmetic)
+    out.arithmetic_supported = false;
+  out.certified = out.condition == Condition::none;
   return out;
 }
 auto boarding_route_checkpoint_world_sweep_math(
     std::span<const Solid> cells, std::span<const std::array<Vec, 3>> triangles,
-    Limits limits)
+    Limits limits, bool strict_boundary)
     -> std::expected<BoardingRouteCheckpointWorldSweepMath, std::string> {
   if (!valid_limits(limits) || cells.empty() || cells.size() > 8 ||
       triangles.empty() || triangles.size() > 8)
@@ -910,7 +1033,8 @@ auto boarding_route_checkpoint_world_sweep_math(
           solid, 0, triangle, cap);
     };
     if (!triangle_assess(triangles[t], trajectory_union, cells.size(), limits,
-                         result.work, get, pair, fail))
+                         result.work, get, pair, fail, !strict_boundary,
+                         strict_boundary))
       return result;
   }
   result.complete = true;

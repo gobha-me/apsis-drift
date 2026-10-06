@@ -377,6 +377,9 @@ void print(std::string_view label, const Diagnostic& d) {
   std::cout << p.work.collapsed_triangles << ','
             << p.work.sole_triangle_exclusions << ','
             << p.work.sole_volume_exclusions;
+  std::cout << " boundary_work=" << d.boundary_work.witness_attempts << ","
+            << d.boundary_work.signed_support_calls << ","
+            << d.boundary_work.width_attempts;
   if (p.first_refusal) {
     const auto& r = *p.first_refusal;
     std::cout << " condition=" << static_cast<unsigned>(r.condition)
@@ -394,6 +397,12 @@ void print(std::string_view label, const Diagnostic& d) {
 }
 void accounting(const Diagnostic& d, const Limits& l = limits()) {
   denied(d);
+  check(d.boundary_work.witness_attempts <= 15360 &&
+            d.boundary_work.signed_support_calls <= 30720 &&
+            d.boundary_work.width_attempts <= 15360 &&
+            d.boundary_work.signed_support_calls % 2 == 0,
+        "Actual per-cell boundary witness/support/width work remains bounded "
+        "and support calls atomic");
   const auto& p = d.result.world;
   const auto& w = p.work;
   check(
@@ -642,6 +651,146 @@ void budgets(const OriginBoardingBootSupport& boot,
           "than a masked source refusal");
   }
 }
+
+void boundary_budgets(
+    const OriginBoardingBootSupport& boot,
+    const OriginBoardingInitialMaterial& base,
+    const OriginBoardingCheckpointMaterialExtension& extension,
+    const Diagnostic& observed) {
+  const auto& w = observed.boundary_work;
+  if (!observed.result.child) return;
+  const auto first = observed.result.child->requested_first;
+  const auto last = observed.result.child->requested_last;
+  const std::array<std::uint64_t, 3> used{
+      w.witness_attempts, w.signed_support_calls, w.width_attempts};
+  for (std::size_t which = 0; which < 3; ++which) {
+    if (used[which] == 0) continue;
+    for (int mode = 0; mode < 3; ++mode) {
+      detail::BoardingRouteCheckpointBoundaryLimits l{};
+      const auto n = mode == 0 ? 0 : mode == 1 ? used[which] : used[which] - 1;
+      if (which == 0) l.witness_attempts = n;
+      if (which == 1) l.signed_support_calls = n;
+      if (which == 2) l.width_attempts = n;
+      const auto r =
+          require(detail::boarding_route_checkpoint_world_material02_bounded(
+              boot, base, extension, first, last, limits(), l));
+      check(
+          r.boundary_work.witness_attempts <= l.witness_attempts &&
+              r.boundary_work.signed_support_calls <= l.signed_support_calls &&
+              r.boundary_work.width_attempts <= l.width_attempts,
+          "Actual whole-cover exterior work obeys lowered independent budgets");
+      if (mode == 1)
+        check(r.result.world.complete == observed.result.world.complete &&
+                  r.result.world.first_refusal.has_value() ==
+                      observed.result.world.first_refusal.has_value() &&
+                  (!r.result.world.first_refusal ||
+                   r.result.world.first_refusal->condition ==
+                       observed.result.world.first_refusal->condition),
+              "Exact actual full-cover witness budgets preserve first observed "
+              "WORLD outcome");
+      else
+        check(!r.result.world.complete && r.result.world.first_refusal &&
+                  r.result.world.first_refusal->condition ==
+                      (which == 0   ? Condition::boundary_witness_capacity
+                       : which == 1 ? Condition::boundary_support_capacity
+                                    : Condition::boundary_width_capacity),
+              "Zero/one-less actually reached full-cover witness stage refuses "
+              "with precise independent capacity");
+    }
+  }
+}
+
+void signed_support_controls(const OriginBoardingBootSupport& boot,
+                             const OriginBoardingInitialMaterial& base) {
+  BoardingRouteCheckpointWorldMaterialDiagnostic owner(base);
+  auto prepared = detail::prepare_boarding_route_checkpoint_world(boot, base, 0,
+                                                                  1, {}, owner);
+  if (!prepared) throw std::runtime_error(prepared.error());
+  auto& context = *prepared;
+  if (!owner.child || owner.child->cells.empty())
+    throw std::runtime_error(
+        "Original retained child has no source-free body cover");
+  const auto component = [](RigidVector3 p, std::size_t i) {
+    return i == 0 ? p.x : i == 1 ? p.y : p.z;
+  };
+  for (auto cell : std::array<std::size_t, 3>{0, owner.child->cells.size() / 2,
+                                              owner.child->cells.size() - 1})
+    for (std::size_t part = 0; part < 15; ++part) {
+      const auto support =
+          require(detail::boarding_route_checkpoint_world_signed_z_support(
+              context, part, cell));
+      check(support.arithmetic_supported && support.original_world_identity,
+            "Signed support requires genuine original part and current "
+            "retained cell identity");
+      const auto& phase = owner.child->cells[cell].assessment.phase;
+      const auto& binding = owner.child->parts[part];
+      long double pl{}, pu{}, nl{}, nu{};
+      if (const auto* box =
+              std::get_if<BoardingRoutePhaseBoxBinding>(&binding.reservation)) {
+        const auto& center =
+            phase.points[static_cast<std::size_t>(box->center)].value;
+        pl = center.lower.z;
+        pu = center.upper.z;
+        nl = -static_cast<long double>(center.upper.z);
+        nu = -static_cast<long double>(center.lower.z);
+        for (std::size_t i = 0; i < 3; ++i) {
+          const auto& c = phase.frames[static_cast<std::size_t>(box->frame)]
+                              .columns[i]
+                              .value;
+          const auto lo = static_cast<long double>(c.lower.z),
+                     hi = static_cast<long double>(c.upper.z);
+          const auto low =
+              lo <= 0 && hi >= 0 ? 0.L : std::min(std::abs(lo), std::abs(hi));
+          const auto high = std::max(std::abs(lo), std::abs(hi));
+          const auto half = component(box->half_size_metres, i);
+          pl += low * half;
+          nl += low * half;
+          pu += high * half;
+          nu += high * half;
+        }
+      } else {
+        const auto& capsule =
+            std::get<BoardingPlantedBodyCapsuleBinding>(binding.reservation);
+        const auto& a =
+            phase.points[static_cast<std::size_t>(capsule.start)].value;
+        const auto& b =
+            phase.points[static_cast<std::size_t>(capsule.end)].value;
+        pl = std::max(static_cast<long double>(a.lower.z),
+                      static_cast<long double>(b.lower.z)) +
+             capsule.radius_metres;
+        pu = std::max(static_cast<long double>(a.upper.z),
+                      static_cast<long double>(b.upper.z)) +
+             capsule.radius_metres;
+        nl = std::max(-static_cast<long double>(a.upper.z),
+                      -static_cast<long double>(b.upper.z)) +
+             capsule.radius_metres;
+        nu = std::max(-static_cast<long double>(a.lower.z),
+                      -static_cast<long double>(b.lower.z)) +
+             capsule.radius_metres;
+      }
+      const auto encloses = [](BoardingFootSiteScalarBounds b, long double lo,
+                               long double hi) {
+        const auto round_error = 32.L * std::numeric_limits<double>::epsilon() *
+                                 std::max({1.L, std::abs(lo), std::abs(hi)});
+        return b.supported && b.lower <= lo + round_error &&
+               b.upper >= hi - round_error;
+      };
+      check(encloses(support.positive, pl, pu) &&
+                encloses(support.negative, nl, nu),
+            "Independent long-double full oriented-box/endcap projection "
+            "oracle corroborates both genuine signed supports");
+    }
+  check(!detail::boarding_route_checkpoint_world_signed_z_support(context, 15,
+                                                                  0) &&
+            !detail::boarding_route_checkpoint_world_signed_z_support(
+                context, 0, owner.child->cells.size()),
+        "Signed support cannot admit out-of-range body or borrowed cell");
+  owner.child.reset();
+  check(
+      !detail::boarding_route_checkpoint_world_signed_z_support(context, 0, 0),
+      "Destroyed child rejects signed support before dereferencing stale "
+      "borrowed geometry");
+}
 void observe(const OriginBoardingBootSupport& boot,
              const OriginBoardingInitialMaterial& base,
              const OriginBoardingCheckpointMaterialExtension& extension) {
@@ -658,6 +807,8 @@ void observe(const OriginBoardingBootSupport& boot,
   print("FIRST_PUBLIC_CHECKPOINT_WORLD_MATERIAL02", first);
   // The new consumer outcome is not assumed before its frozen first log.
   accounting(first);
+  boundary_budgets(boot, base, extension, first);
+  signed_support_controls(boot, base);
   const auto first_child = require(
       assess_origin_boarding_route_checkpoint_unload_self02(boot, 0, 1));
   check(first.result.child &&
@@ -678,6 +829,7 @@ void observe(const OriginBoardingBootSupport& boot,
             boot, base, extension, a, b));
     print("WORLD02_REQUEST_" + std::to_string(i), result);
     accounting(result);
+    boundary_budgets(boot, base, extension, result);
     const auto child = require(
         assess_origin_boarding_route_checkpoint_unload_self02(boot, a, b));
     check(result.result.child &&
@@ -709,9 +861,177 @@ void observe(const OriginBoardingBootSupport& boot,
           "Moved report owns retained source-name lifetime without copied "
           "transient strings");
 }
+
+using BoundaryLimits = detail::BoardingRouteCheckpointBoundaryLimits;
+using Scalar = BoardingFootSiteScalarBounds;
+void witness_controls() {
+  const PointBounds envelope{{-1, -1, -1}, {1, 1, 1}};
+  const auto witness = [&](Scalar plus, Scalar minus, BoundaryLimits l = {}) {
+    return require(detail::boarding_route_checkpoint_boundary_witness_math(
+        plus, minus, envelope, l));
+  };
+  const auto positive = witness({2, 2, true}, {-1, -1, true});
+  const auto negative = witness({-1, -1, true}, {2, 2, true});
+  check(positive.certified && negative.certified &&
+            positive.work.width_attempts == 0 &&
+            negative.work.width_attempts == 0,
+        "Either genuine signed-Z extremum can witness strict exterior to "
+        "containing slab");
+  for (const auto& e : std::array{positive, negative})
+    check(!e.source_qualified && !e.body_qualified && !e.material_qualified &&
+              !e.world_qualified && !e.actor_qualified,
+          "Synthetic exterior arithmetic cannot qualify a source, reservation "
+          "or WORLD");
+  const auto inside = witness({.1, .1, true}, {.1, .1, true});
+  const auto touching = witness({1, 1, true}, {1, 1, true});
+  check(!inside.certified && inside.work.width_attempts == 1 &&
+            !touching.certified && touching.work.width_attempts == 1,
+        "A body inside filled slab and exact-width/tangent body have no strict "
+        "exterior witness");
+  for (int which = 0; which < 3; ++which)
+    for (int mode = 0; mode < 3; ++mode) {
+      BoundaryLimits l{};
+      const std::uint64_t used = which == 1 ? 2 : 1;
+      const auto n = mode == 0 ? 0 : mode == 1 ? used : used - 1;
+      if (which == 0) l.witness_attempts = n;
+      if (which == 1) l.signed_support_calls = n;
+      if (which == 2) l.width_attempts = n;
+      const auto e = witness({.1, .1, true}, {.1, .1, true}, l);
+      check(e.work.witness_attempts <= l.witness_attempts &&
+                e.work.signed_support_calls <= l.signed_support_calls &&
+                e.work.width_attempts <= l.width_attempts,
+            "Witness, atomic support calls and width operations stop before "
+            "their lowered budgets");
+      if (mode == 1)
+        check(!e.certified &&
+                  e.condition == Condition::boundary_witness_unresolved,
+              "Exact actual witness budgets preserve honest interior refusal");
+      else
+        check(!e.certified &&
+                  e.condition ==
+                      (which == 0   ? Condition::boundary_witness_capacity
+                       : which == 1 ? Condition::boundary_support_capacity
+                                    : Condition::boundary_width_capacity),
+              "Zero/one-less reached witness stages preserve exact capacity "
+              "cause");
+      if (which == 1 && mode != 1)
+        check(e.work.signed_support_calls == 0,
+              "Two signed support calls are reserved atomically; cap1 cannot "
+              "report half a getter");
+    }
+  auto raised = BoundaryLimits{};
+  ++raised.width_attempts;
+  check(!detail::boarding_route_checkpoint_boundary_witness_math(
+            {1, 1, true}, {1, 1, true}, envelope, raised),
+        "Witness fixture cannot raise width capacity");
+  const auto malformed =
+      detail::boarding_route_checkpoint_boundary_witness_math(
+          {2, 1, true}, {1, 1, true}, envelope);
+  check(!malformed || !malformed->certified,
+        "Malformed signed supports never produce an exterior witness");
+  const auto nonfinite =
+      detail::boarding_route_checkpoint_boundary_witness_math(
+          {0, std::numeric_limits<double>::infinity(), true}, {1, 1, true},
+          envelope);
+  check(!nonfinite || !nonfinite->certified,
+        "Nonfinite signed support cannot produce exterior material permission");
+  const std::array<PointBounds, 3> frames{{{{0, 0, -1}, {1, 0, 0}},
+                                           {{0, 1, 0}, {0, 1, 0}},
+                                           {{0, 0, 0}, {1, 0, 1}}}};
+  const PointBounds center{{0, 0, 0}, {0, 0, 0}};
+  const auto actual = require(
+      detail::boarding_route_checkpoint_world_frame_box_signed_z_support_math(
+          center, frames, {.4, .1, .1}));
+  const auto proxy =
+      require(detail::boarding_route_checkpoint_world_frame_box_math(
+          center, frames, {.4, .1, .1}));
+  check(actual.arithmetic_supported && proxy.arithmetic_supported,
+        "Frame-aware signed support and collision proxy remain separate "
+        "bounded arithmetic");
+  const PointBounds narrow{{-1, -1, -.45}, {1, 1, .45}};
+  const auto real =
+      require(detail::boarding_route_checkpoint_boundary_witness_math(
+          actual.positive, actual.negative, narrow));
+  const Scalar inflated{proxy.solid.half_size_metres.z,
+                        proxy.solid.half_size_metres.z, true};
+  const auto fake =
+      require(detail::boarding_route_checkpoint_boundary_witness_math(
+          inflated, inflated, narrow));
+  check(!real.certified && fake.certified &&
+            std::sqrt(.4L * .4L + .1L * .1L) < .45L,
+        "Inflated axis-aligned proxy fabricates an exterior point while every "
+        "proper yaw pose of the actual box stays in slab");
+  check(!actual.source_qualified && !actual.body_qualified &&
+            !actual.world_qualified && !actual.material_qualified &&
+            !actual.actor_qualified,
+        "Caller frame math admits no source or actual reservation authority");
+  const std::array<RigidVector3, 4> vertices{
+      {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+  const std::array<std::array<std::size_t, 3>, 4> indices{
+      {{0, 2, 1}, {0, 1, 3}, {0, 3, 2}, {1, 2, 3}}};
+  using Solid = detail::BoardingSourceEndpointSurfaceCheckpointSolidBounds;
+  using Shape = detail::BoardingSourceEndpointSurfaceCheckpointShape;
+  const Solid inner{{{.25, .25, .25}, {.25, .25, .25}},
+                    {{.25, .25, .25}, {.25, .25, .25}},
+                    {.02, .02, .02},
+                    0,
+                    Shape::box};
+  auto outer = inner;
+  outer.first = outer.second = {{.25, .25, 2}, {.25, .25, 2}};
+  for (auto i : indices) {
+    const std::array<RigidVector3, 3> t{vertices[i[0]], vertices[i[1]],
+                                        vertices[i[2]]};
+    check(require(detail::boarding_checkpoint_world_finite_triangle_pair_math(
+                      inner, 0, t))
+              .certified,
+          "A body wholly inside a closed tetrahedron can be disjoint from "
+          "every full boundary face");
+    check(require(detail::boarding_checkpoint_world_finite_triangle_pair_math(
+                      outer, 0, t))
+              .certified,
+          "Exterior body is independently disjoint from every full closed "
+          "boundary face");
+  }
+  const PointBounds tetra_envelope{{0, 0, 0}, {1, 1, 1}};
+  check(!require(detail::boarding_route_checkpoint_boundary_witness_math(
+                     {.27, .27, true}, {-.23, -.23, true}, tetra_envelope))
+             .certified,
+        "Boundary-clear body inside closed material still refuses missing "
+        "exterior witness");
+  check(require(detail::boarding_route_checkpoint_boundary_witness_math(
+                    {2.02, 2.02, true}, {-1.98, -1.98, true}, tetra_envelope))
+            .certified,
+        "Exterior witness plus all full boundary exclusions supplies only "
+        "arithmetic proof, never source authority");
+  const Solid touch{{{0, 0, 0}, {0, 0, 0}},
+                    {{0, 0, 0}, {0, 0, 0}},
+                    {.1, .1, .1},
+                    0,
+                    Shape::box};
+  const std::array<std::array<RigidVector3, 3>, 1> tangent{
+      {{{{.1, -1, -1}, {.1, 1, -1}, {.1, 0, 1}}}}};
+  const std::array<Solid, 1> bodies{touch};
+  const auto old = require(
+      detail::boarding_route_checkpoint_world_sweep_math(bodies, tangent));
+  const auto strict =
+      require(detail::boarding_route_checkpoint_world_sweep_math(
+          bodies, tangent, {}, true));
+  check(old.complete && !strict.complete,
+        "Legacy tangency certificate cannot qualify closed material boundary "
+        "disjointness");
+  auto separated = tangent;
+  for (auto& v : separated[0])
+    v.x = .2;
+  check(require(detail::boarding_route_checkpoint_world_sweep_math(
+                    bodies, separated, {}, true))
+            .complete,
+        "Strict closed-boundary sweep accepts genuine positive separation "
+        "without a tolerance");
+}
 } // namespace
 int main() {
   try {
+    witness_controls();
     const auto l = limits();
     check(l.base_enclosure_relations == 360 &&
               l.refined_enclosure_relations == 368640 &&
@@ -799,6 +1119,37 @@ int main() {
                 !union_evidence.work.constructors_complete,
             "Refused Union02 retains no source handle and no WORLD clearance "
             "observation");
+    }
+
+    detail::BoardingCheckpointMaterialBoundaryEvidence boundary_evidence;
+    const auto boundary_admission =
+        ExtensionAccess::make_boundary03(binding, base, {}, &boundary_evidence);
+    std::cout << "WORLD02_BOUNDARY03_EXTENSION_ADMISSION accepted="
+              << boundary_admission.has_value() << " condition="
+              << static_cast<unsigned>(boundary_evidence.condition)
+              << " version=" << boundary_evidence.work.extension_version
+              << " bound=" << boundary_evidence.bound_coordinate_guards
+              << " faces=" << boundary_evidence.nondegenerate_triangles
+              << " edges=" << boundary_evidence.edge_occurrences
+              << " comparisons=" << boundary_evidence.edge_comparisons;
+    if (!boundary_admission)
+      std::cout << " error=" << boundary_admission.error();
+    std::cout << '\n' << std::flush;
+    if (boundary_admission) {
+      const auto& extension = *boundary_admission;
+      check(extension.summary() && extension.summary()->extension_version == 3,
+            "Only genuine explicitly selected closed-boundary source enables "
+            "the new WORLD observation");
+      invalid_controls(binding, boot, base, extension);
+      observe(boot, base, extension);
+    } else {
+      std::cout << "CHECKPOINT_WORLD_MATERIAL02_UNAVAILABLE "
+                   "reason=boundary03_constructor clearance_observed=0\n"
+                << std::flush;
+      check(!boundary_evidence.complete &&
+                !boundary_evidence.work.constructors_complete,
+            "Unissued closed-boundary source cannot produce a WORLD clearance "
+            "claim");
     }
   } catch (const std::exception& e) {
     ++failures;

@@ -19,6 +19,9 @@ using Proof = detail::BoardingCheckpointMaterialExtensionConstructorMath;
 using Prism = detail::BoardingCheckpointMaterialExtensionPrismMath;
 using Why = detail::BoardingCheckpointMaterialExtensionCondition;
 using Relation = detail::BoardingCheckpointMaterialExtensionRelation;
+using BoundaryLimits = detail::BoardingCheckpointMaterialBoundaryLimits;
+using BoundaryProof = detail::BoardingCheckpointMaterialBoundaryEvidence;
+using BoundaryWhy = detail::BoardingCheckpointMaterialBoundaryCondition;
 constexpr std::array<std::size_t, 2> source_ids{1436, 1574};
 constexpr std::array<std::size_t, 2> vertex_counts{256, 3152},
     face_counts{512, 5187};
@@ -615,13 +618,183 @@ template <typename Points>
          " vertex=" + (proof.vertex ? std::to_string(*proof.vertex) : "none") +
          " plane=" + (proof.plane ? std::to_string(*proof.plane) : "none");
 }
+auto boundary_fail(BoundaryProof& p, BoundaryWhy why) -> bool {
+  p.condition = why;
+  p.complete = false;
+  return false;
+}
+auto boundary_charge(std::uint64_t& count, std::uint64_t cap, BoundaryProof& p,
+                     BoundaryWhy why) -> bool {
+  if (count >= cap) return boundary_fail(p, why);
+  ++count;
+  return true;
+}
+auto boundary_limits_valid(const BoundaryLimits& c) -> bool {
+  const BoundaryLimits top;
+  return c.source_bytes <= top.source_bytes &&
+         c.base_guards <= top.base_guards &&
+         c.vertex_guards <= top.vertex_guards &&
+         c.index_guards <= top.index_guards &&
+         c.bound_coordinate_guards <= top.bound_coordinate_guards &&
+         c.nondegenerate_triangles <= top.nondegenerate_triangles &&
+         c.edge_occurrences <= top.edge_occurrences &&
+         c.edge_comparisons <= top.edge_comparisons;
+}
+[[gnu::noinline]] auto boundary_input(const View& view,
+                                      const BoundaryLimits& caps,
+                                      BoundaryProof& out) -> bool {
+  Proof original;
+  Limits limits;
+  limits.source_bytes = caps.source_bytes;
+  limits.base_guards = caps.base_guards;
+  limits.vertex_guards = caps.vertex_guards;
+  limits.index_guards = caps.index_guards;
+  const auto bytes = out.work.source_bytes;
+  const bool complete =
+      metadata(view, original, limits) && coordinates(view, original, limits);
+  out.work = original.work;
+  out.work.extension_version = kBoardingCheckpointMaterialBoundary03Version;
+  out.work.source_bytes = bytes;
+  out.work.arithmetic_supported = true;
+  if (!complete) {
+    out.input_condition = original.condition;
+    out.source = original.source;
+    out.triangle = original.triangle;
+    out.vertex = original.vertex;
+    return boundary_fail(out, original.condition == Why::unsupported_arithmetic
+                                  ? BoundaryWhy::unsupported_arithmetic
+                                  : BoundaryWhy::input_validation);
+  }
+  out.work.bindings_complete = true;
+  return true;
+}
+[[gnu::noinline]] auto boundary_full_bounds(const View& view,
+                                            const BoundaryLimits& caps,
+                                            BoundaryProof& out) -> bool {
+  for (std::size_t mesh = 0; mesh < 2; ++mesh) {
+    out.source = source_ids[mesh];
+    const auto& m = view.meshes[mesh];
+    const auto& identity = view.sources[mesh].identity;
+    for (std::size_t vertex = 0; vertex < m.raw_vertices.size(); ++vertex) {
+      out.vertex = vertex;
+      for (unsigned representation = 0; representation < 2; ++representation) {
+        const auto& bounds = representation == 0 ? identity.raw_bounds
+                                                 : identity.quantized_bounds;
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+          out.axis = axis;
+          if (!boundary_charge(out.bound_coordinate_guards,
+                               caps.bound_coordinate_guards, out,
+                               BoundaryWhy::bound_capacity))
+            return false;
+          const auto lo = component(bounds.lower, axis),
+                     hi = component(bounds.upper, axis);
+          const auto value =
+              representation == 0
+                  ? component(m.raw_vertices[vertex], axis)
+                  : static_cast<double>(
+                        m.quantized_vertices[vertex].value[axis]) *
+                        1e-6;
+          if (!std::isfinite(lo) || !std::isfinite(hi) ||
+              !std::isfinite(value) || lo > hi || value < lo || value > hi)
+            return boundary_fail(out, BoundaryWhy::source_bounds);
+        }
+      }
+    }
+  }
+  out.vertex.reset();
+  out.axis.reset();
+  return true;
+}
+[[gnu::noinline]] auto boundary_topology(const detail::MaterialMeshRecord& mesh,
+                                         const BoundaryLimits& caps,
+                                         BoundaryProof& out) -> bool {
+  out.source = mesh.source;
+  for (std::size_t t = 0; t < mesh.triangles.size(); ++t) {
+    out.triangle = t;
+    if (!boundary_charge(out.nondegenerate_triangles,
+                         caps.nondegenerate_triangles, out,
+                         BoundaryWhy::triangle_capacity))
+      return false;
+    const auto& ids = mesh.triangles[t].vertices;
+    const auto& a = mesh.quantized_vertices[ids[0]].value;
+    const auto& b = mesh.quantized_vertices[ids[1]].value;
+    const auto& c = mesh.quantized_vertices[ids[2]].value;
+    const std::array<std::int64_t, 3> u{b[0] - a[0], b[1] - a[1], b[2] - a[2]},
+        v{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+    // Bounds authenticated before this helper: |u|,|v|<=16e6, each
+    // cross component<=512e12, so every signed int64 operation is exact.
+    if (u[1] * v[2] - u[2] * v[1] == 0 && u[2] * v[0] - u[0] * v[2] == 0 &&
+        u[0] * v[1] - u[1] * v[0] == 0)
+      return boundary_fail(out, BoundaryWhy::degenerate_triangle);
+  }
+  for (std::size_t t = 0; t < mesh.triangles.size(); ++t) {
+    out.triangle = t;
+    for (std::size_t edge = 0; edge < 3; ++edge) {
+      out.edge = edge;
+      if (!boundary_charge(out.edge_occurrences, caps.edge_occurrences, out,
+                           BoundaryWhy::edge_capacity))
+        return false;
+      const auto a = mesh.triangles[t].vertices[edge],
+                 b = mesh.triangles[t].vertices[(edge + 1) % 3];
+      std::size_t forward{}, reverse{};
+      for (std::size_t other = 0; other < mesh.triangles.size(); ++other) {
+        out.other_triangle = other;
+        for (std::size_t other_edge = 0; other_edge < 3; ++other_edge) {
+          if (!boundary_charge(out.edge_comparisons, caps.edge_comparisons, out,
+                               BoundaryWhy::edge_comparison_capacity))
+            return false;
+          const auto x = mesh.triangles[other].vertices[other_edge],
+                     y = mesh.triangles[other].vertices[(other_edge + 1) % 3];
+          forward += static_cast<std::size_t>(a == x && b == y);
+          reverse += static_cast<std::size_t>(a == y && b == x);
+        }
+      }
+      // Forward includes this occurrence itself. Exactly one opposite
+      // occurrence is required; no manifold/vertex-link/embedding claim.
+      if (forward != 1 || reverse != 1)
+        return boundary_fail(out, BoundaryWhy::closed_chain);
+    }
+  }
+  out.source.reset();
+  out.triangle.reset();
+  out.edge.reset();
+  out.other_triangle.reset();
+  out.vertex.reset();
+  out.axis.reset();
+  out.complete = true;
+  return true;
+}
+[[gnu::noinline]] auto boundary_construct(const View& view,
+                                          const BoundaryLimits& caps,
+                                          BoundaryProof& out) -> bool {
+  out.work.extension_version = kBoardingCheckpointMaterialBoundary03Version;
+  out.work.arithmetic_supported = environment();
+  if (!out.work.arithmetic_supported)
+    return boundary_fail(out, BoundaryWhy::unsupported_arithmetic);
+  if (!boundary_input(view, caps, out) ||
+      !boundary_full_bounds(view, caps, out) ||
+      !boundary_topology(view.meshes[0], caps, out))
+    return false;
+  out.work.sources = 2;
+  out.work.vertices = 3408;
+  out.work.triangles = 5699;
+  out.work.prisms = 0;
+  out.work.constructors_complete = true;
+  return true;
+}
+[[gnu::noinline]] auto boundary_error(const BoundaryProof& out) -> std::string {
+  return "Boundary03 refused condition=" +
+         std::to_string(static_cast<unsigned>(out.condition)) + " triangle=" +
+         (out.triangle ? std::to_string(*out.triangle) : "none") +
+         " edge=" + (out.edge ? std::to_string(*out.edge) : "none");
+}
 } // namespace
 struct OriginBoardingCheckpointMaterialExtension::Data {
   NativeCraftBinding binding;
   OriginBoardingInitialMaterial base;
   const OriginBoardingInitialMaterial::Data* base_identity{};
   View prepared;
-  Prisms prisms;
+  Prisms prisms{};
   BoardingCheckpointMaterialExtensionSummary summary;
   Data(const NativeCraftBinding& b, const OriginBoardingInitialMaterial& source)
       : binding(b), base(source),
@@ -642,6 +815,10 @@ static_assert(sizeof(OriginBoardingCheckpointMaterialExtension::Data) +
               8192);
 static_assert(sizeof(Prisms) + sizeof(Proof) + sizeof(Prism) + sizeof(Limits) +
                   16 + 1024 + 1024 <=
+              8192);
+static_assert(sizeof(OriginBoardingCheckpointMaterialExtension::Data) +
+                  sizeof(BoundaryProof) + sizeof(Proof) +
+                  sizeof(BoundaryLimits) + sizeof(Limits) + 2048 <=
               8192);
 OriginBoardingCheckpointMaterialExtension::
     OriginBoardingCheckpointMaterialExtension(std::shared_ptr<const Data> data)
@@ -665,7 +842,9 @@ auto BoardingCheckpointMaterialExtensionAccess::valid(
          (d->summary.extension_version ==
               kBoardingCheckpointMaterialExtensionVersion ||
           d->summary.extension_version ==
-              kBoardingCheckpointMaterialUnion02Version) &&
+              kBoardingCheckpointMaterialUnion02Version ||
+          d->summary.extension_version ==
+              kBoardingCheckpointMaterialBoundary03Version) &&
          d->base_identity &&
          BoardingInitialMaterialAccess::data(base) == d->base_identity &&
          BoardingInitialMaterialAccess::data(d->base) == d->base_identity &&
@@ -738,11 +917,47 @@ auto BoardingCheckpointMaterialExtensionAccess::make_union02(
   owned->summary = proof.work;
   return OriginBoardingCheckpointMaterialExtension{std::move(owned)};
 }
+auto BoardingCheckpointMaterialExtensionAccess::make_boundary03(
+    const NativeCraftBinding& binding,
+    const OriginBoardingInitialMaterial& base, BoundaryLimits caps,
+    BoundaryProof* evidence)
+    -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string> {
+  BoundaryProof local;
+  auto& out = evidence ? *evidence : local;
+  out = {};
+  out.work.extension_version = kBoardingCheckpointMaterialBoundary03Version;
+  if (!boundary_limits_valid(caps)) {
+    boundary_fail(out, BoundaryWhy::invalid_limits);
+    return std::unexpected("Boundary03 lowered registered capacities required");
+  }
+  const auto view = origin_boarding_checkpoint_material_extension_prepared();
+  out.work.source_bytes = required_source_bytes(view);
+  if (out.work.source_bytes > caps.source_bytes) {
+    boundary_fail(out, BoundaryWhy::source_capacity);
+    return std::unexpected("Boundary03 source capacity before allocation");
+  }
+  if (!initial_material_extension_binding_matches(binding, base)) {
+    boundary_fail(out, BoundaryWhy::invalid_binding);
+    return std::unexpected(
+        "Boundary03 genuine same-base native binding required");
+  }
+  auto owned =
+      std::make_shared<OriginBoardingCheckpointMaterialExtension::Data>(binding,
+                                                                        base);
+  owned->prepared = view;
+  if (!boundary_construct(view, caps, out))
+    return std::unexpected(boundary_error(out));
+  owned->summary = out.work;
+  return OriginBoardingCheckpointMaterialExtension{std::move(owned)};
+}
 auto BoardingCheckpointMaterialExtensionAccess::relation(
     const OriginBoardingCheckpointMaterialExtension& e,
     const OriginBoardingInitialMaterial& base, std::size_t source) -> Relation {
   if (!valid(e, base)) return Relation::none;
-  return source == 1436   ? Relation::frame_annulus
+  return source == 1436   ? (data(e)->summary.extension_version ==
+                                   kBoardingCheckpointMaterialBoundary03Version
+                                 ? Relation::closed_frame_boundary
+                                 : Relation::frame_annulus)
          : source == 1574 ? Relation::retained_cut_skin
                           : Relation::none;
 }
@@ -844,6 +1059,80 @@ auto checkpoint_material_extension_adjacent_union_math(
     fail(out, quantized ? Why::quantized_containment : Why::raw_containment);
   return out;
 }
+auto checkpoint_material_extension_boundary03_constructor_math(
+    const View& view, BoundaryLimits caps)
+    -> std::expected<BoundaryProof, std::string> {
+  if (!boundary_limits_valid(caps))
+    return std::unexpected("Boundary03 lowered registered capacities required");
+  BoundaryProof out;
+  out.work.extension_version = kBoardingCheckpointMaterialBoundary03Version;
+  out.work.source_bytes = required_source_bytes(view);
+  if (out.work.source_bytes > caps.source_bytes) {
+    boundary_fail(out, BoundaryWhy::source_capacity);
+    return out;
+  }
+  static_cast<void>(boundary_construct(view, caps, out));
+  return out;
+}
+auto checkpoint_material_extension_closed_boundary_math(
+    const MaterialMeshRecord& mesh, BoundaryLimits caps)
+    -> std::expected<BoundaryProof, std::string> {
+  if (!boundary_limits_valid(caps))
+    return std::unexpected("Boundary03 lowered registered capacities required");
+  BoundaryProof out;
+  out.work.extension_version = kBoardingCheckpointMaterialBoundary03Version;
+  out.work.arithmetic_supported = environment();
+  if (!out.work.arithmetic_supported) {
+    boundary_fail(out, BoundaryWhy::unsupported_arithmetic);
+    return out;
+  }
+  if (mesh.quantized_vertices.empty() ||
+      mesh.raw_vertices.size() != mesh.quantized_vertices.size() ||
+      mesh.triangles.empty() || mesh.triangles.size() > 512 ||
+      mesh.quantized_vertices.size() > 3408) {
+    boundary_fail(out, BoundaryWhy::input_validation);
+    return out;
+  }
+  for (std::size_t vertex = 0; vertex < mesh.raw_vertices.size(); ++vertex) {
+    out.vertex = vertex;
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+      out.axis = axis;
+      const auto raw = component(mesh.raw_vertices[vertex], axis);
+      const auto q = mesh.quantized_vertices[vertex].value[axis];
+      if (!boundary_charge(out.work.vertex_guards, caps.vertex_guards, out,
+                           BoundaryWhy::vertex_capacity))
+        return out;
+      if (!std::isfinite(raw) || std::abs(raw) > 8) {
+        boundary_fail(out, BoundaryWhy::input_validation);
+        return out;
+      }
+      if (!boundary_charge(out.work.vertex_guards, caps.vertex_guards, out,
+                           BoundaryWhy::vertex_capacity))
+        return out;
+      if (q < -8000000 || q > 8000000 ||
+          std::nearbyint(raw * 1e6) != static_cast<double>(q)) {
+        boundary_fail(out, BoundaryWhy::input_validation);
+        return out;
+      }
+    }
+  }
+  for (std::size_t t = 0; t < mesh.triangles.size(); ++t) {
+    out.triangle = t;
+    for (const auto index : mesh.triangles[t].vertices) {
+      if (!boundary_charge(out.work.index_guards, caps.index_guards, out,
+                           BoundaryWhy::index_capacity))
+        return out;
+      if (index >= mesh.quantized_vertices.size()) {
+        boundary_fail(out, BoundaryWhy::input_validation);
+        return out;
+      }
+    }
+  }
+  out.vertex.reset();
+  out.axis.reset();
+  static_cast<void>(boundary_topology(mesh, caps, out));
+  return out;
+}
 auto checkpoint_material_extension_prism_math(const Frame& frame,
                                               std::size_t sector)
     -> std::expected<Prism, std::string> {
@@ -873,6 +1162,13 @@ auto make_origin_boarding_checkpoint_material_extension_union02(
     const OriginBoardingInitialMaterial& base)
     -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string> {
   return detail::BoardingCheckpointMaterialExtensionAccess::make_union02(
+      binding, base, {}, nullptr);
+}
+auto make_origin_boarding_checkpoint_material_extension_boundary03(
+    const NativeCraftBinding& binding,
+    const OriginBoardingInitialMaterial& base)
+    -> std::expected<OriginBoardingCheckpointMaterialExtension, std::string> {
+  return detail::BoardingCheckpointMaterialExtensionAccess::make_boundary03(
       binding, base, {}, nullptr);
 }
 } // namespace apsis_drift

@@ -4,11 +4,15 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kBoardingRouteCheckpointWorldMaterial02Version{
     2};
+struct BoardingRouteCheckpointBoundaryCounters {
+  std::uint64_t witness_attempts{}, signed_support_calls{}, width_attempts{};
+};
 struct BoardingRouteCheckpointWorldMaterial02Diagnostic {
   // One original report owns the only child and retained cover. Its source1
   // summary stays source1; the explicit extension describes the added policy.
   BoardingRouteCheckpointWorldMaterialDiagnostic result;
   OriginBoardingCheckpointMaterialExtension extension;
+  BoardingRouteCheckpointBoundaryCounters boundary_work;
   BoardingRouteCheckpointWorldMaterial02Diagnostic(
       const OriginBoardingInitialMaterial& material,
       const OriginBoardingCheckpointMaterialExtension& added)

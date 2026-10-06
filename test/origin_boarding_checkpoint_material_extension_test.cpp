@@ -607,7 +607,7 @@ auto summary_bits(const BoardingInitialMaterialSourceSummary& s)
 void admitted_controls(const NativeCraftBinding& binding,
                        const OriginBoardingInitialMaterial& base,
                        const OriginBoardingCheckpointMaterialExtension& cap,
-                       View view) {
+                       View view, bool boundary = false) {
   check(Access::valid(cap, base), "Only retained extension and its owned old "
                                   "material form a valid source binding");
   const auto different = make_origin_boarding_initial_material(binding);
@@ -626,22 +626,27 @@ void admitted_controls(const NativeCraftBinding& binding,
         "evidence");
   if (summary)
     check(summary->sources == 2 && summary->vertices == 3408 &&
-              summary->triangles == 5699 && summary->prisms == 8 &&
+              summary->triangles == 5699 &&
+              summary->prisms == (boundary ? 0 : 8) &&
               summary->source_bytes <= 262144,
           "Issued extension retains all complete full meshes and eight "
           "aperture-preserving prisms");
   for (std::size_t source = 0; source < 1759; ++source) {
     const auto relation = Access::relation(cap, base, source);
-    check(relation ==
-              (source == 1436
-                   ? detail::BoardingCheckpointMaterialExtensionRelation::
-                         frame_annulus
-               : source == 1574
-                   ? detail::BoardingCheckpointMaterialExtensionRelation::
-                         retained_cut_skin
-                   : detail::BoardingCheckpointMaterialExtensionRelation::none),
-          "Exactly two fixed original source indices acquire explicit new "
-          "material relations");
+    check(
+        relation ==
+            (source == 1436
+                 ? (boundary
+                        ? detail::BoardingCheckpointMaterialExtensionRelation::
+                              closed_frame_boundary
+                        : detail::BoardingCheckpointMaterialExtensionRelation::
+                              frame_annulus)
+             : source == 1574
+                 ? detail::BoardingCheckpointMaterialExtensionRelation::
+                       retained_cut_skin
+                 : detail::BoardingCheckpointMaterialExtensionRelation::none),
+        "Exactly two fixed original source indices acquire explicit new "
+        "material relations");
   }
   for (std::size_t i = 0; i < 2; ++i) {
     const auto source = view.sources[i].source_index;
@@ -675,7 +680,7 @@ void admitted_controls(const NativeCraftBinding& binding,
   }
   for (std::size_t s = 0; s < 8; ++s)
     check(
-        Access::planes(cap, base, 1436, s).size() == 6,
+        Access::planes(cap, base, 1436, s).size() == (boundary ? 0 : 6),
         "Genuine frame binds exactly six outward planes for every band sector");
   check(Access::planes(cap, base, 1436, 8).empty() &&
             Access::planes(cap, base, 1574, 0).empty(),
@@ -1005,6 +1010,267 @@ void union02_controls(View view, const NativeCraftBinding& binding,
   check(std::fesetround(old) == 0,
         "Restore rounding after Union02 issuer control");
 }
+
+using BoundaryLimits = detail::BoardingCheckpointMaterialBoundaryLimits;
+using BoundaryEvidence = detail::BoardingCheckpointMaterialBoundaryEvidence;
+using BoundaryCondition = detail::BoardingCheckpointMaterialBoundaryCondition;
+void boundary_log(std::string_view label, const BoundaryEvidence& e) {
+  std::cout << label << " complete=" << e.complete
+            << " condition=" << static_cast<unsigned>(e.condition)
+            << " input_condition=" << static_cast<unsigned>(e.input_condition)
+            << " arithmetic=" << e.work.arithmetic_supported
+            << " version=" << e.work.extension_version
+            << " bytes=" << e.work.source_bytes
+            << " work=" << e.work.base_guards << ',' << e.work.vertex_guards
+            << ',' << e.work.index_guards << ',' << e.bound_coordinate_guards
+            << ',' << e.nondegenerate_triangles << ',' << e.edge_occurrences
+            << ',' << e.edge_comparisons;
+  for (const auto& [name, value] :
+       std::array{std::pair{"source", e.source},
+                  std::pair{"triangle", e.triangle}, std::pair{"edge", e.edge},
+                  std::pair{"other_triangle", e.other_triangle},
+                  std::pair{"vertex", e.vertex}, std::pair{"axis", e.axis}})
+    if (value) std::cout << ' ' << name << '=' << *value;
+  std::cout << '\n' << std::flush;
+}
+void boundary_accounting(const BoundaryEvidence& e, BoundaryLimits l = {}) {
+  no_authority(e);
+  check(e.work.base_guards <= l.base_guards &&
+            e.work.vertex_guards <= l.vertex_guards &&
+            e.work.index_guards <= l.index_guards &&
+            e.bound_coordinate_guards <= l.bound_coordinate_guards &&
+            e.nondegenerate_triangles <= l.nondegenerate_triangles &&
+            e.edge_occurrences <= l.edge_occurrences &&
+            e.edge_comparisons <= l.edge_comparisons,
+        "Closed boundary operations remain separately bounded before next "
+        "operation");
+  check(e.work.extension_version == 3 &&
+            (!e.complete || e.condition == BoundaryCondition::none),
+        "Boundary arithmetic retains explicit selected version and cannot "
+        "complete with a refusal");
+}
+void closed_boundary_controls() {
+  std::vector<RigidVector3> raw{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+  std::vector<detail::MaterialQuantizedPoint> q;
+  for (auto v : raw)
+    q.push_back(quantized_point(v));
+  std::vector<detail::MaterialTriangle> faces{
+      {{{0, 2, 1}}}, {{{0, 1, 3}}}, {{{0, 3, 2}}}, {{{1, 2, 3}}}};
+  const auto mesh = [&] {
+    return detail::MaterialMeshRecord{1436, raw, q, faces};
+  };
+  const auto closed = require(
+      detail::checkpoint_material_extension_closed_boundary_math(mesh()));
+  boundary_accounting(closed);
+  check(closed.complete && closed.nondegenerate_triangles == 4 &&
+            closed.edge_occurrences == 12 && closed.edge_comparisons == 144,
+        "Four-face tetrahedron earns exact indexed oriented closure without "
+        "source authority");
+  for (int which = 0; which < 3; ++which) {
+    const auto used = which == 0   ? closed.nondegenerate_triangles
+                      : which == 1 ? closed.edge_occurrences
+                                   : closed.edge_comparisons;
+    for (int mode = 0; mode < 3; ++mode) {
+      BoundaryLimits l{};
+      const auto n = mode == 0 ? 0 : mode == 1 ? used : used - 1;
+      if (which == 0) l.nondegenerate_triangles = n;
+      if (which == 1) l.edge_occurrences = n;
+      if (which == 2) l.edge_comparisons = n;
+      const auto e =
+          require(detail::checkpoint_material_extension_closed_boundary_math(
+              mesh(), l));
+      boundary_accounting(e, l);
+      if (mode == 1)
+        check(e.complete,
+              "Exact topology work budgets preserve known closed tetrahedron");
+      else
+        check(!e.complete &&
+                  e.condition ==
+                      (which == 0 ? BoundaryCondition::triangle_capacity
+                       : which == 1
+                           ? BoundaryCondition::edge_capacity
+                           : BoundaryCondition::edge_comparison_capacity),
+              "Reached zero and one-less topology capacities stop with exact "
+              "condition");
+    }
+  }
+  const auto original_faces = faces;
+  for (int which = 0; which < 5; ++which) {
+    faces = original_faces;
+    if (which == 0) faces.pop_back();
+    if (which == 1) std::swap(faces[0].vertices[0], faces[0].vertices[1]);
+    if (which == 2) faces.push_back(faces[0]);
+    if (which == 3) faces[0].vertices[1] = faces[0].vertices[0];
+    if (which == 4) faces[0].vertices[0] = 4;
+    const auto e = require(
+        detail::checkpoint_material_extension_closed_boundary_math(mesh()));
+    boundary_accounting(e);
+    check(!e.complete, "Open, one reversed, extra, repeated-index and "
+                       "out-of-range faces cannot become closed material");
+  }
+  faces = original_faces;
+  for (auto& f : faces)
+    std::swap(f.vertices[0], f.vertices[1]);
+  check(require(
+            detail::checkpoint_material_extension_closed_boundary_math(mesh()))
+            .complete,
+        "Global orientation reversal preserves indexed closed chain and "
+        "odd-parity policy");
+  faces = original_faces;
+  const auto original_raw = raw;
+  const auto original_q = q;
+  for (int which = 0; which < 4; ++which) {
+    raw = original_raw;
+    q = original_q;
+    if (which == 0) raw[0].x = std::numeric_limits<double>::quiet_NaN();
+    if (which == 1) q[0].value[0] = std::numeric_limits<std::int64_t>::max();
+    if (which == 2) {
+      raw[0].x = 8.000001;
+      q[0] = quantized_point(raw[0]);
+    }
+    if (which == 3) {
+      raw[2] = raw[1];
+      q[2] = q[1];
+    }
+    const auto e = require(
+        detail::checkpoint_material_extension_closed_boundary_math(mesh()));
+    check(!e.complete, "Nonfinite, overflow-sized, out-of-workspace and "
+                       "collinear grid geometry refuses safely");
+    boundary_accounting(e);
+  }
+  raw = {{-8, -8, -8}, {8, -8, -8}, {-8, 8, -8}, {-8, -8, 8}};
+  q.clear();
+  for (auto v : raw)
+    q.push_back(quantized_point(v));
+  check(require(
+            detail::checkpoint_material_extension_closed_boundary_math(mesh()))
+            .complete,
+        "Exact extreme supported grid differences and cross products stay "
+        "inside signed int64 range");
+  const auto rounding = std::fegetround();
+  if (std::fesetround(FE_DOWNWARD) == 0) {
+    const auto e =
+        detail::checkpoint_material_extension_closed_boundary_math(mesh());
+    check(!e || (!e->complete && !e->work.arithmetic_supported),
+          "Unsafe FP prevents even synthetic boundary qualification");
+  }
+  check(std::fesetround(rounding) == 0,
+        "Restore rounding before Boundary03 admission");
+}
+void boundary03_controls(View view, const NativeCraftBinding& binding,
+                         const OriginBoardingInitialMaterial& base) {
+  closed_boundary_controls();
+  const auto admission =
+      make_origin_boarding_checkpoint_material_extension_boundary03(binding,
+                                                                    base);
+  std::cout << "FIRST_PUBLIC_CHECKPOINT_MATERIAL_BOUNDARY03 accepted="
+            << admission.has_value();
+  if (!admission) std::cout << " error=" << admission.error();
+  std::cout << '\n' << std::flush;
+  BoundaryEvidence baseline;
+  const auto detailed = Access::make_boundary03(binding, base, {}, &baseline);
+  boundary_log("FIRST_CHECKPOINT_MATERIAL_BOUNDARY03_CONSTRUCTOR", baseline);
+  boundary_accounting(baseline);
+  check(admission.has_value() == detailed.has_value(),
+        "Public Boundary03 and authentic issuer preserve unknown first "
+        "admission outcome");
+  const auto numeric = require(
+      detail::checkpoint_material_extension_boundary03_constructor_math(view));
+  boundary_accounting(numeric);
+  check(numeric.complete == baseline.complete &&
+            numeric.condition == baseline.condition &&
+            numeric.source == baseline.source &&
+            numeric.triangle == baseline.triangle &&
+            numeric.edge == baseline.edge &&
+            numeric.vertex == baseline.vertex &&
+            numeric.axis == baseline.axis &&
+            numeric.edge_comparisons == baseline.edge_comparisons,
+        "Complete-source arithmetic preserves authentic Boundary03 outcome "
+        "without issuing a source");
+  const std::array<std::uint64_t, 8> used{
+      baseline.work.source_bytes,       baseline.work.base_guards,
+      baseline.work.vertex_guards,      baseline.work.index_guards,
+      baseline.bound_coordinate_guards, baseline.nondegenerate_triangles,
+      baseline.edge_occurrences,        baseline.edge_comparisons};
+  for (std::size_t which = 0; which < 8; ++which) {
+    if (used[which] == 0) continue;
+    for (int mode = 0; mode < 3; ++mode) {
+      BoundaryLimits l{};
+      const auto n = mode == 0 ? 0 : mode == 1 ? used[which] : used[which] - 1;
+      switch (which) {
+        case 0: l.source_bytes = static_cast<std::size_t>(n); break;
+        case 1: l.base_guards = n; break;
+        case 2: l.vertex_guards = n; break;
+        case 3: l.index_guards = n; break;
+        case 4: l.bound_coordinate_guards = n; break;
+        case 5: l.nondegenerate_triangles = n; break;
+        case 6: l.edge_occurrences = n; break;
+        case 7: l.edge_comparisons = n; break;
+        default: break;
+      }
+      BoundaryEvidence e;
+      const auto r = Access::make_boundary03(binding, base, l, &e);
+      boundary_accounting(e, l);
+      if (mode == 1)
+        check(r.has_value() == admission.has_value() &&
+                  e.condition == baseline.condition &&
+                  e.triangle == baseline.triangle && e.edge == baseline.edge,
+              "Exact authentic Boundary03 source/work budgets preserve "
+              "observed outcome");
+      else {
+        const auto cause = which == 0   ? BoundaryCondition::source_capacity
+                           : which < 4  ? BoundaryCondition::input_validation
+                           : which == 4 ? BoundaryCondition::bound_capacity
+                           : which == 5 ? BoundaryCondition::triangle_capacity
+                           : which == 6
+                               ? BoundaryCondition::edge_capacity
+                               : BoundaryCondition::edge_comparison_capacity;
+        check(!r && !e.complete && e.condition == cause,
+              "Zero and one-less genuine reached Boundary03 cap stops before "
+              "next operation");
+      }
+    }
+  }
+  Clone outside(view);
+  auto v = outside.raw[1][0];
+  v.x = view.sources[1].identity.raw_bounds.upper.x + .001;
+  outside.raw[1][0] = v;
+  outside.quantized[1][0] = quantized_point(v);
+  const auto bounds =
+      require(detail::checkpoint_material_extension_boundary03_constructor_math(
+          outside.view));
+  check(!bounds.complete, "Actual changed source coordinate cannot bypass "
+                          "authenticated complete source bounds");
+  if (baseline.bound_coordinate_guards == 20448)
+    check(bounds.condition == BoundaryCondition::source_bounds &&
+              bounds.source == 1574,
+          "Reached actual changed nose coordinate refuses complete raw/q "
+          "source bounds");
+  check(!make_origin_boarding_checkpoint_material_extension_boundary03(
+            NativeCraftBinding{}, base),
+        "Unbound craft cannot issue closed-frame material");
+  auto over = BoundaryLimits{};
+  ++over.edge_comparisons;
+  check(!detail::checkpoint_material_extension_boundary03_constructor_math(
+            view, over),
+        "Private Boundary03 controls cannot raise exhaustive edge-comparison "
+        "cap");
+  auto stale = baseline;
+  stale.complete = true;
+  stale.work.constructors_complete = true;
+  check(!Access::make_boundary03(binding, base, over, &stale) &&
+            !stale.complete && !stale.work.constructors_complete &&
+            stale.condition == BoundaryCondition::invalid_limits &&
+            stale.work.extension_version == 3,
+        "Overmax new issuer resets previously complete evidence before limits "
+        "refusal and preserves version3");
+  if (admission) {
+    check(admission->summary() && admission->summary()->extension_version == 3,
+          "Genuinely admitted complete closed boundary retains explicit "
+          "version3");
+    admitted_controls(binding, base, *admission, view, true);
+  }
+}
 } // namespace
 int main() {
   try {
@@ -1097,6 +1363,7 @@ int main() {
     unsafe(view, binding, base);
     if (admission) admitted_controls(binding, base, *admission, view);
     union02_controls(view, binding, base);
+    boundary03_controls(view, binding, base);
     check(summary_bits(*base.summary()) == before,
           "Extension admission and controls preserve every old material "
           "summary field");
