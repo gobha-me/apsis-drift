@@ -1012,6 +1012,96 @@ void print_first(std::size_t index, const Diagnostic& d) {
   }
   std::cout << '\n' << std::flush;
 }
+// Added only after the21 requests on frozen2eedd45 agreed byte-for-byte on
+// GCC and pinnedClang20. These qualify kinematics, never contact or gameplay.
+[[gnu::noinline]] void observed_outcome(std::size_t index,
+                                        const Diagnostic& d) {
+  check(d.complete && !d.first_refusal && d.arithmetic_supported &&
+            d.nominal_links && d.target_sole_identities && d.joint_sectors &&
+            d.derivative_domains && d.timing_complete && !d.cells.empty(),
+        "Every frozen FIRST request retains complete original kinematics and "
+        "exact closed requested cover");
+  for (std::size_t phase = 0; phase < 5; ++phase)
+    check(d.controls[phase].seconds_per_parameter == (phase == 4 ? 2. : 12.),
+          "Frozen physical phase durations remain12/12/12/12/2 without "
+          "normalized-time rescaling");
+  check(same_point(d.controls[0].root[0], d.controls[0].root[1]) &&
+            same_constant(d.controls[0].feet[0].sole[0].coordinates[0],
+                          d.controls[0].feet[0].sole[1].coordinates[0]) &&
+            same_constant(d.controls[0].feet[0].sole[0].coordinates[1],
+                          d.controls[0].feet[0].sole[1].coordinates[1]) &&
+            same_constant(d.controls[0].feet[0].sole[1].coordinates[2],
+                          d.controls[0].feet[1].sole[0].coordinates[2]) &&
+            same_point(d.controls[0].feet[0].sole[1],
+                       d.controls[1].feet[0].sole[0]) &&
+            d.controls[0].feet[0].swing_height_metres == 0 &&
+            d.controls[1].feet[0].swing_height_metres == .010,
+        "Registered preposition and exact endpoint ordering remain unchanged "
+        "after observed success");
+  std::size_t cells{}, nodes{}, navigation{}, depth{}, calls{}, output{};
+  double elapsed{};
+  BoardingRouteFootPhaseCounters work;
+  std::array<bool, 4> joins{};
+  if (index < 2) {
+    cells = 66;
+    nodes = 131;
+    navigation = 4;
+    depth = 10;
+    calls = 127;
+    output = 7950864;
+    elapsed = 50;
+    work = {127, 216, 66, 279, 431};
+    joins = {true, true, true, true};
+  } else if (index < 12) {
+    const auto phase = (index - 2) / 2;
+    constexpr std::array<std::size_t, 5> cell_counts{11, 47, 6, 1, 1},
+        node_counts{21, 93, 11, 1, 1}, depths{5, 7, 3, 0, 0};
+    constexpr std::array<BoardingRouteFootPhaseCounters, 5> works{
+        {{21, 32, 11, 43, 66},
+         {93, 163, 47, 207, 317},
+         {11, 17, 6, 23, 36},
+         {1, 2, 1, 3, 6},
+         {1, 2, 1, 3, 6}}};
+    cells = cell_counts[phase];
+    nodes = node_counts[phase];
+    depth = depths[phase];
+    calls = nodes;
+    output = 7950864;
+    elapsed = phase == 4 ? 2 : 12;
+    work = works[phase];
+  } else if (index < 14) {
+    cells = 55;
+    nodes = 109;
+    navigation = 3;
+    depth = 9;
+    calls = 106;
+    output = 7950864;
+    elapsed = 37;
+    work = {106, 184, 55, 236, 365};
+    joins = {false, true, true, true};
+  } else {
+    cells = 1;
+    nodes = 1;
+    calls = 1;
+    output = 12384;
+    work = {1, 2, 1, 3, 6};
+  }
+  check(d.cells.size() == cells && d.examined_nodes == nodes &&
+            d.mandatory_splits == navigation && d.maximum_depth == depth &&
+            d.phase_calls == calls && d.output_capacity_bytes == output &&
+            d.reporting_elapsed_seconds == elapsed &&
+            d.qualified_joins == joins && d.work.graphs == work.graphs &&
+            d.work.legs == work.legs && d.work.bodies == work.bodies &&
+            d.work.sectors == work.sectors && d.work.timing == work.timing,
+        "Frozen recipe preserves actual cover/guard/work/allocation/clock and "
+        "earned physical join observations");
+  if (!d.cells.empty())
+    check(d.cells.front().global_first ==
+                  std::min(d.requested_first, d.requested_last) &&
+              d.cells.back().global_last ==
+                  std::max(d.requested_first, d.requested_last),
+          "Observed complete request retains both exact requested endpoints");
+}
 [[gnu::noinline]] auto first_one(std::size_t index, double first, double last)
     -> Baseline {
   before_query();
@@ -1027,6 +1117,7 @@ void print_first(std::size_t index, const Diagnostic& d) {
   print_first(index, *result);
   validate_report(*result);
   first_oracles(*result);
+  observed_outcome(index, *result);
   return summarize(*result);
 }
 [[gnu::noinline]] auto first_roster() -> Summary {
