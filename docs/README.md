@@ -55,6 +55,8 @@ player's station-to-flight journey.
   complement certificate for the same finite hip slab and supported path.
 - [Checkpoint WORLD/material01](ORIGIN_BOARDING_ROUTE_CHECKPOINT_WORLD_MATERIAL01.md):
   complete preparation clearance and named remaining material gaps.
+- [Hatch-seal material SealSweep01](ORIGIN_BOARDING_HATCH_SEAL_MATERIAL01.md):
+  registered eight-capsule completion; capture and WORLD outcomes unknown.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
   admitted frame/nose relations; remaining hatch seal material gap.
 - [Checkpoint material Union02](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_UNION02.md):
