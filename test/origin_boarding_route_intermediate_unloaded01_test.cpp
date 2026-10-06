@@ -1121,6 +1121,136 @@ constexpr std::array<std::array<double, 2>, 20> requests{
   }
   std::cout << '\n' << std::flush;
 }
+// Mandatory regressions follow the preserved, outcome-unknown FIRST log.
+// This table records the frozen FIRST; it does not add assessments or poses.
+[[gnu::noinline]] void observed_outcome(std::size_t slot, const Diagnostic& d) {
+  struct Observed {
+    std::size_t cells, nodes, splits, depth, calls;
+    double seconds;
+    std::array<std::size_t, 5> old_work;
+    std::array<std::size_t, 9> new_work;
+    std::array<bool, 2> joins;
+    std::array<bool, 3> endpoints;
+  };
+  static constexpr std::array<Observed, 9> observed{{
+      {64,
+       127,
+       2,
+       9,
+       125,
+       36,
+       {125, 212, 64, 273, 419},
+       {32, 16064, 2292, 64, 512, 48, 8, 32, 1024},
+       {true, true},
+       {true, true, true}},
+      {11,
+       21,
+       0,
+       5,
+       21,
+       12,
+       {21, 32, 11, 43, 66},
+       {32, 2761, 392, 11, 88, 48, 0, 17, 176},
+       {false, false},
+       {true, true, false}},
+      {47,
+       93,
+       0,
+       7,
+       93,
+       12,
+       {93, 163, 47, 207, 317},
+       {32, 11797, 1688, 47, 376, 0, 0, 4, 752},
+       {false, false},
+       {false, true, false}},
+      {6,
+       11,
+       0,
+       3,
+       11,
+       12,
+       {11, 17, 6, 23, 36},
+       {32, 1506, 212, 6, 48, 0, 8, 11, 96},
+       {false, false},
+       {false, false, true}},
+      {1,
+       1,
+       0,
+       0,
+       1,
+       0,
+       {1, 2, 1, 3, 6},
+       {32, 251, 32, 1, 8, 8, 0, 2, 16},
+       {false, false},
+       {true, false, false}},
+      {1,
+       1,
+       0,
+       0,
+       1,
+       0,
+       {1, 2, 1, 3, 6},
+       {32, 251, 32, 1, 8, 4, 0, 5, 16},
+       {false, false},
+       {false, true, false}},
+      {1,
+       1,
+       0,
+       0,
+       1,
+       0,
+       {1, 2, 1, 3, 6},
+       {32, 251, 32, 1, 8, 0, 0, 0, 16},
+       {false, false},
+       {false, false, false}},
+      {1,
+       1,
+       0,
+       0,
+       1,
+       0,
+       {1, 2, 1, 3, 6},
+       {32, 251, 32, 1, 8, 0, 8, 11, 16},
+       {false, false},
+       {false, false, true}},
+      {15,
+       29,
+       1,
+       6,
+       28,
+       12,
+       {28, 45, 15, 59, 99},
+       {32, 3765, 532, 15, 120, 4, 0, 9, 240},
+       {true, false},
+       {false, true, false}},
+  }};
+  static constexpr std::array<std::size_t, 14> indices{0, 0, 1, 1, 2, 2, 3,
+                                                       3, 4, 5, 6, 7, 8, 8};
+  const auto& expected = observed[indices[slot - 1]];
+  check(d.state == State::accepted && d.complete && d.source_enrolled &&
+            d.arithmetic_supported && d.kinematic_complete &&
+            d.nominal_equilibrium && d.star_support && d.port_zero_geometry &&
+            !d.first_refusal && d.stop_condition == Condition::none,
+        "Observed FIRST14 complete nominal support and zero-force geometry");
+  check(d.cells.size() == expected.cells &&
+            d.examined_nodes == expected.nodes &&
+            d.mandatory_splits == expected.splits &&
+            d.maximum_depth == expected.depth &&
+            d.work.phase_calls == expected.calls &&
+            d.reporting_elapsed_seconds == expected.seconds,
+        "Observed shared cover, phase calls and physical clock retained");
+  check(std::array{d.work.phase.graphs, d.work.phase.legs, d.work.phase.bodies,
+                   d.work.phase.sectors,
+                   d.work.phase.timing} == expected.old_work &&
+            new_work(d.work) == expected.new_work,
+        "Observed old and newly charged work retained fieldwise");
+  check(d.qualified_joins == expected.joins &&
+            d.endpoint_scope == expected.endpoints &&
+            d.endpoint_earned == expected.endpoints &&
+            mask_count(d.source_evaluated) == 32 &&
+            d.output_capacity_bytes == 9104352,
+        "Observed earned joins, endpoint scope, source mask and owned output");
+}
 [[gnu::noinline]] void first_one(const Provider& p, std::size_t slot,
                                  Summary& summary) {
   charge(totals.consumers, 96);
@@ -1131,11 +1261,11 @@ constexpr std::array<std::array<double, 2>, 20> requests{
     std::cout << "FIRST_UNLOADED01 A" << slot << " API_ERROR=" << result.error()
               << '\n'
               << std::flush;
-    check(!result.error().empty(),
-          "Unknown FIRST API refusal preserves precise error");
+    check(false, "Observed FIRST14 must retain an accepted API result");
     return;
   }
   print(slot, *result);
+  observed_outcome(slot, *result);
   accounting(*result, Limits{});
   if (slot <= 2) summarize(*result, summary.whole[slot - 1]);
   if (slot == 9) summarize(*result, summary.whole[0], true);
@@ -1157,7 +1287,14 @@ constexpr std::array<std::array<double, 2>, 20> requests{
               << " work=" << e->work.base_guards << ',' << e->work.metadata_rows
               << ',' << e->work.face_reads << ',' << e->work.quad_records;
   std::cout << '\n' << std::flush;
+  check(result.has_value(), "Observed genuine source admission retained");
   if (result) {
+    const auto* e = result->summary();
+    check(e && e->complete && e->actual_source_bytes == 4096 &&
+              e->condition == BoardingIntermediatePauseCondition::none &&
+              e->work.base_guards == 21 && e->work.metadata_rows == 1 &&
+              e->work.face_reads == 2 && e->work.quad_records == 2,
+          "Observed genuine source identity work and single arena retained");
     check(Access::valid(*result),
           "Only genuine public unchanged creator issues source");
     p.emplace(std::move(*result));
@@ -1566,7 +1703,7 @@ struct Fixture {
                   "Independent corner cross-products enclosed by side-only "
                   "kernel");
     if (i.mode == GeometryMode::intermediate_overlap &&
-        d.work.source_coordinates == 8) {
+        d.work.source_coordinates == 8 && d.work.operations == 8) {
       for (std::size_t a = 0; a < 2; ++a) {
         const auto axis = a == 0 ? 0U : 2U;
         long double lo = component(i.source_vertices[0], axis), hi = lo;
@@ -1624,8 +1761,18 @@ struct Fixture {
           "Last duplicated-max corner still mandatory and NOT_RUN at cap7");
   if (slot == 15)
     check(d.condition == Condition::endpoint_operation_capacity &&
-              d.work.operations == 7 && !d.operation_evaluated[7],
-          "Last upper intersection operation NOT_RUN at cap7");
+              d.work.operations == 7 && !d.operation_evaluated[7] &&
+              std::ranges::all_of(d.source_extrema,
+                                  [](const auto& pair) {
+                                    return !pair[0].supported &&
+                                           !pair[1].supported;
+                                  }) &&
+              std::ranges::all_of(d.sole_extrema,
+                                  [](const auto& pair) {
+                                    return !pair[0].supported &&
+                                           !pair[1].supported;
+                                  }),
+          "Last upper intersection NOT_RUN; saved extrema unpublished at cap7");
   if (slot == 16)
     check(d.condition == Condition::invalid_limits &&
               d.work.validation_guards == 0 && d.work.operations == 0,

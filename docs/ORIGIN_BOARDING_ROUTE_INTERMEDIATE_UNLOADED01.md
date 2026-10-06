@@ -376,3 +376,43 @@ binaries, this document and final independent/resource/build/lint receipts
 before executing the registered finite roster. These measurements qualify
 storage and authority boundaries; they grant no motion/contact/WORLD/actor
 or First Flight success.
+
+## Retained FIRST — 2026-10-06
+
+Root froze source `f3460de409e06ef430e3967b20a623f963a2db44` at
+`2026-10-06T13:49:26.020093+00:00`, after both complete builds, pinned
+format/lint and the independent pre-FIRST resource/authority review. Both
+frozen binaries ran once. GCC started13:49:26.189119UTC and Clang20
+13:49:26.703666UTC; their3534-byte combined logs are byte-identical, SHA256
+`cd477bbd218ae05aefe5e64dc4ac0f80878c04cf29884614dc6ec71f4379aaee`.
+Both original executions exited1. All original observations and failures remain
+retained; no candidate was adjusted to obtain these results.
+
+All14 registered forward/reverse/phase/point/cross-join observations completed.
+Whole `[0,.5]` forward and reverse each retained64 accepted cells,127 navigation
+nodes,2 mandatory splits,maximum depth9 and125 original compiler calls, over36
+physical seconds. Both actual joins qualified and all three endpoint witnesses
+were earned. Old work is125graphs/212legs/64bodies/273sectors/419timing calls.
+New work is32source/16064projection/2292definition/64pressure/512disk/48upper
+side/8intermediate coordinate/32endpoint operation/1024event guards.
+The three phase-only forward/reverse covers use11/47/6 cells respectively; all
+four point observations use one cell, and each cross-join cover uses15 cells.
+The test used exactly one4096-byte genuine source creator,96 consumer calls,
+24 raw fixtures and8 FIRST-only corroboration poses;72504 checks reported4
+failures.
+
+Two failures identified an actual implementation bug: an outer ordinary
+projection/guard failure downgraded an already terminal inner capacity refusal
+to unresolved. Correct the propagation while retaining its original predicate,
+stop and hard state; do not weaken the terminal-capacity regression. Two other
+failures were premature raw-oracle reads: all8 coordinate visits can occur even
+when an operation7 ceiling stops the shared kernel before it publishes its
+extrema after operation8. Read those numerical values only when their supported
+evidence is published; keep the partial operation masks and refusal checks.
+These corrections change no motion, source, pressure, geometry, clock, input
+fixture or finite roster. Final regression/publication acceptance is pending.
+
+The retained positive result concerns continuous nominal star-only support and
+the declared zero-force port geometry/events over the selected approach only.
+It grants no self/full-material/WORLD/whole-route/seat/actor/save/dynamics or
+First Flight authority. Parent #462/#361/#352 remain open.

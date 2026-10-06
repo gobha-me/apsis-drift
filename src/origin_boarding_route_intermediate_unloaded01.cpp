@@ -56,7 +56,7 @@ auto fail(D& d, R& r, W w) -> bool {
     d.stop_condition = w;
     d.state = capacity(w) ? S::capacity : S::unsupported;
     if (w == W::unsupported_arithmetic) d.arithmetic_supported = false;
-  } else
+  } else if (d.state != S::capacity && d.state != S::unsupported)
     d.state = S::unresolved;
   return false;
 }

@@ -2698,7 +2698,7 @@ auto u_refuse(UD& d, UR& r, UW w, UB b = {},
     d.stop_condition = w;
     d.state = u_hard(w) ? US::capacity : US::unsupported;
     if (w == UW::unsupported_arithmetic) d.arithmetic_supported = false;
-  } else
+  } else if (d.state != US::capacity && d.state != US::unsupported)
     d.state = US::unresolved;
   return false;
 }
