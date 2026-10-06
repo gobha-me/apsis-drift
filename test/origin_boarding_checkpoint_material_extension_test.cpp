@@ -729,8 +729,8 @@ int main() {
     check(!wrong ||
               !make_origin_boarding_checkpoint_material_extension(*wrong, base),
           "Changed hardware cannot issue pinned extension");
-    // This is the first genuine extension admission. Its outcome remains
-    // unknown until the registered frozen run.
+    // Preserve the registered FIRST log ordering. Both original compiler logs
+    // are retained; the observed raw-containment refusal is mandatory below.
     const auto admission =
         make_origin_boarding_checkpoint_material_extension(binding, base);
     std::cout << "FIRST_PUBLIC_CHECKPOINT_MATERIAL_EXTENSION accepted="
@@ -740,6 +740,23 @@ int main() {
     Evidence evidence;
     const auto detailed = Access::make(binding, base, {}, &evidence);
     log_evidence("FIRST_CHECKPOINT_MATERIAL_EXTENSION_CONSTRUCTOR", evidence);
+    check(!admission && !detailed && !evidence.complete &&
+              evidence.condition == Condition::raw_containment &&
+              evidence.source == 1436 && evidence.triangle == 2 &&
+              evidence.sector == 7 && evidence.vertex == 3 &&
+              evidence.plane == 3 && !evidence.quantized,
+          "Frozen FrameAnnulus01 refuses the same original raw face and last "
+          "attempted sector/vertex/plane without issuing source authority");
+    check(evidence.work.base_guards == 791 &&
+              evidence.work.vertex_guards == 20448 &&
+              evidence.work.index_guards == 17097 &&
+              evidence.work.raw_plane_guards == 80 &&
+              evidence.work.quantized_plane_guards == 36 &&
+              evidence.work.bindings_complete &&
+              evidence.work.arithmetic_supported &&
+              !evidence.work.constructors_complete,
+          "Frozen constructor refusal retains exact completed guards and "
+          "separate raw/quantized attempted work");
     check(admission.has_value() == detailed.has_value(),
           "Public and authentic detailed issuer preserve the same first "
           "observed admission");
@@ -752,6 +769,23 @@ int main() {
           "source-attributed refusal evidence");
     if (numeric) {
       log_evidence("IMMUTABLE_EXTENSION_CONSTRUCTOR_MATH", *numeric);
+      check(numeric->complete == evidence.complete &&
+                numeric->condition == evidence.condition &&
+                numeric->source == evidence.source &&
+                numeric->triangle == evidence.triangle &&
+                numeric->sector == evidence.sector &&
+                numeric->vertex == evidence.vertex &&
+                numeric->plane == evidence.plane &&
+                numeric->quantized == evidence.quantized &&
+                numeric->work.base_guards == evidence.work.base_guards &&
+                numeric->work.vertex_guards == evidence.work.vertex_guards &&
+                numeric->work.index_guards == evidence.work.index_guards &&
+                numeric->work.raw_plane_guards ==
+                    evidence.work.raw_plane_guards &&
+                numeric->work.quantized_plane_guards ==
+                    evidence.work.quantized_plane_guards,
+            "Immutable arithmetic fixture preserves the frozen authentic "
+            "constructor refusal and actual work without source authority");
       caps(view, *numeric);
     }
     malformed_controls(view);

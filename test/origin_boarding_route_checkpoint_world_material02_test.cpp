@@ -740,14 +740,27 @@ int main() {
               << " quantized=" << e.work.quantized_plane_guards;
     if (!admission) std::cout << " error=" << admission.error();
     std::cout << '\n' << std::flush;
+    check(!admission && !e.complete && !e.work.constructors_complete &&
+              e.condition ==
+                  detail::BoardingCheckpointMaterialExtensionCondition::
+                      raw_containment &&
+              e.source == 1436 && e.triangle == 2 && e.sector == 7 &&
+              e.vertex == 3 && e.plane == 3 && !e.quantized,
+          "Frozen WORLD02 remains unavailable because original frame raw "
+          "containment refused; this is no WORLD clearance result");
     if (admission) {
       const auto& extension = *admission;
       invalid_controls(binding, boot, base, extension);
       observe(boot, base, extension);
-    } else
+    } else {
+      std::cout << "CHECKPOINT_WORLD_MATERIAL02_UNAVAILABLE "
+                   "reason=frame_raw_containment "
+                   "source=1436 triangle=2 clearance_observed=0\n"
+                << std::flush;
       check(!e.complete && !e.work.constructors_complete,
             "Unavailable constructor is preserved; no fake extension mints "
             "WORLD permission");
+    }
   } catch (const std::exception& e) {
     ++failures;
     std::cerr << "EXCEPTION: " << e.what() << '\n';
