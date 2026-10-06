@@ -57,6 +57,7 @@ player's station-to-flight journey.
   complete preparation clearance and named remaining material gaps.
 - [Hatch-seal material SealSweep01](ORIGIN_BOARDING_HATCH_SEAL_MATERIAL01.md):
 - [Separation load-ring material SeparationRingSweep01](ORIGIN_BOARDING_SEPARATION_RING_MATERIAL01.md) — registered source-specific ring material completion and WORLD04 resource controls.
+- [IntermediateStep01 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP01.md) — one frozen moving-foot candidate and shared kinematic cover, before supported transfer qualification.
   admitted eight-capsule seal; remaining separation load-ring material gap.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
   admitted frame/nose relations; remaining hatch seal material gap.
