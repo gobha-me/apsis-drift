@@ -581,3 +581,45 @@ These23 fields/order/caps and87 slots introduce no raw seam or extra call. Indep
 
 All results remain UNKNOWN. Even an actually complete static reach/contact/load/all105 SELF result is only the selected endpoint prerequisite. It does not establish current WORLD/material/HALO/crop exclusion, a continuous acquisition or reverse route, pan-only seat/actor/save/FirstFlight authority, friction/strength/dynamics, every possible pose or every possible route. Original observations remain immutable.
 <!-- END EXACT MANIFEST -->
+
+## Measured implementation resources
+
+The compile-only admission used GCC 16.2.1 and pinned Clang 20.1.8 at C++23, `-O3`, `-DNDEBUG`, `-fPIC` and `-ffp-contract=off`. Symbol-only layouts and stack-usage objects required no executable probe. Both compilers agree on Expected 1,440 bytes, Diagnostic 1,432 bytes, Cell 10,944 bytes (original PhaseCell 7,736 plus new delta 3,208), Limits 184 bytes, Request 680 bytes and body Oracle 8,400 bytes.
+
+| Complete sequential stage | Source bytes | GCC physical bytes | Clang physical bytes |
+| --- | ---: | ---: | ---: |
+| Creator | 7,000 | 6,884 | 6,620 |
+| Preflight | 11,384 | 13,372 | 11,588 |
+| Source enrollment / request factory | 24,680 | 29,268 | 26,820 |
+| Full-cell reset | 33,650 | 34,134 | 22,502 |
+| Original graph plus additions | 47,528 | 38,180 | 35,740 |
+| Canonical packet factory | 30,216 | 32,452 | 30,580 |
+| Pressure / body / unit / SELF helpers | 28,680 | 29,364 | 27,572 |
+| Independent body audit | 48,088 | 44,564 | 42,900 |
+| Independent interval audit | 31,288 | 22,948 | 21,892 |
+
+The pre-arena authentication chain is separately bounded by 3,988 / 3,484 bytes, including the complete reachable lookup/quad-edge paths, a 128-byte project-primitive reserve and a separate 512-byte library leaf. It does not overlap arena construction. The creator stays below 8,192 bytes; every complete scratch stage stays below 49,152 bytes. The closest source stage is the 48,088-byte body audit, leaving 1,064 bytes of unused margin.
+
+The graph retains the whole original 32,768-byte source proof without subtracting its slack. Inventories include both owning headers, four Limits copies, the one 4,096-byte source arena, retained whole Cell, caller/globals, current and pending returns, error/library slots, and both 8,400-byte body Oracles. Body and interval audits are sequential; no NRVO or return elision is used to reduce source storage. Exact static disassembly establishes the restored-stack owner tail branches used in the physical accounting.
+
+The test caller names 748 creator bytes and 1,332 graph bytes, including 132 bytes of mutable globals; remaining caller allowances are explicitly unused. Pressure utility names all four 128-byte corner slots, including helper-local and pending returns. Body utility retains its separate 512-byte library/error reserve. The layout model for two headers plus one Cell allocation is 13,824 bytes, below 16,777,216; actual allocation capacity is checked by the producer.
+
+Lint fixes changed only two same-value limit literals and three exact, justified annotations on deliberately moved-from provider tests. All twelve refreshed objects are byte-identical to the prior reviewed objects; all layouts and function stack sizes remain identical. Historical resource records and failed compile/lint attempts are retained. None of these compile-only facts constitutes an endpoint, route or gameplay result.
+
+## Retained FIRST result
+
+The immutable source/binary/receipt freeze at code commit `c55c510d1e71700984d2c1983cf53ce7df42e2d3` preceded FIRST on 2026-10-06 at 21:57:45 UTC. The freeze SHA-256 is `63cdebdb3a3509ed9dc91b05d3089355aad768e3f8f72af8d34b8c768f5353e3`. Both GCC and Clang completed the registered harness with exit zero and byte-identical 1,595-byte logs, SHA-256 `6fadb33c421b81cbe7c5dc3239a82a92a6183f47c1989526afa7359d7db4d321`. This is the preserved observation; the candidate, source, geometry and roster were not adjusted afterward.
+
+Candidate0 remains **unresolved** at the original PORT-leg **reach** prerequisite. The new cause/stop is `phase_prerequisite`, stage `phase`; the nested original condition is `reach` (4), side0. The original compiler ran once: graph1, leg1, body0, sectors0, timing0. The source creator completed once with its 4,096-byte arena. All64 source guards and the full source mask were earned. D01–04 were charged (definition work4, mask15); the single allocation has capacity1 and actual owned output13,824 bytes.
+
+Current projection work is0. Pressure construction, disk edges, body binding, unit axes, SELF pairs, owners and hip complements were NOT_RUN. The retained cell's original phase/current/support/SELF completion flags remain false; its existence is not accepted body or contact evidence. Outer unset side/edge/axis and SELF sentinels are not actual geometric identifiers.
+
+The original reach guard rejects a sufficient interval inclusion when `D.upper > maximum_reach.lower` or `D.lower < minimum_reach.upper`, using the unchanged outward squared-distance and link-length primitives. It reports ordinary unresolved reach; it does not provide the strict converse required for an exact unreachable certificate. The saved text does not distinguish the two disjuncts or serialize the original numeric reach interval. The new outer `bound_supported=0` denotes unearned generic evidence and does not mean that the original reach arithmetic was unsupported. Nested `predicate_condition=none` is the original private cell's default; only the older public cover wrapper separately fills that field. No collision, global posture impossibility or geometric margin follows from this record.
+
+The exact87-slot manifest executed46 consumer slots and honestly skipped41 under its preregistered prerequisites. Each compiler reported2,463 checks and zero failures, creator1, raw0, body-pose audits0, pair audits0, owner audits0 and hip audits0. Aggregate phase calls8 and graphs7 are distinct counters; a guarded phase refusal need not earn graph work. Both output streams together remained below the registered16,384-byte ceiling. This is a passing refusal/accounting validation, not a qualified endpoint.
+
+No alternate candidate, subdivision, fallback, grid, fitted coordinate or additional numeric diagnostic followed FIRST. The original source planes, feet, body reservations, finite owners, masses and load shares remain unchanged. The original four certified hip witnesses and the contract audit remain historical evidence for their own unchanged poses; they are not applied to this unevaluated downstream body.
+
+Before another endpoint family, perform a finite, zero-query source-contract audit of the original reach kernel's root-only applicability and evidence semantics. Trace the immutable constant carriers, hip/sole displacement, proper-frame provenance, outward inclusion guards and original/private refusal attribution. Preserve this FIRST and all existing predicates. Such an audit must identify a concrete contradiction or affirm the contract; it does not authorize repairing a rejection to obtain a desired pose or selecting new coordinates. Any later numerical family requires its own independent registration with unknown outcomes.
+
+Issue488's registered assessment is complete with this retained unresolved result. Full WORLD/material/HALO/crop/contact/load/SELF route obligations, acquisition/reverse movement, pan-only seating, actor/save and First Flight remain open. No boarding, sitting, takeoff or full gameplay qualification is claimed.
