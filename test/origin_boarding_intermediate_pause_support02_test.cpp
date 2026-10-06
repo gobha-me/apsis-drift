@@ -737,10 +737,108 @@ void edge_oracle(const BoardingFootSiteEdgeEvidence& e, Point a, Point b,
               << " bytes=" << s->actual_source_bytes
               << " condition=" << static_cast<unsigned>(s->condition);
   std::cout << '\n' << std::flush;
+  check(result.has_value(), "Observed genuine public source remains admitted");
   if (result) {
     check(Access::valid(*result),
           "Genuine public creator alone issues source capability");
+    const auto* s = result->summary();
+    check(s && s->complete &&
+              s->condition == BoardingIntermediatePauseCondition::none &&
+              s->actual_source_bytes == 4096,
+          "Observed source admission retains its complete fixed4096 arena");
     provider.emplace(std::move(*result));
+  }
+}
+// Mandatory regressions follow the initially unknown frozen FIRST observation.
+// This helper runs after the producer returns; its frame never overlaps graph.
+[[gnu::noinline]] void observed_support(const Diagnostic& d) {
+  check(
+      d.version == 2 && d.state == State::supported && d.complete &&
+          d.arithmetic_supported && d.kinematic_complete && d.constant_state &&
+          d.projection_complete && d.intersection_complete &&
+          d.nominal_equilibrium && d.finite_contact_supported &&
+          d.nominal_load_supported && !d.first_refusal &&
+          d.stop_condition == Condition::none && d.duration_seconds == 2 &&
+          d.reactions == std::array<double, 2>{.0625, .9375},
+      "Observed source-backed two-second pause supports the selected1/16 load");
+  check(d.work.phase_calls == 1 && d.work.definition_guards == 31 &&
+            old_work(d) ==
+                std::array<std::uint64_t, 9>{1, 2, 1, 3, 6, 251, 2, 16, 2496} &&
+            stages(d.work) == std::array<std::size_t, 5>{4, 8, 4, 4, 6} &&
+            d.output_bytes == 2496,
+        "Observed fresh graph, complete projection and allocation retain exact "
+        "work");
+  const auto all = [](const auto& a) {
+    return std::all_of(a.begin(), a.end(), [](bool b) { return b; });
+  };
+  check(all(d.definition_evaluated) && all(d.projected_carrier_complete) &&
+            all(d.pressure_evaluated),
+        "Observed success retains all31 definitions,11 carriers and two "
+        "candidates");
+  for (const auto& a : d.source_coordinate_evaluated)
+    check(all(a), "Observed source clip reads all eight coordinates");
+  for (const auto* m : {&d.sole_extrema_evaluated, &d.intersection_evaluated,
+                        &d.midpoint_evaluated})
+    for (const auto& a : *m)
+      check(all(a), "Observed fullsole, clip and midpoint masks are complete");
+  for (const auto& a : d.allocation_evaluated)
+    check(all(a), "Observed star solve retains all six "
+                  "multiply/subtract/divide operations");
+  const auto exact = [](Scalar b, double lower, double upper) {
+    return b.supported && b.lower == lower && b.upper == upper;
+  };
+  check(exact(d.com_xz[0], .27107849490809005, .27107849490809199) &&
+            exact(d.com_xz[1], -.75275030637110374, -.75275030637109841),
+        "Observed independent fullbody COM enclosure remains reproducible");
+  check(exact(d.intersection_lower_xz[0], .11999999999999995,
+              .12000000000000004) &&
+            exact(d.intersection_upper_xz[0], .23999999999999994,
+                  .24000000000000005) &&
+            exact(d.intersection_lower_xz[1], -1.28, -1.2799999999999996) &&
+            exact(d.intersection_upper_xz[1], -1.18316, -1.18316),
+        "Observed fullsole/source intersection keeps strict finite X and Z "
+        "width");
+  check(
+      exact(d.pressure_xz[0][0], .17999999999999988, .1800000000000001) &&
+          exact(d.pressure_xz[0][1], -1.2315800000000006,
+                -1.2315799999999992) &&
+          exact(d.pressure_xz[1][0], .27715039456862928, .27715039456863161) &&
+          exact(d.pressure_xz[1][1], -.7208283267958443, -.72082832679583797),
+      "Observed constructive port midpoint and star moment-solve pressures "
+      "persist");
+  const auto& port = d.sources[0];
+  const auto& star = d.sources[1];
+  check(port.name == "CRAFT | pilot transition intermediate step" &&
+            port.plane == static_cast<double>(-230000) * 1e-6 &&
+            port.keys[0].buffer == LowerCockpitContactBuffer::halo &&
+            port.keys[1].buffer == LowerCockpitContactBuffer::halo &&
+            port.keys[0].group == 0 && port.keys[1].group == 0 &&
+            port.keys[0].triangle == 662 && port.keys[1].triangle == 663 &&
+            star.name == "CABIN | cockpit transition step" &&
+            star.plane == static_cast<double>(-160000) * 1e-6 &&
+            star.keys[0].buffer == LowerCockpitContactBuffer::original &&
+            star.keys[1].buffer == LowerCockpitContactBuffer::original &&
+            star.keys[0].group == 0 && star.keys[1].group == 0 &&
+            star.keys[0].triangle == 62119 && star.keys[1].triangle == 62120,
+        "Observed nonzero support belongs to the exact genuine HALO and "
+        "original quads");
+  for (const auto& site : d.sites) {
+    check(site.loaded && site.plane_identity && site.evaluated &&
+              site.complete &&
+              site.sole_status ==
+                  BoardingIntermediatePauseDiskStatus::contained &&
+              site.source_status ==
+                  BoardingIntermediatePauseDiskStatus::contained &&
+              all(site.sole_evaluated) && all(site.source_evaluated),
+          "Observed two loaded sites retain complete original four-edge disks");
+    for (std::size_t e = 0; e < 4; ++e)
+      for (const auto* edge : {&site.sole_edges[e], &site.source_edges[e]})
+        check(
+            edge->disk_contained && edge->signed_side.supported &&
+                edge->squared_margin_gap.supported &&
+                edge->signed_side.lower > 0 &&
+                edge->squared_margin_gap.lower >= 0,
+            "All16 observed finite margins satisfy unchanged strict admission");
   }
 }
 [[gnu::noinline]] void first_one(const Provider& p, bool reverse,
@@ -751,9 +849,11 @@ void edge_oracle(const BoardingFootSiteEdgeEvidence& e, Point a, Point b,
             << " admitted=" << result.has_value();
   if (!result) {
     std::cout << " error=" << result.error() << '\n' << std::flush;
+    check(false, "Observed supported public assessment remains available");
     return;
   }
   print(*result);
+  observed_support(*result);
   accounting(*result, Limits{});
   first_oracle(*result);
   baseline = summarize(*result);

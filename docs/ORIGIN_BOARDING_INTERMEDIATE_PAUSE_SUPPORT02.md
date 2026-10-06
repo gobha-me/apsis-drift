@@ -289,3 +289,55 @@ allowance, below8192. No graph reserve, caller slack or return elision supplies
 space for new records. The earlier quarter-load results and all other original
 inputs remain unchanged. The new numerical outcome is still unknown before the
 frozen first execution.
+
+## Retained first observation (2026-10-06)
+
+Implementation was frozen at commit
+`68c123b865692b0d98d7d507eeed60b32067340a` before either executable ran.
+Both GCC16 and Clang20 first runs returned success, with identical 1,839-byte
+streams (SHA256
+`b2fb6c659fd00f9dd96cdd365ae9632ad2fd2b04aa04e0ec8960e3f7949c965b`).
+One original source creator admitted the unchanged 4,096-byte source arena.
+
+Both forward and reverse requests genuinely qualify the selected static pause
+at port1/16 and star15/16. Each fresh phase graph completed all251 projection
+records,31 definition guards,4 sole extrema,8 source coordinates,4 intersection
+operations,4 midpoint operations,6 allocation operations and all16 original
+sole/source disk predicates. Both source planes and named force/moment
+identities qualify; there is no terminal stop. Owning output is2,496 bytes.
+
+The same port-source/full-sole intersection gives portCOP X
+[0.17999999999999988,0.1800000000000001] and Z
+[-1.2315800000000006,-1.2315799999999992]. Its complementary moment expression
+gives starCOP X[0.27715039456862928,0.27715039456863161] and Z
+[-0.7208283267958443,-0.72082832679583797]. All four sole/source disks contain
+the original radius.020 and margin.010. Independent FIRST-only long-double
+body, moment and edge corroboration agrees with the retained enclosures.
+
+The literal validation manifest executed47 consumer calls,32 fresh graphs,24
+raw allocation calls and2 FIRST-only oracles, with2,296 checks and0 failures.
+Skipped duplicate/environment slots supply no replacement queries. This result
+qualifies only the registered two-second static nominal support model. Earlier
+quarter-load refutations remain unchanged; continuous acquisition/load transfer,
+self/material/WORLD clearance, seat/actor/save integration and First Flight
+remain open and require separately registered work.
+
+## Publication validation
+
+All84 native contracts pass on GCC16 (76.56 seconds) and Clang20 (66.49 seconds).
+The final CTest-retained support02 streams are identical1,839-byte outputs,
+SHA256 `3cffb8ad4ae3acb9e2c37f0fb7cf6f2337fe0aa5fcf71f42b44cddba5e36d6d5`;
+observed regressions add checks after FIRST prints without adding queries or
+changing controls. The original frozen FIRST streams remain retained separately.
+
+Pinned clang-format20 passes. Full clang-tidy20 covers191 translation units;
+the final observed-test change also passes a focused one-unit run through the
+repository lint script. The suppression policy validates119 directives and all10
+policy self-tests. All829 original input identities, including the complete
+108954-byte boot prefix, remain exact. Production source is unchanged after
+FIRST; only observed test assertions and outcome documentation were added.
+
+All141 rebuilt Godot compatibility inputs and the previous five-contract report
+remain byte-identical. The local walk/save/saved-flight/start-staging/operating-motion
+report is reused on that basis; no fresh local Godot run is claimed. Publication
+requires all eight CI checks on the exact final head, including fresh Godot checks.
