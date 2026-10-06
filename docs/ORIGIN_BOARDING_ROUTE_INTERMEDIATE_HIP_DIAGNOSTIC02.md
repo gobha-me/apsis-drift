@@ -378,3 +378,36 @@ Original creator/authentication and pure42/28 verifier frame evidence is retaine
 The finite roster remains one genuine creator,73 consumer slots,32 source-free analytic slots and at most six FIRST whole-interval certificate audits. Source, layout, resource and immutable prequery checks precede Root's separate once-FIRST observation. No measured bound confers complete support, SELF, WORLD/material/HALO, seat, actor, save or playable-route qualification.
 
 Both complete native builds pass, and pinned format20 and tidy20 pass; tidy checks203 translation units. All compiler/read jobs are reaped before source publication. Runtime remains CLOSED. The rebuilt GCC Godot bridge and all141 exact engine/project/exporter/fixture/helper inputs match the retained local five-contract report; this is verified reuse, not a fresh local run. Fresh exact-head PR CI remains required.
+
+
+## Retained FIRST and publication result
+
+Root froze public implementation `b6f4c284acf7b8b815f695c89678226407a6458d` before once-FIRST on2026-10-06 at19:49:12 UTC. The freeze binds1160 source files,26 receipts,52 artifacts and3 binaries. GCC and Clang each return0 with byte-identical4057-byte logs, SHA256 `040946335bdc9562c13426fb20a6003c0db3f023fd50a65fe409318c5ba95db4`. Observations were retained before outcome expectations. No code, body, source, motion, owner, case, tolerance, resource or candidate family changed after FIRST.
+
+All six original obligations now have certificates. The two original exclusions remain unchanged; the four formerly unresolved point poses have strict unowned-interior witnesses:
+
+|Case|Original global/local selection|Winner|State index|Retained lower gaps|
+|---|---|---|---:|---|
+|0|phase0, global0/local0|dual exclusion|84|exclusion0.10124933240599819|
+|1|phase1, global0.25/local1|strict primal mixture witness|90|axial0.00013203991018825853; radial0.00047391151545118042|
+|2|phase2, global0.5/local1|strict primal mixture witness|3|axial0.0082907649331996885; radial0.0077247443527390432|
+|3|phase3, global0.75/local1|strict primal mixture witness|3|axial0.0082907649331997162; radial0.007724744352739045|
+|4|phase4, global1/local1|strict primal mixture witness|3|axial0.0082907649331997162; radial0.007724744352739045|
+|5|phase1, global[145/1024,146/1024], local[17/128,9/64]|dual exclusion for the whole original interval|93|exclusion0.010174418363653877|
+
+Concrete primal witnesses are original ROOT coordinates and segment fractions, verified by the unchanged full-interval28-operation theorem:
+
+|Case|q.X|q.Y|q.Z|s|
+|---|---:|---:|---:|---:|
+|1|0.0012246172161200792|-0.071374185972545551|-0.17991544733011644|0.45778812823946818|
+|2|-0.065465918704807669|-0.1191629521889407|-0.17874442828341106|0.57082882389804035|
+|3|-0.065465918704807669|-0.11916295218894069|-0.17874442828341103|0.57082882389804057|
+|4|-0.065465918704807669|-0.11916295218894069|-0.17874442828341103|0.57082882389804057|
+
+The axial lower gap is strictly beyond the original finite owner plane; the radial lower gap is strictly inside the complete original capsule. The verifier also establishes all six strict original-box gaps and0<=s<=1. Reporting midpoints and analytic readiness alone establish none of this. Independent retained full-phase/chart/winner audits passed for all six certificates. The original dual coefficients/LB/gap suffixes are byte-identical to Diagnostic01; exclusion concerns strict unowned interior, not tangency or all closed-volume contact.
+
+Each harness creates exactly one genuine4096-byte source. It executes70 of73 consumer slots, all32 raw analytic slots and six FIRST winner audits, with3380 checks and0 failures. Honest SKIPs are A37 (graphs reached count1), A39 (bodies count1) and A48 (first-positive primal trials count1); no replacement query was added. Aggregated41 phase calls versus40 graph-work records reflect charged refusals before the original graph count, not hidden work. Shared stdout/stderr remains4057 bytes below16384. Lowered/raised/unsafe/nonfinite/lifetime/mixed-precedence controls and literal scalar corroborations remain within the frozen roster.
+
+Both complete native suites pass90/90. The normal CTest target outputs are byte-identical to FIRST for each compiler. Root independently rechecks all1241 frozen bindings after FIRST and after CTest; none change. Full builds, pinned format20/tidy20 over203 translation units and exact141-input Godot evidence reuse pass. Fresh exact-head PR CI remains the publication gate.
+
+This resolves the uncertainty by refuting the current fixed reservation's port-hip ownership obligation at four mandatory point poses, including its terminal held configuration. The terminal configuration here is the E/I foot-supported intermediate checkpoint, not the separate pan-supported seated endpoint. It does not prove a collision in the rendered character mesh, actual dynamics, every possible trajectory or all possible body models. A different trajectory cannot repair an unchanged endpoint that already fails; any future endpoint, model or owner-policy revision requires a separately justified and registered child, never an adaptive enlargement or shrinking to erase these observations. Parent #462, #361, #352 and First Flight remain open. Complete support/SELF, WORLD/material/HALO, pan-only seat, actor/save integration and playable-route qualification remain unestablished.
