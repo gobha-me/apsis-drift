@@ -3375,3 +3375,816 @@ auto u_consistent(Point center, Interval y,
   return d.state;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_support01_internal.hpp"
+namespace apsis_drift {
+namespace {
+using HD = BoardingRouteIntermediateSupport01Diagnostic;
+using HC = BoardingRouteIntermediateSupport01Cell;
+using HR = BoardingRouteIntermediateSupport01Refusal;
+using HL = detail::BoardingRouteIntermediateSupport01Limits;
+using HW = BoardingRouteIntermediateSupport01Condition;
+using HS = BoardingRouteIntermediateSupport01State;
+using UB = BoardingFootSiteScalarBounds;
+using UA = detail::BoardingIntermediatePauseSupportAccess;
+using UP = BoardingPlantedBodyPointId;
+using HClass = BoardingRouteIntermediateSupport01UpperClass;
+auto h_valid(UB b, double domain = 8) -> bool {
+  return b.supported && std::isfinite(b.lower) && std::isfinite(b.upper) &&
+         b.lower <= b.upper && std::abs(b.lower) <= domain &&
+         std::abs(b.upper) <= domain;
+}
+auto h_interval(UB b) -> Interval {
+  return {b.lower, b.upper};
+}
+auto h_bounds(Interval b) -> UB {
+  bool supported = true;
+  return site_bounds(b, supported);
+}
+auto h_hard(HW w) -> bool {
+  return w == HW::pressure_capacity || w == HW::edge_capacity ||
+         w == HW::event_guard_capacity || w == HW::upper_edge_capacity ||
+         w == HW::source_coordinate_capacity ||
+         w == HW::endpoint_operation_capacity || w == HW::definition_capacity;
+}
+auto h_refuse(HD& d, HR& r, HW w, UB b = {},
+              std::optional<std::size_t> edge = {}, bool source = false)
+    -> bool {
+  if (r.condition == HW::none) {
+    r.condition = r.predicate_condition = w;
+    r.limiting_bound = b;
+    r.edge = edge;
+    r.side =
+        source ? std::optional<std::size_t>{0} : std::optional<std::size_t>{1};
+    r.source_edge = source;
+  }
+  if (h_hard(w) || w == HW::unsupported_arithmetic) {
+    d.stop_condition = w;
+    d.state = h_hard(w) ? HS::capacity : HS::unsupported;
+    if (w == HW::unsupported_arithmetic) d.arithmetic_supported = false;
+  } else if (d.state != HS::capacity && d.state != HS::unsupported)
+    d.state = HS::unresolved;
+  return false;
+}
+auto h_charge(HD& d, HR& r, std::size_t& n, std::size_t cap, HW w) -> bool {
+  if (n >= cap) return h_refuse(d, r, w);
+  ++n;
+  return true;
+}
+template <class F>
+auto h_guard(HD& d, HC& c, const HL& l, HR& r, F f, HW w) -> bool {
+  return detail::boarding_route_intermediate_support01_definition_charge(
+             d, c, l, r) &&
+         (f() || h_refuse(d, r, w));
+}
+// A strict point-side proof is not a zero-radius pressure-disk query.
+auto h_signed_side(Point a, Point b, Point center, bool& supported) -> UB {
+  return site_bounds(edge_side(a, b, center), supported);
+}
+template <class Charge>
+auto h_sides(const std::array<Vec, 4>& quad, Point center, Charge charge,
+             std::array<bool, 4>& mask, UB& minimum,
+             std::array<UB, 4>* saved = nullptr) -> bool {
+  bool supported = true;
+  for (std::size_t e = 0; e < 4; ++e) {
+    if (!charge(e)) return false;
+    mask[e] = true;
+    const auto b = h_signed_side(wide(quad[e]), wide(quad[(e + 1) % 4]), center,
+                                 supported);
+    if (saved) (*saved)[e] = b;
+    if (!supported) return false;
+    minimum = e == 0 ? b
+                     : UB{std::min(minimum.lower, b.lower),
+                          std::min(minimum.upper, b.upper), true};
+  }
+  return true;
+}
+template <class Op, class Coord>
+auto h_overlap(const std::array<Vec, 4>& quad, Point center, Op op,
+               Coord coordinate, std::array<std::array<UB, 2>, 2>& intersection,
+               std::array<bool, 2>& positive,
+               std::array<std::array<UB, 2>, 2>* sole_saved = nullptr,
+               std::array<std::array<UB, 2>, 2>* source_saved = nullptr)
+    -> bool {
+  std::array<std::array<UB, 2>, 2> sole, source;
+  for (std::size_t a = 0; a < 2; ++a)
+    for (std::size_t k = 0; k < 2; ++k) {
+      if (!op()) return false;
+      sole[a][k] =
+          h_bounds(add(a == 0 ? center.x : center.z,
+                       point((k == 0 ? -1 : 1) * (a == 0 ? .06 : .14))));
+      if (!h_valid(sole[a][k], 32)) return false;
+    }
+  for (std::size_t v = 0; v < 4; ++v)
+    for (std::size_t a = 0; a < 2; ++a) {
+      if (!coordinate(v, a)) return false;
+      const auto x = a == 0 ? quad[v].x : quad[v].z;
+      if (!std::isfinite(x) || std::abs(x) > 8) return false;
+      const UB b{x, x, true};
+      if (v == 0)
+        source[a] = {b, b};
+      else {
+        source[a][0] = {std::min(source[a][0].lower, x),
+                        std::min(source[a][0].upper, x), true};
+        source[a][1] = {std::max(source[a][1].lower, x),
+                        std::max(source[a][1].upper, x), true};
+      }
+    }
+  for (std::size_t a = 0; a < 2; ++a)
+    for (std::size_t k = 0; k < 2; ++k) {
+      if (!op()) return false;
+      intersection[a][k] =
+          k == 0 ? UB{std::max(sole[a][0].lower, source[a][0].lower),
+                      std::max(sole[a][0].upper, source[a][0].upper), true}
+                 : UB{std::min(sole[a][1].lower, source[a][1].lower),
+                      std::min(sole[a][1].upper, source[a][1].upper), true};
+      if (!h_valid(intersection[a][k], 32)) return false;
+    }
+  for (std::size_t a = 0; a < 2; ++a)
+    positive[a] = intersection[a][0].upper < intersection[a][1].lower;
+  if (sole_saved) *sole_saved = sole;
+  if (source_saved) *source_saved = source;
+  return true;
+}
+auto h_min_z(const std::array<Vec, 4>& q) -> double {
+  double z = q[0].z;
+  for (std::size_t i = 1; i < 4; ++i)
+    z = std::min(z, q[i].z);
+  return z;
+}
+auto h_contains(const HC& c, double g) -> bool {
+  return c.global_first <= g && c.global_last >= g;
+}
+template <class Op>
+auto h_endpoint(const BoardingRoutePhasePointConstant& endpoint, Op op,
+                Point& center, Interval& y) -> bool {
+  for (std::size_t a = 0; a < 3; ++a) {
+    const auto& e = endpoint.coordinates[a];
+    if (e.count == 0 || e.count > 3) return false;
+    Interval sum = point(e.terms[0]);
+    for (std::size_t i = 1; i < e.count; ++i) {
+      if (!op()) return false;
+      sum = add(sum, point(e.terms[i]));
+      if (!h_valid(h_bounds(sum), 32)) return false;
+    }
+    if (a == 0)
+      center.x = sum;
+    else if (a == 2)
+      center.z = sum;
+    else {
+      if (!op()) return false;
+      y = add(sum, point(.05));
+      if (!h_valid(h_bounds(y), 32)) return false;
+    }
+    if (!h_valid(h_bounds(sum), 32)) return false;
+  }
+  return finite(center.x) && finite(center.z) && finite(y);
+}
+auto h_consistent(Point center, Interval y,
+                  const BoardingPlantedLegPointBounds& actual) -> bool {
+  return center.x.low <= actual.upper.x && center.x.high >= actual.lower.x &&
+         center.z.low <= actual.upper.z && center.z.high >= actual.lower.z &&
+         y.low <= actual.upper.y && y.high >= actual.lower.y;
+}
+} // namespace
+[[gnu::noinline]] auto detail::
+    boarding_route_intermediate_support01_prefix_bridge(
+        const BoardingRouteIntermediateSupport01CurrentCellToken& token, HD& d,
+        HC& c, const HL& l, HR& r) -> HS {
+  const auto* ctx = token.context_;
+  if (!ctx || ctx->owner_ != &d || token.owner_ != &d || token.cell_ != &c ||
+      token.request_ != ctx->request_ || ctx->parts_ != &d.parts ||
+      !UA::valid(d.source) || ctx->data_ != UA::data(d.source) ||
+      token.data_ != ctx->data_) {
+    h_refuse(d, r, HW::invalid_binding);
+    return d.state;
+  }
+  const auto& request = *token.request_;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            return h_charge(d, r, d.work.pressure_candidates,
+                            l.pressure_candidates, HW::pressure_capacity);
+          },
+          HW::pressure_capacity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            const auto& v = c.phase.center_of_mass.value;
+            c.pressure_xz[1] = {UB{v.lower.x, v.upper.x, true},
+                                UB{v.lower.z, v.upper.z, true}};
+            return h_valid(c.pressure_xz[1][0]) && h_valid(c.pressure_xz[1][1]);
+          },
+          HW::unsupported_arithmetic))
+    return d.state;
+  Point starcenter;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            const auto& v =
+                c.phase
+                    .points[static_cast<std::size_t>(UP::starboard_boot_center)]
+                    .value;
+            starcenter = {{v.lower.x, v.upper.x}, {v.lower.z, v.upper.z}};
+            return h_valid(h_bounds(starcenter.x)) &&
+                   h_valid(h_bounds(starcenter.z));
+          },
+          HW::unsupported_arithmetic))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r, [&] { return c.projection_complete; },
+          HW::event_identity))
+    return d.state;
+  c.pressure_evaluated[1] = true;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            return c.port_share.lower == 0 && c.port_share.upper == 0 &&
+                   c.star_share.lower == 1 && c.star_share.upper == 1;
+          },
+          HW::event_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            c.nominal_equilibrium =
+                (c.port_force_state ==
+                 BoardingRouteIntermediateSupport01PortForceState::zero_only) &&
+                c.projection_complete;
+            return c.nominal_equilibrium;
+          },
+          HW::event_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [] {
+            return kBoardingBootPressureRadiusMetres == .020 &&
+                   kBoardingBootDiskEdgeMarginMetres == .010;
+          },
+          HW::event_identity))
+    return d.state;
+  const BoardingBootSourcePartition* star = nullptr;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            star = UA::partition(d.source, 1);
+            const auto* s = d.source.summary();
+            return star && s && s->quads[1].complete;
+          },
+          HW::source_identity))
+    return d.state;
+  const Point pressure{h_interval(c.pressure_xz[1][0]),
+                       h_interval(c.pressure_xz[1][1])};
+  const auto required = add(point(.020), point(.010));
+  bool supported = true;
+  bool ordinary = false;
+  const auto runedges = [&](bool source) {
+    if (!boarding_route_intermediate_support01_definition_charge(d, c, l, r))
+      return false;
+    const auto corners =
+        source ? source_corners(*star) : site_sole_corners(starcenter);
+    for (std::size_t e = 0; e < 4; ++e) {
+      if (!h_charge(d, r, d.work.disk_edges, l.disk_edges, HW::edge_capacity))
+        return false;
+      auto& mask =
+          source ? c.sites[1].source_evaluated : c.sites[1].sole_evaluated;
+      auto& edges = source ? c.sites[1].source_edges : c.sites[1].sole_edges;
+      mask[e] = true;
+      edges[e] = site_edge(corners[e], corners[(e + 1) % 4], pressure, required,
+                           supported);
+      if (!supported) {
+        h_refuse(d, r, HW::unsupported_arithmetic);
+        return false;
+      }
+      const auto& b = edges[e];
+      if (!b.disk_contained) {
+        ordinary = true;
+        const bool first_finding = r.condition == HW::none;
+        h_refuse(d, r, source ? HW::source_disk : HW::sole_disk,
+                 b.signed_side.lower <= 0 ? b.signed_side
+                                          : b.squared_margin_gap,
+                 e, source);
+        if (first_finding) {
+          r.side = 1;
+          if (source) {
+            const auto& face = star->faces[e < 2 ? 0 : 1];
+            r.source_key = face.key;
+            r.source_name = face.source_object;
+          }
+        }
+      }
+    }
+    return true;
+  };
+  if (!runedges(false) || !runedges(true)) return d.state;
+  if (!h_guard(d, c, l, r, [&] { return !ordinary; }, HW::sole_disk)) {
+    if (d.state == HS::capacity || d.state == HS::unsupported) return d.state;
+    const auto a = pause_edge_status(c.sites[1].sole_edges);
+    const auto b = pause_edge_status(c.sites[1].source_edges);
+    c.sites[1].sole_status = a;
+    c.sites[1].source_status = b;
+    d.state = (a == BoardingIntermediatePauseDiskStatus::refuted ||
+               b == BoardingIntermediatePauseDiskStatus::refuted)
+                  ? HS::witness_refused
+                  : HS::unresolved;
+    return d.state;
+  }
+  c.sites[1].loaded = true;
+  c.sites[1].plane_identity = true;
+  c.sites[1].evaluated = true;
+  c.sites[1].complete = true;
+  c.sites[1].sole_status = c.sites[1].source_status =
+      BoardingIntermediatePauseDiskStatus::contained;
+  c.sites[1].pressure_xz = {
+      BoardingPlantedLegScalarBounds{c.pressure_xz[1][0].lower,
+                                     c.pressure_xz[1][0].upper},
+      BoardingPlantedLegScalarBounds{c.pressure_xz[1][1].lower,
+                                     c.pressure_xz[1][1].upper}};
+  c.star_support = true;
+  if (!h_guard(
+          d, c, l, r, [&] { return c.phase_index < 3; }, HW::event_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            return request.feet[0].yaw_half == std::array<double, 2>{0, 0} &&
+                   request.feet[1].yaw_half == std::array<double, 2>{0, 0};
+          },
+          HW::event_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            return request.feet[0].swing_height_metres ==
+                   (c.phase_index == 1 ? .010 : 0);
+          },
+          HW::event_identity))
+    return d.state;
+  const BoardingBootSourcePartition *upper = nullptr, *port = nullptr;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            upper = boarding_route_intermediate_unloaded01_upper_partition(
+                d.source);
+            port = UA::partition(d.source, 0);
+            return upper && port;
+          },
+          HW::source_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r, [&] { return c.phase.target_sole_identities; },
+          HW::event_identity))
+    return d.state;
+  if (!boarding_route_intermediate_support01_definition_charge(d, c, l, r))
+    return d.state;
+  const auto op = [&]() {
+    if (!h_charge(d, r, d.work.endpoint_operations, l.endpoint_operations,
+                  HW::endpoint_operation_capacity))
+      return false;
+    if (c.endpoint_operation_count >= c.endpoint_operation_evaluated.size())
+      return h_refuse(d, r, HW::endpoint_operation_capacity);
+    c.endpoint_operation_evaluated[c.endpoint_operation_count++] = true;
+    return true;
+  };
+  const auto coordinate = [&](std::size_t v, std::size_t a) {
+    if (!h_charge(d, r, d.work.source_coordinates, l.source_coordinates,
+                  HW::source_coordinate_capacity))
+      return false;
+    c.source_coordinate_evaluated[v][a] = true;
+    return true;
+  };
+  std::array<UB, 4> upper_endpoint_sides{};
+  const auto sides = [&](std::size_t index, Point center) {
+    const auto edge = [&](std::size_t) {
+      return h_charge(d, r, d.work.upper_geometry_edges, l.upper_geometry_edges,
+                      HW::upper_edge_capacity);
+    };
+    return h_sides(upper->perimeter_metres, center, edge,
+                   c.upper_side_evaluated[index],
+                   c.upper_minimum_signed_side[index],
+                   index == 0 ? &upper_endpoint_sides : nullptr);
+  };
+  const auto& actual =
+      c.phase.points[static_cast<std::size_t>(UP::port_boot_center)].value;
+  for (std::size_t e = 0; e < 16; ++e) {
+    if (!h_charge(d, r, d.work.event_guards, l.event_guards,
+                  HW::event_guard_capacity))
+      return d.state;
+    c.event_evaluated[e] = true;
+    bool good = true;
+    switch (e) {
+      case 0: good = c.phase_index < 3; break;
+      case 1: good = c.phase.first >= 0 && c.phase.last <= 1; break;
+      case 2: break;
+      case 3:
+        good = (c.port_force_state ==
+                BoardingRouteIntermediateSupport01PortForceState::zero_only) &&
+               !c.sites[0].loaded;
+        break;
+      case 4: {
+        using PE = BoardingRouteIntermediateSupport01PlaneEvent;
+        const bool singleton = c.phase.first == c.phase.last;
+        c.upper_plane_event =
+            (c.phase_index == 0 ||
+             (singleton && ((c.phase_index == 1 &&
+                             (c.phase.first == 0 || c.phase.first == 1)) ||
+                            (c.phase_index == 2 && c.phase.first == 0))))
+                ? PE::equal
+            : c.phase_index == 1
+                ? (c.phase.first == 0 || c.phase.last == 1
+                       ? PE::equal_boundary_above_interior
+                       : PE::above)
+                : (c.phase.first == 0 ? PE::equal_boundary_below_interior
+                                      : PE::below);
+        break;
+      }
+      case 5: {
+        using PE = BoardingRouteIntermediateSupport01PlaneEvent;
+        c.intermediate_plane_event =
+            c.phase_index == 2 && c.phase.first == 1 && c.phase.last == 1
+                ? PE::equal
+            : c.phase_index < 2 ? PE::above
+            : c.phase.last == 1 ? PE::equal_boundary_above_interior
+                                : PE::above;
+        break;
+      }
+      case 6:
+        good = c.phase.target_sole_identities &&
+               request.feet[0].yaw_half == std::array<double, 2>{0, 0};
+        break;
+      case 7:
+      case 8:
+      case 9:
+        c.endpoint_scope[e - 7] = h_contains(c, e == 7   ? 0
+                                                : e == 8 ? .125
+                                                         : .5);
+        break;
+      case 10:
+        if (c.endpoint_scope[0]) {
+          c.endpoint_evaluated[0] = true;
+          Point center;
+          Interval y;
+          if (!h_endpoint(request.feet[0].sole[0], op, center, y)) {
+            if (d.state != HS::capacity && d.state != HS::unsupported)
+              h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!h_consistent(center, y, actual)) {
+            h_refuse(d, r, HW::endpoint_consistency);
+            return d.state;
+          }
+          if (!sides(0, center)) {
+            if (d.stop_condition == HW::none)
+              h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.upper_minimum_signed_side[0].lower <= 0) {
+            for (std::size_t edge = 0; edge < 4; ++edge)
+              if (upper_endpoint_sides[edge].lower <= 0) {
+                h_refuse(d, r, HW::upper_start_witness,
+                         upper_endpoint_sides[edge], edge, true);
+                if (upper_endpoint_sides[edge].upper <= 0)
+                  d.state = HS::witness_refused;
+                break;
+              }
+            return d.state;
+          }
+          c.endpoint_earned[0] = true;
+        }
+        break;
+      case 11:
+        if (c.endpoint_scope[1]) {
+          c.endpoint_evaluated[1] = true;
+          Point center;
+          Interval y;
+          const auto& endpoint =
+              request.feet[0].sole[c.phase_index == 0 ? 1 : 0];
+          if (!h_endpoint(endpoint, op, center, y)) {
+            if (d.state != HS::capacity && d.state != HS::unsupported)
+              h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!h_consistent(center, y, actual)) {
+            h_refuse(d, r, HW::endpoint_consistency);
+            return d.state;
+          }
+          if (!op()) return d.state;
+          const auto maximum = add(center.z, point(.14));
+          if (!h_valid(h_bounds(maximum), 32)) {
+            h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!op()) return d.state;
+          const auto gap = h_bounds(
+              subtract(point(h_min_z(upper->perimeter_metres)), maximum));
+          if (!h_valid(h_bounds(maximum), 32) || !h_valid(gap, 32)) {
+            h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          c.departure_gap = gap;
+          if (maximum.high >= h_min_z(upper->perimeter_metres)) {
+            h_refuse(d, r, HW::upper_departure, c.departure_gap);
+            return d.state;
+          }
+          c.endpoint_earned[1] = true;
+        }
+        break;
+      case 12:
+        if (c.endpoint_scope[2]) {
+          c.endpoint_evaluated[2] = true;
+          Point center;
+          Interval y;
+          if (!h_endpoint(request.feet[0].sole[1], op, center, y)) {
+            if (d.state != HS::capacity && d.state != HS::unsupported)
+              h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!h_consistent(center, y, actual)) {
+            h_refuse(d, r, HW::endpoint_consistency);
+            return d.state;
+          }
+          if (!h_overlap(port->perimeter_metres, center, op, coordinate,
+                         c.intermediate_intersection, c.positive_overlap)) {
+            if (d.stop_condition == HW::none)
+              h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (!c.positive_overlap[0] || !c.positive_overlap[1]) {
+            h_refuse(d, r, HW::endpoint_overlap);
+            return d.state;
+          }
+          c.endpoint_earned[2] = true;
+        }
+        break;
+      case 13:
+        if (c.phase_index == 0) {
+          const Point center{{actual.lower.x, actual.upper.x},
+                             {actual.lower.z, actual.upper.z}};
+          if (!sides(1, center)) {
+            if (d.stop_condition == HW::none)
+              h_refuse(d, r, HW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.upper_minimum_signed_side[1].lower > 0)
+            c.upper_class = HClass::strict_center_overlap;
+          else {
+            if (!op()) return d.state;
+            const auto maximum = add(center.z, point(.14));
+            if (!h_valid(h_bounds(maximum), 32)) {
+              h_refuse(d, r, HW::unsupported_arithmetic);
+              return d.state;
+            }
+            c.upper_class = maximum.high < h_min_z(upper->perimeter_metres)
+                                ? HClass::strict_Z_disjoint
+                                : HClass::mixed_possible_transition;
+          }
+        }
+        break;
+      case 14:
+        for (std::size_t k = 0; k < 3; ++k)
+          good = good && (!c.endpoint_scope[k] || c.endpoint_earned[k]);
+        break;
+      case 15: break;
+      default: good = false; break;
+    }
+    if (!good) {
+      h_refuse(d, r, HW::event_identity);
+      return d.state;
+    }
+  }
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            return c.phase_index != 0 || c.upper_class != HClass::not_run;
+          },
+          HW::event_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            return c.nominal_equilibrium &&
+                   (c.port_force_state ==
+                    BoardingRouteIntermediateSupport01PortForceState::
+                        zero_only);
+          },
+          HW::event_identity))
+    return d.state;
+  if (!h_guard(
+          d, c, l, r,
+          [&] {
+            c.prefix_zero_geometry_complete = true;
+            return c.star_support && c.projection_complete;
+          },
+          HW::event_identity))
+    return d.state;
+  c.plane_identities =
+      true; // PREFIX loaded STAR only; moving-port structural identity above.
+  c.nominal_support_complete = true;
+  c.complete = true;
+  c.state = d.state = HS::accepted;
+  return d.state;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::
+    boarding_route_intermediate_support01_load_bridge(
+        const BoardingRouteIntermediateSupport01CurrentCellToken& token,
+        BoardingRouteIntermediateSupport01Diagnostic& d,
+        BoardingRouteIntermediateSupport01Cell& c,
+        const BoardingRouteIntermediateSupport01Limits& limits,
+        BoardingRouteIntermediateSupport01Refusal& refusal)
+        -> BoardingRouteIntermediateSupport01State {
+  using Why = BoardingRouteIntermediateSupport01Condition;
+
+  using State = BoardingRouteIntermediateSupport01State;
+
+  const auto stop = [&](Why why, std::optional<std::size_t> side = {},
+                        std::optional<std::size_t> edge = {},
+                        bool source_edge = false) {
+    if (why == Why::edge_capacity || why == Why::unsupported_arithmetic ||
+        why == Why::invalid_binding) {
+      d.stop_condition = why;
+      d.state = why == Why::edge_capacity            ? State::capacity
+                : why == Why::unsupported_arithmetic ? State::unsupported
+                                                     : State::unresolved;
+    } else if (d.state != State::capacity && d.state != State::unsupported)
+      d.state = State::unresolved;
+
+    if (why == Why::unsupported_arithmetic) d.arithmetic_supported = false;
+
+    if (refusal.condition == Why::none) {
+      refusal.condition = refusal.predicate_condition = why;
+      refusal.side = side;
+      refusal.edge = edge;
+      refusal.source_edge = source_edge;
+    }
+  };
+
+  // This context exists only inside the named consumer, after real S36; its
+  // owner and retained Data anchors precede EVERY borrowed request/cell access.
+  if (!token.context_ || token.owner_ != &d || token.cell_ != &c ||
+      !token.request_ ||
+      !BoardingIntermediatePauseSupportAccess::valid(d.source) ||
+      token.data_ != BoardingIntermediatePauseSupportAccess::data(d.source) ||
+      token.context_->owner_ != &d || token.context_->data_ != token.data_ ||
+      token.context_->request_ != token.request_ ||
+      token.context_->parts_ != &d.parts || c.phase_index < 3 ||
+      c.phase_index > 4 || !token.request_) {
+    stop(Why::invalid_binding);
+    return d.state;
+  }
+  if (!boarding_route_intermediate_support01_allocate(d, c, limits, refusal))
+    return d.state;
+
+  if (!boarding_route_intermediate_support01_definition_charge(d, c, limits,
+                                                               refusal))
+    return d.state;
+
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto* source =
+        BoardingIntermediatePauseSupportAccess::partition(d.source, side);
+
+    const auto& y = token.request_->feet[side].sole[0].coordinates[1];
+
+    if (!source || !c.sites[side].plane_identity || y.count != 1 ||
+        y.terms != std::array<double, 3>{source->plane_metres, 0, 0} ||
+        !c.pressure_evaluated[side] || !c.nominal_equilibrium) {
+      stop(Why::sole_plane, side);
+      return d.state;
+    }
+  }
+  c.plane_identities = true;
+
+  const auto required = add(point(.020), point(.010));
+
+  for (std::size_t side = 0; side < 2; ++side) {
+    auto& record = c.sites[side];
+
+    record.loaded =
+        side == 1 || c.port_force_state ==
+                         BoardingRouteIntermediateSupport01PortForceState::
+                             everywhere_positive;
+
+    record.evaluated = true;
+
+    const Point pressure{
+        {c.pressure_xz[side][0].lower, c.pressure_xz[side][0].upper},
+        {c.pressure_xz[side][1].lower, c.pressure_xz[side][1].upper}};
+
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+
+    const auto& boot =
+        c.phase
+            .points[static_cast<std::size_t>(
+                side == 0 ? BoardingPlantedBodyPointId::port_boot_center
+                          : BoardingPlantedBodyPointId::starboard_boot_center)]
+            .value;
+
+    const Point center{{boot.lower.x, boot.upper.x},
+                       {boot.lower.z, boot.upper.z}};
+
+    const auto sole = site_sole_corners(center);
+
+    const auto* partition =
+        BoardingIntermediatePauseSupportAccess::partition(d.source, side);
+
+    if (!partition) {
+      stop(Why::invalid_binding, side);
+      return d.state;
+    }
+    const auto source = source_corners(*partition);
+
+    for (std::size_t which = 0; which < 2; ++which) {
+      const auto& corners = which == 0 ? sole : source;
+      auto& edges = which == 0 ? record.sole_edges : record.source_edges;
+      auto& evaluated =
+          which == 0 ? record.sole_evaluated : record.source_evaluated;
+
+      for (std::size_t edge = 0; edge < 4; ++edge) {
+        if (d.work.disk_edges >= limits.disk_edges) {
+          stop(Why::edge_capacity, side, edge, which != 0);
+          return d.state;
+        }
+        ++d.work.disk_edges;
+        evaluated[edge] = true;
+
+        edges[edge] = site_edge(corners[edge], corners[(edge + 1) % 4],
+                                pressure, required, d.arithmetic_supported);
+
+        if (!d.arithmetic_supported) {
+          stop(Why::unsupported_arithmetic, side, edge, which != 0);
+          return d.state;
+        }
+        if (!edges[edge].disk_contained && refusal.condition == Why::none) {
+          refusal.condition = refusal.predicate_condition =
+              which == 0 ? Why::sole_disk : Why::source_disk;
+          refusal.side = side;
+          refusal.edge = edge;
+          refusal.source_edge = which != 0;
+
+          const auto b = edges[edge].signed_side.lower <= 0
+                             ? edges[edge].signed_side
+                             : edges[edge].squared_margin_gap;
+          refusal.limiting_bound = {b.lower, b.upper, true};
+
+          const auto* summary = d.source.summary();
+          refusal.source_name = summary->sources[side].name;
+          if (which != 0)
+            refusal.source_key = summary->sources[side].keys[edge < 2 ? 0 : 1];
+        }
+      }
+      (which == 0 ? record.sole_status : record.source_status) =
+          pause_edge_status(edges);
+    }
+    record.complete = record.plane_identity &&
+                      record.sole_status == PauseStatus::contained &&
+                      record.source_status == PauseStatus::contained;
+  }
+  if (!boarding_route_intermediate_support01_definition_charge(d, c, limits,
+                                                               refusal))
+    return d.state;
+
+  if (!d.arithmetic_supported || d.stop_condition != Why::none ||
+      !std::all_of(c.sites.begin(), c.sites.end(), [](const auto& s) {
+        return std::all_of(s.sole_evaluated.begin(), s.sole_evaluated.end(),
+                           [](bool b) { return b; }) &&
+               std::all_of(s.source_evaluated.begin(), s.source_evaluated.end(),
+                           [](bool b) { return b; });
+      })) {
+    stop(Why::unsupported_arithmetic);
+    return d.state;
+  }
+  if (!boarding_route_intermediate_support01_definition_charge(d, c, limits,
+                                                               refusal))
+    return d.state;
+
+  c.port_contact_geometry = c.sites[0].complete;
+  c.star_support = c.sites[1].complete;
+
+  c.nominal_support_complete =
+      c.nominal_equilibrium && (c.sites[0].complete && c.sites[1].complete) &&
+      c.star_everywhere_positive &&
+      c.port_force_state !=
+          BoardingRouteIntermediateSupport01PortForceState::not_run;
+
+  c.complete = c.phase.complete && c.projection_complete &&
+               c.plane_identities && c.nominal_support_complete &&
+               refusal.condition == Why::none;
+
+  if (c.complete)
+    d.state = State::accepted;
+
+  else {
+    const bool refuted = c.sites[0].sole_status == PauseStatus::refuted ||
+                         c.sites[0].source_status == PauseStatus::refuted ||
+                         c.sites[1].sole_status == PauseStatus::refuted ||
+                         c.sites[1].source_status == PauseStatus::refuted;
+    d.state = refuted ? State::witness_refused : State::unresolved;
+  }
+  c.state = d.state;
+  return d.state;
+}
+} // namespace apsis_drift
