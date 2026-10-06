@@ -48,7 +48,9 @@ player's station-to-flight journey.
 - [Initial complete material assessment](ORIGIN_BOARDING_INITIAL_MATERIAL01.md):
   full source envelopes, selected complete geometry and bounded material relations.
 - [Supported port unload](ORIGIN_BOARDING_ROUTE_PORT_UNLOAD01.md):
-  one registered floor load shift, self-clearance and finite pressure support.
+  clear supported endpoints with a refused joint sector between them.
+- [Checkpoint unload](ORIGIN_BOARDING_ROUTE_CHECKPOINT_UNLOAD01.md):
+  registered preparation, held-root pivot and held-yaw translation candidate.
 
 - [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
 

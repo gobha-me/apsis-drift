@@ -87,3 +87,14 @@ The constant and swing-value enclosures may intersect independently proven
 workspace or polynomial ranges. This tightens an enclosure without changing
 the exact expression. Over-domain controls refuse; there is no input repair
 or contact tolerance.
+
+## Observed results — 2026-10-06
+
+GCC and Clang20 agree on all six frozen motions. The prior supported root
+translation, a stationary reaction cue, common root/sole yaw, port sole
+translation with yaw, and torso lean pass their kinematic/timing checks.
+The 20mm port lift refuses at the retained joint sector on
+[.1240234375,.125], after seven accepted prefix cells. None of these results
+grants contact or load support. The outcome regressions pass 382,905 checks
+with each compiler; body checks independently pass 3,627. Both library and
+test translation units explicitly disable floating-point contraction.

@@ -74,3 +74,20 @@ representations require at most 2,304 plane predicates, alongside fourteen
 segment and twelve primitive-plane construction records. Unsupported
 construction or a failed enclosing relation refuses; no radius or enclosure
 is enlarged after the first material result.
+
+## Observed results — 2026-10-06
+
+The first boundary controls exposed a shadowed work-budget variable and
+incorrect use of a support maximum as a minimum projection. That run refused
+source construction before the public material assessment and remains
+recorded as a failed implementation observation. The corrected signed
+projection and distinct budget preserve all registered geometry and limits.
+
+Both compilers then admit the complete source and certify initial material
+exclusion: 26,265 envelope comparisons, 59 enclosure pairs, 346,923 shell
+triangle visits, 5,203,845 body/triangle pairs and 78 separation axes.
+The immutable runtime source uses 14,049,188 bytes; new live storage is
+11,880 bytes, inside its frozen 12,000-byte implementation bound.
+Mandatory positive regressions pass 17,076 checks with GCC and Clang20.
+This qualifies the unchanged initial stance only; continuous movement,
+seat acquisition and live actor permission remain open.

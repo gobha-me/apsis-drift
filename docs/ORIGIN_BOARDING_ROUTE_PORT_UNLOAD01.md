@@ -71,3 +71,21 @@ Before a positive outcome is known, record FIRST GCC/Clang whole result and cond
 ## Implementation boundary and ownership proposal
 
 New public include/apsis_drift/origin_boarding_route_port_unload.hpp; private src/origin_boarding_route_port_unload_internal.hpp; controller src/origin_boarding_route_port_unload.cpp. Add purpose-specific general rotated self/compound-cell helpers to END of origin_boarding_planted_legs.cpp and finite-pressure/once-owned source context helpers to END of origin_boarding_boot_support.cpp, preserving old prefixes/algorithms. Reuse existing current phase-cell compiler, not edit its graph. Root owns CMake including explicit ffp-contract=off, portable public registration, source freeze and test integration; independent tests own new test file. Commit registration before implementation and final source before FIRST query.
+
+## Observed refusal — 2026-10-06
+
+Both compilers produce the same first result: 98,901 checks pass, but the
+whole path refuses at global depth10 on [.1962890625,.197265625] under the
+port joint sector. Fifteen accepted cells cover only [0,.1962890625]. The
+reverse request retains that same canonical refusal. Clear point endpoints
+both pass self and finite pressure checks; the final point has exact zero
+port reaction and a starboard pressure disk about the actual COM.
+
+The midpoint is a genuine joint failure: port ankle pitch is approximately
+31.03094 degrees, exceeding the retained 30-degree limit. Its certified
+sector margin is strictly negative. The earlier refused interval straddles
+that boundary and remains unresolved. Endpoint success does not qualify
+the motion between endpoints. Preserve this candidate and its refusal
+regressions; the separately registered
+[checkpoint unload](ORIGIN_BOARDING_ROUTE_CHECKPOINT_UNLOAD01.md) is a new
+three-stage hypothesis under the same body, joint and source limits.
