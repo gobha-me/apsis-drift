@@ -5,7 +5,11 @@ assessment: unchanged Step02 unloaded phases0–2, then the previously selected
 one-sixteenth load ramp and supported hold. This is issue479 under462, after
 issue477/PR478. Separate earlier positives remain historical evidence; this
 consumer must earn its own source enrollment, current cells, support and joins.
-Every new numerical outcome remains UNKNOWN.
+Both compilers now qualify the selected complete nominal support chain: all19
+retained motion observations are positive and the112-case test passes.
+The planning and pre-FIRST statements below remain preserved as history.
+Full self/material/WORLD, seated support, actor integration and First Flight
+remain open.
 
 Baseline: `16b4fd50e1e02d592f36b037c6295f233283272f`. Preserve all841 original tracked inputs in src,
 include, test, tools, assets and godot. The ONLY allowed old-source mutation is
@@ -292,3 +296,61 @@ D23 now preserves capacity/unsupported before ordinary disk classification;
 endpoint operations explicitly validate finite/order/abs32 and attribute a
 non-cap arithmetic failure to unsupported. No candidate, geometry, source,
 load, margin, timing, query family or cap changed.
+
+## Retained FIRST and final local acceptance
+
+Source implementation was committed/pushed and frozen as
+`29a59d9f0f96bb48a6a45f72c36cbe68337679c8` before either first run.
+The freeze retains848 input identities, three binaries,17 receipts and37
+object/stack artifacts. GCC started2026-10-06T15:22:51.961441Z;
+Clang20 started15:22:52.526089Z. Both exited0. Their4727-byte combined stdout/
+stderr logs are byte-identical, SHA256
+`b563ecaab2bbff4ed01b58b6f64eff1605b6da3d93af59e218f81eb505d52694`.
+Original source/resource freeze and first logs are retained read-only; no
+post-observation source, test, arithmetic, candidate, cap or method change was
+needed.
+
+All19 requested observations were accepted:
+
+| Selected requests | Cells | Compiler calls | Physical seconds |
+|---|---:|---:|---:|
+| Whole forward/reverse |71|137|50|
+| Unloaded prefix forward/reverse |64|125|36|
+| Loading/hold forward/reverse |7|12|14|
+| Each phase0/1/2/3/4 |11/47/6/6/1|21/93/11/11/1|12/12/12/12/2|
+| Each selected endpoint/join point |1|1|0|
+| Prefix cross-join A18 |51|99|24|
+| Reacquisition/load cross-join A19 |8|13|15.5|
+
+Whole forward/reverse has141 nodes, four mandatory splits, maximum depth10,
+all four exact qualified joins and all three scoped zero-force endpoint events.
+There are no synthetic graph calls at joins. It preserves one shared budget:
+71=64+7 accepted cells,141=127+13+1 nodes,137=125+12 compiler calls.
+Source enrollment runs36 charges once. Whole old phase work is
+137graphs/236legs/76bodies/309sectors/491timing; new work is
+36source/19076projection/2664definition/88pressure/704disk/48sole-extrema/
+104source-coordinate/48intersection/48midpoint/72allocation/36reaction/
+96quotient/144fold/48upper-edge/32endpoint-operation/1024event.
+Projection19076=76*251, and reached branch work otherwise sums the original
+prefix and loaded observations. Load-only requests honestly leave prefix
+zero-geometry flags false and endpoint masks000.
+
+The complete validation roster has one genuine creator,112 consumers,
+3190 actual compiler calls, raw0,10 fixed accepted-coverage oracle poses,
+92623 checks and zero failures. All25 reached one-less anchors were meaningful;
+no fallback, skipped anchor or hidden assessment was needed. Independent
+retained-outcome review passed, JSON receipt SHA256
+`15fd201bdef307340335b22b5da911278fd93a9f7e0edf11c2fbe3315925c944`.
+
+Both complete native suites pass87/87 (GCC76.29s, Clang20 66.32s). Their new
+consumer output is byte-identical to retained FIRST; no replacement first run
+was made. Pinned formatting,197-TU clang-tidy20,124 valid suppression directives
+and all10 suppression-policy self-tests pass. Original841 input pins and the
+sole boot prefix remain exact. Godot reuse is the precise141-input/bridge/
+report identity result described above, with no fresh local run. PR publication
+still requires all exact-head remote CI checks.
+
+This result qualifies the selected coherent nominal vertical support/contact
+chain. Self exclusion, full material/HALO WORLD clearance, friction/strength/
+dynamics, complete boarding, seated support, actor/save integration and First
+Flight remain false. Parent work remains open:462,361,352 and First Flight.

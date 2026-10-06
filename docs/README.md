@@ -70,7 +70,7 @@ player's station-to-flight journey.
 - [Constructive intermediate pause support02](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT02.md):
   registered lighter-load static witness, preserving the quarter-load refusal.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
-  registered shared five-phase support assessment; numerical outcome remains unknown.
+  qualified coherent five-phase nominal support/contact chain; full boarding remains open.
 - [Unloaded intermediate approach01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_UNLOADED01.md):
   qualified continuous star-only support and zero-force approach/contact events; full boarding remains open.
 - [Intermediate load acquisition01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_LOAD01.md):
