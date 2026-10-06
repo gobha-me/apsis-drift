@@ -915,6 +915,21 @@ void union02_controls(View view, const NativeCraftBinding& binding,
   log_evidence("FIRST_CHECKPOINT_MATERIAL_UNION02_CONSTRUCTOR", e);
   std::cout << "UNION02_PAIR_ATTEMPTS " << e.adjacent_pair_attempts << '\n'
             << std::flush;
+  // Original FIRST02 compiler logs remain retained. The separately selected
+  // method's actual later raw refusal is now a mandatory regression.
+  check(!admission && !detailed && !e.complete &&
+            e.condition == Condition::raw_containment && e.source == 1436 &&
+            e.triangle == 53 && e.sector == 7 && e.vertex == 64 &&
+            e.plane == 4 && !e.quantized && e.work.extension_version == 2,
+        "Frozen Union02 refuses the same original later raw face and last "
+        "sector/vertex/plane without issuing source authority");
+  check(e.work.base_guards == 1063 && e.work.vertex_guards == 20448 &&
+            e.work.index_guards == 17097 && e.work.raw_plane_guards == 3593 &&
+            e.work.quantized_plane_guards == 3411 &&
+            e.adjacent_pair_attempts == 259 && e.work.bindings_complete &&
+            e.work.arithmetic_supported && !e.work.constructors_complete,
+        "Frozen Union02 refusal preserves exact completed guards, separate "
+        "raw/quantized work and actual adjacent fallback attempts");
   check(admission.has_value() == detailed.has_value(),
         "Public Union02 and authentic detailed issuer agree without "
         "preselecting their outcome");

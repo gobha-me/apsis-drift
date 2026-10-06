@@ -773,6 +773,17 @@ int main() {
               << " quantized=" << union_evidence.work.quantized_plane_guards;
     if (!union_admission) std::cout << " error=" << union_admission.error();
     std::cout << '\n' << std::flush;
+    check(!union_admission && !union_evidence.complete &&
+              !union_evidence.work.constructors_complete &&
+              union_evidence.work.extension_version == 2 &&
+              union_evidence.condition ==
+                  detail::BoardingCheckpointMaterialExtensionCondition::
+                      raw_containment &&
+              union_evidence.source == 1436 && union_evidence.triangle == 53 &&
+              union_evidence.sector == 7 && union_evidence.vertex == 64 &&
+              union_evidence.plane == 4 && !union_evidence.quantized,
+          "Frozen WORLD02 is unavailable because Union02 refused original "
+          "raw face53; no WORLD clearance was observed");
     if (union_admission) {
       const auto& extension = *union_admission;
       check(extension.summary() && extension.summary()->extension_version == 2,
