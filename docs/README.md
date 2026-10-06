@@ -63,6 +63,8 @@ player's station-to-flight journey.
   frozen moving-foot candidate, shared kinematic cover and retained joint-sector refusal.
 - [SectorAttribution01 diagnostic](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP_SECTOR_ATTRIBUTION01.md):
   eight fixed replays identify port ankle-pitch violations in the unchanged motion.
+- [Intermediate pause finite support](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT01.md):
+  registered source contact and nominal load gate for the unchanged two-second pause.
 - [IntermediateStep02 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP02.md):
   registered foot-preposition sequencing hypothesis under unchanged shared limits.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
