@@ -153,3 +153,8 @@ Baseline0e1aa7e1cb3bc667aefd0f5a85d04220373a3dd7. All821 original source/project
 ### Projection schema clarification before FIRST
 
 The unchanged phase cell owns boot-center and ankle points, rather than separately stored target-sole points. The same eleven guarded carriers are COM, two boot centers, two ankles and six sole-frame columns. Exact source-plane identity comes from the authentic held target terms, target closure and original boot-center+.05−halfheight.05 expression; a reporting ankle/boot Y never supplies that identity. A supported zero-jet interval may enclose zero with outward rounding width. Constant state requires the exact immutable held-control/zero-hump semantic identity plus supported finite zero-containing derivative bounds, without a tolerance or an inference that rounding width is physical motion. This clarifies the original representation, changing no candidate, body, source, timing, roster or work cap.
+
+
+### Fixed source allocation clarification before FIRST
+
+The immutable provider uses `allocate_shared` with a purpose-specific stateless allocator that requests one fixed4096-byte block for Data and its shared control record. The rebound typed request and alignment must fit that block before allocation. Required and actual owned source bytes are4096; no estimated control-block allowance is reported as actual allocation. The full4096-byte ownership is charged in the co-live ledger. Exact/one-less source controls therefore address this real fixed allocation. Constructor completion is set only after all final guards and allocation succeed; failed out-evidence remains incomplete. Error variants remain charged in the complete live-storage proof even when insufficient output refuses before constructing a Diagnostic.
