@@ -10,7 +10,7 @@ The active direction is [Freedom: exploration before progression](docs/ROADMAP.m
 
 ## Try the native slice
 
-Install Godot 4.7.2, CMake 3.28+, Git and a C++23 compiler. Set `GODOT_BIN` if
+Install Godot 4.7.2, CMake 3.28+, Python 3.10+, Git and a C++23 compiler. Set `GODOT_BIN` if
 Godot is not on your executable search path. The launcher builds the C++ bridge
 and prepares the fixed asset packages; the first build fetches pinned dependencies.
 See [native setup](godot/README.md) and [development/testing](docs/DEVELOPMENT.md).

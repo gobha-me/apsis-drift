@@ -7,7 +7,7 @@ that state and translates input into C++ commands. See the
 
 ## Run from the repository root
 
-Install Godot 4.7.2, CMake 3.28+, Git and a C++23 compiler. Set `GODOT_BIN` to
+Install Godot 4.7.2, CMake 3.28+, Python 3.10+, Git and a C++23 compiler. Set `GODOT_BIN` to
 an installed executable if `godot` is not on PATH. The launcher fetches pinned
 C++ dependencies on its first build; it does not download Godot.
 
