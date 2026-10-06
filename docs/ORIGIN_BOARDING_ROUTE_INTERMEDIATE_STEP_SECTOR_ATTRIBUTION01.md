@@ -27,7 +27,24 @@ FIRST is one eight-request run on each compiler, retained with source/manifest/l
 
 A supported outward POINT margin with upper<0 witnesses that exact nominal necessary-sector violation. Strict F2 upper<=0 witnesses violation of its required positive sign. Bounds straddling zero remain unresolved. Positive points cannot certify intervening intervals or prove dependency is the only failure cause. No new continuous cover is attempted. All contact/load/self/material/WORLD/route/seat/actor/save/dynamics authorities stay false and #462/#361/FirstFlight remain open.
 
-Compile-only actual layout/stack measurements must be added before FIRST; no diagnostic execution is authorized merely by an estimated layout.
+Compile-only measured resource ledger before FIRST (both GCC and pinned Clang20):
+Case568B, Report4664B, expected report4672B, Closure312B, Limits48B,
+optional immutable Request688B and compact retained Summary128B. Owned output
+is4672B. Retain the entire original32768B proof, then add both expected records
+9344B, request688B, new48B and original72B limits, original refusal64B,
+manifest256B, closure312B and caller/control/stream/error reserve2048B:
+complete source-live45,600B≤49,152B, enforced by static_assert. Direct caller
+calls avoid an extra by-value expected return. The FIRST full report dies
+before validation; only Summary survives.
+
+Actual conservative complete O3/fPIC/no-contract caller chains are34,976B GCC
+and29,952B pinnedClang20, including main, FIRST caller, driver, original cell,
+leg, rotation/scalar helpers and256B leaf allowance. FIRST/validation frames
+already contain caller output; no third expected record is retained. Oracle
+and printing occur after graph return. Complete manifest means all eight
+ordinary accepted/unresolved records completed without a capacity/unsupported
+hardstop; it does not qualify movement. Final formatted source and executable
+hashes must be frozen before FIRST.
 
 The producer and harness are test-private reproducible C++; no production API
 or kernel changes. Before any validation replay, reduce/destroy the initial

@@ -568,6 +568,18 @@ if (APSIS_DRIFT_TERMINAL AND APSIS_DRIFT_MIDI_SPIKE)
 endif ()
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-boarding-route-intermediate-sector-tests
+    test/origin_boarding_route_intermediate_step_attribution_driver.cpp
+    test/origin_boarding_route_intermediate_step_attribution_test.cpp)
+  target_link_libraries(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE apsis-drift::core)
+  target_include_directories(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/test")
+  target_compile_options(apsis-drift-boarding-route-intermediate-sector-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-route-intermediate-sector-attribution-contract
+    COMMAND apsis-drift-boarding-route-intermediate-sector-tests)
+  set_tests_properties(boarding-route-intermediate-sector-attribution-contract PROPERTIES TIMEOUT 90)
+
   add_executable(apsis-drift-boarding-route-intermediate-step-tests test/origin_boarding_route_intermediate_step_test.cpp)
   target_link_libraries(apsis-drift-boarding-route-intermediate-step-tests PRIVATE apsis-drift::core)
   target_include_directories(apsis-drift-boarding-route-intermediate-step-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
