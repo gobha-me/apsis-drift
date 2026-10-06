@@ -1,4 +1,4 @@
-# Checkpoint WORLD/material01 — bounded source-only proposal
+# Checkpoint WORLD/material01 — same-cover clearance
 
 Registered for #361 on 2026-10-06, based on merged PR #453 (`55c8fa62a73610de866222ee7499c674c220564e`), before implementation or numerical queries. No source reload is needed. The exact three checkpoint controls,36-second clock, original WORLD sizes and Self02 policy remain frozen. Self02 FIRST at59b5a48 now certifies the complete path with163 cells/325 nodes/323 graphs/38 complement attempts and both joins; those observations are context, never a reason to change the1024-cell ceiling or proof method.
 
@@ -92,3 +92,21 @@ The implementation preserves all six existing source/header prefixes and the com
 Source assertions bound the new WORLD stage at15,664B within16KiB and the unchanged child plus co-live WORLD controller at47,856B within48KiB. Compile-only O3 stack receipts, including a separate pending WORLD return slot, corroborate WORLD14,432B(GCC)/12,464B(Clang20) and child47,120B/44,488B. Source/return/control temporaries are included; existing cells are borrowed. No numerical WORLD assessment has run at this freeze.
 
 The first test-suite attempt at9ce5309 stopped on both compilers after8,388 checks, before the main public WORLD observation. Its synthetic six-plane fixture omitted the required supported flag; the existing primitive validator correctly rejected it. A test-only correction sets that metadata, preserves all plane/body bounds and adds an explicitly unsupported-plane negative. The production method, caps, source and route controls remain frozen; failed logs are retained.
+
+## FIRST observed outcomes — 2026-10-06
+
+Production froze at9ce5309; the test-only supported-plane correction froze at629e254 before the main observation. Both GCC and pinnedClang20 pass43,069 checks with identical logSHA256 `11ea923cb6b984f9abbd0705869984146c9d7e1181b96bbc209b3f80d4f58371`. These are assessment/test results, not playable actor or complete boarding-route permission. Helper#454 publishes this stage; #361 remains open.
+
+| Request | Actual result | Retained evidence |
+| --- | --- | --- |
+| Whole[0,1] and reverse[1,0] | Missing material relation | Source1436 `WF02 \| CABIN emergency pressure frame`; starboard upper arm; cell107; phase2; [0.6796875,0.6875] |
+| Preparation[0,0.25] | Complete material, HALO and domain exclusion | Original85 cells; all1759 roster rows/1751 effective sources;75 HALO objects/8100 faces |
+| Pivot[0.25,0.5] | Missing material relation | Source1574 `WF02 \| retained nose joint backing`; starboard upper arm; cell3; phase1; [0.359375,0.375] |
+| Finish[0.5,1] | Missing material relation | Source1436; same arm/global interval; cell13 of original69-cell cover |
+| Sub[0.125,0.75] and its reverse | Missing material relation | Source1436; same arm/global interval; cell69 of original84-cell cover |
+| Initial point0 | Complete material, HALO and domain exclusion | Original one-cell cover |
+| Final point1 | Missing material relation | Source1436; starboard upper arm; phase2; [1,1] |
+
+Whole/refused requests retain the complete unchanged Self02 child and covered domain. An unknown object's overlapping envelope does not establish collision or filled material. Its genuine relation is the next source-completion task; controls and reservations are unchanged. Traversal stops on that actual refusal, so HALO exclusion is not claimed for those whole/refused requests.
+
+Preparation executes1,275 union-proxy constructions,9,220 total proxy constructions,2,635 refined envelopes,5,310 refined enclosure relations,7,226 axes and82,240 prepared direction entries. It streams346,923 relevant shell triangles and8,100 HALO faces, with5,325,345 actual triangle-union comparisons. Remaining mesh packets belong to authenticated enclosing relations; their triangles need not be re-streamed as sheets. All logical1751 source obligations close for every part/cell. The192 full-source sole vertex guards are executed once. The complete immutable unions close all15 domain checks without domain-cell fallback. No direction/support allowance is reported as executed work.

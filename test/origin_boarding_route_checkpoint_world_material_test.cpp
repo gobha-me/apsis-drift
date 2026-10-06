@@ -1405,6 +1405,72 @@ void budgets(const OriginBoardingBootSupport& boot,
     accounting(empty, zero);
   }
 }
+void observed_complete(const Diagnostic& d) {
+  check(d.world.complete && !d.world.first_refusal && d.child &&
+            d.child->complete && d.world.bindings_complete &&
+            d.world.source_complete && d.world.arithmetic_supported &&
+            d.world.domain_complete && d.world.material_exclusion &&
+            d.world.halo_surface_exclusion,
+        "Frozen public observation requires actual complete material, HALO and "
+        "domain exclusion");
+  check(d.world.work.roster_entries == 1759 &&
+            d.world.work.effective_sources == 1751 &&
+            d.world.work.halo_metadata_visits == 75 &&
+            d.world.work.halo_triangle_visits == 8100,
+        "Observed complete request retains entire authenticated material and "
+        "HALO rosters");
+}
+void observed_missing(const Diagnostic& d, std::size_t source,
+                      std::string_view name, std::size_t cell, double first,
+                      double last, std::size_t phase) {
+  check(!d.world.complete && !d.world.material_exclusion &&
+            !d.world.halo_surface_exclusion &&
+            d.world.first_refusal.has_value(),
+        "Observed missing relation remains explicit refusal without whole "
+        "material or HALO success");
+  if (!d.world.first_refusal) return;
+  const auto& r = *d.world.first_refusal;
+  check(r.condition == Condition::missing_relation && r.source == source &&
+            r.source_object == name && r.part == 12 && r.cell == cell &&
+            r.global_first == first && r.global_last == last &&
+            r.phase_index == phase &&
+            (r.relation == BoardingInitialMaterialRelation::unknown ||
+             r.relation == BoardingInitialMaterialRelation::stowed),
+        "Frozen refusal retains genuine source, starboard upper arm, exact "
+        "retained interval and missing relation");
+}
+void whole_reverse_identity(const Diagnostic& f, const Diagnostic& r) {
+  check(f.world.first_refusal && r.world.first_refusal,
+        "Observed whole/reverse both retain material refusal");
+  if (f.world.first_refusal && r.world.first_refusal) {
+    const auto& a = *f.world.first_refusal;
+    const auto& b = *r.world.first_refusal;
+    check(a.condition == b.condition && a.part == b.part &&
+              a.source == b.source && a.cell == b.cell &&
+              a.triangle == b.triangle && a.source_key == b.source_key &&
+              a.source_object == b.source_object && a.relation == b.relation &&
+              a.global_first == b.global_first &&
+              a.global_last == b.global_last && a.phase_index == b.phase_index,
+          "Whole/reverse preserve exact canonical source and original-cell "
+          "refusal identity");
+  }
+  for (std::size_t part = 0; part < 15; ++part)
+    check(f.world.parts[part].trajectory_union.lower ==
+                  r.world.parts[part].trajectory_union.lower &&
+              f.world.parts[part].trajectory_union.upper ==
+                  r.world.parts[part].trajectory_union.upper,
+          "Reverse preserves immutable full-frame WORLD motion unions");
+  for (const auto& cap : caps)
+    check(f.world.work.*cap.work == r.world.work.*cap.work,
+          "Whole/reverse actual world work is identical without freezing its "
+          "count");
+  check(f.world.work.collapsed_triangles == r.world.work.collapsed_triangles &&
+            f.world.work.sole_triangle_exclusions ==
+                r.world.work.sole_triangle_exclusions &&
+            f.world.work.sole_volume_exclusions ==
+                r.world.work.sole_volume_exclusions,
+        "Whole/reverse preserve remaining actual collapsed/sole work");
+}
 void public_cases(const OriginBoardingBootSupport& boot,
                   const OriginBoardingInitialMaterial& material) {
   const auto old = snapshot(
@@ -1419,14 +1485,16 @@ void public_cases(const OriginBoardingBootSupport& boot,
   auto first = require(std::move(result));
   observe("FIRST_PUBLIC_CHECKPOINT_WORLD_MATERIAL", first);
   accounting(first);
+  // Frozen629e254 GCC/Clang20 FIRST observations preceded these regressions.
+  observed_missing(first, 1436, "WF02 | CABIN emergency pressure frame", 107,
+                   .6796875, .6875, 2);
   check(first.child && snapshot(*first.child) == old,
         "New WORLD consumer retains one unchanged freshly issued Self02 child "
         "fieldwise");
   if (first.child && first.child->complete)
     actual_proxy_oracles(boot, material, first);
   budgets(boot, material);
-  // FIRST outcome remains unknown until the Root freezes and records both
-  // compilers.
+  // Preserve each FIRST receipt before checking its now-known observed result.
   for (auto range : std::array<std::array<double, 2>, 8>{{{1, 0},
                                                           {0, .25},
                                                           {.25, .5},
@@ -1440,6 +1508,19 @@ void public_cases(const OriginBoardingBootSupport& boot,
             boot, material, range[0], range[1]));
     observe("REQUEST", d);
     accounting(d);
+    if (range[0] == 1 && range[1] == 0) {
+      observed_missing(d, 1436, "WF02 | CABIN emergency pressure frame", 107,
+                       .6796875, .6875, 2);
+      whole_reverse_identity(first, d);
+    }
+    if ((range[0] == 0 && range[1] == .25) || (range[0] == 0 && range[1] == 0))
+      observed_complete(d);
+    if (range[0] == .25 && range[1] == .5)
+      observed_missing(d, 1574, "WF02 | retained nose joint backing", 3,
+                       .359375, .375, 1);
+    if (range[0] == 1 && range[1] == 1)
+      observed_missing(d, 1436, "WF02 | CABIN emergency pressure frame", 0, 1,
+                       1, 2);
     const auto original =
         require(assess_origin_boarding_route_checkpoint_unload_self02(
             boot, range[0], range[1]));
