@@ -67,3 +67,14 @@ First retain old whole/point.5 refused self01 evidence and the genuine original 
 For actual cells reconstruct nominalu from authentic current geometry; long-double independent bound E and pelvis bottom compare with outward record; original owner failure remains visible where complementwins. Check all105 newpair outcomes/14 region IDs and per-family totals, clipping countactual<=2*graphs, zero/exact/one-less reachable clippingcaps, incomingovercap beforegraph, stale/moved-context refusal reset,wrongphase/token/address/profile. Original graph/self/source/pressure caps still exactactual replays; no private numeric seam grants source permission.
 
 Record FIRST self02 whole GCC/Clang result before any conditional result becomes mandatory positive regression. Full/reverse/sub/point/joins/pressure0endpoint and C2/local physical clock remain required; accepted prefix/refusal source/part/predicate attribution stays honest. No success presumed: even if this removes hip proof insufficiency, other finite owners/actual self/support/world/material/route phases can refuse. All world/material/sourceSurface/fullroute/seat/actor/save/FirstFlight/freefoot/dynamics/friction/strength authorities remainfalse.
+
+
+## Observed result, 2026-10-06
+
+Implementation `59b5a486f6a0acf8e2157580316b82bd28e6f8d0` was formatted and frozen, with actual storage recorded, before FIRST. GCC and pinned Clang20 produced identical FIRST logs: **212,996 checks, zero failures**. The whole path and its reverse qualify under self02: 163 accepted cells, 325 cover nodes, 323 evaluated graphs, 38 actual hip-complement attempts and both qualified joins. The three individual phases qualify with 85/9/69 accepted cells and 0/10/28 hip attempts. The requested subinterval [0.125,0.75] and its reverse qualify with both joins; the formerly unresolved exact point0.5 qualifies using one complement attempt.
+
+The original version1 whole/point0.5 ownership refusals remain mandatory regressions. The new policy retains each original failed owner record alongside its separate sufficient capsule-slab certificate. These are not penetration findings or changes to the original body, region, controls or pressure policy.
+
+Actual new cell storage is10,136 bytes, maximum owned output10,416,792 bytes and bounded live numeric/control storage43,456 bytes, within the registered12,288-byte cell,16MiB output and48KiB live limits. Compilation-only GCC/pinnedClang20 stack corroboration is40,608/38,352 bytes. Original planted source remains an exact prefix, and the entire boot/pressure implementation is unchanged.
+
+This result establishes only the registered kinematics, timing, self and finite foot-pressure policy. Continuous ship/material clearance, foot release and reacquisition, finite pan load, a complete reversible route and actor/native/save admission remain unqualified. #361 and the First Flight parents remain open.

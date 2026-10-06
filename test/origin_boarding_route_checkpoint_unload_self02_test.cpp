@@ -378,11 +378,18 @@ void cell_evidence(const Diagnostic& d, const Cell& c) {
           "All105 selected-policy decisions carry a genuine named certificate");
     if (kind < counts.size()) ++counts[kind];
     const auto old = a.pair_certificates[pair];
-    if (certificate == Certificate::original_capsule_slab_complement)
+    if (certificate == Certificate::original_capsule_slab_complement) {
       check(old == BoardingSourceEndpointSelfCertificate::none,
             "Complement-only acceptance never forges a passing original "
             "certificate");
-    else
+      const auto matches =
+          std::count_if(c.hip_complements.begin(), c.hip_complements.end(),
+                        [&](const auto& h) {
+                          return h.attempted && h.certified && h.pair == pair;
+                        });
+      check(matches == 1, "Every complement decision binds exactly one actual "
+                          "certified hip record");
+    } else
       check(kind == static_cast<std::size_t>(old),
             "Unchanged certificates retain exact original kind");
     if (old != BoardingSourceEndpointSelfCertificate::none)
@@ -402,9 +409,23 @@ void cell_evidence(const Diagnostic& d, const Cell& c) {
           "compiled identities");
     if (h.side >= 2 || h.region >= 14 || h.pair >= 105) continue;
     const auto& r = d.initial->self.regions[h.region];
+    const auto expected_thigh = h.side == 0
+                                    ? BoardingBodyPartId::port_thigh
+                                    : BoardingBodyPartId::starboard_thigh;
+    const auto expected_root = h.side == 0
+                                   ? BoardingPlantedBodyPointId::port_hip
+                                   : BoardingPlantedBodyPointId::starboard_hip;
+    const auto expected_toward =
+        h.side == 0 ? BoardingPlantedBodyPointId::port_knee
+                    : BoardingPlantedBodyPointId::starboard_knee;
     check(r.junction == BoardingSelfJunction::hip &&
+              r.first == BoardingBodyPartId::pelvis &&
+              r.second == expected_thigh && r.root == expected_root &&
+              r.toward == expected_toward &&
+              h.pair == static_cast<std::size_t>(expected_thigh) - 1 &&
               r.limit_metres == kBoardingSelfHipLengthMetres,
-          "No enlarged hip region or fake distal hemisphere enters proof");
+          "Complement uses exact original side, canonical pelvis/thigh pair, "
+          "hip/knee and finite slab");
     const auto& old = a.owners[h.region];
     check(old.arithmetic_supported && !old.certified &&
               old.certificate == BoardingSourceEndpointSelfCertificate::
@@ -550,6 +571,19 @@ void observe(std::string_view label, const Diagnostic& d) {
             << " graphs=" << d.work.phase.graphs
             << " hip_attempts=" << d.hip_complement_attempts
             << " joins=" << d.qualified_joins[0] << ',' << d.qualified_joins[1];
+  // Keep the historical FIRST receipt schema; later receipts expose all actual
+  // work.
+  if (label != "FIRST_PUBLIC_CHECKPOINT_UNLOAD_SELF02") {
+    const auto& w = d.work;
+    std::cout << " legs=" << w.phase.legs << " bodies=" << w.phase.bodies
+              << " sectors=" << w.phase.sectors << " timing=" << w.phase.timing
+              << " pairs=" << w.contact.self_pairs
+              << " axes=" << w.contact.proposed_axes
+              << " signed=" << w.contact.signed_trials
+              << " owners=" << w.ownership_attempts
+              << " candidates=" << w.contact.pressure_candidates
+              << " edges=" << w.contact.disk_edges;
+  }
   if (d.first_refusal) {
     const auto& r = *d.first_refusal;
     std::cout << " refusal=" << static_cast<unsigned>(r.condition)
@@ -618,6 +652,80 @@ auto decision_snapshot(const Diagnostic& d) -> std::vector<std::uint64_t> {
     number(d.first_refusal->last);
   }
   return out;
+}
+auto owner_snapshot(const BoardingLowerFootTransferOwner& o)
+    -> std::array<std::uint64_t, 10> {
+  return {std::bit_cast<std::uint64_t>(o.extent.lower),
+          std::bit_cast<std::uint64_t>(o.extent.upper),
+          std::bit_cast<std::uint64_t>(o.limit.lower),
+          std::bit_cast<std::uint64_t>(o.limit.upper),
+          std::bit_cast<std::uint64_t>(o.secondary_extent.lower),
+          std::bit_cast<std::uint64_t>(o.secondary_extent.upper),
+          static_cast<std::uint64_t>(o.certificate),
+          o.arithmetic_supported,
+          o.certified,
+          o.structural_identity};
+}
+auto work_snapshot(const Diagnostic& d) -> std::array<std::uint64_t, 11> {
+  const auto& w = d.work;
+  return {w.phase.graphs,          w.phase.legs,
+          w.phase.bodies,          w.phase.sectors,
+          w.phase.timing,          w.contact.self_pairs,
+          w.contact.proposed_axes, w.contact.signed_trials,
+          w.ownership_attempts,    w.contact.pressure_candidates,
+          w.contact.disk_edges};
+}
+void observed_complete(const Diagnostic& d) {
+  check(d.complete && !d.first_refusal && d.initial &&
+            d.initial->self.complete && d.initial->load.complete &&
+            d.arithmetic_supported && d.kinematics_complete &&
+            d.timing_complete && d.self_complete && d.nonnegative_reactions &&
+            d.nominal_vertical_equilibrium_complete &&
+            d.finite_pressure_complete && d.support_complete,
+        "Frozen GCC/Clang20 observations require complete actual "
+        "graph/self/nominal pressure cover");
+  const auto a = std::min(d.requested_first, d.requested_last),
+             b = std::max(d.requested_first, d.requested_last);
+  check(d.qualified_joins ==
+            std::array<bool, 2>{a < .25 && b > .25, a < .5 && b > .5},
+        "Observed complete request earns precisely its genuine two-sided "
+        "physical joins");
+}
+void full_hip_budget(const OriginBoardingBootSupport& source,
+                     const Diagnostic& first) {
+  // The independently frozen FIRST used38 attempts across the same global
+  // cover.
+  check(first.hip_complement_attempts == 38,
+        "Frozen full-path observation retains actual38 hip attempts");
+  Limits exact;
+  exact.hip_complement_attempts = 38;
+  const auto replay =
+      require(detail::boarding_route_checkpoint_unload_self02_bounded(
+          source, 0, 1, exact));
+  observe("FULL_HIP_CAP_EXACT", replay);
+  accounting(replay, exact);
+  observed_complete(replay);
+  check(decision_snapshot(replay) == decision_snapshot(first) &&
+            work_snapshot(replay) == work_snapshot(first) &&
+            old_child(*replay.initial) == old_child(*first.initial),
+        "Exact38 global hip budget preserves fieldwise decisions, actual work "
+        "and original child across both joins");
+  --exact.hip_complement_attempts;
+  const auto less =
+      require(detail::boarding_route_checkpoint_unload_self02_bounded(
+          source, 0, 1, exact));
+  observe("FULL_HIP_CAP_ONE_LESS", less);
+  accounting(less, exact);
+  check(!less.complete && less.first_refusal &&
+            less.first_refusal->self02_condition ==
+                BoardingRouteCheckpointUnloadSelf02Condition::
+                    hip_complement_capacity &&
+            less.first_refusal->phase_index == 2 &&
+            less.hip_complement_attempts == 37 &&
+            less.qualified_joins == std::array<bool, 2>{true, true} &&
+            !less.cells.empty() && less.cells.back().global_last >= .5,
+        "One less global hip operation refuses in finish with real prior "
+        "charges and both qualified prefix joins");
 }
 void stale(Cell& c) {
   c.assessment.complete = c.assessment.self_complete =
@@ -826,8 +934,28 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
       assess_origin_boarding_route_checkpoint_unload_self02(source, .5, .5));
   observe("HIP_CAP_BASE_POINT", base);
   accounting(base);
-  check(base.hip_complement_attempts > 0,
-        "Authentic formerly unresolved join reaches new complement method");
+  observed_complete(base);
+  check(base.hip_complement_attempts == 1,
+        "Observed formerly unresolved join completes with one genuine new hip "
+        "proof");
+  BoardingRouteCheckpointUnloadDiagnostic old_owner;
+  const auto old_context =
+      require(detail::prepare_boarding_route_checkpoint_unload(source, Limits{},
+                                                               old_owner));
+  BoardingRoutePortUnloadCounters old_work;
+  BoardingRoutePortUnloadCell old_cell;
+  BoardingRoutePortUnloadRefusal old_reason;
+  const auto old_state = detail::boarding_route_checkpoint_unload_cell(
+      old_context, 2, 0, 0, false, Limits{}, old_work, old_cell, old_reason);
+  check(old_state == State::unresolved && old_reason.pair == 2 &&
+            !old_cell.owners[1].certified,
+        "Independent original private point still reaches genuine failed port "
+        "hip");
+  if (base.complete && !base.cells.empty())
+    check(owner_snapshot(base.cells.front().assessment.owners[1]) ==
+              owner_snapshot(old_cell.owners[1]),
+          "Selected point retains original failed owner "
+          "extent/limit/secondary/certificate and all flags bit-for-bit");
   Limits zero;
   zero.hip_complement_attempts = 0;
   const auto z =
@@ -869,6 +997,7 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
   const auto point = require(
       assess_origin_boarding_route_checkpoint_unload_self02(source, 0, 0));
   accounting(point);
+  observed_complete(point);
   if (!point.complete) return;
   Limits exact;
   exact.phase.nodes = point.examined_nodes;
@@ -949,6 +1078,8 @@ void cover_and_reverse(const OriginBoardingBootSupport& source) {
                                                                          y, x));
     accounting(f);
     accounting(r);
+    observed_complete(f);
+    observed_complete(r);
     if (f.complete && r.complete) {
       check(f.cells.size() == r.cells.size(),
             "Reverse retains same canonical accepted cover");
@@ -982,6 +1113,7 @@ void cover_and_reverse(const OriginBoardingBootSupport& source) {
     const auto p = require(
         assess_origin_boarding_route_checkpoint_unload_self02(source, g, g));
     accounting(p);
+    observed_complete(p);
     check(p.qualified_joins == std::array<bool, 2>{false, false},
           "Exact join point cannot invent two-sided physical qualification");
     if (p.complete)
@@ -992,6 +1124,7 @@ void cover_and_reverse(const OriginBoardingBootSupport& source) {
         require(assess_origin_boarding_route_checkpoint_unload_self02(
             source, g - 1. / 1024, g + 1. / 1024));
     accounting(cross);
+    observed_complete(cross);
     if (cross.complete)
       check(cross.qualified_joins[join],
             "Actual accepted neighboring nonpoint cells earn physical join");
@@ -1011,8 +1144,11 @@ void public_cases(const OriginBoardingBootSupport& source) {
   accounting(first);
   check(old_child(*first.initial) == original,
         "Selected policy retains one unchanged genuine initial child");
-  // FIRST precedes any outcome-dependent checks; selected full-path outcome
-  // remains unknown until Root freezes and records both compiler observations.
+  // Frozen59b5a48 FIRST observations preceded these mandatory regressions.
+  // Preserve each fresh FIRST print and the original receipt before checking
+  // its now-known result.
+  observed_complete(first);
+  full_hip_budget(source, first);
   observed_budgets(source);
   for (auto range : std::array<std::array<double, 2>, 9>{{{1, 0},
                                                           {0, .25},
@@ -1028,6 +1164,7 @@ void public_cases(const OriginBoardingBootSupport& source) {
             source, range[0], range[1]));
     observe("REQUEST", d);
     accounting(d);
+    observed_complete(d);
     check(old_child(*d.initial) == original,
           "Every fresh full/reverse/sub/point retains original initial source "
           "contracts");
