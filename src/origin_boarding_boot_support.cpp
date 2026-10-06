@@ -2310,3 +2310,146 @@ auto detail::intermediate_pause_disk_math(
                d.nominal_load_supported && !d.first_refusal;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_pause_support02_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::intermediate_pause_support02_pressure_bridge(
+    const BoardingIntermediatePauseSupport02ProjectionToken& token,
+    const BoardingIntermediatePauseSupport02Limits& l,
+    BoardingIntermediatePauseSupport02Diagnostic& d) -> void {
+  using Why = BoardingIntermediatePauseSupport02Condition;
+  using State = BoardingIntermediatePauseSupport02State;
+  // Owner/source identity precedes EVERY borrowed cell/request access. Only the
+  // named fresh-v2 issuer can construct this synchronous capability.
+  if (token.owner_ != &d || !token.provider_ || !token.cell_ ||
+      !token.request_ ||
+      !BoardingIntermediatePauseSupportAccess::valid(d.source) ||
+      BoardingIntermediatePauseSupportAccess::data(d.source) !=
+          BoardingIntermediatePauseSupportAccess::data(*token.provider_)) {
+    intermediate_pause_support02_refuse(d, Why::invalid_binding);
+    return;
+  }
+  const auto& cell = *token.cell_;
+  for (std::size_t carrier = 0; carrier < 3; ++carrier)
+    for (std::size_t a = 0; a < 2; ++a) {
+      if (!intermediate_pause_support02_definition_charge(d)) return;
+      const auto& b =
+          carrier == 0
+              ? cell.center_of_mass.value
+              : cell
+                    .points[static_cast<std::size_t>(
+                        carrier == 1
+                            ? BoardingPlantedBodyPointId::port_boot_center
+                            : BoardingPlantedBodyPointId::
+                                  starboard_boot_center)]
+                    .value;
+      const double lower = a == 0 ? b.lower.x : b.lower.z;
+      const double upper = a == 0 ? b.upper.x : b.upper.z;
+      if (!std::isfinite(lower) || !std::isfinite(upper) || lower > upper ||
+          std::abs(lower) > 8 || std::abs(upper) > 8) {
+        intermediate_pause_support02_refuse(d, Why::unsupported_arithmetic);
+        return;
+      }
+      (carrier == 0 ? d.com_xz[a]
+                    : d.boot_centers_xz[carrier - 1][a]) = {lower, upper, true};
+    }
+  if (!intermediate_pause_support02_allocate(d, l)) return;
+  if (!intermediate_pause_support02_definition_charge(d)) return;
+  // The original target-sole -> bootcenter+.05 -> BOX bottom-.05 identity is
+  // semantic, authenticated in the fresh complete graph and projection. No
+  // tolerance or rounded subtraction moves either genuine source plane.
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& y = token.request_->feet[side].sole[0].coordinates[1];
+    if (!d.sites[side].plane_identity || y.count != 1 ||
+        y.terms != std::array<double, 3>{d.source_planes[side], 0, 0} ||
+        !d.pressure_evaluated[side] || !d.nominal_equilibrium) {
+      intermediate_pause_support02_refuse(d, Why::sole_plane, side);
+      return;
+    }
+  }
+  const auto required = add(point(.020), point(.010));
+  for (std::size_t side = 0; side < 2; ++side) {
+    auto& record = d.sites[side];
+    record.loaded = true;
+    record.evaluated = true;
+    const Point pressure{
+        {d.pressure_xz[side][0].lower, d.pressure_xz[side][0].upper},
+        {d.pressure_xz[side][1].lower, d.pressure_xz[side][1].upper}};
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+    const Point center{
+        {d.boot_centers_xz[side][0].lower, d.boot_centers_xz[side][0].upper},
+        {d.boot_centers_xz[side][1].lower, d.boot_centers_xz[side][1].upper}};
+    const auto sole = site_sole_corners(center);
+    const auto* partition =
+        BoardingIntermediatePauseSupportAccess::partition(d.source, side);
+    if (!partition) {
+      intermediate_pause_support02_refuse(d, Why::invalid_binding, side);
+      return;
+    }
+    const auto source = source_corners(*partition);
+    for (std::size_t which = 0; which < 2; ++which) {
+      const auto& corners = which == 0 ? sole : source;
+      auto& edges = which == 0 ? record.sole_edges : record.source_edges;
+      auto& evaluated =
+          which == 0 ? record.sole_evaluated : record.source_evaluated;
+      for (std::size_t edge = 0; edge < 4; ++edge) {
+        if (d.work.disk_edges >= l.disk_edges) {
+          intermediate_pause_support02_refuse(d, Why::edge_capacity, side, edge,
+                                              which != 0);
+          return;
+        }
+        ++d.work.disk_edges;
+        evaluated[edge] = true;
+        edges[edge] = site_edge(corners[edge], corners[(edge + 1) % 4],
+                                pressure, required, d.arithmetic_supported);
+        if (!d.arithmetic_supported) {
+          intermediate_pause_support02_refuse(d, Why::unsupported_arithmetic,
+                                              side, edge, which != 0);
+          return;
+        }
+        if (!edges[edge].disk_contained) {
+          intermediate_pause_support02_refuse(
+              d, which == 0 ? Why::sole_disk : Why::source_disk, side, edge,
+              which != 0);
+          auto& refusal = *d.first_refusal;
+          if (refusal.side == side && refusal.edge == edge &&
+              refusal.source_edge == (which != 0)) {
+            const auto bound = edges[edge].signed_side.lower <= 0
+                                   ? edges[edge].signed_side
+                                   : edges[edge].squared_margin_gap;
+            refusal.limiting_bound = {bound.lower, bound.upper, true};
+          }
+        }
+      }
+      (which == 0 ? record.sole_status : record.source_status) =
+          pause_edge_status(edges);
+    }
+    record.complete = record.plane_identity &&
+                      record.sole_status == PauseStatus::contained &&
+                      record.source_status == PauseStatus::contained;
+  }
+  if (!intermediate_pause_support02_definition_charge(d)) return;
+  if (d.work.disk_edges != 16 || !d.arithmetic_supported ||
+      d.stop_condition != Why::none) {
+    intermediate_pause_support02_refuse(d, Why::unsupported_arithmetic);
+    return;
+  }
+  if (!intermediate_pause_support02_definition_charge(d)) return;
+  d.finite_contact_supported = d.sites[0].complete && d.sites[1].complete;
+  d.nominal_load_supported =
+      d.nominal_equilibrium && d.finite_contact_supported;
+  d.complete = d.arithmetic_supported && d.kinematic_complete &&
+               d.constant_state && d.projection_complete &&
+               d.nominal_load_supported && !d.first_refusal;
+  if (d.complete)
+    d.state = State::supported;
+  else {
+    const bool refuted = d.sites[0].sole_status == PauseStatus::refuted ||
+                         d.sites[0].source_status == PauseStatus::refuted ||
+                         d.sites[1].sole_status == PauseStatus::refuted ||
+                         d.sites[1].source_status == PauseStatus::refuted;
+    d.state = refuted ? State::witness_refused : State::unresolved;
+  }
+}
+} // namespace apsis_drift

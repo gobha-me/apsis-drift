@@ -67,6 +67,8 @@ player's station-to-flight journey.
   registered source contact and nominal load gate for the unchanged two-second pause.
 - [Intermediate pause fixed fore/aft envelope01](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_ENVELOPE01.md):
   one necessary support bound at the unchanged load split.
+- [Constructive intermediate pause support02](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT02.md):
+  registered lighter-load static witness, preserving the quarter-load refusal.
 - [IntermediateStep02 preflight](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_STEP02.md):
   registered foot-preposition sequencing hypothesis under unchanged shared limits.
 - [Checkpoint material Boundary03](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_BOUNDARY03.md):
