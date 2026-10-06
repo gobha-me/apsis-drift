@@ -46,7 +46,9 @@ void check(bool pass, std::string_view why) {
   }
 }
 template <class T, class E> auto require(std::expected<T, E> r) -> T {
-  if (!r) throw std::runtime_error("Required WORLD/material API refused");
+  if (!r)
+    throw std::runtime_error("Required WORLD/material API refused: " +
+                             std::string(r.error()));
   return std::move(*r);
 }
 auto component(RigidVector3 p, std::size_t i) -> double {
@@ -796,12 +798,17 @@ void domain_fallback_controls(const OriginBoardingBootSupport& boot) {
 // and distinguish containing material from an enclosing clear surface.
 void material_and_sole_controls(const OriginBoardingBootSupport& boot) {
   const std::array<detail::MaterialPlane, 6> planes{
-      detail::MaterialPlane{{1, 0, 0}, {1, 1}},
-      detail::MaterialPlane{{-1, 0, 0}, {1, 1}},
-      detail::MaterialPlane{{0, 1, 0}, {1, 1}},
-      detail::MaterialPlane{{0, -1, 0}, {1, 1}},
-      detail::MaterialPlane{{0, 0, 1}, {1, 1}},
-      detail::MaterialPlane{{0, 0, -1}, {1, 1}}};
+      detail::MaterialPlane{{1, 0, 0}, {1, 1, true}},
+      detail::MaterialPlane{{-1, 0, 0}, {1, 1, true}},
+      detail::MaterialPlane{{0, 1, 0}, {1, 1, true}},
+      detail::MaterialPlane{{0, -1, 0}, {1, 1, true}},
+      detail::MaterialPlane{{0, 0, 1}, {1, 1, true}},
+      detail::MaterialPlane{{0, 0, -1}, {1, 1, true}}};
+  auto unsupported_planes = planes;
+  unsupported_planes[0].maximum.supported = false;
+  check(
+      !detail::initial_material_primitive_math(box(), 0, unsupported_planes, 6),
+      "Unsupported caller plane bounds cannot enter material arithmetic");
   const auto inside =
       require(detail::initial_material_primitive_math(box(), 0, planes, 6));
   check(inside.arithmetic_supported && !inside.certified &&
