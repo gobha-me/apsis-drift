@@ -1498,6 +1498,7 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
       require(assess_origin_boarding_route_port_unload(source, 0, 0));
   observe("POINT_BASE", base);
   accounting(base);
+  check(base.complete, "Observed initial source-bound point remains complete");
   if (!base.complete) return;
   check(base.cells.size() == 1,
         "Actual complete source-bound point owns one shared compound cell");
@@ -1717,6 +1718,29 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
         "Moved-from query context cannot reuse stale compound admission");
   (void)retained_context;
 }
+void observed_refusal(const Diagnostic& d, bool full) {
+  check(!d.complete && d.first_refusal && !d.support_complete &&
+            !d.endpoint_zero_port_reaction,
+        "Observed refused unload never becomes complete support or unloading "
+        "authority");
+  if (!d.first_refusal) return;
+  const auto& r = *d.first_refusal;
+  check(r.predicate_condition == Condition::phase_predicate &&
+            r.phase_condition ==
+                BoardingRouteFootPhaseCondition::joint_sector &&
+            r.side == 0,
+        "Observed refusal preserves authentic port joint-sector cause");
+  if (full) {
+    check(r.condition == Condition::depth_capacity && r.first == .1962890625 &&
+              r.last == .197265625,
+          "Whole and reverse preserve exact original canonical closed refusal "
+          "interval");
+    check(!d.cells.empty() && d.cells.front().phase.first == 0 &&
+              d.cells.back().phase.last == r.first,
+          "Observed whole and reverse retain their genuine valid prefix up to "
+          "the refused interval");
+  }
+}
 void public_cases(const OriginBoardingBootSupport& source) {
   const auto old =
       snapshot(require(assess_origin_boarding_source_endpoint_load(source)));
@@ -1729,6 +1753,9 @@ void public_cases(const OriginBoardingBootSupport& source) {
   auto first = require(std::move(initial));
   observe("FIRST_PUBLIC_PORT_UNLOAD", first);
   accounting(first);
+  // Both registered first compiler logs preceded these outcome regressions.
+  // Continue logging the fresh observation before asserting the known result.
+  observed_refusal(first, true);
   check(snapshot(*first.initial) == old,
         "One fresh compound child remains fieldwise identical to original "
         "load/self/endpoint/sites");
@@ -1751,9 +1778,22 @@ void public_cases(const OriginBoardingBootSupport& source) {
     check(snapshot(*d.initial) == old,
           "Each independent reverse/sub/point owns exactly the unchanged "
           "source child");
-    if (first.complete)
-      check(d.complete, "Observed successful full unload remains complete for "
-                        "valid reverse/sub/points");
+    if (range[0] == 1 && range[1] == 0)
+      observed_refusal(d, true);
+    else if (range[0] == range[1] && (range[0] == 0 || range[0] == 1))
+      check(d.complete, "Observed initial and actual single-foot endpoint "
+                        "remain complete nominal support");
+    else {
+      observed_refusal(d, false);
+      if (range[0] == .5 && range[1] == .5)
+        check(d.first_refusal &&
+                  d.first_refusal->condition ==
+                      Condition::unsplittable_interval &&
+                  d.first_refusal->first == .5 && d.first_refusal->last == .5 &&
+                  d.cells.empty(),
+              "Observed midpoint retains exact instantaneous joint-sector "
+              "refusal without an accepted prefix");
+    }
     if (d.complete && range[0] == 1 && range[1] == 1) {
       check(d.cells.size() == 1 &&
                 d.cells[0].port_reaction_fraction.lower == 0 &&
