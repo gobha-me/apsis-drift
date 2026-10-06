@@ -713,14 +713,20 @@ void invalid_source_controls(const NativeCraftBinding& binding,
   }
   auto copy = source;
   auto moved = std::move(copy);
+  // NOLINTBEGIN(bugprone-use-after-move) -- Documented moved-from material
+  // handle must refuse and expose no views.
   check(!copy.summary() && copy.source_name(0).empty() &&
             !assess_origin_boarding_initial_material(boot, copy),
         "Moved-from material source refuses and loses views");
+  // NOLINTEND(bugprone-use-after-move) -- End empty-handle contract check.
   source_summary(moved);
   auto boot_copy = boot;
   auto boot_moved = std::move(boot_copy);
+  // NOLINTBEGIN(bugprone-use-after-move) -- Documented moved-from boot handle
+  // must refuse original-child admission.
   check(!assess_origin_boarding_initial_material(boot_copy, source),
         "Moved-from genuine boot support refuses original child");
+  // NOLINTEND(bugprone-use-after-move) -- End empty-handle contract check.
   (void)boot_moved;
 }
 void unsafe_environment(const NativeCraftBinding& binding,
@@ -1353,10 +1359,13 @@ void source_roster(const NativeCraftBinding& binding,
         "Diagnostic envelope getter safely rejects past-end source indices");
   auto copy = source;
   auto retained = std::move(copy);
+  // NOLINTBEGIN(bugprone-use-after-move) -- Documented moved-from material
+  // handle must expose no diagnostic envelope.
   check(!detail::initial_material_source_envelope(copy, 0) &&
             detail::initial_material_source_envelope(retained, 0).has_value(),
         "Moved source loses diagnostic envelope while retained handle "
         "preserves it");
+  // NOLINTEND(bugprone-use-after-move) -- End empty-handle contract check.
 }
 } // namespace
 int main() {
@@ -1378,7 +1387,7 @@ int main() {
     check(admission.has_value(),
           "Observed complete genuine material source remains admitted");
     if (admission) {
-      const auto source = *admission;
+      const auto& source = *admission;
       invalid_source_controls(binding, boot, source);
       unsafe_environment(binding, boot, source);
       source_roster(binding, source);

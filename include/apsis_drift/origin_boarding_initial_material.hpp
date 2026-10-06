@@ -20,7 +20,7 @@ inline constexpr std::uint32_t kBoardingInitialMaterialVersion{1};
 inline constexpr std::size_t kBoardingInitialMaterialOriginalObjects{1746};
 inline constexpr std::size_t kBoardingInitialMaterialEffectiveObjects{1751};
 inline constexpr std::size_t kBoardingInitialMaterialMaximumSourceBytes{
-    32 * 1024 * 1024};
+    std::size_t{32} * std::size_t{1024} * std::size_t{1024}};
 enum class BoardingInitialMaterialRelation : std::uint8_t {
   unknown,
   shell_sheet,

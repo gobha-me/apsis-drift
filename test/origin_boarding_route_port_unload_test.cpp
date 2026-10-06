@@ -1301,8 +1301,11 @@ void invalid_controls(const OriginBoardingBootSupport& source) {
           "Invalid requested endpoint refuses before source/graph work");
   auto copied = source;
   const auto retained = std::move(copied);
+  // NOLINTBEGIN(bugprone-use-after-move) -- Documented moved-from source handle
+  // must refuse context admission.
   check(!assess_origin_boarding_route_port_unload(copied),
         "Moved-from genuine provider cannot acquire unload context");
+  // NOLINTEND(bugprone-use-after-move) -- End empty-handle contract check.
   (void)retained;
   Limits raised;
   ++raised.pairs;
@@ -1710,8 +1713,11 @@ void observed_budgets(const OriginBoardingBootSupport& source) {
   BoardingRoutePortUnloadCounters work;
   Compound stale = base.cells[0];
   BoardingRoutePortUnloadRefusal why;
+  // NOLINTBEGIN(bugprone-use-after-move) -- Documented moved-from context must
+  // refuse before graph work.
   const auto moved_state = detail::boarding_route_port_unload_cell(
       moved_context, 0, 0, false, Limits{}, work, stale, why);
+  // NOLINTEND(bugprone-use-after-move) -- End empty-handle contract check.
   check(moved_state == State::unsupported &&
             why.condition == Condition::invalid_binding && !stale.complete &&
             work.phase.graphs == 0,

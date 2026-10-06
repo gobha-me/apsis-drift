@@ -317,9 +317,9 @@ auto curve_proof(const detail::MaterialCurveRecord& c,
       c.radius_metres <= 0)
     return std::unexpected("Material POLY constructor unsupported");
   if (mesh.source != c.source ||
-      mesh.raw_vertices.size() != c.point_count * 10 ||
+      mesh.raw_vertices.size() != std::size_t{c.point_count} * 10 ||
       mesh.quantized_vertices.size() != mesh.raw_vertices.size() ||
-      mesh.triangles.size() != (c.point_count - 1) * 20)
+      mesh.triangles.size() != (std::size_t{c.point_count} - 1) * 20)
     return std::unexpected("Material POLY ring topology");
   std::array<Bounds, 6> points{};
   for (std::size_t i = 0; i < c.point_count; ++i)
