@@ -69,8 +69,10 @@ player's station-to-flight journey.
   one necessary support bound at the unchanged load split.
 - [Constructive intermediate pause support02](ORIGIN_BOARDING_INTERMEDIATE_PAUSE_SUPPORT02.md):
   registered lighter-load static witness, preserving the quarter-load refusal.
+- [Original port-hip diagnostic01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_HIP_DIAGNOSTIC01.md):
+  two original hip exclusions; four later points unresolved; no strict overlap witness.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
-  registered same-cell full-body exclusion check; feasibility remains unknown.
+  certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
   qualified coherent five-phase nominal support/contact chain; full boarding remains open.
 - [Unloaded intermediate approach01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_UNLOADED01.md):
