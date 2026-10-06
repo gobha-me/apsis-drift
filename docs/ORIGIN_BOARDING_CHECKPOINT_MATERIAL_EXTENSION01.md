@@ -48,3 +48,7 @@ Inherit unchanged child/clock/depth/node/leaf caps; material roster1759/effectiv
 Freeze code, capture receipts, actual source/live/output accounting and registered recipe before first constructor and WORLD02 observations. Keep both compiler outcomes before making an observed success/refusal mandatory. Meaningful controls include annular cavity vs material-band crossing; clear sheets inside a containing volume; malformed base/modifier/hash/mapping; seam/raw-containment refusal; full ordinal vs crop key; old named WORLD01 refusals; invalid/moved/stale bindings, nonfinite/unsafe state; and actual zero/exact/one-less source/proxy/face/plane/preparation work. Raw arithmetic carries no source/body/WORLD/actor authority.
 
 A new refusal identifies the next concrete blocker. It does not authorize body/primitive/control tuning or completion of #361. The full transfer and actual seated endpoint remain separate acceptance requirements.
+
+## Narrow capture helper freeze
+
+Before master load, freeze `tools/boarding/checkpoint_material_extension.py` SHA256 `b4dbd4800be1122aaf7251adc829292ef5454aba4acde6f3f21bb302e094e898`. The exact invocation is retained in the local capture receipt; public invocation uses Blender5.2.2LTS background/factory-startup with that helper, unchanged master, pinned historical helper, exact `--capture-sha256` and a new additive output directory. No constructor or WORLD02 query has run. Capture outcome remains unknown.
