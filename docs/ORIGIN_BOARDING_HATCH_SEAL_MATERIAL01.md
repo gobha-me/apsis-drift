@@ -72,3 +72,17 @@ invocation is `blender --background --python tools/boarding/hatch_seal_material.
 --output assets/native/wayfarer-hatch-seal-material-01` with each input matching
 the fixed hashes above. Output must be absent before execution. This freeze
 adds no source save, material permission or observed issuer/WORLD outcome.
+
+## Captured source, before material execution
+
+The one frozen capture completed with source saves0/master unchanged. Current
+constructor is a noncyclic nine-point3D POLY, ROUND/FULL bevel resolution3,
+depth0.013000000268220901m, MINIMUM twist, no authored caps, no modifiers or
+bevel/taper dependencies, unit point radii and zero tilts. The duplicated
+terminal point remains a separate indexed ring. Capture is9178B metadata
+SHA256 `03f0fe49aa849cbfe20dc063cf5699ac714eac5db461a8b020c30cfe57ab5d88`
+and6240B geometry SHA256
+`732771d076b0480d8c71ceb6585169488c51556f75be2c4a4aa45ac3641ff235`.
+Whole original90/160 stream pins match; inherited140crop attribution remains
+unchanged and new crop replay is0. Captured settings are now known, but raw/grid
+containment and genuine issuer/WORLD results remain **UNKNOWN**.
