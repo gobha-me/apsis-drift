@@ -104,3 +104,33 @@ returns, controllers and error storage are charged. Independent shared-runner
 source/live review passed. Original initial/extension/seal files are preserved.
 No numerical issuer or WORLD04 outcome follows from these measurements.
 FIRST remains **UNKNOWN** at this freeze.
+
+## Retained FIRST results
+
+At frozen head `baaee2e`, first GCC and pinnedClang20 logs agree byte-for-byte.
+Genuine SeparationRingSweep01 is **admitted**, with10368B source, raw/game
+radii0.018000952899456028 /0.018002684950263598m, actual work43base/
+540coordinates/540bounds/480indices/160strips/480raw+480grid inclusions/
+8segments. Both issuer tests pass3256checks. No source remodel, radius fit or
+old material-policy replacement followed the observations.
+
+WORLD04 passes2918checks; **all eight original requests complete** material,
+domain and HALO exclusion on one unchanged Self02 cover. Whole/reverse has
+163cells, preparation85, pivot9, finish69, subrange84, and each endpoint1.
+There is no first refusal or seal/ring segment attribution in these normal
+requests. Whole output10418776B and point output49648B fit16MiB.
+
+Whole actual work1759roster/1751effective/26265union-envelope/2445union-proxy/
+15domain-union/0domain-cell/21783proxy/7824refined-envelope/352622material-triangle/
+75HALO-metadata/8100HALO-triangle/5368377triangle-union/0refined-triangle/
+114base-enclosure/11514refined-enclosure/16456axes/179008prepared-directions/
+192sole-guards/0collapsed/0sole-triangle/326sole-volume. Boundary work remains
+154witness/308signed-support/0width. Reverse repeats these counters exactly.
+The eight frozen complete results and all counters become mandatory
+regressions only after these FIRST logs were retained.
+
+Original WORLD03 still retains its source1589/part12/cell137 missing-material
+refusal and all eight historical results; WORLD02 and earlier source identities
+also remain unchanged. Complete current checkpoint material exclusion does
+not establish the final pan-supported seated endpoint or full #361 transfer.
+Actor/save qualification and First Flight remain open.

@@ -971,6 +971,69 @@ void observed_previous(
           "refusal and closed child interval");
   }
 }
+void observed_outcome(const Diagnostic& d, std::size_t request) {
+  const auto& p = d.previous.result.world;
+  constexpr std::array<std::size_t, 8> cells{163, 163, 85, 9, 69, 84, 1, 1};
+  constexpr std::array<std::array<std::uint64_t, 24>, 8> work{
+      {std::array<std::uint64_t, 24>{
+           1759,   1751, 26265, 2445,    15,  0,   21783, 7824,
+           352622, 75,   8100,  5368377, 0,   114, 11514, 16456,
+           179008, 192,  0,     0,       326, 154, 308,   0},
+       std::array<std::uint64_t, 24>{
+           1759,   1751, 26265, 2445,    15,  0,   21783, 7824,
+           352622, 75,   8100,  5368377, 0,   114, 11514, 16456,
+           179008, 192,  0,     0,       326, 154, 308,   0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  1275, 15,    0,
+                                     9220, 2635, 346923, 75,   8100,  5325345,
+                                     0,    66,   5310,   7226, 82240, 192,
+                                     0,    0,    170,    0,    0,     0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  135, 15,   0,
+                                     1035, 306,  352110, 75,  8100, 5340906,
+                                     0,    66,   594,    843, 9216, 192,
+                                     0,    0,    18,     0,   0,    0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  1035, 15,    0,
+                                     9957, 3312, 352622, 75,   8100,  5368377,
+                                     0,    114,  5610,   8387, 87552, 192,
+                                     0,    0,    138,    154,  308,   0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  1260, 15,    0,
+                                     9886, 3192, 352622, 75,   8100,  5347629,
+                                     0,    66,   5434,   7677, 84256, 192,
+                                     0,    0,    168,    31,   62,    0},
+       std::array<std::uint64_t, 24>{
+           1759, 1751, 26265, 15, 15,  0,   106, 30, 346923, 75, 8100, 5325345,
+           0,    61,   61,    78, 944, 192, 0,   0,  2,      0,  0,    0},
+       std::array<std::uint64_t, 24>{1759, 1751, 26265,  15,  15,   0,
+                                     177,  48,   352622, 75,  8100, 5368377,
+                                     0,    114,  114,    169, 1792, 192,
+                                     0,    0,    2,      3,   6,    0}}};
+  check(request < cells.size(),
+        "WORLD04 request has an immutable FIRST observation");
+  if (request >= cells.size()) return;
+  check(d.previous.result.child && d.previous.result.child->complete &&
+            d.previous.result.child->cells.size() == cells[request] &&
+            p.world_version == 4 && p.bindings_complete && p.source_complete &&
+            p.arithmetic_supported && p.domain_complete &&
+            p.material_exclusion && p.halo_surface_exclusion && p.complete &&
+            !p.first_refusal,
+        "Every frozen FIRST WORLD04 request retains complete original "
+        "child/domain/material/HALO obligations");
+  std::array<std::uint64_t, 24> actual{};
+  for (std::size_t i = 0; i < caps.size(); ++i)
+    actual[i] = p.work.*caps[i].work;
+  actual[18] = p.work.collapsed_triangles;
+  actual[19] = p.work.sole_triangle_exclusions;
+  actual[20] = p.work.sole_volume_exclusions;
+  actual[21] = d.previous.boundary_work.witness_attempts;
+  actual[22] = d.previous.boundary_work.signed_support_calls;
+  actual[23] = d.previous.boundary_work.width_attempts;
+  check(actual == work[request], "Frozen FIRST WORLD04 retains every observed "
+                                 "actual operation and boundary counter");
+  check(p.output_capacity_bytes == (request >= 6 ? 49648u : 10418776u),
+        "Frozen FIRST WORLD04 retains actual owned output capacity accounting");
+  check(!d.ring_segment && !d.previous.seal_segment,
+        "Complete normal requests retain no failed ring or seal segment "
+        "attribution");
+}
 void observe(const OriginBoardingBootSupport& boot,
              const OriginBoardingInitialMaterial& base,
              const OriginBoardingCheckpointMaterialExtension& extension,
@@ -987,8 +1050,8 @@ void observe(const OriginBoardingBootSupport& boot,
   }
   auto first = std::move(*r);
   print("FIRST_PUBLIC_CHECKPOINT_WORLD_MATERIAL04", first);
-  // WORLD04 outcomes remain unknown before this distinct retained FIRST
-  // observation.
+  // Preserve genuine FIRST logging before regressions from frozen baaee2e.
+  observed_outcome(first, 0);
   accounting(first);
   const auto original =
       require(assess_origin_boarding_route_checkpoint_unload_self02(boot));
@@ -1024,6 +1087,7 @@ void observe(const OriginBoardingBootSupport& boot,
       continue;
     }
     print("WORLD04_REQUEST_" + std::to_string(i), *result);
+    observed_outcome(*result, i);
     const auto previous =
         require(assess_origin_boarding_route_checkpoint_world_material03(
             boot, base, extension, seal, a, b));
@@ -1132,7 +1196,27 @@ int main() {
                     std::pair{"axis", evidence.axis}})
       if (value) std::cout << ' ' << name << '=' << *value;
     std::cout << " quantized=" << evidence.quantized << '\n' << std::flush;
-    // New ring admission is unknown until this genuine observation is retained.
+    // Preserve genuine FIRST logging before mandatory admitted-source
+    // regression.
+    check(ring_result.has_value() && evidence.complete &&
+              evidence.condition ==
+                  detail::BoardingSeparationRingMaterialCondition::none &&
+              evidence.work.bindings_complete &&
+              evidence.work.arithmetic_supported &&
+              evidence.work.constructors_complete &&
+              evidence.work.version == 1 &&
+              evidence.work.source_bytes == 10368 &&
+              evidence.work.segments == 8 && evidence.work.base_guards == 43 &&
+              evidence.work.coordinate_guards == 540 &&
+              evidence.work.bound_guards == 540 &&
+              evidence.work.index_guards == 480 &&
+              evidence.work.strip_guards == 160 &&
+              evidence.work.raw_inclusions == 480 &&
+              evidence.work.quantized_inclusions == 480 &&
+              evidence.work.raw_radius == 0x1.26ed780000001p-6 &&
+              evidence.work.game_radius == 0x1.26f4bbc6802e5p-6,
+          "Frozen FIRST WORLD04 remains available through the genuine observed "
+          "ring constructor");
     check(ring_result.has_value() == evidence.complete,
           "WORLD04 cannot use an incomplete ring constructor");
     if (ring_result) {

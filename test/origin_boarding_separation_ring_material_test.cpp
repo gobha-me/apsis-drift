@@ -527,8 +527,28 @@ int main() {
     if (!admission) std::cout << " error=" << admission.error();
     std::cout << '\n' << std::flush;
     log("FIRST_SEPARATION_RING_CONSTRUCTOR", evidence);
-    // This distinct genuine constructor outcome is unknown before FIRST.
+    // Preserve genuine FIRST logging before regressions from frozen baaee2e.
     accounting(evidence);
+    const auto& w = evidence.work;
+    check(public_admission.has_value() && admission.has_value() &&
+              evidence.complete && evidence.condition == Condition::none &&
+              w.version == 1 && w.bindings_complete && w.arithmetic_supported &&
+              w.constructors_complete,
+          "Frozen FIRST ring issuer and authentic constructor remain complete");
+    check(w.source_bytes == 10368 && w.segments == 8 && w.base_guards == 43 &&
+              w.coordinate_guards == 540 && w.bound_guards == 540 &&
+              w.index_guards == 480 && w.strip_guards == 160 &&
+              w.raw_inclusions == 480 && w.quantized_inclusions == 480,
+          "Frozen FIRST ring constructor retains every actual allocation and "
+          "work count");
+    check(w.raw_radius == 0x1.26ed780000001p-6 &&
+              w.game_radius == 0x1.26f4bbc6802e5p-6,
+          "Frozen FIRST ring storage and grid radii retain exact observed "
+          "binary64 values");
+    check(!evidence.source && !evidence.triangle && !evidence.strip &&
+              !evidence.vertex && !evidence.axis && !evidence.quantized,
+          "Completed genuine ring retains no failed ordinal or predicate "
+          "attribution");
     check(public_admission.has_value() == admission.has_value(),
           "Public factory and independently replayed authentic detailed issuer "
           "agree");
