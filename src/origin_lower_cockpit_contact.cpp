@@ -784,3 +784,72 @@ auto assess_lower_cockpit_surface_point(
   return result;
 }
 } // namespace apsis_drift
+
+namespace apsis_drift::detail {
+auto visit_lower_cockpit_halo(
+    const OriginLowerCockpitContact& geometry, void* context,
+    bool (*visit)(void*, const LowerCockpitEffectiveTriangle&),
+    std::size_t max_metadata, std::size_t max_triangles)
+    -> std::expected<LowerCockpitHaloVisit, std::string> {
+  if (!visit || max_metadata > 75 || max_triangles > 8100)
+    return std::unexpected("HALO bounded callback and lowered caps required");
+  const auto* data = LowerCockpitContactAccess::data(geometry);
+  if (!data) return std::unexpected("HALO moved-from geometry");
+  if (data->objects.size() != 75 || data->triangles.size() != 8100)
+    return std::unexpected("HALO immutable source roster mismatch");
+  LowerCockpitHaloVisit result;
+  result.total_metadata = data->objects.size();
+  result.total_triangles = data->triangles.size();
+  std::size_t next{};
+  for (std::size_t i = 0; i < data->objects.size(); ++i) {
+    if (result.metadata_examined >= max_metadata) {
+      result.condition = LowerCockpitHaloVisitCondition::metadata_capacity;
+      result.next_metadata = i;
+      return result;
+    }
+    ++result.metadata_examined;
+    const auto& object = data->objects[i];
+    if (object.source_object.empty() || object.triangle_start != next ||
+        object.triangle_count > 8100 - next ||
+        object.evaluated_source_triangles.size() != object.triangle_count)
+      return std::unexpected("HALO immutable object attribution mismatch");
+    next += object.triangle_count;
+  }
+  if (next != 8100)
+    return std::unexpected("HALO complete object ranges required");
+  result.metadata_complete = true;
+  for (std::size_t i = 0; i < data->triangles.size(); ++i) {
+    if (result.visited_triangles >= max_triangles) {
+      result.condition = LowerCockpitHaloVisitCondition::triangle_capacity;
+      result.next_key = LowerCockpitTriangleKey{
+          LowerCockpitContactBuffer::halo, 0, static_cast<std::uint32_t>(i)};
+      return result;
+    }
+    ++result.visited_triangles;
+    const auto& triangle = data->triangles[i];
+    if (triangle.object >= data->objects.size() || triangle.key.group != 0 ||
+        triangle.key.triangle != i)
+      return std::unexpected("HALO immutable face identity mismatch");
+    const auto& object = data->objects[triangle.object];
+    if (i < object.triangle_start ||
+        i - object.triangle_start >= object.triangle_count)
+      return std::unexpected("HALO immutable face range mismatch");
+    const auto ordinal =
+        object.evaluated_source_triangles[i - object.triangle_start];
+    if (ordinal >= object.source_evaluated_triangles)
+      return std::unexpected("HALO immutable evaluated ordinal mismatch");
+    const LowerCockpitEffectiveTriangle face{
+        &triangle,
+        {LowerCockpitContactBuffer::halo, 0, triangle.key.triangle},
+        triangle.object,
+        object.source_object,
+        ordinal};
+    if (!visit(context, face)) {
+      result.condition = LowerCockpitHaloVisitCondition::callback_stopped;
+      return result;
+    }
+  }
+  result.complete = result.visited_triangles == result.total_triangles;
+  return result;
+}
+} // namespace apsis_drift::detail

@@ -33,3 +33,28 @@ struct LowerCockpitContactAccess {
                                                CabinContactBox)
     -> std::expected<bool, std::string>;
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+enum class LowerCockpitHaloVisitCondition : std::uint8_t {
+  none,
+  metadata_capacity,
+  triangle_capacity,
+  callback_stopped
+};
+struct LowerCockpitHaloVisit {
+  std::size_t total_metadata{}, metadata_examined{}, total_triangles{},
+      visited_triangles{};
+  bool metadata_complete{}, complete{};
+  LowerCockpitHaloVisitCondition condition{};
+  std::optional<std::size_t> next_metadata;
+  std::optional<LowerCockpitTriangleKey> next_key;
+};
+// Narrow immutable HALO traversal: no original count/removal scan or
+// replacement visit. Stopping callbacks count their actual face; capacity names
+// NEXT work.
+[[nodiscard]] auto visit_lower_cockpit_halo(
+    const OriginLowerCockpitContact&, void* context,
+    bool (*visit)(void*, const LowerCockpitEffectiveTriangle&),
+    std::size_t max_metadata = 75, std::size_t max_triangles = 8100)
+    -> std::expected<LowerCockpitHaloVisit, std::string>;
+} // namespace apsis_drift::detail

@@ -47,7 +47,7 @@ Reuse Self02 child caps verbatim (depth10/nodes2047/leaves1024, all original agg
 * full material triangle visits≤349,087, halo triangle visits≤8,100, combined triangle visits≤357,187;
 * triangle union/base pairs≤5,357,805; actual refined triangle-cell pairs≤1,048,576;
 * service/support source-part base relations≤240; actual refined enclosure relations≤245,760 (=16*15*1024);
-* per-pair proposals≤16 and shared aggregate numeric axes≤16,777,216 across triangle AND enclosure tests; report a derived support-evaluation ceiling≤67,108,864 (four per shared axis: body h(n),h(−n) and source capsule h(n),h(−n); triangle pairs use only two body supports, planes one). Triangle vertex projections≤50,331,648 (three per triangle axis). Actual axis work remains the primary returned work charge; wrappers must distinguish these derived worst-case allowances from observed actual support/projection counts and never label allowances as executed work;
+* per-pair proposals≤16 and shared aggregate numeric axes≤16,777,216 across triangle AND enclosure tests; report a derived axis-associated support-evaluation allowance≤67,108,864 (four per shared axis: body h(n),h(−n) and source capsule h(n),h(−n); triangle pairs use only two body supports, planes one). Triangle vertex projections≤50,331,648 (three per triangle axis). Actual axis work remains the primary returned work charge; wrappers must distinguish these derived worst-case allowances from observed actual support/projection counts and never label allowances as executed work;
 * authentic constructor counters stay≤1,680 ring inclusions/2,304 support-plane inclusions, retained once. Exact sole full-source plane guard scans have a SEPARATE frozen vertex count (supports192), executed once, not silently once per triangle/cell;
 * recomputed cell proxy/enclosure arithmetic is charged separately BEFORE each helper. Proposed ceiling is union preparation15,360 plus the sum of allowed refined envelope/triangle/enclosure attempts2,342,912, total2,373,632 including15,360 additional domain-refinement constructions; a zero/one-less cap stops before actual construction. No large per-cell cache is hidden as scratch.
 
@@ -82,3 +82,11 @@ The WORLD-stage16KiB target is additional stage accounting, not permission to hi
 
 
 The32MiB decoded-source limit applies to the already admitted complete material source. Existing original/halo capabilities retain their separately published source budgets; this is not a claim that all prior source allocations combined fit32MiB. The actual phased ledger must identify retained source handles and their existing bounds without duplicating decoded arrays or hiding new storage.
+
+Before FIRST, source review clarified that the axis-associated support allowance above excludes the existing six signed support evaluations used by each full-body proxy and the finite triangle kernel’s front-end enclosure. Those fixed operations are separately bounded by the registered proxy and refined-pair call limits; the axis allowance is neither an observed count nor a claim about total support evaluations. No kernel order or work cap changes.
+
+## Actual storage freeze before FIRST
+
+The implementation preserves all six existing source/header prefixes and the complete boot/Self02 prerequisite files. Actual WORLD payload is1,856B; result/expected result1,880/1,888B; limits336B; context80B; proxy200B. Its one original10,136B-per-cell vector remains owned by the fresh Self02 child. Maximum combined owned output is10,418,672B within16MiB. Complete material decoded source remains14,049,188B; original/HALO retain their separately declared source budgets.
+
+Source assertions bound the new WORLD stage at15,664B within16KiB and the unchanged child plus co-live WORLD controller at47,856B within48KiB. Compile-only O3 stack receipts, including a separate pending WORLD return slot, corroborate WORLD14,432B(GCC)/12,464B(Clang20) and child47,120B/44,488B. Source/return/control temporaries are included; existing cells are borrowed. No numerical WORLD assessment has run at this freeze.
