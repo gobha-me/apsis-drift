@@ -481,3 +481,42 @@ The conservative source co-live bounds are creator 7,000 bytes, graph 48,600 byt
 The independent body oracle counts both 8,400-byte local and pending results; the SELF helper counts four 192-byte solid slots without relying on return elision. The combined summary is 368 bytes, each baseline 176 bytes and totals 128 bytes. All 845 original input identities pass, including both exact prefixes and the unchanged prior support producer. Formatting, full native builds and pinned static analysis pass. This admission records storage and compilation only: FIRST numerical outcomes, work counts, partitions and qualified joins remain unknown until the frozen run.
 
 The existing five local Godot contracts retain identical inputs, including the rebuilt native bridge. This reuses their retained evidence and does not claim a fresh visual, audio or Godot run. Fresh pull-request CI remains required.
+
+
+## Retained FIRST outcome (2026-10-06)
+
+The first execution of frozen commit `a9310c5f1a01dd4a60392e4834dbc5463d6f7e86` completed with exit zero on both compilers. Their 7,161-byte reports are identical (SHA-256 `09ac4ba8beb8ef076634337f7f29ff69b80d35e34ba3f75f940f23238ebd9938`). Neither producer nor test changed after FIRST. The contract tests pass while the full maneuver remains unresolved.
+
+Whole forward and reverse each retain 20 accepted cells from 45 original phase calls. Every accepted cell earns nominal support and all 105 original SELF obligations on the same current body. Only the first of four joins earns the required positive-width two-sided combined qualification. The first terminal interval is `[0.1416015625,0.142578125]`, phase 1 at depth 10: lexicographic pair 2, pelvis versus **port thigh**, original port-hip region 1. The original owner, conditional full-capsule hip complement and finite signed-plane alternatives do not certify that obligation. This sufficient-method refusal is neither a collision finding nor a proof that the motion is impossible.
+
+The following table records actual accepted prefixes, including incomplete requests. Counts are observations of the registered method, not a replacement source or an entitlement for another method.
+
+|Slot|Requested global range|Complete|Accepted cells|Original phase calls|Qualified joins|
+|---|---|---|---:|---:|---|
+|A01|0,1|no|20|45|1000|
+|A02|1,0|no|20|45|1000|
+|A03|0,0.5|no|22|50|1000|
+|A04|0.5,0|no|22|50|1000|
+|A05|0.5,1|no|0|10|0000|
+|A06|1,0.5|no|0|10|0000|
+|A07|0,0.125|yes|13|25|0000|
+|A08|0.125,0.25|no|16|39|0000|
+|A09|0.25,0.5|no|0|11|0000|
+|A10|0.5,0.75|no|0|11|0000|
+|A11|0.75,1|no|0|11|0000|
+|A12|0,0|yes|1|1|0000|
+|A13|0.5,0.5|no|0|1|0000|
+|A14|1,1|no|0|1|0000|
+|A15|0.125,0.125|yes|1|1|0000|
+|A16|0.25,0.25|no|0|1|0000|
+|A17|0.75,0.75|no|0|1|0000|
+|A18|0.0625,0.375|no|12|30|1000|
+|A19|0.4375,0.8125|no|0|10|0000|
+
+A07 certifies the full `[0,0.125]` phase in 13 cells; A12 and A15 certify the selected start and first-join points. A13/A14/A16/A17 retain ordinary unresolved point obligations at the same port-hip pair. Narrower requests keep their own genuine adaptive prefixes and terminal intervals; they do not borrow A01 coverage.
+
+The full execution uses one source creator, all 130 consumer slots, 1,551 phase calls, zero raw calls and four accepted-coverage body poses. All 208,016 checks pass. Independent FIRST-only interval audits inspect 13,335 accepted pair records, 1,778 owner records and 254 hip-complement records. All work, caller state, exact-capacity, partial-evidence, unsafe-arithmetic and lifetime controls pass. The fixed tests do not require a positive whole outcome.
+
+This result preserves the prior nominal-support qualification and adds authentic combined support/SELF evidence only for the accepted intervals. Material, WORLD, HALO, seat-pan support, complete route, actor/save integration, dynamics and First Flight remain unqualified. A stronger original port-hip proof needs its own exact registration before new numerical assessment; changing the body, movement, source or budgets is not authorized by this result.
+
+Both full native suites pass all 88 tests, including the unchanged primitive negative tests. Each normal CTest report for the new target is byte-identical to its retained FIRST report. Pinned format and static analysis pass; all 845 original identities and 141 Godot contract inputs still pass after testing. No implementation changes were made after FIRST. Exact-head pull-request CI remains the publication gate.
