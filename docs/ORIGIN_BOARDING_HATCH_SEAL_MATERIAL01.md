@@ -86,3 +86,14 @@ and6240B geometry SHA256
 Whole original90/160 stream pins match; inherited140crop attribution remains
 unchanged and new crop replay is0. Captured settings are now known, but raw/grid
 containment and genuine issuer/WORLD results remain **UNKNOWN**.
+
+## Refusal attribution before FIRST
+
+WORLD03 adds a purpose-specific optional seal segment ordinal (0..7) to its
+new wrapper. It records only the genuine seal obligation whose refined check
+produced the first refusal, including a reached capacity refusal before kernel
+execution. Earlier union/base/child/source/binding or unrelated failures leave
+it empty; successful segment checks never set it. The old WORLD01/02 refusal
+layout remains unchanged. This diagnostic addition grants no material or actor
+authority and raises no source/work/live/output ceiling. Final sizeof/stack
+receipts include the new field and its borrowed stage pointer before FIRST.
