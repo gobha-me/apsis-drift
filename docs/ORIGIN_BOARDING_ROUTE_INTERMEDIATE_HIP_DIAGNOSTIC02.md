@@ -327,3 +327,54 @@ No layout/probe execution. After later code authorization, BOTH strictO3/fPIC GC
 This finite73/32/6/onecreator table is bound to Core's final matching method987d75ec. No unresolved field/count/mode choices remain in this pair. Exact method/public registration/independent review precede implementation; actual resource review and Root's binary/source freeze precede FIRST. No solver/body/source fixture was evaluated to choose any literal or cap. No code, runtime or qualification follows from this file alone.
 
 <!-- END EXACT TEST MANIFEST -->
+
+
+## Measured implementation before FIRST
+
+The registration above remains byte-exact. No creator, geometry, generation, raw fixture, verifier or independent oracle was executed to select this implementation or its bounds. Both strict optimized object builds and symbol-only layout probes pass; layout probes are never executed. The pre-FIRST corrections fix the registered END-adapter symbol names, remove unused test scaffolding and publish a partial epsilon precisely when M40 is written. They change no proposal family, operation order, case, geometry, limit or theorem.
+
+GCC and Clang20 agree on Expected1576, Diagnostic1568, Limits120, Refusal8, Context32, Token40, Request680/optional688 and original PhaseCell7736. AnalyticInput144, AnalyticMath224, Stage64, Generator24, Proposal64 and Matrix240 are measured. The test owns Summary288 and two streams176. Mutable globals100 INCLUDES Totals88, checks8 and failures4; Totals is not charged twice. Its named creator caller884 fits the registered1024; graph caller1008 also fits1024. FOUR Limits and TWO owning Expected headers remain separately charged.
+
+The entire original32768 graph proof is retained. Source stage bounds in bytes:
+
+|Stage|Measured conservative source bytes|
+|---|---:|
+|creator|7000|
+|first audit|27240|
+|global enrollment|26904|
+|graph|44176|
+|owned output|10888|
+|post|33616|
+|preflight|10208|
+|raw|21064|
+|reset|27464|
+
+Creator7000 includes the one4096 arena and all current/pending creator records. Compound stages remain below49152; owned output10888 is two1576 headers plus one7736 cell. There is one reserve(1), no growth or copying. Abnormal capacity is released before refusal.
+
+Analytic512 is Input144+Math224+two lexical Stage64=496, with16 unused. Helper6144 names4276 actual semantic bytes, with1868 unused: three DualMath720, three PrimalMath1008, matrix240, proposal64, geometry336, two generators48, three scalar vectors216, solver arrays180, reporting48, candidate arguments96, three math limits48, verifier24, primitive scratch512, loop/refs256, anchor200 and mixture280. The anchor and mixture stages coexist; the retained dual remains charged during mixture. Unused margin is not a fabricated object or optimization credit.
+
+Factory7680 names6856 with824 unused; catalog5760 and caller parts960 are separate. Sourcehelper2048 names1652 bytes; the retained ledger label1752 adds100 conservative overcharge and leaves296 unused. That arithmetic clarification creates no extra object or optimization credit. Original direct packet comparison is six returns within6144; the public pure wrapper's nine-return7544 scope fits7680 and ends before graph. Reset charges both full7736 aggregate cells. Independent interval audit8192 names4736 with3456 unused; separate raw scalar corroboration8192 names1440 with6752 unused. Raw current/local/pending inputs and all three224 Math returns, controls and errors are named independently of optimizer elision.
+
+Complete physical optimized chains include main, helpers, controllers, pending returns,100 mutable globals, the4096 arena and the7736 cell whenever allocated. They corroborate the full source reservations rather than replacing them:
+
+|Stage|GCC bytes|Clang20 bytes|
+|---|---:|---:|
+|canonical|28388|27860|
+|creator|6964|6684|
+|creator prearena|3764|3332|
+|first audit|18756|18388|
+|first graph|34180|33244|
+|global enrollment|28220|26860|
+|graph|34724|33700|
+|parts|26964|27212|
+|post helper|26548|26132|
+|preflight|12412|12036|
+|raw|6876|7116|
+|raw ld|6948|7076|
+|reset|27516|27124|
+
+Original creator/authentication and pure42/28 verifier frame evidence is retained with unchanged original source identities. New planted objects independently corroborate original phase/leg/rotate/scale/timing frames and the appended typed adapters. Original1155 tracked inputs remain whole-byte exact except the explicit END suffix,13 CMake additions and2 index additions; the planted259247-byte prefix stays exact and boot stays whole unchanged. Existing diagnostic01 observations, receipts and artifacts are preserved; its three cached binaries are archived byte-exact before cache reuse.
+
+The finite roster remains one genuine creator,73 consumer slots,32 source-free analytic slots and at most six FIRST whole-interval certificate audits. Source, layout, resource and immutable prequery checks precede Root's separate once-FIRST observation. No measured bound confers complete support, SELF, WORLD/material/HALO, seat, actor, save or playable-route qualification.
+
+Both complete native builds pass, and pinned format20 and tidy20 pass; tidy checks203 translation units. All compiler/read jobs are reaped before source publication. Runtime remains CLOSED. The rebuilt GCC Godot bridge and all141 exact engine/project/exporter/fixture/helper inputs match the retained local five-contract report; this is verified reuse, not a fresh local run. Fresh exact-head PR CI remains required.

@@ -5571,3 +5571,90 @@ auto detail::boarding_route_intermediate_hip_diagnostic01_current_body(
   });
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_hip_diagnostic02_internal.hpp"
+namespace apsis_drift {
+namespace {
+using Hip02D = BoardingRouteIntermediateHipDiagnostic02Diagnostic;
+using Hip02L = detail::BoardingRouteIntermediateHipDiagnostic02Limits;
+using Hip02W = BoardingRouteIntermediateHipDiagnostic02Condition;
+auto hip02_identity(Hip02D& d, Hip02W why) -> bool {
+  if (d.first_refusal.condition == Hip02W::none)
+    d.first_refusal.condition = why;
+  if (d.state != BoardingRouteIntermediateHipDiagnostic02State::capacity &&
+      d.state != BoardingRouteIntermediateHipDiagnostic02State::unsupported) {
+    d.state = BoardingRouteIntermediateHipDiagnostic02State::unresolved;
+    d.stop_condition = why;
+  }
+  return false;
+}
+} // namespace
+auto detail::boarding_route_intermediate_hip_diagnostic02_body_source(
+    Hip02D& d,
+    const std::array<BoardingRoutePhasePartBinding, kBoardingBodyPartCount>&
+        parts,
+    const Hip02L& l) -> bool {
+  const auto source = [&](std::size_t i, auto predicate) {
+    return boarding_route_intermediate_hip_diagnostic02_source_charge(d, i,
+                                                                      l) &&
+           (predicate() || hip02_identity(d, Hip02W::source_identity));
+  };
+  for (std::size_t i = 0; i < 15; ++i)
+    if (!source(36 + i, [&] { return ss_same_part(parts[i], ss_part(i)); }))
+      return false;
+  SelfRegions regions{};
+  for (std::size_t i = 0; i < 14; ++i)
+    if (!source(51 + i, [&] {
+          if (i == 0) regions = self_regions();
+          return ss_same_region(regions[i], ss_region(i));
+        }))
+      return false;
+  if (!source(65, [&] {
+        return kBoardingRouteFootPhaseVersion == 1 && thigh_length == .47285 &&
+               shin_length == .47478 && parts[0].id == PartId::pelvis;
+      }))
+    return false;
+  return source(66, [&] {
+    return kBoardingRouteFootPhaseVersion == 1 &&
+           parts[1].id == PartId::trunk && parts[2].id == PartId::helmet &&
+           parts[6].id == PartId::port_upper_arm &&
+           parts[12].id == PartId::starboard_upper_arm;
+  });
+}
+auto detail::boarding_route_intermediate_hip_diagnostic02_current_body(
+    Hip02D& d, const Hip02L& l) -> bool {
+  const auto current = [&](std::size_t i, auto predicate) {
+    return boarding_route_intermediate_hip_diagnostic02_current_charge(d, i,
+                                                                       l) &&
+           (predicate() || hip02_identity(d, Hip02W::current_identity));
+  };
+  std::array<BoardingRoutePhasePartBinding, kBoardingBodyPartCount> parts{};
+  for (std::size_t i = 0; i < 15; ++i)
+    if (!current(10 + i, [&] {
+          if (i == 0) parts = boarding_route_foot_phase_parts();
+          return ss_same_part(parts[i], ss_part(i));
+        }))
+      return false;
+  if (!current(25, [&] {
+        const auto regions = self_regions();
+        return ss_same_region(regions[1], ss_region(1)) &&
+               regions[1].first == PartId::pelvis &&
+               regions[1].second == PartId::port_thigh &&
+               regions[1].limit_metres == kBoardingSelfHipLengthMetres;
+      }))
+    return false;
+  // These are provenance of the fresh frozen compiler, not enclosure-unit
+  // tests.
+  if (!current(26, [&] {
+        return kBoardingRouteFootPhaseVersion == 1 && d.source_complete &&
+               d.phase_available && parts[0].id == PartId::pelvis &&
+               ss_same_part(parts[0], ss_part(0));
+      }))
+    return false;
+  return current(27, [&] {
+    return thigh_length == .47285 && parts[3].id == PartId::port_thigh &&
+           ss_same_part(parts[3], ss_part(3)) &&
+           d.current_phase.front().legs[0].nominal_links;
+  });
+}
+} // namespace apsis_drift
