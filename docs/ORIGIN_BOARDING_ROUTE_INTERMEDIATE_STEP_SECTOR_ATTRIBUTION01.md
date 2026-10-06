@@ -1,0 +1,38 @@
+# SectorAttribution01: eight frozen arithmetic diagnostics
+
+Selected before code or new queries for #465, after #463 merged in PR#464 at `4f27c12ae585753734e44ed8d44e63e7477a91eb`. This is a diagnostic of the unchanged IntermediateStep01 phase0 recipe; it selects no replacement trajectory or source/support/WORLD method. All eight replay outcomes and six point-oracle signs are UNKNOWN before FIRST. Preserve the negative whole/phase0 preflight and all existing WORLD04/prefix observations.
+
+Use exactly `boarding_route_intermediate_step_controls(0)` and the unchanged `boarding_route_foot_phase_cell`, with forward derivatives and original physicalT12. Global identifiers are mapped once to localu=4g; no physical-jet rescaling. No production kernel/API/control/body/source/clock/sector changes or asset capture.
+
+|Case|Global interval/point|Local interval/point|
+|---:|---|---|
+|0|[10/1024,11/1024]|[5/128,11/256]|
+|1|[46/4096,47/4096]|[46/1024,47/1024]|
+|2|10/1024|5/128|
+|3|21/2048|21/512|
+|4|11/1024|11/256|
+|5|93/8192|93/2048|
+|6|1/32|1/8|
+|7|1/16|1/4|
+
+The two coarse early dyadic points are registered before this diagnostic's code or execution. They sample unchanged motion between the retained refusal and the previously accepted local half-phase. No grid, adaptive selection or body/target/duration fit is authorized. Each diagnostic run owns one counter ledger with graph8/leg16/body8/sector24/timing48 ceilings, never reset between cases. It attempts each case once in the listed order, continuing after ordinary unresolved predicates but stopping at capacity/unsupported state; remaining cases are explicitly NOT RUN. No DFS or navigation nodes are introduced.
+
+Classify only a genuine fresh unresolved joint_sector return with a valid current side, ordered finite reached margin prefix and exact equality of the first negative lower-bound margin to the original reason bound. The six original margins are roll/ankle-roll15°, hip lower-20°, hip upper120°, knee135°, ankle pitch30°, axial45°; the later strict F2>0 guard is separate. Later margin defaults are UNEVALUATED. All six passed plus such a leg refusal and reason.lower<=0 identifies the strict F2 guard. Side-less torso, different conditions/states, malformed bounds, absent/invalid side or mismatch remain unclassified. Reset staged cell/reason before each call. Final unresolved-leg flags and unwritten body/other-leg/COM fields are never treated as reached evidence.
+
+Retain only compact records, one reusable original cell and one copied680B immutable request. Maximum compact owned output8KiB and complete source/caller/helper/error/pending-return live48KiB; preserve the full inherited32KiB graph proof, without subtracting its old caller reserve. Actual eight-record layout, allocator/control metadata, both local/pending returns and O3 GCC/pinnedClang20 deepest chains must be measured and statically bounded before FIRST. An8KiB ceiling alone does not prove the co-live bound. Stage printing and the independent oracle after the graph replay has returned. Total bounded streamed executable log16KiB; print FIRST8+LD6 and compact validation summaries.
+
+The independent long-double oracle reconstructs frozen term-list sums, quintic/hump, rational yaw, root/port hip, sole frame, ankle offset(0,.1,0), original positive leg closure and six margin/strict-F2 values at cases2–7. Source coordinates use the sole frame, not the root frame. It uses no failed-cell body fields. Printing signs/angles does not grant authority, and long-double approximations are corroboration rather than outward proof.
+
+FIRST is one eight-request run on each compiler, retained with source/manifest/library/flags/sizeof/O3 hashes before mandatory numerical outcomes. Later validation repeats ONLY this same manifest: one exact-work replay; at most five one-less-work and five zero-work replays for actually reached stages; one exact-output replay; one one-less-output refusal before geometry; three alternate rounding and three x86 FTZ/DAZ/MXCSR environment controls, each stopping at its first unsupported call; raised-limit refusals before geometry. Each independent validation run owns its separate lowered ledger, never resets within cases and changes no candidate location/control. Maximum genuine cell calls110 per compiler:8+8+40+40+8+6. Classifier-only malformed/stale/side/reason fixtures invoke no geometry.
+
+A supported outward POINT margin with upper<0 witnesses that exact nominal necessary-sector violation. Strict F2 upper<=0 witnesses violation of its required positive sign. Bounds straddling zero remain unresolved. Positive points cannot certify intervening intervals or prove dependency is the only failure cause. No new continuous cover is attempted. All contact/load/self/material/WORLD/route/seat/actor/save/dynamics authorities stay false and #462/#361/FirstFlight remain open.
+
+Compile-only actual layout/stack measurements must be added before FIRST; no diagnostic execution is authorized merely by an estimated layout.
+
+The producer and harness are test-private reproducible C++; no production API
+or kernel changes. Before any validation replay, reduce/destroy the initial
+full report and retain only a measured compact summary, so prior eight-record
+output does not silently overlap later query/pending returns. Independent
+oracle comparisons and bounded printing are staged after graph replay. Final
+actual caller/main/helper stack chains and summary bytes join the pre-FIRST
+ledger; source-level scopes alone do not replace compiler frame measurements.
