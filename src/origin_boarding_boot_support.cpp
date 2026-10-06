@@ -1954,3 +1954,359 @@ auto detail::boarding_route_checkpoint_unload_pressure(
   return UnloadState::accepted;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_pause_support_internal.hpp"
+namespace apsis_drift {
+namespace {
+using PauseWhy = BoardingIntermediatePauseCondition;
+using PauseStatus = BoardingIntermediatePauseDiskStatus;
+using PauseCtor = BoardingIntermediatePauseConstructorEvidence;
+using PauseCtorLimits = detail::BoardingIntermediatePauseConstructorLimits;
+using PauseDiag = BoardingIntermediatePauseSupportDiagnostic;
+using PauseLimits = detail::BoardingIntermediatePauseLimits;
+auto pause_ctor_charge(std::size_t& count, std::size_t maximum, PauseCtor& e,
+                       PauseWhy why) -> bool {
+  if (count >= maximum) {
+    if (e.condition == PauseWhy::none) e.condition = why;
+    return false;
+  }
+  ++count;
+  return true;
+}
+auto pause_quad_failure(PauseCtor& e, PauseWhy why) -> bool {
+  if (e.condition == PauseWhy::none) e.condition = why;
+  return false;
+}
+auto pause_input(std::array<BoardingPlantedLegScalarBounds, 2> p) -> bool {
+  return load_input_bound(p[0]) && load_input_bound(p[1]);
+}
+auto pause_edge_status(const std::array<BoardingFootSiteEdgeEvidence, 4>& edges)
+    -> PauseStatus {
+  bool contained = true, refuted = false;
+  for (const auto& e : edges) {
+    contained = contained && e.disk_contained;
+    refuted =
+        refuted || (e.signed_side.supported && e.signed_side.upper <= 0) ||
+        (e.squared_margin_gap.supported && e.squared_margin_gap.upper < 0);
+  }
+  return contained ? PauseStatus::contained
+         : refuted ? PauseStatus::refuted
+                   : PauseStatus::unresolved;
+}
+auto pause_refuse(PauseDiag& d, PauseWhy why,
+                  std::optional<std::size_t> site = {},
+                  std::optional<std::size_t> edge = {}, bool source = false)
+    -> void {
+  if (why == PauseWhy::pressure_capacity || why == PauseWhy::edge_capacity ||
+      why == PauseWhy::unsupported_arithmetic)
+    d.stop_condition = why;
+  if (!d.first_refusal) {
+    BoardingIntermediatePauseRefusal r;
+    r.condition = why;
+    r.side = site;
+    r.edge = edge;
+    r.source_edge = source;
+    d.first_refusal = r;
+  }
+}
+constexpr std::size_t pause_pressure_scratch =
+    sizeof(LoadScratch) + load_nested_scratch +
+    2 * sizeof(BoardingIntermediatePauseRefusal) + 512;
+static_assert(pause_pressure_scratch <= 4096);
+constexpr std::size_t pause_quad_scratch =
+    2 * sizeof(BoardingIntermediatePauseQuadEvidence) + 2 * sizeof(Point) +
+    10 * sizeof(Interval) + 2 * sizeof(BoardingFootSiteEdgeEvidence) + 256;
+static_assert(pause_quad_scratch <= 2048);
+} // namespace
+[[gnu::noinline]] auto detail::intermediate_pause_quad_bridge(
+    const BoardingBootSourcePartition& p, const PauseCtorLimits& l,
+    PauseCtor& e, std::size_t side) -> bool {
+  if (side >= 2) return pause_quad_failure(e, PauseWhy::source_geometry);
+  e.side = side;
+  if (!pause_ctor_charge(e.work.quad_records, l.quad_records, e,
+                         PauseWhy::quad_capacity))
+    return false;
+  auto& q = e.quads[side];
+  q = {};
+  q.evaluated = e.geometry_evaluated[side] = true;
+  if (!pause_ctor_charge(e.work.base_guards, l.base_guards, e,
+                         PauseWhy::base_capacity))
+    return false;
+  if (!site_supported_environment() || !load_finite(p.plane_metres) ||
+      !std::ranges::all_of(p.perimeter_metres,
+                           [](Vec v) { return load_finite(v); })) {
+    e.arithmetic_supported = false;
+    return pause_quad_failure(e, PauseWhy::unsupported_arithmetic);
+  }
+  q.arithmetic_supported = true;
+  q.horizontal = true;
+  q.convex = true;
+  q.nondegenerate = true;
+  q.corner_membership = q.distinct_face_vertices = true;
+  for (const auto corner : p.perimeter_metres)
+    q.horizontal = q.horizontal && corner.y == p.plane_metres;
+  for (std::size_t i = 0; i < 4; ++i) {
+    if (!pause_ctor_charge(e.work.quad_edges, l.quad_edges, e,
+                           PauseWhy::quad_edge_capacity))
+      return false;
+    const auto a = wide(p.perimeter_metres[i]),
+               b = wide(p.perimeter_metres[(i + 1) % 4]);
+    const auto delta = subtract(b, a);
+    const auto length = add(square(delta.x), square(delta.z));
+    load_minimum(q.minimum_edge_squared, length, q.checked_edges == 0,
+                 q.arithmetic_supported);
+    ++q.checked_edges;
+    q.nondegenerate = q.nondegenerate && finite(length) && length.low > 0;
+    for (std::size_t j = 2; j < 4; ++j) {
+      if (!pause_ctor_charge(e.work.quad_sides, l.quad_sides, e,
+                             PauseWhy::quad_side_capacity))
+        return false;
+      const auto signed_side =
+          edge_side(a, b, wide(p.perimeter_metres[(i + j) % 4]));
+      load_minimum(q.minimum_signed_side, signed_side, q.checked_sides == 0,
+                   q.arithmetic_supported);
+      ++q.checked_sides;
+      q.convex = q.convex && finite(signed_side) && signed_side.low > 0;
+    }
+  }
+  std::array<std::size_t, 4> incidence{};
+  bool upward = true;
+  for (const auto& face : p.faces) {
+    std::array<bool, 4> seen{};
+    for (const auto vertex : face.points_current_metres) {
+      if (!pause_ctor_charge(e.work.face_vertices, l.face_vertices, e,
+                             PauseWhy::vertex_capacity))
+        return false;
+      ++q.checked_vertices;
+      if (!load_finite(vertex)) {
+        q.arithmetic_supported = e.arithmetic_supported = false;
+        return pause_quad_failure(e, PauseWhy::unsupported_arithmetic);
+      }
+      q.horizontal = q.horizontal && vertex.y == p.plane_metres;
+      bool found = false;
+      for (std::size_t i = 0; i < 4; ++i) {
+        if (!pause_ctor_charge(e.work.corner_matches, l.corner_matches, e,
+                               PauseWhy::corner_capacity))
+          return false;
+        if (vertex == p.perimeter_metres[i]) {
+          q.distinct_face_vertices = q.distinct_face_vertices && !seen[i];
+          seen[i] = true;
+          ++incidence[i];
+          found = true;
+          break;
+        }
+      }
+      q.corner_membership = q.corner_membership && found;
+    }
+    if (!pause_ctor_charge(e.work.face_windings, l.face_windings, e,
+                           PauseWhy::winding_capacity))
+      return false;
+    const auto winding = edge_side(wide(face.points_current_metres[0]),
+                                   wide(face.points_current_metres[1]),
+                                   wide(face.points_current_metres[2]));
+    ++q.checked_windings;
+    q.arithmetic_supported = q.arithmetic_supported && finite(winding);
+    upward = upward && finite(winding) && winding.low > 0;
+  }
+  std::size_t first{}, last{}, shared{}, single{};
+  for (std::size_t i = 0; i < 4; ++i) {
+    if (!pause_ctor_charge(e.work.incidence, l.incidence, e,
+                           PauseWhy::incidence_capacity))
+      return false;
+    ++q.checked_incidence;
+    if (incidence[i] == 2) {
+      if (shared == 0) first = i;
+      last = i;
+      ++shared;
+    } else if (incidence[i] == 1)
+      ++single;
+  }
+  q.incidence_valid = shared == 2 && single == 2;
+  if (!pause_ctor_charge(e.work.diagonals, l.diagonals, e,
+                         PauseWhy::diagonal_capacity))
+    return false;
+  q.diagonal_valid = q.incidence_valid && last - first == 2;
+  q.upward = q.horizontal && q.convex && upward;
+  q.minimum_edge_squared.supported = q.minimum_signed_side.supported =
+      q.arithmetic_supported;
+  q.complete = q.arithmetic_supported && q.horizontal && q.convex &&
+               q.nondegenerate && q.upward && q.corner_membership &&
+               q.distinct_face_vertices && q.incidence_valid &&
+               q.diagonal_valid;
+  if (!q.arithmetic_supported) {
+    e.arithmetic_supported = false;
+    return pause_quad_failure(e, PauseWhy::unsupported_arithmetic);
+  }
+  return q.complete || pause_quad_failure(e, PauseWhy::source_geometry);
+}
+auto detail::intermediate_pause_pressure_math(
+    std::array<BoardingPlantedLegScalarBounds, 2> com,
+    std::array<std::array<BoardingPlantedLegScalarBounds, 2>, 2> centers,
+    BoardingPlantedLegScalarBounds w) -> BoardingIntermediatePausePressureMath {
+  BoardingIntermediatePausePressureMath r;
+  if (!site_supported_environment() || !pause_input(com) ||
+      !pause_input(centers[0]) || !pause_input(centers[1]) ||
+      !load_input_bound(w) || w.lower < 0 || w.upper > 1)
+    return r;
+  LoadScratch s;
+  s.com = {{com[0].lower, com[0].upper}, {com[1].lower, com[1].upper}};
+  for (std::size_t i = 0; i < 2; ++i)
+    s.centers[i] = {{centers[i][0].lower, centers[i][0].upper},
+                    {centers[i][1].lower, centers[i][1].upper}};
+  if (!unload_pressure_algebra(s, {w.lower, w.upper})) return r;
+  r.barycenter_xz = {{{s.barycenter.x.low, s.barycenter.x.high},
+                      {s.barycenter.z.low, s.barycenter.z.high}}};
+  r.delta_xz = {
+      {{s.delta.x.low, s.delta.x.high}, {s.delta.z.low, s.delta.z.high}}};
+  for (std::size_t i = 0; i < 2; ++i)
+    r.pressure_xz[i] = {{{s.pressures[i].x.low, s.pressures[i].x.high},
+                         {s.pressures[i].z.low, s.pressures[i].z.high}}};
+  r.arithmetic_supported = true;
+  return r;
+}
+auto detail::intermediate_pause_disk_math(
+    std::array<RigidVector3, 4> p,
+    std::array<BoardingPlantedLegScalarBounds, 2> pressure, std::size_t maximum)
+    -> BoardingIntermediatePauseDiskMath {
+  BoardingIntermediatePauseDiskMath r;
+  if (maximum > 4) {
+    r.condition = PauseWhy::invalid_limits;
+    return r;
+  }
+  if (!site_supported_environment() || !pause_input(pressure) ||
+      !std::ranges::all_of(p, [](Vec v) { return load_finite(v); })) {
+    r.condition = PauseWhy::unsupported_arithmetic;
+    return r;
+  }
+  const auto quad = load_quad(p, p[0].y);
+  if (!quad.valid) {
+    r.condition = PauseWhy::source_geometry;
+    return r;
+  }
+  r.arithmetic_supported = true;
+  const Point center{{pressure[0].lower, pressure[0].upper},
+                     {pressure[1].lower, pressure[1].upper}};
+  const auto required = add(point(.020), point(.010));
+  for (std::size_t i = 0; i < 4; ++i) {
+    if (r.edge_checks >= maximum) {
+      r.condition = PauseWhy::edge_capacity;
+      return r;
+    }
+    ++r.edge_checks;
+    r.evaluated[i] = true;
+    r.edges[i] = site_edge(wide(p[i]), wide(p[(i + 1) % 4]), center, required,
+                           r.arithmetic_supported);
+    if (!r.arithmetic_supported) {
+      r.condition = PauseWhy::unsupported_arithmetic;
+      return r;
+    }
+  }
+  r.status = pause_edge_status(r.edges);
+  return r;
+}
+[[gnu::noinline]] auto detail::intermediate_pause_pressure_bridge(
+    const BoardingIntermediatePauseProjectionToken& token, const PauseLimits& l,
+    PauseDiag& d) -> void {
+  // Token was privately issued only after one fresh complete fixed body graph.
+  // Its provider is retained by the owning report; no caller fixture enters.
+  if (!token.provider_ || !token.cell_ ||
+      !BoardingIntermediatePauseSupportAccess::valid(*token.provider_)) {
+    pause_refuse(d, PauseWhy::invalid_binding);
+    return;
+  }
+  const auto& cell = *token.cell_;
+  LoadScratch s;
+  const auto& com = cell.center_of_mass.value;
+  s.com = {{com.lower.x, com.upper.x}, {com.lower.z, com.upper.z}};
+  d.com_xz = {{{com.lower.x, com.upper.x}, {com.lower.z, com.upper.z}}};
+  for (std::size_t i = 0; i < 2; ++i) {
+    const auto id = i == 0 ? BoardingPlantedBodyPointId::port_boot_center
+                           : BoardingPlantedBodyPointId::starboard_boot_center;
+    const auto& b = cell.points[static_cast<std::size_t>(id)].value;
+    s.centers[i] = {{b.lower.x, b.upper.x}, {b.lower.z, b.upper.z}};
+    d.boot_centers_xz[i] = {{{b.lower.x, b.upper.x}, {b.lower.z, b.upper.z}}};
+    d.sites[i].loaded = true;
+  }
+  // Shared algebra computes BOTH candidate positions. Eagerly charge each
+  // selected obligation before entering it, including a cap1 partial refusal.
+  for (std::size_t i = 0; i < 2; ++i) {
+    if (d.work.pressure_candidates >= l.pressure_candidates) {
+      pause_refuse(d, PauseWhy::pressure_capacity, i);
+      return;
+    }
+    ++d.work.pressure_candidates;
+  }
+  if (!unload_pressure_algebra(s, {cell.port_reaction_fraction.lower,
+                                   cell.port_reaction_fraction.upper})) {
+    d.arithmetic_supported = false;
+    pause_refuse(d, PauseWhy::unsupported_arithmetic);
+    return;
+  }
+  d.barycenter_xz = {{{s.barycenter.x.low, s.barycenter.x.high},
+                      {s.barycenter.z.low, s.barycenter.z.high}}};
+  d.delta_xz = {
+      {{s.delta.x.low, s.delta.x.high}, {s.delta.z.low, s.delta.z.high}}};
+  d.nominal_equilibrium = true;
+  const auto required = add(point(.020), point(.010));
+  for (std::size_t i = 0; i < 2; ++i) {
+    auto& record = d.sites[i];
+    record.evaluated = true;
+    const auto pressure = s.pressures[i];
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+    s.sole = site_sole_corners(s.centers[i]);
+    const auto* source =
+        BoardingIntermediatePauseSupportAccess::partition(*token.provider_, i);
+    if (!source) {
+      pause_refuse(d, PauseWhy::invalid_binding, i);
+      return;
+    }
+    s.source = source_corners(*source);
+    for (std::size_t which = 0; which < 2; ++which) {
+      const auto& corners = which == 0 ? s.sole : s.source;
+      auto& edges = which == 0 ? record.sole_edges : record.source_edges;
+      auto& evaluated =
+          which == 0 ? record.sole_evaluated : record.source_evaluated;
+      for (std::size_t edge = 0; edge < 4; ++edge) {
+        if (d.work.disk_edges >= l.disk_edges) {
+          pause_refuse(d, PauseWhy::edge_capacity, i, edge, which != 0);
+          return;
+        }
+        ++d.work.disk_edges;
+        evaluated[edge] = true;
+        edges[edge] = site_edge(corners[edge], corners[(edge + 1) % 4],
+                                pressure, required, d.arithmetic_supported);
+        if (!d.arithmetic_supported) {
+          pause_refuse(d, PauseWhy::unsupported_arithmetic, i, edge,
+                       which != 0);
+          return;
+        }
+        if (!edges[edge].disk_contained) {
+          pause_refuse(d,
+                       which == 0 ? PauseWhy::sole_disk : PauseWhy::source_disk,
+                       i, edge, which != 0);
+          auto& refusal = *d.first_refusal;
+          if (refusal.side == i && refusal.edge == edge &&
+              refusal.source_edge == (which != 0)) {
+            const auto b = edges[edge].signed_side.lower <= 0
+                               ? edges[edge].signed_side
+                               : edges[edge].squared_margin_gap;
+            refusal.limiting_bound = {b.lower, b.upper};
+          }
+        }
+      }
+      const auto status = pause_edge_status(edges);
+      (which == 0 ? record.sole_status : record.source_status) = status;
+    }
+    record.complete = record.plane_identity &&
+                      record.sole_status == PauseStatus::contained &&
+                      record.source_status == PauseStatus::contained;
+  }
+  d.finite_contact_supported = d.sites[0].complete && d.sites[1].complete;
+  d.nominal_load_supported =
+      d.nominal_equilibrium && d.finite_contact_supported;
+  d.complete = d.arithmetic_supported && d.kinematic_complete &&
+               d.constant_state && d.projection_complete &&
+               d.nominal_load_supported && !d.first_refusal;
+}
+} // namespace apsis_drift
