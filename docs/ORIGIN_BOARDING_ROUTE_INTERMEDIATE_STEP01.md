@@ -1,6 +1,6 @@
 # IntermediateStep01: one frozen kinematic preflight
 
-**Registered before code or query.** Selected for #462 after #461 merged at `489c143c6dd2dd4c7a52fa7c6cf2faf3d3444d0c`. This selects one exact numerical preflight, not a fitting family or source/support/WORLD qualification. No new candidate query or source capture has run; all feasibility remains **UNKNOWN**. Earlier WORLD04 outcomes remain unchanged.
+**Registered before code or query.** Selected for #462 after #461 merged at `489c143c6dd2dd4c7a52fa7c6cf2faf3d3444d0c`. This selects one exact numerical preflight, not a fitting family or source/support/WORLD qualification. FIRST observations were retained at `b8151cc05cfb82904489318e104bd88a557ef9a4`: the complete continuation is **NOT QUALIFIED**. No new source capture ran. Earlier WORLD04 outcomes remain unchanged.
 
 ## First useful gate
 
@@ -103,3 +103,46 @@ source cannot be fitted after refusal without a separately registered method.
 This preflight leaves #462/#361/#352 open. It grants no source/support/load/
 self/material/WORLD/route/seat/actor/save/FirstFlight/dynamics authority.
 Pan-only seated support remains a separate unresolved prerequisite.
+
+## Retained FIRST outcome
+
+Both compilers produced byte-identical logs, SHA256
+`2555027efb670798d47547700649d41f9ad5eb7c942349ca53124a2962c1c976`.
+The frozen test passed114,578 independent/control checks. A passing test here
+means honest numerical evidence and refusals, not successful movement.
+
+|Request|Complete|Accepted cells|Examined nodes|Finding|
+|---|---:|---:|---:|---|
+|Whole and reverse|No|3|15|Phase0, port joint sector unresolved at global[.009765625,.0107421875], local[.0390625,.04296875], depth10|
+|Phase0 and reverse|No|7|21|Same predicate unresolved at global[.01123046875,.011474609375], local[.044921875,.0458984375], depth10|
+|Phase1 and reverse|Yes|6|11|Numerical descent only|
+|Phase2 and reverse|Yes|1|1|Numerical transfer cue only|
+|Phase3 and reverse|Yes|1|1|Numerical two-second pause only|
+|Subrange[.125,.875]|Yes|41|81|All three internal joins qualified numerically|
+|Points0,.25,.5,.75,1,.8125|Yes|1 each|1 each|Numerical endpoint/join/pause checks only|
+
+Whole refusal bound is[-5.457909659112304e-05,.00039041924679814049];
+standalone phase0 bound is[-1.4626336539147469e-06,.00013341588569426579].
+Both straddle the sector boundary. These bounded interval refusals do not
+prove an impossible pose or path. Whole work counters(graph,leg,body,sector,
+timing) are(13,16,3,18,18); phase0(21,28,7,34,42); complete subrange
+(78,133,41,173,270). The complete subrange uses three counted mandatory splits,
+depth8, and all three qualified joins. Standalone phase0 cannot authorize
+whole coverage or erase the counted quarter navigation depth.
+
+This selected candidate/method stops here. Its controls, body, limits and
+clock remain frozen. Any further approach needs a separate registration
+before new queries; no target/duration/sector fitting is hidden in these
+results. Contact/load/self/material/WORLD and the actual step remain
+unqualified. Issue#462 and the boarding/FirstFlight parents remain open.
+
+Mandatory post-FIRST regressions pass552,898 checks on each compiler,
+including fieldwise replay of the complete subrange with exactly consumed
+shared budgets and each one-less refusal. Retained post-FIRST outputs are
+byte-identical, SHA256
+`6513e06363cb32b7fc3c73ba4755038e75db906d7c641559f5b8fc1d77468ec6`.
+Both full native compiler suites pass79/79. Existing native walk/save/flight/
+start-staging/operating-motion compatibility inputs remain byte-identical to
+the prior five passing Godot contracts:118 staged project files including the
+GCC bridge, plus engine and exporter. This is reuse of unchanged local
+compatibility evidence; it is not a fresh local Godot run or boarding acceptance.

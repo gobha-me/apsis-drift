@@ -1010,6 +1010,141 @@ void point_budgets(const Diagnostic& base) {
     denied(r);
   }
 }
+// These expectations were recorded only after frozen b8151cc FIRST observations
+// agreed byte-for-byte on GCC and Clang20. They preserve the candidate's
+// refusal.
+void observed_counts(const Diagnostic& d, bool complete, std::size_t cells,
+                     std::size_t nodes, std::size_t navigation,
+                     std::size_t depth, std::size_t output,
+                     BoardingRouteFootPhaseCounters work,
+                     std::array<bool, 3> joins) {
+  check(d.complete == complete && d.cells.size() == cells &&
+            d.examined_nodes == nodes && d.mandatory_splits == navigation &&
+            d.maximum_depth == depth && d.output_capacity_bytes == output &&
+            d.work.graphs == work.graphs && d.work.legs == work.legs &&
+            d.work.bodies == work.bodies && d.work.sectors == work.sectors &&
+            d.work.timing == work.timing && d.qualified_joins == joins,
+        "Frozen first observation retains actual outcome, shared work, "
+        "allocated output, and earned joins");
+  check(d.arithmetic_supported &&
+            (complete ? !d.first_refusal : d.first_refusal.has_value()),
+        "Recorded numerical completeness/refusal remains explicit and "
+        "arithmetic supported");
+}
+void observed_release_refusal(const Diagnostic& d, bool standalone) {
+  observed_counts(d, false, standalone ? 7 : 3, standalone ? 21 : 15,
+                  standalone ? 0 : 2, 10, 7950176,
+                  standalone
+                      ? BoardingRouteFootPhaseCounters{21, 28, 7, 34, 42}
+                      : BoardingRouteFootPhaseCounters{13, 16, 3, 18, 18},
+                  {false, false, false});
+  if (!d.first_refusal) return;
+  const auto& r = *d.first_refusal;
+  const auto first = standalone ? .01123046875 : .009765625;
+  const auto last = standalone ? .011474609375 : .0107421875;
+  check(r.condition == Condition::depth_capacity &&
+            r.predicate_condition == Condition::joint_sector &&
+            r.phase_index == 0 && r.side == 0 && r.depth == 10 &&
+            r.first == first && r.last == last && r.local_first == 4 * first &&
+            r.local_last == 4 * last && !d.cells.empty() &&
+            d.cells.back().global_last == first && r.limiting_bound.lower < 0 &&
+            r.limiting_bound.upper > 0,
+        "Original phase-zero port sector refusal retains exact canonical "
+        "closed interval and accepted prefix");
+}
+void complete_subrange_budgets(const Diagnostic& base) {
+  if (!base.complete) return;
+  Limits exact;
+  exact.phase.depth = base.maximum_depth;
+  exact.phase.nodes = base.examined_nodes;
+  exact.phase.leaves = base.cells.size();
+  exact.phase.output_bytes = base.output_capacity_bytes;
+  exact.phase.graphs = base.work.graphs;
+  exact.phase.legs = base.work.legs;
+  exact.phase.bodies = base.work.bodies;
+  exact.phase.sectors = base.work.sectors;
+  exact.phase.timing = base.work.timing;
+  const auto replay = require(
+      detail::boarding_route_intermediate_step_bounded(.125, .875, exact));
+  log("EXACT_SHARED_SUBRANGE", replay);
+  report(replay, exact);
+  check(replay.complete && replay.cells.size() == base.cells.size() &&
+            replay.qualified_joins == base.qualified_joins &&
+            replay.examined_nodes == base.examined_nodes &&
+            replay.mandatory_splits == base.mandatory_splits &&
+            replay.work.graphs == base.work.graphs &&
+            replay.work.legs == base.work.legs &&
+            replay.work.bodies == base.work.bodies &&
+            replay.work.sectors == base.work.sectors &&
+            replay.work.timing == base.work.timing,
+        "Exact actual complete-cover budgets replay all four phases and three "
+        "shared joins without resetting work");
+  for (std::size_t i = 0; i < std::min(replay.cells.size(), base.cells.size());
+       ++i)
+    check(
+        replay.cells[i].phase_index == base.cells[i].phase_index &&
+            replay.cells[i].global_first == base.cells[i].global_first &&
+            replay.cells[i].global_last == base.cells[i].global_last &&
+            snapshot(replay.cells[i].phase) == snapshot(base.cells[i].phase),
+        "Reduced allocation preserves every original accepted cell fieldwise");
+  exact.phase.output_bytes = replay.output_capacity_bytes;
+  const auto tight = require(
+      detail::boarding_route_intermediate_step_bounded(.125, .875, exact));
+  check(tight.complete &&
+            tight.output_capacity_bytes == exact.phase.output_bytes &&
+            tight.cells.size() == base.cells.size(),
+        "Exact measured allocation fits complete shared cover including joins");
+  for (std::size_t field = 0; field < 9; ++field) {
+    auto l = exact;
+    Condition expected{};
+    switch (field) {
+      case 0:
+        --l.phase.depth;
+        expected = Condition::depth_capacity;
+        break;
+      case 1:
+        --l.phase.nodes;
+        expected = Condition::node_capacity;
+        break;
+      case 2:
+        --l.phase.leaves;
+        expected = Condition::leaf_capacity;
+        break;
+      case 3:
+        --l.phase.output_bytes;
+        expected = Condition::output_capacity;
+        break;
+      case 4:
+        --l.phase.graphs;
+        expected = Condition::graph_capacity;
+        break;
+      case 5:
+        --l.phase.legs;
+        expected = Condition::leg_capacity;
+        break;
+      case 6:
+        --l.phase.bodies;
+        expected = Condition::body_capacity;
+        break;
+      case 7:
+        --l.phase.sectors;
+        expected = Condition::sector_capacity;
+        break;
+      default:
+        --l.phase.timing;
+        expected = Condition::timing_capacity;
+        break;
+    }
+    const auto r = require(
+        detail::boarding_route_intermediate_step_bounded(.125, .875, l));
+    log("ONE_LESS_SHARED_" + std::to_string(field), r);
+    report(r, l);
+    check(!r.complete && r.first_refusal &&
+              r.first_refusal->condition == expected,
+          "One less measured complete-cover capacity refuses its own stage "
+          "across shared phase/physical joins");
+  }
+}
 void observations() {
   auto raw = assess_origin_boarding_route_intermediate_step();
   if (!raw)
@@ -1020,10 +1155,12 @@ void observations() {
     log("FIRST_PUBLIC_INTERMEDIATE_STEP", *raw);
   const auto whole = require(std::move(raw));
   report(whole);
+  observed_release_refusal(whole, false);
   const auto reverse =
       require(assess_origin_boarding_route_intermediate_step(1, 0));
   log("FIRST_REVERSE", reverse);
   report(reverse);
+  observed_release_refusal(reverse, false);
   check(reverse.complete == whole.complete &&
             reverse.cells.size() == whole.cells.size() &&
             reverse.examined_nodes == whole.examined_nodes &&
@@ -1062,17 +1199,37 @@ void observations() {
               forward.cells.size() == backward.cells.size(),
           "Standalone phase reversal retains outcome without assuming movement "
           "success");
+    if (phase == 0) {
+      observed_release_refusal(forward, true);
+      observed_release_refusal(backward, true);
+    } else {
+      const auto work = phase == 1
+                            ? BoardingRouteFootPhaseCounters{11, 17, 6, 23, 36}
+                            : BoardingRouteFootPhaseCounters{1, 2, 1, 3, 6};
+      const auto cells = phase == 1 ? 6 : 1;
+      const auto nodes = phase == 1 ? 11 : 1;
+      const auto depth = phase == 1 ? 3 : 0;
+      observed_counts(forward, true, cells, nodes, 0, depth, 7950176, work,
+                      {false, false, false});
+      observed_counts(backward, true, cells, nodes, 0, depth, 7950176, work,
+                      {false, false, false});
+    }
     local_replay(forward);
   }
   const auto sub =
       require(assess_origin_boarding_route_intermediate_step(.125, .875));
   log("FIRST_SUBRANGE", sub);
   report(sub);
+  observed_counts(sub, true, 41, 81, 3, 8, 7950176, {78, 133, 41, 173, 270},
+                  {true, true, true});
+  complete_subrange_budgets(sub);
   for (double g : std::array{0., .25, .5, .75, 1., .8125}) {
     const auto point =
         require(assess_origin_boarding_route_intermediate_step(g, g));
     log("FIRST_POINT_" + std::to_string(g), point);
     report(point);
+    observed_counts(point, true, 1, 1, 0, 0, 11696, {1, 2, 1, 3, 6},
+                    {false, false, false});
     local_replay(point);
     point_budgets(point);
   }
