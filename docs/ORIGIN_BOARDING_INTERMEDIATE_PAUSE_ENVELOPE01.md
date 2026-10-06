@@ -156,10 +156,38 @@ Entire creator includes4096 arena + authentic make1152/1016 + initialize16/8 + p
 
 ## Integration risks to settle before preregistration
 
-1. Five new cap fields/ceilings and literal arrays are now selected; actual sizeof/frames/source lifetimes still require pre-FIRST measurement. This draft is not implementation authorization.
+1. Five new cap fields/ceilings and literal arrays are now selected; actual sizeof/frames/source lifetimes still require pre-FIRST measurement. The committed registration governs implementation; actual resource proofs still gate FIRST.
 2. Old ordinary finding versus terminal stop must be explicit. Do not turn physical disk failure into missing projection; do not turn a later old capacity into a qualified envelope.
 3. Production must obtain genuine original sole/source identities; no caller successful child report/vertices admitted. Raw fixtures are disjoint from this authority path.
 4. Max/min interval ordering and fixed runtime operations need retained masks; zero/default unsupported bounds cannot supply extrema.
 5. Output underflow must reject before invoking old chain, and raised limits before all work.
 6. One MathInput seam shares the source max loop; M08/M16 each remain one call, no auxiliary numerical helper invocation or source admission.
 7. FIRST outcomes are unknown; no sign fitted from469 sufficient-witness failure. Both prior469 strict disk result and Step02/WORLD/input identities remain unchanged.
+
+
+## Measured implementation gate before FIRST (2026-10-06)
+
+The registered method and roster are unchanged. Strict compile-only probes on
+GCC 16 and Clang 20 measured the diagnostic at 752 bytes, its expected return
+at 760, limits at 120, math limits at 40, math input at 264 and math result at
+536. The compact output is below its 1024-byte limit.
+
+The source lifetime bound retains the entire prior 44,440-byte proof, adds two
+760-byte return slots, four 120-byte limit records and 2,048 bytes for new
+controller, caller and error records: **48,488 <= 49,152 bytes**. No portion of
+the old compiler reserve or caller allowance supplies the new space. The
+post-child catalog is staged after that compiler returns. Separate conservative
+source bounds are 19,808 bytes for post-child arithmetic, 11,024 for raw fixtures
+and 20,816 for the FIRST-only oracle phase. There is one existing 4096-byte source
+arena throughout.
+
+Complete measured machine chains, including explicit pending old and new return
+slots and the arena, are 39,856 bytes on GCC and 36,688 on Clang. The entire
+public source-creator admission chain, including the arena and a 512-byte
+allocator/error allowance, is 6,928 / 6,616 bytes, below the unchanged 8192-byte
+limit. These measurements include the test callers. The new 33-record definition
+guard ceiling and 2/8/2/3/1 operation ceilings remain fixed.
+
+These are compile and lifetime measurements only. No new source creator,
+assessment, math fixture, test or oracle was executed before this gate. The
+first forward and reverse results remain unknown until the frozen binaries run.
