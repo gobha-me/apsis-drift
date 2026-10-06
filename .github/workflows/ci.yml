@@ -153,7 +153,8 @@ jobs:
           -DAPSIS_DRIFT_GODOT_SPIKE=ON
 
       - name: Build
-        run: cmake --build build --parallel
+        # Bound compiler concurrency: the material TU and Godot headers are large.
+        run: cmake --build build --parallel 4
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --parallel 2
@@ -196,7 +197,8 @@ jobs:
           -DAPSIS_DRIFT_GODOT_LIVE=ON
 
       - name: Build native core, live Godot bridge and headless targets
-        run: cmake --build build-core --parallel
+        # Use the same bounded compiler concurrency as the terminal/native builds.
+        run: cmake --build build-core --parallel 4
 
       - name: Test native and headless targets
         run: ctest --test-dir build-core --output-on-failure
