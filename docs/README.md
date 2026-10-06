@@ -77,6 +77,8 @@ player's station-to-flight journey.
   preserves finite ownership; a fresh intermediate endpoint prerequisite precedes another route.
 - [Registered static intermediate endpoint01](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT01.md):
   retained unresolved PORT-leg reach prerequisite; downstream contact and SELF not run.
+- [Root-only reach contract audit](ORIGIN_BOARDING_ROOT_REACH_CONTRACT_AUDIT.md):
+  distinguishes unresolved inclusion from strict exclusion and retains the original derivative domains.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
