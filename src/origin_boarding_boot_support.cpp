@@ -1782,3 +1782,175 @@ auto detail::boarding_route_port_unload_pressure_math(
   return out;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_checkpoint_unload_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::prepare_boarding_route_checkpoint_unload(
+    const OriginBoardingBootSupport& source,
+    const BoardingRouteCheckpointUnloadLimits& limits,
+    BoardingRouteCheckpointUnloadDiagnostic& out)
+    -> std::expected<BoardingRouteCheckpointUnloadContext, std::string> {
+  if (limits.output_bytes <
+      sizeof(
+          std::expected<BoardingRouteCheckpointUnloadDiagnostic, std::string>) +
+          sizeof(BoardingSourceEndpointLoadDiagnostic)) {
+    out.initial.reset();
+    return std::unexpected("Checkpoint unload initial output exceeds capacity");
+  }
+  BoardingRoutePortUnloadDiagnostic staged;
+  auto prepared = prepare_boarding_route_port_unload(source, limits, staged);
+  out.initial = std::move(staged.initial);
+  if (!prepared) return std::unexpected(prepared.error());
+  return std::move(*prepared);
+}
+auto detail::boarding_route_checkpoint_unload_pressure(
+    const BoardingRouteCheckpointUnloadCellToken& token,
+    const UnloadLimits& caps, UnloadWork& work, UnloadCell& out,
+    UnloadReason& reason) -> UnloadState {
+  out.complete = out.nonnegative_reactions =
+      out.nominal_vertical_equilibrium_complete = out.finite_pressure_complete =
+          out.endpoint_zero_port_reaction = false;
+  if (token.phase_index_ > 2 || !token.context_ || token.cell_ != &out) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::invalid_binding);
+  }
+  if (!site_supported_environment() || !token.context_ || token.cell_ != &out ||
+      !out.phase.complete || !out.phase.arithmetic_supported ||
+      !out.self_complete) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  const auto& context = *token.context_;
+  const auto sources = context.source_.selected_partitions();
+  if (!load_provider_valid(context.source_) || sources.size() != 10) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::invalid_binding);
+  }
+  const UnloadLimits original;
+  if (caps.candidates > original.candidates || caps.edges > original.edges) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::invalid_binding);
+  }
+  if (work.contact.pressure_candidates > caps.candidates) {
+    reason.condition = UnloadWhy::pressure_capacity;
+    return UnloadState::capacity;
+  }
+  if (work.contact.disk_edges > caps.edges) {
+    reason.condition = UnloadWhy::edge_capacity;
+    return UnloadState::capacity;
+  }
+  // Private immutable profile proves its range before enclosure intersection.
+  // Phase0/1 local1 are .25; only phase2 local1 is zero.
+  constexpr std::array<std::array<double, 2>, 3> profiles{
+      {{{.5, .25}}, {{.25, .25}}, {{.25, 0}}}};
+  const auto profile = profiles[token.phase_index_];
+  const auto reported = out.phase.port_reaction_fraction;
+  if (!std::isfinite(reported.lower) || !std::isfinite(reported.upper) ||
+      reported.lower > reported.upper) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  auto w = Interval{std::max(profile[1], reported.lower),
+                    std::min(profile[0], reported.upper)};
+  if (token.phase_index_ == 1) w = point(.25);
+  if (out.phase.first == out.phase.last && out.phase.first == 1)
+    w = point(profile[1]);
+  else if (out.phase.first == out.phase.last && out.phase.first == 0)
+    w = point(profile[0]);
+  const auto other = subtract(point(1), w);
+  if (!finite(w) || !finite(other)) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  LoadScratch scratch;
+  scratch.centers[0] = {add(point(.16), point(-.14)), point(-.5)};
+  scratch.centers[1] = {add(point(.16), point(.14)), point(-.8)};
+  scratch.com = {{out.phase.center_of_mass.value.lower.x,
+                  out.phase.center_of_mass.value.upper.x},
+                 {out.phase.center_of_mass.value.lower.z,
+                  out.phase.center_of_mass.value.upper.z}};
+  if (!unload_pressure_algebra(scratch, w)) {
+    out.arithmetic_supported = false;
+    return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+  }
+  out.port_reaction_fraction = {w.low, w.high};
+  out.barycenter_xz = {{{scratch.barycenter.x.low, scratch.barycenter.x.high},
+                        {scratch.barycenter.z.low, scratch.barycenter.z.high}}};
+  out.common_pressure_delta_xz = {
+      {{scratch.delta.x.low, scratch.delta.x.high},
+       {scratch.delta.z.low, scratch.delta.z.high}}};
+  out.nonnegative_reactions = out.nominal_vertical_equilibrium_complete = true;
+  out.endpoint_zero_port_reaction =
+      token.phase_index_ == 2 && out.phase.last == 1;
+  for (std::size_t site = 0; site < 2; ++site) {
+    reason.side = site;
+    auto& record = out.pressures[site];
+    const auto pressure = scratch.pressures[site];
+    if (!finite(pressure.x) || !finite(pressure.z) || pressure.x.low < -8 ||
+        pressure.x.high > 8 || pressure.z.low < -8 || pressure.z.high > 8) {
+      out.arithmetic_supported = false;
+      return unload_pressure_refuse(reason, UnloadWhy::unsupported_arithmetic);
+    }
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+    record.arithmetic_supported = true;
+    scratch.sole = site_sole_corners(scratch.centers[site]);
+    auto state = unload_disk_edges(scratch.sole, pressure, caps, work, scratch,
+                                   record.arithmetic_supported, reason);
+    if (state != UnloadState::accepted) return state;
+    const auto sole = load_summary(scratch.edges, record.arithmetic_supported);
+    record.sole_minimum_signed_side = {sole.minimum_signed_side.lower,
+                                       sole.minimum_signed_side.upper};
+    record.sole_minimum_squared_gap = {sole.minimum_squared_gap.lower,
+                                       sole.minimum_squared_gap.upper};
+    record.sole_disk_contained = sole.status == LoadStatus::contained;
+    if (!record.sole_disk_contained)
+      return unload_pressure_refuse(reason, UnloadWhy::sole_disk_margin);
+    const auto plane = site == 0 ? site_upper_plane : site_transition_plane;
+    for (std::size_t p = 0; p < sources.size(); ++p) {
+      reason.partition = p;
+      if (work.contact.pressure_candidates >= caps.candidates) {
+        reason.condition = UnloadWhy::pressure_capacity;
+        return UnloadState::capacity;
+      }
+      ++work.contact.pressure_candidates;
+      ++record.scanned_partitions;
+      const auto& quad = context.guards_[p];
+      auto& candidate = record.candidates[p];
+      candidate.quad_valid = quad.valid;
+      candidate.arithmetic_supported = quad.arithmetic_supported;
+      if (!quad.valid) {
+        candidate.status = LoadStatus::invalid_support;
+        continue;
+      }
+      if (sources[p].plane_metres != plane) {
+        candidate.status = LoadStatus::noncoplanar;
+        continue;
+      }
+      record.coplanar = true;
+      scratch.source = source_corners(sources[p]);
+      bool supported = true;
+      state = unload_disk_edges(scratch.source, pressure, caps, work, scratch,
+                                supported, reason);
+      if (state != UnloadState::accepted) return state;
+      const auto summary = load_summary(scratch.edges, supported);
+      candidate = transfer_pressure_candidate(summary);
+      record.arithmetic_supported = record.arithmetic_supported && supported;
+      if (summary.status == LoadStatus::contained &&
+          record.source_partition == 65535)
+        record.source_partition = static_cast<std::uint16_t>(p);
+    }
+    record.coverage_complete = record.scanned_partitions == 10;
+    record.source_disk_contained = record.source_partition != 65535;
+    record.complete = record.arithmetic_supported &&
+                      record.sole_disk_contained && record.coverage_complete &&
+                      record.source_disk_contained;
+    if (!record.complete)
+      return unload_pressure_refuse(reason, UnloadWhy::source_disk_margin);
+  }
+  out.finite_pressure_complete = true;
+  reason.side.reset();
+  reason.partition.reset();
+  return UnloadState::accepted;
+}
+} // namespace apsis_drift

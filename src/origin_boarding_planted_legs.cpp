@@ -4294,3 +4294,86 @@ auto detail::boarding_route_port_unload_support_math(
   return out;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_checkpoint_unload_internal.hpp"
+namespace apsis_drift {
+static_assert(sizeof(BoardingRouteCheckpointUnloadCell) + sizeof(PhaseGraph) +
+                  sizeof(std::optional<PhaseRequest>) +
+                  sizeof(detail::BoardingRouteCheckpointUnloadContext) +
+                  11 * std::size_t{24} + std::size_t{12288} +
+                  sizeof(std::expected<BoardingRouteCheckpointUnloadDiagnostic,
+                                       std::string>) +
+                  std::size_t{8192} + std::size_t{512} <=
+              kBoardingRouteCheckpointUnloadMaximumScratchBytes);
+auto detail::boarding_route_checkpoint_unload_cell(
+    const BoardingRoutePortUnloadContext& context, std::size_t phase_index,
+    double first, double last, bool reverse, const UnloadLimits& caps,
+    UnloadWork& work, UnloadCell& out, UnloadReason& reason) -> UnloadState {
+  out = {};
+  reason = {};
+  out.phase.first = first;
+  out.phase.last = last;
+  const UnloadLimits original;
+  if (phase_index > 2 || !std::isfinite(first) || !std::isfinite(last) ||
+      first < 0 || last > 1 || first > last || caps.pairs > original.pairs ||
+      caps.axes > original.axes ||
+      caps.signed_trials > original.signed_trials ||
+      caps.owners > original.owners || caps.candidates > original.candidates ||
+      caps.edges > original.edges ||
+      caps.initial_source_partitions > original.initial_source_partitions ||
+      caps.initial_body_records > original.initial_body_records ||
+      caps.initial_self_pairs > original.initial_self_pairs ||
+      caps.initial_self_axes > original.initial_self_axes ||
+      caps.initial_pressure_partitions > original.initial_pressure_partitions ||
+      caps.output_bytes > original.output_bytes || !context.source_.contact() ||
+      context.source_.selected_partitions().size() != 10)
+    return unload_refuse(reason, UnloadWhy::invalid_binding);
+  const std::array incoming{
+      work.contact.self_pairs,          work.contact.proposed_axes,
+      work.contact.signed_trials,       work.ownership_attempts,
+      work.contact.pressure_candidates, work.contact.disk_edges};
+  const std::array ceilings{caps.pairs,  caps.axes,       caps.signed_trials,
+                            caps.owners, caps.candidates, caps.edges};
+  const std::array failures{
+      UnloadWhy::pair_capacity,         UnloadWhy::axis_capacity,
+      UnloadWhy::signed_trial_capacity, UnloadWhy::ownership_capacity,
+      UnloadWhy::pressure_capacity,     UnloadWhy::edge_capacity};
+  for (std::size_t i = 0; i < incoming.size(); ++i)
+    if (incoming[i] > ceilings[i]) {
+      reason.condition = failures[i];
+      return UnloadState::capacity;
+    }
+  const auto request = boarding_route_checkpoint_unload_controls(phase_index);
+  if (!request) return unload_refuse(reason, UnloadWhy::invalid_binding);
+  BoardingRouteFootPhaseRefusal phase_reason;
+  auto state =
+      boarding_route_foot_phase_cell(*request, first, last, reverse, caps.phase,
+                                     work.phase, out.phase, phase_reason);
+  if (state != UnloadState::accepted) {
+    reason.condition = UnloadWhy::phase_predicate;
+    reason.phase_condition = phase_reason.condition;
+    reason.side = phase_reason.side;
+    reason.limiting_bound = phase_reason.limiting_bound;
+    return state;
+  }
+  out.arithmetic_supported = true;
+  state = unload_self(caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  const BoardingRouteCheckpointUnloadCellToken token(context, out, phase_index);
+  state =
+      boarding_route_checkpoint_unload_pressure(token, caps, work, out, reason);
+  if (state != UnloadState::accepted) {
+    if (state == UnloadState::unsupported) out.arithmetic_supported = false;
+    return state;
+  }
+  out.complete =
+      out.phase.complete && out.self_complete && out.nonnegative_reactions &&
+      out.nominal_vertical_equilibrium_complete && out.finite_pressure_complete;
+  reason = {};
+  return out.complete ? UnloadState::accepted
+                      : unload_refuse(reason, UnloadWhy::incomplete_cover);
+}
+} // namespace apsis_drift

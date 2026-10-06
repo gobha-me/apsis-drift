@@ -15,6 +15,17 @@ struct BoardingRoutePortUnloadLimits {
 using BoardingRoutePortUnloadCellResult = BoardingRouteFootPhaseCellResult;
 class BoardingRoutePortUnloadContext;
 class BoardingRoutePortUnloadCellToken;
+class BoardingRouteCheckpointUnloadCellToken;
+[[nodiscard]] auto boarding_route_checkpoint_unload_cell(
+    const BoardingRoutePortUnloadContext&, std::size_t, double, double, bool,
+    const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,
+    BoardingRoutePortUnloadCell&, BoardingRoutePortUnloadRefusal&)
+    -> BoardingRoutePortUnloadCellResult;
+[[nodiscard]] auto boarding_route_checkpoint_unload_pressure(
+    const BoardingRouteCheckpointUnloadCellToken&,
+    const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,
+    BoardingRoutePortUnloadCell&, BoardingRoutePortUnloadRefusal&)
+    -> BoardingRoutePortUnloadCellResult;
 [[nodiscard]] auto boarding_route_port_unload_controls()
     -> BoardingRouteFootPhaseRequest;
 [[nodiscard]] auto prepare_boarding_route_port_unload(
@@ -59,6 +70,16 @@ class BoardingRoutePortUnloadContext {
       -> std::expected<BoardingRoutePortUnloadContext, std::string>;
   friend auto boarding_route_port_unload_cell(
       const BoardingRoutePortUnloadContext&, double, double, bool,
+      const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,
+      BoardingRoutePortUnloadCell&, BoardingRoutePortUnloadRefusal&)
+      -> BoardingRoutePortUnloadCellResult;
+  friend auto boarding_route_checkpoint_unload_cell(
+      const BoardingRoutePortUnloadContext&, std::size_t, double, double, bool,
+      const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,
+      BoardingRoutePortUnloadCell&, BoardingRoutePortUnloadRefusal&)
+      -> BoardingRoutePortUnloadCellResult;
+  friend auto boarding_route_checkpoint_unload_pressure(
+      const BoardingRouteCheckpointUnloadCellToken&,
       const BoardingRoutePortUnloadLimits&, BoardingRoutePortUnloadCounters&,
       BoardingRoutePortUnloadCell&, BoardingRoutePortUnloadRefusal&)
       -> BoardingRoutePortUnloadCellResult;
