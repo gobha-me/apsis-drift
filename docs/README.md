@@ -81,6 +81,8 @@ player's station-to-flight journey.
   distinguishes unresolved inclusion from strict exclusion and retains the original derivative domains.
 - [Original intermediate reach evidence01](ORIGIN_BOARDING_INTERMEDIATE_REACH_EVIDENCE01.md):
   bounded unchanged-candidate diagnostic; no body, contact or boarding qualification.
+- [Original intermediate endpoint02](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT02.md):
+  one registered analytic root-height candidate; static support/SELF prerequisite.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
