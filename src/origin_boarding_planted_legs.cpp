@@ -6257,3 +6257,961 @@ auto reach_threshold_charge(ReachD& d, const ReachL& l, std::uint8_t row)
   return true;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_endpoint02_internal.hpp"
+namespace apsis_drift {
+namespace {
+using EP2D = BoardingIntermediateEndpoint02Diagnostic;
+using EP2C = BoardingIntermediateEndpoint02Cell;
+using EP2R = BoardingIntermediateEndpoint02Refusal;
+using EP2L = detail::BoardingIntermediateEndpoint02Limits;
+using EP2W = BoardingIntermediateEndpoint02Condition;
+using EP2S = BoardingIntermediateEndpoint02State;
+using EP2Stage = BoardingIntermediateEndpoint02SelfStage;
+using EP2Cert = BoardingIntermediateEndpoint02Certificate;
+auto ep2_source_bit(const EP2D& d, std::size_t i) -> bool {
+  return (d.source_evaluated & (std::uint64_t{1} << i)) != 0;
+}
+auto ep2_valid(Interval x) -> bool {
+  return x.supported && std::isfinite(x.low) && std::isfinite(x.high) &&
+         x.low <= x.high;
+}
+auto ep2_scalar(const BoardingFootSiteScalarBounds& x) -> Interval {
+  return x.supported ? interval(x.lower, x.upper) : failed();
+}
+auto ep2_axis(const EP2C& c, std::size_t axis) -> Point {
+  return {ep2_scalar(c.unit_axes[axis][0]), ep2_scalar(c.unit_axes[axis][1]),
+          ep2_scalar(c.unit_axes[axis][2])};
+}
+auto ep2_component(const BoardingPlantedLegPointBounds& b, std::size_t j)
+    -> Interval {
+  return interval(j == 0   ? b.lower.x
+                  : j == 1 ? b.lower.y
+                           : b.lower.z,
+                  j == 0   ? b.upper.x
+                  : j == 1 ? b.upper.y
+                           : b.upper.z);
+}
+// Direct endpoint division encloses genuine D/L, never a rounded reciprocal.
+auto ep2_unit_divide(Interval numerator, double length) -> Interval {
+  if (!ep2_valid(numerator) || !std::isfinite(length) || length <= 0)
+    return failed();
+  if (numerator.low == 0 && numerator.high == 0) return point(0);
+  const auto low = numerator.low / length, high = numerator.high / length;
+  if (!std::isfinite(low) || !std::isfinite(high) ||
+      low == -std::numeric_limits<double>::max() ||
+      high == std::numeric_limits<double>::max())
+    return failed();
+  return interval(down(low), up(high));
+}
+[[gnu::noinline]] auto ep2_units(EP2D& d, EP2C& c, const EP2L& l, EP2R& r)
+    -> bool {
+  for (std::size_t axis = 0; axis < 4; ++axis) {
+    const auto side = axis % 2;
+    const auto knee =
+        side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+    const auto from = axis < 2 ? (side == 0 ? BodyPointId::port_hip
+                                            : BodyPointId::starboard_hip)
+                               : (side == 0 ? BodyPointId::port_ankle
+                                            : BodyPointId::starboard_ankle);
+    Point displacement{};
+    for (std::size_t operation = 0; operation < 6; ++operation) {
+      const auto row = 6 * axis + operation, component = operation % 3;
+      r = EP2R{};
+      r.self_stage = EP2Stage::unit_axes;
+      r.operation = static_cast<std::uint8_t>(row);
+      c.unit_axis_cursor = static_cast<std::uint8_t>(row);
+      if (!detail::intermediate_endpoint02_charge(
+              d, r, d.work.unit_axis_operations, l.unit_axis_operations,
+              EP2W::unit_axis_capacity))
+        return false;
+      c.unit_axis_attempted |= std::uint32_t{1} << row;
+      const auto length = axis < 2 ? thigh_length : shin_length;
+      if (!c.self_body_complete || !ss_leg(c.phase.legs[side]) ||
+          !ep2_source_bit(d, 62) ||
+          (axis < 2 ? length != .47285 : length != .47478))
+        return detail::intermediate_endpoint02_refuse(d, r,
+                                                      EP2W::unit_axis_identity);
+      const auto result =
+          operation < 3
+              ? subtract(ep2_component(c.phase.points[body_index(knee)].value,
+                                       component),
+                         ep2_component(c.phase.points[body_index(from)].value,
+                                       component))
+              : ep2_unit_divide(displacement[component], length);
+      if (!ep2_valid(result) ||
+          (operation < 3 && (result.low < -16 || result.high > 16)))
+        return detail::intermediate_endpoint02_refuse(
+            d, r, EP2W::unsupported_arithmetic);
+      if (operation < 3)
+        displacement[component] = result;
+      else
+        c.unit_axes[axis][component] = {result.low, result.high, true};
+      c.unit_axis_written |= std::uint32_t{1} << row;
+    }
+    c.unit_axis_complete_mask |=
+        static_cast<std::uint8_t>(std::uint8_t{1} << axis);
+  }
+  return (c.unit_axis_written == kBoardingIntermediateEndpoint02UnitMask &&
+          c.unit_axis_complete_mask == 15) ||
+         detail::intermediate_endpoint02_refuse(d, r, EP2W::unit_axis_identity);
+}
+[[gnu::noinline]] auto ep2_owner(
+    const EP2C& c,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& relative,
+    const SelfRegion& region, BoardingLowerFootTransferOwner& out) -> void {
+  if (region.junction != Junction::hip && region.junction != Junction::ankle) {
+    ss_owner(c.phase, relative, region, out);
+    return;
+  }
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  const auto u = ep2_axis(c, (region.junction == Junction::hip ? 0 : 2) + side);
+  auto extent = failed();
+  if (region.junction == Junction::hip) {
+    const auto x = unload_frame_dot(c.phase.frames[0], 0, u),
+               y = unload_frame_dot(c.phase.frames[0], 1, u),
+               z = unload_frame_dot(c.phase.frames[0], 2, u);
+    extent = add(add(subtract(multiply(point(.24), absolute(x)),
+                              multiply(point(side == 0 ? -.14 : .14), x)),
+                     multiply(point(.12), absolute(y))),
+                 multiply(point(.18), absolute(z)));
+  } else {
+    if (.075 > region.limit_metres || region.limit_metres >= shin_length ||
+        !ep2_valid(u[1]))
+      return;
+    // The original nominal sole is WORLD-Y, and bootC-A=-.05 WORLD-Y;
+    // B63 authenticates that construction. Cancellation needs nonnegative uY.
+    if (u[1].low < 0) {
+      out.arithmetic_supported = true;
+      return;
+    }
+    const auto x = unload_frame_dot(c.phase.frames[side + 2], 0, u),
+               z = unload_frame_dot(c.phase.frames[side + 2], 2, u);
+    extent = add(multiply(point(.06), absolute(x)),
+                 multiply(point(.14), absolute(z)));
+  }
+  const auto limit = point(region.limit_metres), gap = subtract(limit, extent);
+  out.arithmetic_supported =
+      ep2_valid(extent) && ep2_valid(limit) && ep2_valid(gap);
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(point(0));
+  out.structural_identity = true;
+  out.certificate = SelfCert::original_axis_box_support;
+  out.certified = gap.low >= 0;
+}
+[[gnu::noinline]] auto ep2_hip(
+    const EP2C& c, const SelfRegion& region, std::size_t region_index,
+    std::size_t pair, BoardingRouteCheckpointUnloadHipComplement& result)
+    -> void {
+  result.attempted = true;
+  result.region = region_index;
+  result.pair = pair;
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  result.side = side;
+  result.slab_limit_metres = region.limit_metres;
+  const auto hip =
+      side == 0 ? BodyPointId::port_hip : BodyPointId::starboard_hip;
+  const auto knee =
+      side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+  const auto thigh = side == 0 ? PartId::port_thigh : PartId::starboard_thigh;
+  if (!c.self_body_complete || c.unit_axis_complete_mask != 15 ||
+      !ss_leg(c.phase.legs[side]) || region.junction != Junction::hip ||
+      region.first != PartId::pelvis || region.second != thigh ||
+      region.root != hip || region.toward != knee ||
+      region.limit_metres != kBoardingSelfHipLengthMetres ||
+      .105 > region.limit_metres || region.limit_metres >= thigh_length)
+    return;
+  result.nominal_unit_identity = result.upright_pelvis_identity =
+      result.original_slab_identity = true;
+  const auto u = ep2_axis(c, side);
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!ep2_valid(u[i])) return;
+    result.axis[i] = bounds(u[i]);
+  }
+  if (u[1].high >= 0) {
+    result.arithmetic_supported = true;
+    return;
+  }
+  result.extent_evaluated = true;
+  const auto proof = self02_hip_expression(u, .105, region.limit_metres, -.12);
+  result.arithmetic_supported = proof.arithmetic_supported;
+  if (!proof.arithmetic_supported) return;
+  result.transverse = proof.transverse;
+  result.extent = proof.extent;
+  result.limit = proof.limit;
+  result.strict_gap = proof.strict_gap;
+  result.certified = proof.negative_axis && proof.strict_extent_below_bottom;
+}
+[[gnu::noinline]] auto ep2_separate(const UnloadSolid& a, const UnloadSolid& b,
+                                    EP2D& d, EP2C& c, const EP2L& l, EP2R& r,
+                                    std::size_t pair) -> bool {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  r.self_stage = EP2Stage::separation;
+  for (std::size_t i = 0; i < count; ++i) {
+    r.self_axis = static_cast<std::uint8_t>(i);
+    r.self_sign = 255;
+    if (!detail::intermediate_endpoint02_charge(
+            d, r, d.work.self_axes, l.self_axes, EP2W::self_axis_capacity))
+      return false;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (std::size_t sign = 0; sign < 2; ++sign) {
+      r.self_sign = static_cast<std::uint8_t>(sign);
+      if (!detail::intermediate_endpoint02_charge(
+              d, r, d.work.self_signed_trials, l.self_signed_trials,
+              EP2W::self_signed_capacity))
+        return false;
+      const auto n = sign == 0 ? axis : self_negate(axis);
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported || !std::isfinite(total.low) ||
+          !std::isfinite(total.high))
+        return detail::intermediate_endpoint02_refuse(
+            d, r, EP2W::unsupported_arithmetic);
+      if (total.high <= 0) {
+        c.self_axes[pair] = static_cast<std::uint8_t>(i | (sign == 0 ? 0 : 16));
+        return true;
+      }
+    }
+  }
+  return detail::intermediate_endpoint02_refuse(d, r,
+                                                EP2W::unresolved_self_pair);
+}
+} // namespace
+auto detail::intermediate_endpoint02_self_bridge(
+    const BoardingIntermediateEndpoint02CurrentToken& token, EP2D& d, EP2C& c,
+    const EP2L& l, EP2R& r) -> EP2S {
+  std::size_t body_index_record{};
+  const auto body = [&](auto predicate, EP2W why = EP2W::self_body_identity) {
+    r = EP2R{};
+    r.self_stage = EP2Stage::body;
+    r.operation = static_cast<std::uint8_t>(body_index_record);
+    if (!intermediate_endpoint02_charge(d, r, d.work.self_body_guards,
+                                        l.self_body_guards,
+                                        EP2W::self_body_capacity))
+      return false;
+    c.self_body_evaluated |= std::uint64_t{1} << body_index_record++;
+    return predicate() || intermediate_endpoint02_refuse(d, r, why);
+  };
+  if (!body([&] {
+        return token.context() && token.owner() == &d && token.cell() == &c &&
+               token.request() && token.context()->owner() == &d &&
+               token.context()->parts() == &d.parts &&
+               token.context()->request() == token.request() &&
+               token.context()->key() &&
+               token.context()->key()->version() == 2 &&
+               token.context()->key()->candidate() == d.candidate &&
+               token.context()->key()->y() == d.slice.y && d.slice.complete &&
+               d.work.phase_calls == 1 &&
+               BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+               token.data() ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+               token.context()->data() == token.data() && token.data() &&
+               d.cells.size() == 1 && d.cells.capacity() == 1 &&
+               &d.cells.front() == &c && d.work.phase_calls == 1;
+      }))
+    return d.state;
+  if (!body([&] { return boarding_route_foot_phase_environment(); },
+            EP2W::unsupported_arithmetic))
+    return d.state;
+  const auto& p = c.phase;
+  if (!body([&] {
+        return p.complete && p.arithmetic_supported && p.nominal_links &&
+               p.target_sole_identities && p.joint_sectors &&
+               p.derivative_domains && p.timing_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.candidate == BoardingIntermediateEndpoint02Candidate::
+                                  root_y_reach_slice &&
+               d.version == 2 && p.first == 0 && p.last == 1 &&
+               token.request()->seconds_per_parameter == 2 &&
+               c.projection_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_enrolled && d.self_version == 1 &&
+               d.source_evaluated == UINT64_MAX;
+      }))
+    return d.state;
+  if (!body([&] {
+        return ep2_source_bit(d, 62) && p.nominal_links &&
+               p.target_sole_identities;
+      }))
+    return d.state;
+  if (!body([&] {
+        return ep2_source_bit(d, 63) && p.arithmetic_supported &&
+               c.projected_carrier_complete[0];
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.nominal_support_complete && c.nominal_equilibrium &&
+               c.star_support && d.stop_condition == EP2W::none;
+      }))
+    return d.state;
+  for (std::size_t i = 0; i < 18; ++i)
+    if (!body(
+            [&] {
+              return ss_point_valid(body_intervals(p.points[i].value), 8);
+            },
+            EP2W::unsupported_arithmetic))
+      return d.state;
+  for (std::size_t f = 0; f < 4; ++f)
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!body(
+              [&] {
+                return ss_point_valid(
+                    body_intervals(p.frames[f].columns[j].value), 8);
+              },
+              EP2W::unsupported_arithmetic))
+        return d.state;
+  for (std::size_t side = 0; side < 2; ++side)
+    if (!body([&] {
+          const auto first = side == 0 ? std::size_t{36} : std::size_t{42};
+          return ss_leg(p.legs[side]) && ep2_source_bit(d, 62) &&
+                 ep2_source_bit(d, first) && ep2_source_bit(d, first + 1) &&
+                 ss_same_part(d.parts[first - 33], ss_part(first - 33)) &&
+                 ss_same_part(d.parts[first - 32], ss_part(first - 32));
+        }))
+      return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[0], ss_part(0)) &&
+               ss_same_part(d.parts[1], ss_part(1)) && ep2_source_bit(d, 33) &&
+               ep2_source_bit(d, 34) && ep2_source_bit(d, 48);
+      }))
+    return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[1], ss_part(1)) &&
+               ss_same_part(d.parts[2], ss_part(2)) && ep2_source_bit(d, 34) &&
+               ep2_source_bit(d, 35) && ep2_source_bit(d, 51) &&
+               ep2_source_bit(d, 63);
+      }))
+    return d.state;
+  if (!body([&] {
+        if (!ep2_source_bit(d, 63)) return false;
+        for (const auto part :
+             {std::size_t{6}, std::size_t{7}, std::size_t{8}, std::size_t{12},
+              std::size_t{13}, std::size_t{14}})
+          if (!ep2_source_bit(d, 33 + part) ||
+              !ss_same_part(d.parts[part], ss_part(part)))
+            return false;
+        for (const auto region :
+             {std::size_t{4}, std::size_t{5}, std::size_t{8}, std::size_t{9},
+              std::size_t{12}, std::size_t{13}})
+          if (!ep2_source_bit(d, 48 + region)) return false;
+        return true;
+      }))
+    return d.state;
+  SelfRegions regions{};
+  if (!body([&] {
+        regions = self_regions();
+        for (std::size_t i = 0; i < 14; ++i)
+          if (!ep2_source_bit(d, 48 + i) ||
+              !ss_same_region(regions[i], ss_region(i)))
+            return false;
+        return true;
+      }))
+    return d.state;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  if (!body([&] {
+        relative[0] = {point(0), point(0), point(0)};
+        return true;
+      }))
+    return d.state;
+  for (std::size_t i = 1; i < 18; ++i)
+    if (!body(
+            [&] {
+              relative[i] =
+                  unload_difference(body_intervals(p.points[i].value),
+                                    body_intervals(p.points[0].value));
+              return ss_point_valid(relative[i], 16);
+            },
+            EP2W::unsupported_arithmetic))
+      return d.state;
+  if (!body([&] {
+        return body_index_record == 63 &&
+               c.self_body_evaluated ==
+                   kBoardingIntermediateEndpoint02BodyMask &&
+               token.owner() == &d && token.cell() == &c &&
+               token.data() ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source);
+      }))
+    return d.state;
+  c.self_body_complete = true;
+  if (!ep2_units(d, c, l, r)) return d.state;
+  std::size_t pair{};
+  for (std::size_t a = 0; a < 15; ++a)
+    for (std::size_t b = a + 1; b < 15; ++b, ++pair) {
+      r = EP2R{};
+      r.self_stage = EP2Stage::not_run;
+      r.self_pair = static_cast<std::uint16_t>(pair);
+      r.self_region = 255;
+      r.self_axis = 255;
+      r.self_sign = 255;
+      r.self_stage = EP2Stage::pair;
+      if (!intermediate_endpoint02_charge(d, r, d.work.self_pairs, l.self_pairs,
+                                          EP2W::self_pair_capacity))
+        return d.state;
+      ++c.examined_pairs;
+      auto certificate = EP2Cert::not_run;
+      for (std::size_t region = 0; region < 14; ++region)
+        if (static_cast<std::size_t>(regions[region].first) == a &&
+            static_cast<std::size_t>(regions[region].second) == b) {
+          r.self_stage = EP2Stage::owner;
+          r.self_region = static_cast<std::uint8_t>(region);
+          if (!intermediate_endpoint02_charge(d, r, d.work.self_owners,
+                                              l.self_owners,
+                                              EP2W::self_owner_capacity))
+            return d.state;
+          c.owner_attempted_mask |=
+              static_cast<std::uint16_t>(std::uint16_t{1} << region);
+          ep2_owner(c, relative, regions[region], c.owners[region]);
+          if (!c.owners[region].arithmetic_supported) {
+            intermediate_endpoint02_refuse(d, r, EP2W::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.owners[region].certified)
+            certificate = static_cast<EP2Cert>(c.owners[region].certificate);
+          else if (regions[region].junction == Junction::hip) {
+            r.self_stage = EP2Stage::hip;
+            if (!intermediate_endpoint02_charge(
+                    d, r, d.work.self_hip_complements, l.self_hip_complements,
+                    EP2W::self_hip_capacity))
+              return d.state;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            ep2_hip(c, regions[region], region, pair, c.hip_complements[side]);
+            if (!c.hip_complements[side].arithmetic_supported) {
+              intermediate_endpoint02_refuse(d, r,
+                                             EP2W::unsupported_arithmetic);
+              return d.state;
+            }
+            if (c.hip_complements[side].certified)
+              certificate = EP2Cert::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (certificate == EP2Cert::not_run) {
+        const auto first = unload_solid(d.parts[a], relative, p),
+                   second = unload_solid(d.parts[b], relative, p);
+        if (!ep2_separate(first, second, d, c, l, r, pair)) return d.state;
+        certificate = EP2Cert::convex_support_plane;
+      }
+      c.self_certificates[pair] = certificate;
+      ++c.self_certificate_counts[static_cast<std::size_t>(certificate)];
+      ++c.accepted_pairs;
+    }
+  c.self_complete = pair == 105 && c.accepted_pairs == 105;
+  if (!c.self_complete) {
+    intermediate_endpoint02_refuse(d, r, EP2W::incomplete_endpoint);
+    return d.state;
+  }
+  r.self_pair = 65535;
+  r.self_region = 255;
+  r.self_axis = 255;
+  r.self_sign = 255;
+  r.self_stage = EP2Stage::complete;
+  c.complete = true;
+  c.state = d.state = EP2S::accepted;
+  return d.state;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+using SliceWhy = BoardingIntermediateEndpoint02SliceCondition;
+using EP2Request = BoardingRouteFootPhaseRequest;
+auto ep2_packet(const BoardingRoutePhaseConstant& c,
+                const std::array<double, 3>& terms, std::size_t count) -> bool {
+  return c.count == count && c.terms == terms;
+}
+auto ep2_packet_domains(const EP2Request& request) -> bool {
+  const auto valid = [](const BoardingRoutePhaseConstant& c) {
+    if (c.count == 0 || c.count > 3) return false;
+    for (std::size_t i = 0; i < 3; ++i)
+      if (!std::isfinite(c.terms[i]) || std::abs(c.terms[i]) > 8 ||
+          (i >= c.count && (c.terms[i] != 0 || std::signbit(c.terms[i]))))
+        return false;
+    return true;
+  };
+  for (const auto& root : request.root)
+    for (const auto& c : root.coordinates)
+      if (!valid(c)) return false;
+  for (const auto& foot : request.feet)
+    for (const auto& sole : foot.sole)
+      for (const auto& c : sole.coordinates)
+        if (!valid(c)) return false;
+  return std::isfinite(request.seconds_per_parameter) &&
+         std::isfinite(request.root_yaw_half[0]) &&
+         std::isfinite(request.root_yaw_half[1]) &&
+         std::isfinite(request.torso_lean_half[0]) &&
+         std::isfinite(request.torso_lean_half[1]) &&
+         std::isfinite(request.port_reaction_fraction[0]) &&
+         std::isfinite(request.port_reaction_fraction[1]);
+}
+auto ep2_construction_packet_domains(const EP2Request& request) -> bool {
+  for (std::size_t i = 0; i < 8; ++i) {
+    const auto& c =
+        i < 2 ? request.root[0].coordinates[i == 0 ? 0 : 2]
+              : request.feet[i < 5 ? 0 : 1].sole[0].coordinates[(i - 2) % 3];
+    if (c.count == 0 || c.count > 3) return false;
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!std::isfinite(c.terms[j]) || std::abs(c.terms[j]) > 8 ||
+          (j >= c.count && (c.terms[j] != 0 || std::signbit(c.terms[j]))))
+        return false;
+  }
+  return true;
+}
+auto ep2_slice_stop(EP2D& d, EP2R& r, EP2W why, SliceWhy condition) -> bool {
+  d.slice.condition = condition;
+  r.limiting_bound = d.slice.limiting_bound;
+  return detail::intermediate_endpoint02_refuse(d, r, why);
+}
+} // namespace
+// This is a literal packet predicate, not a source issuer or new factory.
+auto detail::intermediate_endpoint02_template_valid(const EP2Request& request,
+                                                    bool generated, double y)
+    -> bool {
+  for (const auto& root : request.root) {
+    if (!ep2_packet(root.coordinates[0], {.16, .16, -.0075}, 3) ||
+        !ep2_packet(root.coordinates[2], {-.55, -.17, .19}, 3) ||
+        !(generated ? ep2_packet(root.coordinates[1], {y, 0, 0}, 1)
+                    : ep2_packet(root.coordinates[1],
+                                 {.847, .012, (-.359) / 2.0}, 3)))
+      return false;
+  }
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& foot = request.feet[side];
+    for (const auto& sole : foot.sole) {
+      if (side == 0) {
+        if (!ep2_packet(sole.coordinates[0], {.16, -.14, .16}, 3) ||
+            !ep2_packet(sole.coordinates[1],
+                        {static_cast<double>(-230000) * 1e-6, 0, 0}, 1) ||
+            !ep2_packet(sole.coordinates[2], {-1.14, 0, 0}, 1))
+          return false;
+      } else {
+        if (!ep2_packet(sole.coordinates[0], {.16, .14, 0}, 2) ||
+            !ep2_packet(sole.coordinates[1],
+                        {static_cast<double>(-160000) * 1e-6, 0, 0}, 1) ||
+            !ep2_packet(sole.coordinates[2], {-.8, 0, 0}, 1))
+          return false;
+      }
+    }
+    if (foot.yaw_half != std::array<double, 2>{0, 0} ||
+        foot.swing_height_metres != 0)
+      return false;
+  }
+  return request.root_yaw_half == std::array<double, 2>{.125, .125} &&
+         request.torso_lean_half == std::array<double, 2>{-.30, -.30} &&
+         request.port_reaction_fraction ==
+             std::array<double, 2>{.0625, .0625} &&
+         request.seconds_per_parameter == 2;
+}
+[[gnu::noinline]] auto detail::intermediate_endpoint02_construct(
+    EP2D& d, EP2Request& request, const EP2L& limits, EP2R& r) -> bool {
+  // Scalar construction only: no PhaseCell, region catalog or owning return.
+  std::array<Interval, 8> input{};
+  std::array<Interval, 6> yaw{};
+  std::array<Interval, 4> ca{};
+  std::array<Interval, 2> thresholds{};
+  std::array<Interval, 8> leg{};
+  std::array<Interval, 4> proof{};
+  std::array<double, 6> selected{};
+  const auto guard = [&](std::uint8_t row, std::uint8_t side, auto predicate,
+                         SliceWhy ordinary) {
+    r = EP2R{};
+    r.self_stage = EP2Stage::slice_guard;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.slice.guard = row;
+    d.slice.side = side;
+    d.slice.limiting_bound = {};
+    if (!intermediate_endpoint02_charge(d, r, d.work.construction_guards,
+                                        limits.construction_guards,
+                                        EP2W::slice_guard_capacity)) {
+      d.slice.condition = SliceWhy::guard_capacity;
+      return false;
+    }
+    d.slice.guard_attempted |= std::uint32_t{1} << row;
+    EP2W why = ordinary == SliceWhy::identity ? EP2W::slice_identity
+                                              : EP2W::slice_unavailable;
+    const bool good = predicate(why);
+    if (!good)
+      return ep2_slice_stop(d, r, why,
+                            why == EP2W::unsupported_arithmetic
+                                ? SliceWhy::unsupported_arithmetic
+                                : ordinary);
+    d.slice.guard_written |= std::uint32_t{1} << row;
+    return true;
+  };
+  const auto operation = [&](std::uint8_t row, std::uint8_t side,
+                             Interval& output, auto compute) {
+    r = EP2R{};
+    r.self_stage = EP2Stage::slice_operation;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.slice.operation = row;
+    d.slice.side = side;
+    d.slice.limiting_bound = {};
+    if (!intermediate_endpoint02_charge(d, r, d.work.construction_operations,
+                                        limits.construction_operations,
+                                        EP2W::slice_operation_capacity)) {
+      d.slice.condition = SliceWhy::operation_capacity;
+      return false;
+    }
+    d.slice.operation_attempted |= std::uint64_t{1} << row;
+    const auto value = compute();
+    if (!ep2_valid(value))
+      return ep2_slice_stop(d, r, EP2W::unsupported_arithmetic,
+                            SliceWhy::unsupported_arithmetic);
+    output = value;
+    d.slice.limiting_bound = {value.low, value.high, true};
+    d.slice.operation_written |= std::uint64_t{1} << row;
+    d.slice.arithmetic_supported = true;
+    return true;
+  };
+  if (!guard(
+          0, 255,
+          [&](EP2W&) {
+            return d.source_enrolled && d.source_evaluated == UINT64_MAX &&
+                   BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+                   d.parts.size() == 15;
+          },
+          SliceWhy::identity))
+    return false;
+  if (!guard(
+          1, 255,
+          [&](EP2W& why) {
+            why = EP2W::unsupported_arithmetic;
+            return boarding_route_foot_phase_environment();
+          },
+          SliceWhy::unsupported_arithmetic))
+    return false;
+  if (!guard(
+          2, 255,
+          [&](EP2W&) {
+            return d.version == 2 &&
+                   d.candidate == BoardingIntermediateEndpoint02Candidate::
+                                      root_y_reach_slice &&
+                   intermediate_endpoint02_template_valid(request, false, 0);
+          },
+          SliceWhy::identity))
+    return false;
+  if (!guard(
+          3, 255,
+          [&](EP2W& why) {
+            why = EP2W::unsupported_arithmetic;
+            return ep2_construction_packet_domains(request);
+          },
+          SliceWhy::identity))
+    return false;
+  if (!guard(
+          4, 255,
+          [&](EP2W& why) {
+            if (!std::isfinite(thigh_length) || !std::isfinite(shin_length)) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            return kBoardingRouteFootPhaseVersion == 1 &&
+                   thigh_length == .47285 && shin_length == .47478 &&
+                   thigh_length > 0 && shin_length > 0 && thigh_length <= 1 &&
+                   shin_length <= 1 && ep2_source_bit(d, 62);
+          },
+          SliceWhy::identity))
+    return false;
+  if (!guard(
+          5, 255,
+          [&](EP2W&) {
+            // The source compiler's exact-real nominal rational yaw
+            // construction, not midpoint or rounded affine orthogonality, owns
+            // these identities.
+            return ep2_source_bit(d, 63) &&
+                   kBoardingRouteFootPhaseVersion == 1 &&
+                   intermediate_endpoint02_template_valid(request, false, 0) &&
+                   request.feet[0].yaw_half == std::array<double, 2>{0, 0} &&
+                   request.feet[1].yaw_half == std::array<double, 2>{0, 0};
+          },
+          SliceWhy::identity))
+    return false;
+  // O01--O08: each actual CONST is called only after its own charge.
+  for (std::uint8_t i = 0; i < 8; ++i)
+    if (!operation(i,
+                   i < 2   ? 255
+                   : i < 5 ? 0
+                           : 1,
+                   input[i], [&] {
+                     const auto& coordinate =
+                         i < 2 ? request.root[0].coordinates[i == 0 ? 0 : 2]
+                               : request.feet[i < 5 ? 0 : 1]
+                                     .sole[0]
+                                     .coordinates[(i - 2) % 3];
+                     return phase_constant(coordinate);
+                   }))
+      return false;
+  if (!operation(8, 255, yaw[0],
+                 [&] { return square(point(request.root_yaw_half[0])); }) ||
+      !operation(9, 255, yaw[1], [&] { return add(point(1), yaw[0]); }) ||
+      !operation(10, 255, yaw[2], [&] { return subtract(point(1), yaw[0]); }) ||
+      !operation(11, 255, yaw[3], [&] { return divide(yaw[2], yaw[1]); }) ||
+      !operation(12, 255, yaw[2],
+                 [&] {
+                   return multiply(point(2), point(request.root_yaw_half[0]));
+                 }) ||
+      !operation(13, 255, yaw[4], [&] { return divide(yaw[2], yaw[1]); }) ||
+      !operation(14, 255, yaw[5], [&] { return negate(yaw[4]); }))
+    return false;
+  for (std::uint8_t side = 0; side < 2; ++side) {
+    const auto base = static_cast<std::uint8_t>(side == 0 ? 15 : 25);
+    if (!operation(
+            base, side, leg[0],
+            [&] { return multiply(point(side == 0 ? -.14 : .14), yaw[3]); }) ||
+        !operation(
+            static_cast<std::uint8_t>(base + 1), side, leg[1],
+            [&] { return multiply(point(side == 0 ? -.14 : .14), yaw[5]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 2), side, leg[2],
+                   [&] { return add(input[0], leg[0]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 3), side, leg[3],
+                   [&] { return add(input[1], leg[1]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 4), side, leg[4],
+                   [&] { return subtract(input[2 + 3 * side], leg[2]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 5), side, leg[5],
+                   [&] { return subtract(input[4 + 3 * side], leg[3]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 6), side, leg[6],
+                   [&] { return square(leg[4]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 7), side, leg[7],
+                   [&] { return square(leg[5]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 8), side,
+                   ca[std::size_t{2} * side],
+                   [&] { return add(leg[6], leg[7]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 9), side, ca[2 * side + 1],
+                   [&] { return add(input[3 + 3 * side], point(.1)); }))
+      return false;
+  }
+  if (!operation(
+          35, 255, thresholds[0],
+          [&] { return add(point(thigh_length), point(shin_length)); }) ||
+      !operation(36, 255, thresholds[0],
+                 [&] { return square(thresholds[0]); }) ||
+      !operation(
+          37, 255, thresholds[1],
+          [&] { return subtract(point(thigh_length), point(shin_length)); }) ||
+      !operation(38, 255, thresholds[1], [&] { return square(thresholds[1]); }))
+    return false;
+  for (std::uint8_t side = 0; side < 2; ++side) {
+    const auto base = static_cast<std::uint8_t>(side == 0 ? 39 : 46);
+    if (!operation(base, side, leg[0], [&] {
+          return subtract(point(thresholds[1].high),
+                          point(ca[std::size_t{2} * side].low));
+        }))
+      return false;
+    bool zero_branch{};
+    if (!operation(static_cast<std::uint8_t>(base + 1), side, leg[1], [&] {
+          zero_branch = leg[0].high <= 0;
+          return point(zero_branch ? +0.0 : leg[0].high);
+        }))
+      return false;
+    if (zero_branch)
+      d.slice.zero_mask |= static_cast<std::uint8_t>(std::uint8_t{1} << side);
+    if (!operation(static_cast<std::uint8_t>(base + 2), side, leg[2],
+                   [&] { return transfer_small_root(leg[1]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 3), side, leg[3], [&] {
+          return add(point(ca[2 * side + 1].high), point(leg[2].high));
+        }))
+      return false;
+    selected[std::size_t{2} * side] = leg[3].high;
+    if (!operation(static_cast<std::uint8_t>(base + 4), side, leg[4], [&] {
+          return subtract(point(thresholds[0].low),
+                          point(ca[std::size_t{2} * side].high));
+        }))
+      return false;
+    if (!guard(
+            static_cast<std::uint8_t>(6 + side), side,
+            [&](EP2W& why) {
+              d.slice.limiting_bound = {leg[4].low, leg[4].high,
+                                        leg[4].supported};
+              if (!ep2_valid(leg[4]) || leg[4].high > 16384) {
+                why = EP2W::unsupported_arithmetic;
+                return false;
+              }
+              return leg[4].low > 0;
+            },
+            SliceWhy::no_positive_upper))
+      return false;
+    if (!operation(static_cast<std::uint8_t>(base + 5), side, leg[5],
+                   [&] { return transfer_small_root(point(leg[4].low)); }) ||
+        !operation(static_cast<std::uint8_t>(base + 6), side, leg[6], [&] {
+          return add(point(ca[2 * side + 1].low), point(leg[5].low));
+        }))
+      return false;
+    selected[2 * side + 1] = leg[6].low;
+  }
+  if (!operation(53, 255, leg[0], [&] {
+        return point(selected[0] < selected[2] ? selected[2] : selected[0]);
+      }))
+    return false;
+  d.slice.lo = leg[0].low;
+  if (!operation(54, 255, leg[1], [&] {
+        return point(selected[3] < selected[1] ? selected[3] : selected[1]);
+      }))
+    return false;
+  d.slice.hi = leg[1].low;
+  if (!guard(
+          8, 255,
+          [&](EP2W& why) {
+            d.slice.limiting_bound = {d.slice.lo, d.slice.lo,
+                                      std::isfinite(d.slice.lo)};
+            if (!std::isfinite(d.slice.lo) || !std::isfinite(d.slice.hi)) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            return d.slice.lo < d.slice.hi;
+          },
+          SliceWhy::empty_inward_interval))
+    return false;
+  if (!operation(55, 255, leg[2],
+                 [&] { return point(d.slice.hi - d.slice.lo); }) ||
+      !operation(56, 255, leg[3], [&] { return point(leg[2].low * .5); }) ||
+      !operation(57, 255, leg[4],
+                 [&] { return point(d.slice.lo + leg[3].low); }))
+    return false;
+  d.slice.y = leg[4].low;
+  if (!guard(
+          9, 255,
+          [&](EP2W& why) {
+            d.slice.limiting_bound = {d.slice.y, d.slice.y,
+                                      std::isfinite(d.slice.y)};
+            if (!std::isfinite(d.slice.y)) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            return std::abs(d.slice.y) <= 8;
+          },
+          SliceWhy::candidate_domain) ||
+      !guard(
+          10, 255,
+          [&](EP2W&) {
+            d.slice.limiting_bound = {d.slice.y, d.slice.y, true};
+            return d.slice.y > d.slice.lo;
+          },
+          SliceWhy::midpoint_unavailable) ||
+      !guard(
+          11, 255,
+          [&](EP2W&) {
+            d.slice.limiting_bound = {d.slice.y, d.slice.y, true};
+            return d.slice.y < d.slice.hi;
+          },
+          SliceWhy::midpoint_unavailable))
+    return false;
+  for (std::uint8_t side = 0; side < 2; ++side) {
+    const auto base = static_cast<std::uint8_t>(58 + 3 * side);
+    if (!operation(
+            base, side, proof[0],
+            [&] { return subtract(point(d.slice.y), ca[2 * side + 1]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 1), side, proof[1],
+                   [&] { return square(proof[0]); }) ||
+        !operation(static_cast<std::uint8_t>(base + 2), side, proof[2 + side],
+                   [&] { return add(ca[std::size_t{2} * side], proof[1]); }))
+      return false;
+    if (!guard(
+            static_cast<std::uint8_t>(12 + 2 * side), side,
+            [&](EP2W&) {
+              const auto& a = ca[2 * side + 1];
+              d.slice.limiting_bound = {a.low, a.high, a.supported};
+              return d.slice.y > a.high;
+            },
+            SliceWhy::verification_inconclusive) ||
+        !guard(
+            static_cast<std::uint8_t>(13 + 2 * side), side,
+            [&](EP2W& why) {
+              const auto& distance = proof[2 + side];
+              d.slice.limiting_bound = {distance.low, distance.high,
+                                        distance.supported};
+              if (!ep2_valid(distance)) {
+                why = EP2W::unsupported_arithmetic;
+                return false;
+              }
+              return distance.low > thresholds[1].high &&
+                     distance.high < thresholds[0].low;
+            },
+            SliceWhy::verification_inconclusive))
+      return false;
+  }
+  if (!guard(
+          16, 255,
+          [&](EP2W&) {
+            if (!intermediate_endpoint02_template_valid(request, false, 0))
+              return false;
+            for (auto& root : request.root)
+              root.coordinates[1] = {{d.slice.y, 0, 0}, 1};
+            return intermediate_endpoint02_template_valid(request, true,
+                                                          d.slice.y);
+          },
+          SliceWhy::identity))
+    return false;
+  if (!guard(
+          17, 255,
+          [&](EP2W& why) {
+            if (!boarding_route_foot_phase_environment()) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            if (!ep2_packet_domains(request)) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            if (!intermediate_endpoint02_template_valid(request, true,
+                                                        d.slice.y))
+              return false;
+            const auto valid = boarding_route_foot_phase_request_valid(request);
+            if (!valid) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            if (!boarding_route_foot_phase_environment()) {
+              why = EP2W::unsupported_arithmetic;
+              return false;
+            }
+            return true;
+          },
+          SliceWhy::identity))
+    return false;
+  d.slice.complete = d.slice.operation_written == UINT64_MAX &&
+                     d.slice.guard_written == 0x0003ffffU;
+  return d.slice.complete;
+}
+} // namespace apsis_drift
