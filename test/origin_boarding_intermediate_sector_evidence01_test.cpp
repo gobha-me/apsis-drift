@@ -419,7 +419,9 @@ void cursor(Stage stage, std::uint8_t operation) {
                        : stage == Stage::construction_operation ? 63
                        : stage == Stage::capture                ? 7
                                                                 : 255;
-  check(maximum == 255 ? operation == 255 : operation <= maximum,
+  check(stage == Stage::complete ? operation == 7
+        : maximum == 255         ? operation == 255
+                                 : operation <= maximum,
         "Stage selects its actual bounded cursor family");
 }
 void companion_accounting(const Refusal& r) {
@@ -728,6 +730,14 @@ void companion_accounting(const Refusal& r) {
           "Original private default reason metadata is not invocation range");
   }
   cursor(d.last_stage, d.operation);
+  if (d.last_stage == Stage::complete)
+    check(
+        d.operation == 7 && d.capture_cursor == 7 &&
+            d.work.capture_guards == 8 && d.capture_attempted == 255 &&
+            d.capture_written == 255 && d.evidence_complete &&
+            d.last_predicate_available && d.last_predicate &&
+            d.classification_evaluated && d.arithmetic_supported,
+        "Complete stage retains the actually completed C08 cursor and closure");
   if (d.first_companion_refusal_available)
     companion_accounting(d.first_companion_refusal);
   if (d.terminal_companion_refusal_available)
@@ -865,6 +875,79 @@ void print_bound(std::string_view name, const BoardingFootSiteScalarBounds& b) {
     return;
   }
   print_first(*result);
+  check(result->state == State::unresolved &&
+            result->original_result == Original::unresolved &&
+            result->kind == Kind::joint_sector_refusal &&
+            result->sector == Sector::roll && result->selected_side == 1 &&
+            result->classification ==
+                Classification::strict_necessary_violation &&
+            result->classification_evaluated && result->evidence_complete &&
+            result->arithmetic_supported,
+        "Retained A01 attributes the original STARBOARD roll necessary "
+        "violation");
+  check(result->source_enrolled &&
+            result->source_evaluated == 18446744073709551615ULL &&
+            result->slice.operation_attempted == 18446744073709551615ULL &&
+            result->slice.operation_written == 18446744073709551615ULL &&
+            result->slice.guard_attempted == 262143 &&
+            result->slice.guard_written == 262143 &&
+            result->slice.operation == 63 && result->slice.guard == 17 &&
+            result->slice.condition ==
+                BoardingIntermediateEndpoint02SliceCondition::none &&
+            result->slice.complete && result->slice.arithmetic_supported &&
+            result->slice.lo < result->slice.y &&
+            result->slice.y < result->slice.hi &&
+            result->reporting_elapsed_seconds == 2,
+        "Retained complete Slice and strictly interior Y remain independently "
+        "earned");
+  check(result->capture_attempted == 255 && result->capture_written == 255 &&
+            result->capture_cursor == 7 &&
+            result->last_stage == Stage::complete && result->operation == 7 &&
+            result->margin_read == 1 && result->margin_written == 1 &&
+            result->selected_limiting_available &&
+            result->selected_limiting_bound.supported &&
+            result->sector_margins[0].lower == -0.06449320320294924 &&
+            result->sector_margins[0].upper == -0.064493203202948282 &&
+            result->selected_limiting_bound.lower == -0.06449320320294924 &&
+            result->selected_limiting_bound.upper == -0.064493203202948282 &&
+            result->selected_limiting_bound.upper < 0,
+        "Retained first margin alone earns its exact strictly negative "
+        "limiting bound");
+  check(result->work.phase_calls == 1 && result->cells.size() == 1 &&
+            result->selected_limiting_available &&
+            result->selected_limiting_bound.supported &&
+            result->original_reason.condition == PhaseCondition::joint_sector &&
+            result->original_reason.predicate_condition ==
+                PhaseCondition::none &&
+            result->original_reason.side == 1 &&
+            result->original_reason.first == 0 &&
+            result->original_reason.last == 0 &&
+            result->original_reason.depth == 0 &&
+            result->original_reason.limiting_bound.lower ==
+                -0.06449320320294924 &&
+            result->original_reason.limiting_bound.upper ==
+                -0.064493203202948282 &&
+            !result->terminal_companion_refusal_available,
+        "Retained original refusal stays separate from completed companion "
+        "attribution");
+  check(result->work.preflight_guards == 1 &&
+            result->work.source_guards == 64 &&
+            result->work.construction_guards == 18 &&
+            result->work.construction_operations == 64 &&
+            result->work.capture_guards == 8 && result->work.phase_calls == 1 &&
+            result->work.phase.graphs == 1 && result->work.phase.legs == 2 &&
+            result->work.phase.bodies == 0 && result->work.phase.sectors == 2 &&
+            result->work.phase.timing == 1,
+        "Retained original lazy work prefix stops before body and later sector "
+        "timing");
+  check(result->cells.size() == 1 && result->cells.capacity() == 1 &&
+            result->output_capacity_bytes == 9192 &&
+            result->required_output_bytes == 9192 &&
+            result->cells[0].first == 0 && result->cells[0].last == 1 &&
+            !result->cells[0].complete &&
+            !result->cells[0].arithmetic_supported,
+        "Retained whole call owns exact bytes while original body aggregate "
+        "stays unearned");
   const Limits limits;
   accounting(*result, limits);
   check(Access::data(result->source) == Access::data(provider),
