@@ -1892,5 +1892,31 @@
     "prior_public_inventory_sha256": "b3a85c55766f7530f87d13fe2e71b394de373c70e3a1f05242bdca5a41826458",
     "quantitative_change": false,
     "explanation": "Move unchanged old2048 plan to explicitly historical namespace. Selected Endpoint04 audit remains only3072 (named2624/UNUSED448); no stage, source reservation, primitive, schema, roster or gate change."
+  },
+  "effective_resource_ownership_scope": {
+    "amendment": "USER_DIRECTED_NUMERICAL_WORKER_AND_WORLD_ACCOUNTING_SEPARATION",
+    "existing_numeric_dataset": "Every existing component, stage, pool, cap, layout target, counter, control and historical binding is unchanged. The legacy whole_live label means numerical-worker working storage.",
+    "bounded_source_creator": "Existing creator ceiling applies to registered numerical source creation after authentic original world prerequisites exist; not universe construction.",
+    "numerical_worker_included": [
+      "Candidate-born provider, catalog, arena and owned outputs",
+      "Source enrollment, canonical guards, factories and complete original reservations",
+      "Constructor, original graph, support, SELF and independent audit working owners",
+      "All current/pending headers, requests, refusals, limits, cells, capabilities, helper and graph returns",
+      "True active caller frames, library, allocation, error and destructor paths without elision credit",
+      "Separately named numerical scalar cache and guard; existing conservative native metadata overcharge retained"
+    ],
+    "world_and_loader_separate_nonzero": [
+      "Original cold native-world/contact and boot prerequisite setup",
+      "Joined source buffers, parsers, duplicate sets, DOMs and canonical recipe/decoder caches",
+      "Published support/cabin/lower/stowed geometry, pose and shared ownership",
+      "Actual setup temporaries, returns, errors, static guards and destruction"
+    ],
+    "world_reporting": "Report actual capacities, payloads, simultaneous lifetimes and measured cold evidence separately; unknown complete peaks remain UNKNOWN. No total-engine/world upper cap is invented and no cold setup fit is inferred.",
+    "borrowed_input_rule": "Persistent immutable application-world owners are separate reported inputs, not candidate-born numerical scratch. Borrowing does not erase local handle/status/caller ownership.",
+    "reentered_call_rule": "Any loader/decoder/authentication actually selected during numerical work needs source and saved call-role proof; active working temporaries, returns, errors and cleanup remain charged. No assumed warm state or missing-frame zero.",
+    "unchanged_setup_and_authority": "Existing authentic world setup only; no added warm-up, creator, source recapture, new numerical program, policy relaxation or gameplay/route qualification.",
+    "historical_failures": "Previous whole-world HOLDs remain immutable and correct under their former scope; current worker admission requires a new explicitly scoped binding.",
+    "portable_ownership_reference": "GODOT_ADOPTION.md",
+    "final_current_binding": "External paired publication receipt binds current method, manifest and inventory bytes; historical hashes remain historical and no hash cycle is introduced."
   }
 }

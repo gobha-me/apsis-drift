@@ -46,6 +46,29 @@ This kinematic ordinary-interior slice establishes no AG acceleration/failure,
 EVA, ladder, seat, dynamic-object collision or planet-surface walking model.
 See [saved station walking](SAVED_STATION_WALK.md) for bounds and qualification.
 
+## Native memory budgeting
+
+Numerical working-storage budgets do not limit total native-game RAM. The
+registered 8 KiB creator and 48 KiB worker limits describe bounded numerical
+work; fixed world loading and retained scene/contact data have separate memory
+accounting. This owner-directed scope correction replaces the whole-native
+startup interpretation investigated in [issue #508](https://github.com/gobha-me/apsis-drift/issues/508).
+
+World accounting includes cold loader frames, owned input joins, JSON/parser
+storage, recipe and canonical caches, support/contact geometry, shared scene
+owners, allocation overhead, errors and cleanup. Count shared payloads once by
+ownership and report simultaneous loading peaks separately from retained memory.
+Unknown upper peaks remain unknown until measured; no replacement global RAM
+ceiling is inferred from a numerical test's scratch budget.
+
+Worker accounting still includes candidate-owned providers/catalogs, arenas,
+current and pending results, caller/control objects, numerical caches, primitive
+and library helpers, errors, cleanup and independent audits. Immutability does
+not exclude a candidate-owned allocation. Existing cold setup calls and source
+authentication remain unchanged; separate accounting permits no warm-up or
+extra creator. See the [active Endpoint04 resource registration](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04.md#9-complete-additive-source-forecasts-and-actual-gates)
+for the precise stage and ownership definitions.
+
 ## Build boundary
 
 `apsis-drift::core` holds authoritative world, flight and save code used by the
