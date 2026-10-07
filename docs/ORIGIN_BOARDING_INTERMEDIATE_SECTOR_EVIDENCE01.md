@@ -298,3 +298,59 @@ Portable held method reference: `next-same-program-sector-evidence-exact-typed-m
 ## Original part identity hashing clarification
 
 The semantic hash includes only the original BoardingBodyPartId enumerators in their fixed order (values 0 through 14), and only when source_enrolled records the actual successful fresh S64 return, work.source_guards == 64, and source_evaluated == UINT64_MAX. The mask alone is insufficient because the original source checks mark a charged row before evaluating its predicate. Original S15 validates the actual fifteen IDs in order; S34–S48 further validate the original bindings. Hashing the already verified immutable ID literals therefore binds that fixed source identity without retaining or reading a body catalog after preparation. It does not hash reservation variants, shape families, dimensions, observed body geometry or default PhaseCell data, and adds no factory, inspector, numerical call, authority, stored catalog, roster slot or resource pool.
+
+## Retained FIRST outcome and test repair (2026-10-07)
+
+The registered program was evaluated once per compiler at source commit
+`437854ccff8bc49ae25486909ffc73f763060c71`. Both original FIRST processes
+exited 1. Their identical 1,160-byte logs have SHA-256
+`9ef6d509fc2a7f9690cee148d2510754bf65a475877ca095ed4e1763ddcdb4fe`.
+Each reports 1,004 checks and six failures of the test assertion
+“Stage selects its actual bounded cursor family”. These failed FIRST records,
+the source commit, binaries, freeze and recovery bundle remain retained;
+subsequent regression results do not replace them.
+
+The production diagnostic completes C08 with `operation == 7` and
+`capture_cursor == 7`. The test incorrectly expected cursor 255 for the
+complete stage. Only the test was repaired: completion now requires the exact
+visited cursor, eight capture guards, both full capture masks, the earned true
+last predicate and completed evidence/classification. Six grouped checks after
+the existing A01 print bind the retained result without adding calls, cases,
+locals, fixtures, poses or numerical inputs. Source semantics attribute the six
+original failures to completed A01, A17 and A25–A28; the original log does not
+contain per-slot failure labels.
+
+The unchanged program earns source64/G18/O64, a complete root-height slice with
+strictly interior stored Y `0.25236931050230371`, and one original forward
+`[0,1]` compiler invocation. Original lazy work is graphs1/legs2/bodies0/
+sectors2/timing1. The original refusal is the STARBOARD joint sector; the
+companion identifies original roll slot 0 with the exact supported bound
+`[-0.06449320320294924, -0.064493203202948282]`. Its strictly negative upper
+endpoint excludes the original roll necessary condition for this fixed
+program. Only margin 0 is read and copied. Later margins, body generation,
+contact, SELF and WORLD remain unearned. Original phase state remains
+unresolved; neither endpoint acceptance nor impossibility of other postures
+follows.
+
+Distinct post-FIRST compile-only measurements cover PIC and native test
+objects and layout probes for GCC and Clang. All duplicate-preserving stack
+row multisets and object layouts remain unchanged. The production object is
+byte-identical to its original measurement. Selected source reservations and
+complete arena, heap, current/pending owner, stream, error and teardown
+accounting remain unchanged; the original 32,768-byte graph allowance stays
+additive. The actual owned output remains 9,192 bytes. The original registration
+prefix and subsequent part-identity clarification remain byte-preserved.
+
+### Final local publication validation
+
+GCC and Clang full Release builds passed, with 94/94 CTest contracts each.
+The repaired ordinary diagnostic passes 1,016 checks with zero failures,
+one creator and 30 consumers. Both compiler outputs are identical; original
+source/A01 diagnostic prints and the complete aggregate work counts are
+unchanged from the failed FIRST. Pinned format20 and full clang-tidy20 passed
+(211 unique source files, 214 selected compilation entries, 144 valid
+suppression directives and 10 policy self-tests). Five freshly prepared,
+isolated Godot contracts passed: native walk, native save, saved flight,
+native start staging and Wayfarer operating. These are headless compatibility
+checks, not visible rendering, hardware or listening acceptance. The broader
+boarding route and First Flight remain open.
