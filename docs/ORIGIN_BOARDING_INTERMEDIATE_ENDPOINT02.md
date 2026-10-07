@@ -457,3 +457,186 @@ V2 whole-stage forecasts: source creator7000; additive source enrollment28880, r
 Core v2 and the selected clock addendum bind corrected separate old carrier/new headers, full G18 current/pending/error/environment helper and the explicit private-Key clock earning point. Deterministic PORT-first equality selection and canonical positive-zero publication are bound to the held exact-selection addendum SHAa58309dbc12fd562b2c0bd183803a81def1c026147ba44588fa7803e1276a484. Final actual API field spellings, Context/Token/Key constructor signatures, slice field layout and owner/audit publication predicates require held headers after public registration. No stronger runtime or numeric claim is made here. Method review may change the proposal; changes must be explicit and versioned before any public registration/code/evaluation.
 
 Writer HOLD for this provisional file only; no issue/public registration/code/runtime permission.
+
+
+## Actual resource admission and retained first execution
+
+The immutable registration above remains the original 69,199-byte prefix
+(SHA-256 `74cf5a9abbe348a23003e1769878544b13f969e564ef907499700f4ac325c44b`).
+The following measurements and observations were added after the retained FIRST.
+The fixed source packet and construction algorithm were preregistered; no
+derived Y coordinate or expected outcome was evaluated or fitted before that run.
+
+### Resource and publication gates
+
+GCC and Clang 20 Release objects, native test objects and linked binaries were
+measured before execution. Both compilers give Expected 1,536, Diagnostic 1,528,
+Endpoint02 Cell 10,944, original phase Cell 7,736, Request 680, optional
+Request 688, Limits 200, Slice 80,
+private Key 16, Context 40 and Token 40 bytes. The creator/validator Expected
+objects are 40 bytes each; the independent body oracle is 8,400 bytes. The
+source ledger counts current and pending values separately, including return
+objects, four Limits values, two Cells during reset and two independent body
+oracles. It retains the entire original 32,768-byte graph reservation and
+explicit helper, library and bounded-error allowances.
+
+| Source stage | Conservative bytes |
+| --- | ---: |
+| creator | 7,000 |
+| preflight | 10,528 |
+| required room refusal | 11,392 |
+| enrollment | 28,880 |
+| construction | 14,376 |
+| enrollment plus disjoint construction overcharge | 30,928 |
+| reset | 33,946 |
+| graph | 47,824 |
+| canonical | 30,512 |
+| pressure SELF | 28,976 |
+| body audit | 48,384 |
+| interval audit | 31,584 |
+| output | 14,016 |
+
+| Complete physical chain | GCC bytes | Clang 20 bytes |
+| --- | ---: | ---: |
+| creator | 6,892 | 6,628 |
+| creator prearena | 3,996 | 3,492 |
+| preflight and required room | 13,764 | 11,900 |
+| enrollment | 31,548 | 28,980 |
+| construction | 15,100 | 12,780 |
+| reset | 34,526 | 22,814 |
+| graph | 38,572 | 36,052 |
+| FIRST graph | 37,932 | 35,532 |
+| canonical | 32,860 | 30,908 |
+| pressure SELF | 29,756 | 27,884 |
+| B44 region | 27,324 | 25,540 |
+| body audit | 44,780 | 43,116 |
+| interval audit | 23,196 | 22,140 |
+| teardown | 23,852 | 21,988 |
+| direct test postcheck | 22,252 | 22,012 |
+
+All creator chains fit 8,192 bytes and all child chains fit 49,152 bytes.
+The body-audit source ceiling of 48,384 bytes leaves 768 bytes of unused
+headroom. Two Expected headers plus one actual Cell require 14,016 owned
+output bytes, within the 16,777,216-byte cap. Source bounds and physical
+compiler measurements are distinct evidence; neither is a prediction of
+successful downstream qualification.
+
+Pinned format 20 and tidy 20 passed before FIRST. The full tidy run checked
+209 unique translation units. Both ordinary Release target builds and links
+passed. The normal test objects and all eight production object symbol-size
+multisets matched the admitted measured objects. The test targets use
+`-O3 -DNDEBUG -std=gnu++23 -Wall -Wextra -Wpedantic -Werror -ffp-contract=off`;
+production objects retain PIC and disabled floating-point contraction.
+
+Independent complete resource review passed before build/link. Final prequery
+review rehashed every frozen source, binary, receipt and artifact and approved
+only the exclusive once-FIRST runner. The final freeze SHA-256 is
+`50dae0bb939a6ec3432b318d552191349a3ac4c71a4ab33505389b6b809618ad`;
+final prequery review receipt SHA-256 is
+`1b056bca12585fa1d0d97b4698bfd4cab00b63ea8a8b2e0da9dbc6c45cd8823a`.
+
+### Retained FIRST output
+
+GCC began at `2026-10-07T01:20:15.325923+00:00` and Clang 20 at
+`2026-10-07T01:20:15.740408+00:00`. Both exited zero. Their complete shared
+stdout/stderr outputs are byte-identical: 2,350 bytes, SHA-256
+`70ae7e196dae33e833c5376da562fcb74302c381719a420ed49792606cb9e437`.
+The exclusive runner was executed once and its artifacts are retained; later
+regression assertions and ordinary tests do not replace this first result.
+
+```text
+FIRST_INTERMEDIATE_ENDPOINT02_SOURCE admitted=1 complete=1 bytes=4096 condition=0 work=21,1,2,2
+FIRST_INTERMEDIATE_ENDPOINT02 A01 candidate=0 state=2 complete=0 flags=010000000000 clock=2 cells=1 capacity=1 output=14016 phase_calls=1 work=1,2,0,2,1,64,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,18,64, source_mask=18446744073709551615 stop=7 stop_stage=2 stop_op=255 stop_SELF=65535,255,255,255 cause=7/7 stage=2 op=255 side=2 edge=4 axis=2 SELF=65535,255,255,255 phase=6/0:1 bound_supported=0 name=
+FIRST_ENDPOINT02_SLICE masks=18446744073709551615,18446744073709551615,262143,262143 cursors=63,17,255 condition=0 flags=11 preflight=1 Y=0.25236931050230371 lo=-0.059999999999999991 hi=0.56473862100460748 zero=1,1
+FIRST_ENDPOINT02_CELL phase=0 current=0 support=0 body=0 self=0 D=15 B=0 unit=0,0,0,255 pairs=0,0 owners=0 masks=0,0,0,0,0,0,0 codes=0,0,0,0,0,0,0,
+FIRST_ENDPOINT02_CONTACT 0 pressure=NOT_RUN;NOT_RUN; disk=0,0 edges=0,0
+FIRST_ENDPOINT02_CONTACT 1 pressure=NOT_RUN;NOT_RUN; disk=0,0 edges=0,0
+SKIP A4 unreached_or_unavailable
+SKIP A8 unreached_or_unavailable
+SKIP A10 unreached_or_unavailable
+SKIP A11 unreached_or_unavailable
+SKIP A12 unreached_or_unavailable
+SKIP A13 unreached_or_unavailable
+SKIP A14 unreached_or_unavailable
+SKIP A15 unreached_or_unavailable
+SKIP A16 unreached_or_unavailable
+SKIP A17 unreached_or_unavailable
+SKIP A18 unreached_or_unavailable
+SKIP A19 unreached_or_unavailable
+SKIP A20 unreached_or_unavailable
+SKIP A21 unreached_or_unavailable
+SKIP A22 unreached_or_unavailable
+SKIP A23 unreached_or_unavailable
+SKIP A52 unreached_or_unavailable
+SKIP A54 unreached_or_unavailable
+SKIP A56 unreached_or_unavailable
+SKIP A58 unreached_or_unavailable
+SKIP A60 unreached_or_unavailable
+SKIP A61 unreached_or_unavailable
+SKIP A62 unreached_or_unavailable
+SKIP A63 unreached_or_unavailable
+SKIP A64 unreached_or_unavailable
+SKIP A65 unreached_or_unavailable
+SKIP A66 unreached_or_unavailable
+SKIP A67 unreached_or_unavailable
+SKIP A68 unreached_or_unavailable
+SKIP A69 unreached_or_unavailable
+SKIP A70 unreached_or_unavailable
+SKIP A71 unreached_or_unavailable
+SKIP A72 unreached_or_unavailable
+SKIP A73 unreached_or_unavailable
+ENDPOINT02_VALIDATION creator=1 consumers=57 skips=34 raw=0 inspectors=0 bodies=0 interval_records=0 checks=4190 failures=0 aggregate=11,17,0,15,8,1280,0,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,277,959,12,57,
+```
+
+The genuine source creator succeeded. A01 wrote all 64 construction operations
+and all 18 guards, with complete supported slice evidence. Its inward common
+interval is `(-0.059999999999999991, 0.56473862100460748)` and its one stored
+midpoint is `0.25236931050230371`, strictly inside that interval. Both registered
+nonpositive-lower-radicand branches selected canonical positive zero. This
+construction is only an input to the original kinematic predicates.
+
+The original phase returned `joint_sector` for STARBOARD. A01 charged one
+phase invocation, one graph, two legs, zero bodies, two sector checks and one
+timing check. The original leg predicate stopped before full body generation,
+current carriers, contact, pressure or SELF. The outer diagnostic remains
+`unresolved`, with construction evidence preserved and a reporting clock of
+two seconds. Its original predicate subcondition is default `none`; the
+wrapper limiting bound is unearned. A joint-sector refusal does not establish
+a strict collision witness, impossibility of all postures or acceptance of
+this static endpoint.
+
+The finite roster visited all 91 labels: one creator, 57 actual consumers and
+34 honest skips, 4,190 checks and zero failures. There were zero raw calls,
+request inspectors, body audit poses or interval audit records. No contact,
+load, SELF, WORLD, material, continuous route, occupied seat, actor, save or
+First Flight qualification follows from this outcome. Those parent issues
+remain open. A new candidate or additional numerical evidence requires its
+own immutable source-bound method before evaluation.
+
+Independent retained-outcome review reverified the full frozen snapshot and
+previous FIRST artifacts without replaying the query and reported PASS. Its
+receipt SHA-256 is
+`dc59d23b067cab9356b5cff7dd61face7d1cc6b606a71ae668cf658bc5f11a6f`.
+
+
+### Post-FIRST regression coverage and resource delta
+
+After the retained first result, six grouped inline checks were added to A01.
+They pin the earned construction masks and strict stored midpoint relation,
+the authentic STARBOARD joint-sector refusal and original counters, and the
+unearned downstream masks. They add no requests, local records, body audits
+or roster entries; the immutable FIRST logs above remain unchanged.
+
+Both compilers then compiled fresh PIC and native test objects plus layout
+probes. Complete stack-usage multisets retain duplicate function rows. GCC's
+A01 function grew from 1,792 to 1,824 bytes: its full graph chain is 37,964,
+body-audit chain 44,812 and interval-audit chain 23,228 bytes. A separate
+48-byte GCC slot outline before assessment has a conservative complete chain
+of 7,996 bytes, including the persistent 4,096-byte provider arena, mutable
+globals and distinct project/library/error leaves. Clang adds two zero-byte
+mask-count leaves and preserves every existing frame. All layouts and source
+storage ceilings remain unchanged. Normal rebuilt test object bytes exactly
+match their measured native objects on both compilers.
+
+These regression measurements do not replay or replace FIRST. They preserve
+its unresolved interpretation and all later qualification boundaries.

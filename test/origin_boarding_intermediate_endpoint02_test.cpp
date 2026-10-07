@@ -2046,6 +2046,77 @@ void slot(std::size_t n, bool executed) {
     return;
   }
   print_first(*result);
+  check(result->slice.complete && result->slice.arithmetic_supported &&
+            result->slice.condition == SliceCondition::none &&
+            result->slice.operation_attempted ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_written ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.guard_attempted == 0x3ffffU &&
+            result->slice.guard_written == 0x3ffffU &&
+            result->slice.operation == 63 && result->slice.guard == 17 &&
+            result->slice.side == 255 && result->slice.preflight_guards == 1,
+        "Observed FIRST earns all64 operations and18 guards");
+  check(result->slice.y == 0.25236931050230371 &&
+            result->slice.lo == -0.059999999999999991 &&
+            result->slice.hi == 0.56473862100460748 &&
+            result->slice.lo < result->slice.y &&
+            result->slice.y < result->slice.hi && result->slice.zero_mask == 3,
+        "Observed stored Y is strictly inside its earned slice");
+  check(result->source_enrolled &&
+            result->source_evaluated ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->reporting_elapsed_seconds == 2 &&
+            result->state == State::unresolved && !result->complete &&
+            !result->arithmetic_supported && !result->kinematic_complete &&
+            !result->projection_complete && !result->nominal_support_complete &&
+            !result->self_complete,
+        "Observed complete slice does not promote original phase refusal");
+  check(result->work.phase_calls == 1 && result->work.phase.graphs == 1 &&
+            result->work.phase.legs == 2 && result->work.phase.bodies == 0 &&
+            result->work.phase.sectors == 2 && result->work.phase.timing == 1 &&
+            result->work.source_guards == 64 &&
+            result->work.definition_guards == 4 &&
+            result->work.projection_guards == 0 &&
+            result->work.construction_guards == 18 &&
+            result->work.construction_operations == 64,
+        "Observed original work stops in the second leg before body");
+  check(
+      result->first_refusal &&
+          result->first_refusal->condition == Condition::phase_prerequisite &&
+          result->first_refusal->predicate_condition ==
+              Condition::phase_prerequisite &&
+          result->first_refusal->self_stage == Stage::phase &&
+          result->first_refusal->operation == 255 &&
+          result->first_refusal->phase.condition ==
+              BoardingRouteFootPhaseCondition::joint_sector &&
+          result->first_refusal->phase.predicate_condition ==
+              BoardingRouteFootPhaseCondition::none &&
+          result->first_refusal->phase.side == 1 &&
+          !result->first_refusal->limiting_bound.supported &&
+          result->stop_condition == Condition::phase_prerequisite &&
+          result->stop_stage == Stage::phase && result->stop_operation == 255,
+      "Observed authentic STARBOARD sector cause retains unearned outer bound");
+  check(result->cells.size() == 1 && result->cells.capacity() == 1 &&
+            result->output_capacity_bytes == 14016 &&
+            !result->cells[0].phase.complete &&
+            result->cells[0].definition_evaluated == 15 &&
+            result->cells[0].self_body_evaluated == 0 &&
+            result->cells[0].unit_axis_attempted == 0 &&
+            result->cells[0].unit_axis_written == 0 &&
+            result->cells[0].unit_axis_complete_mask == 0 &&
+            result->cells[0].unit_axis_cursor == 255 &&
+            result->cells[0].examined_pairs == 0 &&
+            result->cells[0].accepted_pairs == 0 &&
+            result->cells[0].owner_attempted_mask == 0 &&
+            mask_count(result->cells[0].projected_carrier_complete) == 0 &&
+            mask_count(result->cells[0].sole_extrema_evaluated) == 0 &&
+            mask_count(result->cells[0].source_coordinate_evaluated) == 0 &&
+            mask_count(result->cells[0].intersection_evaluated) == 0 &&
+            mask_count(result->cells[0].midpoint_evaluated) == 0 &&
+            mask_count(result->cells[0].allocation_evaluated) == 0 &&
+            mask_count(result->cells[0].pressure_evaluated) == 0,
+        "Observed lazy current/contact/SELF fields remain NOT_RUN");
   accounting(*result, Limits{});
   capture(*result, summary);
   first_body_audit(*result);
