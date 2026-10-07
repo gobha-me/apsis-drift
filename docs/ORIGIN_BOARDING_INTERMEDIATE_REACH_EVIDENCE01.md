@@ -266,3 +266,110 @@ Owned output<=16777216 is TWO actual Expected headers plus actual vector capacit
 ## Registration gate
 
 This manifest binds the exact held Core typed method/hash above, FP-FIRST/errors, inspector0, two capture modes, sparse metadata/hard-state distinctions and required-versus-owned output. Independent review, public registration commit/push and Root source/format/compile-only/actual resource gates precede a frozen once-FIRST. No classification prediction or candidate change follows an adverse result. Preserve #488 FIRST and all earlier source/observations exactly. Contact/load/SELF/WORLD/material/route/seat/actor/gameplay remain unearned.
+
+
+---
+
+## Measured resources and retained FIRST — 2026-10-06
+
+This appendix records the executed registered method. The complete preceding
+57,266-byte registration remains byte-for-byte unchanged (SHA-256
+`096024fce4c2a947ac339eb33cfcdbfdbf1e84658ff22a5400de15f5b8f71c86`).
+The implementation was frozen and published at
+`eccfa8eef51253fb121c7ed374cbebbf48390c4d` before either first execution.
+
+### Actual layouts and complete live stages
+
+Root measured compile-only Release objects, symbol sizes, stack usage and
+call chains with GCC and Clang 20, including the actual test's native no-PIC
+flags as well as PIC objects. Both compilers agree on the following byte sizes:
+Expected 360; Diagnostic 352; Work 88; companion Limits 32; Context 32;
+CaptureToken 40; fresh state 16; optional token 48; Bounds 24; original PhaseCell
+7,736; original Request 680; optional Request 688; original limits 72;
+original reason 64; original work 40; creator Expected 40. Test Summary is 48,
+Totals 64, all mutable globals together 76, Environment 16 and StreamCounter 88.
+
+The table combines the whole active caller and producer path, including
+retained source/output, current and pending values, globals, independent
+library/error allowances and complete inherited original graph storage.
+Physical rows use the actual measured active stack chains; they do not reduce
+source reservations when an optimizer removes storage.
+
+| Active stage | Complete source bytes | GCC physical bytes | Clang 20 physical bytes |
+| --- | ---: | ---: | ---: |
+| Whole creator | 7,000 | 6,828 | 6,580 |
+| Preflight with admitted arena | 7,664 | 8,164 | 7,532 |
+| S64 enrollment | 25,592 | 30,228 | 28,132 |
+| Original PhaseCell reset | 24,656 | 23,364 | 22,732 |
+| Original graph | 41,400 | 30,844 | 29,556 |
+| Capture and threshold processing | 18,344 | 18,636 | 18,132 |
+| Direct test checks | 18,344 | 15,260 | 14,836 |
+
+The creator is within 8,192 bytes; all child scratch stages are within 49,152
+bytes. The original graph reservation remains the full 32,768 bytes. No stage
+borrows unused inherited storage. Owned and required full output are both
+8,456 bytes: two Expected headers (720) plus one original PhaseCell (7,736),
+well within the 16,777,216-byte output cap. A preallocation refusal owns only
+its 720 header bytes but retains the full 8,456-byte required budget.
+
+The selected 1,024-byte creator caller pool contains 620 named bytes and 404
+unused. The 2,048-byte graph caller pool contains 860 named bytes and 1,188
+unused. The production helper pool contains 1,088 named bytes and 960 unused.
+Before FIRST, review amended the direct test helper inventory to include its
+separate fixed eight-element accounting array: 1,053 named bytes and 995 unused
+within the same 2,048-byte pool. Source stage totals and caps did not change.
+All source and physical gates passed independent review before execution.
+
+The [pre-execution error representation clarification](https://github.com/gobha-me/apsis-drift/issues/493#issuecomment-6027479646)
+was published before FIRST. On an unsafe floating-point preflight the selected
+Expected/string error may allocate its one bounded error buffer (at most 57
+bytes including its terminator), within the registered error allowance. No
+source/request factory, source arena or PhaseCell allocation follows that
+failure. This clarification changed no source, controls, limits, roster or
+numerical method; the original registration bytes are retained above.
+
+### First execution and exact retained output
+
+GCC began at `2026-10-06T23:48:33.107297+00:00`; Clang 20 began at
+`2026-10-06T23:48:33.521890+00:00`. Both exited zero. Their complete shared
+stdout/stderr outputs are byte-identical: 760 bytes, SHA-256
+`964756bf4e1b35ea7db5746e612bffa6a08ae60398a52e290e14198019b36cf0`.
+Each process performed one creator and all 28 registered consumers, with zero
+skips, 643 checks and zero failures. The custom once-FIRST execution is not
+repeated. Later regression assertions and normal test runs do not replace
+these retained artifacts.
+
+```text
+FIRST_REACH_EVIDENCE01_SOURCE admitted=1 complete=1 bytes=4096 condition=0 work=21,1,2,2
+FIRST_INTERMEDIATE_REACH_EVIDENCE01 A01 version=1 candidate=0 state=1 original=2 kind=1 class=2 complete=1 arithmetic=1 source=1/18446744073709551615 actual=[0,1] capacity=1 owned=8456 required=8456 work=1,64,1,1,1,0,0,0,8,4,4, masks=255,255/15,15/15,15 cursors=63,7,3,3 captured_side=0 stop=0/0/255 phase=4/0 side=0 private=[0,0] depth=0 D=[1.0706311153846131,1.0706311153846169] min=[3.7248999999999497e-06,3.7248999999999523e-06] max=[0.89800261689999961,0.89800261690000027] comparisons=0110
+REACH_EVIDENCE01_VALIDATION creator=1 consumers=28 skips=0 inspectors=0 raw=0 bodies=0 pairs=0 owners=0 hips=0 checks=643 failures=0 aggregate=28,897,14,14,14,0,0,0,87,39,31,
+```
+
+The genuine unchanged candidate earns complete `reach_refusal` evidence for
+PORT, with the original result still `unresolved`. Its squared distance is
+`[1.0706311153846131, 1.0706311153846169]`; the original maximum squared reach
+is `[0.89800261689999961, 0.89800261690000027]`. The evaluated strict converse
+`D.lower > maximum.upper` is true, so classification is `strict_too_long`.
+This is a genuine nominal overreach of this candidate, rather than a mere
+failure of inward sufficient inclusion. The minimum squared threshold is
+`[3.7248999999999497e-06, 3.7248999999999523e-06]`; all four written comparisons
+are `0110`. Source mask UINT64_MAX, capture 255/255, threshold 15/15 and
+comparison 15/15 are fully earned. The call's actual requested domain `[0,1]`
+remains distinct from the original refusal's unearned private `[0,0]` and depth
+zero. The original reason, body dimensions and joint policy remain unchanged.
+
+One original graph and one leg were charged; no original body, sector or
+timing work occurred in A01. Across the entire roster, 14 original phase
+calls/graphs/legs occurred, with zero bodies, sectors or timing. There were
+zero raw geometry calls, request inspectors, body pairs, owners or hip probes.
+This result establishes neither a kernel contradiction nor impossibility for
+other postures. Body, contact, load, SELF, WORLD, material, route, occupied seat,
+actor, save and First Flight qualifications remain unearned. Any new candidate
+requires a separate issue and source-bound method before evaluation.
+
+Independent retained-outcome review checked the frozen source, binary,
+receipt and artifact bindings and reported PASS without replaying a query.
+The freeze SHA-256 is
+`b756fb10f6230a6fcee2e114d51c4baacb61e7f8ea3c3b65ca725a0452e1229f`;
+the review receipt SHA-256 is
+`31d38e7547d6419aaa211981d10778137fd85df6b1e645fe19c062786cfe29c0`.

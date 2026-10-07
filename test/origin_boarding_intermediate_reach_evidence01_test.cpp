@@ -567,6 +567,62 @@ void print_bound(std::string_view name, Bounds b) {
     return;
   }
   print_first(*result); // Retain FIRST before any outcome/geometry expectation.
+  check(result->state == State::evidence &&
+            result->original_result == Original::unresolved &&
+            result->kind == Kind::reach_refusal &&
+            result->classification == Classification::strict_too_long &&
+            result->captured_side == 0 && result->source_admitted &&
+            result->phase_invoked && result->evidence_complete &&
+            result->arithmetic_supported,
+        "Retained A01 earns strict too-long PORT reach evidence");
+  check(
+      result->source_evaluated == 18446744073709551615ULL &&
+          result->capture_attempted == 255 && result->capture_written == 255 &&
+          result->threshold_attempted == 15 &&
+          result->threshold_written == 15 &&
+          result->comparison_attempted == 15 &&
+          result->comparison_written == 15 && result->source_operation == 63 &&
+          result->capture_operation == 7 && result->threshold_operation == 3 &&
+          result->comparison_operation == 3 &&
+          result->stop_condition == Condition::none &&
+          result->stop_stage == Stage::not_run && result->stop_operation == 255,
+      "Retained source and companion masks/cursors are fully earned");
+  check(
+      result->phase_reason.condition == PhaseCondition::reach &&
+          result->phase_reason.predicate_condition == PhaseCondition::none &&
+          result->phase_reason.side == 0 && result->phase_reason.first == 0 &&
+          result->phase_reason.last == 0 && result->phase_reason.depth == 0 &&
+          result->phase_reason.limiting_bound.lower == 1.0706311153846131 &&
+          result->phase_reason.limiting_bound.upper == 1.0706311153846169,
+      "Authentic original PORT refusal retains its earned bound and metadata");
+  check(result->distance_squared.supported &&
+            result->distance_squared.lower == 1.0706311153846131 &&
+            result->distance_squared.upper == 1.0706311153846169 &&
+            result->minimum_squared.supported &&
+            result->minimum_squared.lower == 3.7248999999999497e-06 &&
+            result->minimum_squared.upper == 3.7248999999999523e-06 &&
+            result->maximum_squared.supported &&
+            result->maximum_squared.lower == 0.89800261689999961 &&
+            result->maximum_squared.upper == 0.89800261690000027,
+        "Retained outward distance and original thresholds remain exact");
+  check(
+      !result->comparisons[0] && result->comparisons[1] &&
+          result->comparisons[2] && !result->comparisons[3],
+      "Retained written comparisons are 0110 with a strict too-long converse");
+  check(result->work.preflight_guards == 1 &&
+            result->work.source_guards == 64 && result->work.phase_calls == 1 &&
+            result->work.phase.graphs == 1 && result->work.phase.legs == 1 &&
+            result->work.phase.bodies == 0 && result->work.phase.sectors == 0 &&
+            result->work.phase.timing == 0 &&
+            result->work.capture_guards == 8 &&
+            result->work.threshold_operations == 4 &&
+            result->work.comparison_operations == 4,
+        "Retained work stops the original phase before body or timing work");
+  check(result->actual_first == 0 && result->actual_last == 1 &&
+            result->cells.size() == 1 && result->cells.capacity() == 1 &&
+            result->output_capacity_bytes == 8456 &&
+            result->required_output_bytes == 8456,
+        "Retained whole call owns one original slot and exact bounded output");
   const Limits limits;
   accounting(*result, limits);
   check(Access::data(result->source) == Access::data(provider),
