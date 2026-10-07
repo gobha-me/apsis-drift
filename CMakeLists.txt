@@ -410,6 +410,7 @@ add_library(apsis_drift_core STATIC
   src/origin_boarding_intermediate_sector_evidence01.cpp
   src/origin_boarding_intermediate_endpoint03.cpp
   src/origin_boarding_intermediate_sector_evidence02.cpp
+  src/origin_boarding_intermediate_endpoint04.cpp
   src/origin_boarding_initial_material.cpp
   src/origin_boarding_checkpoint_material_extension.cpp
   src/origin_boarding_hatch_seal_material.cpp
@@ -495,6 +496,8 @@ set_property(SOURCE src/origin_boarding_intermediate_sector_evidence01.cpp APPEN
 set_property(SOURCE src/origin_boarding_intermediate_endpoint03.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_intermediate_sector_evidence02.cpp APPEND PROPERTY COMPILE_OPTIONS
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
+set_property(SOURCE src/origin_boarding_intermediate_endpoint04.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 
 if (APSIS_DRIFT_TERMINAL)
@@ -703,6 +706,18 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME boarding-intermediate-sector-evidence02-contract
     COMMAND apsis-drift-boarding-intermediate-sector-evidence02-tests)
   set_tests_properties(boarding-intermediate-sector-evidence02-contract PROPERTIES TIMEOUT 180)
+
+  add_executable(apsis-drift-boarding-intermediate-endpoint04-tests
+    test/origin_boarding_intermediate_endpoint04_test.cpp)
+  target_link_libraries(apsis-drift-boarding-intermediate-endpoint04-tests
+    PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-boarding-intermediate-endpoint04-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  target_include_directories(apsis-drift-boarding-intermediate-endpoint04-tests
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME boarding-intermediate-endpoint04-contract
+    COMMAND apsis-drift-boarding-intermediate-endpoint04-tests)
+  set_tests_properties(boarding-intermediate-endpoint04-contract PROPERTIES TIMEOUT 180)
 
   add_executable(apsis-drift-boarding-route-intermediate-unloaded01-tests
     test/origin_boarding_route_intermediate_unloaded01_test.cpp)
