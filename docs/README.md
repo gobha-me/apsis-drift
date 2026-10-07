@@ -87,6 +87,8 @@ player's station-to-flight journey.
   one same-program joint-sector attribution; body and gameplay remain unqualified.
 - [Registered intermediate endpoint03](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT03.md):
   one source-bound reach-and-both-roll candidate; current-body and route obligations remain explicit.
+- [Registered intermediate sector evidence02](ORIGIN_BOARDING_INTERMEDIATE_SECTOR_EVIDENCE02.md):
+  original sector attribution for the same program, with fresh authority and a stop before body assembly.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
