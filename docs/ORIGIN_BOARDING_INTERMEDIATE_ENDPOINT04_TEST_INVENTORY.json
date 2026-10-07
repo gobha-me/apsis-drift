@@ -1,0 +1,1896 @@
+{
+  "status": "EXACT_PUBLICATION_PAIR_DRAFT_NOT_IMPLEMENTATION_OR_ACTUAL_ADMISSION",
+  "issue": 505,
+  "current_package": {
+    "method": "ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04.md",
+    "manifest": "ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04_TEST_MANIFEST.md",
+    "inventory": "ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04_TEST_INVENTORY.json",
+    "current_hash_binding": "Separate final publication/review receipt binds exact current bytes; no self-referential hash cycle."
+  },
+  "historical_input_hashes": [
+    {
+      "provenance_label": "endpoint04-exact-typed-method-v1.md",
+      "sha256": "be43b8128dcebd4a70fd30b193588e362a7e40fce2012579b86cbf3d2ace954b",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "endpoint04-exact-source-forecast-v1.json",
+      "sha256": "452324dfefb2ce0efd5a86403a0c5c530444e711196134242cd4674fcad92afc",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "endpoint04-row-reset-ownership-author-clarification-v2.json",
+      "sha256": "56cc6f79b693c98f7babdc84a52408ee09d3c0ab0f0b3e6df97dc7131be76fc8",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "endpoint04-row-reset-ownership-author-clarification-v2.md",
+      "sha256": "58cf6058780d6072d75b20c88407f2af74c1849d94748cb8e5985114e482c643",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "endpoint04-matched-test-manifest-v1.md",
+      "sha256": "3fe1426136ddfbc5a60a4f971ee50cf263771f010f793d21be372abd775ff9cf",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "endpoint04-matched-test-manifest-v1.json",
+      "sha256": "7a4351c562cefe4571e9ca7d5ac77cdf12d5380555572b2ac6f8df2eb1fe2245",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "endpoint04-matched-source-audit-inventory-v1.json",
+      "sha256": "f124b280104f55a01a31f0e582f4afe2718f2d4d5abed270e2fac44f765af118",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "historical-endpoint03-complete-resource-base-inventory-v2.json",
+      "sha256": "40ad89341136a86e45dce584c50d1a163911cbdce9950c04ffc6b23bad2969fa",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    },
+    {
+      "provenance_label": "independent-matched-both-ankle-construction-review.json",
+      "sha256": "6fb74a396b6d443a30dc7803f5cd7deff44ddd90d01eb97895a436b35131b6b4",
+      "meaning": "IMMUTABLE_HISTORICAL_MATCHED_INPUT; not a binding to current same-named public document"
+    }
+  ],
+  "binding_semantics": "Historical provenance labels are retained review inputs, not portable build dependencies or hashes of current publication bytes. Final exact current bindings are external. All geometry tables/guards/field defaults/97 control inputs and stage sums unchanged.",
+  "source_stage_maps": {
+    "creator": {
+      "components": {
+        "entire_old_creator": 7000,
+        "phase_scalar_limits_global": 152
+      },
+      "bytes": 7152,
+      "ceiling": 8192,
+      "headroom": 1040
+    },
+    "preflight": {
+      "components": {
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "library_error": 512,
+        "control": 64,
+        "phase_scalar_limits_global": 152
+      },
+      "bytes": 11000,
+      "ceiling": 49152,
+      "headroom": 38152
+    },
+    "required_room_refusal": {
+      "components": {
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "library_error": 512,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "current_request": 680,
+        "current_pending_refusal": 368
+      },
+      "bytes": 12048,
+      "ceiling": 49152,
+      "headroom": 37104
+    },
+    "source_enrollment": {
+      "components": {
+        "full_old_endpoint03_enrollment": 33208,
+        "new_two_headers": 3328,
+        "new_four_limits": 800,
+        "new_current_pending_refusal": 368,
+        "new_context": 40,
+        "new_token_reservation": 40,
+        "new_current_pending_key": 32,
+        "new_control": 64,
+        "new_exterior_current_pending_request_overcharge": 1368,
+        "phase_scalar_limits_global": 152
+      },
+      "bytes": 39400,
+      "ceiling": 49152,
+      "headroom": 9752
+    },
+    "source_plus_disjoint_construction_overcharge": {
+      "components": {
+        "full_old_endpoint03_enrollment": 33208,
+        "new_two_headers": 3328,
+        "new_four_limits": 800,
+        "new_current_pending_refusal": 368,
+        "new_context": 40,
+        "new_token_reservation": 40,
+        "new_current_pending_key": 32,
+        "new_control": 64,
+        "new_exterior_current_pending_request_overcharge": 1368,
+        "phase_scalar_limits_global": 152,
+        "disjoint_full_constructor_pool": 4096
+      },
+      "bytes": 43496,
+      "ceiling": 49152,
+      "headroom": 5656
+    },
+    "construction": {
+      "components": {
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 368,
+        "current_pending_key": 32,
+        "context": 40,
+        "old_caps_reason_work": 176,
+        "constructor_pool": 4096,
+        "independent_error": 512,
+        "outer_control": 64,
+        "phase_scalar_limits_global": 152
+      },
+      "bytes": 17080,
+      "ceiling": 49152,
+      "headroom": 32072
+    },
+    "reset": {
+      "components": {
+        "two_full_cells": 22064,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 368,
+        "context": 40,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "two_initializer_arrays": 210,
+        "control": 64,
+        "phase_scalar_limits_global": 152
+      },
+      "bytes": 34746,
+      "ceiling": 49152,
+      "headroom": 14406
+    },
+    "original_graph": {
+      "components": {
+        "entire_original_graph": 32768,
+        "two_headers": 3328,
+        "arena": 4096,
+        "cell_delta": 3296,
+        "four_limits": 800,
+        "caller": 2048,
+        "old_caps": 72,
+        "old_reason": 64,
+        "pending_optional_request": 688,
+        "current_request": 680,
+        "current_pending_refusal": 368,
+        "context": 40,
+        "token_reservation": 40,
+        "current_pending_key": 32,
+        "control": 64,
+        "phase_scalar_limits_global": 152
+      },
+      "bytes": 48536,
+      "ceiling": 49152,
+      "headroom": 616
+    },
+    "canonical": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 368,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "factory_pool": 7680
+      },
+      "bytes": 31224,
+      "ceiling": 49152,
+      "headroom": 17928
+    },
+    "pressure_SELF": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 368,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "helper_pool": 6144
+      },
+      "bytes": 29688,
+      "ceiling": 49152,
+      "headroom": 19464
+    },
+    "region_factory": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 368,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "region_factory": 1440
+      },
+      "bytes": 24984,
+      "ceiling": 49152,
+      "headroom": 24168
+    },
+    "construction_audit": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "scalar_error": 1024,
+        "inactive_key_context_overcharge": 40,
+        "phase_scalar_limits_global": 152,
+        "construction_audit_utility": 3072
+      },
+      "bytes": 26960,
+      "ceiling": 49152,
+      "headroom": 22192
+    },
+    "body_audit": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "scalar_error": 1024,
+        "inactive_key_context_overcharge": 40,
+        "phase_scalar_limits_global": 152,
+        "two_oracles": 16800,
+        "body_utility": 8192
+      },
+      "bytes": 48880,
+      "ceiling": 49152,
+      "headroom": 272
+    },
+    "interval_audit": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3328,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "scalar_error": 1024,
+        "inactive_key_context_overcharge": 40,
+        "phase_scalar_limits_global": 152,
+        "interval_utility": 8192
+      },
+      "bytes": 32080,
+      "ceiling": 49152,
+      "headroom": 17072
+    },
+    "owned_capacity1_output": {
+      "components": {
+        "two_headers": 3328,
+        "capacity1_cell": 11032
+      },
+      "bytes": 14360,
+      "ceiling": 16777216,
+      "headroom": 16762856
+    }
+  },
+  "core_source_pools": {
+    "constructor": {
+      "named_components": {
+        "eight_input_intervals": 192,
+        "six_yaw_intervals": 144,
+        "two_side_chart_records_16_intervals": 384,
+        "nine_link_threshold_intervals": 216,
+        "twelve_parameter_radial_intervals": 288,
+        "ten_height_cut_doubles": 80,
+        "eighteen_endpoint_active_intervals": 432,
+        "eighteen_direct_active_intervals": 432,
+        "eight_primitive_argument_local_pending_intervals": 192,
+        "constant_sign_arrays": 96,
+        "certified_small_root_interval_terms_scratch_scalars": 176,
+        "references_closures_cursor_controls": 256,
+        "two_validator_expected": 80,
+        "library_environment_error": 512,
+        "eight_scalar_selection_doubles": 64,
+        "row_reset_full_refusal_initializer": 184
+      },
+      "named_bytes": 3728,
+      "unused_bytes": 368,
+      "reservation_bytes": 4096
+    },
+    "factory": {
+      "named_components": {
+        "eight_optional_request_returns": 5504,
+        "request": 680,
+        "six_constants": 576,
+        "step": 96,
+        "references_error": 512
+      },
+      "named_bytes": 7368,
+      "unused_bytes": 312,
+      "reservation_bytes": 7680
+    },
+    "tuple": {
+      "named_components": {
+        "three_region_arrays": 672,
+        "two_part_records": 128,
+        "descriptors": 256,
+        "references_error": 512,
+        "sort": 480
+      },
+      "named_bytes": 2048,
+      "unused_bytes": 0,
+      "reservation_bytes": 2048
+    },
+    "pressure": {
+      "named_components": {
+        "entire_preserved_pressure_named_inventory": 3192,
+        "row_reset_full_refusal_initializer": 184
+      },
+      "named_bytes": 3376,
+      "unused_bytes": 2768,
+      "reservation_bytes": 6144
+    },
+    "SELF": {
+      "named_components": {
+        "relative_points": 1296,
+        "whole_region": 224,
+        "four_solid_local_caller_pending_returns": 768,
+        "six_points": 432,
+        "twentyfour_intervals": 576,
+        "two_squared_scratch": 112,
+        "eight_vectors": 192,
+        "three_owner_returns": 168,
+        "three_hip_and_three_half_ray_returns": 336,
+        "extra_intervals": 192,
+        "doubles": 192,
+        "references": 160,
+        "error": 512,
+        "row_reset_full_refusal_initializer": 184
+      },
+      "named_bytes": 5344,
+      "unused_bytes": 800,
+      "reservation_bytes": 6144
+    },
+    "region_factory": {
+      "named_components": {
+        "three_region_arrays": 672,
+        "tuple_references": 512,
+        "error": 256
+      },
+      "named_bytes": 1440,
+      "unused_bytes": 0,
+      "reservation_bytes": 1440
+    },
+    "construction_audit": {
+      "named_components": {
+        "twelve_LD_bounds": 384,
+        "six_LD_vectors": 576,
+        "fortyeight_LD_scalars": 768,
+        "thirtytwo_double_slots": 256,
+        "references_closures_cursors": 128,
+        "library_error": 512
+      },
+      "named_bytes": 2624,
+      "unused_bytes": 448,
+      "reservation_bytes": 3072
+    },
+    "body_audit": {
+      "named_components": {
+        "preserved_body_named_inventory": 7904
+      },
+      "named_bytes": 7904,
+      "unused_bytes": 288,
+      "reservation_bytes": 8192
+    },
+    "interval_audit": {
+      "named_components": {
+        "solids": 1296,
+        "points": 1728,
+        "bounds": 1152,
+        "scalar_support": 1024,
+        "library_error": 512,
+        "selected_helper_returns_arguments": 2480
+      },
+      "named_bytes": 8192,
+      "unused_bytes": 0,
+      "reservation_bytes": 8192
+    },
+    "creator_caller": {
+      "named_components": {
+        "summary": 120,
+        "two_streams": 176,
+        "mutable_globals_target": 140,
+        "boot_native_expected": 80,
+        "provider": 24,
+        "saved_buffers_bytes": 24,
+        "references": 32,
+        "errors": 160
+      },
+      "named_bytes": 756,
+      "unused_bytes": 268,
+      "reservation_bytes": 1024
+    },
+    "graph_caller": {
+      "named_components": {
+        "entire_preserved_endpoint03_named_caller": 1871
+      },
+      "named_bytes": 1871,
+      "unused_bytes": 177,
+      "reservation_bytes": 2048
+    }
+  },
+  "test_source_pools": {
+    "creator1024": {
+      "objects": {
+        "Summary_reservation": 120,
+        "two_StreamCounter": 176,
+        "mutable_globals_reservation": 140,
+        "native_boot_Expected": 80,
+        "provider_optional": 24,
+        "saved_stream_pointers_and_bytes": 24,
+        "references": 32,
+        "current_pending_errors": 160
+      },
+      "named": 756,
+      "unused": 268,
+      "selected": 1024
+    },
+    "graph2048": {
+      "objects": {
+        "Summary_reservation": 120,
+        "two_StreamCounter": 176,
+        "mutable_globals_reservation": 140,
+        "native_boot_Expected": 80,
+        "provider_optional": 24,
+        "four_alias_slots": 64,
+        "saved_stream_pointers_and_bytes": 24,
+        "references_arguments": 96,
+        "slot_field_candidate_cursor_status": 112,
+        "saved_environment_slots": 64,
+        "current_pending_errors_check_arguments": 256,
+        "post_return_work_array": 192,
+        "Hash": 8,
+        "two_word_prefix_current_pending_arrays": 32,
+        "interleaved_pair_array_and_initializer_list_view_peak": 136,
+        "self_accounting_certificate_count_array": 14,
+        "semantic_hash_boolean_initializer_list": 13,
+        "edge_pointer_initializer_list_and_view": 32,
+        "hash_jet_velocity_current_and_saved_original": 96,
+        "separate_pending_work_array_return_no_elision": 192
+      },
+      "named": 1871,
+      "unused": 177,
+      "selected": 2048,
+      "historical_registered_named": 1388,
+      "historical_registered_unused": 660,
+      "implementation_constraints": [
+        "Retain selected1871/177. No owning four-word prefix arrays: validate by reference/per-word scalar prefix helper within retained32-byte prefix allowance.",
+        "No new37-entry table: sequential interleave initializer lists each at most15 pair<uint32,uint32> plus16-byte view, peak136; scopes do not overlap.",
+        "Summary uses24 checked uint32 used counts, hash8/output8, exists and six boundary booleans (119 before final alignment, target120); no word archives.",
+        "FOUR Limits200 and TWO Expected1664 are exterior to caller2048; no padding/global/header credit."
+      ]
+    },
+    "body8192": {
+      "objects": {
+        "outer_Jets_and_root_points": 768,
+        "side_loop_points_Jets_scalars": 2144,
+        "twelve_Point_slots": 1728,
+        "twelve_Jet_slots": 576,
+        "four_Matrix_slots": 1728,
+        "loop_indices_control": 96,
+        "ExceptionState": 16,
+        "norm_root_scalar_returns": 96,
+        "angle_trig_reciprocal_returns": 96,
+        "check_arguments_labels_references": 128,
+        "library_error_leaf": 512,
+        "current_pending_y_arguments": 16
+      },
+      "named": 7904,
+      "unused": 288,
+      "selected": 8192
+    },
+    "interval8192": {
+      "objects": {
+        "relative_54_original_supported_intervals": 1296,
+        "LD_points_operands_local_pending": 1728,
+        "LD_frames_operands_local_pending": 1152,
+        "two_solid_description_allowance": 1024,
+        "pending_proof_returns": 512,
+        "scalar_owner_hip_error_helpers_including_library512": 2480
+      },
+      "named": 8192,
+      "unused": 0,
+      "selected": 8192
+    }
+  },
+  "construction_audit3072": {
+    "named_components": {
+      "twelve_LdBounds32_argument_local_pending_slots": {
+        "bytes": 384,
+        "roles": "two input arguments/local/pending scalar interval results plus four product endpoints and root/max/abs/reciprocal alternatives; peak12; never by-value LDPoint"
+      },
+      "six_LDPoint96_by_reference_destinations": {
+        "bytes": 576,
+        "roles": "root XYZ; active original sole XYZ; active rotated hip offset; hip XYZ; ankle XYZ; displacement XYZ. Helpers borrow and write by reference; overwrite only after last consumer."
+      },
+      "fortyeight_long_double16_scalars": {
+        "bytes": 768,
+        "roles": "8 retained yaw/link/threshold scalars;6 active original chart scalars;18 active direct alpha/beta/gamma/F1/F2/G1/G2/cone/roll/regularity slots;16 nested primitive/root/allowance operand-local-return slots. Reuse after last consumer, no stored p/q/inward bounds."
+      },
+      "thirtytwo_double8_literal_reconstruction_slots": {
+        "bytes": 256,
+        "roles": "24 current/pending Constant-term argument slots;8 actual Y/constant-selection/max-abs argument-result slots. TWO reconstructed Requests1368 separately exterior."
+      },
+      "references_closures_environment_indices128": {
+        "bytes": 128,
+        "roles": "Environment16 + three indices24 + borrowed references48 + four pointer-sized predicate/label/control slots32 + loop flags8"
+      },
+      "independent_library_error_leaf512": {
+        "bytes": 512,
+        "roles": "sqrt/libm/check/printing/error alternatives separate from future measured project frames; no archive"
+      }
+    },
+    "named_bytes": 2624,
+    "unused": 448,
+    "selected": 3072,
+    "exterior_requests": 1368,
+    "actual_lexical_code_and_frames": "UNKNOWN"
+  },
+  "test_manifest": {
+    "status": "SOURCE-ONLY MATCHED REGISTRATION DRAFT; no implementation/actual admission",
+    "issue": 505,
+    "actual_layouts": "UNKNOWN",
+    "complete_physical_resources": "UNKNOWN",
+    "outcome": "UNKNOWN",
+    "compiler_API_runtime_numerical_calls": 0,
+    "candidate": "root_y_both_ankle_reach_roll_slice=0/version4",
+    "lowerable_limits": [
+      {
+        "index": 0,
+        "field": "phase.graphs",
+        "default": 1
+      },
+      {
+        "index": 1,
+        "field": "phase.legs",
+        "default": 2
+      },
+      {
+        "index": 2,
+        "field": "phase.bodies",
+        "default": 1
+      },
+      {
+        "index": 3,
+        "field": "phase.sectors",
+        "default": 3
+      },
+      {
+        "index": 4,
+        "field": "phase.timing",
+        "default": 6
+      },
+      {
+        "index": 5,
+        "field": "source_guards",
+        "default": 64
+      },
+      {
+        "index": 6,
+        "field": "projection_guards",
+        "default": 256
+      },
+      {
+        "index": 7,
+        "field": "definition_guards",
+        "default": 31
+      },
+      {
+        "index": 8,
+        "field": "sole_extrema",
+        "default": 4
+      },
+      {
+        "index": 9,
+        "field": "source_coordinates",
+        "default": 8
+      },
+      {
+        "index": 10,
+        "field": "intersection_operations",
+        "default": 4
+      },
+      {
+        "index": 11,
+        "field": "midpoint_operations",
+        "default": 4
+      },
+      {
+        "index": 12,
+        "field": "allocation_operations",
+        "default": 6
+      },
+      {
+        "index": 13,
+        "field": "pressure_candidates",
+        "default": 2
+      },
+      {
+        "index": 14,
+        "field": "disk_edges",
+        "default": 16
+      },
+      {
+        "index": 15,
+        "field": "self_body_guards",
+        "default": 63
+      },
+      {
+        "index": 16,
+        "field": "self_pairs",
+        "default": 105
+      },
+      {
+        "index": 17,
+        "field": "self_axes",
+        "default": 1470
+      },
+      {
+        "index": 18,
+        "field": "self_signed_trials",
+        "default": 2940
+      },
+      {
+        "index": 19,
+        "field": "self_owners",
+        "default": 14
+      },
+      {
+        "index": 20,
+        "field": "self_hip_complements",
+        "default": 2
+      },
+      {
+        "index": 21,
+        "field": "unit_axis_operations",
+        "default": 24
+      },
+      {
+        "index": 22,
+        "field": "output_bytes",
+        "default": 16777216
+      },
+      {
+        "index": 23,
+        "field": "construction_guards",
+        "default": 37
+      },
+      {
+        "index": 24,
+        "field": "construction_operations",
+        "default": 226
+      }
+    ],
+    "roster": [
+      {
+        "label": "A01",
+        "purpose": "ONE default public FIRST printed before assertions; outcome UNKNOWN",
+        "gate": "genuine creator success",
+        "audits": "only here, three sequential genuinely earned scopes"
+      },
+      {
+        "label": "A02",
+        "purpose": "zero",
+        "field_index": 0,
+        "field": "phase.graphs",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A03",
+        "purpose": "zero",
+        "field_index": 1,
+        "field": "phase.legs",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A04",
+        "purpose": "zero",
+        "field_index": 2,
+        "field": "phase.bodies",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A05",
+        "purpose": "zero",
+        "field_index": 3,
+        "field": "phase.sectors",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A06",
+        "purpose": "zero",
+        "field_index": 4,
+        "field": "phase.timing",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A07",
+        "purpose": "zero",
+        "field_index": 5,
+        "field": "source_guards",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A08",
+        "purpose": "zero",
+        "field_index": 6,
+        "field": "projection_guards",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A09",
+        "purpose": "zero",
+        "field_index": 7,
+        "field": "definition_guards",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A10",
+        "purpose": "zero",
+        "field_index": 8,
+        "field": "sole_extrema",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A11",
+        "purpose": "zero",
+        "field_index": 9,
+        "field": "source_coordinates",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A12",
+        "purpose": "zero",
+        "field_index": 10,
+        "field": "intersection_operations",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A13",
+        "purpose": "zero",
+        "field_index": 11,
+        "field": "midpoint_operations",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A14",
+        "purpose": "zero",
+        "field_index": 12,
+        "field": "allocation_operations",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A15",
+        "purpose": "zero",
+        "field_index": 13,
+        "field": "pressure_candidates",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A16",
+        "purpose": "zero",
+        "field_index": 14,
+        "field": "disk_edges",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A17",
+        "purpose": "zero",
+        "field_index": 15,
+        "field": "self_body_guards",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A18",
+        "purpose": "zero",
+        "field_index": 16,
+        "field": "self_pairs",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A19",
+        "purpose": "zero",
+        "field_index": 17,
+        "field": "self_axes",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A20",
+        "purpose": "zero",
+        "field_index": 18,
+        "field": "self_signed_trials",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A21",
+        "purpose": "zero",
+        "field_index": 19,
+        "field": "self_owners",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A22",
+        "purpose": "zero",
+        "field_index": 20,
+        "field": "self_hip_complements",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A23",
+        "purpose": "zero",
+        "field_index": 21,
+        "field": "unit_axis_operations",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A24",
+        "purpose": "zero",
+        "field_index": 22,
+        "field": "output_bytes",
+        "value": 0,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected output headers"
+      },
+      {
+        "label": "A25",
+        "purpose": "zero",
+        "field_index": 23,
+        "field": "construction_guards",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A26",
+        "purpose": "zero",
+        "field_index": 24,
+        "field": "construction_operations",
+        "value": 0,
+        "gate": "structured FIRST count>0",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A27",
+        "purpose": "raised",
+        "field_index": 0,
+        "field": "phase.graphs",
+        "value": 2,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A28",
+        "purpose": "raised",
+        "field_index": 1,
+        "field": "phase.legs",
+        "value": 3,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A29",
+        "purpose": "raised",
+        "field_index": 2,
+        "field": "phase.bodies",
+        "value": 2,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A30",
+        "purpose": "raised",
+        "field_index": 3,
+        "field": "phase.sectors",
+        "value": 4,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A31",
+        "purpose": "raised",
+        "field_index": 4,
+        "field": "phase.timing",
+        "value": 7,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A32",
+        "purpose": "raised",
+        "field_index": 5,
+        "field": "source_guards",
+        "value": 65,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A33",
+        "purpose": "raised",
+        "field_index": 6,
+        "field": "projection_guards",
+        "value": 257,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A34",
+        "purpose": "raised",
+        "field_index": 7,
+        "field": "definition_guards",
+        "value": 32,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A35",
+        "purpose": "raised",
+        "field_index": 8,
+        "field": "sole_extrema",
+        "value": 5,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A36",
+        "purpose": "raised",
+        "field_index": 9,
+        "field": "source_coordinates",
+        "value": 9,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A37",
+        "purpose": "raised",
+        "field_index": 10,
+        "field": "intersection_operations",
+        "value": 5,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A38",
+        "purpose": "raised",
+        "field_index": 11,
+        "field": "midpoint_operations",
+        "value": 5,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A39",
+        "purpose": "raised",
+        "field_index": 12,
+        "field": "allocation_operations",
+        "value": 7,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A40",
+        "purpose": "raised",
+        "field_index": 13,
+        "field": "pressure_candidates",
+        "value": 3,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A41",
+        "purpose": "raised",
+        "field_index": 14,
+        "field": "disk_edges",
+        "value": 17,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A42",
+        "purpose": "raised",
+        "field_index": 15,
+        "field": "self_body_guards",
+        "value": 64,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A43",
+        "purpose": "raised",
+        "field_index": 16,
+        "field": "self_pairs",
+        "value": 106,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A44",
+        "purpose": "raised",
+        "field_index": 17,
+        "field": "self_axes",
+        "value": 1471,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A45",
+        "purpose": "raised",
+        "field_index": 18,
+        "field": "self_signed_trials",
+        "value": 2941,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A46",
+        "purpose": "raised",
+        "field_index": 19,
+        "field": "self_owners",
+        "value": 15,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A47",
+        "purpose": "raised",
+        "field_index": 20,
+        "field": "self_hip_complements",
+        "value": 3,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A48",
+        "purpose": "raised",
+        "field_index": 21,
+        "field": "unit_axis_operations",
+        "value": 25,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A49",
+        "purpose": "raised",
+        "field_index": 22,
+        "field": "output_bytes",
+        "value": 16777217,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A50",
+        "purpose": "raised",
+        "field_index": 23,
+        "field": "construction_guards",
+        "value": 38,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A51",
+        "purpose": "raised",
+        "field_index": 24,
+        "field": "construction_operations",
+        "value": 227,
+        "gate": "creator success",
+        "expectation": "safe FP then unexpected invalid limits; source/construction/phase NOT_RUN"
+      },
+      {
+        "label": "A52",
+        "purpose": "reached used-minus-one",
+        "field_index": 0,
+        "field": "phase.graphs",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A53",
+        "purpose": "reached used-minus-one",
+        "field_index": 1,
+        "field": "phase.legs",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A54",
+        "purpose": "reached used-minus-one",
+        "field_index": 2,
+        "field": "phase.bodies",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A55",
+        "purpose": "reached used-minus-one",
+        "field_index": 3,
+        "field": "phase.sectors",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A56",
+        "purpose": "reached used-minus-one",
+        "field_index": 4,
+        "field": "phase.timing",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A57",
+        "purpose": "reached used-minus-one",
+        "field_index": 5,
+        "field": "source_guards",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A58",
+        "purpose": "reached used-minus-one",
+        "field_index": 6,
+        "field": "projection_guards",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A59",
+        "purpose": "reached used-minus-one",
+        "field_index": 7,
+        "field": "definition_guards",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A60",
+        "purpose": "reached used-minus-one",
+        "field_index": 8,
+        "field": "sole_extrema",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A61",
+        "purpose": "reached used-minus-one",
+        "field_index": 9,
+        "field": "source_coordinates",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A62",
+        "purpose": "reached used-minus-one",
+        "field_index": 10,
+        "field": "intersection_operations",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A63",
+        "purpose": "reached used-minus-one",
+        "field_index": 11,
+        "field": "midpoint_operations",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A64",
+        "purpose": "reached used-minus-one",
+        "field_index": 12,
+        "field": "allocation_operations",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A65",
+        "purpose": "reached used-minus-one",
+        "field_index": 13,
+        "field": "pressure_candidates",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A66",
+        "purpose": "reached used-minus-one",
+        "field_index": 14,
+        "field": "disk_edges",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A67",
+        "purpose": "reached used-minus-one",
+        "field_index": 15,
+        "field": "self_body_guards",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A68",
+        "purpose": "reached used-minus-one",
+        "field_index": 16,
+        "field": "self_pairs",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A69",
+        "purpose": "reached used-minus-one",
+        "field_index": 17,
+        "field": "self_axes",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A70",
+        "purpose": "reached used-minus-one",
+        "field_index": 18,
+        "field": "self_signed_trials",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A71",
+        "purpose": "reached used-minus-one",
+        "field_index": 19,
+        "field": "self_owners",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A72",
+        "purpose": "reached used-minus-one",
+        "field_index": 20,
+        "field": "self_hip_complements",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A73",
+        "purpose": "reached used-minus-one",
+        "field_index": 21,
+        "field": "unit_axis_operations",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A74",
+        "purpose": "reached used-minus-one",
+        "field_index": 22,
+        "field": "output_bytes",
+        "value": "REQUIRED-1",
+        "gate": "structured FIRST baseline",
+        "expectation": "structured required-room output_capacity; source/constructor/phase NOT_RUN"
+      },
+      {
+        "label": "A75",
+        "purpose": "reached used-minus-one",
+        "field_index": 23,
+        "field": "construction_guards",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A76",
+        "purpose": "reached used-minus-one",
+        "field_index": 24,
+        "field": "construction_operations",
+        "value": "FIRST successful charged count-1",
+        "gate": "structured FIRST count>1; count0/1 honest SKIP",
+        "expectation": "genuine selected hard capacity; failed charge no count/attempt/write, prior ordinary first cause and earlier earned publications preserved"
+      },
+      {
+        "label": "A77",
+        "purpose": "all24 work fields exact-used; output REQUIRED",
+        "gate": "any structured A01, including ordinary SliceUnavailable/capacity/unsupported; unexpected disables baseline-dependent calls",
+        "expectation": "same earned-only hash, complete causes/masks/cursors/availability/clock/owned bytes"
+      },
+      {
+        "label": "A78",
+        "purpose": "FE_DOWNWARD",
+        "gate": "creator success and representable saved/restored regime",
+        "expectation": "unsafe FP-FIRST error"
+      },
+      {
+        "label": "A79",
+        "purpose": "FE_UPWARD",
+        "gate": "creator success and representable saved/restored regime",
+        "expectation": "unsafe FP-FIRST error"
+      },
+      {
+        "label": "A80",
+        "purpose": "FE_TOWARDZERO",
+        "gate": "creator success and representable saved/restored regime",
+        "expectation": "unsafe FP-FIRST error"
+      },
+      {
+        "label": "A81",
+        "purpose": "MXCSR FTZ bit15",
+        "gate": "creator success and supported control, otherwise SKIP",
+        "expectation": "unsafe FP-FIRST error"
+      },
+      {
+        "label": "A82",
+        "purpose": "MXCSR DAZ bit6",
+        "gate": "creator success and supported control, otherwise SKIP",
+        "expectation": "unsafe FP-FIRST error"
+      },
+      {
+        "label": "A83",
+        "purpose": "MXCSR nonnearest (control & ~(3U<<13)) | (1U<<13), otherwise normal fenv",
+        "gate": "creator success and supported control, otherwise SKIP",
+        "expectation": "unsafe FP-FIRST error"
+      },
+      {
+        "label": "A84",
+        "purpose": "Candidate255 in safe environment",
+        "gate": "creator success",
+        "expectation": "unexpected invalid candidate"
+      },
+      {
+        "label": "A85",
+        "purpose": "copy original into alias; move alias into saved; assess genuinely empty alias once; restore alias while original valid",
+        "gate": "creator success",
+        "expectation": "structured invalid_binding at charged S01; no constructor or phase"
+      },
+      {
+        "label": "A86",
+        "purpose": "move original to valid moved-to; assess moved-to once; restore original",
+        "gate": "creator success",
+        "expectation": "same owner; baseline comparison only if available"
+      },
+      {
+        "label": "A87",
+        "purpose": "copy survivor; move original into scoped discard; DESTROY discard BEFORE assessment; assess survivor while original genuinely empty; restore original afterward",
+        "gate": "creator success",
+        "expectation": "genuine copy-after-original-release; no hidden creator result survives"
+      },
+      {
+        "label": "A88",
+        "purpose": "assess restored original after prior lifetime controls",
+        "gate": "creator success",
+        "expectation": "genuine same owner; baseline comparison only if available"
+      },
+      {
+        "label": "A89",
+        "purpose": "source0 + construction_guards0",
+        "gate": "structured A01 source count>0",
+        "expectation": "source capacity prevents construction"
+      },
+      {
+        "label": "A90",
+        "purpose": "construction_guards0 + construction_operations0",
+        "gate": "structured A01 guard count>0",
+        "expectation": "G01 capacity prevents operations"
+      },
+      {
+        "label": "A91",
+        "purpose": "construction_operations0 + phase.graphs0",
+        "gate": "structured A01 operation count>0",
+        "expectation": "G01\u201306 then O001 capacity; no Key/clock/phase"
+      },
+      {
+        "label": "A92",
+        "purpose": "fixed conditional word crossing",
+        "field": "construction_operations",
+        "value": 64,
+        "gate": "structured A01; actual source_enrolled AND64/fullmask; operation count>64; O064 actually written AND ALL G01\u2013G10 actually written",
+        "expectation": {
+          "upcoming_one_based_row": "O065",
+          "stored_zero_based_cursor": 64,
+          "side": 0,
+          "charged_operations": 64,
+          "prefix_word_bit_counts": [
+            64,
+            0,
+            0,
+            0
+          ],
+          "successful_guards": 10,
+          "guard_prefix_bits": 10,
+          "failed_charge_attempted_and_written": false,
+          "absent": "PORT rho_p",
+          "no_key_clock_or_phase": true
+        }
+      },
+      {
+        "label": "A93",
+        "purpose": "fixed conditional word crossing",
+        "field": "construction_operations",
+        "value": 65,
+        "gate": "structured A01; actual source_enrolled AND64/fullmask; operation count>65; O065 actually written AND ALL G01\u2013G10 actually written",
+        "expectation": {
+          "upcoming_one_based_row": "O066",
+          "stored_zero_based_cursor": 65,
+          "side": 0,
+          "charged_operations": 65,
+          "prefix_word_bit_counts": [
+            64,
+            1,
+            0,
+            0
+          ],
+          "successful_guards": 10,
+          "guard_prefix_bits": 10,
+          "failed_charge_attempted_and_written": false,
+          "absent": "PORT q endpoint",
+          "no_key_clock_or_phase": true
+        }
+      },
+      {
+        "label": "A94",
+        "purpose": "fixed conditional word crossing",
+        "field": "construction_operations",
+        "value": 128,
+        "gate": "structured A01; actual source_enrolled AND64/fullmask; operation count>128; O128 actually written AND ALL G01\u2013G20 actually written",
+        "expectation": {
+          "upcoming_one_based_row": "O129",
+          "stored_zero_based_cursor": 128,
+          "side": 1,
+          "charged_operations": 128,
+          "prefix_word_bit_counts": [
+            64,
+            64,
+            0,
+            0
+          ],
+          "successful_guards": 20,
+          "guard_prefix_bits": 20,
+          "failed_charge_attempted_and_written": false,
+          "absent": "STAR u",
+          "no_key_clock_or_phase": true
+        }
+      },
+      {
+        "label": "A95",
+        "purpose": "fixed conditional word crossing",
+        "field": "construction_operations",
+        "value": 129,
+        "gate": "structured A01; actual source_enrolled AND64/fullmask; operation count>129; O129 actually written AND ALL G01\u2013G20 actually written",
+        "expectation": {
+          "upcoming_one_based_row": "O130",
+          "stored_zero_based_cursor": 129,
+          "side": 1,
+          "charged_operations": 129,
+          "prefix_word_bit_counts": [
+            64,
+            64,
+            1,
+            0
+          ],
+          "successful_guards": 20,
+          "guard_prefix_bits": 20,
+          "failed_charge_attempted_and_written": false,
+          "absent": "STAR v/G21",
+          "no_key_clock_or_phase": true
+        }
+      },
+      {
+        "label": "A96",
+        "purpose": "fixed conditional word crossing",
+        "field": "construction_operations",
+        "value": 192,
+        "gate": "structured A01; actual source_enrolled AND64/fullmask; operation count>192; O192 actually written AND ALL G01\u2013G30 actually written",
+        "expectation": {
+          "upcoming_one_based_row": "O193",
+          "stored_zero_based_cursor": 192,
+          "side": 0,
+          "charged_operations": 192,
+          "prefix_word_bit_counts": [
+            64,
+            64,
+            64,
+            0
+          ],
+          "successful_guards": 30,
+          "guard_prefix_bits": 30,
+          "failed_charge_attempted_and_written": false,
+          "absent": "PORT rollMargin/G31",
+          "no_key_clock_or_phase": true
+        }
+      },
+      {
+        "label": "A97",
+        "purpose": "fixed conditional word crossing",
+        "field": "construction_operations",
+        "value": 193,
+        "gate": "structured A01; actual source_enrolled AND64/fullmask; operation count>193; O193 actually written AND ALL G01\u2013G31 actually written",
+        "expectation": {
+          "upcoming_one_based_row": "O194",
+          "stored_zero_based_cursor": 193,
+          "side": 1,
+          "charged_operations": 193,
+          "prefix_word_bit_counts": [
+            64,
+            64,
+            64,
+            1
+          ],
+          "successful_guards": 31,
+          "guard_prefix_bits": 31,
+          "failed_charge_attempted_and_written": false,
+          "absent": "STAR direct verification",
+          "no_key_clock_or_phase": true
+        }
+      }
+    ],
+    "operation": {
+      "rows": 226,
+      "words": 4,
+      "complete_words": [
+        "0xffffffffffffffff",
+        "0xffffffffffffffff",
+        "0xffffffffffffffff",
+        "0x00000003ffffffff"
+      ],
+      "complete_cursor": 225,
+      "rule": "bit=row-1; word=(row-1)/64; bit-in-word=(row-1)%64; never shift64"
+    },
+    "guard": {
+      "rows": 37,
+      "uint64_complete": "0x0000001fffffffff",
+      "complete_cursor": 36,
+      "upper27bits_zero": true
+    },
+    "complete_side": 255,
+    "earned_scalar_rows": {
+      "lo": 154,
+      "hi": 157,
+      "y": 160
+    },
+    "zero_mask_rows_bit_order": [
+      89,
+      141,
+      63,
+      74,
+      115,
+      126,
+      81,
+      133
+    ],
+    "work_order": [
+      "phase.graphs",
+      "phase.legs",
+      "phase.bodies",
+      "phase.sectors",
+      "phase.timing",
+      "source_guards",
+      "projection_guards",
+      "definition_guards",
+      "sole_extrema",
+      "source_coordinates",
+      "intersection_operations",
+      "midpoint_operations",
+      "allocation_operations",
+      "pressure_candidates",
+      "disk_edges",
+      "self_body_guards",
+      "self_pairs",
+      "self_axes",
+      "self_signed_trials",
+      "self_owners",
+      "self_hip_complements",
+      "unit_axis_operations",
+      "construction_guards",
+      "construction_operations",
+      "phase_calls",
+      "preflight_guards"
+    ],
+    "aggregate_work_ceilings": [
+      {
+        "field": "phase.graphs",
+        "maximum": 97
+      },
+      {
+        "field": "phase.legs",
+        "maximum": 194
+      },
+      {
+        "field": "phase.bodies",
+        "maximum": 97
+      },
+      {
+        "field": "phase.sectors",
+        "maximum": 291
+      },
+      {
+        "field": "phase.timing",
+        "maximum": 582
+      },
+      {
+        "field": "source_guards",
+        "maximum": 6208
+      },
+      {
+        "field": "projection_guards",
+        "maximum": 24832
+      },
+      {
+        "field": "definition_guards",
+        "maximum": 3007
+      },
+      {
+        "field": "sole_extrema",
+        "maximum": 388
+      },
+      {
+        "field": "source_coordinates",
+        "maximum": 776
+      },
+      {
+        "field": "intersection_operations",
+        "maximum": 388
+      },
+      {
+        "field": "midpoint_operations",
+        "maximum": 388
+      },
+      {
+        "field": "allocation_operations",
+        "maximum": 582
+      },
+      {
+        "field": "pressure_candidates",
+        "maximum": 194
+      },
+      {
+        "field": "disk_edges",
+        "maximum": 1552
+      },
+      {
+        "field": "self_body_guards",
+        "maximum": 6111
+      },
+      {
+        "field": "self_pairs",
+        "maximum": 10185
+      },
+      {
+        "field": "self_axes",
+        "maximum": 142590
+      },
+      {
+        "field": "self_signed_trials",
+        "maximum": 285180
+      },
+      {
+        "field": "self_owners",
+        "maximum": 1358
+      },
+      {
+        "field": "self_hip_complements",
+        "maximum": 194
+      },
+      {
+        "field": "unit_axis_operations",
+        "maximum": 2328
+      },
+      {
+        "field": "construction_guards",
+        "maximum": 3589
+      },
+      {
+        "field": "construction_operations",
+        "maximum": 21922
+      },
+      {
+        "field": "phase_calls",
+        "maximum": 97
+      },
+      {
+        "field": "preflight_guards",
+        "maximum": 97
+      }
+    ],
+    "seven_uint16_maxima": {
+      "creators": 1,
+      "consumers": 97,
+      "skips": 97,
+      "next_slot": 98,
+      "construction_audits": 1,
+      "body_audits": 1,
+      "interval_records": 121
+    },
+    "totals_target": 120,
+    "summary_target": 120,
+    "globals_reservation": 140,
+    "raw": 0,
+    "inspectors": 0,
+    "shared_stream_bytes": 16384,
+    "output_ceiling": 16777216,
+    "checks": "separate uint64 checks/uint32 failures; checked increment and all work/roster narrowing/accumulation; counters never silently wrap",
+    "preflight_per_actual_consumer": 1,
+    "error_precedence": [
+      "intermediate endpoint04 unsupported floating point",
+      "intermediate endpoint04 invalid candidate",
+      "intermediate endpoint04 invalid limits",
+      "intermediate endpoint04 output headers"
+    ],
+    "required_output": "constexpr TWOsizeof(Expected)+sizeof(Cell)",
+    "actual_owned_output": "TWOsizeof(Expected)+actual_vector_capacity*sizeof(Cell)",
+    "first_scope": "A01 only; no predicted original success, sector, branch or geometry. Print FIRST before mandatory outcomes.",
+    "audits": "construction then body then interval strictly sequential; genuine earned fields only; no report/word archive/new query/RAW/inspector; maximum1/1/121",
+    "nested_original_bounds": "NOT_INTERPRETED without genuine supported carrier; preserve reason condition/side/predicate/first/last/depth as metadata, never infer failed margin or call-range change",
+    "guard_shift_rule": "uint64_t{1} before guard shifts0..36; never inherited1U; perword count0/64 branch avoids shift64"
+  },
+  "source_audit_lifetime_and_gate_details": {
+    "status": "SOURCE-ONLY lexical IMPLEMENTATION PLAN; actual objects/frames UNKNOWN",
+    "issue": 505,
+    "initializer_refinement": "distinct fullRefusal184 temporary through reset assignment before charge, independent of exterior368; name only from existing unused4096/6144 margins; no stage/pool/ceiling changes",
+    "new_graph_metadata_lifetimes": "per-word scalar prefix helper/no owning four-word array; sequential<=15pair+view interleave blocks peak136; 24-work arrays current/pending192 each preserved; no extra Summary words; six booleans plus exists keep target120",
+    "old_BODY_live_header_identity": "TWOowning1664 headers LIVE3328; Slice contained inside each; headergrowth128 total vs old3200; static152 distinct; body48880/headroom272",
+    "sequential_audit_death_boundaries": "constructor4096/scratch/current-pending validator80 die before Key/graph; original source adapter/carriers die before constructor. A01 construction3072/Requests1368 die before body; bodyTWO8400 Oracles/Requests1368 die before interval8192; all current/pending Expected/fourLimits/caller/arena retained independently",
+    "source_creator_graph_pools": "entireold33208/nested28880/24680 and32768graph immutable; creator7152\u22648192; graph48536/body48880\u226449152 forecasts only",
+    "error_and_library_inventory": "Each utility names explicit bounded library/environment/error leaf; headers include std::string alternatives, transferred heap<=57 inclusiveNUL; no duplicate error heap assumed; all current/pending returns charged without NRVO. Active phase_scalar_limits BSS144+guard8=152 independent ofTestglobal140.",
+    "complete_physical_stage_maps": "UNKNOWN until future both strict compiler PIC/native/included layouts/raw duplicate-preserving rows/symbols/disassembly complete descendants, not substituted source pool",
+    "compiler_runtime_API_numerical_calls": 0,
+    "outcomes": "UNKNOWN"
+  },
+  "shared_map_references": {
+    "test_manifest.source_stage_maps": "source_stage_maps",
+    "test_manifest.source_test_pools": "test_source_pools",
+    "test_manifest.construction_audit3072": "construction_audit3072",
+    "source_audit.Core_selected_source_stage_maps_exact": "source_stage_maps",
+    "source_audit.Core_selected_pools_explicit_initializer_refinement": "core_source_pools",
+    "source_audit.Test_selected_pools_exact": "test_source_pools",
+    "source_audit.construction_audit3072": "construction_audit3072",
+    "selection_scope": "Only test_source_pools current four entries and separate construction_audit3072 are selected. historical_superseded_test_pools.construction_audit2048 is preserved provenance only, excluded from all current selected pool and source-stage references."
+  },
+  "historical_superseded_test_pools": {
+    "construction_audit2048": {
+      "selection_status": "HISTORICAL_SUPERSEDED_NOT_SELECTED_FOR_ENDPOINT04",
+      "superseded_by_selected_record": "construction_audit3072",
+      "original_historical_data_unchanged": {
+        "selected": 2048,
+        "objects": {
+          "root_and_sole_two_LD_bounds_vectors": 192,
+          "twelve_long_double_scalar_array": 192,
+          "chart_constant_value_local_current_pending_return": 48,
+          "chart_constant_loop_and_references": 24,
+          "bounds_assignment_current_pending_brace_values": 64,
+          "four_value_max_initializer_list_and_view": 80,
+          "sqrt_operand_current_pending_return": 48,
+          "max_abs_arguments_current_pending_return_slots": 64,
+          "sixteen_LD_expression_operand_result_slot_allowance": 256,
+          "ExceptionState": 16,
+          "three_loop_indices": 24,
+          "check_arguments_labels_references": 128,
+          "current_pending_Y_scalar_arguments": 16,
+          "independent_library_error_leaf": 512
+        },
+        "named": 1664,
+        "unused": 384
+      },
+      "current_stage_map_participation": false
+    }
+  },
+  "selected_test_pool_references": {
+    "creator": "test_source_pools.creator1024",
+    "graph_caller": "test_source_pools.graph2048",
+    "body": "test_source_pools.body8192",
+    "interval": "test_source_pools.interval8192",
+    "construction_audit": "construction_audit3072"
+  },
+  "pool_label_revision": {
+    "kind": "HISTORICAL_2048_AUDIT_SELECTION_LABEL_ONLY",
+    "prior_public_inventory_sha256": "b3a85c55766f7530f87d13fe2e71b394de373c70e3a1f05242bdca5a41826458",
+    "quantitative_change": false,
+    "explanation": "Move unchanged old2048 plan to explicitly historical namespace. Selected Endpoint04 audit remains only3072 (named2624/UNUSED448); no stage, source reservation, primitive, schema, roster or gate change."
+  }
+}
