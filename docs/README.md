@@ -95,7 +95,9 @@ player's station-to-flight journey.
 - [Endpoint04 finite manifest and audit inventory](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04_TEST_MANIFEST.md):
   exact97 controls, conditional independent audits and complete source storage plans.
 - [Endpoint04 arithmetic registration](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04.md):
-  one conditional BOTH-ankle/reach/roll root-height program; actual resources and endpoint outcome remain unknown.
+  admitted BOTH-ankle construction and nominal contact/load; retained unresolved pelvis–PORT-thigh SELF separation.
+- [Original hip-containment contract audit](ORIGIN_BOARDING_HIP_CONTAINMENT_AUDIT.md):
+  separates permitted joint overlap from conservative ownership and separation certificates.
 - [Conditional BOTH-ankle construction](ORIGIN_BOARDING_BOTH_ANKLE_CONSTRUCTION.md):
   derives a conservative connected root-height subset before exact registration or evaluation.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
