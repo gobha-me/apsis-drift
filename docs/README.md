@@ -98,6 +98,10 @@ player's station-to-flight journey.
   admitted BOTH-ankle construction and nominal contact/load; retained unresolved pelvis–PORT-thigh SELF separation.
 - [Original hip-containment contract audit](ORIGIN_BOARDING_HIP_CONTAINMENT_AUDIT.md):
   separates permitted joint overlap from conservative ownership and separation certificates.
+- [Hip joint-plane method registration](ORIGIN_BOARDING_HIP_JOINT_PLANE_METHOD01.md):
+  finite section evidence for the original box; implementation and numerical outcomes remain pending.
+- [Hip joint-plane test manifest](ORIGIN_BOARDING_HIP_JOINT_PLANE_METHOD01_TEST_MANIFEST.md):
+  bounded controls and an independent same-call geometry and distance check.
 - [Conditional BOTH-ankle construction](ORIGIN_BOARDING_BOTH_ANKLE_CONSTRUCTION.md):
   derives a conservative connected root-height subset before exact registration or evaluation.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
