@@ -2275,6 +2275,73 @@ void slot(std::size_t n, bool executed) {
     return;
   }
   print_first(*result);
+  check(complete_slice(*result) &&
+            result->slice.operation_attempted[0] ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_attempted[1] ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_attempted[2] ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_attempted[3] == 0x3ffffffffULL &&
+            result->slice.guard_attempted == 0x1fffffffffULL &&
+            result->slice.operation == 225 && result->slice.guard == 36 &&
+            result->slice.side == 255 &&
+            result->slice.condition == SliceCondition::none &&
+            result->reporting_elapsed_seconds == 2,
+        "Retained FIRST authentic source and complete226/37 construction");
+  check(result->slice.complete && result->slice.arithmetic_supported &&
+            std::isfinite(result->slice.lo) && std::isfinite(result->slice.y) &&
+            std::isfinite(result->slice.hi) &&
+            result->slice.lo < result->slice.y &&
+            result->slice.y < result->slice.hi &&
+            !result->slice.limiting_bound.supported,
+        "Retained FIRST supported strict slice membership");
+  check(result->cells.size() == 1 && result->work.phase_calls == 1 &&
+            result->cells[0].phase.complete && result->kinematic_complete &&
+            result->constant_state && result->projection_complete &&
+            result->plane_identities && result->nominal_equilibrium &&
+            result->finite_contact_supported &&
+            result->nominal_load_supported &&
+            result->nominal_support_complete && result->self_body_complete &&
+            result->cells[0].projection_complete &&
+            result->cells[0].nominal_support_complete &&
+            result->cells[0].self_body_complete &&
+            result->cells[0].definition_evaluated == 0x7fffffffU &&
+            result->cells[0].self_body_evaluated == 0x7fffffffffffffffULL &&
+            result->cells[0].unit_axis_attempted == 0xffffffU &&
+            result->cells[0].unit_axis_written == 0xffffffU &&
+            result->cells[0].unit_axis_complete_mask == 15 &&
+            result->cells[0].unit_axis_cursor == 23,
+        "Retained FIRST accepted phase and earned current/contact/load/body "
+        "prefix");
+  check(
+      result->state == State::unresolved && !result->complete &&
+          !result->self_complete &&
+          result->stop_condition == Condition::unresolved_self_pair &&
+          result->stop_stage == Stage::separation &&
+          result->stop_operation == 255 && result->stop_self_pair == 2 &&
+          result->stop_self_region == 1 && result->stop_self_axis == 8 &&
+          result->stop_self_sign == 1 && result->first_refusal &&
+          result->first_refusal->condition == Condition::unresolved_self_pair &&
+          result->first_refusal->predicate_condition ==
+              Condition::unresolved_self_pair &&
+          result->first_refusal->self_stage == Stage::separation &&
+          result->first_refusal->operation == 255 &&
+          result->first_refusal->self_pair == 2 &&
+          result->first_refusal->self_region == 1 &&
+          result->first_refusal->self_axis == 8 &&
+          result->first_refusal->self_sign == 1 &&
+          !result->first_refusal->limiting_bound.supported &&
+          result->cells.size() == 1 && !result->cells[0].self_complete &&
+          !result->cells[0].complete && result->cells[0].examined_pairs == 3 &&
+          result->cells[0].accepted_pairs == 2 &&
+          result->cells[0].owner_attempted_mask == 3 &&
+          result->cells[0].self_certificate_counts[1] == 1 &&
+          result->cells[0].self_certificate_counts[2] == 1 &&
+          result->cells[0].self_certificates[2] == SelfCertificate::not_run &&
+          result->cells[0].self_axes[2] == 255,
+      "Retained FIRST lazy unresolved SELF prefix without an earned "
+      "separation bound");
   accounting(*result, Limits{});
   capture(*result, summary);
   construction_audit(*result);
