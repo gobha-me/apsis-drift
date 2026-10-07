@@ -15,6 +15,7 @@ player's station-to-flight journey.
 
 - [Freedom roadmap](ROADMAP.md)
 - [C++ / Godot / TermForge ownership](GODOT_ADOPTION.md)
+- [Native memory budgeting](GODOT_ADOPTION.md#native-memory-budgeting)
 - [Concept](CONCEPT.md)
 - [Native flight session](NATIVE_FLIGHT_SESSION.md)
 - [Freedom save format](FREEDOM_SAVE_FORMAT.md)
