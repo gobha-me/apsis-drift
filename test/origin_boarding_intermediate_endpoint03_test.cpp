@@ -2194,6 +2194,96 @@ void slot(std::size_t n, bool executed) {
     return;
   }
   print_first(*result);
+  // Retained once-FIRST observations; these add no query or geometric
+  // authority.
+  check(result->source_enrolled && result->work.source_guards == 64 &&
+            result->source_evaluated ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.complete && result->slice.arithmetic_supported &&
+            result->slice.preflight_guards == 1 &&
+            result->work.construction_guards == 21 &&
+            result->work.construction_operations == 78 &&
+            result->slice.operation_attempted[0] ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_written[0] ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_attempted[1] == 0x3fffU &&
+            result->slice.operation_written[1] == 0x3fffU &&
+            result->slice.guard_attempted == 0x1fffffU &&
+            result->slice.guard_written == 0x1fffffU &&
+            result->slice.operation == 77 && result->slice.guard == 20 &&
+            result->slice.side == 255 &&
+            result->slice.condition == SliceCondition::none &&
+            !result->slice.limiting_bound.supported &&
+            result->reporting_elapsed_seconds == 2,
+        "Observed FIRST earns source64 and complete constructor78/21 only");
+  check(result->source_enrolled && result->slice.complete &&
+            result->slice.arithmetic_supported &&
+            result->slice.operation_written[0] ==
+                std::numeric_limits<std::uint64_t>::max() &&
+            result->slice.operation_written[1] == 0x3fffU &&
+            result->slice.guard_written == 0x1fffffU &&
+            result->slice.y == 0.5288999213015908 &&
+            result->slice.lo == 0.49306122159857413 &&
+            result->slice.hi == 0.56473862100460748 &&
+            result->slice.lo < result->slice.y &&
+            result->slice.y < result->slice.hi && result->slice.zero_mask == 3,
+        "Observed earned stored midpoint and strict interval replay exactly");
+  check(result->state == State::unresolved &&
+            result->stop_condition == Condition::phase_prerequisite &&
+            result->stop_stage == Stage::phase &&
+            result->stop_operation == 255 && result->first_refusal &&
+            result->first_refusal->condition == Condition::phase_prerequisite &&
+            result->first_refusal->predicate_condition ==
+                Condition::phase_prerequisite &&
+            result->first_refusal->self_stage == Stage::phase &&
+            result->first_refusal->operation == 255 &&
+            !result->first_refusal->limiting_bound.supported &&
+            result->first_refusal->phase.condition ==
+                BoardingRouteFootPhaseCondition::joint_sector &&
+            result->first_refusal->phase.predicate_condition ==
+                BoardingRouteFootPhaseCondition::none &&
+            result->first_refusal->phase.side == 0,
+        "Observed original PORT joint-sector refusal has no earned bound");
+  check(result->work.phase_calls == 1 && result->work.phase.graphs == 1 &&
+            result->work.phase.legs == 1 && result->work.phase.bodies == 0 &&
+            result->work.phase.sectors == 1 && result->work.phase.timing == 0 &&
+            result->work.definition_guards == 4 &&
+            result->work.projection_guards == 0 && result->cells.size() == 1 &&
+            result->cells.capacity() == 1 &&
+            result->output_capacity_bytes == 14048 &&
+            !result->cells[0].phase.complete &&
+            result->cells[0].definition_evaluated == 15,
+        "Observed original reached prefix stops at D04 before projection");
+  check(!result->arithmetic_supported && !result->kinematic_complete &&
+            !result->constant_state && !result->projection_complete &&
+            !result->plane_identities && !result->nominal_equilibrium &&
+            !result->finite_contact_supported &&
+            !result->nominal_load_supported &&
+            !result->nominal_support_complete && !result->self_body_complete &&
+            !result->self_complete && !result->complete,
+        "Complete construction does not earn phase, body, support or SELF");
+  check(
+      result->work.sole_extrema == 0 && result->work.source_coordinates == 0 &&
+          result->work.intersection_operations == 0 &&
+          result->work.midpoint_operations == 0 &&
+          result->work.allocation_operations == 0 &&
+          result->work.pressure_candidates == 0 &&
+          result->work.disk_edges == 0 && result->work.self_body_guards == 0 &&
+          result->work.self_pairs == 0 && result->work.self_axes == 0 &&
+          result->work.self_signed_trials == 0 &&
+          result->work.self_owners == 0 &&
+          result->work.self_hip_complements == 0 &&
+          result->work.unit_axis_operations == 0 && result->cells.size() == 1 &&
+          result->cells[0].self_body_evaluated == 0 &&
+          result->cells[0].unit_axis_attempted == 0 &&
+          result->cells[0].unit_axis_written == 0 &&
+          result->cells[0].unit_axis_complete_mask == 0 &&
+          result->cells[0].unit_axis_cursor == 255 &&
+          result->cells[0].owner_attempted_mask == 0 &&
+          result->cells[0].examined_pairs == 0 &&
+          result->cells[0].accepted_pairs == 0,
+      "Observed later contact, body and SELF stages remain NOT_RUN");
   accounting(*result, Limits{});
   capture(*result, summary);
   construction_audit(*result);

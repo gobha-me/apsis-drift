@@ -1517,3 +1517,43 @@ Held payload SHA256: `6c3176e877561137ee4542288bca95e274741cbf7788b4a588084546b7
 }
 ```
 
+
+## Retained first observation — 2026-10-07
+
+The one registered Endpoint03 program completed its source-bound reach-and-roll construction and independent nominal construction audit. Its fresh call to the unchanged original compiler remained unresolved at the PORT joint-sector check, before body construction. This establishes a completed necessary construction, with endpoint acceptance still unearned.
+
+The original source commit is `cdf1db31c89b99fae0c51040f034f577df21e796`. The independently reviewed final freeze is `58b12b5312ef8aaea71dd058b33479ea9a2f76d0eff739f7a8d2bbc13a36da46`, covering 1,187 source files, two immutable binaries, 77 receipts and 954 artifacts. It retains the complete original graph and source-enrollment reservations and the reviewed historical input aliases. GCC and Clang each ran once, in that order, after all resource, normal-link and freeze gates passed.
+
+Both original processes exited zero and produced identical 2,510-byte logs with SHA256 `961288368752ba9d3456fb39db6131ae85304a2811987e2ecae18fb1b3f988d2`. The logs, original test source, binaries, freeze, marker and source recovery bundle remain retained. Subsequent ordinary regression runs do not replace this observation.
+
+| Earned surface | Original observation |
+|---|---|
+| Genuine source | Admitted and complete; arena 4,096 bytes; creator work `21,1,2,2` |
+| Construction | All 78 operations and 21 guards completed and supported |
+| Operation masks | Both attempted and written words are `18446744073709551615,16383` |
+| Guard masks and final cursors | Attempted/written `2097151`; cursors `77,20,255` |
+| Stored midpoint | `0.5288999213015908`, strictly inside `[0.49306122159857413,0.56473862100460748]` |
+| Fresh program continuation | Requested clock 2 seconds; one original phase call; one retained cell/capacity 1; owned output 14,048 bytes |
+| Original phase work | Graphs 1, legs 1, bodies 0, sectors 1, timing 0 |
+| Original refusal | Joint-sector condition ordinal 6, PORT side 0; predicate ordinal 0 remains an unattributed default |
+| Endpoint state | Unresolved, incomplete; definition mask 15 |
+| Independent construction audit | One audit, using the supported complete slice |
+| Body and finite support | Body, contact, unit, owner, pair and SELF continuations not reached |
+
+The original nested refusal has no generic support flag for its limiting doubles. Their output remains `nested_bound=NOT_INTERPRETED`; the default predicate value does not identify a particular sector margin. This observation supplies neither a supported negative margin nor a collision or all-posture impossibility result. A source-only reached-sector attribution contract is the next diagnostic prerequisite for this same program.
+
+The fixed 93-slot roster used one genuine creator, 56 consumers and 37 documented skips; RAW and inspector counts remained zero. The construction audit count was one, with zero body poses and zero interval-record audits. Both compilers reported 3,772 checks and zero failures. Skips followed the registered reached-work conditions; no substitute query or alternate candidate was used.
+
+The original aggregate work record, in the registered 26-field order, is:
+
+```text
+8,7,0,6,0,1216,0,35,0,0,0,0,0,0,0,0,0,0,0,0,0,0,279,1064,9,56
+```
+
+Independent retained-outcome review: `9eb97ee4a569aa1c8c217e6b5766b65ca5de80e6874a75a8e9c5509bcf836c4c`. WORLD, the boarding route, loaded seat-pan support, actor movement and First Flight remain subsequent obligations; parent issues #462, #361 and #352 remain open.
+
+Publication validation completed locally after the reviewed six-check Test-only regression addition. Both full Release builds passed all 95 CTest contracts. Ten normal objects matched their strict measured objects byte-for-byte under the registered FP flags. Both ordinary Endpoint03 runs reported 3,778 checks and zero failures; all retained printed source/A01 rows and the aggregate were unchanged. The original once-only observation remains the 3,772-check record above.
+
+Pinned format20 and full lint20 passed, including 213 unique files from 216 selected compilation entries and the suppression-policy self-tests. All five fresh Godot 4.7.2 compatibility contracts passed: native walking, native save, saved flight, native start staging and Wayfarer operation. These isolated headless contracts do not qualify visible/hardware/audio play or the unresolved boarding route.
+
+The post-FIRST Test resource delta was independently reviewed: all eight duplicate-preserving stack-row multisets and measured layouts remained equal to the originals; all 17 complete physical stage maps retained their bounds, with peak 46,796 bytes against 49,152. The full original graph/source reservations and no-elision returns remain charged. The public registration prefix, old source prefixes, historical first observations and the complete Endpoint03 first-run freeze remain unchanged. Local validation receipt: `cdd73cb5eabf29dc1def81e7d8b82f15c91c599743aa105b5ae953d22ed11a9c`. Final independent publication review and the eight exact-head CI jobs remain required before merge.
