@@ -1222,3 +1222,22 @@ Exact held record SHA256: `8575f33d01f22e18dedcae370384b27140be2c6d9ee9bf6e39637
 }
 ```
 
+
+## Retained #501 outcome
+
+The registered once-FIRST executions used frozen HEAD `7fffef9de8e31fe0dd0388ab3398110c834eb4eb`. GCC and Clang each exited 0 with identical 1,132-byte logs, SHA256 `6dd65107c09abdc125349270da9249229658497098aa3024e01a1859d8f398c6`. The frozen admission receipt is `first-observation-freeze.json`, SHA256 `5a0a162378b7bd89ddbb9450a47ec387e6b9201614e710e1e72774dec8868a5a`. Validation retained 1 creator, 30 consumers, 0 skips, 1,140 checks and 0 failures; inspectors/raw/body/oracle calls were 0. No further execution occurred for this interpretation.
+
+A01 completed genuine fresh source 64, construction G21/O78 and capture C08. The companion is `complete=true`, `arithmetic_supported=true`, kind `joint_sector_refusal`, classification `strict_necessary_violation`. The original compiler remains `unresolved`, condition `joint_sector` 6, side PORT 0. Original charged counters are graphs 1 / legs 1 / bodies 0 / sectors 1 / timing 0, after exactly 1 phase invocation. Evidence completion grants no original phase, body, contact, support, SELF, route or gameplay acceptance.
+
+The actual attempted/written prefix mask 31 earns PORT margins m0..m4 only. The four preceding margins have nonnegative lower endpoints. Selected ordinal 4 is **ankle_pitch**, as fixed by the registered enum ([public header](../include/apsis_drift/origin_boarding_intermediate_sector_evidence02.hpp#L31)) and the original ordered array ([original compiler](../src/origin_boarding_planted_legs.cpp#L3545)). The retained supported selected interval, authenticated by the same-call prefix and limiting-bound equality checks, is:
+
+`[-0.007894727365671041, -0.0078947273656617394]`
+
+Its upper endpoint is strictly negative, so this is a strict necessary ankle-sector violation for the one unchanged source-bound Endpoint03 program. It is stronger than an interval-inclusion failure. It does not refute other postures, all root heights or the body/joint/world policy. Axial m5 and the later positive-shin test were not earned by this prefix; STARBOARD and all body/contact/SELF stages remain unvisited. The original reason’s first/last reporting fields remain `[0,0]` and depth 0 defaults; they do not change the authenticated whole-hold `[0,1]` call. The separate limiting-bound doubles are earned by C06.
+
+The exact original predicate is `F2/2 − |G2|·sqrt(3)/2 >= 0`, with supported outward interval arithmetic ([original margin computation](../src/origin_boarding_planted_legs.cpp#L3540)); the later separate branch additionally requires `F2.lower > 0`. In that same original sole-frame chart, `F2=(1−alpha)rho−gamma*dZ` and `G2=−((1−alpha)*dZ+gamma*rho)` ([original limb construction](../src/origin_boarding_planted_legs.cpp#L3481)). These operands come from the original hip/ankle displacement, reach and positive-root branch, not an inferred reporting angle or caller-normalized frame. The companion captured the original evaluated margin; it did not recompute a replacement ankle test.
+
+The Endpoint03 constructor proves its own registered nominal reach and both-roll prerequisites. Those predicates do not imply this original ankle-sector inequality or any later original sector/timing/body qualification. This retained attribution therefore closes the missing ordinal for #499’s unchanged refusal, without changing that FIRST result or either constructor.
+
+The next bounded prerequisite should be a source/equation review of how BOTH original ankle-sector inequalities constrain the existing root-height construction under held feet, yaw, lengths and regular branch. It should first establish the genuine same-chart premise and equality/positive-F2 obligations; no additional attribution replay is needed to identify this failure. If that contract is affirmed and an independent analytic construction is justified, a later exact preregistration may select one source-bound constructor that jointly earns reach, both-roll and both ankle predicates before fresh original compiler authority. It must preserve all original source/body/owner/joint/world policies and retain full original compiler→support→105SELF admission. No new candidate, height/angle, successful intersection, resource cap or expected outcome is selected here. Empty conservative intervals remain ordinary unavailable, not all-posture impossibility.
+
