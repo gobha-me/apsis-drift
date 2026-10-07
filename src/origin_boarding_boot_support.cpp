@@ -5784,3 +5784,393 @@ namespace apsis_drift {
   return d.state;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_endpoint03_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::intermediate_endpoint03_pressure_bridge(
+    const BoardingIntermediateEndpoint03CurrentToken& token,
+    BoardingIntermediateEndpoint03Diagnostic& d,
+    BoardingIntermediateEndpoint03Cell& c,
+    const BoardingIntermediateEndpoint03Limits& limits,
+    BoardingIntermediateEndpoint03Refusal& refusal)
+    -> BoardingIntermediateEndpoint03State {
+  using Why = BoardingIntermediateEndpoint03Condition;
+  using State = BoardingIntermediateEndpoint03State;
+  using Stage = BoardingIntermediateEndpoint03SelfStage;
+  using Access = BoardingIntermediatePauseSupportAccess;
+  // Authenticate every owned anchor before any borrowed pointer is followed.
+  if (!token.context() || token.owner() != &d || token.cell() != &c ||
+      !token.request() || !Access::valid(d.source) ||
+      token.data() != Access::data(d.source) ||
+      token.context()->owner() != &d ||
+      token.context()->data() != token.data() ||
+      token.context()->parts() != &d.parts ||
+      token.context()->request() != token.request() ||
+      !token.context()->key() || token.context()->key()->version() != 3 ||
+      token.context()->key()->candidate() != d.candidate || !d.slice.complete ||
+      token.context()->key()->y() != d.slice.y || d.work.phase_calls != 1 ||
+      d.cells.size() != 1 || &d.cells[0] != &c || d.cells.capacity() != 1) {
+    intermediate_endpoint03_refuse(d, refusal, Why::invalid_binding);
+    return d.state;
+  }
+  const auto fail = [&](Why why) {
+    intermediate_endpoint03_refuse(d, refusal, why);
+    return false;
+  };
+  const auto definition_begin = [&](std::uint8_t row) {
+    refusal = {};
+    refusal.self_stage = Stage::definition;
+    refusal.operation = row;
+    return intermediate_endpoint03_definition_charge(d, c, limits, refusal);
+  };
+  const auto definition = [&](std::uint8_t row, const auto& predicate,
+                              Why why = Why::unsupported_arithmetic) {
+    if (!definition_begin(row)) return false;
+    return predicate() || fail(why);
+  };
+  const auto good = [](Interval v, double bound) {
+    return finite(v) && std::abs(v.low) <= bound && std::abs(v.high) <= bound;
+  };
+  const auto scalar = [&](std::uint64_t& count, std::size_t cap, Stage stage,
+                          std::uint8_t operation, Why why) {
+    refusal = {};
+    refusal.self_stage = stage;
+    refusal.operation = operation;
+    if (stage == Stage::disk) {
+      refusal.side = operation / 8;
+      refusal.edge = operation % 4;
+      refusal.source_edge = (operation % 8) >= 4;
+    }
+    return intermediate_endpoint03_charge(d, refusal, count, cap, why);
+  };
+  const auto current = [&](std::size_t carrier, std::size_t axis) {
+    const auto& value =
+        carrier == 0
+            ? c.phase.center_of_mass.value
+            : c.phase
+                  .points[static_cast<std::size_t>(
+                      carrier == 1
+                          ? BoardingPlantedBodyPointId::port_boot_center
+                          : BoardingPlantedBodyPointId::starboard_boot_center)]
+                  .value;
+    return Interval{axis == 0 ? value.lower.x : value.lower.z,
+                    axis == 0 ? value.upper.x : value.upper.z};
+  };
+  for (std::uint8_t carrier = 0; carrier < 3; ++carrier)
+    for (std::uint8_t axis = 0; axis < 2; ++axis) {
+      const std::uint8_t row =
+          static_cast<std::uint8_t>(4 + 2 * carrier + axis);
+      if (!definition_begin(row)) return d.state;
+      if (!good(current(carrier, axis), 8)) {
+        fail(Why::unsupported_arithmetic);
+        return d.state;
+      }
+    }
+  const BoardingBootSourcePartition* port = nullptr;
+  for (std::uint8_t side = 0; side < 2; ++side) {
+    if (!definition_begin(static_cast<std::uint8_t>(10 + side))) return d.state;
+    const auto* partition = Access::partition(d.source, side);
+    const auto* summary = d.source.summary();
+    if (!partition || !summary || !summary->complete ||
+        summary->version != kBoardingIntermediatePauseSupportVersion ||
+        summary->sources[side].keys[0] != partition->faces[0].key ||
+        summary->sources[side].keys[1] != partition->faces[1].key ||
+        summary->sources[side].plane != partition->plane_metres ||
+        summary->sources[side].name.empty() ||
+        summary->sources[side].name != partition->faces[0].source_object ||
+        summary->sources[side].name != partition->faces[1].source_object) {
+      fail(Why::source_identity);
+      return d.state;
+    }
+    if (side == 0) port = partition;
+  }
+  std::array<Interval, 2> sole_low{}, sole_high{}, source_low{}, source_high{},
+      low{}, high{};
+  std::array<std::array<double, 2>, 4> vertices{};
+  for (std::uint8_t axis = 0; axis < 2; ++axis)
+    for (std::uint8_t which = 0; which < 2; ++which) {
+      const std::uint8_t op = static_cast<std::uint8_t>(2 * axis + which);
+      if (!scalar(d.work.sole_extrema, limits.sole_extrema, Stage::sole_extrema,
+                  op, Why::sole_extrema_capacity))
+        return d.state;
+      c.sole_extrema_evaluated[axis][which] = true;
+      const auto result =
+          which == 0 ? subtract(current(1, axis), point(axis == 0 ? .06 : .14))
+                     : add(current(1, axis), point(axis == 0 ? .06 : .14));
+      if (!good(result, 16)) {
+        fail(Why::unsupported_arithmetic);
+        return d.state;
+      }
+      (which == 0 ? sole_low[axis] : sole_high[axis]) = result;
+    }
+  if (!definition(12, [&] {
+        return good(sole_low[0], 16) && good(sole_low[1], 16) &&
+               good(sole_high[0], 16) && good(sole_high[1], 16) &&
+               token.request()->feet[0].yaw_half ==
+                   std::array<double, 2>{0, 0} &&
+               token.request()->feet[1].yaw_half == std::array<double, 2>{0, 0};
+      }))
+    return d.state;
+  for (std::uint8_t vertex = 0; vertex < 4; ++vertex)
+    for (std::uint8_t axis = 0; axis < 2; ++axis) {
+      const std::uint8_t op = static_cast<std::uint8_t>(2 * vertex + axis);
+      if (!scalar(d.work.source_coordinates, limits.source_coordinates,
+                  Stage::source_coordinates, op,
+                  Why::source_coordinate_capacity))
+        return d.state;
+      c.source_coordinate_evaluated[vertex][axis] = true;
+      const auto& v = port->perimeter_metres[vertex];
+      const double coordinate = axis == 0 ? v.x : v.z;
+      const auto value = point(coordinate);
+      if (!good(value, 8)) {
+        fail(Why::unsupported_arithmetic);
+        return d.state;
+      }
+      vertices[vertex][axis] = coordinate;
+      if (vertex == 0)
+        source_low[axis] = source_high[axis] = value;
+      else {
+        source_low[axis] = {std::min(source_low[axis].low, value.low),
+                            std::min(source_low[axis].high, value.high)};
+        source_high[axis] = {std::max(source_high[axis].low, value.low),
+                             std::max(source_high[axis].high, value.high)};
+      }
+    }
+  if (!definition(13, [&] {
+        return good(source_low[0], 8) && good(source_low[1], 8) &&
+               good(source_high[0], 8) && good(source_high[1], 8);
+      }))
+    return d.state;
+  if (!definition(
+          14,
+          [&] {
+            return vertices[0][0] == vertices[3][0] &&
+                   vertices[1][0] == vertices[2][0] &&
+                   vertices[0][1] == vertices[1][1] &&
+                   vertices[2][1] == vertices[3][1];
+          },
+          Why::source_rectangle))
+    return d.state;
+  if (!definition(
+          15,
+          [&] {
+            return vertices[1][0] < vertices[0][0] &&
+                   vertices[0][1] < vertices[2][1];
+          },
+          Why::source_rectangle))
+    return d.state;
+  if (!definition_begin(16)) return d.state;
+  const auto& request = *token.request();
+  if (request.port_reaction_fraction[0] != .0625 ||
+      request.port_reaction_fraction[1] != .0625 || !(.0625 > .010)) {
+    fail(Why::denominator);
+    return d.state;
+  }
+  c.port_share = {.0625, .0625, true};
+  if (!definition_begin(17)) return d.state;
+  c.star_share = {.9375, .9375, true};
+  if (!(.9375 > .010)) {
+    fail(Why::denominator);
+    return d.state;
+  }
+  for (std::uint8_t axis = 0; axis < 2; ++axis) {
+    for (std::uint8_t which = 0; which < 2; ++which) {
+      const std::uint8_t op = static_cast<std::uint8_t>(2 * axis + which);
+      if (!scalar(d.work.intersection_operations,
+                  limits.intersection_operations, Stage::intersection, op,
+                  Why::intersection_capacity))
+        return d.state;
+      c.intersection_evaluated[axis][which] = true;
+      if (which == 0)
+        low[axis] = {std::max(sole_low[axis].low, source_low[axis].low),
+                     std::max(sole_low[axis].high, source_low[axis].high)};
+      else
+        high[axis] = {std::min(sole_high[axis].low, source_high[axis].low),
+                      std::min(sole_high[axis].high, source_high[axis].high)};
+      if (!good(which == 0 ? low[axis] : high[axis], 32)) {
+        fail(Why::unsupported_arithmetic);
+        return d.state;
+      }
+    }
+    if (!definition(
+            static_cast<std::uint8_t>(18 + axis),
+            [&] { return low[axis].high < high[axis].low; },
+            Why::empty_intersection))
+      return d.state;
+  }
+  if (!scalar(d.work.pressure_candidates, limits.pressure_candidates,
+              Stage::pressure_candidate, 0, Why::pressure_capacity))
+    return d.state;
+  for (std::uint8_t axis = 0; axis < 2; ++axis) {
+    Interval sum{};
+    for (std::uint8_t which = 0; which < 2; ++which) {
+      const std::uint8_t op = static_cast<std::uint8_t>(2 * axis + which);
+      if (!scalar(d.work.midpoint_operations, limits.midpoint_operations,
+                  Stage::midpoint, op, Why::midpoint_capacity))
+        return d.state;
+      c.midpoint_evaluated[axis][which] = true;
+      sum = which == 0 ? add(low[axis], high[axis]) : multiply(sum, point(.5));
+      if (!good(sum, 32)) {
+        fail(Why::unsupported_arithmetic);
+        return d.state;
+      }
+    }
+    c.pressure_xz[0][axis] = {sum.low, sum.high, true};
+    if (!definition(static_cast<std::uint8_t>(20 + axis),
+                    [&] { return good(sum, 32); }))
+      return d.state;
+  }
+  c.pressure_evaluated[0] = true;
+  if (!scalar(d.work.pressure_candidates, limits.pressure_candidates,
+              Stage::pressure_candidate, 1, Why::pressure_capacity))
+    return d.state;
+  for (std::uint8_t axis = 0; axis < 2; ++axis) {
+    Interval residual{};
+    for (std::uint8_t which = 0; which < 3; ++which) {
+      const std::uint8_t op = static_cast<std::uint8_t>(3 * axis + which);
+      if (!scalar(d.work.allocation_operations, limits.allocation_operations,
+                  Stage::allocation, op, Why::allocation_capacity))
+        return d.state;
+      c.allocation_evaluated[axis][which] = true;
+      if (which == 0)
+        residual = multiply(point(.0625), {c.pressure_xz[0][axis].lower,
+                                           c.pressure_xz[0][axis].upper});
+      else if (which == 1)
+        residual = subtract(current(0, axis), residual);
+      else
+        residual = {down(residual.low / .9375), up(residual.high / .9375)};
+      if (!good(residual, 32)) {
+        fail(Why::unsupported_arithmetic);
+        return d.state;
+      }
+      if (which >= 1 &&
+          !definition(static_cast<std::uint8_t>(22 + 2 * axis + which - 1),
+                      [&] { return good(residual, 32); }))
+        return d.state;
+    }
+    c.pressure_xz[1][axis] = {residual.low, residual.high, true};
+  }
+  c.pressure_evaluated[1] = true;
+  if (!definition(
+          26,
+          [&] {
+            return c.port_share.lower == .0625 && c.port_share.upper == .0625 &&
+                   c.star_share.lower == .9375 && c.star_share.upper == .9375;
+          },
+          Why::symbolic_equilibrium))
+    return d.state;
+  if (!definition(
+          27,
+          [&] {
+            return std::ranges::all_of(c.midpoint_evaluated,
+                                       [](const auto& row) {
+                                         return std::ranges::all_of(
+                                             row, [](bool v) { return v; });
+                                       }) &&
+                   std::ranges::all_of(c.allocation_evaluated,
+                                       [](const auto& row) {
+                                         return std::ranges::all_of(
+                                             row, [](bool v) { return v; });
+                                       }) &&
+                   c.pressure_evaluated[0] && c.pressure_evaluated[1];
+          },
+          Why::symbolic_equilibrium))
+    return d.state;
+  c.nominal_equilibrium = true;
+  if (!definition_begin(28)) return d.state;
+  for (std::uint8_t side = 0; side < 2; ++side) {
+    const auto* partition = Access::partition(d.source, side);
+    const auto& y = request.feet[side].sole[0].coordinates[1];
+    if (!partition || y.count != 1 ||
+        y.terms != std::array<double, 3>{partition->plane_metres, 0, 0}) {
+      fail(Why::sole_plane);
+      return d.state;
+    }
+    c.sites[side].plane_identity = true;
+  }
+  c.plane_identities = true;
+  const auto required = add(point(.020), point(.010));
+  for (std::uint8_t side = 0; side < 2; ++side) {
+    auto& record = c.sites[side];
+    record.loaded = true;
+    record.evaluated = true;
+    const Point pressure{
+        {c.pressure_xz[side][0].lower, c.pressure_xz[side][0].upper},
+        {c.pressure_xz[side][1].lower, c.pressure_xz[side][1].upper}};
+    record.pressure_xz = {
+        {{pressure.x.low, pressure.x.high}, {pressure.z.low, pressure.z.high}}};
+    const Point center{current(side + 1, 0), current(side + 1, 1)};
+    const auto sole = site_sole_corners(center);
+    const auto* partition = Access::partition(d.source, side);
+    if (!partition) {
+      fail(Why::invalid_binding);
+      return d.state;
+    }
+    const auto source = source_corners(*partition);
+    for (std::uint8_t which = 0; which < 2; ++which) {
+      const auto& corners = which == 0 ? sole : source;
+      auto& edges = which == 0 ? record.sole_edges : record.source_edges;
+      auto& evaluated =
+          which == 0 ? record.sole_evaluated : record.source_evaluated;
+      for (std::uint8_t edge = 0; edge < 4; ++edge) {
+        const std::uint8_t op =
+            static_cast<std::uint8_t>(8 * side + 4 * which + edge);
+        if (!scalar(d.work.disk_edges, limits.disk_edges, Stage::disk, op,
+                    Why::edge_capacity))
+          return d.state;
+        evaluated[edge] = true;
+        edges[edge] = site_edge(corners[edge], corners[(edge + 1) % 4],
+                                pressure, required, d.arithmetic_supported);
+        if (!d.arithmetic_supported) {
+          fail(Why::unsupported_arithmetic);
+          return d.state;
+        }
+        if (!edges[edge].disk_contained) {
+          if (!d.first_refusal) {
+            refusal.side = side;
+            refusal.edge = edge;
+            refusal.source_edge = which != 0;
+            const auto bound = edges[edge].signed_side.lower <= 0
+                                   ? edges[edge].signed_side
+                                   : edges[edge].squared_margin_gap;
+            refusal.limiting_bound = {bound.lower, bound.upper, true};
+            refusal.source_name = d.source.summary()->sources[side].name;
+            if (which != 0)
+              refusal.source_key =
+                  d.source.summary()->sources[side].keys[edge < 2 ? 0 : 1];
+          }
+          fail(which == 0 ? Why::sole_disk : Why::source_disk);
+        }
+      }
+      (which == 0 ? record.sole_status : record.source_status) =
+          pause_edge_status(edges);
+    }
+    record.complete = record.plane_identity &&
+                      record.sole_status == PauseStatus::contained &&
+                      record.source_status == PauseStatus::contained;
+  }
+  if (!definition(29, [&] {
+        return d.work.disk_edges == 16 && d.arithmetic_supported &&
+               d.stop_condition == Why::none;
+      }))
+    return d.state;
+  if (!definition_begin(30)) return d.state;
+  c.finite_contact_supported =
+      c.sites[0].complete && c.sites[1].complete && c.plane_identities;
+  c.nominal_load_supported =
+      c.nominal_equilibrium && c.finite_contact_supported;
+  c.nominal_support_complete = c.nominal_load_supported;
+  c.star_support = c.sites[1].complete;
+  if (!c.nominal_load_supported) {
+    const bool refuted = c.sites[0].sole_status == PauseStatus::refuted ||
+                         c.sites[0].source_status == PauseStatus::refuted ||
+                         c.sites[1].sole_status == PauseStatus::refuted ||
+                         c.sites[1].source_status == PauseStatus::refuted;
+    d.state = refuted ? State::witness_refused : State::unresolved;
+  } else {
+    d.state = State::accepted;
+  }
+  c.state = d.state;
+  return d.state;
+}
+} // namespace apsis_drift

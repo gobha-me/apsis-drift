@@ -1093,3 +1093,62 @@ namespace apsis_drift {
   return result;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_endpoint03_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::intermediate_endpoint03_source_enroll(
+    BoardingIntermediateEndpoint03Diagnostic& d,
+    BoardingRouteFootPhaseRequest& request,
+    const BoardingIntermediateEndpoint03Limits& limits,
+    BoardingIntermediateEndpoint03Refusal& reason) -> bool {
+  // Genuine seed authentication only. The EMPTY old carrier, all old source
+  // factories and old typed scratch die here before the NEW constructor.
+  BoardingIntermediateEndpoint02Diagnostic original(d.source);
+  BoardingIntermediateEndpoint02Limits source_limits;
+  source_limits.source_guards = limits.source_guards;
+  BoardingIntermediateEndpoint02Refusal old_reason;
+  const bool good = intermediate_endpoint02_source_enroll(
+      original, request, source_limits, old_reason);
+  d.parts = original.parts;
+  d.work.source_guards = original.work.source_guards;
+  d.source_evaluated = original.source_evaluated;
+  d.source_enrolled = good && original.source_enrolled;
+  if (d.source_enrolled) return true;
+  // Full by-reference typed forwarding; no old report/key/constructor return
+  // is retained or consumed as authority and no metadata is truncated.
+  reason.condition = static_cast<BoardingIntermediateEndpoint03Condition>(
+      old_reason.condition);
+  reason.predicate_condition =
+      static_cast<BoardingIntermediateEndpoint03Condition>(
+          old_reason.predicate_condition);
+  reason.limiting_bound = old_reason.limiting_bound;
+  reason.phase = old_reason.phase;
+  reason.side = old_reason.side;
+  reason.edge = old_reason.edge;
+  reason.axis = old_reason.axis;
+  reason.source_key = old_reason.source_key;
+  reason.source_name = old_reason.source_name;
+  reason.self_pair = old_reason.self_pair;
+  reason.operation = old_reason.operation;
+  reason.self_region = old_reason.self_region;
+  reason.self_axis = old_reason.self_axis;
+  reason.self_sign = old_reason.self_sign;
+  reason.self_stage = static_cast<BoardingIntermediateEndpoint03SelfStage>(
+      old_reason.self_stage);
+  reason.source_edge = old_reason.source_edge;
+  return intermediate_endpoint03_refuse(d, reason, reason.condition);
+}
+[[gnu::noinline]] auto detail::intermediate_endpoint03_canonical(
+    const BoardingIntermediateEndpoint03ProgramKey& key)
+    -> std::optional<BoardingRouteFootPhaseRequest> {
+  if (key.version() != 3 ||
+      key.candidate() !=
+          BoardingIntermediateEndpoint03Candidate::root_y_reach_roll_slice)
+    return {};
+  auto result = intermediate_pause_support02_request();
+  if (result)
+    for (auto& root : result->root)
+      root.coordinates[1] = {{key.y(), +0.0, +0.0}, 1};
+  return result;
+}
+} // namespace apsis_drift
