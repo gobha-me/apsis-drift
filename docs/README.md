@@ -85,6 +85,8 @@ player's station-to-flight journey.
   one registered analytic root-height candidate; static support/SELF prerequisite.
 - [Original intermediate sector evidence01](ORIGIN_BOARDING_INTERMEDIATE_SECTOR_EVIDENCE01.md):
   one same-program joint-sector attribution; body and gameplay remain unqualified.
+- [Registered intermediate endpoint03](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT03.md):
+  one source-bound reach-and-both-roll candidate; current-body and route obligations remain explicit.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
