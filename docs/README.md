@@ -89,6 +89,8 @@ player's station-to-flight journey.
   one source-bound reach-and-both-roll candidate; current-body and route obligations remain explicit.
 - [Registered intermediate sector evidence02](ORIGIN_BOARDING_INTERMEDIATE_SECTOR_EVIDENCE02.md):
   original sector attribution for the same program, with fresh authority and a stop before body assembly.
+- [Original BOTH-ankle contract audit](ORIGIN_BOARDING_ANKLE_CONTRACT_AUDIT.md):
+  proves the positive-branch pitch cone and retains both-side chart, support and equality obligations.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
