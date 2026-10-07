@@ -1,0 +1,375 @@
+# Original intermediate reach evidence 01
+
+This is the exact pre-observation method for [issue #493](https://github.com/gobha-me/apsis-drift/issues/493), following the merged [root reach contract audit](ORIGIN_BOARDING_ROOT_REACH_CONTRACT_AUDIT.md). It preserves the unchanged Endpoint01 candidate and its original FIRST. The companion makes at most one original phase call and reports authenticated squared-distance and length-threshold evidence. It cannot assemble the body, run pressure or SELF, select another posture, or qualify First Flight. Parents #462, #361 and #352 remain open.
+
+Registration precedes implementation; complete source and object-only resource admission precedes Root's once-per-compiler FIRST. Actual new layouts, bounds, comparison classification and outcomes are UNKNOWN at registration. The old reach condition is known; it supplies no printed threshold, failed disjunct or strict exclusion. No candidate, coordinate, range, reverse, subdivision, solver, raw comparison API, body oracle or retry is added.
+
+## 1. Immutable inputs and permitted files
+
+Baseline is `bdb1bbbd48dac5d9c08deb5e14a77696c89ce6a5`. The complete input manifest is retained at `build-native/issue493-validation/baseline-source-pins.json`; it binds every original input and the original FIRST freeze SHA256 `63cdebdb3a3509ed9dc91b05d3089355aad768e3f8f72af8d34b8c768f5353e3`. Preserve original FIRST logs, binaries, source and resource receipts without rewriting their identities.
+
+Only these two original C++ files may receive END-only additions, after their complete pinned prefixes:
+
+| File | Prefix bytes | SHA256 |
+| --- | ---: | --- |
+| `src/origin_boarding_intermediate_endpoint01.cpp` | 30642 | `e42fc16fc4ef9c65153454b11206166bc8ce686d9264073cfe04afbf1a1ac526` |
+| `src/origin_boarding_planted_legs.cpp` | 285446 | `8fa693c5776007e47c6c56e63d7b69cc7ab98a119f5d2327a78e70b28c4c766e` |
+
+New files are `include/apsis_drift/origin_boarding_intermediate_reach_evidence01.hpp`, `src/origin_boarding_intermediate_reach_evidence01_internal.hpp`, `src/origin_boarding_intermediate_reach_evidence01.cpp`, and `test/origin_boarding_intermediate_reach_evidence01_test.cpp`. Narrow CMake registration adds only the new source, strict floating-point source options and test target. Documentation/index changes are separate. No old header, constructor, issuer, guard, result, source geometry, body/owner policy or numerical primitive changes. Boot support remains whole unchanged.
+
+The existing `BoardingIntermediateEndpoint01Candidate::authored_descent_midpoint` is the only valid candidate. Its actual pure request constructor is used unchanged, through original enrollment S18. Equal endpoint root/sole packets, exact stored binary64 terms, root/sole yaw, torso, zero humps, share, duration, source planes, original positive-knee branch and lengths remain unchanged. There is no second inspector: request-inspector calls are **zero**; one original S18 constructor invocation occurs only when its original source row is reached. No arbitrary request enters the new public or private bounded API.
+
+## 2. Public and private types
+
+The public function is:
+
+```cpp
+auto assess_origin_boarding_intermediate_reach_evidence01(
+    const OriginBoardingIntermediatePauseSupport&,
+    BoardingIntermediateEndpoint01Candidate =
+        BoardingIntermediateEndpoint01Candidate::authored_descent_midpoint)
+    -> BoardingIntermediateReachEvidence01Expected;
+```
+
+`BoardingIntermediateReachEvidence01Expected` is exactly `std::expected<BoardingIntermediateReachEvidence01Diagnostic, std::string>`. There is no public numerical input or public limits parameter. Private `detail::intermediate_reach_evidence01_bounded(provider, candidate, Limits = {})` returns that same Expected. The following named enums all use `std::uint8_t` with the explicit ordinals shown:
+
+| Type suffix | Enumerators, in ordinal order starting at zero |
+| --- | --- |
+| `State` | `not_run=0`, `evidence=1`, `unavailable=2`, `unsupported=3`, `capacity=4` |
+| `Condition` | `none=0`, `invalid_binding=1`, `source_identity=2`, `capture_identity=3`, `evidence_unavailable=4`, `unsupported_arithmetic=5`, `capture_capacity=6`, `threshold_capacity=7`, `comparison_capacity=8`, `output_capacity=9`, `original_capacity=10`, `original_unsupported=11`, `inconsistent_evidence=12`, `allocation_failure=13` |
+| `Kind` | `not_run=0`, `reach_refusal=1`, `intentional_body_stop=2` |
+| `Classification` | `not_run=0`, `sufficient_inclusion=1`, `strict_too_long=2`, `strict_too_short=3`, `unresolved_enclosure=4` |
+| `Stage` | `not_run=0`, `preflight=1`, `source=2`, `output=3`, `phase=4`, `capture=5`, `threshold=6`, `comparison=7` |
+| `OriginalResult` | `not_run=0`, `accepted=1`, `unresolved=2`, `unsupported=3`, `capacity=4` |
+
+Each public type above has prefix `BoardingIntermediateReachEvidence01`. `Bounds` stores `double lower{}, upper{}; bool supported{};`; unsupported default zeros are NOT evidence. `Work` stores unsigned 64-bit successful-charge counters `preflight_guards`, `source_guards`, `phase_calls`, `capture_guards`, `threshold_operations`, `comparison_operations`, and an unchanged `BoardingRouteFootPhaseCounters phase`. Counts are not failed upcoming indices.
+
+`Diagnostic` contains, in this declared logical order: uint32 `version{1}`; original provider `source`; candidate; `std::vector<BoardingRouteFootPhaseCell> cells`; unchanged by-value `BoardingRouteFootPhaseRefusal phase_reason`; Work; Bounds `distance_squared`, `minimum_squared`, `maximum_squared`; uint64 `source_evaluated`; size_t `output_capacity_bytes`, `required_output_bytes`; doubles `actual_first{0}`, `actual_last{1}`; enums `original_result`, `state`, `stop_condition`, `kind`, `classification`, `stop_stage`; uint8 `stop_operation{255}`, `source_operation{255}`, `capture_operation{255}`, `threshold_operation{255}`, `comparison_operation{255}`, `captured_side{255}`; uint8 attempted/written mask pairs `capture_attempted/capture_written`, `threshold_attempted/threshold_written`, `comparison_attempted/comparison_written`; `std::array<bool,4> comparisons{}`; bool `source_admitted`, `phase_invoked`, `evidence_complete`, `arithmetic_supported`. There is no retained Request, parts catalog, old full Endpoint Cell, optional original reason, source-free input or report archive in this header. The original reason is preserved without cover stamping, field fabrication or predicate rewriting.
+
+Static qualification constants are false: `body_qualified`, `source_qualified`, `support_qualified`, `load_qualified`, `self_qualified`, `material_qualified`, `world_qualified`, `route_qualified`, `seat_qualified`, `actor_qualified`, `save_qualified`, `dynamics_qualified`. Runtime `source_admitted` means only S64 admission for this diagnostic; it does not override those qualification constants. `evidence_complete` is not original PhaseCell.complete or gameplay permission.
+
+The NEW Diagnostic.arithmetic_supported means partial, actually evaluated companion arithmetic only. It starts false; successful C05 alone earns true from the actual supported finite ordered D when original_result is not unsupported. Any genuinely attempted floating-point/environment or new arithmetic failure clears it, including C02/C05/C07 and threshold/comparison arithmetic failure. Later capacity or ordinary identity/readiness/consistency stops preserve an already earned value. OriginalResult::unsupported always keeps it false; passing C02 cannot promote that original result. The ORIGINAL PhaseCell.arithmetic_supported aggregate is different: it remains untouched and unearned/false on both legitimate capture modes, because the original whole-phase completion has not occurred. That old aggregate is never a capture gate. The new flag does not assert full original-phase arithmetic, body support, all thresholds/comparisons, evidence_complete or any qualification.
+
+Private `BoardingIntermediateReachEvidence01Limits` has exactly four size_t fields in this order: `capture_guards{8}`, `threshold_operations{4}`, `comparison_operations{4}`, `output_bytes{16777216}`. Each may only be lowered. Zero is valid; raising any independently is a preflight error. The immutable source and phase ceilings are not exposed as additional lowering fields.
+
+## 3. FP-first preflight, enrollment and output
+
+Every actual public or private assessment starts with exactly ONE fixed, nonlowerable charged preflight environment guard. It calls the original exported `boarding_route_foot_phase_environment()` before candidate/cap/header checks and before construction of any original source carrier, request or factory. An unsafe result returns the exact unexpected string `intermediate reach evidence01 unsupported floating point`. There is no report, source work, phase call, allocation or arithmetic after that failure. The test totals count this one guard for every actual call, including unexpected returns; structured Work.preflight_guards is exactly1. This fixed record includes the original environment helper's checks; it is not an additional hidden charge family.
+
+For a safe environment the remaining preflight order and exact unexpected strings are:
+
+1. Candidate is not the sole existing candidate: `intermediate reach evidence01 invalid candidate`.
+2. Any one of the four Limits exceeds its registered maximum, checked in field order: `intermediate reach evidence01 invalid limits`.
+3. Output cap is below `fixed = 2*sizeof(Expected)`: `intermediate reach evidence01 output headers`.
+
+No structured Condition is invented for those unexpected errors. Current/pending std::string/Expected errors and the environment helper are included in the preflight resource pool. Only then construct the new report, set output_capacity_bytes=fixed and required_output_bytes=`required = fixed+sizeof(BoardingRouteFootPhaseCell)`. Required bytes are the input room needed before S64; actual owned bytes remain independent and can be headers-only after an early source refusal. Exact replay and required-output-minus-one use required_output_bytes, never assume that actual owned header bytes would reach the same source stage. If output cap is below required, return a structured state capacity/stop output_capacity/stage output/op255, with header-only output bytes, source0/phase0/capture0, empty vector and all evidence NOT_RUN. This makes required-output-minus-one meaningful without a hidden allocation or source factory.
+
+For sufficient room, a noinline enrollment helper uses the original anonymous `enroll` in the END-extended Endpoint01 TU. Its lexical old-shaped carrier has this genuine provider/candidate and EMPTY cells throughout; original Limits default values and original R are used unchanged. S01–S64 charge and execute exactly their existing ordered predicates, including separate original S02 FP validation and the S18 immutable constructor. No old report is consumed as authority; original carrier/catalog/local/pending factory scopes finish before graph. Copy only original charged source count, uint64 source mask and admitted status into the new report. All64 source bits use `UINT64_MAX`, never a shift by64. On source failure retain its actual old Condition and operation internally for mapping: invalid binding maps invalid_binding; unsafe maps unsupported_arithmetic/hard unsupported; other source identity maps source_identity/unavailable. There is no new source-cap failure because source cap is fixed64. No phase/capture/threshold work follows failed enrollment.
+
+One vector.reserve(1) follows successful admission; no growth or second allocation. Inspect actual capacity and checked owned bytes. If capacity is not exactly1, release the vector with an empty-vector swap BEFORE returning structured output_capacity with truthful header-only bytes. Allocation exceptions produce allocation_failure/capacity with truthful retained bytes; source evidence remains, no phase call. After capacity1, noinline emplace/reset initializes one original PhaseCell. The full local/pending reset aggregate is charged separately and dies before graph. Normal actual owned output is fixed+capacity*sizeof(PhaseCell), not the cap or a requested capacity assumption. Ordinary moves transfer this single allocation; TWO owning header slots conservatively cover no-elision return staging, with no vector/cell copy. Early source failures own only the two charged header slots.
+
+## 4. Fresh authority and exactly one original call
+
+`detail::BoardingIntermediateReachEvidence01Context` contains only four read-only pointer anchors: actual owner report, genuine provider Data, the retained admitted Request, and a unique synchronous FreshCallRecord. It has no public/default/copy issuance path: copy/move construction and assignment are explicitly deleted; its constructor is private and friend ONLY the new named bounded consumer. Read-only getters may be public. Its 32-byte target is metadata, not a new source capture. The original enrollment carrier cannot construct it and does not survive graph.
+
+`detail::BoardingIntermediateReachEvidence01CaptureToken` contains five pointer anchors: Context, owner report, actual owned cell, actual Request, same FreshCallRecord. Constructor is private and friend ONLY `intermediate_reach_evidence01_phase_call`; no threshold/capture function or caller can manufacture it. Copying the private token is permitted only for synchronous borrows inside this assessment, and it never escapes. That adapter is purpose-private and requires the new Context; it cannot accept an old successful report/token or caller request. Before any cell/request borrow it validates actual owner/Data/request/fresh-call anchors, source admission, actual vector size/capacity/slot, and the pending latch's not-yet-invoked state. It sets call work before one actual original invocation and completes its FreshCallRecord afterwards. Token issuance requires actual completed call count1 and unchanged actual slot identity; token is not a success certificate.
+
+The retained Request came from real S64 enrollment and is immutable after that. The original compiler is exactly `boarding_route_foot_phase_cell(request,0,1,false,fixed_phase_limits,work.phase,cells.front(),phase_reason)`. Private original temporal defaults are preserved: reason first/last/depth may remain zero; actual_first/last describe the real call, not a point reconstructed from those defaults. There is no original public cover, new cover, subdivision or reversed invocation.
+
+Fixed original Limits retain all original navigation/output defaults, and lower only graphs1, legs2, bodies0, sectors3, timing6. They stay within every original ceiling, with the same numerical predicates and one ordinary graph. Bodies0 is an intentional structural stop at the original body charge, before phase_body, even if both legs succeed. No producer path reaches pressure, source disks, unit axes, body assembly, SELF or old Endpoint01 bounded/public assessment. Original graph success cannot remove this structural stop.
+
+Record the actual original result and unchanged phase_reason first. Unsupported always maps state unsupported/stop original_unsupported/stage phase/op255 and keeps arithmetic_supported false. Every original capacity maps state capacity/stop original_capacity/stage phase/op255. Other original ordinary results map state unavailable/stop evidence_unavailable until a legitimate capture is completed. This stored original hard stop is never downgraded. A later companion capacity/unsupported may become the stop cause while original_result/reason remain unchanged; first ordinary original attribution is always independently retained.
+
+## 5. Eight capture records
+
+Each row sets stage capture and its upcoming zero-based cursor before checking capacity. A failed charge leaves both mask bits clear. A successful charge increments Work.capture_guards and sets its attempted bit; a successful readiness predicate writes its bit. A finite false readiness predicate is an attempted, UNWRITTEN stop, not a successfully issued capability. C02 numeric/environment failure is hard unsupported. C05/C07 numeric failures are hard unsupported; identity failures elsewhere are unavailable unless an original hard state is already present. No later row runs after a failed readiness row. After ANY actually completed original call, C01, then C02, then C03 run under their own limits, including for ineligible original outcomes. Ineligible C03 is attempted/unwritten and stops: Kind not_run, captured_side255, D/min/max unsupported, T/Q masks zero and classification not_run. Thus capture-guard attempts are distinguishable from unavailable numeric evidence; original capacity/unsupported is preserved. An original unsupported result remains arithmetic_supported false even if post-call environment C02 passes; C02 cannot promote it.
+
+| Label / cursor | Exact charged reads and predicate |
+| --- | --- |
+| C01 /0 | Revalidate token/Context owner, genuine Data, immutable Request, FreshCallRecord completed actual count1, same owned capacity1/size1/cell slot and source64 admission. Charge before any report/cell/request borrow. |
+| C02 /1 | Revalidate the original exported FP environment, independently of preflight, original S02 and compiler checks. False hard-stops unsupported_arithmetic. |
+| C03 /2 | Recognize one of the two legitimate original result kinds below, from that actual call's result/reason/work and earned leg flags. No D is read yet. Another original result leaves Kind not_run and evidence unavailable; preserve its hard state. |
+| C04 /3 | Revalidate the exact admitted candidate/version packet, unchanged Request anchor, actual call forward [0,1], and output first0/last1. Packet was already read by original S64; this is an actual charged revalidation, no second factory or independent pose. |
+| C05 /4 | Read and copy only the mode-specific original D endpoint tuple; require finite ordered lower/upper. Set distance_squared.supported only on success. No D derivatives, default leg field or reporting midpoint is read. |
+| C06 /5 | Authenticate original phase version1, length/family identity and genuine positive finite immutable thigh_length/shin_length literals, before original threshold construction. No caller lengths. |
+| C07 /6 | After all four T records, require both original interval threshold results supported, finite, ordered and their actually written publication masks complete. |
+| C08 /7 | After all four Q records, revalidate the same token/Request/version/length-recipe identity, all earned D/min/max supports, full masks and exact mode-specific consistency below. No threshold recomputation or other uncharged arithmetic. Only success sets evidence_complete/classification. |
+
+The two kinds, and no others, are:
+
+- `reach_refusal`: actual original result unresolved, phase_reason.condition reach, original side0 or1, work.graphs1, work.legs=side+1, bodies0, no side forged. Original phase_leg's timing_supported(D/rho), forward branch and positive domains precede this return. C05 reads only phase_reason.limiting_bound; it is the supported squared-distance VALUE copied by phase_refuse on precisely this path. The original Bounds type alone has no support bit. This gives no derivative/threshold/failed-disjunct/strict-exclusion evidence.
+- `intentional_body_stop`: actual original capacity, condition body_capacity, side empty, graphs1/legs2/bodies0, both actual leg records have nominal_links/target_sole_identity/derivative_domains/joint_sectors/timing_complete true. The original code writes each distance_squared before completing these five flags, then resets side and tries the body charge. C05 reads ONLY port leg.distance_squared with captured_side0. That is an earned field, not its default. Original capacity remains hard even if evidence completes. No original aggregate/body completion is inferred.
+
+C03 records Kind/captured_side only after all its readiness checks succeed. Default Kind/captured_side remain not_run/255 otherwise. Reach-mode sectors/timing are actual original counters, not guessed values or retroactive masks. Neither mode grants authority to generic evaluate_leg/endpoint_leg results, caller reports or unearned generic bounds. Source-only audit lines in the previous document establish actual phase_graph→phase_leg provenance and exact-real nominal proper frame premises; interval columns are not numerically asserted orthogonal.
+
+## 6. Four original threshold and four comparison records
+
+The END-only planted helper is strictly by-reference publication, with this sole named prototype:
+
+```cpp
+auto detail::intermediate_reach_evidence01_thresholds(
+    const BoardingIntermediateReachEvidence01CaptureToken&,
+    BoardingIntermediateReachEvidence01Diagnostic&,
+    const BoardingIntermediateReachEvidence01Limits&) -> bool;
+```
+
+It runs charged C06, T01–T04 and C07 after C05; the caller runs Q01–Q04 and C08 only after its true return. The bool return conveys continuation only, not evidence authority. There is no aggregate threshold packet or local/pending aggregate return. The END-only planted helper accepts only the new capture token and owner/limits references. It obtains the original anonymous length literals and original `point/add/subtract/square` primitives in their existing TU. It does not invert a frame, recompute D, solve a leg, reconstruct rounded affine geometry or expose a raw API. T01–T04 are exactly the threshold expression used by phase_leg:
+
+| Label / zero-based cursor | Charged operation | Published record |
+| --- | --- | --- |
+| T01 /0 | `add(point(thigh_length),point(shin_length))` | helper sum only |
+| T02 /1 | `square(sum)` | maximum_squared on successful original support/finite order |
+| T03 /2 | `subtract(point(thigh_length),point(shin_length))` | helper difference only |
+| T04 /3 | `square(difference)` | minimum_squared on successful original support/finite order |
+
+Each operation includes original argument/point construction, original primitive, finite/order/support validation and publication inside its one charged record. No primitive runs before its charge. The original zero/singleton cases and nextafter policy remain unchanged; there is no new generalized arithmetic engine or domain. Attempted/written T masks include valid helper sum/difference even though only squared records appear publicly. T02 or T04 failure leaves that public Bounds unsupported/default; prior written records stay valid. C07 is a separately charged complete-readiness check, not free support validation. These authentic thresholds enclose the original squared sum/difference, never new tuned lengths.
+
+After C07, Q01–Q04 all run in order, without boolean short-circuiting:
+
+| Label / zero-based cursor | Comparison stored in comparisons[index] |
+| --- | --- |
+| Q01 /0 | `distance_squared.upper <= maximum_squared.lower` |
+| Q02 /1 | `distance_squared.lower >= minimum_squared.upper` |
+| Q03 /2 | `distance_squared.lower > maximum_squared.upper` |
+| Q04 /3 | `distance_squared.upper < minimum_squared.lower` |
+
+A charged comparison with finite supported inputs always sets attempted and written, including a FALSE boolean. Unvisited/default false is not evidence. An unsupported input hard-stops and leaves that row unwritten. All four source-bound comparisons concern squared-distance VALUES only.
+
+C08 rejects contradictory strict-long/strict-short flags, any exclusion coexisting with full inclusion, invalid ordering/support or stale mask/anchor. It uses the immutable original recipe identity and earned T/Q records, not fresh arithmetic. Reach mode additionally requires NOT(Q01&&Q02), matching original `D.high>maximum.low || D.low<minimum.high`. Body-stop mode requires Q01&&Q02 and !Q03&&!Q04, matching both legs' passed original reach guards. A mismatch is inconsistent_evidence/unavailable, preserving any original hard state; it never patches an original guard or assigns a desired classification.
+
+After successful C08 classify sufficient_inclusion if Q01&&Q02; otherwise strict_too_long if Q03; otherwise strict_too_short if Q04; otherwise unresolved_enclosure. Evidence-complete reach mode has state evidence/stop none even for ordinary enclosure uncertainty, with original unresolved/reach retained. Evidence-complete body-stop mode has state capacity/stop original_capacity retained, while classification may independently be sufficient_inclusion. A classification means only these complete supported bound comparisons. Strict exclusion uses OUTER max.upper/min.lower; failure of inward inclusion alone is not exclusion. Compared-bound equality satisfies the nonstrict inclusion comparison and never the strict converse. Exact straight/folded equality still has the separate original positive-gamma/derivative-domain obligation; this companion cannot authorize singular factorization.
+
+## 7. Partial, cursor and terminal semantics
+
+All scalar support flags, classifications, Kind, masks and counters start NOT_RUN/zero. Sentinel255 means no attempted/upcoming operation or side. Labels C01/T01/Q01 are one-based prose; cursors and mask positions are zero-based. Capture masks use eight bits (complete255); threshold/comparison masks use four bits (complete15). Original S64 mask is all64bits UINT64_MAX. Stage resets its own upcoming cursor and row destination before each new charge; no stale supported scalar is attached to an unattempted row. This assessment contains one call, not a repeating search.
+
+Charge failure sets the actual upcoming stage/cursor and capacity cause, without increment or attempted/written bit. Successful-charge counters define exact replay limits. Earlier separately supported D or squared threshold records may survive a later stop. Classification remains not_run and evidence_complete false until C08 writes bit7. A C08 capacity may leave all T/Q evidence complete while classification remains not_run. There is no implicit classification from partially written booleans.
+
+Any companion unsupported result overrides an ordinary unavailable result and records unsupported_arithmetic. Capacity overrides an ordinary result and preserves original_result/reason. An ordinary readiness/consistency failure cannot overwrite a previously hard capacity/unsupported state/cause. At capture entry an original hard cause is retained; companion capacity/unsupported, if reached, supplies its separate latest stop stage/op. The exact original reason always remains independently readable and unmodified. No wrapper creates a supported generic limiting bound from default zeros. Unavailable results must identify evidence_unavailable, capture_identity or inconsistent_evidence rather than silently reporting stop none. Evidence state is earned metadata, not a witness-refuted body state.
+
+## 8. Finite work and observations
+
+At most28 serial assessment slots per compiler; exactly one source creator and one A01 unchanged-candidate FIRST. No new raw calls, body/SELF/pose/selected-axis/owner/hip audits, test request inspector, additional candidate or conditional substitute. Root appends the separately reviewed literal28-slot manifest. The test compares retained endpoint booleans directly only when their written bits/support are earned; it does not call another phase/threshold/verifier/helper to produce an oracle. Equality and strict converse are source-reviewed; no private comparison seam is selected.
+
+Maximum actual assessments28; fixed preflight guards28; source guards<=1792; phase_calls<=28; graphs<=28, legs<=56, bodies=0, sectors<=84, timing<=168; companion capture<=224, threshold<=112, comparison<=112. Compiler invocation and charged graph counts remain separate. Unsafe/invalid/short-output calls consume only actually reached stages. Failed source creation causes unavailable/SKIP for the whole roster, no retry/forged provider. Zero/one-less/replay controls use the actually reached FIRST charged counts; unreached controls skip honestly, with no different source/phase or hidden query. Shared stdout+stderr<=16384 bytes, both stream states/bytes checked; print one compact FIRST plus bounded skips/final summary, not28 full reports.
+
+The test retains one Summary<=200, Totals<=128 and checks/failures12, two streams176, original native/boot expected handles80, providerOptional24, saved ptr/bytes24, refs32 and current/pending typed-error allowance160: named creator caller936<=1024. Original creator Expected dies before A01/lifetime tests. Actual graph caller2048 inventory is Summary200+streams176+Totals128+checks/failures12+native/boot80+providerOptional24+alias/lifetime handles64+savedptrbytes24+environment16+summary current/pending200+attribution/control128+references64+error160=1276, with UNUSED772. FOUR Limits and TWO owning Expected headers are separate, not borrowed caller slack. Actual test type/global/frame measurements must replace forecasts before FIRST, with every retained global explicitly charged.
+
+## 9. Selected storage ceilings and complete measurement gate
+
+These are selected admission bounds, not measured claims: each new Expected<=384 bytes, Limits32, Context32, Token40, FreshCallRecord/control<=64; one unchanged PhaseCell currently7736. Scratch at every stage<=49152, complete original creator including its4096 arena<=8192, owned output<=16777216. If layout exceeds the selected target, stop before FIRST and stage/compact within this exact field/method scope or report failure; never raise ceilings, fit geometry or subtract old graph slack. TWO Expected header slots and FOUR actual Limits copies are charged even though there is one moved vector.
+
+The source graph proof retains the ENTIRE original32768 proof. Selected graph formula41448 =32768 +twoExpected768+arena4096+fourLimits128+caller2048+currentRequest680+pendingOptionalRequest688+oldPhaseLimits72+oldPhaseReason64+Context32+Token40+control64. The original cell and compiler locals are already inside the entire32768 source proof; physical chains separately add the7736 heap slot. No measured frame substitutes for that source proof. Token is conservatively charged although issued after the call. PhaseWork40 resides in the owning Work and remains represented inside the original proof as well. A unique latch, phase caps/default copies, D/source error and case metadata cannot silently occupy old slack.
+
+The selected pregraph factory bound25640 retains the complete old24680 source-enrollment bound, then adds newtwoExpected768+newfourLimits128+newcontrol64. The old bound explicitly includes oldtwoHeaders2880 (conservative even though only one EMPTY carrier is required), arena4096, oldfourLimits736, caller2048, Request680, EIGHT optionalRequest5504, sixPointConstants576, originalStep02P96, TWO fullbody catalogs3840, TWO convertedPhase catalogs1920, sourceTuple2048 and error256. Its immutable request chain is Endpoint01→Support02→Step02phase4→Step01phase3; all expression/local/pending/caller constructor returns are charged without NRVO. SourceTuple2048 includes THREE whole14-region arrays672, TWO part64slots128, descriptors256, refs/refusal/error/control512 and sorting/factory480. EMPTY oldcarrier/header and all full catalogs/regions/oldsource Limits die before graph; no full oldEndpointCell is allocated. Source failure/error cleanup uses this same bound. Reusing the actual helper does not make its reads free: all64original charges remain.
+
+Preflight/error3616 =twoExpected768+fourLimits128+caller2048+current/pendingstring160+library/environment/error512. This conservatively charges header/error slots even on unexpected return. No source factory or arena allocation occurs under an unsupported environment; a previously acquired source arena belongs to the creator and is separately charged in complete consumer physical chains and, where present, adds4096 to this preflight source stage (7712).
+
+Full emplace/reset24704 =TWOPhaseCells15472+twoExpected768+arena4096+fourLimits128+caller2048+current/pendingRequest1368+oldLimits/Reason/Work176+Context/Token72+control64+library/error512. The heap cell and aggregate initializer/current/pending return are distinct. A noinline reset/emplace stage ends before the original graph; any additional full initializer must be explicitly charged before admission, never nested with32768 or dismissed as NRVO. No105-axis initializer or new body record exists here.
+
+Post-call18392 =heapPhase7736+twoExpected768+arena4096+fourLimits128+caller2048+current/pendingRequest1368+originalReason64+Context/Token72+control64+helper2048. Capture/threshold/comparison and the direct test comparison checks are sequential with graph, never nested. Helper2048 has named1088 plus UNUSED960: TWELVE originalInterval24slots288; FOUR publicBounds24slots96; anchor/argumentrefs128; bool/cursor/scalars64; primitive/environment/library/error512. The twelve Interval slots conservatively cover point operands, local sum/difference/min/max and original primitive argument/expression/current/pending returns; FOUR Bounds slots cover retained destination/publication/argument allowance even when sequential. The by-reference bool helper has no threshold aggregate or extra originalReason copy/return slots. The original reason is already separately charged in the retained header and originalReason64 stage allowance. Unused960 is margin, not fabricated objects or authority. No invented aggregate elision or opaque nested pool is allowed; identify real slots and unused margin in the actual ledger.
+
+Constructor source7000 retains original arena-inclusive4096 chain plus the selected1024 test caller and existing factory/error/leaf allowances, below8192. Actual pre-arena authenticate→quad→edge/project primitive alternatives, lookup alternatives, public/make/initializer and library/error leaves must all be bound; authenticate runs before allocation. Creator cannot be justified from a public wrapper frame alone.
+
+After source HOLD and Root's pinned formatter, compile-only strict GCC and pinned Clang20 O3/fPIC objects, `.su` and nonexecuted sizeof symbol probes must measure every actual layout and path. No executable sizeof probe. Bind both complete source formulas and physical call chains for creator/prearena, preflight/error, enrollment/full factory/catalog/returns, output/reset, original graph, postcall capture/threshold/comparison, direct test checks and exceptional cleanup. Physical chains add heapPhaseCell, retained4096arena, pending owningExpected/Request/helper returns, every mutable global, FOUR Limits and independent library leaves when absent from frames. Include private/public/max lowering/FIRST caller roots, original graph→leg→rotation→scale→timing primitive alternatives, returned local/pending threshold and original reason slots. Bind inherited whole32768 and oldcreator/request proof files by exact hashes plus current objects for any END-extended TU; no stale changed-source identity.
+
+Root's preserved old ledger `build-native/issue488-validation/endpoint01-live-storage-ledger.md`, original resource receipts and v4/auth amendments are provenance references, not authority to omit new scopes or execute old queries. Freeze a new actual ledger/producer/test/independent resource receipt with current source/object/symbol/SU/log hashes before FIRST. If any stage fails49152/8192/output bounds, report exact stage and stop. Unmeasured fields, missing nested frames and unpublished helper slots are not positive admission. Root alone publishes registration, authorizes implementation, releases compile-only measurement, freezes FIRST and retains both outcomes; later outcome corrections require separate immutable receipts rather than rewriting the original freeze.
+
+
+---
+
+# ReachEvidence01: exact finite companion test manifest
+
+HELD test manifest for registration review, matched to docs/ORIGIN_BOARDING_INTERMEDIATE_REACH_EVIDENCE01.md SHA256 b3ac5ec7e431bfddba613ddfa81ff0fc4a055f9b5dbd7f16f636c874a6c68c2e. This is not implementation/evaluation authorization or actual resource admission. Earlier `test-plan.md`, `selected-test-plan-v2.md` and the method-v1 bound `registered-test-manifest-method-v1.md` (SHA78c54015bdb70e53ed24c98f42be3cf24706af794b5b12a7df36ef78923b73d8) remain historical and unchanged. The selected roster is exactly28 indexed slots, one genuine source creator, RAW0, and zero body/pose/selected-pair/owner/hip audits. There is no caller numerical input, synthetic classifier seam, old cap replay, range/reverse/alternate coordinate, subdivision, failed-body retry, old successful report or replacement anchor. Actual classification and resource admission remain UNKNOWN.
+
+## Immutable configuration and setup
+
+Only unchanged #488 Candidate0 and its original authentic provider/request/source/feet/frame/length/load/body policy are admissible. The original private compiler's fixed work configuration is graphs1/legs2/bodies0/sectors3/timing6. Body0 is an explicit structural stop before original body construction, within unchanged original ceilings, and is not a changed numerical guard. One original compiler invocation at most per admitted assessment; original phase counters are reported, not exposed as new caller limits.
+
+Exactly one unchanged genuine public source-provider creator is called before A01 and prints its actual admission/evidence. If creation fails, all28 dependent consumers are declared unavailable SKIPs; no retry, alternate factory or synthetic provider. The creator Expected and any other hidden source-owning result must die before A01 and before destruction/move controls. Only one4096 source arena survives. Test inspector count is exactly0. Each admitted source enrollment uses only its one existing S18 request constructor; there is no separate setup inspector, pose construction or packet constructor outside the roster. Generic hashes use earned retained packet/provenance metadata under the final method, never a fresh request to supply authority.
+
+Four companion fields only, in registered order: capture_guards8; threshold_operations4; comparison_operations4; output_bytes16777216. Original S64 and graph limits are immutable, with no extra public cap fields. Selected types have prefix `BoardingIntermediateReachEvidence01`: Diagnostic/Expected/State/Condition/Kind/Classification/Stage/Bounds/Work. Public `assess_origin_boarding_intermediate_reach_evidence01(provider, existing Endpoint01Candidate)` has only the same existing Candidate0, default authored_descent_midpoint. Private Limits has exactly these four fields. Returns are Expected, not a boolean or caller-authority tuple.
+
+Four exact unexpected error strings are selected: invalid CandidateId is `intermediate reach evidence01 invalid candidate`; any field above its registered ceiling is `intermediate reach evidence01 invalid limits`; short TWO-Expected fixed owning headers is `intermediate reach evidence01 output headers`; unsupported exported environment is `intermediate reach evidence01 unsupported floating point`. Invalid-empty source is structured, not a fabricated preflight exception. Core corrected the exact order to FP FIRST: one fixed counted exported environment guard -> candidate -> raised fields in table order -> TWO-Expected fixed owning headers -> report. Unsafe FP takes precedence over all later preflight defects. No existing row combines preflight defects; source-reviewed order does not add an unregistered mixed query.
+
+Exact postpreflight order is report construction -> one-slot room check (structured output capacity, source0/phase0) -> S64 -> reserve1/reset -> ONE original phase -> capture/threshold/comparison. Structured required_output_bytes=2*sizeof(Expected)+sizeof(PhaseCell) is the input room required before S64; output_capacity_bytes is independently the actual owned two headers plus actual allocated capacity. Source refusal can own only headers while exact replay still needs full required input room. A09 required-minus1 is a structured pre-S64 room refusal; A05 is the owning-header preflight error. Structured Work.preflight_guards=1. EVERY actual consumer invocation executes one fixed FP preflight guard, including unexpected errors: Totals.preflight_guards equals executed consumers, not only structured work sums. An unexpected has no report: record its exact error and that one contractual fixed check, never fabricated source/phase/evidence counters. Original internal environment checks remain charged under original helper/source proof; C02 is independently charged within capture8.
+
+Exact enums have uint8 storage and ordinals: State not_run0/evidence1/unavailable2/unsupported3/capacity4; Condition none0/invalid_binding1/source_identity2/capture_identity3/evidence_unavailable4/unsupported_arithmetic5/capture_capacity6/threshold_capacity7/comparison_capacity8/output_capacity9/original_capacity10/original_unsupported11/inconsistent_evidence12/allocation_failure13; Kind not_run0/reach_refusal1/intentional_body_stop2; Classification not_run0/sufficient_inclusion1/strict_too_long2/strict_too_short3/unresolved_enclosure4; Stage not_run0/preflight1/source2/output3/phase4/capture5/threshold6/comparison7; OriginalResult not_run0/accepted1/unresolved2/unsupported3/capacity4. Bounds has two doubles and explicit supported bool; default unsupported zeros are NOT evidence.
+
+The report retains original by-value phase_reason unmodified; actual_first0/actual_last1 and phase_invoked independently identify the real call. It holds distance_squared/minimum_squared/maximum_squared, source mask/status, Work, Kind/classification/state/stop metadata, required/owned output bytes and one original PhaseCell vector. No Request/full catalog/old Endpoint Cell/archive is retained in its header. Work uses uint64 preflight_guards/source_guards/phase_calls/capture_guards/threshold_operations/comparison_operations plus original phase counters. Static body/source/support/load/self/material/world/route/seat/actor/save/dynamics qualifications are false; source_admitted and evidence_complete do not change them.
+
+Sparse uint8 masks are capture_attempted/capture_written (8bits, complete255), threshold_attempted/threshold_written and comparison_attempted/comparison_written (4bits, complete15). stop_operation/source_operation/capture_operation/threshold_operation/comparison_operation/captured_side default255. C01..C08/T01..T04/Q01..Q04 labels are one-based; indices/maskbits are label−1. Upcoming cursor precedes charge; failed charge sets no count or bit. Successful charge sets attempted; valid CHECK writes, finite false readiness CHECK stops attempted/unwritten, while completed false comparisons write. Per-row destinations reset before charge; no stale support or implicit classifier before C08 bit7.
+
+## Indexed roster
+
+All unstated fields are default. Uc/Ut/Uq are A01's actual charged capture/threshold/comparison counts, including honest partial stopped work; R is A01.required_output_bytes, distinct from actual output_capacity_bytes. Source/evidence unavailability never authorizes default-value reads or substitute controls. Zero stage controls execute only for U>0; one-less executes only for U>1. Output controls are distinct from work counts. Raised controls execute with available provider irrespective of reached geometry.
+
+|Slot|Exact input/control|Conditional execution and test purpose|
+|---|---|---|
+|A01|Default Candidate0|One genuine FIRST; print actual provenance, phase result/refusal/counters, D/min/max/masks/cursors/comparison/classification/output before numeric expectations.|
+|A02|capture_guards0|Execute iff Uc>0; uncharged first capture cursor, no attempted/written bit.|
+|A03|threshold_operations0|Execute iff Ut>0; authentic earlier C guards may remain, threshold NOT_RUN.|
+|A04|comparison_operations0|Execute iff Uq>0; completed supported thresholds may remain, comparison NOT_RUN.|
+|A05|output_bytes0|Provider available: fixed-header output shortfall, no original phase or evidence.|
+|A06|capture_guards=Uc−1|Execute iff Uc>1; retained earlier stage evidence stays independently gated. If stop is C08, earlier threshold/comparison fields may be complete but final evidence is not.|
+|A07|threshold_operations=Ut−1|Execute iff Ut>1; last upcoming record unattempted/unwritten, honest partial publication.|
+|A08|comparison_operations=Uq−1|Execute iff Uq>1; earlier booleans remain earned, missing row prevents complete classification.|
+|A09|output_bytes=R−1|Execute iff structured FIRST R exists. R−1 is above fixed headers but below one-slot room: structured capacity/output_capacity/output-stage/op255, owned headers only, source0/phase0/evidence NOT_RUN.|
+|A10|capture_guards9|Typed upper-limit preflight, no original geometry/evidence.|
+|A11|threshold_operations5|Same.|
+|A12|comparison_operations5|Same.|
+|A13|output_bytes16777217|Same.|
+|A14|capture=Uc, threshold=Ut, comparison=Uq, output=R|Execute iff structured FIRST baseline exists. Exact semantic replay of earned masks/state/cause/provenance/counters; reservation slack excluded from hash.|
+|A15|FE_DOWNWARD|One unsafe-FP call iff setup succeeds; restore original environment afterward.|
+|A16|FE_UPWARD|Same.|
+|A17|FE_TOWARDZERO|Same.|
+|A18|FTZ set in original x86/SSE control|Registered hardware conditional, unavailable SKIP.|
+|A19|DAZ set in original x86/SSE control|Registered hardware conditional, unavailable SKIP.|
+|A20|Original actual rounding-unit disagreement with fenv|Registered hardware conditional, unavailable SKIP.|
+|A21|Existing CandidateId255|Single invalid-ID typed preflight, no phase/evidence.|
+|A22|Empty moved-from genuine alias|Copy original; move alias owner into a scoped saved handle; assess empty alias once; restore. Original remains valid. No default provider/forged Data.|
+|A23|Valid copied alias|Assess same issued owner while original survives. No second native factory/source creator.|
+|A24|Valid moved-to provider|Move original into a valid handle; assess it; restore original.|
+|A25|Copy survives original handle destruction|Copy alias; move original into scoped discarded owner; destroy scope BEFORE call, with no hidden creator Expected retaining the original handle. Assess survivor while original empty; restore afterward.|
+|A26|Restored original after A25|Fresh same-issued-owner call proves defined restored-handle reuse; not a repeated invalid-source assessment.|
+|A27|capture_guards0 + threshold_operations0|Execute iff Uc>0; capture capacity precedes threshold; original reason remains separate.|
+|A28|threshold_operations0 + comparison_operations0|Execute iff Ut>0; threshold capacity precedes comparison.|
+
+The count decomposition is1 FIRST +12 isolated four-field controls +1 exact +6 FP +2 identity +4 lifetime +2 mixed =28. There are no extra setup assessments, implicit raw calls or geometry checks inside pure hashing. No unsupported slot is rerun with a different mode/request/candidate. All outcomes except structural assertions are unknown until Root retains FIRST.
+
+## Evidence semantics to bind to the held method
+
+Root selected exactly TWO authenticated same-call capture modes. The first is the actual private unresolved/reach result with valid side, using its supported nested limiting-bound D. The second is ONLY the intentional fixed bodies0 stop: original result capacity, condition body_capacity, empty side, graph1/legs2/body0, both original legs with all five complete flags and the same-call/provider/request latch. Only in that second mode may the genuinely published PORT leg.distance_squared supply D. Default/unearned leg distance is never read. All other original capacity/results leave capture evidence NOT_RUN. Actual invocation[0,1]/forward metadata stays separate from original refusal default first/last/depth/predicate metadata. Body-stop remains original hard capacity even if independent reach_evidence_complete is true; no phase/body/contact/SELF or gameplay acceptance follows.
+
+Capture C01–C08 is lazy and charged before named reads. C03 authenticates one of the two exact capture modes; C05 reads only that mode's actual earned D record. Threshold T01 ADD(sum), T02 SQUARE, T03 SUB(difference), T04 SQUARE uses original anonymous primitives and fixed original length literals. Comparison Q01 D.upper<=maximum.lower; Q02 D.lower>=minimum.upper; Q03 D.lower>maximum.upper; Q04 D.upper<minimum.lower executes every row in that order without truth-value short circuit. A false comparison is evaluated/written, not NOT_RUN. Complete evidence requires final C08 and all earlier required written/support bits. C08 also checks mode consistency: original reach-refusal cannot have both inclusion bits true; intentional body-stop requires both inclusion bits true and both strict exclusion bits false. Capacity records upcoming cursor but no attempted/written bit; unsupported publication supplies no usable default bound. Preserve original ordinary/hard reason separately from any companion hard terminal stop; complete reach evidence and original capacity can coexist truthfully.
+
+Generic tests verify the actual supported finite ordered published records and exact comparison flags directly, without a new seam or numerical pose. Sufficient inclusion is Q01&&Q02; strict-too-long uses Q03 and strict-too-short Q04; otherwise ordinary unresolved enclosure. Malformed/unsupported/unavailable records remain NOT_RUN and cannot classify. Equality is source-audited only: inward comparisons are nonstrict, outward exclusions strict; positive-gamma derivative applicability remains distinct. No synthetic fixture or singular factorization is selected.
+
+On complete reach_refusal evidence, state evidence/stop none preserves original_result unresolved/reach; unresolved_enclosure is still complete comparison evidence. On complete intentional_body_stop evidence, original capacity/state capacity/stop original_capacity remains independently of sufficient_inclusion classification. Every ineligible returned original result still reaches C01/C02 then attempts C03 eligibility unless an earlier hard stop interrupts; C03 fails attempted/unwritten, Kind not_run/side255, D/T/Q NOT_RUN, original hard state retained. No pre-capture eligibility shortcut is substituted. The NEW Diagnostic.arithmetic_supported starts false and becomes true only at C05 after actual supported finite ordered D is validated and original_result is not unsupported. A genuinely attempted new FP/arithmetic failure clears it; a later capacity or ordinary stop preserves earlier earned true. This is partial companion arithmetic support, not evidence_complete or full original-phase support. The ORIGINAL PhaseCell aggregate arithmetic_supported=false is unearned in both eligible modes, remains untouched and is not a capture gate. OriginalResult::unsupported never promotes to supported companion arithmetic. Original unsupported maps original_unsupported/phase/op255, original capacity initially original_capacity/phase/op255. Later companion capacity/unsupported can replace latest hard stop stage/cause/op without modifying original_result/reason; ordinary readiness/inconsistency cannot overwrite hard state/cause. Invalid source is structured invalid_binding; source unsafe is unsupported_arithmetic; other failed source identity is unavailable/source_identity with actual S64 mask/count/cursor and no phase. Allocation/capacity failures retain truthful source/owned bytes, never fabricated one-slot completion.
+
+## Finite work/output and complete caller forecast
+
+Per process: creator<=1, indexed consumers+SKIPs=28, test request inspectors=0, enrollment S18 request constructions<=28, original compiler invocations<=28, charged graphs<=28, source guards<=1792, legs<=56, original bodies=0, sectors<=84, timing<=168; new capture<=224, threshold<=112, comparison<=112; fixed preflight checks=executed consumers<=28 including unexpected calls. Sum all other work only from actual published structured records. Report actual invocations separately from charged graphs. Bounded uint32 totals validate maxima before narrowing. Check/failure globals are named separately. All candidate/source/body/raw/oracle retry counters stay0.
+
+ONE compact Summary<=200 stores the FIRST actual counts, semantic hash, state/side/provenance/masks and required output, never a PhaseCell/report/archive. Totals<=128 plus checks/failures12 are real mutable globals; Stream objects target88 each. Creator named caller936 = Summary200 + Streams176 + Totals128 + checks/failures12 + native/boot Expected handles80 + providerOptional24 + saved pointers/bytes24 + refs32 + current/pending typed errors160, within1024. Every current/local/pending admission result, returned error and helper argument is accounted; no NRVO or dead-future-frame assumption. Future fixtures/phase records/oracle helpers are absent from main, and this harness introduces none.
+
+The new Context has deleted copy/move constructors, no public/default issuance and only its named bounded consumer as construction friend; the CaptureToken constructor is only the actual phase adapter friend. No caller report/default cell enrolls either. Tests use exact-signature nonconstructibility checks once held headers exist, without generating a context/token.
+
+Fill Summary in place from a const returned Expected; do not return an owning Expected or Summary through a query wrapper. The graph caller2048 is a selected upper pool, not a fabricated object: source implementation must inventory main's retained Summary/streams/global totals/provider/error state, active assessment/roster arguments and references, lifecycle current/copied/saved/discarded handles in their actual scopes, FP save/restore object, hash/accounting scalar temporaries, current/pending errors and any returned compact metadata. The selected named graph caller forecast is1276 plus772 UNUSED margin: Summary200+streams176+Totals128+check/failure12+native/boot80+providerOptional24+alias/lifetime64+savedptrbytes24+environment16+compact Summary current/pending200+attribution/control128+refs64+error160. These conditional targets require actual lexical inventory/layout measurements, not invented storage. FOUR actual Limits and TWO Expected are outside that pool and independently charged. Do not count a destroyed discarded owner as live during A25; do count its source arena via the surviving genuine alias. A new aggregate-return helper adds its local/current/pending copies explicitly before actual admission; unused pool margin is labeled unused.
+
+Actual layouts/resources remain UNKNOWN. Conditional Core forecasts: TWO owning headers<=768; FOUR companion Limits<=128; one original PhaseCell7736 output slot; graph41448 retaining full original32768; pregraph factory25640; postgraph capture/threshold18392. All source stages must additionally match actual test caller/globals and actual header/limit/error/control/return sizes. The old S64 carrier's cells are EMPTY and catalog/carrier/factory temporaries die before graph; its current/local/pending slots are charged in their own stage. An original PhaseCell reset has a separate full source/machine stage. A retained allocated slot is owned output, not accepted body evidence. Source graph ceilings cannot borrow old scratch slack.
+
+Whole creator<=8192 includes arena4096, all caller/allocator/error/library/global paths. Whole graph<=49152 includes full original32768, sourcearena, BOTH Expected headers, current/pending original Request/optional, original limits/refusal, context/token/capture, FOUR actual new limits, caller2048 and all named mutable globals/error/helper slots. Postgraph original threshold/capture helpers are sequential, with no nested body/SELF/LD Oracle. The named bool-return by-reference-only threshold helper runs C06/T01–T04/C07 after C05; it directly publishes earned squared bounds, while Q01–Q04 and C08 remain in the caller. No alternate aggregate-return threshold API is selected. Helper2048 has named1088 plus960 UNUSED margin under the held method; enumerate actual local/pending original Interval operands, by-reference targets, bool returns, reason/reference/control slots and primitive/environment/error leaves. No returned threshold aggregate or fake unused storage is introduced. Complete actual GCC/Clang O3 object/layout/stack chains are mandatory before FIRST, with no executable probe.
+
+Owned output<=16777216 is TWO actual Expected headers plus actual vector capacity*PhaseCell size, one reserve/no growth. Required input budget is fixed two owning headers+one original slot, independent of actual reached allocation; never lower exact replay to header-only owned bytes. Shared stdout+stderr<=16384 includes SOURCE, compact FIRST, skips/final checks and failures. Verify actual byte count and both stream states, not a counter that silently truncates. No28-packet dump or full-cell archive.
+
+## Registration gate
+
+This manifest binds the exact held Core typed method/hash above, FP-FIRST/errors, inspector0, two capture modes, sparse metadata/hard-state distinctions and required-versus-owned output. Independent review, public registration commit/push and Root source/format/compile-only/actual resource gates precede a frozen once-FIRST. No classification prediction or candidate change follows an adverse result. Preserve #488 FIRST and all earlier source/observations exactly. Contact/load/SELF/WORLD/material/route/seat/actor/gameplay remain unearned.
+
+
+---
+
+## Measured resources and retained FIRST — 2026-10-06
+
+This appendix records the executed registered method. The complete preceding
+57,266-byte registration remains byte-for-byte unchanged (SHA-256
+`096024fce4c2a947ac339eb33cfcdbfdbf1e84658ff22a5400de15f5b8f71c86`).
+The implementation was frozen and published at
+`eccfa8eef51253fb121c7ed374cbebbf48390c4d` before either first execution.
+
+### Actual layouts and complete live stages
+
+Root measured compile-only Release objects, symbol sizes, stack usage and
+call chains with GCC and Clang 20, including the actual test's native no-PIC
+flags as well as PIC objects. Both compilers agree on the following byte sizes:
+Expected 360; Diagnostic 352; Work 88; companion Limits 32; Context 32;
+CaptureToken 40; fresh state 16; optional token 48; Bounds 24; original PhaseCell
+7,736; original Request 680; optional Request 688; original limits 72;
+original reason 64; original work 40; creator Expected 40. Test Summary is 48,
+Totals 64, all mutable globals together 76, Environment 16 and StreamCounter 88.
+
+The table combines the whole active caller and producer path, including
+retained source/output, current and pending values, globals, independent
+library/error allowances and complete inherited original graph storage.
+Physical rows use the actual measured active stack chains; they do not reduce
+source reservations when an optimizer removes storage.
+
+| Active stage | Complete source bytes | GCC physical bytes | Clang 20 physical bytes |
+| --- | ---: | ---: | ---: |
+| Whole creator | 7,000 | 6,828 | 6,580 |
+| Preflight with admitted arena | 7,664 | 8,164 | 7,532 |
+| S64 enrollment | 25,592 | 30,228 | 28,132 |
+| Original PhaseCell reset | 24,656 | 23,364 | 22,732 |
+| Original graph | 41,400 | 30,844 | 29,556 |
+| Capture and threshold processing | 18,344 | 18,636 | 18,132 |
+| Direct test checks | 18,344 | 15,260 | 14,836 |
+
+The creator is within 8,192 bytes; all child scratch stages are within 49,152
+bytes. The original graph reservation remains the full 32,768 bytes. No stage
+borrows unused inherited storage. Owned and required full output are both
+8,456 bytes: two Expected headers (720) plus one original PhaseCell (7,736),
+well within the 16,777,216-byte output cap. A preallocation refusal owns only
+its 720 header bytes but retains the full 8,456-byte required budget.
+
+The selected 1,024-byte creator caller pool contains 620 named bytes and 404
+unused. The 2,048-byte graph caller pool contains 860 named bytes and 1,188
+unused. The production helper pool contains 1,088 named bytes and 960 unused.
+Before FIRST, review amended the direct test helper inventory to include its
+separate fixed eight-element accounting array: 1,053 named bytes and 995 unused
+within the same 2,048-byte pool. Source stage totals and caps did not change.
+All source and physical gates passed independent review before execution.
+
+The [pre-execution error representation clarification](https://github.com/gobha-me/apsis-drift/issues/493#issuecomment-6027479646)
+was published before FIRST. On an unsafe floating-point preflight the selected
+Expected/string error may allocate its one bounded error buffer (at most 57
+bytes including its terminator), within the registered error allowance. No
+source/request factory, source arena or PhaseCell allocation follows that
+failure. This clarification changed no source, controls, limits, roster or
+numerical method; the original registration bytes are retained above.
+
+### First execution and exact retained output
+
+GCC began at `2026-10-06T23:48:33.107297+00:00`; Clang 20 began at
+`2026-10-06T23:48:33.521890+00:00`. Both exited zero. Their complete shared
+stdout/stderr outputs are byte-identical: 760 bytes, SHA-256
+`964756bf4e1b35ea7db5746e612bffa6a08ae60398a52e290e14198019b36cf0`.
+Each process performed one creator and all 28 registered consumers, with zero
+skips, 643 checks and zero failures. The custom once-FIRST execution is not
+repeated. Later regression assertions and normal test runs do not replace
+these retained artifacts.
+
+```text
+FIRST_REACH_EVIDENCE01_SOURCE admitted=1 complete=1 bytes=4096 condition=0 work=21,1,2,2
+FIRST_INTERMEDIATE_REACH_EVIDENCE01 A01 version=1 candidate=0 state=1 original=2 kind=1 class=2 complete=1 arithmetic=1 source=1/18446744073709551615 actual=[0,1] capacity=1 owned=8456 required=8456 work=1,64,1,1,1,0,0,0,8,4,4, masks=255,255/15,15/15,15 cursors=63,7,3,3 captured_side=0 stop=0/0/255 phase=4/0 side=0 private=[0,0] depth=0 D=[1.0706311153846131,1.0706311153846169] min=[3.7248999999999497e-06,3.7248999999999523e-06] max=[0.89800261689999961,0.89800261690000027] comparisons=0110
+REACH_EVIDENCE01_VALIDATION creator=1 consumers=28 skips=0 inspectors=0 raw=0 bodies=0 pairs=0 owners=0 hips=0 checks=643 failures=0 aggregate=28,897,14,14,14,0,0,0,87,39,31,
+```
+
+The genuine unchanged candidate earns complete `reach_refusal` evidence for
+PORT, with the original result still `unresolved`. Its squared distance is
+`[1.0706311153846131, 1.0706311153846169]`; the original maximum squared reach
+is `[0.89800261689999961, 0.89800261690000027]`. The evaluated strict converse
+`D.lower > maximum.upper` is true, so classification is `strict_too_long`.
+This is a genuine nominal overreach of this candidate, rather than a mere
+failure of inward sufficient inclusion. The minimum squared threshold is
+`[3.7248999999999497e-06, 3.7248999999999523e-06]`; all four written comparisons
+are `0110`. Source mask UINT64_MAX, capture 255/255, threshold 15/15 and
+comparison 15/15 are fully earned. The call's actual requested domain `[0,1]`
+remains distinct from the original refusal's unearned private `[0,0]` and depth
+zero. The original reason, body dimensions and joint policy remain unchanged.
+
+One original graph and one leg were charged; no original body, sector or
+timing work occurred in A01. Across the entire roster, 14 original phase
+calls/graphs/legs occurred, with zero bodies, sectors or timing. There were
+zero raw geometry calls, request inspectors, body pairs, owners or hip probes.
+This result establishes neither a kernel contradiction nor impossibility for
+other postures. Body, contact, load, SELF, WORLD, material, route, occupied seat,
+actor, save and First Flight qualifications remain unearned. Any new candidate
+requires a separate issue and source-bound method before evaluation.
+
+Independent retained-outcome review checked the frozen source, binary,
+receipt and artifact bindings and reported PASS without replaying a query.
+The freeze SHA-256 is
+`b756fb10f6230a6fcee2e114d51c4baacb61e7f8ea3c3b65ca725a0452e1229f`;
+the review receipt SHA-256 is
+`31d38e7547d6419aaa211981d10778137fd85df6b1e645fe19c062786cfe29c0`.

@@ -686,3 +686,354 @@ auto assess_origin_boarding_intermediate_endpoint01(
   return detail::intermediate_endpoint01_bounded(source, candidate);
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_reach_evidence01_internal.hpp"
+namespace apsis_drift {
+namespace {
+using RED = BoardingIntermediateReachEvidence01Diagnostic;
+using REE = BoardingIntermediateReachEvidence01Expected;
+using REL = detail::BoardingIntermediateReachEvidence01Limits;
+using REW = BoardingIntermediateReachEvidence01Condition;
+using RES = BoardingIntermediateReachEvidence01State;
+using REStage = BoardingIntermediateReachEvidence01Stage;
+using REKind = BoardingIntermediateReachEvidence01Kind;
+using REClass = BoardingIntermediateReachEvidence01Classification;
+using REOriginal = BoardingIntermediateReachEvidence01OriginalResult;
+using REToken = detail::BoardingIntermediateReachEvidence01CaptureToken;
+using REContext = detail::BoardingIntermediateReachEvidence01Context;
+using RECall = detail::BoardingIntermediateReachEvidence01FreshCallRecord;
+constexpr std::size_t reach_fixed_output = 2 * sizeof(REE);
+static_assert(sizeof(REE) <=
+              kBoardingIntermediateReachEvidence01MaximumExpectedBytes);
+static_assert(sizeof(REL) == 32);
+static_assert(sizeof(REContext) == 32 && sizeof(REToken) == 40);
+static_assert(sizeof(RECall) + sizeof(std::optional<REToken>) <= 64);
+constexpr std::size_t reach_graph_live =
+    32768 + reach_fixed_output + 4096 + 4 * sizeof(REL) + 2048 +
+    sizeof(Request) + sizeof(std::optional<Request>) +
+    sizeof(detail::BoardingRouteFootPhaseLimits) +
+    sizeof(BoardingRouteFootPhaseRefusal) + sizeof(REContext) +
+    sizeof(REToken) + 64;
+static_assert(reach_graph_live <=
+              kBoardingIntermediateReachEvidence01MaximumScratchBytes);
+auto reach_limits_valid(const REL& l) -> bool {
+  return l.capture_guards <= 8 && l.threshold_operations <= 4 &&
+         l.comparison_operations <= 4 &&
+         l.output_bytes <=
+             kBoardingIntermediateReachEvidence01MaximumOutputBytes;
+}
+[[gnu::noinline]] auto reach_enroll(RED& d, Request& request) -> bool {
+  // This original carrier is lexical, has EMPTY cells, and dies before graph.
+  D original(d.source);
+  original.candidate = d.candidate;
+  const L fixed_source_limits;
+  R reason;
+  const bool good = enroll(original, request, fixed_source_limits, reason);
+  d.work.source_guards = original.work.source_guards;
+  d.source_evaluated = original.source_evaluated;
+  d.source_operation = reason.operation;
+  d.source_admitted = good && original.source_enrolled;
+  if (d.source_admitted) return true;
+  const REW why = reason.condition == W::invalid_binding ? REW::invalid_binding
+                  : reason.condition == W::unsupported_arithmetic
+                      ? REW::unsupported_arithmetic
+                      : REW::source_identity;
+  return detail::intermediate_reach_evidence01_refuse(d, why, REStage::source,
+                                                      reason.operation);
+}
+[[gnu::noinline]] auto reach_reset(BoardingRouteFootPhaseCell& c) -> void {
+  c = {};
+}
+auto reach_leg_complete(const BoardingRouteFootPhaseLeg& leg) -> bool {
+  return leg.nominal_links && leg.target_sole_identity &&
+         leg.derivative_domains && leg.joint_sectors && leg.timing_complete;
+}
+auto reach_eligible(RED& d) -> bool {
+  const auto& reason = d.phase_reason;
+  if (d.original_result == REOriginal::unresolved &&
+      reason.condition == BoardingRouteFootPhaseCondition::reach &&
+      reason.side && *reason.side < 2 && d.work.phase.graphs == 1 &&
+      d.work.phase.legs == *reason.side + 1 && d.work.phase.bodies == 0) {
+    d.kind = REKind::reach_refusal;
+    d.captured_side = static_cast<std::uint8_t>(*reason.side);
+    return true;
+  }
+  if (d.original_result == REOriginal::capacity &&
+      reason.condition == BoardingRouteFootPhaseCondition::body_capacity &&
+      !reason.side && d.work.phase.graphs == 1 && d.work.phase.legs == 2 &&
+      d.work.phase.bodies == 0 && reach_leg_complete(d.cells.front().legs[0]) &&
+      reach_leg_complete(d.cells.front().legs[1])) {
+    d.kind = REKind::intentional_body_stop;
+    d.captured_side = 0;
+    return true;
+  }
+  return false;
+}
+auto reach_finite(const BoardingIntermediateReachEvidence01Bounds& b) -> bool {
+  return b.supported && std::isfinite(b.lower) && std::isfinite(b.upper) &&
+         b.lower <= b.upper;
+}
+auto reach_capture_row(const REToken& token, RED& d, const REL& l,
+                       std::uint8_t row) -> bool {
+  if (!detail::intermediate_reach_evidence01_capture_charge(d, l, row))
+    return false;
+  bool good = false;
+  REW why = REW::capture_identity;
+  switch (row) {
+    case 0:
+      good = detail::intermediate_reach_evidence01_token_valid(token, d);
+      break;
+    case 1:
+      good = detail::boarding_route_foot_phase_environment();
+      why = REW::unsupported_arithmetic;
+      break;
+    case 2:
+      good = reach_eligible(d);
+      why = REW::evidence_unavailable;
+      break;
+    case 3: {
+      const auto& request = *token.request();
+      const auto& cell = *token.cell();
+      good =
+          d.version == 1 &&
+          d.candidate == BoardingIntermediateEndpoint01Candidate::
+                             authored_descent_midpoint &&
+          d.source_admitted &&
+          d.source_evaluated == std::numeric_limits<std::uint64_t>::max() &&
+          token.context()->request() == &request && d.actual_first == 0 &&
+          d.actual_last == 1 && cell.first == 0 && cell.last == 1 &&
+          request.seconds_per_parameter == 2 &&
+          request.port_reaction_fraction == std::array<double, 2>{.0625, .0625};
+      break;
+    }
+    case 4: {
+      const auto& value = d.kind == REKind::reach_refusal
+                              ? d.phase_reason.limiting_bound
+                              : token.cell()->legs[0].distance_squared;
+      good = std::isfinite(value.lower) && std::isfinite(value.upper) &&
+             value.lower <= value.upper;
+      why = REW::unsupported_arithmetic;
+      if (good) {
+        d.distance_squared = {value.lower, value.upper, true};
+        if (d.original_result != REOriginal::unsupported)
+          d.arithmetic_supported = true;
+      }
+      break;
+    }
+    case 7: {
+      const auto& q = d.comparisons;
+      const bool inclusion = q[0] && q[1];
+      const bool disjoint = !(q[2] && q[3]) && !(inclusion && (q[2] || q[3]));
+      const bool mode = d.kind == REKind::reach_refusal
+                            ? !inclusion
+                            : d.kind == REKind::intentional_body_stop &&
+                                  inclusion && !q[2] && !q[3];
+      good = detail::intermediate_reach_evidence01_token_valid(token, d) &&
+             d.version == 1 && kBoardingRouteFootPhaseVersion == 1 &&
+             d.capture_written == 127 && d.threshold_written == 15 &&
+             d.comparison_written == 15 && reach_finite(d.distance_squared) &&
+             reach_finite(d.minimum_squared) &&
+             reach_finite(d.maximum_squared) &&
+             d.minimum_squared.upper <= d.maximum_squared.lower && disjoint &&
+             mode;
+      why = REW::inconsistent_evidence;
+      break;
+    }
+    default: break;
+  }
+  if (!good)
+    return detail::intermediate_reach_evidence01_refuse(d, why,
+                                                        REStage::capture, row);
+  d.capture_written |= static_cast<std::uint8_t>(std::uint8_t{1} << row);
+  return true;
+}
+auto reach_comparisons(RED& d, const REL& l) -> bool {
+  for (std::uint8_t row = 0; row < 4; ++row) {
+    d.comparison_operation = row;
+    d.comparisons[row] = false;
+    if (d.work.comparison_operations >= l.comparison_operations)
+      return detail::intermediate_reach_evidence01_refuse(
+          d, REW::comparison_capacity, REStage::comparison, row);
+    ++d.work.comparison_operations;
+    d.comparison_attempted |= static_cast<std::uint8_t>(std::uint8_t{1} << row);
+    if (!reach_finite(d.distance_squared) || !reach_finite(d.minimum_squared) ||
+        !reach_finite(d.maximum_squared))
+      return detail::intermediate_reach_evidence01_refuse(
+          d, REW::unsupported_arithmetic, REStage::comparison, row);
+    d.comparisons[row] =
+        row == 0   ? d.distance_squared.upper <= d.maximum_squared.lower
+        : row == 1 ? d.distance_squared.lower >= d.minimum_squared.upper
+        : row == 2 ? d.distance_squared.lower > d.maximum_squared.upper
+                   : d.distance_squared.upper < d.minimum_squared.lower;
+    d.comparison_written |= static_cast<std::uint8_t>(std::uint8_t{1} << row);
+  }
+  return true;
+}
+auto reach_capture(const REToken& token, RED& d, const REL& l) -> bool {
+  for (std::uint8_t row = 0; row < 5; ++row)
+    if (!reach_capture_row(token, d, l, row)) return false;
+  if (!detail::intermediate_reach_evidence01_thresholds(token, d, l) ||
+      !reach_comparisons(d, l) || !reach_capture_row(token, d, l, 7))
+    return false;
+  d.evidence_complete = true;
+  const auto& q = d.comparisons;
+  d.classification = q[0] && q[1] ? REClass::sufficient_inclusion
+                     : q[2]       ? REClass::strict_too_long
+                     : q[3]       ? REClass::strict_too_short
+                                  : REClass::unresolved_enclosure;
+  if (d.original_result != REOriginal::capacity &&
+      d.original_result != REOriginal::unsupported) {
+    d.state = RES::evidence;
+    d.stop_condition = REW::none;
+    d.stop_stage = REStage::not_run;
+    d.stop_operation = 255;
+  }
+  return true;
+}
+} // namespace
+
+auto detail::intermediate_reach_evidence01_refuse(RED& d, REW why,
+                                                  REStage stage,
+                                                  std::uint8_t op) -> bool {
+  const bool unsupported =
+      why == REW::unsupported_arithmetic || why == REW::original_unsupported;
+  const bool capacity =
+      why == REW::capture_capacity || why == REW::threshold_capacity ||
+      why == REW::comparison_capacity || why == REW::output_capacity ||
+      why == REW::allocation_failure || why == REW::original_capacity;
+  if (unsupported) {
+    d.arithmetic_supported = false;
+    d.state = RES::unsupported;
+  } else if (capacity && d.state != RES::unsupported) {
+    d.state = RES::capacity;
+  } else if (d.state != RES::capacity && d.state != RES::unsupported) {
+    d.state = RES::unavailable;
+  } else {
+    return false;
+  }
+  d.stop_condition = why;
+  d.stop_stage = stage;
+  d.stop_operation = op;
+  return false;
+}
+auto detail::intermediate_reach_evidence01_capture_charge(RED& d, const REL& l,
+                                                          std::uint8_t row)
+    -> bool {
+  d.capture_operation = row;
+  if (d.work.capture_guards >= l.capture_guards)
+    return intermediate_reach_evidence01_refuse(d, REW::capture_capacity,
+                                                REStage::capture, row);
+  ++d.work.capture_guards;
+  d.capture_attempted |= static_cast<std::uint8_t>(std::uint8_t{1} << row);
+  return true;
+}
+auto detail::intermediate_reach_evidence01_token_valid(const REToken& t,
+                                                       const RED& d) -> bool {
+  const auto* x = t.context();
+  if (!x || t.owner() != &d || x->owner() != &d || !x->data() ||
+      x->data() != A::data(d.source) || !A::valid(d.source) ||
+      !d.source_admitted ||
+      d.source_evaluated != std::numeric_limits<std::uint64_t>::max() ||
+      t.request() != x->request() || !t.request() || t.call() != x->call() ||
+      !t.call())
+    return false;
+  return d.cells.size() == 1 && d.cells.capacity() == 1 &&
+         t.cell() == &d.cells.front() && t.call()->calls == 1 &&
+         t.call()->completed && t.call()->issued && d.work.phase_calls == 1 &&
+         d.phase_invoked;
+}
+[[gnu::noinline]] auto detail::intermediate_reach_evidence01_phase_call(
+    const REContext& x, RED& d, RECall& call, std::optional<REToken>& output)
+    -> bool {
+  if (x.owner() != &d || !x.data() || x.data() != A::data(d.source) ||
+      !A::valid(d.source) || !x.request() || x.call() != &call ||
+      !d.source_admitted ||
+      d.source_evaluated != std::numeric_limits<std::uint64_t>::max() ||
+      d.cells.size() != 1 || d.cells.capacity() != 1 || call.calls != 0 ||
+      call.completed || call.issued || d.work.phase_calls != 0 ||
+      d.work.phase.graphs != 0 || d.work.phase.legs != 0 ||
+      d.work.phase.bodies != 0 || d.work.phase.sectors != 0 ||
+      d.work.phase.timing != 0 || output.has_value())
+    return intermediate_reach_evidence01_refuse(d, REW::capture_identity,
+                                                REStage::phase, 255);
+  BoardingRouteFootPhaseLimits fixed;
+  fixed.graphs = 1;
+  fixed.legs = 2;
+  fixed.bodies = 0;
+  fixed.sectors = 3;
+  fixed.timing = 6;
+  ++call.calls;
+  ++d.work.phase_calls;
+  d.phase_invoked = true;
+  const auto status = boarding_route_foot_phase_cell(
+      *x.request(), 0, 1, false, fixed, d.work.phase, d.cells.front(),
+      d.phase_reason);
+  call.completed = true;
+  using O = BoardingRouteFootPhaseCellResult;
+  d.original_result = status == O::accepted      ? REOriginal::accepted
+                      : status == O::unresolved  ? REOriginal::unresolved
+                      : status == O::unsupported ? REOriginal::unsupported
+                                                 : REOriginal::capacity;
+  intermediate_reach_evidence01_refuse(
+      d,
+      status == O::unsupported ? REW::original_unsupported
+      : status == O::capacity  ? REW::original_capacity
+                               : REW::evidence_unavailable,
+      REStage::phase, 255);
+  output = REToken(x, d);
+  call.issued = true;
+  return true;
+}
+[[gnu::noinline]] auto detail::intermediate_reach_evidence01_bounded(
+    const OriginBoardingIntermediatePauseSupport& provider,
+    BoardingIntermediateEndpoint01Candidate candidate, REL limits) -> REE {
+  // Exactly one fixed preflight record, before every factory and other error.
+  if (!boarding_route_foot_phase_environment())
+    return std::unexpected(
+        "intermediate reach evidence01 unsupported floating point");
+  if (candidate !=
+      BoardingIntermediateEndpoint01Candidate::authored_descent_midpoint)
+    return std::unexpected("intermediate reach evidence01 invalid candidate");
+  if (!reach_limits_valid(limits))
+    return std::unexpected("intermediate reach evidence01 invalid limits");
+  if (limits.output_bytes < reach_fixed_output)
+    return std::unexpected("intermediate reach evidence01 output headers");
+  REE result(std::in_place, provider);
+  auto& d = *result;
+  d.candidate = candidate;
+  d.work.preflight_guards = 1;
+  d.output_capacity_bytes = reach_fixed_output;
+  d.required_output_bytes =
+      reach_fixed_output + sizeof(BoardingRouteFootPhaseCell);
+  if (limits.output_bytes < d.required_output_bytes) {
+    intermediate_reach_evidence01_refuse(d, REW::output_capacity,
+                                         REStage::output, 255);
+    return result;
+  }
+  Request request;
+  if (!reach_enroll(d, request)) return result;
+  try {
+    d.cells.reserve(1);
+  } catch (const std::bad_alloc&) {
+    intermediate_reach_evidence01_refuse(d, REW::allocation_failure,
+                                         REStage::output, 255);
+    return result;
+  }
+  if (d.cells.capacity() != 1) {
+    std::vector<BoardingRouteFootPhaseCell>().swap(d.cells);
+    intermediate_reach_evidence01_refuse(d, REW::output_capacity,
+                                         REStage::output, 255);
+    return result;
+  }
+  d.output_capacity_bytes = d.required_output_bytes;
+  d.cells.emplace_back();
+  reach_reset(d.cells.front());
+  RECall call;
+  std::optional<REToken> token;
+  const REContext context(d, request, call);
+  if (!intermediate_reach_evidence01_phase_call(context, d, call, token))
+    return result;
+  if (token) reach_capture(*token, d, limits);
+  return result;
+}
+} // namespace apsis_drift

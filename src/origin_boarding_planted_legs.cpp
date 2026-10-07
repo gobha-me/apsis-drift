@@ -6181,3 +6181,79 @@ auto detail::intermediate_endpoint01_self_bridge(
   return d.state;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_reach_evidence01_internal.hpp"
+namespace apsis_drift {
+namespace {
+using ReachD = BoardingIntermediateReachEvidence01Diagnostic;
+using ReachL = detail::BoardingIntermediateReachEvidence01Limits;
+using ReachW = BoardingIntermediateReachEvidence01Condition;
+using ReachStage = BoardingIntermediateReachEvidence01Stage;
+using ReachKind = BoardingIntermediateReachEvidence01Kind;
+using ReachToken = detail::BoardingIntermediateReachEvidence01CaptureToken;
+auto reach_threshold_valid(Interval value) -> bool {
+  return value.supported && std::isfinite(value.low) &&
+         std::isfinite(value.high) && value.low <= value.high;
+}
+auto reach_public_bound_valid(
+    const BoardingIntermediateReachEvidence01Bounds& b) -> bool {
+  return b.supported && std::isfinite(b.lower) && std::isfinite(b.upper) &&
+         b.lower <= b.upper;
+}
+auto reach_threshold_charge(ReachD& d, const ReachL& l, std::uint8_t row)
+    -> bool {
+  d.threshold_operation = row;
+  if (d.work.threshold_operations >= l.threshold_operations)
+    return detail::intermediate_reach_evidence01_refuse(
+        d, ReachW::threshold_capacity, ReachStage::threshold, row);
+  ++d.work.threshold_operations;
+  d.threshold_attempted |= static_cast<std::uint8_t>(std::uint8_t{1} << row);
+  return true;
+}
+} // namespace
+[[gnu::noinline]] auto detail::intermediate_reach_evidence01_thresholds(
+    const ReachToken& token, ReachD& d, const ReachL& limits) -> bool {
+  // C06 owns the actual immutable family/length reads, before any point or T.
+  if (!intermediate_reach_evidence01_capture_charge(d, limits, 5)) return false;
+  if (!intermediate_reach_evidence01_token_valid(token, d) ||
+      kBoardingRouteFootPhaseVersion != 1 || d.version != 1 ||
+      (d.kind != ReachKind::reach_refusal &&
+       d.kind != ReachKind::intentional_body_stop) ||
+      d.captured_side > 1 || thigh_length != .47285 || shin_length != .47478 ||
+      !std::isfinite(thigh_length) || !std::isfinite(shin_length) ||
+      thigh_length <= 0 || shin_length <= 0)
+    return intermediate_reach_evidence01_refuse(d, ReachW::capture_identity,
+                                                ReachStage::capture, 5);
+  d.capture_written |= static_cast<std::uint8_t>(std::uint8_t{1} << 5);
+  Interval sum, difference;
+  for (std::uint8_t row = 0; row < 4; ++row) {
+    if (row == 1) d.maximum_squared = {};
+    if (row == 3) d.minimum_squared = {};
+    if (!reach_threshold_charge(d, limits, row)) return false;
+    Interval value;
+    switch (row) {
+      case 0: value = add(point(thigh_length), point(shin_length)); break;
+      case 1: value = square(sum); break;
+      case 2: value = subtract(point(thigh_length), point(shin_length)); break;
+      case 3: value = square(difference); break;
+      default: break;
+    }
+    if (!reach_threshold_valid(value))
+      return intermediate_reach_evidence01_refuse(
+          d, ReachW::unsupported_arithmetic, ReachStage::threshold, row);
+    if (row == 0) sum = value;
+    if (row == 1) d.maximum_squared = {value.low, value.high, true};
+    if (row == 2) difference = value;
+    if (row == 3) d.minimum_squared = {value.low, value.high, true};
+    d.threshold_written |= static_cast<std::uint8_t>(std::uint8_t{1} << row);
+  }
+  if (!intermediate_reach_evidence01_capture_charge(d, limits, 6)) return false;
+  if (d.threshold_attempted != 15 || d.threshold_written != 15 ||
+      !reach_public_bound_valid(d.minimum_squared) ||
+      !reach_public_bound_valid(d.maximum_squared))
+    return intermediate_reach_evidence01_refuse(
+        d, ReachW::unsupported_arithmetic, ReachStage::capture, 6);
+  d.capture_written |= static_cast<std::uint8_t>(std::uint8_t{1} << 6);
+  return true;
+}
+} // namespace apsis_drift
