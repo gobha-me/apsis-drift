@@ -1568,3 +1568,67 @@ auto initial_material_capsule_vertex_math(Bounds p, Bounds first, Bounds last,
   return out;
 }
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+auto root_z01_material_view(const OriginBoardingInitialMaterial& material)
+    -> std::optional<MaterialPreparedView> {
+  const auto* d = BoardingInitialMaterialAccess::data(material);
+  if (!d || !d->summary.bindings_complete || !d->summary.constructors_complete)
+    return {};
+  return d->prepared;
+}
+auto root_z01_material_encloser_count(
+    const OriginBoardingInitialMaterial& material, std::size_t source)
+    -> std::size_t {
+  const auto* d = BoardingInitialMaterialAccess::data(material);
+  if (!d || !root_z01_material_view(material) ||
+      source >= d->prepared.sources.size())
+    return 0;
+  const auto& r = d->prepared.sources[source];
+  if (r.removed) return 0;
+  if (r.relation == BoardingInitialMaterialRelation::service_enclosure)
+    return static_cast<std::size_t>(std::ranges::count_if(
+        d->segments, [source](const auto& x) { return x.source == source; }));
+  if (r.relation == BoardingInitialMaterialRelation::support_enclosure)
+    return static_cast<std::size_t>(std::ranges::count_if(
+        d->supports, [source](const auto& x) { return x.source == source; }));
+  return 0;
+}
+auto root_z01_material_enclosure(
+    const OriginBoardingInitialMaterial& material, std::size_t source,
+    std::size_t ordinal,
+    const BoardingSourceEndpointSurfaceCheckpointSolidBounds& solid,
+    std::size_t axes)
+    -> std::expected<MaterialEnclosureMathEvidence, std::string> {
+  const auto* d = BoardingInitialMaterialAccess::data(material);
+  if (!d || !root_z01_material_view(material) ||
+      source >= d->prepared.sources.size() || axes > 16)
+    return std::unexpected(
+        "RootZ01 original material enclosure binding required");
+  const auto& r = d->prepared.sources[source];
+  if (r.removed) return std::unexpected("RootZ01 effective source required");
+  if (r.relation == BoardingInitialMaterialRelation::service_enclosure) {
+    for (const auto& x : d->segments)
+      if (x.source == source && ordinal-- == 0)
+        return initial_material_capsule_math(solid, 0, x.first, x.second,
+                                             x.radius, axes);
+  } else if (r.relation == BoardingInitialMaterialRelation::support_enclosure) {
+    for (const auto& x : d->supports)
+      if (x.source == source && ordinal-- == 0)
+        return initial_material_primitive_math(solid, 0, x.planes, axes);
+  }
+  return std::unexpected("RootZ01 finite material enclosure ordinal required");
+}
+} // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+auto root_z01_material_base_matches(
+    const NativeCraftBinding& binding,
+    const OriginBoardingInitialMaterial& material) -> bool {
+  const auto* d = BoardingInitialMaterialAccess::data(material);
+  return d && initial_material_extension_binding_matches(binding, material) &&
+         d->binding.contact() == binding.contact() &&
+         d->binding.selection() == binding.selection() &&
+         d->binding.pose() == binding.pose();
+}
+} // namespace apsis_drift::detail

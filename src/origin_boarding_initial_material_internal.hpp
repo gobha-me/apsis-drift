@@ -133,3 +133,21 @@ namespace apsis_drift::detail {
     BoardingPlantedLegPointBounds second, double radius)
     -> std::expected<MaterialConstructorMathEvidence, std::string>;
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+auto root_z01_material_view(const OriginBoardingInitialMaterial&)
+    -> std::optional<MaterialPreparedView>;
+auto root_z01_material_encloser_count(const OriginBoardingInitialMaterial&,
+                                      std::size_t source) -> std::size_t;
+auto root_z01_material_enclosure(
+    const OriginBoardingInitialMaterial&, std::size_t source,
+    std::size_t ordinal,
+    const BoardingSourceEndpointSurfaceCheckpointSolidBounds&, std::size_t axes)
+    -> std::expected<MaterialEnclosureMathEvidence, std::string>;
+} // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+auto root_z01_material_base_matches(const NativeCraftBinding&,
+                                    const OriginBoardingInitialMaterial&)
+    -> bool;
+} // namespace apsis_drift::detail
