@@ -13599,3 +13599,4278 @@ struct Endpoint05ConstructorControl {
   return d.slice.complete;
 }
 } // namespace apsis_drift
+
+// Endpoint06: all preceding source bytes are the immutable registered prefix.
+#include "origin_boarding_intermediate_endpoint06_internal.hpp"
+namespace apsis_drift {
+namespace {
+using EP6D = BoardingIntermediateEndpoint06Diagnostic;
+using EP6C = BoardingIntermediateEndpoint06Cell;
+using EP6R = BoardingIntermediateEndpoint06Refusal;
+using EP6L = detail::BoardingIntermediateEndpoint06Limits;
+using EP6W = BoardingIntermediateEndpoint06Condition;
+using EP6S = BoardingIntermediateEndpoint06State;
+using EP6Stage = BoardingIntermediateEndpoint06SelfStage;
+using EP6Cert = BoardingIntermediateEndpoint06Certificate;
+auto ep6_source_bit(const EP6D& d, std::size_t i) -> bool {
+  return (d.source_evaluated & (std::uint64_t{1} << i)) != 0;
+}
+auto ep6_valid(Interval x) -> bool {
+  return x.supported && std::isfinite(x.low) && std::isfinite(x.high) &&
+         x.low <= x.high;
+}
+auto ep6_scalar(const BoardingFootSiteScalarBounds& x) -> Interval {
+  return x.supported ? interval(x.lower, x.upper) : failed();
+}
+auto ep6_axis(const EP6C& c, std::size_t axis) -> Point {
+  return {ep6_scalar(c.unit_axes[axis][0]), ep6_scalar(c.unit_axes[axis][1]),
+          ep6_scalar(c.unit_axes[axis][2])};
+}
+auto ep6_component(const BoardingPlantedLegPointBounds& b, std::size_t j)
+    -> Interval {
+  return interval(j == 0   ? b.lower.x
+                  : j == 1 ? b.lower.y
+                           : b.lower.z,
+                  j == 0   ? b.upper.x
+                  : j == 1 ? b.upper.y
+                           : b.upper.z);
+}
+// Direct endpoint division encloses genuine D/L, never a rounded reciprocal.
+auto ep6_unit_divide(Interval numerator, double length) -> Interval {
+  if (!ep6_valid(numerator) || !std::isfinite(length) || length <= 0)
+    return failed();
+  if (numerator.low == 0 && numerator.high == 0) return point(0);
+  const auto low = numerator.low / length, high = numerator.high / length;
+  if (!std::isfinite(low) || !std::isfinite(high) ||
+      low == -std::numeric_limits<double>::max() ||
+      high == std::numeric_limits<double>::max())
+    return failed();
+  return interval(down(low), up(high));
+}
+[[gnu::noinline]] auto ep6_units(EP6D& d, EP6C& c, const EP6L& l, EP6R& r)
+    -> bool {
+  for (std::size_t axis = 0; axis < 4; ++axis) {
+    const auto side = axis % 2;
+    const auto knee =
+        side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+    const auto from = axis < 2 ? (side == 0 ? BodyPointId::port_hip
+                                            : BodyPointId::starboard_hip)
+                               : (side == 0 ? BodyPointId::port_ankle
+                                            : BodyPointId::starboard_ankle);
+    Point displacement{};
+    for (std::size_t operation = 0; operation < 6; ++operation) {
+      const auto row = 6 * axis + operation, component = operation % 3;
+      r = EP6R{};
+      r.self_stage = EP6Stage::unit_axes;
+      r.operation = static_cast<std::uint16_t>(row);
+      c.unit_axis_cursor = static_cast<std::uint8_t>(row);
+      if (!detail::intermediate_endpoint06_charge(
+              d, r, d.work.unit_axis_operations, l.unit_axis_operations,
+              EP6W::unit_axis_capacity))
+        return false;
+      c.unit_axis_attempted |= std::uint32_t{1} << row;
+      const auto length = axis < 2 ? thigh_length : shin_length;
+      if (!c.self_body_complete || !ss_leg(c.phase.legs[side]) ||
+          !ep6_source_bit(d, 62) ||
+          (axis < 2 ? length != .47285 : length != .47478))
+        return detail::intermediate_endpoint06_refuse(d, r,
+                                                      EP6W::unit_axis_identity);
+      const auto result =
+          operation < 3
+              ? subtract(ep6_component(c.phase.points[body_index(knee)].value,
+                                       component),
+                         ep6_component(c.phase.points[body_index(from)].value,
+                                       component))
+              : ep6_unit_divide(displacement[component], length);
+      if (!ep6_valid(result) ||
+          (operation < 3 && (result.low < -16 || result.high > 16)))
+        return detail::intermediate_endpoint06_refuse(
+            d, r, EP6W::unsupported_arithmetic);
+      if (operation < 3)
+        displacement[component] = result;
+      else
+        c.unit_axes[axis][component] = {result.low, result.high, true};
+      c.unit_axis_written |= std::uint32_t{1} << row;
+    }
+    c.unit_axis_complete_mask |=
+        static_cast<std::uint8_t>(std::uint8_t{1} << axis);
+  }
+  return (c.unit_axis_written == kBoardingIntermediateEndpoint06UnitMask &&
+          c.unit_axis_complete_mask == 15) ||
+         detail::intermediate_endpoint06_refuse(d, r, EP6W::unit_axis_identity);
+}
+[[gnu::noinline]] auto ep6_owner(
+    const EP6C& c,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& relative,
+    const SelfRegion& region, BoardingLowerFootTransferOwner& out) -> void {
+  if (region.junction != Junction::hip && region.junction != Junction::ankle) {
+    ss_owner(c.phase, relative, region, out);
+    return;
+  }
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  const auto u = ep6_axis(c, (region.junction == Junction::hip ? 0 : 2) + side);
+  auto extent = failed();
+  if (region.junction == Junction::hip) {
+    const auto x = unload_frame_dot(c.phase.frames[0], 0, u),
+               y = unload_frame_dot(c.phase.frames[0], 1, u),
+               z = unload_frame_dot(c.phase.frames[0], 2, u);
+    extent = add(add(subtract(multiply(point(.24), absolute(x)),
+                              multiply(point(side == 0 ? -.14 : .14), x)),
+                     multiply(point(.12), absolute(y))),
+                 multiply(point(.18), absolute(z)));
+  } else {
+    if (.075 > region.limit_metres || region.limit_metres >= shin_length ||
+        !ep6_valid(u[1]))
+      return;
+    // The original nominal sole is WORLD-Y, and bootC-A=-.05 WORLD-Y;
+    // B63 authenticates that construction. Cancellation needs nonnegative uY.
+    if (u[1].low < 0) {
+      out.arithmetic_supported = true;
+      return;
+    }
+    const auto x = unload_frame_dot(c.phase.frames[side + 2], 0, u),
+               z = unload_frame_dot(c.phase.frames[side + 2], 2, u);
+    extent = add(multiply(point(.06), absolute(x)),
+                 multiply(point(.14), absolute(z)));
+  }
+  const auto limit = point(region.limit_metres), gap = subtract(limit, extent);
+  out.arithmetic_supported =
+      ep6_valid(extent) && ep6_valid(limit) && ep6_valid(gap);
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(point(0));
+  out.structural_identity = true;
+  out.certificate = SelfCert::original_axis_box_support;
+  out.certified = gap.low >= 0;
+}
+[[gnu::noinline]] auto ep6_hip(
+    const EP6C& c, const SelfRegion& region, std::size_t region_index,
+    std::size_t pair, BoardingRouteCheckpointUnloadHipComplement& result)
+    -> void {
+  result.attempted = true;
+  result.region = region_index;
+  result.pair = pair;
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  result.side = side;
+  result.slab_limit_metres = region.limit_metres;
+  const auto hip =
+      side == 0 ? BodyPointId::port_hip : BodyPointId::starboard_hip;
+  const auto knee =
+      side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+  const auto thigh = side == 0 ? PartId::port_thigh : PartId::starboard_thigh;
+  if (!c.self_body_complete || c.unit_axis_complete_mask != 15 ||
+      !ss_leg(c.phase.legs[side]) || region.junction != Junction::hip ||
+      region.first != PartId::pelvis || region.second != thigh ||
+      region.root != hip || region.toward != knee ||
+      region.limit_metres != kBoardingSelfHipLengthMetres ||
+      .105 > region.limit_metres || region.limit_metres >= thigh_length)
+    return;
+  result.nominal_unit_identity = result.upright_pelvis_identity =
+      result.original_slab_identity = true;
+  const auto u = ep6_axis(c, side);
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!ep6_valid(u[i])) return;
+    result.axis[i] = bounds(u[i]);
+  }
+  if (u[1].high >= 0) {
+    result.arithmetic_supported = true;
+    return;
+  }
+  result.extent_evaluated = true;
+  const auto proof = self02_hip_expression(u, .105, region.limit_metres, -.12);
+  result.arithmetic_supported = proof.arithmetic_supported;
+  if (!proof.arithmetic_supported) return;
+  result.transverse = proof.transverse;
+  result.extent = proof.extent;
+  result.limit = proof.limit;
+  result.strict_gap = proof.strict_gap;
+  result.certified = proof.negative_axis && proof.strict_extent_below_bottom;
+}
+[[gnu::noinline]] auto ep6_separate(const UnloadSolid& a, const UnloadSolid& b,
+                                    EP6D& d, EP6C& c, const EP6L& l, EP6R& r,
+                                    std::size_t pair) -> bool {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  r.self_stage = EP6Stage::separation;
+  for (std::size_t i = 0; i < count; ++i) {
+    r.self_axis = static_cast<std::uint8_t>(i);
+    r.self_sign = 255;
+    if (!detail::intermediate_endpoint06_charge(
+            d, r, d.work.self_axes, l.self_axes, EP6W::self_axis_capacity))
+      return false;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (std::size_t sign = 0; sign < 2; ++sign) {
+      r.self_sign = static_cast<std::uint8_t>(sign);
+      if (!detail::intermediate_endpoint06_charge(
+              d, r, d.work.self_signed_trials, l.self_signed_trials,
+              EP6W::self_signed_capacity))
+        return false;
+      const auto n = sign == 0 ? axis : self_negate(axis);
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported || !std::isfinite(total.low) ||
+          !std::isfinite(total.high))
+        return detail::intermediate_endpoint06_refuse(
+            d, r, EP6W::unsupported_arithmetic);
+      if (total.high <= 0) {
+        c.self_axes[pair] = static_cast<std::uint8_t>(i | (sign == 0 ? 0 : 16));
+        return true;
+      }
+    }
+  }
+  return detail::intermediate_endpoint06_refuse(d, r,
+                                                EP6W::unresolved_self_pair);
+}
+} // namespace
+auto detail::intermediate_endpoint06_self_bridge(
+    const BoardingIntermediateEndpoint06CurrentToken& token, EP6D& d, EP6C& c,
+    const EP6L& l, EP6R& r) -> EP6S {
+  std::size_t body_index_record{};
+  const auto body = [&](auto predicate, EP6W why = EP6W::self_body_identity) {
+    r = EP6R{};
+    r.self_stage = EP6Stage::body;
+    r.operation = static_cast<std::uint16_t>(body_index_record);
+    if (!intermediate_endpoint06_charge(d, r, d.work.self_body_guards,
+                                        l.self_body_guards,
+                                        EP6W::self_body_capacity))
+      return false;
+    c.self_body_evaluated |= std::uint64_t{1} << body_index_record++;
+    return predicate() || intermediate_endpoint06_refuse(d, r, why);
+  };
+  if (!body([&] {
+        return token.context() && token.owner() == &d && token.cell() == &c &&
+               token.request() && token.context()->owner() == &d &&
+               token.context()->parts() == &d.parts &&
+               token.context()->request() == token.request() &&
+               token.context()->key() &&
+               token.context()->key()->version() == 6 &&
+               token.context()->key()->candidate() == d.candidate &&
+               token.context()->key()->y() == d.slice.y && d.slice.complete &&
+               d.work.phase_calls == 1 &&
+               BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+               token.data() ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+               token.context()->data() == token.data() && token.data() &&
+               d.cells.size() == 1 && d.cells.capacity() == 1 &&
+               &d.cells.front() == &c && d.work.phase_calls == 1;
+      }))
+    return d.state;
+  if (!body([&] { return boarding_route_foot_phase_environment(); },
+            EP6W::unsupported_arithmetic))
+    return d.state;
+  const auto& p = c.phase;
+  if (!body([&] {
+        return p.complete && p.arithmetic_supported && p.nominal_links &&
+               p.target_sole_identities && p.joint_sectors &&
+               p.derivative_domains && p.timing_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.candidate ==
+                   BoardingIntermediateEndpoint06Candidate::
+                       root_y_same_base_chart_factor_both_hip_ankle_reach_roll_slice &&
+               d.version == 6 && p.first == 0 && p.last == 1 &&
+               token.request()->seconds_per_parameter == 2 &&
+               c.projection_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_enrolled && d.self_version == 1 &&
+               d.source_evaluated == UINT64_MAX;
+      }))
+    return d.state;
+  if (!body([&] {
+        return ep6_source_bit(d, 62) && p.nominal_links &&
+               p.target_sole_identities;
+      }))
+    return d.state;
+  if (!body([&] {
+        return ep6_source_bit(d, 63) && p.arithmetic_supported &&
+               c.projected_carrier_complete[0];
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.nominal_support_complete && c.nominal_equilibrium &&
+               c.star_support && d.stop_condition == EP6W::none;
+      }))
+    return d.state;
+  for (std::size_t i = 0; i < 18; ++i)
+    if (!body(
+            [&] {
+              return ss_point_valid(body_intervals(p.points[i].value), 8);
+            },
+            EP6W::unsupported_arithmetic))
+      return d.state;
+  for (std::size_t f = 0; f < 4; ++f)
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!body(
+              [&] {
+                return ss_point_valid(
+                    body_intervals(p.frames[f].columns[j].value), 8);
+              },
+              EP6W::unsupported_arithmetic))
+        return d.state;
+  for (std::size_t side = 0; side < 2; ++side)
+    if (!body([&] {
+          const auto first = side == 0 ? std::size_t{36} : std::size_t{42};
+          return ss_leg(p.legs[side]) && ep6_source_bit(d, 62) &&
+                 ep6_source_bit(d, first) && ep6_source_bit(d, first + 1) &&
+                 ss_same_part(d.parts[first - 33], ss_part(first - 33)) &&
+                 ss_same_part(d.parts[first - 32], ss_part(first - 32));
+        }))
+      return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[0], ss_part(0)) &&
+               ss_same_part(d.parts[1], ss_part(1)) && ep6_source_bit(d, 33) &&
+               ep6_source_bit(d, 34) && ep6_source_bit(d, 48);
+      }))
+    return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[1], ss_part(1)) &&
+               ss_same_part(d.parts[2], ss_part(2)) && ep6_source_bit(d, 34) &&
+               ep6_source_bit(d, 35) && ep6_source_bit(d, 51) &&
+               ep6_source_bit(d, 63);
+      }))
+    return d.state;
+  if (!body([&] {
+        if (!ep6_source_bit(d, 63)) return false;
+        for (const auto part :
+             {std::size_t{6}, std::size_t{7}, std::size_t{8}, std::size_t{12},
+              std::size_t{13}, std::size_t{14}})
+          if (!ep6_source_bit(d, 33 + part) ||
+              !ss_same_part(d.parts[part], ss_part(part)))
+            return false;
+        for (const auto region :
+             {std::size_t{4}, std::size_t{5}, std::size_t{8}, std::size_t{9},
+              std::size_t{12}, std::size_t{13}})
+          if (!ep6_source_bit(d, 48 + region)) return false;
+        return true;
+      }))
+    return d.state;
+  SelfRegions regions{};
+  if (!body([&] {
+        regions = self_regions();
+        for (std::size_t i = 0; i < 14; ++i)
+          if (!ep6_source_bit(d, 48 + i) ||
+              !ss_same_region(regions[i], ss_region(i)))
+            return false;
+        return true;
+      }))
+    return d.state;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  if (!body([&] {
+        relative[0] = {point(0), point(0), point(0)};
+        return true;
+      }))
+    return d.state;
+  for (std::size_t i = 1; i < 18; ++i)
+    if (!body(
+            [&] {
+              relative[i] =
+                  unload_difference(body_intervals(p.points[i].value),
+                                    body_intervals(p.points[0].value));
+              return ss_point_valid(relative[i], 16);
+            },
+            EP6W::unsupported_arithmetic))
+      return d.state;
+  if (!body([&] {
+        return body_index_record == 63 &&
+               c.self_body_evaluated ==
+                   kBoardingIntermediateEndpoint06BodyMask &&
+               token.owner() == &d && token.cell() == &c &&
+               token.data() ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source);
+      }))
+    return d.state;
+  c.self_body_complete = true;
+  if (!ep6_units(d, c, l, r)) return d.state;
+  std::size_t pair{};
+  for (std::size_t a = 0; a < 15; ++a)
+    for (std::size_t b = a + 1; b < 15; ++b, ++pair) {
+      r = EP6R{};
+      r.self_stage = EP6Stage::not_run;
+      r.self_pair = static_cast<std::uint16_t>(pair);
+      r.self_region = 255;
+      r.self_axis = 255;
+      r.self_sign = 255;
+      r.self_stage = EP6Stage::pair;
+      if (!intermediate_endpoint06_charge(d, r, d.work.self_pairs, l.self_pairs,
+                                          EP6W::self_pair_capacity))
+        return d.state;
+      ++c.examined_pairs;
+      auto certificate = EP6Cert::not_run;
+      for (std::size_t region = 0; region < 14; ++region)
+        if (static_cast<std::size_t>(regions[region].first) == a &&
+            static_cast<std::size_t>(regions[region].second) == b) {
+          r.self_stage = EP6Stage::owner;
+          r.self_region = static_cast<std::uint8_t>(region);
+          if (!intermediate_endpoint06_charge(d, r, d.work.self_owners,
+                                              l.self_owners,
+                                              EP6W::self_owner_capacity))
+            return d.state;
+          c.owner_attempted_mask |=
+              static_cast<std::uint16_t>(std::uint16_t{1} << region);
+          ep6_owner(c, relative, regions[region], c.owners[region]);
+          if (!c.owners[region].arithmetic_supported) {
+            intermediate_endpoint06_refuse(d, r, EP6W::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.owners[region].certified)
+            certificate = static_cast<EP6Cert>(c.owners[region].certificate);
+          else if (regions[region].junction == Junction::hip) {
+            r.self_stage = EP6Stage::hip;
+            if (!intermediate_endpoint06_charge(
+                    d, r, d.work.self_hip_complements, l.self_hip_complements,
+                    EP6W::self_hip_capacity))
+              return d.state;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            ep6_hip(c, regions[region], region, pair, c.hip_complements[side]);
+            if (!c.hip_complements[side].arithmetic_supported) {
+              intermediate_endpoint06_refuse(d, r,
+                                             EP6W::unsupported_arithmetic);
+              return d.state;
+            }
+            if (c.hip_complements[side].certified)
+              certificate = EP6Cert::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (certificate == EP6Cert::not_run) {
+        const auto first = unload_solid(d.parts[a], relative, p),
+                   second = unload_solid(d.parts[b], relative, p);
+        if (!ep6_separate(first, second, d, c, l, r, pair)) return d.state;
+        certificate = EP6Cert::convex_support_plane;
+      }
+      c.self_certificates[pair] = certificate;
+      ++c.self_certificate_counts[static_cast<std::size_t>(certificate)];
+      ++c.accepted_pairs;
+    }
+  c.self_complete = pair == 105 && c.accepted_pairs == 105;
+  if (!c.self_complete) {
+    intermediate_endpoint06_refuse(d, r, EP6W::incomplete_endpoint);
+    return d.state;
+  }
+  r.self_pair = 65535;
+  r.self_region = 255;
+  r.self_axis = 255;
+  r.self_sign = 255;
+  r.self_stage = EP6Stage::complete;
+  c.complete = true;
+  c.state = d.state = EP6S::accepted;
+  return d.state;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+using Slice6Why = BoardingIntermediateEndpoint06SliceCondition;
+using EP6Request = BoardingRouteFootPhaseRequest;
+auto ep6_packet(const BoardingRoutePhaseConstant& c,
+                const std::array<double, 3>& terms, std::size_t count) -> bool {
+  return c.count == count && c.terms == terms;
+}
+// Comparison-only structure; no numeric sum or construction evaluation.
+// Called only within the already charged G04/G75 deferred predicates.
+auto ep6_packet_structure(const EP6Request& request) -> bool {
+  const auto canonical = [](const BoardingRoutePhaseConstant& c) {
+    if (c.count == 0 || c.count > c.terms.size()) return false;
+    for (std::size_t i = c.count; i < c.terms.size(); ++i)
+      if (c.terms[i] != 0 || std::signbit(c.terms[i])) return false;
+    return true;
+  };
+  for (const auto& root : request.root)
+    for (const auto& c : root.coordinates)
+      if (!canonical(c)) return false;
+  for (const auto& foot : request.feet)
+    for (const auto& sole : foot.sole)
+      for (const auto& c : sole.coordinates)
+        if (!canonical(c)) return false;
+  return true;
+}
+auto ep6_packet_domains(const EP6Request& request) -> bool {
+  const auto valid = [](const BoardingRoutePhaseConstant& c) {
+    if (c.count == 0 || c.count > 3) return false;
+    for (std::size_t i = 0; i < 3; ++i)
+      if (!std::isfinite(c.terms[i]) || std::abs(c.terms[i]) > 8 ||
+          (i >= c.count && (c.terms[i] != 0 || std::signbit(c.terms[i]))))
+        return false;
+    return true;
+  };
+  for (const auto& root : request.root)
+    for (const auto& c : root.coordinates)
+      if (!valid(c)) return false;
+  for (const auto& foot : request.feet)
+    for (const auto& sole : foot.sole)
+      for (const auto& c : sole.coordinates)
+        if (!valid(c)) return false;
+  return std::isfinite(request.seconds_per_parameter) &&
+         std::isfinite(request.root_yaw_half[0]) &&
+         std::isfinite(request.root_yaw_half[1]) &&
+         std::isfinite(request.torso_lean_half[0]) &&
+         std::isfinite(request.torso_lean_half[1]) &&
+         std::isfinite(request.port_reaction_fraction[0]) &&
+         std::isfinite(request.port_reaction_fraction[1]);
+}
+auto ep6_construction_packet_domains(const EP6Request& request) -> bool {
+  for (std::size_t i = 0; i < 8; ++i) {
+    const auto& c =
+        i < 2 ? request.root[0].coordinates[i == 0 ? 0 : 2]
+              : request.feet[i < 5 ? 0 : 1].sole[0].coordinates[(i - 2) % 3];
+    if (c.count == 0 || c.count > 3) return false;
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!std::isfinite(c.terms[j]) || std::abs(c.terms[j]) > 8 ||
+          (j >= c.count && (c.terms[j] != 0 || std::signbit(c.terms[j]))))
+        return false;
+  }
+  return true;
+}
+auto ep6_slice_stop(EP6D& d, EP6R& r, EP6W why, Slice6Why condition) -> bool {
+  d.slice.condition = condition;
+  r.limiting_bound = d.slice.limiting_bound;
+  return detail::intermediate_endpoint06_refuse(d, r, why);
+}
+} // namespace
+// This is a literal packet predicate, not a source issuer or new factory.
+auto detail::intermediate_endpoint06_template_valid(const EP6Request& request,
+                                                    bool generated, double y)
+    -> bool {
+  for (const auto& root : request.root) {
+    if (!ep6_packet(root.coordinates[0], {.16, .16, -.0075}, 3) ||
+        !ep6_packet(root.coordinates[2], {-.55, -.17, .19}, 3) ||
+        !(generated ? ep6_packet(root.coordinates[1], {y, 0, 0}, 1)
+                    : ep6_packet(root.coordinates[1],
+                                 {.847, .012, (-.359) / 2.0}, 3)))
+      return false;
+  }
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& foot = request.feet[side];
+    for (const auto& sole : foot.sole) {
+      if (side == 0) {
+        if (!ep6_packet(sole.coordinates[0], {.16, -.14, .16}, 3) ||
+            !ep6_packet(sole.coordinates[1],
+                        {static_cast<double>(-230000) * 1e-6, 0, 0}, 1) ||
+            !ep6_packet(sole.coordinates[2], {-1.14, 0, 0}, 1))
+          return false;
+      } else {
+        if (!ep6_packet(sole.coordinates[0], {.16, .14, 0}, 2) ||
+            !ep6_packet(sole.coordinates[1],
+                        {static_cast<double>(-160000) * 1e-6, 0, 0}, 1) ||
+            !ep6_packet(sole.coordinates[2], {-.8, 0, 0}, 1))
+          return false;
+      }
+    }
+    if (foot.yaw_half != std::array<double, 2>{0, 0} ||
+        foot.swing_height_metres != 0)
+      return false;
+  }
+  return request.root_yaw_half == std::array<double, 2>{.125, .125} &&
+         request.torso_lean_half == std::array<double, 2>{-.30, -.30} &&
+         request.port_reaction_fraction ==
+             std::array<double, 2>{.0625, .0625} &&
+         request.seconds_per_parameter == 2;
+}
+namespace {
+// Direct local aggregate: all registered fields retain their complete lifetime.
+struct Endpoint06ConstructorWorkspace {
+  // All construction storage dies before Key issuance and the original graph.
+  std::array<Interval, 8> input{};
+  std::array<Interval, 6> yaw{};
+  // Per side: signed X/Z, X2/Z2, C, A, full ABS(X), rollLower.
+  std::array<Interval, 16> chart{};
+  // Lsum, M, Ldiff, m, L1sq, L2sq, Delta, sqrt3half, b.
+  std::array<Interval, 9> link{};
+  // Per side: W, cutlow, cuthi, cutturn, p, q; no overwritten origins.
+  std::array<Interval, 12> cut{};
+  // Per side: rho_p/rho_q, ankle lower/upper, reach lower/upper;
+  // the last six slots are sequential endpoint/current primitive scratch.
+  std::array<Interval, 18> endpoint{};
+  std::array<Interval, 18> direct{};
+  std::array<double, 10> cuts{};
+  std::array<double, 8> selected{};
+  std::array<bool, 2> endpoint_certificate{};
+};
+// Borrowed numerical controls only; this object issues no program authority.
+struct Endpoint06ConstructorControl {
+  EP6D& d;
+  EP6R& r;
+  const EP6L& limits;
+  template <class Predicate>
+  auto guard(std::uint8_t row, std::uint8_t side, Predicate&& predicate,
+             Slice6Why ordinary) -> bool {
+    r = EP6R{};
+    r.self_stage = EP6Stage::slice_guard;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.slice.guard = row;
+    d.slice.side = side;
+    d.slice.limiting_bound = {};
+    if (!detail::intermediate_endpoint06_charge(
+            d, r, d.work.construction_guards, limits.construction_guards,
+            EP6W::slice_guard_capacity)) {
+      d.slice.condition = Slice6Why::guard_capacity;
+      return false;
+    }
+    d.slice.guard_attempted[row / 64] |= std::uint64_t{1} << (row % 64);
+    EP6W why = ordinary == Slice6Why::identity ? EP6W::slice_identity
+                                               : EP6W::slice_unavailable;
+    const bool good = predicate(why);
+    if (!good)
+      return ep6_slice_stop(
+          d, r, why,
+          why == EP6W::unsupported_arithmetic
+              ? Slice6Why::unsupported_arithmetic
+              : ((row == 61 || row == 68) &&
+                         d.slice.condition == Slice6Why::hip_descent_unavailable
+                     ? Slice6Why::hip_descent_unavailable
+                     : ordinary));
+    d.slice.guard_written[row / 64] |= std::uint64_t{1} << (row % 64);
+    return true;
+  }
+  template <class Compute>
+  auto operation(std::uint16_t row, std::uint8_t side, Interval& output,
+                 Compute&& compute) -> bool {
+    r = EP6R{};
+    r.self_stage = EP6Stage::slice_operation;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.slice.operation = row;
+    d.slice.side = side;
+    d.slice.limiting_bound = {};
+    if (!detail::intermediate_endpoint06_charge(
+            d, r, d.work.construction_operations,
+            limits.construction_operations, EP6W::slice_operation_capacity)) {
+      d.slice.condition = Slice6Why::operation_capacity;
+      return false;
+    }
+    d.slice.operation_attempted[row / 64] |= std::uint64_t{1} << (row % 64);
+    const auto value = compute();
+    if (!ep6_valid(value))
+      return ep6_slice_stop(d, r, EP6W::unsupported_arithmetic,
+                            Slice6Why::unsupported_arithmetic);
+    output = value;
+    // Each returned scalar is assigned after its genuine row destination,
+    // before publication of that row's written bit. BASE has no later writer.
+    switch (row) {
+      case 153: d.slice.base_lo = value.high; break;
+      case 156: d.slice.base_hi = value.low; break;
+      case 182: d.slice.factor_lower[0] = value.low; break;
+      case 199: d.slice.factor_lower[1] = value.low; break;
+      case 302: d.slice.lo = value.high; break;
+      case 304: d.slice.hi = value.low; break;
+      case 307: d.slice.y = value.low; break;
+      default: break;
+    }
+    d.slice.limiting_bound = {value.low, value.high, true};
+    d.slice.operation_written[row / 64] |= std::uint64_t{1} << (row % 64);
+    d.slice.arithmetic_supported = true;
+    return true;
+  }
+  auto supported(EP6W& why, const Interval& v) -> bool {
+    if (ep6_valid(v)) return true;
+    why = EP6W::unsupported_arithmetic;
+    return false;
+  }
+  auto attach(const Interval& v) -> bool {
+    d.slice.limiting_bound = {v.low, v.high, true};
+    return false;
+  }
+};
+} // namespace
+[[gnu::noinline]] auto detail::intermediate_endpoint06_construct(
+    EP6D& d, EP6Request& request, const EP6L& limits, EP6R& r) -> bool {
+  // Direct local aggregate; every field dies before key/graph issuance.
+  Endpoint06ConstructorWorkspace workspace{};
+  Endpoint06ConstructorControl control{d, r, limits};
+  // G001
+  if (!control.guard(
+          0, 255,
+          [&](EP6W&) {
+            return d.source_enrolled && d.work.source_guards == 64 &&
+                   d.source_evaluated == UINT64_MAX &&
+                   BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+                   d.parts.size() == 15;
+          },
+          Slice6Why::identity))
+    return false;
+  // G002
+  if (!control.guard(
+          1, 255,
+          [&](EP6W& why) {
+            why = EP6W::unsupported_arithmetic;
+            return boarding_route_foot_phase_environment();
+          },
+          Slice6Why::unsupported_arithmetic))
+    return false;
+  // G003
+  if (!control.guard(
+          2, 255,
+          [&](EP6W&) {
+            return d.version == 6 &&
+                   d.candidate ==
+                       BoardingIntermediateEndpoint06Candidate::
+                           root_y_same_base_chart_factor_both_hip_ankle_reach_roll_slice &&
+                   intermediate_endpoint06_template_valid(request, false, 0);
+          },
+          Slice6Why::identity))
+    return false;
+  // G004
+  if (!control.guard(
+          3, 255,
+          [&](EP6W& why) {
+            if (!ep6_packet_structure(request) ||
+                !intermediate_endpoint06_template_valid(request, false, 0))
+              return false;
+            if (!ep6_packet_domains(request) ||
+                !ep6_construction_packet_domains(request)) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return true;
+          },
+          Slice6Why::identity))
+    return false;
+  // G005
+  if (!control.guard(
+          4, 255,
+          [&](EP6W& why) {
+            if (!std::isfinite(thigh_length) || !std::isfinite(shin_length) ||
+                thigh_length <= 0 || shin_length <= 0 || thigh_length > 1 ||
+                shin_length > 1) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return kBoardingRouteFootPhaseVersion == 1 &&
+                   thigh_length == .47285 && shin_length == .47478 &&
+                   thigh_length > 0 && shin_length > 0 && thigh_length <= 1 &&
+                   shin_length <= 1 && ep6_source_bit(d, 62);
+          },
+          Slice6Why::identity))
+    return false;
+  // G006
+  if (!control.guard(
+          5, 255,
+          [&](EP6W&) {
+            // The source compiler's exact-real nominal rational workspace.yaw
+            // construction, not midpoint or rounded affine orthogonality, owns
+            // these identities.
+            return ep6_source_bit(d, 63) &&
+                   kBoardingRouteFootPhaseVersion == 1 &&
+                   intermediate_endpoint06_template_valid(request, false, 0) &&
+                   request.feet[0].yaw_half == std::array<double, 2>{0, 0} &&
+                   request.feet[1].yaw_half == std::array<double, 2>{0, 0};
+          },
+          Slice6Why::identity))
+    return false;
+  // O001
+  if (!control.operation(0, 255, workspace.input[0], [&] {
+        return phase_constant(request.root[0].coordinates[0]);
+      }))
+    return false;
+  // O002
+  if (!control.operation(1, 255, workspace.input[1], [&] {
+        return phase_constant(request.root[0].coordinates[2]);
+      }))
+    return false;
+  // O003
+  if (!control.operation(2, 255, workspace.input[2], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[0]);
+      }))
+    return false;
+  // O004
+  if (!control.operation(3, 255, workspace.input[3], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[1]);
+      }))
+    return false;
+  // O005
+  if (!control.operation(4, 255, workspace.input[4], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[2]);
+      }))
+    return false;
+  // O006
+  if (!control.operation(5, 255, workspace.input[5], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[0]);
+      }))
+    return false;
+  // O007
+  if (!control.operation(6, 255, workspace.input[6], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[1]);
+      }))
+    return false;
+  // O008
+  if (!control.operation(7, 255, workspace.input[7], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[2]);
+      }))
+    return false;
+  // O009
+  if (!control.operation(8, 255, workspace.yaw[0], [&] {
+        return square(point(request.root_yaw_half[0]));
+      }))
+    return false;
+  // O010
+  if (!control.operation(9, 255, workspace.yaw[1],
+                         [&] { return add(point(1), workspace.yaw[0]); }))
+    return false;
+  // O011
+  if (!control.operation(10, 255, workspace.yaw[2],
+                         [&] { return subtract(point(1), workspace.yaw[0]); }))
+    return false;
+  // O012
+  if (!control.operation(11, 255, workspace.yaw[3], [&] {
+        return divide(workspace.yaw[2], workspace.yaw[1]);
+      }))
+    return false;
+  // O013
+  if (!control.operation(12, 255, workspace.yaw[2], [&] {
+        return multiply(point(2), point(request.root_yaw_half[0]));
+      }))
+    return false;
+  // O014
+  if (!control.operation(13, 255, workspace.yaw[4], [&] {
+        return divide(workspace.yaw[2], workspace.yaw[1]);
+      }))
+    return false;
+  // O015
+  if (!control.operation(14, 255, workspace.yaw[5],
+                         [&] { return negate(workspace.yaw[4]); }))
+    return false;
+  // O016
+  if (!control.operation(15, 0, workspace.endpoint[12], [&] {
+        return multiply(point(-.14), workspace.yaw[3]);
+      }))
+    return false;
+  // O017
+  if (!control.operation(16, 0, workspace.endpoint[13], [&] {
+        return multiply(point(-.14), workspace.yaw[5]);
+      }))
+    return false;
+  // O018
+  if (!control.operation(17, 0, workspace.endpoint[14], [&] {
+        return add(workspace.input[0], workspace.endpoint[12]);
+      }))
+    return false;
+  // O019
+  if (!control.operation(18, 0, workspace.endpoint[15], [&] {
+        return add(workspace.input[1], workspace.endpoint[13]);
+      }))
+    return false;
+  // O020
+  if (!control.operation(19, 0, workspace.chart[0], [&] {
+        return subtract(workspace.input[2], workspace.endpoint[14]);
+      }))
+    return false;
+  // O021
+  if (!control.operation(20, 0, workspace.chart[1], [&] {
+        return subtract(workspace.input[4], workspace.endpoint[15]);
+      }))
+    return false;
+  // O022
+  if (!control.operation(21, 0, workspace.chart[2],
+                         [&] { return square(workspace.chart[0]); }))
+    return false;
+  // O023
+  if (!control.operation(22, 0, workspace.chart[3],
+                         [&] { return square(workspace.chart[1]); }))
+    return false;
+  // O024
+  if (!control.operation(23, 0, workspace.chart[4], [&] {
+        return add(workspace.chart[2], workspace.chart[3]);
+      }))
+    return false;
+  // O025
+  if (!control.operation(24, 0, workspace.chart[5],
+                         [&] { return add(workspace.input[3], point(.1)); }))
+    return false;
+  // O026
+  if (!control.operation(25, 1, workspace.endpoint[12], [&] {
+        return multiply(point(.14), workspace.yaw[3]);
+      }))
+    return false;
+  // O027
+  if (!control.operation(26, 1, workspace.endpoint[13], [&] {
+        return multiply(point(.14), workspace.yaw[5]);
+      }))
+    return false;
+  // O028
+  if (!control.operation(27, 1, workspace.endpoint[14], [&] {
+        return add(workspace.input[0], workspace.endpoint[12]);
+      }))
+    return false;
+  // O029
+  if (!control.operation(28, 1, workspace.endpoint[15], [&] {
+        return add(workspace.input[1], workspace.endpoint[13]);
+      }))
+    return false;
+  // O030
+  if (!control.operation(29, 1, workspace.chart[8], [&] {
+        return subtract(workspace.input[5], workspace.endpoint[14]);
+      }))
+    return false;
+  // O031
+  if (!control.operation(30, 1, workspace.chart[9], [&] {
+        return subtract(workspace.input[7], workspace.endpoint[15]);
+      }))
+    return false;
+  // O032
+  if (!control.operation(31, 1, workspace.chart[10],
+                         [&] { return square(workspace.chart[8]); }))
+    return false;
+  // O033
+  if (!control.operation(32, 1, workspace.chart[11],
+                         [&] { return square(workspace.chart[9]); }))
+    return false;
+  // O034
+  if (!control.operation(33, 1, workspace.chart[12], [&] {
+        return add(workspace.chart[10], workspace.chart[11]);
+      }))
+    return false;
+  // O035
+  if (!control.operation(34, 1, workspace.chart[13],
+                         [&] { return add(workspace.input[6], point(.1)); }))
+    return false;
+  // O036
+  if (!control.operation(35, 255, workspace.link[0], [&] {
+        return add(point(thigh_length), point(shin_length));
+      }))
+    return false;
+  // O037
+  if (!control.operation(36, 255, workspace.link[1],
+                         [&] { return square(workspace.link[0]); }))
+    return false;
+  // O038
+  if (!control.operation(37, 255, workspace.link[2], [&] {
+        return subtract(point(thigh_length), point(shin_length));
+      }))
+    return false;
+  // O039
+  if (!control.operation(38, 255, workspace.link[3],
+                         [&] { return square(workspace.link[2]); }))
+    return false;
+  // O040
+  if (!control.operation(39, 255, workspace.link[4],
+                         [&] { return square(point(thigh_length)); }))
+    return false;
+  // O041
+  if (!control.operation(40, 255, workspace.link[5],
+                         [&] { return square(point(shin_length)); }))
+    return false;
+  // O042
+  if (!control.operation(41, 255, workspace.link[6], [&] {
+        return subtract(workspace.link[4], workspace.link[5]);
+      }))
+    return false;
+  // O043
+  if (!control.operation(42, 255, workspace.yaw[0],
+                         [&] { return transfer_small_root(point(3)); }))
+    return false;
+  // O044
+  if (!control.operation(43, 255, workspace.link[7],
+                         [&] { return divide(workspace.yaw[0], point(2)); }))
+    return false;
+  // O045
+  if (!control.operation(44, 255, workspace.link[8],
+                         [&] { return subtract(point(2), workspace.yaw[0]); }))
+    return false;
+  // G007
+  if (!control.guard(
+          6, 255,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.link[8])) return false;
+            return workspace.link[8].low > 0 ||
+                   control.attach(workspace.link[8]);
+          },
+          Slice6Why::no_positive_roll_factor))
+    return false;
+  // O046
+  if (!control.operation(45, 0, workspace.cut[0],
+                         [&] { return negate(workspace.chart[1]); }))
+    return false;
+  // O047
+  if (!control.operation(46, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O048
+  if (!control.operation(47, 0, workspace.cut[1], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O049
+  if (!control.operation(48, 0, workspace.endpoint[12], [&] {
+        return add(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O050
+  if (!control.operation(49, 0, workspace.cut[2], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O051
+  if (!control.operation(50, 0, workspace.cut[3], [&] {
+        return divide(workspace.cut[0], workspace.link[0]);
+      }))
+    return false;
+  // O052
+  if (!control.operation(51, 0, workspace.cut[4], [&] {
+        return point(std::max(-.5, workspace.cut[1].high));
+      }))
+    return false;
+  // O053
+  if (!control.operation(52, 0, workspace.cut[5], [&] {
+        return point(std::min(.5, workspace.cut[2].low));
+      }))
+    return false;
+  // O054
+  if (!control.operation(53, 0, workspace.cut[5], [&] {
+        return point(std::min(workspace.cut[5].low, workspace.cut[3].low));
+      }))
+    return false;
+  // G008
+  if (!control.guard(
+          7, 0,
+          [&](EP6W& why) {
+            for (const auto* v :
+                 {&workspace.cut[0], &workspace.cut[1], &workspace.cut[2],
+                  &workspace.cut[3], &workspace.cut[4], &workspace.cut[5]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[4].low != workspace.cut[4].high ||
+                workspace.cut[5].low != workspace.cut[5].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[4].low < -.5)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[4].low >= workspace.cut[5].low ||
+                workspace.cut[5].low > .5)
+              return control.attach(workspace.cut[5]);
+            if (workspace.cut[4].low < workspace.cut[1].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.cut[2].low ||
+                workspace.cut[5].low > workspace.cut[3].low)
+              return control.attach(workspace.cut[5]);
+            workspace.endpoint_certificate[0] = true;
+            return true;
+          },
+          Slice6Why::no_tau_interval))
+    return false;
+  // O055
+  if (!control.operation(54, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[4]); }))
+    return false;
+  // O056
+  if (!control.operation(55, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G009
+  if (!control.guard(
+          8, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O057
+  if (!control.operation(56, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O058
+  if (!control.operation(57, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O059
+  if (!control.operation(58, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[4]);
+      }))
+    return false;
+  // O060
+  if (!control.operation(59, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O061
+  if (!control.operation(60, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O062
+  if (!control.operation(61, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G010
+  if (!control.guard(
+          9, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O063
+  if (!control.operation(62, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 2;
+          return value;
+        }();
+      }))
+    return false;
+  // O064
+  if (!control.operation(63, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O065
+  if (!control.operation(64, 0, workspace.endpoint[0], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O066
+  if (!control.operation(65, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[5]); }))
+    return false;
+  // O067
+  if (!control.operation(66, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G011
+  if (!control.guard(
+          10, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O068
+  if (!control.operation(67, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O069
+  if (!control.operation(68, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O070
+  if (!control.operation(69, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[5]);
+      }))
+    return false;
+  // O071
+  if (!control.operation(70, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O072
+  if (!control.operation(71, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O073
+  if (!control.operation(72, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G012
+  if (!control.guard(
+          11, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O074
+  if (!control.operation(73, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 3;
+          return value;
+        }();
+      }))
+    return false;
+  // O075
+  if (!control.operation(74, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O076
+  if (!control.operation(75, 0, workspace.endpoint[1], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O077
+  if (!control.operation(76, 0, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[0].high); }))
+    return false;
+  workspace.cuts[0] = workspace.endpoint[12].low;
+  // O078
+  if (!control.operation(77, 0, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[1].low); }))
+    return false;
+  workspace.cuts[1] = workspace.endpoint[13].low;
+  // G013
+  if (!control.guard(
+          12, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cuts[0] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.cuts[0] < workspace.cuts[1] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::no_radial_interval))
+    return false;
+  // O079
+  if (!control.operation(78, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[0])); }))
+    return false;
+  // O080
+  if (!control.operation(79, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].low));
+      }))
+    return false;
+  // O081
+  if (!control.operation(80, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 6;
+          return value;
+        }();
+      }))
+    return false;
+  // O082
+  if (!control.operation(81, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O083
+  if (!control.operation(82, 0, workspace.endpoint[2], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O084
+  if (!control.operation(83, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[1])); }))
+    return false;
+  // O085
+  if (!control.operation(84, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].high));
+      }))
+    return false;
+  // G014
+  if (!control.guard(
+          13, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::no_positive_upper))
+    return false;
+  // O086
+  if (!control.operation(85, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O087
+  if (!control.operation(86, 0, workspace.endpoint[3], [&] {
+        return add(point(workspace.chart[5].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O088
+  if (!control.operation(87, 0, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[3].high),
+                        point(workspace.chart[4].low));
+      }))
+    return false;
+  // O089
+  if (!control.operation(88, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 0;
+          return value;
+        }();
+      }))
+    return false;
+  // O090
+  if (!control.operation(89, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O091
+  if (!control.operation(90, 0, workspace.endpoint[4], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O092
+  if (!control.operation(91, 0, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[1].low),
+                        point(workspace.chart[4].high));
+      }))
+    return false;
+  // G015
+  if (!control.guard(
+          14, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::no_positive_upper))
+    return false;
+  // O093
+  if (!control.operation(92, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O094
+  if (!control.operation(93, 0, workspace.endpoint[5], [&] {
+        return add(point(workspace.chart[5].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O095
+  if (!control.operation(94, 0, workspace.chart[6],
+                         [&] { return absolute(workspace.chart[0]); }))
+    return false;
+  // O096
+  if (!control.operation(95, 0, workspace.endpoint[12], [&] {
+        return divide(workspace.chart[6], workspace.link[8]);
+      }))
+    return false;
+  // O097
+  if (!control.operation(96, 0, workspace.chart[7], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O098
+  if (!control.operation(97, 1, workspace.cut[6],
+                         [&] { return negate(workspace.chart[9]); }))
+    return false;
+  // O099
+  if (!control.operation(98, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O100
+  if (!control.operation(99, 1, workspace.cut[7], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O101
+  if (!control.operation(100, 1, workspace.endpoint[12], [&] {
+        return add(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O102
+  if (!control.operation(101, 1, workspace.cut[8], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O103
+  if (!control.operation(102, 1, workspace.cut[9], [&] {
+        return divide(workspace.cut[6], workspace.link[0]);
+      }))
+    return false;
+  // O104
+  if (!control.operation(103, 1, workspace.cut[10], [&] {
+        return point(std::max(-.5, workspace.cut[7].high));
+      }))
+    return false;
+  // O105
+  if (!control.operation(104, 1, workspace.cut[11], [&] {
+        return point(std::min(.5, workspace.cut[8].low));
+      }))
+    return false;
+  // O106
+  if (!control.operation(105, 1, workspace.cut[11], [&] {
+        return point(std::min(workspace.cut[11].low, workspace.cut[9].low));
+      }))
+    return false;
+  // G016
+  if (!control.guard(
+          15, 1,
+          [&](EP6W& why) {
+            for (const auto* v :
+                 {&workspace.cut[6], &workspace.cut[7], &workspace.cut[8],
+                  &workspace.cut[9], &workspace.cut[10], &workspace.cut[11]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[10].low != workspace.cut[10].high ||
+                workspace.cut[11].low != workspace.cut[11].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[10].low < -.5)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[10].low >= workspace.cut[11].low ||
+                workspace.cut[11].low > .5)
+              return control.attach(workspace.cut[11]);
+            if (workspace.cut[10].low < workspace.cut[7].high)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[11].low > workspace.cut[8].low ||
+                workspace.cut[11].low > workspace.cut[9].low)
+              return control.attach(workspace.cut[11]);
+            workspace.endpoint_certificate[1] = true;
+            return true;
+          },
+          Slice6Why::no_tau_interval))
+    return false;
+  // O107
+  if (!control.operation(106, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[10]); }))
+    return false;
+  // O108
+  if (!control.operation(107, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G017
+  if (!control.guard(
+          16, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O109
+  if (!control.operation(108, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O110
+  if (!control.operation(109, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O111
+  if (!control.operation(110, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[10]);
+      }))
+    return false;
+  // O112
+  if (!control.operation(111, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O113
+  if (!control.operation(112, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O114
+  if (!control.operation(113, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G018
+  if (!control.guard(
+          17, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O115
+  if (!control.operation(114, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 4;
+          return value;
+        }();
+      }))
+    return false;
+  // O116
+  if (!control.operation(115, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O117
+  if (!control.operation(116, 1, workspace.endpoint[6], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O118
+  if (!control.operation(117, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[11]); }))
+    return false;
+  // O119
+  if (!control.operation(118, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G019
+  if (!control.guard(
+          18, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O120
+  if (!control.operation(119, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O121
+  if (!control.operation(120, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O122
+  if (!control.operation(121, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[11]);
+      }))
+    return false;
+  // O123
+  if (!control.operation(122, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O124
+  if (!control.operation(123, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O125
+  if (!control.operation(124, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G020
+  if (!control.guard(
+          19, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O126
+  if (!control.operation(125, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 5;
+          return value;
+        }();
+      }))
+    return false;
+  // O127
+  if (!control.operation(126, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O128
+  if (!control.operation(127, 1, workspace.endpoint[7], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O129
+  if (!control.operation(128, 1, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[6].high); }))
+    return false;
+  workspace.cuts[2] = workspace.endpoint[12].low;
+  // O130
+  if (!control.operation(129, 1, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[7].low); }))
+    return false;
+  workspace.cuts[3] = workspace.endpoint[13].low;
+  // G021
+  if (!control.guard(
+          20, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cuts[2] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.cuts[2] < workspace.cuts[3] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::no_radial_interval))
+    return false;
+  // O131
+  if (!control.operation(130, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[2])); }))
+    return false;
+  // O132
+  if (!control.operation(131, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[10].low));
+      }))
+    return false;
+  // O133
+  if (!control.operation(132, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 7;
+          return value;
+        }();
+      }))
+    return false;
+  // O134
+  if (!control.operation(133, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O135
+  if (!control.operation(134, 1, workspace.endpoint[8], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O136
+  if (!control.operation(135, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[3])); }))
+    return false;
+  // O137
+  if (!control.operation(136, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12],
+                        point(workspace.chart[10].high));
+      }))
+    return false;
+  // G022
+  if (!control.guard(
+          21, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::no_positive_upper))
+    return false;
+  // O138
+  if (!control.operation(137, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O139
+  if (!control.operation(138, 1, workspace.endpoint[9], [&] {
+        return add(point(workspace.chart[13].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O140
+  if (!control.operation(139, 1, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[3].high),
+                        point(workspace.chart[12].low));
+      }))
+    return false;
+  // O141
+  if (!control.operation(140, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 1;
+          return value;
+        }();
+      }))
+    return false;
+  // O142
+  if (!control.operation(141, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O143
+  if (!control.operation(142, 1, workspace.endpoint[10], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O144
+  if (!control.operation(143, 1, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[1].low),
+                        point(workspace.chart[12].high));
+      }))
+    return false;
+  // G023
+  if (!control.guard(
+          22, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::no_positive_upper))
+    return false;
+  // O145
+  if (!control.operation(144, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O146
+  if (!control.operation(145, 1, workspace.endpoint[11], [&] {
+        return add(point(workspace.chart[13].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O147
+  if (!control.operation(146, 1, workspace.chart[14],
+                         [&] { return absolute(workspace.chart[8]); }))
+    return false;
+  // O148
+  if (!control.operation(147, 1, workspace.endpoint[12], [&] {
+        return divide(workspace.chart[14], workspace.link[8]);
+      }))
+    return false;
+  // O149
+  if (!control.operation(148, 1, workspace.chart[15], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O150
+  if (!control.operation(149, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.endpoint[2].high, workspace.endpoint[8].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O151
+  if (!control.operation(150, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.selected[0], workspace.endpoint[4].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O152
+  if (!control.operation(151, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.selected[0], workspace.endpoint[10].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O153
+  if (!control.operation(152, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.selected[0], workspace.chart[7].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O154
+  if (!control.operation(153, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.selected[0], workspace.chart[15].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O155
+  if (!control.operation(154, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.endpoint[3].low, workspace.endpoint[9].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // O156
+  if (!control.operation(155, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.selected[1], workspace.endpoint[5].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // O157
+  if (!control.operation(156, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.selected[1], workspace.endpoint[11].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // G024
+  if (!control.guard(
+          23, 255,
+          [&](EP6W& why) {
+            if (!std::isfinite(d.slice.base_lo) ||
+                !std::isfinite(d.slice.base_hi)) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return d.slice.base_lo < d.slice.base_hi ||
+                   control.attach(point(d.slice.base_hi));
+          },
+          Slice6Why::base_interval_unavailable))
+    return false;
+  // G025
+  if (!control.guard(
+          24, 255,
+          [&](EP6W& why) {
+            if ((d.slice.guard_written[0] & (std::uint64_t{1} << 23)) == 0)
+              return false;
+            if (!std::isfinite(thigh_length) || !std::isfinite(shin_length) ||
+                thigh_length <= 0 || shin_length <= 0 || thigh_length > 1 ||
+                shin_length > 1) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            const auto* pelvis = std::get_if<BoardingRoutePhaseBoxBinding>(
+                &d.parts[0].reservation);
+            const auto* port = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+                &d.parts[3].reservation);
+            const auto* star = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+                &d.parts[9].reservation);
+            const auto port_region = ss_region(1), star_region = ss_region(2);
+            if (kBoardingRouteFootPhaseVersion != 1 || thigh_length != .47285 ||
+                shin_length != .47478 || !ep6_source_bit(d, 62) || !pelvis ||
+                !port || !star || d.parts[0].id != PartId::pelvis ||
+                d.parts[3].id != PartId::port_thigh ||
+                d.parts[9].id != PartId::starboard_thigh ||
+                pelvis->center != BodyPointId::root ||
+                pelvis->frame != BoardingRoutePhaseFrame::root ||
+                pelvis->half_size_metres != RigidVector3{.24, .12, .18} ||
+                port->start != BodyPointId::port_hip ||
+                port->end != BodyPointId::port_knee ||
+                star->start != BodyPointId::starboard_hip ||
+                star->end != BodyPointId::starboard_knee ||
+                port->radius_metres != .105 || star->radius_metres != .105 ||
+                port_region.first != PartId::pelvis ||
+                port_region.second != PartId::port_thigh ||
+                star_region.first != PartId::pelvis ||
+                star_region.second != PartId::starboard_thigh ||
+                port_region.junction != Junction::hip ||
+                star_region.junction != Junction::hip ||
+                port_region.root != BodyPointId::port_hip ||
+                port_region.toward != BodyPointId::port_knee ||
+                star_region.root != BodyPointId::starboard_hip ||
+                star_region.toward != BodyPointId::starboard_knee ||
+                port_region.limit_metres != kBoardingSelfHipLengthMetres ||
+                star_region.limit_metres != kBoardingSelfHipLengthMetres ||
+                kBoardingSelfHipLengthMetres != 0x1.bb0cd605d7512p-3) {
+              why = EP6W::slice_identity;
+              return false;
+            }
+            if (!std::isfinite(kBoardingSelfHipLengthMetres)) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return .12 > 0 && kBoardingSelfHipLengthMetres > .12 && .105 > 0 &&
+                   .105 <= kBoardingSelfHipLengthMetres &&
+                   kBoardingSelfHipLengthMetres < thigh_length;
+          },
+          Slice6Why::hip_threshold_domain))
+    return false;
+  // O158
+  if (!control.operation(157, 255, workspace.direct[0],
+                         [&] { return square(workspace.link[8]); }))
+    return false;
+  // O159
+  if (!control.operation(158, 255, workspace.direct[0],
+                         [&] { return add(point(1), workspace.direct[0]); }))
+    return false;
+  // O160
+  if (!control.operation(159, 255, workspace.direct[0], [&] {
+        return transfer_small_root(workspace.direct[0]);
+      }))
+    return false;
+  // O161
+  if (!control.operation(160, 255, workspace.direct[1],
+                         [&] { return divide(point(1), workspace.direct[0]); }))
+    return false;
+  // G026
+  if (!control.guard(
+          25, 255,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[1])) return false;
+            if (workspace.direct[1].low <= 0 || workspace.direct[1].high >= 1)
+              return control.attach(workspace.direct[1]);
+            return true;
+          },
+          Slice6Why::hip_threshold_domain))
+    return false;
+  // O162
+  if (!control.operation(161, 255, workspace.direct[2], [&] {
+        return square(point(kBoardingSelfHipLengthMetres));
+      }))
+    return false;
+  // O163
+  if (!control.operation(162, 255, workspace.direct[3],
+                         [&] { return square(point(.105)); }))
+    return false;
+  // O164
+  if (!control.operation(163, 255, workspace.direct[4],
+                         [&] { return square(point(.12)); }))
+    return false;
+  // O165
+  if (!control.operation(164, 255, workspace.direct[2], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O166
+  if (!control.operation(165, 255, workspace.direct[3], [&] {
+        return subtract(workspace.direct[2], workspace.direct[4]);
+      }))
+    return false;
+  // G027
+  if (!control.guard(
+          26, 255,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[2]) ||
+                !control.supported(why, workspace.direct[3]))
+              return false;
+            if (workspace.direct[2].low <= 0)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[3].low > 0 ||
+                   control.attach(workspace.direct[3]);
+          },
+          Slice6Why::hip_threshold_domain))
+    return false;
+  // O167
+  if (!control.operation(166, 255, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[3]);
+      }))
+    return false;
+  // O168
+  if (!control.operation(167, 255, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[3]);
+      }))
+    return false;
+  // O169
+  if (!control.operation(168, 255, workspace.direct[4], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres), point(.12));
+      }))
+    return false;
+  // O170
+  if (!control.operation(169, 255, workspace.direct[3], [&] {
+        return add(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O171
+  if (!control.operation(170, 255, workspace.direct[3], [&] {
+        return divide(workspace.direct[3], workspace.direct[2]);
+      }))
+    return false;
+  // G028
+  if (!control.guard(
+          27, 255,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[3])) return false;
+            if (workspace.direct[3].low <= 0 || workspace.direct[3].high >= 1)
+              return control.attach(workspace.direct[3]);
+            return true;
+          },
+          Slice6Why::hip_threshold_domain))
+    return false;
+  // O172
+  if (!control.operation(171, 255, workspace.direct[4], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[3]);
+      }))
+    return false;
+  // O173
+  if (!control.operation(172, 255, workspace.direct[4], [&] {
+        return subtract(workspace.direct[4], point(.12));
+      }))
+    return false;
+  // G029
+  if (!control.guard(
+          28, 255,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_threshold_domain))
+    return false;
+  // O174
+  if (!control.operation(173, 0, workspace.endpoint[12], [&] {
+        return subtract(point(d.slice.base_lo), point(workspace.chart[5].high));
+      }))
+    return false;
+  // O175
+  if (!control.operation(174, 0, workspace.endpoint[12], [&] {
+        const auto value = point(workspace.endpoint[12].low);
+        if (ep6_valid(value)) workspace.selected[4] = value.low;
+        return value;
+      }))
+    return false;
+  // G030
+  if (!control.guard(
+          29, 0,
+          [&](EP6W& why) {
+            if ((d.slice.guard_written[0] & (std::uint64_t{1} << 23)) == 0)
+              return false;
+            // Only O154/O157 write BASE: no saved original or erased floor
+            // read.
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.selected[4] > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::height_floor_unavailable))
+    return false;
+  // O176
+  if (!control.operation(175, 0, workspace.endpoint[13], [&] {
+        const auto value = point(workspace.chart[6].high);
+        if (ep6_valid(value)) workspace.selected[5] = value.high;
+        return value;
+      }))
+    return false;
+  // O177
+  if (!control.operation(176, 0, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[5])); }))
+    return false;
+  // O178
+  if (!control.operation(177, 0, workspace.direct[5],
+                         [&] { return square(point(workspace.selected[4])); }))
+    return false;
+  // O179
+  if (!control.operation(178, 0, workspace.direct[4], [&] {
+        return add(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // G031
+  if (!control.guard(
+          30, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[13]) ||
+                !control.supported(why, workspace.direct[4]))
+              return false;
+            if (workspace.selected[5] < 0)
+              return control.attach(workspace.endpoint[13]);
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::chart_factor_unavailable))
+    return false;
+  // O180
+  if (!control.operation(179, 0, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O181
+  if (!control.operation(180, 0, workspace.endpoint[14], [&] {
+        return divide(point(workspace.selected[4]), workspace.direct[4]);
+      }))
+    return false;
+  // O182
+  if (!control.operation(181, 0, workspace.endpoint[14],
+                         [&] { return point(workspace.endpoint[14].low); }))
+    return false;
+  // O183
+  if (!control.operation(182, 0, workspace.endpoint[15], [&] {
+        return point(
+            std::max(workspace.direct[1].low, workspace.endpoint[14].low));
+      }))
+    return false;
+  // G032
+  if (!control.guard(
+          31, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.endpoint[14]) ||
+                !control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.endpoint[15]))
+              return false;
+            if (workspace.direct[4].low <= 0)
+              return control.attach(workspace.direct[4]);
+            if (!std::isfinite(d.slice.factor_lower[0])) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            // O181/O182 (STAR O198/O199) established extraction provenance;
+            // the overwritten whole quotient is not read here.
+            return (d.slice.factor_lower[0] > 0 &&
+                    d.slice.factor_lower[0] <= 1 &&
+                    d.slice.factor_lower[0] == workspace.endpoint[15].low) ||
+                   control.attach(workspace.endpoint[15]);
+          },
+          Slice6Why::chart_factor_unavailable))
+    return false;
+  // O184
+  if (!control.operation(183, 0, workspace.direct[4], [&] {
+        return divide(workspace.direct[3], point(d.slice.factor_lower[0]));
+      }))
+    return false;
+  // O185
+  if (!control.operation(184, 0, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].high);
+        if (ep6_valid(value)) workspace.selected[6] = value.high;
+        return value;
+      }))
+    return false;
+  // G033
+  if (!control.guard(
+          32, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // POINT_UPPER's written row owns provenance; no erased quotient
+            // read.
+            return (workspace.selected[6] > 0 && workspace.selected[6] < 1) ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_descent_unavailable))
+    return false;
+  // O186
+  if (!control.operation(185, 0, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[6])); }))
+    return false;
+  // O187
+  if (!control.operation(186, 0, workspace.direct[4], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // G034
+  if (!control.guard(
+          33, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_descent_unavailable))
+    return false;
+  // O188
+  if (!control.operation(187, 0, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O189
+  if (!control.operation(188, 0, workspace.direct[4], [&] {
+        return multiply(point(thigh_length), workspace.direct[4]);
+      }))
+    return false;
+  // O190
+  if (!control.operation(189, 0, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].low);
+        if (ep6_valid(value)) workspace.cuts[0] = value.low;
+        return value;
+      }))
+    return false;
+  // G035
+  if (!control.guard(
+          34, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // The written POINT_LOWER row retains this side's cap by value.
+            return (workspace.cuts[0] > 0 &&
+                    workspace.cuts[0] == workspace.direct[4].low) ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_descent_unavailable))
+    return false;
+  // O191
+  if (!control.operation(190, 1, workspace.endpoint[12], [&] {
+        return subtract(point(d.slice.base_lo),
+                        point(workspace.chart[13].high));
+      }))
+    return false;
+  // O192
+  if (!control.operation(191, 1, workspace.endpoint[12], [&] {
+        const auto value = point(workspace.endpoint[12].low);
+        if (ep6_valid(value)) workspace.selected[4] = value.low;
+        return value;
+      }))
+    return false;
+  // G036
+  if (!control.guard(
+          35, 1,
+          [&](EP6W& why) {
+            if ((d.slice.guard_written[0] & (std::uint64_t{1} << 23)) == 0)
+              return false;
+            // Only O154/O157 write BASE: no saved original or erased floor
+            // read.
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.selected[4] > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::height_floor_unavailable))
+    return false;
+  // O193
+  if (!control.operation(192, 1, workspace.endpoint[13], [&] {
+        const auto value = point(workspace.chart[14].high);
+        if (ep6_valid(value)) workspace.selected[5] = value.high;
+        return value;
+      }))
+    return false;
+  // O194
+  if (!control.operation(193, 1, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[5])); }))
+    return false;
+  // O195
+  if (!control.operation(194, 1, workspace.direct[5],
+                         [&] { return square(point(workspace.selected[4])); }))
+    return false;
+  // O196
+  if (!control.operation(195, 1, workspace.direct[4], [&] {
+        return add(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // G037
+  if (!control.guard(
+          36, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[13]) ||
+                !control.supported(why, workspace.direct[4]))
+              return false;
+            if (workspace.selected[5] < 0)
+              return control.attach(workspace.endpoint[13]);
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::chart_factor_unavailable))
+    return false;
+  // O197
+  if (!control.operation(196, 1, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O198
+  if (!control.operation(197, 1, workspace.endpoint[14], [&] {
+        return divide(point(workspace.selected[4]), workspace.direct[4]);
+      }))
+    return false;
+  // O199
+  if (!control.operation(198, 1, workspace.endpoint[14],
+                         [&] { return point(workspace.endpoint[14].low); }))
+    return false;
+  // O200
+  if (!control.operation(199, 1, workspace.endpoint[15], [&] {
+        return point(
+            std::max(workspace.direct[1].low, workspace.endpoint[14].low));
+      }))
+    return false;
+  // G038
+  if (!control.guard(
+          37, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.endpoint[14]) ||
+                !control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.endpoint[15]))
+              return false;
+            if (workspace.direct[4].low <= 0)
+              return control.attach(workspace.direct[4]);
+            if (!std::isfinite(d.slice.factor_lower[1])) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            // O181/O182 (STAR O198/O199) established extraction provenance;
+            // the overwritten whole quotient is not read here.
+            return (d.slice.factor_lower[1] > 0 &&
+                    d.slice.factor_lower[1] <= 1 &&
+                    d.slice.factor_lower[1] == workspace.endpoint[15].low) ||
+                   control.attach(workspace.endpoint[15]);
+          },
+          Slice6Why::chart_factor_unavailable))
+    return false;
+  // O201
+  if (!control.operation(200, 1, workspace.direct[4], [&] {
+        return divide(workspace.direct[3], point(d.slice.factor_lower[1]));
+      }))
+    return false;
+  // O202
+  if (!control.operation(201, 1, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].high);
+        if (ep6_valid(value)) workspace.selected[6] = value.high;
+        return value;
+      }))
+    return false;
+  // G039
+  if (!control.guard(
+          38, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // POINT_UPPER's written row owns provenance; no erased quotient
+            // read.
+            return (workspace.selected[6] > 0 && workspace.selected[6] < 1) ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_descent_unavailable))
+    return false;
+  // O203
+  if (!control.operation(202, 1, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[6])); }))
+    return false;
+  // O204
+  if (!control.operation(203, 1, workspace.direct[4], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // G040
+  if (!control.guard(
+          39, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_descent_unavailable))
+    return false;
+  // O205
+  if (!control.operation(204, 1, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O206
+  if (!control.operation(205, 1, workspace.direct[4], [&] {
+        return multiply(point(thigh_length), workspace.direct[4]);
+      }))
+    return false;
+  // O207
+  if (!control.operation(206, 1, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].low);
+        if (ep6_valid(value)) workspace.cuts[1] = value.low;
+        return value;
+      }))
+    return false;
+  // G041
+  if (!control.guard(
+          40, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // The written POINT_LOWER row retains this side's cap by value.
+            return (workspace.cuts[1] > 0 &&
+                    workspace.cuts[1] == workspace.direct[4].low) ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice6Why::hip_descent_unavailable))
+    return false;
+  // O208
+  if (!control.operation(207, 0, workspace.cut[0],
+                         [&] { return negate(workspace.chart[1]); }))
+    return false;
+  // O209
+  if (!control.operation(208, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O210
+  if (!control.operation(209, 0, workspace.cut[1], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O211
+  if (!control.operation(210, 0, workspace.endpoint[12], [&] {
+        return add(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O212
+  if (!control.operation(211, 0, workspace.cut[2], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O213
+  if (!control.operation(212, 0, workspace.cut[3], [&] {
+        return divide(workspace.cut[0], workspace.link[0]);
+      }))
+    return false;
+  // O214
+  if (!control.operation(213, 0, workspace.cut[4], [&] {
+        return point(std::max(-.5, workspace.cut[1].high));
+      }))
+    return false;
+  // O215
+  if (!control.operation(214, 0, workspace.cut[5], [&] {
+        return point(std::min(.5, workspace.cut[2].low));
+      }))
+    return false;
+  // O216
+  if (!control.operation(215, 0, workspace.cut[5], [&] {
+        return point(std::min(workspace.cut[5].low, workspace.cut[3].low));
+      }))
+    return false;
+  // O217
+  if (!control.operation(216, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(workspace.cuts[0]));
+      }))
+    return false;
+  // O218
+  if (!control.operation(217, 0, workspace.endpoint[12], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O219
+  if (!control.operation(218, 0, workspace.cut[4], [&] {
+        return point(
+            std::max(workspace.cut[4].low, workspace.endpoint[12].high));
+      }))
+    return false;
+  // O220
+  if (!control.operation(219, 0, workspace.endpoint[13], [&] {
+        return divide(workspace.cut[0], point(shin_length));
+      }))
+    return false;
+  // O221
+  if (!control.operation(220, 0, workspace.cut[5], [&] {
+        return point(
+            std::min(workspace.cut[5].low, workspace.endpoint[13].low));
+      }))
+    return false;
+  // G042
+  if (!control.guard(
+          41, 0,
+          [&](EP6W& why) {
+            workspace.endpoint_certificate[0] = false;
+            for (const auto* v :
+                 {&workspace.cut[0], &workspace.cut[1], &workspace.cut[2],
+                  &workspace.cut[3], &workspace.cut[4], &workspace.cut[5]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[4].low != workspace.cut[4].high ||
+                workspace.cut[5].low != workspace.cut[5].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[4].low < -.5)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[4].low >= workspace.cut[5].low ||
+                workspace.cut[5].low > .5)
+              return control.attach(workspace.cut[5]);
+            if (workspace.cut[4].low < workspace.cut[1].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.cut[2].low ||
+                workspace.cut[5].low > workspace.cut[3].low)
+              return control.attach(workspace.cut[5]);
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.cut[4].low < workspace.endpoint[12].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.endpoint[13].low)
+              return control.attach(workspace.cut[5]);
+            if (!std::isfinite(workspace.cuts[0]) || workspace.cuts[0] <= 0) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            workspace.endpoint_certificate[0] = true;
+            return true;
+          },
+          Slice6Why::no_tau_interval))
+    return false;
+  // O222
+  if (!control.operation(221, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[4]); }))
+    return false;
+  // O223
+  if (!control.operation(222, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G043
+  if (!control.guard(
+          42, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O224
+  if (!control.operation(223, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O225
+  if (!control.operation(224, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O226
+  if (!control.operation(225, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[4]);
+      }))
+    return false;
+  // O227
+  if (!control.operation(226, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O228
+  if (!control.operation(227, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O229
+  if (!control.operation(228, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G044
+  if (!control.guard(
+          43, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O230
+  if (!control.operation(229, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 8;
+          return value;
+        }();
+      }))
+    return false;
+  // O231
+  if (!control.operation(230, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O232
+  if (!control.operation(231, 0, workspace.endpoint[0], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O233
+  if (!control.operation(232, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[5]); }))
+    return false;
+  // O234
+  if (!control.operation(233, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G045
+  if (!control.guard(
+          44, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O235
+  if (!control.operation(234, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O236
+  if (!control.operation(235, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O237
+  if (!control.operation(236, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[5]);
+      }))
+    return false;
+  // O238
+  if (!control.operation(237, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O239
+  if (!control.operation(238, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O240
+  if (!control.operation(239, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G046
+  if (!control.guard(
+          45, 0,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O241
+  if (!control.operation(240, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 9;
+          return value;
+        }();
+      }))
+    return false;
+  // O242
+  if (!control.operation(241, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O243
+  if (!control.operation(242, 0, workspace.endpoint[1], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O244
+  if (!control.operation(243, 0, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[0].high); }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O245
+  if (!control.operation(244, 0, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[1].low); }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[13].low;
+  // G047
+  if (!control.guard(
+          46, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.selected[0] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.selected[0] < workspace.selected[1] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::no_radial_interval))
+    return false;
+  // O246
+  if (!control.operation(245, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.selected[0])); }))
+    return false;
+  // O247
+  if (!control.operation(246, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].low));
+      }))
+    return false;
+  // O248
+  if (!control.operation(247, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 12;
+          return value;
+        }();
+      }))
+    return false;
+  // O249
+  if (!control.operation(248, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O250
+  if (!control.operation(249, 0, workspace.endpoint[2], [&] {
+        const auto value = add(point(workspace.chart[5].high),
+                               point(workspace.endpoint[12].high));
+        if (ep6_valid(value)) workspace.cuts[2] = value.high;
+        return value;
+      }))
+    return false;
+  // O251
+  if (!control.operation(250, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.selected[1])); }))
+    return false;
+  // O252
+  if (!control.operation(251, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].high));
+      }))
+    return false;
+  // G048
+  if (!control.guard(
+          47, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::no_positive_upper))
+    return false;
+  // O253
+  if (!control.operation(252, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O254
+  if (!control.operation(253, 0, workspace.endpoint[3], [&] {
+        const auto value = add(point(workspace.chart[5].low),
+                               point(workspace.endpoint[12].low));
+        if (ep6_valid(value)) workspace.cuts[3] = value.low;
+        return value;
+      }))
+    return false;
+  // O255
+  if (!control.operation(254, 1, workspace.cut[6],
+                         [&] { return negate(workspace.chart[9]); }))
+    return false;
+  // O256
+  if (!control.operation(255, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O257
+  if (!control.operation(256, 1, workspace.cut[7], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O258
+  if (!control.operation(257, 1, workspace.endpoint[12], [&] {
+        return add(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O259
+  if (!control.operation(258, 1, workspace.cut[8], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O260
+  if (!control.operation(259, 1, workspace.cut[9], [&] {
+        return divide(workspace.cut[6], workspace.link[0]);
+      }))
+    return false;
+  // O261
+  if (!control.operation(260, 1, workspace.cut[10], [&] {
+        return point(std::max(-.5, workspace.cut[7].high));
+      }))
+    return false;
+  // O262
+  if (!control.operation(261, 1, workspace.cut[11], [&] {
+        return point(std::min(.5, workspace.cut[8].low));
+      }))
+    return false;
+  // O263
+  if (!control.operation(262, 1, workspace.cut[11], [&] {
+        return point(std::min(workspace.cut[11].low, workspace.cut[9].low));
+      }))
+    return false;
+  // O264
+  if (!control.operation(263, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[6], point(workspace.cuts[1]));
+      }))
+    return false;
+  // O265
+  if (!control.operation(264, 1, workspace.endpoint[12], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O266
+  if (!control.operation(265, 1, workspace.cut[10], [&] {
+        return point(
+            std::max(workspace.cut[10].low, workspace.endpoint[12].high));
+      }))
+    return false;
+  // O267
+  if (!control.operation(266, 1, workspace.endpoint[13], [&] {
+        return divide(workspace.cut[6], point(shin_length));
+      }))
+    return false;
+  // O268
+  if (!control.operation(267, 1, workspace.cut[11], [&] {
+        return point(
+            std::min(workspace.cut[11].low, workspace.endpoint[13].low));
+      }))
+    return false;
+  // G049
+  if (!control.guard(
+          48, 1,
+          [&](EP6W& why) {
+            workspace.endpoint_certificate[1] = false;
+            for (const auto* v :
+                 {&workspace.cut[6], &workspace.cut[7], &workspace.cut[8],
+                  &workspace.cut[9], &workspace.cut[10], &workspace.cut[11]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[10].low != workspace.cut[10].high ||
+                workspace.cut[11].low != workspace.cut[11].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[10].low < -.5)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[10].low >= workspace.cut[11].low ||
+                workspace.cut[11].low > .5)
+              return control.attach(workspace.cut[11]);
+            if (workspace.cut[10].low < workspace.cut[7].high)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[11].low > workspace.cut[8].low ||
+                workspace.cut[11].low > workspace.cut[9].low)
+              return control.attach(workspace.cut[11]);
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.cut[10].low < workspace.endpoint[12].high)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[11].low > workspace.endpoint[13].low)
+              return control.attach(workspace.cut[11]);
+            if (!std::isfinite(workspace.cuts[1]) || workspace.cuts[1] <= 0) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            workspace.endpoint_certificate[1] = true;
+            return true;
+          },
+          Slice6Why::no_tau_interval))
+    return false;
+  // O269
+  if (!control.operation(268, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[10]); }))
+    return false;
+  // O270
+  if (!control.operation(269, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G050
+  if (!control.guard(
+          49, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O271
+  if (!control.operation(270, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O272
+  if (!control.operation(271, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O273
+  if (!control.operation(272, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[10]);
+      }))
+    return false;
+  // O274
+  if (!control.operation(273, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O275
+  if (!control.operation(274, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O276
+  if (!control.operation(275, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G051
+  if (!control.guard(
+          50, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O277
+  if (!control.operation(276, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 10;
+          return value;
+        }();
+      }))
+    return false;
+  // O278
+  if (!control.operation(277, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O279
+  if (!control.operation(278, 1, workspace.endpoint[6], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O280
+  if (!control.operation(279, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[11]); }))
+    return false;
+  // O281
+  if (!control.operation(280, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G052
+  if (!control.guard(
+          51, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O282
+  if (!control.operation(281, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O283
+  if (!control.operation(282, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O284
+  if (!control.operation(283, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[11]);
+      }))
+    return false;
+  // O285
+  if (!control.operation(284, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O286
+  if (!control.operation(285, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O287
+  if (!control.operation(286, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G053
+  if (!control.guard(
+          52, 1,
+          [&](EP6W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice6Why::endpoint_domain_unavailable))
+    return false;
+  // O288
+  if (!control.operation(287, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 11;
+          return value;
+        }();
+      }))
+    return false;
+  // O289
+  if (!control.operation(288, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O290
+  if (!control.operation(289, 1, workspace.endpoint[7], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O291
+  if (!control.operation(290, 1, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[6].high); }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O292
+  if (!control.operation(291, 1, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[7].low); }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[13].low;
+  // G054
+  if (!control.guard(
+          53, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.selected[0] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.selected[0] < workspace.selected[1] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice6Why::no_radial_interval))
+    return false;
+  // O293
+  if (!control.operation(292, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.selected[0])); }))
+    return false;
+  // O294
+  if (!control.operation(293, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[10].low));
+      }))
+    return false;
+  // O295
+  if (!control.operation(294, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep6_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint16_t{1} << 13;
+          return value;
+        }();
+      }))
+    return false;
+  // O296
+  if (!control.operation(295, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O297
+  if (!control.operation(296, 1, workspace.endpoint[8], [&] {
+        const auto value = add(point(workspace.chart[13].high),
+                               point(workspace.endpoint[12].high));
+        if (ep6_valid(value)) workspace.cuts[4] = value.high;
+        return value;
+      }))
+    return false;
+  // O298
+  if (!control.operation(297, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.selected[1])); }))
+    return false;
+  // O299
+  if (!control.operation(298, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12],
+                        point(workspace.chart[10].high));
+      }))
+    return false;
+  // G055
+  if (!control.guard(
+          54, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice6Why::no_positive_upper))
+    return false;
+  // O300
+  if (!control.operation(299, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O301
+  if (!control.operation(300, 1, workspace.endpoint[9], [&] {
+        const auto value = add(point(workspace.chart[13].low),
+                               point(workspace.endpoint[12].low));
+        if (ep6_valid(value)) workspace.cuts[5] = value.low;
+        return value;
+      }))
+    return false;
+  // O302
+  if (!control.operation(301, 255, workspace.endpoint[12], [&] {
+        return point(std::max(d.slice.base_lo, workspace.cuts[2]));
+      }))
+    return false;
+  // O303
+  if (!control.operation(302, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.endpoint[12].low, workspace.cuts[4]));
+      }))
+    return false;
+  // O304
+  if (!control.operation(303, 255, workspace.endpoint[12], [&] {
+        return point(std::min(d.slice.base_hi, workspace.cuts[3]));
+      }))
+    return false;
+  // O305
+  if (!control.operation(304, 255, workspace.endpoint[12], [&] {
+        return point(std::min(workspace.endpoint[12].low, workspace.cuts[5]));
+      }))
+    return false;
+  // G056
+  if (!control.guard(
+          55, 255,
+          [&](EP6W& why) {
+            // BASE has only its original two writers, never a later assignment.
+            if ((d.slice.guard_written[0] & (std::uint64_t{1} << 23)) == 0 ||
+                !workspace.endpoint_certificate[0] ||
+                !workspace.endpoint_certificate[1])
+              return false;
+            if (!std::isfinite(d.slice.lo) || !std::isfinite(d.slice.hi)) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return d.slice.lo < d.slice.hi || control.attach(point(d.slice.hi));
+          },
+          Slice6Why::empty_inward_interval))
+    return false;
+  // O306
+  if (!control.operation(305, 255, workspace.endpoint[12],
+                         [&] { return point(d.slice.hi - d.slice.lo); }))
+    return false;
+  workspace.selected[2] = workspace.endpoint[12].low;
+  // O307
+  if (!control.operation(306, 255, workspace.endpoint[12],
+                         [&] { return point(workspace.selected[2] * .5); }))
+    return false;
+  workspace.selected[3] = workspace.endpoint[12].low;
+  // O308
+  if (!control.operation(307, 255, workspace.endpoint[12], [&] {
+        return point(d.slice.lo + workspace.selected[3]);
+      }))
+    return false;
+  workspace.selected[4] = workspace.endpoint[12].low;
+  // G057
+  if (!control.guard(
+          56, 255,
+          [&](EP6W& why) {
+            if (!std::isfinite(d.slice.y)) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return std::abs(d.slice.y) <= 8 || control.attach(point(d.slice.y));
+          },
+          Slice6Why::candidate_domain))
+    return false;
+  // G058
+  if (!control.guard(
+          57, 255,
+          [&](EP6W& why) {
+            (void)why;
+            return d.slice.y > d.slice.lo || control.attach(point(d.slice.y));
+          },
+          Slice6Why::midpoint_unavailable))
+    return false;
+  // G059
+  if (!control.guard(
+          58, 255,
+          [&](EP6W& why) {
+            (void)why;
+            return d.slice.y < d.slice.hi || control.attach(point(d.slice.y));
+          },
+          Slice6Why::midpoint_unavailable))
+    return false;
+  // O309
+  if (!control.operation(308, 0, workspace.direct[0], [&] {
+        return subtract(point(d.slice.y), workspace.chart[5]);
+      }))
+    return false;
+  // O310
+  if (!control.operation(309, 0, workspace.direct[1],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O311
+  if (!control.operation(310, 0, workspace.direct[1], [&] {
+        return add(workspace.chart[2], workspace.direct[1]);
+      }))
+    return false;
+  // O312
+  if (!control.operation(311, 0, workspace.direct[2], [&] {
+        return add(workspace.direct[1], workspace.chart[3]);
+      }))
+    return false;
+  // G060
+  if (!control.guard(
+          59, 0,
+          [&](EP6W& why) {
+            for (const auto* v : {&workspace.direct[0], &workspace.direct[1],
+                                  &workspace.direct[2]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[0].low <= 0)
+              return control.attach(workspace.direct[0]);
+            if (workspace.direct[1].low <= 0)
+              return control.attach(workspace.direct[1]);
+            if (workspace.direct[2].low <= workspace.link[3].high)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[2].high < workspace.link[1].low ||
+                   control.attach(workspace.direct[2]);
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O313
+  if (!control.operation(312, 0, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O314
+  if (!control.operation(313, 0, workspace.direct[4], [&] {
+        return add(workspace.link[6], workspace.direct[2]);
+      }))
+    return false;
+  // O315
+  if (!control.operation(314, 0, workspace.direct[5], [&] {
+        return multiply(point(2), workspace.direct[2]);
+      }))
+    return false;
+  // O316
+  if (!control.operation(315, 0, workspace.direct[4], [&] {
+        return divide(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // O317
+  if (!control.operation(316, 0, workspace.direct[6], [&] {
+        return subtract(workspace.link[1], workspace.direct[2]);
+      }))
+    return false;
+  // O318
+  if (!control.operation(317, 0, workspace.direct[7], [&] {
+        return subtract(workspace.direct[2], workspace.link[3]);
+      }))
+    return false;
+  // O319
+  if (!control.operation(318, 0, workspace.direct[6], [&] {
+        return multiply(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // O320
+  if (!control.operation(319, 0, workspace.direct[7],
+                         [&] { return square(workspace.direct[2]); }))
+    return false;
+  // O321
+  if (!control.operation(320, 0, workspace.direct[7], [&] {
+        return multiply(point(4), workspace.direct[7]);
+      }))
+    return false;
+  // O322
+  if (!control.operation(321, 0, workspace.direct[7], [&] {
+        return divide(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // G061
+  if (!control.guard(
+          60, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[7])) return false;
+            return workspace.direct[7].low > 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O323
+  if (!control.operation(322, 0, workspace.direct[7], [&] {
+        return transfer_small_root(workspace.direct[7]);
+      }))
+    return false;
+  // O324
+  if (!control.operation(323, 0, workspace.direct[5], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // O325
+  if (!control.operation(324, 0, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O326
+  if (!control.operation(325, 0, workspace.direct[9], [&] {
+        return multiply(workspace.direct[7], workspace.chart[1]);
+      }))
+    return false;
+  // O327
+  if (!control.operation(326, 0, workspace.direct[8], [&] {
+        return add(workspace.direct[8], workspace.direct[9]);
+      }))
+    return false;
+  // O328
+  if (!control.operation(327, 0, workspace.direct[10], [&] {
+        return multiply(workspace.direct[7], workspace.direct[3]);
+      }))
+    return false;
+  // O329
+  if (!control.operation(328, 0, workspace.direct[11], [&] {
+        return multiply(workspace.direct[4], workspace.chart[1]);
+      }))
+    return false;
+  // O330
+  if (!control.operation(329, 0, workspace.direct[11], [&] {
+        return subtract(workspace.direct[10], workspace.direct[11]);
+      }))
+    return false;
+  // O331
+  if (!control.operation(330, 0, workspace.direct[12], [&] {
+        return multiply(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O332
+  if (!control.operation(331, 0, workspace.direct[12], [&] {
+        return subtract(workspace.direct[12], workspace.direct[9]);
+      }))
+    return false;
+  // O333
+  if (!control.operation(332, 0, workspace.direct[13], [&] {
+        return multiply(workspace.direct[5], workspace.chart[1]);
+      }))
+    return false;
+  // O334
+  if (!control.operation(333, 0, workspace.direct[13], [&] {
+        return add(workspace.direct[13], workspace.direct[10]);
+      }))
+    return false;
+  // O335
+  if (!control.operation(334, 0, workspace.direct[13],
+                         [&] { return negate(workspace.direct[13]); }))
+    return false;
+  // G062
+  if (!control.guard(
+          61, 0,
+          [&](EP6W& why) {
+            for (const auto* v : {&workspace.direct[8], &workspace.direct[12],
+                                  &workspace.direct[11], &workspace.direct[13]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[8].low <= 0)
+              return control.attach(workspace.direct[8]);
+            if (workspace.direct[12].low <= 0)
+              return control.attach(workspace.direct[12]);
+            if (workspace.direct[11].low <= 0) {
+              d.slice.condition = Slice6Why::hip_descent_unavailable;
+              return control.attach(workspace.direct[11]);
+            }
+            return true;
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O336
+  if (!control.operation(335, 0, workspace.direct[14],
+                         [&] { return absolute(workspace.direct[13]); }))
+    return false;
+  // O337
+  if (!control.operation(336, 0, workspace.direct[15], [&] {
+        return multiply(workspace.direct[12], point(.5));
+      }))
+    return false;
+  // O338
+  if (!control.operation(337, 0, workspace.direct[14], [&] {
+        return multiply(workspace.direct[14], workspace.link[7]);
+      }))
+    return false;
+  // O339
+  if (!control.operation(338, 0, workspace.direct[15], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // O340
+  if (!control.operation(339, 0, workspace.direct[16], [&] {
+        return multiply(workspace.direct[0], workspace.link[8]);
+      }))
+    return false;
+  // O341
+  if (!control.operation(340, 0, workspace.direct[16], [&] {
+        return subtract(workspace.direct[16], workspace.chart[6]);
+      }))
+    return false;
+  // G063
+  if (!control.guard(
+          62, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            if (workspace.direct[15].low < 0)
+              return control.attach(workspace.direct[15]);
+            return workspace.direct[16].low >= 0 ||
+                   control.attach(workspace.direct[16]);
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O342
+  if (!control.operation(341, 0, workspace.direct[1], [&] {
+        return multiply(workspace.chart[0], workspace.chart[1]);
+      }))
+    return false;
+  // O343
+  if (!control.operation(342, 0, workspace.direct[1], [&] {
+        return divide(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O344
+  if (!control.operation(343, 0, workspace.direct[2],
+                         [&] { return negate(workspace.direct[0]); }))
+    return false;
+  // O345
+  if (!control.operation(344, 0, workspace.direct[5], [&] {
+        return multiply(workspace.direct[2], workspace.chart[1]);
+      }))
+    return false;
+  // O346
+  if (!control.operation(345, 0, workspace.direct[5], [&] {
+        return divide(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O347
+  if (!control.operation(346, 0, workspace.direct[6],
+                         [&] { return negate(workspace.direct[3]); }))
+    return false;
+  // O348
+  if (!control.operation(347, 0, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.chart[0]);
+      }))
+    return false;
+  // O349
+  if (!control.operation(348, 0, workspace.direct[9], [&] {
+        return multiply(workspace.direct[4], workspace.direct[2]);
+      }))
+    return false;
+  // O350
+  if (!control.operation(349, 0, workspace.direct[10], [&] {
+        return multiply(workspace.direct[4], workspace.chart[1]);
+      }))
+    return false;
+  // O351
+  if (!control.operation(350, 0, workspace.direct[11], [&] {
+        return multiply(workspace.direct[7], workspace.direct[1]);
+      }))
+    return false;
+  // O352
+  if (!control.operation(351, 0, workspace.direct[12], [&] {
+        return multiply(workspace.direct[7], workspace.direct[5]);
+      }))
+    return false;
+  // O353
+  if (!control.operation(352, 0, workspace.direct[13], [&] {
+        return multiply(workspace.direct[7], workspace.direct[6]);
+      }))
+    return false;
+  // O354
+  if (!control.operation(353, 0, workspace.direct[14], [&] {
+        return add(workspace.direct[8], workspace.direct[11]);
+      }))
+    return false;
+  // O355
+  if (!control.operation(354, 0, workspace.direct[15], [&] {
+        return add(workspace.direct[9], workspace.direct[12]);
+      }))
+    return false;
+  // O356
+  if (!control.operation(355, 0, workspace.direct[16], [&] {
+        return add(workspace.direct[10], workspace.direct[13]);
+      }))
+    return false;
+  // O357
+  if (!control.operation(356, 0, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(1));
+      }))
+    return false;
+  // O358
+  if (!control.operation(357, 0, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O359
+  if (!control.operation(358, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O360
+  if (!control.operation(359, 0, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O361
+  if (!control.operation(360, 0, workspace.direct[4], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O362
+  if (!control.operation(361, 0, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O363
+  if (!control.operation(362, 0, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(1));
+      }))
+    return false;
+  // O364
+  if (!control.operation(363, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O365
+  if (!control.operation(364, 0, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O366
+  if (!control.operation(365, 0, workspace.direct[7], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O367
+  if (!control.operation(366, 0, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O368
+  if (!control.operation(367, 0, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O369
+  if (!control.operation(368, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O370
+  if (!control.operation(369, 0, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(1));
+      }))
+    return false;
+  // O371
+  if (!control.operation(370, 0, workspace.direct[0], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // G064
+  if (!control.guard(
+          63, 0,
+          [&](EP6W& why) {
+            if (!ep6_source_bit(d, 63) || kBoardingRouteFootPhaseVersion != 1 ||
+                !intermediate_endpoint06_template_valid(request, false, 0) ||
+                request.feet[0].yaw_half != std::array<double, 2>{0, 0}) {
+              why = EP6W::slice_identity;
+              return false;
+            }
+            for (const auto* v : {&workspace.direct[4], &workspace.direct[7],
+                                  &workspace.direct[0]}) {
+              if (!control.supported(why, *v)) return false;
+              if (v->low < -16 || v->high > 16) {
+                why = EP6W::unsupported_arithmetic;
+                return control.attach(*v);
+              }
+            }
+            return true;
+          },
+          Slice6Why::hip_verification_inconclusive))
+    return false;
+  // O372
+  if (!control.operation(371, 0, workspace.direct[4], [&] {
+        return ep6_unit_divide(workspace.direct[4], thigh_length);
+      }))
+    return false;
+  // O373
+  if (!control.operation(372, 0, workspace.direct[7], [&] {
+        return ep6_unit_divide(workspace.direct[7], thigh_length);
+      }))
+    return false;
+  // O374
+  if (!control.operation(373, 0, workspace.direct[0], [&] {
+        return ep6_unit_divide(workspace.direct[0], thigh_length);
+      }))
+    return false;
+  // G065
+  if (!control.guard(
+          64, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.direct[7]) ||
+                !control.supported(why, workspace.direct[0]))
+              return false;
+            return workspace.direct[7].high < 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice6Why::hip_verification_inconclusive))
+    return false;
+  // O375
+  if (!control.operation(374, 0, workspace.direct[1],
+                         [&] { return square(workspace.direct[4]); }))
+    return false;
+  // O376
+  if (!control.operation(375, 0, workspace.direct[2],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O377
+  if (!control.operation(376, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O378
+  if (!control.operation(377, 0, workspace.direct[1], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O379
+  if (!control.operation(378, 0, workspace.direct[2], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[7]);
+      }))
+    return false;
+  // O380
+  if (!control.operation(379, 0, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[1]);
+      }))
+    return false;
+  // O381
+  if (!control.operation(380, 0, workspace.direct[14], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O382
+  if (!control.operation(381, 0, workspace.direct[15],
+                         [&] { return negate(point(.12)); }))
+    return false;
+  // O383
+  if (!control.operation(382, 0, workspace.direct[16], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // G066
+  if (!control.guard(
+          65, 0,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.direct[14]) ||
+                !control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            return workspace.direct[14].high < workspace.direct[15].low ||
+                   control.attach(workspace.direct[14]);
+          },
+          Slice6Why::hip_verification_inconclusive))
+    return false;
+  // O384
+  if (!control.operation(383, 1, workspace.direct[0], [&] {
+        return subtract(point(d.slice.y), workspace.chart[13]);
+      }))
+    return false;
+  // O385
+  if (!control.operation(384, 1, workspace.direct[1],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O386
+  if (!control.operation(385, 1, workspace.direct[1], [&] {
+        return add(workspace.chart[10], workspace.direct[1]);
+      }))
+    return false;
+  // O387
+  if (!control.operation(386, 1, workspace.direct[2], [&] {
+        return add(workspace.direct[1], workspace.chart[11]);
+      }))
+    return false;
+  // G067
+  if (!control.guard(
+          66, 1,
+          [&](EP6W& why) {
+            for (const auto* v : {&workspace.direct[0], &workspace.direct[1],
+                                  &workspace.direct[2]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[0].low <= 0)
+              return control.attach(workspace.direct[0]);
+            if (workspace.direct[1].low <= 0)
+              return control.attach(workspace.direct[1]);
+            if (workspace.direct[2].low <= workspace.link[3].high)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[2].high < workspace.link[1].low ||
+                   control.attach(workspace.direct[2]);
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O388
+  if (!control.operation(387, 1, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O389
+  if (!control.operation(388, 1, workspace.direct[4], [&] {
+        return add(workspace.link[6], workspace.direct[2]);
+      }))
+    return false;
+  // O390
+  if (!control.operation(389, 1, workspace.direct[5], [&] {
+        return multiply(point(2), workspace.direct[2]);
+      }))
+    return false;
+  // O391
+  if (!control.operation(390, 1, workspace.direct[4], [&] {
+        return divide(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // O392
+  if (!control.operation(391, 1, workspace.direct[6], [&] {
+        return subtract(workspace.link[1], workspace.direct[2]);
+      }))
+    return false;
+  // O393
+  if (!control.operation(392, 1, workspace.direct[7], [&] {
+        return subtract(workspace.direct[2], workspace.link[3]);
+      }))
+    return false;
+  // O394
+  if (!control.operation(393, 1, workspace.direct[6], [&] {
+        return multiply(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // O395
+  if (!control.operation(394, 1, workspace.direct[7],
+                         [&] { return square(workspace.direct[2]); }))
+    return false;
+  // O396
+  if (!control.operation(395, 1, workspace.direct[7], [&] {
+        return multiply(point(4), workspace.direct[7]);
+      }))
+    return false;
+  // O397
+  if (!control.operation(396, 1, workspace.direct[7], [&] {
+        return divide(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // G068
+  if (!control.guard(
+          67, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[7])) return false;
+            return workspace.direct[7].low > 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O398
+  if (!control.operation(397, 1, workspace.direct[7], [&] {
+        return transfer_small_root(workspace.direct[7]);
+      }))
+    return false;
+  // O399
+  if (!control.operation(398, 1, workspace.direct[5], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // O400
+  if (!control.operation(399, 1, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O401
+  if (!control.operation(400, 1, workspace.direct[9], [&] {
+        return multiply(workspace.direct[7], workspace.chart[9]);
+      }))
+    return false;
+  // O402
+  if (!control.operation(401, 1, workspace.direct[8], [&] {
+        return add(workspace.direct[8], workspace.direct[9]);
+      }))
+    return false;
+  // O403
+  if (!control.operation(402, 1, workspace.direct[10], [&] {
+        return multiply(workspace.direct[7], workspace.direct[3]);
+      }))
+    return false;
+  // O404
+  if (!control.operation(403, 1, workspace.direct[11], [&] {
+        return multiply(workspace.direct[4], workspace.chart[9]);
+      }))
+    return false;
+  // O405
+  if (!control.operation(404, 1, workspace.direct[11], [&] {
+        return subtract(workspace.direct[10], workspace.direct[11]);
+      }))
+    return false;
+  // O406
+  if (!control.operation(405, 1, workspace.direct[12], [&] {
+        return multiply(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O407
+  if (!control.operation(406, 1, workspace.direct[12], [&] {
+        return subtract(workspace.direct[12], workspace.direct[9]);
+      }))
+    return false;
+  // O408
+  if (!control.operation(407, 1, workspace.direct[13], [&] {
+        return multiply(workspace.direct[5], workspace.chart[9]);
+      }))
+    return false;
+  // O409
+  if (!control.operation(408, 1, workspace.direct[13], [&] {
+        return add(workspace.direct[13], workspace.direct[10]);
+      }))
+    return false;
+  // O410
+  if (!control.operation(409, 1, workspace.direct[13],
+                         [&] { return negate(workspace.direct[13]); }))
+    return false;
+  // G069
+  if (!control.guard(
+          68, 1,
+          [&](EP6W& why) {
+            for (const auto* v : {&workspace.direct[8], &workspace.direct[12],
+                                  &workspace.direct[11], &workspace.direct[13]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[8].low <= 0)
+              return control.attach(workspace.direct[8]);
+            if (workspace.direct[12].low <= 0)
+              return control.attach(workspace.direct[12]);
+            if (workspace.direct[11].low <= 0) {
+              d.slice.condition = Slice6Why::hip_descent_unavailable;
+              return control.attach(workspace.direct[11]);
+            }
+            return true;
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O411
+  if (!control.operation(410, 1, workspace.direct[14],
+                         [&] { return absolute(workspace.direct[13]); }))
+    return false;
+  // O412
+  if (!control.operation(411, 1, workspace.direct[15], [&] {
+        return multiply(workspace.direct[12], point(.5));
+      }))
+    return false;
+  // O413
+  if (!control.operation(412, 1, workspace.direct[14], [&] {
+        return multiply(workspace.direct[14], workspace.link[7]);
+      }))
+    return false;
+  // O414
+  if (!control.operation(413, 1, workspace.direct[15], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // O415
+  if (!control.operation(414, 1, workspace.direct[16], [&] {
+        return multiply(workspace.direct[0], workspace.link[8]);
+      }))
+    return false;
+  // O416
+  if (!control.operation(415, 1, workspace.direct[16], [&] {
+        return subtract(workspace.direct[16], workspace.chart[14]);
+      }))
+    return false;
+  // G070
+  if (!control.guard(
+          69, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            if (workspace.direct[15].low < 0)
+              return control.attach(workspace.direct[15]);
+            return workspace.direct[16].low >= 0 ||
+                   control.attach(workspace.direct[16]);
+          },
+          Slice6Why::verification_inconclusive))
+    return false;
+  // O417
+  if (!control.operation(416, 1, workspace.direct[1], [&] {
+        return multiply(workspace.chart[8], workspace.chart[9]);
+      }))
+    return false;
+  // O418
+  if (!control.operation(417, 1, workspace.direct[1], [&] {
+        return divide(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O419
+  if (!control.operation(418, 1, workspace.direct[2],
+                         [&] { return negate(workspace.direct[0]); }))
+    return false;
+  // O420
+  if (!control.operation(419, 1, workspace.direct[5], [&] {
+        return multiply(workspace.direct[2], workspace.chart[9]);
+      }))
+    return false;
+  // O421
+  if (!control.operation(420, 1, workspace.direct[5], [&] {
+        return divide(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O422
+  if (!control.operation(421, 1, workspace.direct[6],
+                         [&] { return negate(workspace.direct[3]); }))
+    return false;
+  // O423
+  if (!control.operation(422, 1, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.chart[8]);
+      }))
+    return false;
+  // O424
+  if (!control.operation(423, 1, workspace.direct[9], [&] {
+        return multiply(workspace.direct[4], workspace.direct[2]);
+      }))
+    return false;
+  // O425
+  if (!control.operation(424, 1, workspace.direct[10], [&] {
+        return multiply(workspace.direct[4], workspace.chart[9]);
+      }))
+    return false;
+  // O426
+  if (!control.operation(425, 1, workspace.direct[11], [&] {
+        return multiply(workspace.direct[7], workspace.direct[1]);
+      }))
+    return false;
+  // O427
+  if (!control.operation(426, 1, workspace.direct[12], [&] {
+        return multiply(workspace.direct[7], workspace.direct[5]);
+      }))
+    return false;
+  // O428
+  if (!control.operation(427, 1, workspace.direct[13], [&] {
+        return multiply(workspace.direct[7], workspace.direct[6]);
+      }))
+    return false;
+  // O429
+  if (!control.operation(428, 1, workspace.direct[14], [&] {
+        return add(workspace.direct[8], workspace.direct[11]);
+      }))
+    return false;
+  // O430
+  if (!control.operation(429, 1, workspace.direct[15], [&] {
+        return add(workspace.direct[9], workspace.direct[12]);
+      }))
+    return false;
+  // O431
+  if (!control.operation(430, 1, workspace.direct[16], [&] {
+        return add(workspace.direct[10], workspace.direct[13]);
+      }))
+    return false;
+  // O432
+  if (!control.operation(431, 1, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(1));
+      }))
+    return false;
+  // O433
+  if (!control.operation(432, 1, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O434
+  if (!control.operation(433, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O435
+  if (!control.operation(434, 1, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O436
+  if (!control.operation(435, 1, workspace.direct[4], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O437
+  if (!control.operation(436, 1, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O438
+  if (!control.operation(437, 1, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(1));
+      }))
+    return false;
+  // O439
+  if (!control.operation(438, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O440
+  if (!control.operation(439, 1, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O441
+  if (!control.operation(440, 1, workspace.direct[7], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O442
+  if (!control.operation(441, 1, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O443
+  if (!control.operation(442, 1, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O444
+  if (!control.operation(443, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O445
+  if (!control.operation(444, 1, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(1));
+      }))
+    return false;
+  // O446
+  if (!control.operation(445, 1, workspace.direct[0], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // G071
+  if (!control.guard(
+          70, 1,
+          [&](EP6W& why) {
+            if (!ep6_source_bit(d, 63) || kBoardingRouteFootPhaseVersion != 1 ||
+                !intermediate_endpoint06_template_valid(request, false, 0) ||
+                request.feet[1].yaw_half != std::array<double, 2>{0, 0}) {
+              why = EP6W::slice_identity;
+              return false;
+            }
+            for (const auto* v : {&workspace.direct[4], &workspace.direct[7],
+                                  &workspace.direct[0]}) {
+              if (!control.supported(why, *v)) return false;
+              if (v->low < -16 || v->high > 16) {
+                why = EP6W::unsupported_arithmetic;
+                return control.attach(*v);
+              }
+            }
+            return true;
+          },
+          Slice6Why::hip_verification_inconclusive))
+    return false;
+  // O447
+  if (!control.operation(446, 1, workspace.direct[4], [&] {
+        return ep6_unit_divide(workspace.direct[4], thigh_length);
+      }))
+    return false;
+  // O448
+  if (!control.operation(447, 1, workspace.direct[7], [&] {
+        return ep6_unit_divide(workspace.direct[7], thigh_length);
+      }))
+    return false;
+  // O449
+  if (!control.operation(448, 1, workspace.direct[0], [&] {
+        return ep6_unit_divide(workspace.direct[0], thigh_length);
+      }))
+    return false;
+  // G072
+  if (!control.guard(
+          71, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.direct[7]) ||
+                !control.supported(why, workspace.direct[0]))
+              return false;
+            return workspace.direct[7].high < 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice6Why::hip_verification_inconclusive))
+    return false;
+  // O450
+  if (!control.operation(449, 1, workspace.direct[1],
+                         [&] { return square(workspace.direct[4]); }))
+    return false;
+  // O451
+  if (!control.operation(450, 1, workspace.direct[2],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O452
+  if (!control.operation(451, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O453
+  if (!control.operation(452, 1, workspace.direct[1], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O454
+  if (!control.operation(453, 1, workspace.direct[2], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[7]);
+      }))
+    return false;
+  // O455
+  if (!control.operation(454, 1, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[1]);
+      }))
+    return false;
+  // O456
+  if (!control.operation(455, 1, workspace.direct[14], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O457
+  if (!control.operation(456, 1, workspace.direct[15],
+                         [&] { return negate(point(.12)); }))
+    return false;
+  // O458
+  if (!control.operation(457, 1, workspace.direct[16], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // G073
+  if (!control.guard(
+          72, 1,
+          [&](EP6W& why) {
+            if (!control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.direct[14]) ||
+                !control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            return workspace.direct[14].high < workspace.direct[15].low ||
+                   control.attach(workspace.direct[14]);
+          },
+          Slice6Why::hip_verification_inconclusive))
+    return false;
+  // G074
+  if (!control.guard(
+          73, 255,
+          [&](EP6W&) {
+            if (!intermediate_endpoint06_template_valid(request, false, 0))
+              return false;
+            for (auto& root : request.root)
+              root.coordinates[1] = {{d.slice.y, +0.0, +0.0}, 1};
+            return intermediate_endpoint06_template_valid(request, true,
+                                                          d.slice.y);
+          },
+          Slice6Why::identity))
+    return false;
+  // G075
+  if (!control.guard(
+          74, 255,
+          [&](EP6W& why) {
+            if (!boarding_route_foot_phase_environment()) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (!ep6_packet_structure(request) || d.version != 6 ||
+                d.candidate !=
+                    BoardingIntermediateEndpoint06Candidate::
+                        root_y_same_base_chart_factor_both_hip_ankle_reach_roll_slice ||
+                !intermediate_endpoint06_template_valid(request, true,
+                                                        d.slice.y))
+              return false;
+            for (const auto& root : request.root)
+              if (std::bit_cast<std::uint64_t>(root.coordinates[1].terms[0]) !=
+                  std::bit_cast<std::uint64_t>(d.slice.y))
+                return false;
+            if (!ep6_packet_domains(request)) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            const auto valid = boarding_route_foot_phase_request_valid(request);
+            if (!valid) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            if (!boarding_route_foot_phase_environment()) {
+              why = EP6W::unsupported_arithmetic;
+              return false;
+            }
+            return true;
+          },
+          Slice6Why::identity))
+    return false;
+  d.slice.complete = d.slice.operation_written ==
+                         std::array<std::uint64_t, 8>{
+                             UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX,
+                             UINT64_MAX, UINT64_MAX, UINT64_MAX, 0x3ffULL} &&
+                     d.slice.guard_written ==
+                         std::array<std::uint64_t, 2>{UINT64_MAX, 0x7ffULL};
+  d.slice.side = 255;
+  return d.slice.complete;
+}
+} // namespace apsis_drift
