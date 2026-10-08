@@ -17874,3 +17874,2431 @@ struct Endpoint06ConstructorControl {
   return d.slice.complete;
 }
 } // namespace apsis_drift
+
+// Diagnostic01: the complete preceding source is the immutable retained prefix.
+#include "origin_boarding_knee_compatibility_diagnostic01_internal.hpp"
+namespace apsis_drift {
+namespace {
+using KD01Diagnostic = BoardingKneeCompatibilityDiagnostic01Diagnostic;
+using KD01Refusal = BoardingKneeCompatibilityDiagnostic01Refusal;
+using KD01Limits = detail::BoardingKneeCompatibilityDiagnostic01Limits;
+using KD01Condition = BoardingKneeCompatibilityDiagnostic01Condition;
+using KD01SourceCondition =
+    BoardingKneeCompatibilityDiagnostic01SourceCondition;
+using KD01Stage = BoardingKneeCompatibilityDiagnostic01Stage;
+using KD01Stop = BoardingKneeCompatibilityDiagnostic01Stop;
+using KD01State = BoardingKneeCompatibilityDiagnostic01State;
+using KD01PrefixState = BoardingKneeCompatibilityDiagnostic01PrefixState;
+using KD01Classification = BoardingKneeCompatibilityDiagnostic01Classification;
+using KD01Bound = BoardingFootSiteScalarBounds;
+
+auto kd01_source_bit(const KD01Diagnostic& d, std::size_t bit) -> bool {
+  return (d.source_evaluated & (std::uint64_t{1} << bit)) != 0;
+}
+auto kd01_valid(Interval value) -> bool {
+  return value.supported && std::isfinite(value.low) &&
+         std::isfinite(value.high) && value.low <= value.high;
+}
+auto kd01_whole(const KD01Bound& value) -> Interval {
+  return value.supported ? interval(value.lower, value.upper) : failed();
+}
+struct KneeDiagnostic01PrefixWorkspace {
+  // All fixed prefix storage dies before the separate optimistic activation.
+  std::array<Interval, 8> input{};
+  std::array<Interval, 6> yaw{};
+  // Per side: signed X/Z, X2/Z2, C, A, full ABS(X), rollLower.
+  std::array<Interval, 16> chart{};
+  // Lsum, M, Ldiff, m, L1sq, L2sq, Delta, sqrt3half, b.
+  std::array<Interval, 9> link{};
+  // Per side: W, cutlow, cuthi, cutturn, p, q; no overwritten origins.
+  std::array<Interval, 12> cut{};
+  // Per side: rho_p/rho_q, ankle lower/upper, reach lower/upper;
+  // the last six slots are sequential endpoint/current primitive scratch.
+  std::array<Interval, 18> endpoint{};
+  std::array<Interval, 18> direct{};
+  std::array<double, 10> cuts{};
+  std::array<double, 8> selected{};
+  std::array<bool, 2> endpoint_certificate{};
+};
+// Exactly three borrowed references; no workspace or owning evidence member.
+struct KneeDiagnostic01Control {
+  KD01Diagnostic& d;
+  KD01Refusal& r;
+  const KD01Limits& limits;
+
+  auto condition(KD01Condition value, bool optimistic) -> void {
+    if (optimistic)
+      d.optimistic.domain_condition = value;
+    else
+      d.prefix.condition = value;
+  }
+  auto stop(KD01SourceCondition why, KD01Condition value, bool optimistic)
+      -> bool {
+    condition(value, optimistic);
+    r.condition = why;
+    r.predicate_condition = why;
+    r.limiting_bound = d.prefix.limiting_bound;
+    if (why == KD01SourceCondition::unsupported_arithmetic) {
+      d.arithmetic_supported = false;
+      d.prefix.arithmetic_supported = false;
+    }
+    return detail::knee_compatibility_diagnostic01_refuse(
+        d, r,
+        why == KD01SourceCondition::unsupported_arithmetic
+            ? KD01Stop::unsupported_arithmetic
+            : (why == KD01SourceCondition::slice_identity
+                   ? KD01Stop::source_identity
+                   : (optimistic ? KD01Stop::suffix_domain
+                                 : KD01Stop::prefix_domain)));
+  }
+  template <class Predicate>
+  auto guard(std::uint8_t row, std::uint8_t side, Predicate&& predicate,
+             KD01Condition ordinary) -> bool {
+    r = KD01Refusal{};
+    r.self_stage = KD01Stage::slice_guard;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.prefix.guard = row;
+    d.prefix.side = side;
+    d.prefix.limiting_bound.lower = 0;
+    d.prefix.limiting_bound.upper = 0;
+    d.prefix.limiting_bound.supported = false;
+    if (!detail::knee_compatibility_diagnostic01_charge(
+            d, r, d.work.construction_guards, limits.construction_guards,
+            KD01Stop::guard_capacity)) {
+      condition(KD01Condition::guard_capacity, row >= 42);
+      return false;
+    }
+    d.prefix.guard_attempted |= std::uint64_t{1} << row;
+    KD01SourceCondition why = ordinary == KD01Condition::identity
+                                  ? KD01SourceCondition::slice_identity
+                                  : KD01SourceCondition::slice_unavailable;
+    if (!predicate(why)) {
+      stop(why,
+           why == KD01SourceCondition::unsupported_arithmetic
+               ? KD01Condition::unsupported_arithmetic
+               : ordinary,
+           row >= 42);
+      // The predicate marked collapse only at G42's localized supported
+      // original p>=q branch. Keep its attempted bit and unwritten hole.
+      return row == 41 && why == KD01SourceCondition::slice_unavailable &&
+             d.prefix.prefix_state == KD01PrefixState::cuts_collapsed;
+    }
+    d.prefix.guard_written |= std::uint64_t{1} << row;
+    return true;
+  }
+  template <class Destination, class Compute>
+  auto operation(std::uint16_t row, std::uint8_t side, Destination& output,
+                 Compute&& compute) -> bool {
+    r = KD01Refusal{};
+    r.self_stage = KD01Stage::slice_operation;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.prefix.operation = row;
+    d.prefix.side = side;
+    d.prefix.limiting_bound.lower = 0;
+    d.prefix.limiting_bound.upper = 0;
+    d.prefix.limiting_bound.supported = false;
+    if (!detail::knee_compatibility_diagnostic01_charge(
+            d, r, d.work.construction_operations,
+            limits.construction_operations, KD01Stop::operation_capacity)) {
+      condition(KD01Condition::operation_capacity, row >= 221);
+      return false;
+    }
+    d.prefix.operation_attempted[row / 64] |= std::uint64_t{1} << (row % 64);
+    const auto value = compute();
+    if (!kd01_valid(value))
+      return stop(KD01SourceCondition::unsupported_arithmetic,
+                  KD01Condition::unsupported_arithmetic, row >= 221);
+    if constexpr (requires { output.low; }) {
+      output = value;
+    } else {
+      // The literal optimistic destination is itself the owned returned Bound.
+      output.lower = value.low;
+      output.upper = value.high;
+      output.supported = value.supported;
+    }
+    // Publication follows the literal destination and precedes written.
+    // Only these rows can write the immutable BASE and captured factors.
+    switch (row) {
+      case 35:
+        d.prefix.Lsum.lower = value.low;
+        d.prefix.Lsum.upper = value.high;
+        d.prefix.Lsum.supported = value.supported;
+        break;
+      case 153:
+        d.prefix.base_lo = value.high;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 0;
+        break;
+      case 156:
+        d.prefix.base_hi = value.low;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 1;
+        break;
+      case 170:
+        d.prefix.threshold.lower = value.low;
+        d.prefix.threshold.upper = value.high;
+        d.prefix.threshold.supported = value.supported;
+        break;
+      case 182:
+        d.prefix.factor_lower[0] = value.low;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 2;
+        break;
+      case 189:
+        d.prefix.current_cap_PORT = value.low;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 4;
+        break;
+      case 199:
+        d.prefix.factor_lower[1] = value.low;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 3;
+        break;
+      case 207:
+        d.prefix.W_PORT.lower = value.low;
+        d.prefix.W_PORT.upper = value.high;
+        d.prefix.W_PORT.supported = value.supported;
+        break;
+      case 218:
+        d.prefix.p_PORT = value.low;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 5;
+        break;
+      case 220:
+        d.prefix.q_PORT = value.low;
+        d.prefix.scalar_ready |= std::uint16_t{1} << 6;
+        break;
+      default: break;
+    }
+    d.prefix.limiting_bound.lower = value.low;
+    d.prefix.limiting_bound.upper = value.high;
+    d.prefix.limiting_bound.supported = value.supported;
+    d.prefix.operation_written[row / 64] |= std::uint64_t{1} << (row % 64);
+    d.arithmetic_supported = true;
+    d.prefix.arithmetic_supported = true;
+    return true;
+  }
+  auto supported(KD01SourceCondition& why, const Interval& value) -> bool {
+    if (kd01_valid(value)) return true;
+    why = KD01SourceCondition::unsupported_arithmetic;
+    return false;
+  }
+  auto supported(KD01SourceCondition& why, const KD01Bound& value) -> bool {
+    if (value.supported && std::isfinite(value.lower) &&
+        std::isfinite(value.upper) && value.lower <= value.upper)
+      return true;
+    why = KD01SourceCondition::unsupported_arithmetic;
+    return false;
+  }
+  auto attach(const Interval& value) -> bool {
+    d.prefix.limiting_bound.lower = value.low;
+    d.prefix.limiting_bound.upper = value.high;
+    d.prefix.limiting_bound.supported = value.supported;
+    return false;
+  }
+  auto attach(const KD01Bound& value) -> bool {
+    d.prefix.limiting_bound.lower = value.lower;
+    d.prefix.limiting_bound.upper = value.upper;
+    d.prefix.limiting_bound.supported = value.supported;
+    return false;
+  }
+};
+} // namespace
+[[gnu::noinline]] auto detail::knee_compatibility_diagnostic01_prefix(
+    KD01Diagnostic& d, BoardingRouteFootPhaseRequest& request,
+    const KD01Limits& limits, KD01Refusal& r) -> bool {
+  KneeDiagnostic01PrefixWorkspace workspace{};
+  KneeDiagnostic01Control control{d, r, limits};
+  // G001
+  if (!control.guard(
+          0, 255,
+          [&](KD01SourceCondition&) {
+            return d.source_enrolled && d.work.source_guards == 64 &&
+                   d.source_evaluated == UINT64_MAX &&
+                   BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+                   d.parts.size() == 15;
+          },
+          KD01Condition::identity))
+    return false;
+  // G002
+  if (!control.guard(
+          1, 255,
+          [&](KD01SourceCondition& why) {
+            why = KD01SourceCondition::unsupported_arithmetic;
+            return boarding_route_foot_phase_environment();
+          },
+          KD01Condition::unsupported_arithmetic))
+    return false;
+  // G003
+  if (!control.guard(
+          2, 255,
+          [&](KD01SourceCondition&) {
+            // This provider-only entry has exactly the fixed PORT purpose.
+            return d.version == kBoardingKneeCompatibilityDiagnostic01Version &&
+                   intermediate_endpoint06_template_valid(request, false, 0);
+          },
+          KD01Condition::identity))
+    return false;
+  // G004
+  if (!control.guard(
+          3, 255,
+          [&](KD01SourceCondition& why) {
+            if (!ep6_packet_structure(request) ||
+                !intermediate_endpoint06_template_valid(request, false, 0))
+              return false;
+            if (!ep6_packet_domains(request) ||
+                !ep6_construction_packet_domains(request)) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            return true;
+          },
+          KD01Condition::identity))
+    return false;
+  // G005
+  if (!control.guard(
+          4, 255,
+          [&](KD01SourceCondition& why) {
+            if (!std::isfinite(thigh_length) || !std::isfinite(shin_length) ||
+                thigh_length <= 0 || shin_length <= 0 || thigh_length > 1 ||
+                shin_length > 1) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (!(kBoardingRouteFootPhaseVersion == 1 &&
+                  thigh_length == .47285 && shin_length == .47478 &&
+                  thigh_length > 0 && shin_length > 0 && thigh_length <= 1 &&
+                  shin_length <= 1 && kd01_source_bit(d, 62)))
+              return false;
+            d.prefix.L1 = thigh_length;
+            d.prefix.L2 = shin_length;
+            return true;
+          },
+          KD01Condition::identity))
+    return false;
+  // G006
+  if (!control.guard(
+          5, 255,
+          [&](KD01SourceCondition&) {
+            // The source compiler's exact-real nominal rational workspace.yaw
+            // construction, not midpoint or rounded affine orthogonality, owns
+            // these identities.
+            return kd01_source_bit(d, 63) &&
+                   kBoardingRouteFootPhaseVersion == 1 &&
+                   intermediate_endpoint06_template_valid(request, false, 0) &&
+                   request.feet[0].yaw_half == std::array<double, 2>{0, 0} &&
+                   request.feet[1].yaw_half == std::array<double, 2>{0, 0};
+          },
+          KD01Condition::identity))
+    return false;
+  // O001
+  if (!control.operation(0, 255, workspace.input[0], [&] {
+        return phase_constant(request.root[0].coordinates[0]);
+      }))
+    return false;
+  // O002
+  if (!control.operation(1, 255, workspace.input[1], [&] {
+        return phase_constant(request.root[0].coordinates[2]);
+      }))
+    return false;
+  // O003
+  if (!control.operation(2, 255, workspace.input[2], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[0]);
+      }))
+    return false;
+  // O004
+  if (!control.operation(3, 255, workspace.input[3], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[1]);
+      }))
+    return false;
+  // O005
+  if (!control.operation(4, 255, workspace.input[4], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[2]);
+      }))
+    return false;
+  // O006
+  if (!control.operation(5, 255, workspace.input[5], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[0]);
+      }))
+    return false;
+  // O007
+  if (!control.operation(6, 255, workspace.input[6], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[1]);
+      }))
+    return false;
+  // O008
+  if (!control.operation(7, 255, workspace.input[7], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[2]);
+      }))
+    return false;
+  // O009
+  if (!control.operation(8, 255, workspace.yaw[0], [&] {
+        return square(point(request.root_yaw_half[0]));
+      }))
+    return false;
+  // O010
+  if (!control.operation(9, 255, workspace.yaw[1],
+                         [&] { return add(point(1), workspace.yaw[0]); }))
+    return false;
+  // O011
+  if (!control.operation(10, 255, workspace.yaw[2],
+                         [&] { return subtract(point(1), workspace.yaw[0]); }))
+    return false;
+  // O012
+  if (!control.operation(11, 255, workspace.yaw[3], [&] {
+        return divide(workspace.yaw[2], workspace.yaw[1]);
+      }))
+    return false;
+  // O013
+  if (!control.operation(12, 255, workspace.yaw[2], [&] {
+        return multiply(point(2), point(request.root_yaw_half[0]));
+      }))
+    return false;
+  // O014
+  if (!control.operation(13, 255, workspace.yaw[4], [&] {
+        return divide(workspace.yaw[2], workspace.yaw[1]);
+      }))
+    return false;
+  // O015
+  if (!control.operation(14, 255, workspace.yaw[5],
+                         [&] { return negate(workspace.yaw[4]); }))
+    return false;
+  // O016
+  if (!control.operation(15, 0, workspace.endpoint[12], [&] {
+        return multiply(point(-.14), workspace.yaw[3]);
+      }))
+    return false;
+  // O017
+  if (!control.operation(16, 0, workspace.endpoint[13], [&] {
+        return multiply(point(-.14), workspace.yaw[5]);
+      }))
+    return false;
+  // O018
+  if (!control.operation(17, 0, workspace.endpoint[14], [&] {
+        return add(workspace.input[0], workspace.endpoint[12]);
+      }))
+    return false;
+  // O019
+  if (!control.operation(18, 0, workspace.endpoint[15], [&] {
+        return add(workspace.input[1], workspace.endpoint[13]);
+      }))
+    return false;
+  // O020
+  if (!control.operation(19, 0, workspace.chart[0], [&] {
+        return subtract(workspace.input[2], workspace.endpoint[14]);
+      }))
+    return false;
+  // O021
+  if (!control.operation(20, 0, workspace.chart[1], [&] {
+        return subtract(workspace.input[4], workspace.endpoint[15]);
+      }))
+    return false;
+  // O022
+  if (!control.operation(21, 0, workspace.chart[2],
+                         [&] { return square(workspace.chart[0]); }))
+    return false;
+  // O023
+  if (!control.operation(22, 0, workspace.chart[3],
+                         [&] { return square(workspace.chart[1]); }))
+    return false;
+  // O024
+  if (!control.operation(23, 0, workspace.chart[4], [&] {
+        return add(workspace.chart[2], workspace.chart[3]);
+      }))
+    return false;
+  // O025
+  if (!control.operation(24, 0, workspace.chart[5],
+                         [&] { return add(workspace.input[3], point(.1)); }))
+    return false;
+  // O026
+  if (!control.operation(25, 1, workspace.endpoint[12], [&] {
+        return multiply(point(.14), workspace.yaw[3]);
+      }))
+    return false;
+  // O027
+  if (!control.operation(26, 1, workspace.endpoint[13], [&] {
+        return multiply(point(.14), workspace.yaw[5]);
+      }))
+    return false;
+  // O028
+  if (!control.operation(27, 1, workspace.endpoint[14], [&] {
+        return add(workspace.input[0], workspace.endpoint[12]);
+      }))
+    return false;
+  // O029
+  if (!control.operation(28, 1, workspace.endpoint[15], [&] {
+        return add(workspace.input[1], workspace.endpoint[13]);
+      }))
+    return false;
+  // O030
+  if (!control.operation(29, 1, workspace.chart[8], [&] {
+        return subtract(workspace.input[5], workspace.endpoint[14]);
+      }))
+    return false;
+  // O031
+  if (!control.operation(30, 1, workspace.chart[9], [&] {
+        return subtract(workspace.input[7], workspace.endpoint[15]);
+      }))
+    return false;
+  // O032
+  if (!control.operation(31, 1, workspace.chart[10],
+                         [&] { return square(workspace.chart[8]); }))
+    return false;
+  // O033
+  if (!control.operation(32, 1, workspace.chart[11],
+                         [&] { return square(workspace.chart[9]); }))
+    return false;
+  // O034
+  if (!control.operation(33, 1, workspace.chart[12], [&] {
+        return add(workspace.chart[10], workspace.chart[11]);
+      }))
+    return false;
+  // O035
+  if (!control.operation(34, 1, workspace.chart[13],
+                         [&] { return add(workspace.input[6], point(.1)); }))
+    return false;
+  // O036
+  if (!control.operation(35, 255, workspace.link[0], [&] {
+        return add(point(thigh_length), point(shin_length));
+      }))
+    return false;
+  // O037
+  if (!control.operation(36, 255, workspace.link[1],
+                         [&] { return square(workspace.link[0]); }))
+    return false;
+  // O038
+  if (!control.operation(37, 255, workspace.link[2], [&] {
+        return subtract(point(thigh_length), point(shin_length));
+      }))
+    return false;
+  // O039
+  if (!control.operation(38, 255, workspace.link[3],
+                         [&] { return square(workspace.link[2]); }))
+    return false;
+  // O040
+  if (!control.operation(39, 255, workspace.link[4],
+                         [&] { return square(point(thigh_length)); }))
+    return false;
+  // O041
+  if (!control.operation(40, 255, workspace.link[5],
+                         [&] { return square(point(shin_length)); }))
+    return false;
+  // O042
+  if (!control.operation(41, 255, workspace.link[6], [&] {
+        return subtract(workspace.link[4], workspace.link[5]);
+      }))
+    return false;
+  // O043
+  if (!control.operation(42, 255, workspace.yaw[0],
+                         [&] { return transfer_small_root(point(3)); }))
+    return false;
+  // O044
+  if (!control.operation(43, 255, workspace.link[7],
+                         [&] { return divide(workspace.yaw[0], point(2)); }))
+    return false;
+  // O045
+  if (!control.operation(44, 255, workspace.link[8],
+                         [&] { return subtract(point(2), workspace.yaw[0]); }))
+    return false;
+  // G007
+  if (!control.guard(
+          6, 255,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.link[8])) return false;
+            return workspace.link[8].low > 0 ||
+                   control.attach(workspace.link[8]);
+          },
+          KD01Condition::no_positive_roll_factor))
+    return false;
+  // O046
+  if (!control.operation(45, 0, workspace.cut[0],
+                         [&] { return negate(workspace.chart[1]); }))
+    return false;
+  // O047
+  if (!control.operation(46, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O048
+  if (!control.operation(47, 0, workspace.cut[1], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O049
+  if (!control.operation(48, 0, workspace.endpoint[12], [&] {
+        return add(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O050
+  if (!control.operation(49, 0, workspace.cut[2], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O051
+  if (!control.operation(50, 0, workspace.cut[3], [&] {
+        return divide(workspace.cut[0], workspace.link[0]);
+      }))
+    return false;
+  // O052
+  if (!control.operation(51, 0, workspace.cut[4], [&] {
+        return point(std::max(-.5, workspace.cut[1].high));
+      }))
+    return false;
+  // O053
+  if (!control.operation(52, 0, workspace.cut[5], [&] {
+        return point(std::min(.5, workspace.cut[2].low));
+      }))
+    return false;
+  // O054
+  if (!control.operation(53, 0, workspace.cut[5], [&] {
+        return point(std::min(workspace.cut[5].low, workspace.cut[3].low));
+      }))
+    return false;
+  // G008
+  if (!control.guard(
+          7, 0,
+          [&](KD01SourceCondition& why) {
+            for (const auto* v :
+                 {&workspace.cut[0], &workspace.cut[1], &workspace.cut[2],
+                  &workspace.cut[3], &workspace.cut[4], &workspace.cut[5]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[4].low != workspace.cut[4].high ||
+                workspace.cut[5].low != workspace.cut[5].high) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[4].low < -.5)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[4].low >= workspace.cut[5].low ||
+                workspace.cut[5].low > .5)
+              return control.attach(workspace.cut[5]);
+            if (workspace.cut[4].low < workspace.cut[1].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.cut[2].low ||
+                workspace.cut[5].low > workspace.cut[3].low)
+              return control.attach(workspace.cut[5]);
+            workspace.endpoint_certificate[0] = true;
+            return true;
+          },
+          KD01Condition::no_tau_interval))
+    return false;
+  // O055
+  if (!control.operation(54, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[4]); }))
+    return false;
+  // O056
+  if (!control.operation(55, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G009
+  if (!control.guard(
+          8, 0,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O057
+  if (!control.operation(56, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O058
+  if (!control.operation(57, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O059
+  if (!control.operation(58, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[4]);
+      }))
+    return false;
+  // O060
+  if (!control.operation(59, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O061
+  if (!control.operation(60, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O062
+  if (!control.operation(61, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G010
+  if (!control.guard(
+          9, 0,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O063
+  if (!control.operation(62, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 2;
+          return value;
+        }();
+      }))
+    return false;
+  // O064
+  if (!control.operation(63, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O065
+  if (!control.operation(64, 0, workspace.endpoint[0], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O066
+  if (!control.operation(65, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[5]); }))
+    return false;
+  // O067
+  if (!control.operation(66, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G011
+  if (!control.guard(
+          10, 0,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O068
+  if (!control.operation(67, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O069
+  if (!control.operation(68, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O070
+  if (!control.operation(69, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[5]);
+      }))
+    return false;
+  // O071
+  if (!control.operation(70, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O072
+  if (!control.operation(71, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O073
+  if (!control.operation(72, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G012
+  if (!control.guard(
+          11, 0,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O074
+  if (!control.operation(73, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 3;
+          return value;
+        }();
+      }))
+    return false;
+  // O075
+  if (!control.operation(74, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O076
+  if (!control.operation(75, 0, workspace.endpoint[1], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O077
+  if (!control.operation(76, 0, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[0].high); }))
+    return false;
+  workspace.cuts[0] = workspace.endpoint[12].low;
+  // O078
+  if (!control.operation(77, 0, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[1].low); }))
+    return false;
+  workspace.cuts[1] = workspace.endpoint[13].low;
+  // G013
+  if (!control.guard(
+          12, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cuts[0] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.cuts[0] < workspace.cuts[1] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          KD01Condition::no_radial_interval))
+    return false;
+  // O079
+  if (!control.operation(78, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[0])); }))
+    return false;
+  // O080
+  if (!control.operation(79, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].low));
+      }))
+    return false;
+  // O081
+  if (!control.operation(80, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 6;
+          return value;
+        }();
+      }))
+    return false;
+  // O082
+  if (!control.operation(81, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O083
+  if (!control.operation(82, 0, workspace.endpoint[2], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O084
+  if (!control.operation(83, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[1])); }))
+    return false;
+  // O085
+  if (!control.operation(84, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].high));
+      }))
+    return false;
+  // G014
+  if (!control.guard(
+          13, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          KD01Condition::no_positive_upper))
+    return false;
+  // O086
+  if (!control.operation(85, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O087
+  if (!control.operation(86, 0, workspace.endpoint[3], [&] {
+        return add(point(workspace.chart[5].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O088
+  if (!control.operation(87, 0, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[3].high),
+                        point(workspace.chart[4].low));
+      }))
+    return false;
+  // O089
+  if (!control.operation(88, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 0;
+          return value;
+        }();
+      }))
+    return false;
+  // O090
+  if (!control.operation(89, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O091
+  if (!control.operation(90, 0, workspace.endpoint[4], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O092
+  if (!control.operation(91, 0, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[1].low),
+                        point(workspace.chart[4].high));
+      }))
+    return false;
+  // G015
+  if (!control.guard(
+          14, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          KD01Condition::no_positive_upper))
+    return false;
+  // O093
+  if (!control.operation(92, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O094
+  if (!control.operation(93, 0, workspace.endpoint[5], [&] {
+        return add(point(workspace.chart[5].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O095
+  if (!control.operation(94, 0, workspace.chart[6],
+                         [&] { return absolute(workspace.chart[0]); }))
+    return false;
+  // O096
+  if (!control.operation(95, 0, workspace.endpoint[12], [&] {
+        return divide(workspace.chart[6], workspace.link[8]);
+      }))
+    return false;
+  // O097
+  if (!control.operation(96, 0, workspace.chart[7], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O098
+  if (!control.operation(97, 1, workspace.cut[6],
+                         [&] { return negate(workspace.chart[9]); }))
+    return false;
+  // O099
+  if (!control.operation(98, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O100
+  if (!control.operation(99, 1, workspace.cut[7], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O101
+  if (!control.operation(100, 1, workspace.endpoint[12], [&] {
+        return add(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O102
+  if (!control.operation(101, 1, workspace.cut[8], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O103
+  if (!control.operation(102, 1, workspace.cut[9], [&] {
+        return divide(workspace.cut[6], workspace.link[0]);
+      }))
+    return false;
+  // O104
+  if (!control.operation(103, 1, workspace.cut[10], [&] {
+        return point(std::max(-.5, workspace.cut[7].high));
+      }))
+    return false;
+  // O105
+  if (!control.operation(104, 1, workspace.cut[11], [&] {
+        return point(std::min(.5, workspace.cut[8].low));
+      }))
+    return false;
+  // O106
+  if (!control.operation(105, 1, workspace.cut[11], [&] {
+        return point(std::min(workspace.cut[11].low, workspace.cut[9].low));
+      }))
+    return false;
+  // G016
+  if (!control.guard(
+          15, 1,
+          [&](KD01SourceCondition& why) {
+            for (const auto* v :
+                 {&workspace.cut[6], &workspace.cut[7], &workspace.cut[8],
+                  &workspace.cut[9], &workspace.cut[10], &workspace.cut[11]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[10].low != workspace.cut[10].high ||
+                workspace.cut[11].low != workspace.cut[11].high) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[10].low < -.5)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[10].low >= workspace.cut[11].low ||
+                workspace.cut[11].low > .5)
+              return control.attach(workspace.cut[11]);
+            if (workspace.cut[10].low < workspace.cut[7].high)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[11].low > workspace.cut[8].low ||
+                workspace.cut[11].low > workspace.cut[9].low)
+              return control.attach(workspace.cut[11]);
+            workspace.endpoint_certificate[1] = true;
+            return true;
+          },
+          KD01Condition::no_tau_interval))
+    return false;
+  // O107
+  if (!control.operation(106, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[10]); }))
+    return false;
+  // O108
+  if (!control.operation(107, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G017
+  if (!control.guard(
+          16, 1,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O109
+  if (!control.operation(108, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O110
+  if (!control.operation(109, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O111
+  if (!control.operation(110, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[10]);
+      }))
+    return false;
+  // O112
+  if (!control.operation(111, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O113
+  if (!control.operation(112, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O114
+  if (!control.operation(113, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G018
+  if (!control.guard(
+          17, 1,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O115
+  if (!control.operation(114, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 4;
+          return value;
+        }();
+      }))
+    return false;
+  // O116
+  if (!control.operation(115, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O117
+  if (!control.operation(116, 1, workspace.endpoint[6], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O118
+  if (!control.operation(117, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[11]); }))
+    return false;
+  // O119
+  if (!control.operation(118, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G019
+  if (!control.guard(
+          18, 1,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O120
+  if (!control.operation(119, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O121
+  if (!control.operation(120, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O122
+  if (!control.operation(121, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[11]);
+      }))
+    return false;
+  // O123
+  if (!control.operation(122, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O124
+  if (!control.operation(123, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O125
+  if (!control.operation(124, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G020
+  if (!control.guard(
+          19, 1,
+          [&](KD01SourceCondition& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O126
+  if (!control.operation(125, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 5;
+          return value;
+        }();
+      }))
+    return false;
+  // O127
+  if (!control.operation(126, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O128
+  if (!control.operation(127, 1, workspace.endpoint[7], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O129
+  if (!control.operation(128, 1, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[6].high); }))
+    return false;
+  workspace.cuts[2] = workspace.endpoint[12].low;
+  // O130
+  if (!control.operation(129, 1, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[7].low); }))
+    return false;
+  workspace.cuts[3] = workspace.endpoint[13].low;
+  // G021
+  if (!control.guard(
+          20, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cuts[2] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.cuts[2] < workspace.cuts[3] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          KD01Condition::no_radial_interval))
+    return false;
+  // O131
+  if (!control.operation(130, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[2])); }))
+    return false;
+  // O132
+  if (!control.operation(131, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[10].low));
+      }))
+    return false;
+  // O133
+  if (!control.operation(132, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 7;
+          return value;
+        }();
+      }))
+    return false;
+  // O134
+  if (!control.operation(133, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O135
+  if (!control.operation(134, 1, workspace.endpoint[8], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O136
+  if (!control.operation(135, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[3])); }))
+    return false;
+  // O137
+  if (!control.operation(136, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12],
+                        point(workspace.chart[10].high));
+      }))
+    return false;
+  // G022
+  if (!control.guard(
+          21, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          KD01Condition::no_positive_upper))
+    return false;
+  // O138
+  if (!control.operation(137, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O139
+  if (!control.operation(138, 1, workspace.endpoint[9], [&] {
+        return add(point(workspace.chart[13].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O140
+  if (!control.operation(139, 1, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[3].high),
+                        point(workspace.chart[12].low));
+      }))
+    return false;
+  // O141
+  if (!control.operation(140, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (kd01_valid(value) && zero_branch)
+            d.prefix.zero_mask |= std::uint16_t{1} << 1;
+          return value;
+        }();
+      }))
+    return false;
+  // O142
+  if (!control.operation(141, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O143
+  if (!control.operation(142, 1, workspace.endpoint[10], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O144
+  if (!control.operation(143, 1, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[1].low),
+                        point(workspace.chart[12].high));
+      }))
+    return false;
+  // G023
+  if (!control.guard(
+          22, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          KD01Condition::no_positive_upper))
+    return false;
+  // O145
+  if (!control.operation(144, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O146
+  if (!control.operation(145, 1, workspace.endpoint[11], [&] {
+        return add(point(workspace.chart[13].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O147
+  if (!control.operation(146, 1, workspace.chart[14],
+                         [&] { return absolute(workspace.chart[8]); }))
+    return false;
+  // O148
+  if (!control.operation(147, 1, workspace.endpoint[12], [&] {
+        return divide(workspace.chart[14], workspace.link[8]);
+      }))
+    return false;
+  // O149
+  if (!control.operation(148, 1, workspace.chart[15], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O150
+  if (!control.operation(149, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.endpoint[2].high, workspace.endpoint[8].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O151
+  if (!control.operation(150, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.selected[0], workspace.endpoint[4].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O152
+  if (!control.operation(151, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.selected[0], workspace.endpoint[10].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O153
+  if (!control.operation(152, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.selected[0], workspace.chart[7].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O154
+  if (!control.operation(153, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.selected[0], workspace.chart[15].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O155
+  if (!control.operation(154, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.endpoint[3].low, workspace.endpoint[9].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // O156
+  if (!control.operation(155, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.selected[1], workspace.endpoint[5].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // O157
+  if (!control.operation(156, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.selected[1], workspace.endpoint[11].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // G024
+  if (!control.guard(
+          23, 255,
+          [&](KD01SourceCondition& why) {
+            if (!std::isfinite(d.prefix.base_lo) ||
+                !std::isfinite(d.prefix.base_hi)) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            return d.prefix.base_lo < d.prefix.base_hi ||
+                   control.attach(point(d.prefix.base_hi));
+          },
+          KD01Condition::base_interval_unavailable))
+    return false;
+  // G025
+  if (!control.guard(
+          24, 255,
+          [&](KD01SourceCondition& why) {
+            if ((d.prefix.guard_written & (std::uint64_t{1} << 23)) == 0)
+              return false;
+            if (!std::isfinite(thigh_length) || !std::isfinite(shin_length) ||
+                thigh_length <= 0 || shin_length <= 0 || thigh_length > 1 ||
+                shin_length > 1) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            const auto* pelvis = std::get_if<BoardingRoutePhaseBoxBinding>(
+                &d.parts[0].reservation);
+            const auto* port = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+                &d.parts[3].reservation);
+            const auto* star = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+                &d.parts[9].reservation);
+            const auto port_region = ss_region(1), star_region = ss_region(2);
+            if (kBoardingRouteFootPhaseVersion != 1 || thigh_length != .47285 ||
+                shin_length != .47478 || !kd01_source_bit(d, 62) || !pelvis ||
+                !port || !star || d.parts[0].id != PartId::pelvis ||
+                d.parts[3].id != PartId::port_thigh ||
+                d.parts[9].id != PartId::starboard_thigh ||
+                pelvis->center != BodyPointId::root ||
+                pelvis->frame != BoardingRoutePhaseFrame::root ||
+                pelvis->half_size_metres != RigidVector3{.24, .12, .18} ||
+                port->start != BodyPointId::port_hip ||
+                port->end != BodyPointId::port_knee ||
+                star->start != BodyPointId::starboard_hip ||
+                star->end != BodyPointId::starboard_knee ||
+                port->radius_metres != .105 || star->radius_metres != .105 ||
+                port_region.first != PartId::pelvis ||
+                port_region.second != PartId::port_thigh ||
+                star_region.first != PartId::pelvis ||
+                star_region.second != PartId::starboard_thigh ||
+                port_region.junction != Junction::hip ||
+                star_region.junction != Junction::hip ||
+                port_region.root != BodyPointId::port_hip ||
+                port_region.toward != BodyPointId::port_knee ||
+                star_region.root != BodyPointId::starboard_hip ||
+                star_region.toward != BodyPointId::starboard_knee ||
+                port_region.limit_metres != kBoardingSelfHipLengthMetres ||
+                star_region.limit_metres != kBoardingSelfHipLengthMetres ||
+                kBoardingSelfHipLengthMetres != 0x1.bb0cd605d7512p-3) {
+              why = KD01SourceCondition::slice_identity;
+              return false;
+            }
+            if (!std::isfinite(kBoardingSelfHipLengthMetres)) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            return .12 > 0 && kBoardingSelfHipLengthMetres > .12 && .105 > 0 &&
+                   .105 <= kBoardingSelfHipLengthMetres &&
+                   kBoardingSelfHipLengthMetres < thigh_length;
+          },
+          KD01Condition::hip_threshold_domain))
+    return false;
+  // O158
+  if (!control.operation(157, 255, workspace.direct[0],
+                         [&] { return square(workspace.link[8]); }))
+    return false;
+  // O159
+  if (!control.operation(158, 255, workspace.direct[0],
+                         [&] { return add(point(1), workspace.direct[0]); }))
+    return false;
+  // O160
+  if (!control.operation(159, 255, workspace.direct[0], [&] {
+        return transfer_small_root(workspace.direct[0]);
+      }))
+    return false;
+  // O161
+  if (!control.operation(160, 255, workspace.direct[1],
+                         [&] { return divide(point(1), workspace.direct[0]); }))
+    return false;
+  // G026
+  if (!control.guard(
+          25, 255,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[1])) return false;
+            if (workspace.direct[1].low <= 0 || workspace.direct[1].high >= 1)
+              return control.attach(workspace.direct[1]);
+            return true;
+          },
+          KD01Condition::hip_threshold_domain))
+    return false;
+  // O162
+  if (!control.operation(161, 255, workspace.direct[2], [&] {
+        return square(point(kBoardingSelfHipLengthMetres));
+      }))
+    return false;
+  // O163
+  if (!control.operation(162, 255, workspace.direct[3],
+                         [&] { return square(point(.105)); }))
+    return false;
+  // O164
+  if (!control.operation(163, 255, workspace.direct[4],
+                         [&] { return square(point(.12)); }))
+    return false;
+  // O165
+  if (!control.operation(164, 255, workspace.direct[2], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O166
+  if (!control.operation(165, 255, workspace.direct[3], [&] {
+        return subtract(workspace.direct[2], workspace.direct[4]);
+      }))
+    return false;
+  // G027
+  if (!control.guard(
+          26, 255,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[2]) ||
+                !control.supported(why, workspace.direct[3]))
+              return false;
+            if (workspace.direct[2].low <= 0)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[3].low > 0 ||
+                   control.attach(workspace.direct[3]);
+          },
+          KD01Condition::hip_threshold_domain))
+    return false;
+  // O167
+  if (!control.operation(166, 255, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[3]);
+      }))
+    return false;
+  // O168
+  if (!control.operation(167, 255, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[3]);
+      }))
+    return false;
+  // O169
+  if (!control.operation(168, 255, workspace.direct[4], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres), point(.12));
+      }))
+    return false;
+  // O170
+  if (!control.operation(169, 255, workspace.direct[3], [&] {
+        return add(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O171
+  if (!control.operation(170, 255, workspace.direct[3], [&] {
+        return divide(workspace.direct[3], workspace.direct[2]);
+      }))
+    return false;
+  // G028
+  if (!control.guard(
+          27, 255,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[3])) return false;
+            if (workspace.direct[3].low <= 0 || workspace.direct[3].high >= 1)
+              return control.attach(workspace.direct[3]);
+            return true;
+          },
+          KD01Condition::hip_threshold_domain))
+    return false;
+  // O172
+  if (!control.operation(171, 255, workspace.direct[4], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[3]);
+      }))
+    return false;
+  // O173
+  if (!control.operation(172, 255, workspace.direct[4], [&] {
+        return subtract(workspace.direct[4], point(.12));
+      }))
+    return false;
+  // G029
+  if (!control.guard(
+          28, 255,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_threshold_domain))
+    return false;
+  // O174
+  if (!control.operation(173, 0, workspace.endpoint[12], [&] {
+        return subtract(point(d.prefix.base_lo),
+                        point(workspace.chart[5].high));
+      }))
+    return false;
+  // O175
+  if (!control.operation(174, 0, workspace.endpoint[12], [&] {
+        const auto value = point(workspace.endpoint[12].low);
+        if (kd01_valid(value)) workspace.selected[4] = value.low;
+        return value;
+      }))
+    return false;
+  // G030
+  if (!control.guard(
+          29, 0,
+          [&](KD01SourceCondition& why) {
+            if ((d.prefix.guard_written & (std::uint64_t{1} << 23)) == 0)
+              return false;
+            // Only O154/O157 write BASE: no saved original or erased floor
+            // read.
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.selected[4] > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          KD01Condition::height_floor_unavailable))
+    return false;
+  // O176
+  if (!control.operation(175, 0, workspace.endpoint[13], [&] {
+        const auto value = point(workspace.chart[6].high);
+        if (kd01_valid(value)) workspace.selected[5] = value.high;
+        return value;
+      }))
+    return false;
+  // O177
+  if (!control.operation(176, 0, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[5])); }))
+    return false;
+  // O178
+  if (!control.operation(177, 0, workspace.direct[5],
+                         [&] { return square(point(workspace.selected[4])); }))
+    return false;
+  // O179
+  if (!control.operation(178, 0, workspace.direct[4], [&] {
+        return add(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // G031
+  if (!control.guard(
+          30, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[13]) ||
+                !control.supported(why, workspace.direct[4]))
+              return false;
+            if (workspace.selected[5] < 0)
+              return control.attach(workspace.endpoint[13]);
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::chart_factor_unavailable))
+    return false;
+  // O180
+  if (!control.operation(179, 0, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O181
+  if (!control.operation(180, 0, workspace.endpoint[14], [&] {
+        return divide(point(workspace.selected[4]), workspace.direct[4]);
+      }))
+    return false;
+  // O182
+  if (!control.operation(181, 0, workspace.endpoint[14],
+                         [&] { return point(workspace.endpoint[14].low); }))
+    return false;
+  // O183
+  if (!control.operation(182, 0, workspace.endpoint[15], [&] {
+        return point(
+            std::max(workspace.direct[1].low, workspace.endpoint[14].low));
+      }))
+    return false;
+  // G032
+  if (!control.guard(
+          31, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.endpoint[14]) ||
+                !control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.endpoint[15]))
+              return false;
+            if (workspace.direct[4].low <= 0)
+              return control.attach(workspace.direct[4]);
+            if (!std::isfinite(d.prefix.factor_lower[0])) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            // O181/O182 (STAR O198/O199) established extraction provenance;
+            // the overwritten whole quotient is not read here.
+            return (d.prefix.factor_lower[0] > 0 &&
+                    d.prefix.factor_lower[0] <= 1 &&
+                    d.prefix.factor_lower[0] == workspace.endpoint[15].low) ||
+                   control.attach(workspace.endpoint[15]);
+          },
+          KD01Condition::chart_factor_unavailable))
+    return false;
+  // O184
+  if (!control.operation(183, 0, workspace.direct[4], [&] {
+        return divide(workspace.direct[3], point(d.prefix.factor_lower[0]));
+      }))
+    return false;
+  // O185
+  if (!control.operation(184, 0, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].high);
+        if (kd01_valid(value)) workspace.selected[6] = value.high;
+        return value;
+      }))
+    return false;
+  // G033
+  if (!control.guard(
+          32, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // POINT_UPPER's written row owns provenance; no erased quotient
+            // read.
+            return (workspace.selected[6] > 0 && workspace.selected[6] < 1) ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_descent_unavailable))
+    return false;
+  // O186
+  if (!control.operation(185, 0, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[6])); }))
+    return false;
+  // O187
+  if (!control.operation(186, 0, workspace.direct[4], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // G034
+  if (!control.guard(
+          33, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_descent_unavailable))
+    return false;
+  // O188
+  if (!control.operation(187, 0, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O189
+  if (!control.operation(188, 0, workspace.direct[4], [&] {
+        return multiply(point(thigh_length), workspace.direct[4]);
+      }))
+    return false;
+  // O190
+  if (!control.operation(189, 0, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].low);
+        if (kd01_valid(value)) workspace.cuts[0] = value.low;
+        return value;
+      }))
+    return false;
+  // G035
+  if (!control.guard(
+          34, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // The written POINT_LOWER row retains this side's cap by value.
+            return (workspace.cuts[0] > 0 &&
+                    workspace.cuts[0] == workspace.direct[4].low) ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_descent_unavailable))
+    return false;
+  // O191
+  if (!control.operation(190, 1, workspace.endpoint[12], [&] {
+        return subtract(point(d.prefix.base_lo),
+                        point(workspace.chart[13].high));
+      }))
+    return false;
+  // O192
+  if (!control.operation(191, 1, workspace.endpoint[12], [&] {
+        const auto value = point(workspace.endpoint[12].low);
+        if (kd01_valid(value)) workspace.selected[4] = value.low;
+        return value;
+      }))
+    return false;
+  // G036
+  if (!control.guard(
+          35, 1,
+          [&](KD01SourceCondition& why) {
+            if ((d.prefix.guard_written & (std::uint64_t{1} << 23)) == 0)
+              return false;
+            // Only O154/O157 write BASE: no saved original or erased floor
+            // read.
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.selected[4] > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          KD01Condition::height_floor_unavailable))
+    return false;
+  // O193
+  if (!control.operation(192, 1, workspace.endpoint[13], [&] {
+        const auto value = point(workspace.chart[14].high);
+        if (kd01_valid(value)) workspace.selected[5] = value.high;
+        return value;
+      }))
+    return false;
+  // O194
+  if (!control.operation(193, 1, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[5])); }))
+    return false;
+  // O195
+  if (!control.operation(194, 1, workspace.direct[5],
+                         [&] { return square(point(workspace.selected[4])); }))
+    return false;
+  // O196
+  if (!control.operation(195, 1, workspace.direct[4], [&] {
+        return add(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // G037
+  if (!control.guard(
+          36, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.endpoint[13]) ||
+                !control.supported(why, workspace.direct[4]))
+              return false;
+            if (workspace.selected[5] < 0)
+              return control.attach(workspace.endpoint[13]);
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::chart_factor_unavailable))
+    return false;
+  // O197
+  if (!control.operation(196, 1, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O198
+  if (!control.operation(197, 1, workspace.endpoint[14], [&] {
+        return divide(point(workspace.selected[4]), workspace.direct[4]);
+      }))
+    return false;
+  // O199
+  if (!control.operation(198, 1, workspace.endpoint[14],
+                         [&] { return point(workspace.endpoint[14].low); }))
+    return false;
+  // O200
+  if (!control.operation(199, 1, workspace.endpoint[15], [&] {
+        return point(
+            std::max(workspace.direct[1].low, workspace.endpoint[14].low));
+      }))
+    return false;
+  // G038
+  if (!control.guard(
+          37, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.endpoint[14]) ||
+                !control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.endpoint[15]))
+              return false;
+            if (workspace.direct[4].low <= 0)
+              return control.attach(workspace.direct[4]);
+            if (!std::isfinite(d.prefix.factor_lower[1])) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            // O181/O182 (STAR O198/O199) established extraction provenance;
+            // the overwritten whole quotient is not read here.
+            return (d.prefix.factor_lower[1] > 0 &&
+                    d.prefix.factor_lower[1] <= 1 &&
+                    d.prefix.factor_lower[1] == workspace.endpoint[15].low) ||
+                   control.attach(workspace.endpoint[15]);
+          },
+          KD01Condition::chart_factor_unavailable))
+    return false;
+  // O201
+  if (!control.operation(200, 1, workspace.direct[4], [&] {
+        return divide(workspace.direct[3], point(d.prefix.factor_lower[1]));
+      }))
+    return false;
+  // O202
+  if (!control.operation(201, 1, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].high);
+        if (kd01_valid(value)) workspace.selected[6] = value.high;
+        return value;
+      }))
+    return false;
+  // G039
+  if (!control.guard(
+          38, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // POINT_UPPER's written row owns provenance; no erased quotient
+            // read.
+            return (workspace.selected[6] > 0 && workspace.selected[6] < 1) ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_descent_unavailable))
+    return false;
+  // O203
+  if (!control.operation(202, 1, workspace.direct[4],
+                         [&] { return square(point(workspace.selected[6])); }))
+    return false;
+  // O204
+  if (!control.operation(203, 1, workspace.direct[4], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // G040
+  if (!control.guard(
+          39, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_descent_unavailable))
+    return false;
+  // O205
+  if (!control.operation(204, 1, workspace.direct[4], [&] {
+        return transfer_small_root(workspace.direct[4]);
+      }))
+    return false;
+  // O206
+  if (!control.operation(205, 1, workspace.direct[4], [&] {
+        return multiply(point(thigh_length), workspace.direct[4]);
+      }))
+    return false;
+  // O207
+  if (!control.operation(206, 1, workspace.direct[4], [&] {
+        const auto value = point(workspace.direct[4].low);
+        if (kd01_valid(value)) workspace.cuts[1] = value.low;
+        return value;
+      }))
+    return false;
+  // G041
+  if (!control.guard(
+          40, 1,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            // The written POINT_LOWER row retains this side's cap by value.
+            return (workspace.cuts[1] > 0 &&
+                    workspace.cuts[1] == workspace.direct[4].low) ||
+                   control.attach(workspace.direct[4]);
+          },
+          KD01Condition::hip_descent_unavailable))
+    return false;
+  // O208
+  if (!control.operation(207, 0, workspace.cut[0],
+                         [&] { return negate(workspace.chart[1]); }))
+    return false;
+  // O209
+  if (!control.operation(208, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O210
+  if (!control.operation(209, 0, workspace.cut[1], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O211
+  if (!control.operation(210, 0, workspace.endpoint[12], [&] {
+        return add(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O212
+  if (!control.operation(211, 0, workspace.cut[2], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O213
+  if (!control.operation(212, 0, workspace.cut[3], [&] {
+        return divide(workspace.cut[0], workspace.link[0]);
+      }))
+    return false;
+  // O214
+  if (!control.operation(213, 0, workspace.cut[4], [&] {
+        return point(std::max(-.5, workspace.cut[1].high));
+      }))
+    return false;
+  // O215
+  if (!control.operation(214, 0, workspace.cut[5], [&] {
+        return point(std::min(.5, workspace.cut[2].low));
+      }))
+    return false;
+  // O216
+  if (!control.operation(215, 0, workspace.cut[5], [&] {
+        return point(std::min(workspace.cut[5].low, workspace.cut[3].low));
+      }))
+    return false;
+  // O217
+  if (!control.operation(216, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(workspace.cuts[0]));
+      }))
+    return false;
+  // O218
+  if (!control.operation(217, 0, workspace.endpoint[12], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O219
+  if (!control.operation(218, 0, workspace.cut[4], [&] {
+        return point(
+            std::max(workspace.cut[4].low, workspace.endpoint[12].high));
+      }))
+    return false;
+  // O220
+  if (!control.operation(219, 0, workspace.endpoint[13], [&] {
+        return divide(workspace.cut[0], point(shin_length));
+      }))
+    return false;
+  // O221
+  if (!control.operation(220, 0, workspace.cut[5], [&] {
+        return point(
+            std::min(workspace.cut[5].low, workspace.endpoint[13].low));
+      }))
+    return false;
+  // G042
+  if (!control.guard(
+          41, 0,
+          [&](KD01SourceCondition& why) {
+            workspace.endpoint_certificate[0] = false;
+            for (const auto* v :
+                 {&workspace.cut[0], &workspace.cut[1], &workspace.cut[2],
+                  &workspace.cut[3], &workspace.cut[4], &workspace.cut[5]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[4].low != workspace.cut[4].high ||
+                workspace.cut[5].low != workspace.cut[5].high) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[4].low < -.5)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[4].low >= workspace.cut[5].low ||
+                workspace.cut[5].low > .5) {
+              // Localize only this original ordered branch. All preceding
+              // guards and literal written MAX/MIN rows own its provenance.
+              if (workspace.cut[4].low >= workspace.cut[5].low &&
+                  workspace.cut[5].low <= .5 && d.source_enrolled &&
+                  d.work.source_guards == 64 &&
+                  d.source_evaluated == UINT64_MAX &&
+                  d.prefix.guard_written == 0x1ffffffffffULL &&
+                  d.prefix.operation_written[0] == UINT64_MAX &&
+                  d.prefix.operation_written[1] == UINT64_MAX &&
+                  d.prefix.operation_written[2] == UINT64_MAX &&
+                  d.prefix.operation_written[3] == 0x1fffffffULL &&
+                  d.prefix.scalar_ready == 0x7f && d.arithmetic_supported &&
+                  d.prefix.arithmetic_supported)
+                d.prefix.prefix_state = KD01PrefixState::cuts_collapsed;
+              return control.attach(workspace.cut[5]);
+            }
+            if (workspace.cut[4].low < workspace.cut[1].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.cut[2].low ||
+                workspace.cut[5].low > workspace.cut[3].low)
+              return control.attach(workspace.cut[5]);
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.cut[4].low < workspace.endpoint[12].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.endpoint[13].low)
+              return control.attach(workspace.cut[5]);
+            if (!std::isfinite(workspace.cuts[0]) || workspace.cuts[0] <= 0) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            workspace.endpoint_certificate[0] = true;
+            return true;
+          },
+          KD01Condition::no_tau_interval))
+    return false;
+  if (d.prefix.prefix_state != KD01PrefixState::cuts_collapsed)
+    d.prefix.prefix_state = KD01PrefixState::cuts_available;
+  return true;
+}
+[[gnu::noinline]] auto detail::knee_compatibility_diagnostic01_optimistic(
+    KD01Diagnostic& d, const KD01Limits& limits, KD01Refusal& r) -> bool {
+  // A real separate activation, entered after the prefix workspace dies.
+  // All five fixed scratch slots retain their full lifetime through return.
+  std::array<Interval, 5> scratch{};
+  KneeDiagnostic01Control control{d, r, limits};
+  // O222
+  if (!control.operation(221, 0, scratch[0], [&] {
+        return square(kd01_whole(d.prefix.threshold));
+      }))
+    return false;
+  // O223
+  if (!control.operation(222, 0, scratch[0],
+                         [&] { return subtract(point(1), scratch[0]); }))
+    return false;
+  // G043
+  if (!control.guard(
+          42, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, scratch[0])) return false;
+            return scratch[0].low > 0 || control.attach(scratch[0]);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O224
+  if (!control.operation(223, 0, scratch[0],
+                         [&] { return transfer_small_root(scratch[0]); }))
+    return false;
+  // O225
+  if (!control.operation(224, 0, d.optimistic.best_cap, [&] {
+        return multiply(point(d.prefix.L1), scratch[0]);
+      }))
+    return false;
+  // G044
+  if (!control.guard(
+          43, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, d.optimistic.best_cap)) return false;
+            return d.optimistic.best_cap.lower > 0 ||
+                   control.attach(d.optimistic.best_cap);
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O226
+  if (!control.operation(225, 0, scratch[1], [&] {
+        return multiply(point(.5), point(d.prefix.L2));
+      }))
+    return false;
+  // O227
+  if (!control.operation(226, 0, scratch[2], [&] {
+        return divide(point(d.prefix.L2), kd01_whole(d.prefix.Lsum));
+      }))
+    return false;
+  // G045
+  if (!control.guard(
+          44, 0,
+          [&](KD01SourceCondition& why) {
+            if (!control.supported(why, scratch[1]) ||
+                !control.supported(why, scratch[2]) ||
+                !control.supported(why, d.prefix.Lsum))
+              return false;
+            if (!std::isfinite(d.prefix.L1) || !std::isfinite(d.prefix.L2)) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (scratch[1].low <= 0) return control.attach(scratch[1]);
+            if (scratch[2].low <= 0) return control.attach(scratch[2]);
+            return d.prefix.L1 > 0 && d.prefix.L2 > 0 &&
+                   d.prefix.Lsum.lower > 0;
+          },
+          KD01Condition::endpoint_domain_unavailable))
+    return false;
+  // O228
+  if (!control.operation(227, 0, d.optimistic.scalar_current[0], [&] {
+        return add(kd01_whole(d.prefix.W_PORT), scratch[1]);
+      }))
+    return false;
+  // O229
+  if (!control.operation(228, 0, scratch[3], [&] {
+        return add(point(d.prefix.current_cap_PORT), scratch[1]);
+      }))
+    return false;
+  // O230
+  if (!control.operation(229, 0, d.optimistic.scalar_current[1], [&] {
+        return subtract(scratch[3], kd01_whole(d.prefix.W_PORT));
+      }))
+    return false;
+  // O231
+  if (!control.operation(230, 0, scratch[3], [&] {
+        return multiply(point(d.prefix.current_cap_PORT),
+                        kd01_whole(d.prefix.Lsum));
+      }))
+    return false;
+  // O232
+  if (!control.operation(231, 0, scratch[3], [&] {
+        return divide(scratch[3], point(d.prefix.L1));
+      }))
+    return false;
+  // O233
+  if (!control.operation(232, 0, d.optimistic.scalar_current[2], [&] {
+        return subtract(scratch[3], kd01_whole(d.prefix.W_PORT));
+      }))
+    return false;
+  // G046
+  if (!control.guard(
+          45, 0,
+          [&](KD01SourceCondition& why) {
+            for (const auto& slack : d.optimistic.scalar_current)
+              if (!control.supported(why, slack)) return false;
+            for (const auto& slack : d.optimistic.scalar_current)
+              if (slack.upper <= 0) {
+                d.optimistic.classification[0] = KD01Classification::excluded;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 0;
+                return true;
+              }
+            for (const auto& slack : d.optimistic.scalar_current)
+              if (slack.lower <= 0) {
+                d.optimistic.classification[0] =
+                    KD01Classification::inconclusive;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 0;
+                return true;
+              }
+            d.optimistic.classification[0] =
+                KD01Classification::necessary_compatible;
+            d.optimistic.classifier_ready |= std::uint8_t{1} << 0;
+            return true;
+          },
+          KD01Condition::verification_inconclusive))
+    return false;
+  // O234
+  if (!control.operation(233, 0, d.optimistic.scalar_best[0], [&] {
+        return add(kd01_whole(d.prefix.W_PORT), scratch[1]);
+      }))
+    return false;
+  // O235
+  if (!control.operation(234, 0, scratch[3], [&] {
+        return add(kd01_whole(d.optimistic.best_cap), scratch[1]);
+      }))
+    return false;
+  // O236
+  if (!control.operation(235, 0, d.optimistic.scalar_best[1], [&] {
+        return subtract(scratch[3], kd01_whole(d.prefix.W_PORT));
+      }))
+    return false;
+  // O237
+  if (!control.operation(236, 0, scratch[3], [&] {
+        return multiply(kd01_whole(d.optimistic.best_cap),
+                        kd01_whole(d.prefix.Lsum));
+      }))
+    return false;
+  // O238
+  if (!control.operation(237, 0, scratch[3], [&] {
+        return divide(scratch[3], point(d.prefix.L1));
+      }))
+    return false;
+  // O239
+  if (!control.operation(238, 0, d.optimistic.scalar_best[2], [&] {
+        return subtract(scratch[3], kd01_whole(d.prefix.W_PORT));
+      }))
+    return false;
+  // G047
+  if (!control.guard(
+          46, 0,
+          [&](KD01SourceCondition& why) {
+            for (const auto& slack : d.optimistic.scalar_best)
+              if (!control.supported(why, slack)) return false;
+            for (const auto& slack : d.optimistic.scalar_best)
+              if (slack.upper <= 0) {
+                d.optimistic.classification[1] = KD01Classification::excluded;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 1;
+                return true;
+              }
+            for (const auto& slack : d.optimistic.scalar_best)
+              if (slack.lower <= 0) {
+                d.optimistic.classification[1] =
+                    KD01Classification::inconclusive;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 1;
+                return true;
+              }
+            d.optimistic.classification[1] =
+                KD01Classification::necessary_compatible;
+            d.optimistic.classifier_ready |= std::uint8_t{1} << 1;
+            return true;
+          },
+          KD01Condition::verification_inconclusive))
+    return false;
+  // O240
+  if (!control.operation(239, 0, d.optimistic.common_current[0], [&] {
+        return add(point(d.prefix.W_PORT.lower), scratch[1]);
+      }))
+    return false;
+  // O241
+  if (!control.operation(240, 0, scratch[3], [&] {
+        return add(point(d.prefix.current_cap_PORT), scratch[1]);
+      }))
+    return false;
+  // O242
+  if (!control.operation(241, 0, d.optimistic.common_current[1], [&] {
+        return subtract(scratch[3], point(d.prefix.W_PORT.upper));
+      }))
+    return false;
+  // O243
+  if (!control.operation(242, 0, scratch[3], [&] {
+        return multiply(scratch[2], point(d.prefix.W_PORT.lower));
+      }))
+    return false;
+  // O244
+  if (!control.operation(243, 0, scratch[3], [&] {
+        return add(point(d.prefix.current_cap_PORT), scratch[3]);
+      }))
+    return false;
+  // O245
+  if (!control.operation(244, 0, d.optimistic.common_current[2], [&] {
+        return subtract(scratch[3], point(d.prefix.W_PORT.upper));
+      }))
+    return false;
+  // O246
+  if (!control.operation(245, 0, scratch[4], [&] {
+        return subtract(point(d.prefix.W_PORT.upper),
+                        point(d.prefix.W_PORT.lower));
+      }))
+    return false;
+  // O247
+  if (!control.operation(246, 0, d.optimistic.common_current[3], [&] {
+        return subtract(point(d.prefix.current_cap_PORT), scratch[4]);
+      }))
+    return false;
+  // G048
+  if (!control.guard(
+          47, 0,
+          [&](KD01SourceCondition& why) {
+            for (const auto& slack : d.optimistic.common_current)
+              if (!control.supported(why, slack)) return false;
+            for (const auto& slack : d.optimistic.common_current)
+              if (slack.upper <= 0) {
+                d.optimistic.classification[2] = KD01Classification::excluded;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 2;
+                return true;
+              }
+            for (const auto& slack : d.optimistic.common_current)
+              if (slack.lower <= 0) {
+                d.optimistic.classification[2] =
+                    KD01Classification::inconclusive;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 2;
+                return true;
+              }
+            d.optimistic.classification[2] =
+                KD01Classification::necessary_compatible;
+            d.optimistic.classifier_ready |= std::uint8_t{1} << 2;
+            return true;
+          },
+          KD01Condition::verification_inconclusive))
+    return false;
+  // O248
+  if (!control.operation(247, 0, d.optimistic.common_best[0], [&] {
+        return add(point(d.prefix.W_PORT.lower), scratch[1]);
+      }))
+    return false;
+  // O249
+  if (!control.operation(248, 0, scratch[3], [&] {
+        return add(kd01_whole(d.optimistic.best_cap), scratch[1]);
+      }))
+    return false;
+  // O250
+  if (!control.operation(249, 0, d.optimistic.common_best[1], [&] {
+        return subtract(scratch[3], point(d.prefix.W_PORT.upper));
+      }))
+    return false;
+  // O251
+  if (!control.operation(250, 0, scratch[3], [&] {
+        return multiply(scratch[2], point(d.prefix.W_PORT.lower));
+      }))
+    return false;
+  // O252
+  if (!control.operation(251, 0, scratch[3], [&] {
+        return add(kd01_whole(d.optimistic.best_cap), scratch[3]);
+      }))
+    return false;
+  // O253
+  if (!control.operation(252, 0, d.optimistic.common_best[2], [&] {
+        return subtract(scratch[3], point(d.prefix.W_PORT.upper));
+      }))
+    return false;
+  // O254
+  if (!control.operation(253, 0, scratch[4], [&] {
+        return subtract(point(d.prefix.W_PORT.upper),
+                        point(d.prefix.W_PORT.lower));
+      }))
+    return false;
+  // O255
+  if (!control.operation(254, 0, d.optimistic.common_best[3], [&] {
+        return subtract(kd01_whole(d.optimistic.best_cap), scratch[4]);
+      }))
+    return false;
+  // G049
+  if (!control.guard(
+          48, 0,
+          [&](KD01SourceCondition& why) {
+            for (const auto& slack : d.optimistic.common_best)
+              if (!control.supported(why, slack)) return false;
+            for (const auto& slack : d.optimistic.common_best)
+              if (slack.upper <= 0) {
+                d.optimistic.classification[3] = KD01Classification::excluded;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 3;
+                return true;
+              }
+            for (const auto& slack : d.optimistic.common_best)
+              if (slack.lower <= 0) {
+                d.optimistic.classification[3] =
+                    KD01Classification::inconclusive;
+                d.optimistic.classifier_ready |= std::uint8_t{1} << 3;
+                return true;
+              }
+            d.optimistic.classification[3] =
+                KD01Classification::necessary_compatible;
+            d.optimistic.classifier_ready |= std::uint8_t{1} << 3;
+            return true;
+          },
+          KD01Condition::verification_inconclusive))
+    return false;
+  // G050
+  if (!control.guard(
+          49, 255,
+          [&](KD01SourceCondition& why) {
+            if (!boarding_route_foot_phase_environment()) {
+              why = KD01SourceCondition::unsupported_arithmetic;
+              return false;
+            }
+            if (!d.source_enrolled || d.work.source_guards != 64 ||
+                d.source_evaluated != UINT64_MAX ||
+                d.prefix.operation_written[0] != UINT64_MAX ||
+                d.prefix.operation_written[1] != UINT64_MAX ||
+                d.prefix.operation_written[2] != UINT64_MAX ||
+                d.prefix.operation_written[3] != 0x7fffffffffffffffULL ||
+                d.optimistic.classifier_ready != 0xf)
+              return false;
+            if (d.prefix.prefix_state == KD01PrefixState::cuts_available)
+              return d.prefix.guard_written == 0x1ffffffffffffULL;
+            if (d.prefix.prefix_state == KD01PrefixState::cuts_collapsed)
+              return d.prefix.guard_written ==
+                         (0x1ffffffffffffULL & ~(std::uint64_t{1} << 41)) &&
+                     (d.prefix.guard_attempted & (std::uint64_t{1} << 41)) != 0;
+            return false;
+          },
+          KD01Condition::identity))
+    return false;
+  d.optimistic.complete = true;
+  d.complete = true;
+  d.stop_condition = KD01Stop::none;
+  d.state = KD01State::evidence_complete;
+  d.prefix.side = 255;
+  return true;
+}
+} // namespace apsis_drift

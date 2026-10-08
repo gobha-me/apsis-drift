@@ -413,6 +413,7 @@ add_library(apsis_drift_core STATIC
   src/origin_boarding_intermediate_endpoint04.cpp
   src/origin_boarding_intermediate_endpoint05.cpp
   src/origin_boarding_intermediate_endpoint06.cpp
+  src/origin_boarding_knee_compatibility_diagnostic01.cpp
   src/origin_boarding_hip_joint_plane_method01.cpp
   src/origin_boarding_initial_material.cpp
   src/origin_boarding_checkpoint_material_extension.cpp
@@ -505,6 +506,8 @@ set_property(SOURCE src/origin_boarding_intermediate_endpoint04.cpp APPEND PROPE
 set_property(SOURCE src/origin_boarding_intermediate_endpoint05.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_intermediate_endpoint06.cpp APPEND PROPERTY COMPILE_OPTIONS
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
+set_property(SOURCE src/origin_boarding_knee_compatibility_diagnostic01.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_hip_joint_plane_method01.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
@@ -789,6 +792,52 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     set_tests_properties(boarding-intermediate-endpoint06-contract PROPERTIES
       ENVIRONMENT "LD_BIND_NOW=1;LC_ALL=C;LANG=C;GLIBC_TUNABLES=glibc.malloc.tcache_count=0")
     set_property(TEST boarding-intermediate-endpoint06-contract
+      PROPERTY ENVIRONMENT_MODIFICATION
+        "LD_PRELOAD=unset:"
+        "LD_AUDIT=unset:"
+        "LD_LIBRARY_PATH=unset:"
+        "LD_PROFILE=unset:"
+        "LD_DEBUG=unset:"
+        "LD_DEBUG_OUTPUT=unset:"
+        "LD_BIND_NOT=unset:"
+        "LD_ORIGIN_PATH=unset:"
+        "LD_ASSUME_KERNEL=unset:"
+        "LD_HWCAP_MASK=unset:"
+        "LD_TRACE_LOADED_OBJECTS=unset:"
+        "LD_USE_LOAD_BIAS=unset:"
+        "GLIBCXX_TUNABLES=unset:"
+        "MALLOC_CHECK_=unset:"
+        "MALLOC_PERTURB_=unset:"
+        "MALLOC_ARENA_MAX=unset:"
+        "MALLOC_ARENA_TEST=unset:"
+        "MALLOC_MMAP_THRESHOLD_=unset:"
+        "MALLOC_MMAP_MAX_=unset:"
+        "MALLOC_TRIM_THRESHOLD_=unset:"
+        "MALLOC_TOP_PAD_=unset:"
+        "MALLOC_MXFAST_=unset:"
+        "LD_DYNAMIC_WEAK=unset:"
+        "LD_SHOW_AUXV=unset:"
+        "LD_PROFILE_OUTPUT=unset:"
+        "LD_VERBOSE=unset:"
+        "LD_WARN=unset:"
+    )
+  endif()
+
+  add_executable(apsis-drift-boarding-knee-compatibility-diagnostic01-tests
+    test/origin_boarding_knee_compatibility_diagnostic01_test.cpp)
+  target_link_libraries(apsis-drift-boarding-knee-compatibility-diagnostic01-tests
+    PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-boarding-knee-compatibility-diagnostic01-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  target_include_directories(apsis-drift-boarding-knee-compatibility-diagnostic01-tests
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME boarding-knee-compatibility-diagnostic01-contract
+    COMMAND apsis-drift-boarding-knee-compatibility-diagnostic01-tests)
+  set_tests_properties(boarding-knee-compatibility-diagnostic01-contract PROPERTIES TIMEOUT 180)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set_tests_properties(boarding-knee-compatibility-diagnostic01-contract PROPERTIES
+      ENVIRONMENT "LD_BIND_NOW=1;LC_ALL=C;LANG=C;GLIBC_TUNABLES=glibc.malloc.tcache_count=0")
+    set_property(TEST boarding-knee-compatibility-diagnostic01-contract
       PROPERTY ENVIRONMENT_MODIFICATION
         "LD_PRELOAD=unset:"
         "LD_AUDIT=unset:"

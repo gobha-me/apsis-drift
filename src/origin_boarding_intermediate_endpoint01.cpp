@@ -1355,3 +1355,66 @@ namespace apsis_drift {
   return result;
 }
 } // namespace apsis_drift
+
+// Diagnostic01: the complete preceding implementation remains historical.
+#include "origin_boarding_knee_compatibility_diagnostic01_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::knee_compatibility_diagnostic01_source_enroll(
+    BoardingKneeCompatibilityDiagnostic01Diagnostic& d,
+    BoardingRouteFootPhaseRequest& request,
+    const BoardingKneeCompatibilityDiagnostic01Limits& limits,
+    BoardingKneeCompatibilityDiagnostic01Refusal& reason) -> bool {
+  // Genuine source authentication only; the EMPTY historical carrier and
+  // nested source owners die before the fresh prefix workspace is entered.
+  BoardingIntermediateEndpoint03Diagnostic original(d.source);
+  BoardingIntermediateEndpoint03Limits source_limits;
+  source_limits.source_guards = limits.source_guards;
+  BoardingIntermediateEndpoint03Refusal old_reason;
+  const bool good = intermediate_endpoint03_source_enroll(
+      original, request, source_limits, old_reason);
+  d.parts = original.parts;
+  d.work.source_guards = original.work.source_guards;
+  d.source_evaluated = original.source_evaluated;
+  d.source_enrolled = good && original.source_enrolled &&
+                      original.work.source_guards == 64 &&
+                      original.source_evaluated == UINT64_MAX;
+  if (d.source_enrolled) return true;
+  using C = BoardingKneeCompatibilityDiagnostic01SourceCondition;
+  using W = BoardingKneeCompatibilityDiagnostic01Stop;
+  if (good && original.source_enrolled) {
+    reason = {};
+    reason.condition = reason.predicate_condition = C::source_identity;
+    reason.self_stage = BoardingKneeCompatibilityDiagnostic01Stage::source;
+    return knee_compatibility_diagnostic01_refuse(d, reason,
+                                                  W::source_identity);
+  }
+  // Forward every original field without reducing its domain. Only the old
+  // exterior operation sentinel is widened; nested phase sentinels are intact.
+  reason.condition = old_reason.condition;
+  reason.predicate_condition = old_reason.predicate_condition;
+  reason.limiting_bound = old_reason.limiting_bound;
+  reason.phase = old_reason.phase;
+  reason.side = old_reason.side;
+  reason.edge = old_reason.edge;
+  reason.axis = old_reason.axis;
+  reason.source_key = old_reason.source_key;
+  reason.source_name = old_reason.source_name;
+  reason.self_pair = old_reason.self_pair;
+  reason.operation = old_reason.operation == std::uint8_t{255}
+                         ? std::uint16_t{65535}
+                         : static_cast<std::uint16_t>(old_reason.operation);
+  reason.self_region = old_reason.self_region;
+  reason.self_axis = old_reason.self_axis;
+  reason.self_sign = old_reason.self_sign;
+  reason.self_stage = old_reason.self_stage;
+  reason.source_edge = old_reason.source_edge;
+  const auto stop =
+      reason.condition == C::invalid_binding   ? W::invalid_binding
+      : reason.condition == C::source_identity ? W::source_identity
+      : reason.condition == C::source_capacity ? W::source_capacity
+      : reason.condition == C::unsupported_arithmetic
+          ? W::unsupported_arithmetic
+          : W::source_refusal;
+  return knee_compatibility_diagnostic01_refuse(d, reason, stop);
+}
+} // namespace apsis_drift
