@@ -99,11 +99,17 @@ player's station-to-flight journey.
 - [Original hip-containment contract audit](ORIGIN_BOARDING_HIP_CONTAINMENT_AUDIT.md):
   separates permitted joint overlap from conservative ownership and separation certificates.
 - [Hip joint-plane method registration](ORIGIN_BOARDING_HIP_JOINT_PLANE_METHOD01.md):
-  finite section evidence for the original box; implementation and numerical outcomes remain pending.
+  retained strict unowned interior for the one original Endpoint04 height.
 - [Hip joint-plane test manifest](ORIGIN_BOARDING_HIP_JOINT_PLANE_METHOD01_TEST_MANIFEST.md):
   bounded controls and an independent same-call geometry and distance check.
 - [Conditional BOTH-ankle construction](ORIGIN_BOARDING_BOTH_ANKLE_CONSTRUCTION.md):
   derives a conservative connected root-height subset before exact registration or evaluation.
+- [Conditional BOTH-hip construction](ORIGIN_BOARDING_BOTH_HIP_CONSTRUCTION.md):
+  proves the conservative descent restriction before literal arithmetic registration.
+- [Endpoint05 registration and retained observation](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT05.md):
+  admitted implementation; unavailable PORT knee interval before a generated height or original phase.
+- [Selected knee-cut coverage audit](ORIGIN_BOARDING_KNEE_CUT_COVERAGE_AUDIT.md):
+  exact scalar/common-enclosure compatibility and conditional descent dependence; actual feasibility unknown.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
