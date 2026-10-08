@@ -124,3 +124,8 @@ Preserve creator8192/worker49152/helper4096/output16MiB, complete historical enr
 This source/symbolic proof evaluates no source operands, coordinates, angles, derived numerical bounds or alternative candidate. No literal primitive/API/Test registration or implementation is authorized here. Ordinary publication checks on unchanged existing source do not select a new numerical construction.
 
 The [Endpoint05 registration](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT05.md) and its [matched Test manifest](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT05_TEST_MANIFEST.md) specify the finite constructor and admission constraints in [#519](https://github.com/gobha-me/apsis-drift/issues/519). They evaluate no new posture and leave actual feasibility and original endpoint acceptance unknown.
+
+The subsequent [knee-cut coverage audit](ORIGIN_BOARDING_KNEE_CUT_COVERAGE_AUDIT.md)
+classifies the exact restricted scalar/common-enclosure intervals and retains
+conditional actual descent dependence after Endpoint05's unavailable result.
+It changes no registered constructor and selects no new candidate or program.
