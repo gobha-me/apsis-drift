@@ -2925,3 +2925,38 @@ The following dataset contains the exact field, slot, helper, stage, allocation 
   "evaluations": 0
 }
 ```
+
+## 11. Retained first observation
+
+Issue [#522](https://github.com/gobha-me/apsis-drift/issues/522), 2026-10-08 UTC. The registered Endpoint05 constructor is implemented, but the selected sufficient construction is unavailable for the authentic held source. Both separately frozen, once-only GCC and Clang processes returned an unresolved, incomplete A01 result at PORT G15 after O082. The Slice condition is `no_tau_interval`. No root height, Key, original phase call or Cell was earned.
+
+| Earned surface | Identical GCC / Clang20 observation |
+|---|---|
+| Genuine source | Admitted and complete; arena 4,096 bytes; creator work `21,1,2,2`; all 64 source rows |
+| Constructor operations | 82 attempted and written; first two mask words `18446744073709551615,262143`, remaining four zero; last zero-based cursor 81 |
+| Constructor guards | 15 attempted, 14 written; masks `32767,16383`; last zero-based cursor 14, side PORT |
+| Refusal | Endpoint condition 38 `slice_unavailable`, stage 19 `slice_guard`; Slice condition 11 `no_tau_interval` |
+| Limiting record | Supported attached q bound `[0.5,0.5]`; p is not reported |
+| Construction completion | False; Y, inward height bounds and selected zeros are `NOT_RUN` |
+| Original continuation | Calls 0, reporting clock 0, Cells 0, capacity 0; actual owned output 3,280 bytes |
+| Independent geometry audits | Construction not run; body poses 0; interval records 0 |
+| Finite control roster | One creator; 51 consumers and 50 explicit unreached/unavailable skips; RAW0, inspector0 |
+| Harness checks | 1,527 checks and zero failures per process |
+
+The q singleton is the supported record attached to G15's refusal. It does not expose p or establish p=q. G15 requires a strict, supported selected PORT knee interval before any closed-endpoint root, radial/height image or direct WORLD hip verification. Missing this sufficient interval neither proves collision under the original certificate nor excludes all possible heights or other constructions. The prior BOTH-hip lemma remains conditional. No geometry, arithmetic, limits or guard predicates were retuned after this observation.
+
+The executed controls passed their registered refusal, identity, accounting and ownership checks. Fifty controls honestly skipped because their prerequisites were not reached. The independent construction, full-body and interval audits did not run; zero harness failures therefore supplies no geometric acceptance. Original contact/load, complete SELF, WORLD/material/HALO, continuous route/seat, actor movement, save/dynamics and First Flight remain unearned by this result. Parent issues #462, #361 and #352 stay open.
+
+The reviewed source base is `4829b26daed19dae3dff4df129b19397c0db5cf4`; the eight-file implementation hold SHA256 is `7b9ea11c425f1a2e298d6e09ae98296cdd7bd9529df5a381bf76af7656826d40`. Complete independent source and actual resource admission preceded execution, followed by immutable freeze SHA256 `4cb63c091f4e4256eb781ea2844c5508ce543acb0be26bef149cfd5f6fd190b7` and a separate captured-freeze review. The freeze binds 3,189 current inputs, eight operative source files and 1,190 admitted evidence bindings. Its 3,728 content-index entries resolve to 3,327 distinct immutable contents. Root reviewed the completed GCC observation before separately authorizing Clang. Both processes reaped with exit zero and byte-identical 2,899-byte logs, SHA256 `826869b03024f84895469b084e7ff5de66ad0862b8fbe74af9c6c13207427c97`. The frozen copies are consumed; ordinary regression binaries do not replace or replay them.
+
+| Complete pre-execution physical bound | GCC | Clang20 | Ceiling |
+|---|---:|---:|---:|
+| Creator | 7,124 | 6,916 | 8,192 |
+| Numerical worker maximum over admitted stages | 48,886 | 44,980 | 49,152 |
+| Constructor helper including applicable callees | 3,480 | 2,936 | 4,096 |
+| Full body audit stage, including current/pending owners | 47,124 | 44,980 | 49,152 |
+| Complete numerical terminal error helper | 3,632 | 3,632 | 4,096 |
+
+These are whole admitted source/frame/callee/error ownership bounds, not memory peaks measured from the short reached path. The numerical error maps additionally retain 320 bytes of fixed error strings and chunk ownership outside the error helper. Actual layout, complete object/archive correspondence, linked ELF/CFI, stock library and allocator/error/unwind paths were reviewed in the closed Linux x86_64 launch profile: `PATH=/usr/bin:/bin`, `LANG=C`, `LC_ALL=C`, `LD_BIND_NOW=1`, `GLIBC_TUNABLES=glibc.malloc.tcache_count=0`, with no system preload or injected modules. The smallest numerical margin is 266 bytes on GCC reset. No NRVO, optimizer elision or `sizeof` subtraction discounts an owning frame. Initial compilation/type failures and oversized constructor/body helper frames remain retained; only independently reviewed source-preserving representation/lifetime changes preceded the first run.
+
+World loading, presentation, process startup and their pre-creator errors remain separately nonzero; their complete peak is unknown. This is not a whole-game 48 KiB limit or a portable process-memory guarantee. Independent paired resource admission receipt SHA256 is `919d2de01a9bf119fe1c18767ee20af4e40ee9197973ab4ca13fea17e5985dd6`; paired observation review SHA256 is `3b4694f71f02a1b15fcb6180ad7b270b3fad11275c619bb5e95308b56ffbf7ad`. Every prior first-observation family remains immutable.
