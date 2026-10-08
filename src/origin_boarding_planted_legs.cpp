@@ -20302,3 +20302,373 @@ struct KneeDiagnostic01Control {
   return true;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_root_z01_arithmetic_internal.hpp"
+namespace apsis_drift {
+namespace {
+auto ss_fail(detail::RootZ01SupportBorrow& d, SSR& r, SSW why) -> bool {
+  if (r.condition == SSW::none) r.condition = r.predicate_condition = why;
+  const bool cap =
+      why == SSW::source_guard_capacity || why == SSW::self_body_capacity ||
+      why == SSW::self_pair_capacity || why == SSW::self_axis_capacity ||
+      why == SSW::self_signed_capacity || why == SSW::self_owner_capacity ||
+      why == SSW::self_hip_capacity;
+  if (cap || why == SSW::unsupported_arithmetic) {
+    d.stop_condition = why;
+    d.state = cap ? SSS::capacity : SSS::unsupported;
+    if (!cap) d.arithmetic_supported = false;
+  } else if (d.state != SSS::capacity && d.state != SSS::unsupported)
+    d.state = SSS::unresolved;
+  return false;
+}
+auto ss_charge(detail::RootZ01SupportBorrow& d, SSR& r, std::size_t& work,
+               std::size_t cap, SSW why) -> bool {
+  if (work >= cap) return ss_fail(d, r, why);
+  ++work;
+  return true;
+}
+auto ss_separate(const UnloadSolid& a, const UnloadSolid& b,
+                 detail::RootZ01SupportBorrow& d, SSC& c, const SSL& l, SSR& r,
+                 std::size_t pair) -> bool {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  r.self_stage = SSStage::separation;
+  for (std::size_t i = 0; i < count; ++i) {
+    r.self_axis = static_cast<std::uint8_t>(i);
+    r.self_sign = 255;
+    if (!ss_charge(d, r, d.work.self_axes, l.self_axes,
+                   SSW::self_axis_capacity))
+      return false;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (std::size_t sign = 0; sign < 2; ++sign) {
+      r.self_sign = static_cast<std::uint8_t>(sign);
+      if (!ss_charge(d, r, d.work.self_signed_trials, l.self_signed_trials,
+                     SSW::self_signed_capacity))
+        return false;
+      const auto n = sign == 0 ? axis : self_negate(axis);
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported || !std::isfinite(total.low) ||
+          !std::isfinite(total.high))
+        return ss_fail(d, r, SSW::unsupported_arithmetic);
+      if (total.high <= 0) {
+        c.self_axes[pair] = static_cast<std::uint8_t>(i | (sign == 0 ? 0 : 16));
+        return true;
+      }
+    }
+  }
+  return ss_fail(d, r, SSW::unresolved_self_pair);
+}
+} // namespace
+auto detail::root_z01_enroll_self_source(RootZ01SupportBorrow& d, const SSL& l,
+                                         SSR& r) -> bool {
+  const auto source = [&](std::size_t i, auto predicate) {
+    if (!ss_charge(d, r, d.work.source_guards, l.source_guards,
+                   SSW::source_guard_capacity))
+      return false;
+    d.source_evaluated[i] = true;
+    return predicate() || ss_fail(d, r, SSW::source_identity);
+  };
+  for (std::size_t i = 0; i < 15; ++i)
+    if (!source(36 + i, [&] { return ss_same_part(d.parts[i], ss_part(i)); }))
+      return false;
+  // Materialize only AFTER the first region record charge, before any graph.
+  SelfRegions regions{};
+  for (std::size_t i = 0; i < 14; ++i)
+    if (!source(51 + i, [&] {
+          if (i == 0) regions = self_regions();
+          return ss_same_region(regions[i], ss_region(i));
+        }))
+      return false;
+  if (!source(65, [&] {
+        return kBoardingRouteFootPhaseVersion == 1 && thigh_length == .47285 &&
+               shin_length == .47478 && d.parts[0].id == PartId::pelvis;
+      }))
+    return false;
+  // The frozen nominal compiler composes proper rational rotations and exact
+  // local offsets. Stored interval columns are enclosures, not affine claims.
+  return source(66, [&] {
+    return kBoardingRouteFootPhaseVersion == 1 &&
+           d.parts[1].id == PartId::trunk && d.parts[2].id == PartId::helmet &&
+           d.parts[6].id == PartId::port_upper_arm &&
+           d.parts[12].id == PartId::starboard_upper_arm;
+  });
+}
+auto detail::root_z01_self_math(const BoardingRouteFootPhaseRequest& request,
+                                RootZ01SupportBorrow& d, SSC& c, const SSL& l,
+                                SSR& r) -> SSS {
+  std::size_t body_index_record{};
+  const auto body = [&](auto predicate, SSW why = SSW::self_body_identity) {
+    r.self_stage = SSStage::body;
+    r.operation = body_index_record;
+    if (!ss_charge(d, r, d.work.self_body_guards, l.self_body_guards,
+                   SSW::self_body_capacity))
+      return false;
+    c.self_body_evaluated |= std::uint64_t{1} << body_index_record++;
+    return predicate() || ss_fail(d, r, why);
+  };
+  if (!body([&] {
+        return BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+               BoardingIntermediatePauseSupportAccess::data(d.source) !=
+                   nullptr;
+      }))
+    return d.state;
+  if (!body([&] { return boarding_route_foot_phase_environment(); },
+            SSW::unsupported_arithmetic))
+    return d.state;
+  const auto& p = c.phase;
+  if (!body([&] {
+        return p.complete && p.arithmetic_supported && p.nominal_links &&
+               p.target_sole_identities && p.joint_sectors &&
+               p.derivative_domains && p.timing_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.phase_index < 5 &&
+               p.first == boarding_route_intermediate_root_z01_local(
+                              c.phase_index, c.global_first) &&
+               p.last == boarding_route_intermediate_root_z01_local(
+                             c.phase_index, c.global_last) &&
+               request.seconds_per_parameter == (c.phase_index == 4 ? 2 : 12) &&
+               c.projection_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_enrolled && d.self_version == 1 &&
+               std::ranges::all_of(d.source_evaluated,
+                                   [](bool x) { return x; });
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_evaluated[65] && p.nominal_links &&
+               p.target_sole_identities;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_evaluated[66] && p.arithmetic_supported &&
+               c.projected_carrier_complete[0];
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.nominal_support_complete && c.nominal_equilibrium &&
+               c.star_support && d.stop_condition == SSW::none;
+      }))
+    return d.state;
+  for (std::size_t i = 0; i < 18; ++i)
+    if (!body(
+            [&] {
+              return ss_point_valid(body_intervals(p.points[i].value), 8);
+            },
+            SSW::unsupported_arithmetic))
+      return d.state;
+  for (std::size_t f = 0; f < 4; ++f)
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!body(
+              [&] {
+                return ss_point_valid(
+                    body_intervals(p.frames[f].columns[j].value), 8);
+              },
+              SSW::unsupported_arithmetic))
+        return d.state;
+  for (std::size_t side = 0; side < 2; ++side)
+    if (!body([&] { return ss_leg(p.legs[side]) && d.source_evaluated[65]; }))
+      return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[0], ss_part(0)) &&
+               ss_same_part(d.parts[1], ss_part(1)) && d.source_evaluated[51];
+      }))
+    return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[2], ss_part(2)) && d.source_evaluated[54] &&
+               d.source_evaluated[66];
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_evaluated[66] && ss_same_part(d.parts[6], ss_part(6)) &&
+               ss_same_part(d.parts[12], ss_part(12));
+      }))
+    return d.state;
+  SelfRegions regions{};
+  if (!body([&] {
+        regions = self_regions();
+        for (std::size_t i = 0; i < 14; ++i)
+          if (!ss_same_region(regions[i], ss_region(i))) return false;
+        return true;
+      }))
+    return d.state;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  if (!body([&] {
+        relative[0] = {point(0), point(0), point(0)};
+        return true;
+      }))
+    return d.state;
+  for (std::size_t i = 1; i < 18; ++i)
+    if (!body(
+            [&] {
+              relative[i] =
+                  unload_difference(body_intervals(p.points[i].value),
+                                    body_intervals(p.points[0].value));
+              return ss_point_valid(relative[i], 16);
+            },
+            SSW::unsupported_arithmetic))
+      return d.state;
+  if (!body([&] {
+        return body_index_record == 63 &&
+               c.self_body_evaluated ==
+                   kBoardingRouteIntermediateSupportSelf01BodyMask &&
+               BoardingIntermediatePauseSupportAccess::valid(d.source);
+      }))
+    return d.state;
+  c.self_body_complete = true;
+  std::size_t pair{};
+  for (std::size_t a = 0; a < 15; ++a)
+    for (std::size_t b = a + 1; b < 15; ++b, ++pair) {
+      r.operation.reset();
+      r.self_stage = SSStage::not_run;
+      r.self_pair = static_cast<std::uint16_t>(pair);
+      r.self_region = 255;
+      r.self_axis = 255;
+      r.self_sign = 255;
+      if (!ss_charge(d, r, d.work.self_pairs, l.self_pairs,
+                     SSW::self_pair_capacity))
+        return d.state;
+      ++c.examined_pairs;
+      auto certificate = SSCert::not_run;
+      for (std::size_t region = 0; region < 14; ++region)
+        if (static_cast<std::size_t>(regions[region].first) == a &&
+            static_cast<std::size_t>(regions[region].second) == b) {
+          r.self_stage = SSStage::owner;
+          r.self_region = static_cast<std::uint8_t>(region);
+          if (!ss_charge(d, r, d.work.self_owners, l.self_owners,
+                         SSW::self_owner_capacity))
+            return d.state;
+          c.owner_attempted_mask |=
+              static_cast<std::uint16_t>(std::uint16_t{1} << region);
+          ss_owner(p, relative, regions[region], c.owners[region]);
+          if (!c.owners[region].arithmetic_supported) {
+            ss_fail(d, r, SSW::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.owners[region].certified)
+            certificate = static_cast<SSCert>(c.owners[region].certificate);
+          else if (regions[region].junction == Junction::hip) {
+            r.self_stage = SSStage::hip;
+            if (!ss_charge(d, r, d.work.self_hip_complements,
+                           l.self_hip_complements, SSW::self_hip_capacity))
+              return d.state;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            self02_hip_complement(p, relative, regions[region], region, pair,
+                                  c.hip_complements[side]);
+            if (!c.hip_complements[side].arithmetic_supported) {
+              ss_fail(d, r, SSW::unsupported_arithmetic);
+              return d.state;
+            }
+            if (c.hip_complements[side].certified)
+              certificate = SSCert::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (certificate == SSCert::not_run) {
+        const auto first = unload_solid(d.parts[a], relative, p),
+                   second = unload_solid(d.parts[b], relative, p);
+        if (!ss_separate(first, second, d, c, l, r, pair)) return d.state;
+        certificate = SSCert::convex_support_plane;
+      }
+      c.self_certificates[pair] = certificate;
+      ++c.self_certificate_counts[static_cast<std::size_t>(certificate)];
+      ++c.accepted_pairs;
+    }
+  c.self_complete = pair == 105 && c.accepted_pairs == 105;
+  if (!c.self_complete) {
+    ss_fail(d, r, SSW::self_incomplete);
+    return d.state;
+  }
+  r.self_pair = 65535;
+  r.self_region = 255;
+  r.self_axis = 255;
+  r.self_sign = 255;
+  r.self_stage = SSStage::complete;
+  c.complete = false;
+  c.state = d.state = SSS::accepted;
+  return d.state;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift::detail {
+auto root_z01_proxy_math(
+    const BoardingRouteIntermediateRootZ01CurrentToken& token,
+    BoardingRouteIntermediateRootZ01Diagnostic& owner,
+    BoardingRouteIntermediateRootZ01Cell& cell, std::size_t part)
+    -> std::expected<BoardingRouteCheckpointWorldProxy, std::string> {
+  if (!BoardingRouteIntermediateRootZ01CurrentAccess::valid(token, owner,
+                                                            cell) ||
+      !cell.contact_complete || !cell.load_complete || !cell.self_complete ||
+      part >= owner.parts.size())
+    return std::unexpected("RootZ01 earned current-cell proxy required");
+  if (!supported_environment()) return BoardingRouteCheckpointWorldProxy{};
+  const auto& phase = cell.support_self.phase;
+  const auto& binding = owner.parts[part];
+  UnloadSolid input;
+  if (const auto* box =
+          std::get_if<BoardingRoutePhaseBoxBinding>(&binding.reservation)) {
+    const auto center = body_index(box->center);
+    const auto frame = static_cast<std::size_t>(box->frame);
+    if (center >= phase.points.size() || frame >= phase.frames.size())
+      return std::unexpected("RootZ01 box binding exceeds owned graph");
+    input.shape.shape = SelfShape::box;
+    input.shape.first = input.shape.second =
+        body_intervals(phase.points[center].value);
+    input.shape.half = box->half_size_metres;
+    input.frame = &phase.frames[frame];
+  } else {
+    const auto& capsule =
+        std::get<BoardingPlantedBodyCapsuleBinding>(binding.reservation);
+    const auto first = body_index(capsule.start),
+               last = body_index(capsule.end);
+    if (first >= phase.points.size() || last >= phase.points.size())
+      return std::unexpected("RootZ01 capsule binding exceeds owned graph");
+    input.shape.shape = SelfShape::capsule;
+    input.shape.first = body_intervals(phase.points[first].value);
+    input.shape.second = body_intervals(phase.points[last].value);
+    input.shape.radius = capsule.radius_metres;
+  }
+  const auto math = world_proxy_math(input);
+  BoardingRouteCheckpointWorldProxy out;
+  out.solid = math.solid;
+  out.bounds = math.bounds;
+  out.arithmetic_supported = out.original_world_identity =
+      math.arithmetic_supported;
+  // No old stationary-sole or source-volume waiver is imported. Contacts
+  // retain their separate fresh event proof; WORLD tests this actual solid.
+  return out;
+}
+} // namespace apsis_drift::detail

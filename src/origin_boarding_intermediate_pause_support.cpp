@@ -569,3 +569,29 @@ auto boarding_route_intermediate_unloaded01_upper_partition(
   return partitions.size() == 10 ? &partitions[8] : nullptr;
 }
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+auto root_z01_pause_base_matches(
+    const OriginBoardingIntermediatePauseSupport& pause,
+    const NativeCraftBinding& binding, const OriginBoardingBootSupport& boots)
+    -> bool {
+  const auto* d = BoardingIntermediatePauseSupportAccess::data(pause);
+  if (!d || !BoardingIntermediatePauseSupportAccess::valid(pause)) return false;
+  const auto* a = d->binding.contact();
+  const auto* b = binding.contact();
+  const auto* sa = d->binding.selection();
+  const auto* sb = binding.selection();
+  const auto retained = d->boots.selected_partitions();
+  const auto incoming = boots.selected_partitions();
+  return a && b && sa && sb && a == b && sa == sb &&
+         d->binding.pose() == binding.pose() &&
+         a->original_geometry() == b->original_geometry() &&
+         a->stowed_partition() == b->stowed_partition() &&
+         d->lower == LowerCockpitContactAccess::data(*b) &&
+         sa->hardware == OperatingProgress{1, 1, 1, 0} &&
+         sb->hardware == OperatingProgress{1, 1, 1, 0} &&
+         retained.size() == kBoardingBootSourcePartitionCount &&
+         retained.data() == incoming.data() &&
+         d->boots.contact() == boots.contact();
+}
+} // namespace apsis_drift::detail

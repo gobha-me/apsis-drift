@@ -1259,3 +1259,790 @@ auto assess_origin_boarding_route_checkpoint_world_material04(
       detail::boarding_route_checkpoint_world_material04_limits());
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_route_intermediate_root_z01_arithmetic_internal.hpp"
+namespace apsis_drift {
+namespace {
+auto root_z01_base_triangle_count(const OriginBoardingInitialMaterial& material,
+                                  std::size_t source) -> std::size_t {
+  const auto view = detail::root_z01_material_view(material);
+  if (!view || source >= view->sources.size()) return 0;
+  const auto& r = view->sources[source];
+  if (r.removed || r.relation != Relation::shell_sheet || r.mesh < 0 ||
+      static_cast<std::size_t>(r.mesh) >= view->meshes.size())
+    return 0;
+  return view->meshes[static_cast<std::size_t>(r.mesh)].triangles.size();
+}
+auto root_z01_base_triangle(const OriginBoardingInitialMaterial& material,
+                            std::size_t source, std::size_t ordinal,
+                            bool& collapsed)
+    -> std::expected<std::array<Vec, 3>, std::string> {
+  const auto view = detail::root_z01_material_view(material);
+  if (!view || source >= view->sources.size() ||
+      ordinal >= root_z01_base_triangle_count(material, source))
+    return std::unexpected("RootZ01 original shell triangle ordinal required");
+  const auto& r = view->sources[source];
+  const auto& mesh = view->meshes[static_cast<std::size_t>(r.mesh)];
+  const auto& t = mesh.triangles[ordinal];
+  for (const auto v : t.vertices)
+    if (v >= mesh.quantized_vertices.size())
+      return std::unexpected("RootZ01 original shell vertex required");
+  const auto& a = mesh.quantized_vertices[t.vertices[0]];
+  const auto& b = mesh.quantized_vertices[t.vertices[1]];
+  const auto& c = mesh.quantized_vertices[t.vertices[2]];
+  collapsed = a.value == b.value || b.value == c.value || a.value == c.value;
+  const auto decode = [](const detail::MaterialQuantizedPoint& q) {
+    return Vec{static_cast<double>(q.value[0]) * 1e-6,
+               static_cast<double>(q.value[1]) * 1e-6,
+               static_cast<double>(q.value[2]) * 1e-6};
+  };
+  return std::array<Vec, 3>{decode(a), decode(b), decode(c)};
+}
+template <class CellBounds, class Failure>
+auto root_z01_domain_assess(
+    const OriginLowerCockpitContact& contact, Bounds trajectory_union,
+    std::size_t cells,
+    const detail::BoardingRouteIntermediateRootZ01WorldLimits& limits,
+    Work& work, CellBounds get, Failure fail, bool& union_complete) -> bool {
+  union_complete = false;
+  if (!charge(work.domain_union_checks, limits.domain_union_checks)) {
+    fail(Condition::domain_capacity, {});
+    return false;
+  }
+  auto covered = detail::covers_lower_cockpit_bounds(
+      contact, {trajectory_union.lower, trajectory_union.upper});
+  if (!covered) {
+    fail(Condition::invalid_binding, {});
+    return false;
+  }
+  if (*covered) {
+    union_complete = true;
+    return true;
+  }
+  for (std::size_t cell = 0; cell < cells; ++cell) {
+    if (!charge(work.domain_cell_checks, limits.domain_cell_checks)) {
+      fail(Condition::domain_capacity, cell);
+      return false;
+    }
+    auto b = get(cell);
+    if (!b) return false;
+    covered =
+        detail::covers_lower_cockpit_bounds(contact, {b->lower, b->upper});
+    if (!covered) {
+      fail(Condition::invalid_binding, cell);
+      return false;
+    }
+    if (!*covered) {
+      fail(Condition::domain_uncovered, cell);
+      return false;
+    }
+  }
+  return true;
+}
+// One pair against one immutable union, then precisely its retained cells.
+// Proposals/axes are separate work. A lowered preparation cap conservatively
+// refuses before an eager-list call, including its possible early broad path.
+template <class CellProxy, class PairKernel, class Failure>
+auto root_z01_triangle_assess(
+    const std::array<Vec, 3>& triangle, const Bounds& trajectory_union,
+    std::size_t cells,
+    const detail::BoardingRouteIntermediateRootZ01WorldLimits& limits,
+    Work& work, CellProxy get, PairKernel pair_kernel, Failure fail,
+    bool allow_sole = true, bool strict_boundary = false) -> bool {
+  if (!charge(work.triangle_union_pairs, limits.triangle_union_pairs)) {
+    fail(Condition::pair_capacity, {});
+    return false;
+  }
+  if (separated(trajectory_union, triangle_bounds(triangle), !strict_boundary))
+    return true;
+  for (std::size_t cell = 0; cell < cells; ++cell) {
+    if (!charge(work.refined_triangle_pairs, limits.refined_triangle_pairs)) {
+      fail(Condition::pair_capacity, cell);
+      return false;
+    }
+    auto p = get(cell);
+    if (!p) return false;
+    if (!p->arithmetic_supported) {
+      fail(Condition::unsupported_arithmetic, cell);
+      return false;
+    }
+    if (allow_sole && p->sole_expression_identity &&
+        std::ranges::all_of(triangle,
+                            [&](Vec v) { return v.y <= p->sole_plane; })) {
+      ++work.sole_triangle_exclusions;
+      continue;
+    }
+    const auto remaining = limits.axes - work.axes_examined;
+    const auto allowance = static_cast<std::size_t>(
+        std::min<std::uint64_t>(remaining, limits.pair_axes));
+    if (allowance == 0) {
+      fail(Condition::axis_capacity, cell);
+      return false;
+    }
+    if (limits.direction_entries_prepared - work.direction_entries_prepared <
+        16) {
+      fail(Condition::preparation_capacity, cell);
+      return false;
+    }
+    auto proof = pair_kernel(p->solid, triangle, allowance);
+    if (!proof || proof->axes_examined > allowance) {
+      fail(Condition::unsupported_arithmetic, cell);
+      return false;
+    }
+    work.axes_examined += proof->axes_examined;
+    if (proof->axes_examined != 0) work.direction_entries_prepared += 16;
+    if (!proof->arithmetic_supported) {
+      fail(Condition::unsupported_arithmetic, cell);
+      return false;
+    }
+    if (!proof->certified ||
+        (strict_boundary && (!proof->certificate_gap.supported ||
+                             !std::isfinite(proof->certificate_gap.lower) ||
+                             proof->certificate_gap.lower <= 0))) {
+      fail(proof->truncated ? Condition::axis_capacity
+                            : Condition::sheet_unresolved,
+           cell);
+      return false;
+    }
+  }
+  return true;
+}
+struct RootZ01WorldStage {
+  BoardingRouteIntermediateRootZ01Diagnostic& result;
+  const detail::BoardingRouteIntermediateRootZ01WorldLimits& limits;
+  const OriginBoardingInitialMaterial& material;
+  const OriginBoardingCheckpointMaterialExtension* extension;
+  const OriginBoardingHatchSealMaterial* seal;
+  const OriginBoardingSeparationRingMaterial* ring;
+  void* proxy_context;
+  detail::RootZ01ProxyGetter get_proxy;
+  BoardingRouteIntermediateRootZ01Refusal& reason;
+  bool domain_complete{}, material_complete{}, halo_complete{};
+  detail::BoardingRouteCheckpointBoundaryLimits boundary_limits;
+  BoundaryWork& boundary;
+  auto refuse(Condition why, std::optional<std::size_t> part = {},
+              std::optional<std::size_t> source = {},
+              std::optional<std::size_t> cell = {}, std::string_view name = {},
+              Relation relation = {},
+              std::optional<std::uint32_t> triangle = {},
+              std::optional<LowerCockpitTriangleKey> key = {}) const -> void {
+    if (reason.world.condition == Condition::none) {
+      auto& r = reason.world;
+      r.condition = why;
+      r.part = part;
+      r.source = source;
+      r.cell = cell;
+      r.source_object = name;
+      r.relation = relation;
+      r.triangle = triangle;
+      r.source_key = key;
+      if (cell && *cell < result.cells.size()) {
+        const auto& c = result.cells[*cell].support_self;
+        r.global_first = c.global_first;
+        r.global_last = c.global_last;
+        r.phase_index = c.phase_index;
+        reason.first = c.global_first;
+        reason.last = c.global_last;
+        reason.local_first = c.phase.first;
+        reason.local_last = c.phase.last;
+        reason.phase_index = c.phase_index;
+        reason.cell = cell;
+        reason.event = result.cells[*cell].event;
+      }
+    }
+    result.complete = result.route_qualified = false;
+  }
+  using RingAccess = detail::BoardingSeparationRingMaterialAccess;
+  auto ring_relation(std::size_t source) const -> bool {
+    return ring && RingAccess::encloser_count(*ring, material, source) == 8;
+  }
+  auto ring_enclosure(std::size_t source, std::size_t ordinal,
+                      const Proxy& proxy, std::size_t axes) const
+      -> std::expected<detail::MaterialEnclosureMathEvidence, std::string> {
+    const auto* capsule = RingAccess::capsule(*ring, material, source, ordinal);
+    if (!capsule)
+      return std::unexpected("WORLD04 genuine separation capsule required");
+    return detail::initial_material_capsule_math(
+        proxy.solid, 0, capsule->first, capsule->second, capsule->radius, axes);
+  }
+  using SealAccess = detail::BoardingHatchSealMaterialAccess;
+  auto seal_relation(std::size_t source) const -> bool {
+    return seal && SealAccess::encloser_count(*seal, material, source) == 8;
+  }
+  using ExtensionAccess = detail::BoardingCheckpointMaterialExtensionAccess;
+  using ExtensionRelation = detail::BoardingCheckpointMaterialExtensionRelation;
+  auto extension_relation(std::size_t source) const -> ExtensionRelation {
+    return extension ? ExtensionAccess::relation(*extension, material, source)
+                     : ExtensionRelation::none;
+  }
+  auto seal_enclosure(std::size_t source, std::size_t ordinal,
+                      const Proxy& proxy, std::size_t axes) const
+      -> std::expected<detail::MaterialEnclosureMathEvidence, std::string> {
+    const auto* capsule = SealAccess::capsule(*seal, material, source, ordinal);
+    if (!capsule)
+      return std::unexpected("WORLD03 genuine seal capsule required");
+    return detail::initial_material_capsule_math(
+        proxy.solid, 0, capsule->first, capsule->second, capsule->radius, axes);
+  }
+  auto encloser_count(std::size_t source) const -> std::size_t {
+    return ring_relation(source) || seal_relation(source) ||
+                   extension_relation(source) ==
+                       ExtensionRelation::frame_annulus
+               ? 8
+               : detail::root_z01_material_encloser_count(material, source);
+  }
+  auto triangle_count(std::size_t source) const -> std::size_t {
+    if (extension_relation(source) == ExtensionRelation::retained_cut_skin ||
+        extension_relation(source) ==
+            ExtensionRelation::closed_frame_boundary) {
+      const auto* mesh = ExtensionAccess::mesh(*extension, material, source);
+      return mesh ? mesh->triangles.size() : 0;
+    }
+    return root_z01_base_triangle_count(material, source);
+  }
+  auto triangle(std::size_t source, std::size_t ordinal, bool& collapsed) const
+      -> std::expected<std::array<Vec, 3>, std::string> {
+    return (extension_relation(source) ==
+                ExtensionRelation::retained_cut_skin ||
+            extension_relation(source) ==
+                ExtensionRelation::closed_frame_boundary)
+               ? ExtensionAccess::triangle(*extension, material, source,
+                                           ordinal, collapsed)
+               : root_z01_base_triangle(material, source, ordinal, collapsed);
+  }
+  auto boundary_exterior(std::size_t source, std::size_t part, std::size_t cell,
+                         Bounds envelope,
+                         const detail::MaterialSourceRecord& record) -> bool {
+    auto condition = reserve_boundary_support(boundary, boundary_limits);
+    if (condition == Condition::none) {
+      auto p = proxy(part, cell);
+      if (!p || !p->arithmetic_supported || !p->original_world_identity)
+        condition = Condition::unsupported_arithmetic;
+      else {
+        auto positive =
+            detail::boarding_source_endpoint_surface_checkpoint_support_math(
+                p->solid, 0, {0, 0, 1});
+        auto negative =
+            detail::boarding_source_endpoint_surface_checkpoint_support_math(
+                p->solid, 0, {0, 0, -1});
+        if (!positive || !negative)
+          condition = Condition::unsupported_arithmetic;
+        else
+          condition = boundary_witness(*positive, *negative, envelope,
+                                       boundary_limits, boundary);
+      }
+    }
+    if (condition == Condition::none) return true;
+    if (condition == Condition::unsupported_arithmetic)
+      result.arithmetic_supported = false;
+    refuse(condition, part, source, cell, record.name, record.relation);
+    return false;
+  }
+  auto proxy(std::size_t part, std::size_t cell) const
+      -> std::expected<Proxy, std::string> {
+    return get_proxy(proxy_context, cell, part, reason);
+  }
+  auto source_triangle(const std::array<Vec, 3>& triangle, std::size_t part,
+                       std::optional<std::size_t> source, std::string_view name,
+                       Relation relation, std::uint32_t ordinal,
+                       std::optional<LowerCockpitTriangleKey> key = {},
+                       bool allow_sole = true) const -> bool {
+    auto failure = [&](Condition why, std::optional<std::size_t> cell) {
+      if (why == Condition::unsupported_arithmetic)
+        result.arithmetic_supported = false;
+      refuse(why, part, source, cell, name, relation, ordinal, key);
+    };
+    auto get = [&](std::size_t cell) -> std::expected<Proxy, std::string> {
+      const bool capacity =
+          result.work.world.proxy_preparations >= limits.proxy_preparations;
+      auto p = proxy(part, cell);
+      if (!p || !p->arithmetic_supported || !p->original_world_identity) {
+        failure(
+            capacity ? Condition::proxy_capacity
+            : reason.condition ==
+                    BoardingRouteIntermediateRootZ01Condition::invalid_binding
+                ? Condition::invalid_binding
+                : Condition::unsupported_arithmetic,
+            cell);
+        return std::unexpected(
+            "WORLD triangle genuine current-cell proxy required");
+      }
+      return p;
+    };
+    auto kernel = [](const Solid& solid, const std::array<Vec, 3>& t,
+                     std::size_t axes) {
+      return detail::boarding_checkpoint_world_finite_triangle_pair_math(
+          solid, 0, t, axes);
+    };
+    return root_z01_triangle_assess(
+        triangle, result.world_parts[part].trajectory_union,
+        result.cells.size(), limits, result.work.world, get, kernel, failure,
+        allow_sole,
+        source && extension_relation(*source) ==
+                      ExtensionRelation::closed_frame_boundary);
+  }
+  auto enclosure(std::size_t source, std::size_t part, std::size_t cell,
+                 std::size_t ordinal,
+                 const detail::MaterialSourceRecord& r) const -> bool {
+    return enclosure_assess(source, part, cell, ordinal, r);
+  }
+  auto enclosure_assess(std::size_t source, std::size_t part, std::size_t cell,
+                        std::size_t ordinal,
+                        const detail::MaterialSourceRecord& r) const -> bool {
+    auto& w = result.work.world;
+    if (!charge(w.refined_enclosure_relations,
+                limits.refined_enclosure_relations)) {
+      refuse(Condition::pair_capacity, part, source, cell, r.name, r.relation);
+      return false;
+    }
+    const bool capacity = w.proxy_preparations >= limits.proxy_preparations;
+    auto p = proxy(part, cell);
+    if (!p || !p->arithmetic_supported || !p->original_world_identity) {
+      if (!capacity) result.arithmetic_supported = false;
+      refuse(capacity ? Condition::proxy_capacity
+             : reason.condition ==
+                     BoardingRouteIntermediateRootZ01Condition::invalid_binding
+                 ? Condition::invalid_binding
+                 : Condition::unsupported_arithmetic,
+             part, source, cell, r.name, r.relation);
+      return false;
+    }
+    const auto allowance = static_cast<std::size_t>(std::min<std::uint64_t>(
+        limits.pair_axes, limits.axes - w.axes_examined));
+    if (allowance == 0) {
+      refuse(Condition::axis_capacity, part, source, cell, r.name, r.relation);
+      return false;
+    }
+    const bool hatch = seal_relation(source);
+    const bool separation = ring_relation(source);
+    const bool eager =
+        hatch || separation || r.relation == Relation::service_enclosure;
+    if (eager &&
+        limits.direction_entries_prepared - w.direction_entries_prepared < 16) {
+      refuse(Condition::preparation_capacity, part, source, cell, r.name,
+             r.relation);
+      return false;
+    }
+    // Every authentic safe capsule call prepares all sixteen entries before
+    // trial/projection, including a subsequent arithmetic refusal.
+    auto proof =
+        separation ? ring_enclosure(source, ordinal, *p, allowance)
+        : hatch    ? seal_enclosure(source, ordinal, *p, allowance)
+        : extension_relation(source) == ExtensionRelation::frame_annulus
+            ? detail::initial_material_primitive_math(
+                  p->solid, 0,
+                  ExtensionAccess::planes(*extension, material, source,
+                                          ordinal),
+                  allowance)
+            : detail::root_z01_material_enclosure(material, source, ordinal,
+                                                  p->solid, allowance);
+    if (eager && proof && proof->axes_examined != 0)
+      w.direction_entries_prepared += 16;
+    if (!proof || proof->axes_examined > allowance) {
+      result.arithmetic_supported = false;
+      refuse(Condition::unsupported_arithmetic, part, source, cell, r.name,
+             r.relation);
+      return false;
+    }
+    w.axes_examined += proof->axes_examined;
+    if (!proof->arithmetic_supported) {
+      result.arithmetic_supported = false;
+      refuse(Condition::unsupported_arithmetic, part, source, cell, r.name,
+             r.relation);
+      return false;
+    }
+    if (!proof->certified) {
+      const auto required = eager ? 16U : 6U;
+      refuse(allowance < required ? Condition::axis_capacity
+                                  : Condition::enclosure_unresolved,
+             part, source, cell, r.name, r.relation);
+      return false;
+    }
+    return true;
+  }
+};
+auto root_z01_prepare_unions(RootZ01WorldStage& stage) -> bool {
+  auto& out = stage.result;
+  const auto* contact =
+      detail::BoardingRouteIntermediateRootZ01Access::binding(out.source)
+          ->contact();
+  if (!contact || out.cells.size() > 1024 ||
+      !detail::BoardingRouteIntermediateRootZ01Access::valid(out.source)) {
+    stage.refuse(Condition::invalid_binding);
+    return false;
+  }
+  for (std::size_t part = 0; part < 15; ++part) {
+    auto& summary = out.world_parts[part];
+    summary.id = static_cast<BoardingBodyPartId>(part);
+    for (std::size_t cell = 0; cell < out.cells.size(); ++cell) {
+      if (!charge(out.work.world.union_proxy_preparations,
+                  stage.limits.union_proxy_preparations)) {
+        stage.refuse(Condition::proxy_capacity, part, {}, cell);
+        return false;
+      }
+      const bool capacity =
+          out.work.world.proxy_preparations >= stage.limits.proxy_preparations;
+      auto proxy = stage.proxy(part, cell);
+      if (!proxy || !proxy->arithmetic_supported ||
+          !proxy->original_world_identity || !valid(proxy->bounds)) {
+        if (!capacity) out.arithmetic_supported = false;
+        stage.refuse(capacity ? Condition::proxy_capacity
+                              : Condition::unsupported_arithmetic,
+                     part, {}, cell);
+        return false;
+      }
+      summary.trajectory_union =
+          cell == 0 ? proxy->bounds
+                    : unite(summary.trajectory_union, proxy->bounds);
+    }
+    summary.original_world_identity = true;
+    auto get = [&](std::size_t cell) -> std::expected<Bounds, std::string> {
+      const bool capacity =
+          out.work.world.proxy_preparations >= stage.limits.proxy_preparations;
+      auto p = stage.proxy(part, cell);
+      if (!p || !p->arithmetic_supported || !p->original_world_identity) {
+        if (!capacity) out.arithmetic_supported = false;
+        stage.refuse(capacity ? Condition::proxy_capacity
+                              : Condition::unsupported_arithmetic,
+                     part, {}, cell);
+        return std::unexpected("WORLD domain genuine cell proxy required");
+      }
+      return p->bounds;
+    };
+    auto failure = [&](Condition why, std::optional<std::size_t> cell) {
+      stage.refuse(why, part, {}, cell);
+    };
+    if (!root_z01_domain_assess(*contact, summary.trajectory_union,
+                                out.cells.size(), stage.limits, out.work.world,
+                                get, failure, summary.union_domain_complete))
+      return false;
+    summary.domain_complete = true;
+  }
+  stage.domain_complete = true;
+  return true;
+}
+auto root_z01_material_assess(RootZ01WorldStage& stage) -> bool {
+  auto& out = stage.result;
+  auto& w = out.work.world;
+  const auto view = detail::root_z01_material_view(stage.material);
+  if (!view) {
+    stage.refuse(Condition::invalid_binding);
+    return false;
+  }
+  for (std::size_t source = 0; source < view->sources.size(); ++source) {
+    if (!charge(w.roster_entries, stage.limits.roster_entries)) {
+      stage.refuse(Condition::roster_capacity, {}, source);
+      return false;
+    }
+    const auto* r = &view->sources[source];
+    if (r->removed) continue;
+    if (!charge(w.effective_sources, stage.limits.effective_sources)) {
+      stage.refuse(Condition::roster_capacity, {}, source, {}, r->name,
+                   r->relation);
+      return false;
+    }
+    auto envelope =
+        detail::initial_material_source_envelope(stage.material, source);
+    if (!envelope || !valid(*envelope)) {
+      stage.refuse(Condition::source_identity, {}, source, {}, r->name,
+                   r->relation);
+      return false;
+    }
+    std::array<bool, 15> pending{};
+    for (std::size_t part = 0; part < 15; ++part) {
+      if (!charge(w.union_envelope_pairs, stage.limits.union_envelope_pairs)) {
+        stage.refuse(Condition::envelope_capacity, part, source, {}, r->name,
+                     r->relation);
+        return false;
+      }
+      auto& summary = out.world_parts[part];
+      if (separated(summary.trajectory_union, *envelope)) {
+        ++summary.material_sources_closed;
+        summary.material_cells_closed += out.cells.size();
+        continue;
+      }
+      const auto enclosers = stage.encloser_count(source);
+      const auto added = stage.extension_relation(source);
+      const bool frame =
+          added == RootZ01WorldStage::ExtensionRelation::frame_annulus;
+      const bool hatch = stage.seal_relation(source);
+      const bool separation = stage.ring_relation(source);
+      const bool boundary =
+          added == RootZ01WorldStage::ExtensionRelation::closed_frame_boundary;
+      const bool sheet =
+          r->relation == Relation::shell_sheet ||
+          added == RootZ01WorldStage::ExtensionRelation::retained_cut_skin;
+      if (r->relation == Relation::service_enclosure ||
+          r->relation == Relation::support_enclosure || frame || hatch ||
+          separation) {
+        if (enclosers == 0) {
+          stage.refuse(Condition::source_identity, part, source, {}, r->name,
+                       r->relation);
+          return false;
+        }
+        for (std::size_t n = 0; n < enclosers; ++n)
+          if (!charge(w.base_enclosure_relations,
+                      stage.limits.base_enclosure_relations)) {
+            stage.refuse(Condition::pair_capacity, part, source, {}, r->name,
+                         r->relation);
+            return false;
+          }
+      }
+      for (std::size_t cell = 0; cell < out.cells.size(); ++cell) {
+        if (!charge(w.refined_envelope_pairs,
+                    stage.limits.refined_envelope_pairs)) {
+          stage.refuse(Condition::envelope_capacity, part, source, cell,
+                       r->name, r->relation);
+          return false;
+        }
+        const bool capacity =
+            w.proxy_preparations >= stage.limits.proxy_preparations;
+        auto p = stage.proxy(part, cell);
+        if (!p || !p->arithmetic_supported || !p->original_world_identity) {
+          if (!capacity) out.arithmetic_supported = false;
+          stage.refuse(capacity ? Condition::proxy_capacity
+                                : Condition::unsupported_arithmetic,
+                       part, source, cell, r->name, r->relation);
+          return false;
+        }
+        if (separated(p->bounds, *envelope)) continue;
+        if (!frame && !sheet && !boundary && !hatch && !separation &&
+            (r->relation == Relation::unknown ||
+             r->relation == Relation::stowed)) {
+          stage.refuse(Condition::missing_relation, part, source, cell, r->name,
+                       r->relation);
+          return false;
+        }
+        if (boundary &&
+            !stage.boundary_exterior(source, part, cell, *envelope, *r))
+          return false;
+        if (sheet || boundary) {
+          pending[part] = true;
+          continue;
+        }
+        for (std::size_t n = 0; n < enclosers; ++n)
+          if (!stage.enclosure(source, part, cell, n, *r)) return false;
+      }
+      if (!pending[part]) {
+        ++summary.material_sources_closed;
+        summary.material_cells_closed += out.cells.size();
+      }
+    }
+    if (!std::ranges::any_of(pending, [](bool p) { return p; })) continue;
+    const auto count = stage.triangle_count(source);
+    if (count == 0) {
+      stage.refuse(Condition::source_identity, {}, source, {}, r->name,
+                   r->relation);
+      return false;
+    }
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+      if (!charge(w.material_triangle_visits,
+                  stage.limits.material_triangle_visits)) {
+        stage.refuse(Condition::triangle_capacity, {}, source, {}, r->name,
+                     r->relation, static_cast<std::uint32_t>(ordinal));
+        return false;
+      }
+      bool collapsed{};
+      auto triangle = stage.triangle(source, ordinal, collapsed);
+      if (!triangle) {
+        stage.refuse(Condition::source_identity, {}, source, {}, r->name,
+                     r->relation, static_cast<std::uint32_t>(ordinal));
+        return false;
+      }
+      if (collapsed) {
+        ++w.collapsed_triangles;
+        continue;
+      }
+      for (std::size_t part = 0; part < 15; ++part)
+        if (pending[part]) {
+          if (!stage.source_triangle(
+                  *triangle, part, source, r->name, r->relation,
+                  static_cast<std::uint32_t>(ordinal), {},
+                  stage.extension_relation(source) ==
+                      RootZ01WorldStage::ExtensionRelation::none))
+            return false;
+          ++out.world_parts[part].material_triangles_closed;
+        }
+    }
+    for (std::size_t part = 0; part < 15; ++part)
+      if (pending[part]) {
+        ++out.world_parts[part].material_sources_closed;
+        out.world_parts[part].material_cells_closed += out.cells.size();
+      }
+  }
+  if (w.roster_entries != 1759 || w.effective_sources != 1751) {
+    stage.refuse(Condition::source_identity);
+    return false;
+  }
+  for (const auto& p : out.world_parts)
+    if (p.material_sources_closed != 1751 ||
+        p.material_cells_closed != 1751 * out.cells.size()) {
+      stage.refuse(Condition::source_identity, static_cast<std::size_t>(p.id));
+      return false;
+    }
+  stage.material_complete = true;
+  return true;
+}
+auto root_z01_halo_callback(
+    void* cookie, const detail::LowerCockpitEffectiveTriangle& triangle)
+    -> bool {
+  auto& stage = *static_cast<RootZ01WorldStage*>(cookie);
+  auto& out = stage.result;
+  if (!triangle.obstacle ||
+      triangle.key.buffer != LowerCockpitContactBuffer::halo ||
+      !std::ranges::all_of(triangle.obstacle->points,
+                           [](Vec p) { return finite(p); })) {
+    stage.refuse(Condition::source_identity, {}, {}, {}, triangle.source_object,
+                 {}, triangle.key.triangle, triangle.key);
+    return false;
+  }
+  ++out.work.world.halo_triangle_visits;
+  for (std::size_t part = 0; part < 15; ++part) {
+    if (!stage.source_triangle(triangle.obstacle->points, part, {},
+                               triangle.source_object, Relation::shell_sheet,
+                               triangle.key.triangle, triangle.key))
+      return false;
+    ++out.world_parts[part].halo_triangles_closed;
+  }
+  return true;
+}
+auto root_z01_halo_assess(RootZ01WorldStage& stage) -> bool {
+  auto& out = stage.result;
+  const auto* contact =
+      detail::BoardingRouteIntermediateRootZ01Access::binding(out.source)
+          ->contact();
+  if (!contact) {
+    stage.refuse(Condition::invalid_binding);
+    return false;
+  }
+  auto visited = detail::visit_lower_cockpit_halo(
+      *contact, &stage, root_z01_halo_callback,
+      static_cast<std::size_t>(stage.limits.halo_metadata_visits),
+      static_cast<std::size_t>(stage.limits.halo_triangle_visits));
+  if (!visited) {
+    stage.refuse(Condition::source_identity);
+    return false;
+  }
+  out.work.world.halo_metadata_visits = visited->metadata_examined;
+  if (visited->visited_triangles != out.work.world.halo_triangle_visits) {
+    stage.refuse(Condition::source_identity);
+    return false;
+  }
+  if (!visited->complete) {
+    stage.refuse(
+        visited->condition ==
+                detail::LowerCockpitHaloVisitCondition::metadata_capacity
+            ? Condition::roster_capacity
+            : Condition::triangle_capacity,
+        {}, {}, {}, {}, Relation::shell_sheet, {}, visited->next_key);
+    return false;
+  }
+  if (visited->total_metadata != 75 || visited->total_triangles != 8100 ||
+      !visited->metadata_complete) {
+    stage.refuse(Condition::source_identity);
+    return false;
+  }
+  for (const auto& p : out.world_parts)
+    if (p.halo_triangles_closed != 8100) {
+      stage.refuse(Condition::source_identity, static_cast<std::size_t>(p.id));
+      return false;
+    }
+  stage.halo_complete = true;
+  return true;
+}
+} // namespace
+} // namespace apsis_drift
+
+namespace apsis_drift::detail {
+auto root_z01_world_sweep(BoardingRouteIntermediateRootZ01Diagnostic& d,
+                          const BoardingRouteIntermediateRootZ01Limits& l,
+                          void* proxy_context, RootZ01ProxyGetter get_proxy,
+                          BoardingRouteIntermediateRootZ01Refusal& r)
+    -> BoardingRouteIntermediateRootZ01State {
+  using State = BoardingRouteIntermediateRootZ01State;
+  using Why = BoardingRouteIntermediateRootZ01Condition;
+  const auto* material =
+      BoardingRouteIntermediateRootZ01Access::material(d.source);
+  const auto* extension =
+      BoardingRouteIntermediateRootZ01Access::extension(d.source);
+  const auto* seal = BoardingRouteIntermediateRootZ01Access::seal(d.source);
+  const auto* ring = BoardingRouteIntermediateRootZ01Access::ring(d.source);
+  if (!material || !extension || !seal || !ring || !d.source_enrolled ||
+      d.cells.empty() || d.cells.size() > 1024 || !get_proxy) {
+    r.world.condition = Condition::invalid_binding;
+    r.condition = r.predicate_condition = Why::invalid_binding;
+    r.stage = BoardingRouteIntermediateRootZ01Stage::world;
+    return State::identity;
+  }
+  RootZ01WorldStage stage{d,
+                          l.world,
+                          *material,
+                          extension,
+                          seal,
+                          ring,
+                          proxy_context,
+                          get_proxy,
+                          r,
+                          false,
+                          false,
+                          false,
+                          {l.world.boundary_witness_attempts,
+                           l.world.boundary_signed_support_calls,
+                           l.world.boundary_width_attempts},
+                          d.work.boundary};
+  const bool complete = root_z01_prepare_unions(stage) &&
+                        root_z01_material_assess(stage) &&
+                        root_z01_halo_assess(stage);
+  if (!complete) {
+    if (r.world.condition == Condition::none)
+      stage.refuse(Condition::source_identity);
+    const auto why = r.world.condition;
+    const bool capacity =
+        why == Condition::output_capacity ||
+        why == Condition::roster_capacity ||
+        why == Condition::domain_capacity || why == Condition::proxy_capacity ||
+        why == Condition::envelope_capacity ||
+        why == Condition::triangle_capacity ||
+        why == Condition::pair_capacity || why == Condition::axis_capacity ||
+        why == Condition::preparation_capacity ||
+        why == Condition::sole_guard_capacity ||
+        why == Condition::boundary_witness_capacity ||
+        why == Condition::boundary_support_capacity ||
+        why == Condition::boundary_width_capacity;
+    r.condition = r.predicate_condition =
+        capacity                                   ? Why::work_capacity
+        : why == Condition::unsupported_arithmetic ? Why::unsupported_arithmetic
+        : why == Condition::invalid_binding        ? Why::invalid_binding
+                                                   : Why::world_refused;
+    r.stage = BoardingRouteIntermediateRootZ01Stage::world;
+    return capacity                                   ? State::capacity
+           : why == Condition::unsupported_arithmetic ? State::unsupported
+           : why == Condition::invalid_binding        ? State::identity
+                                                      : State::unresolved;
+  }
+  for (auto& p : d.world_parts)
+    p.complete = p.original_world_identity && p.domain_complete &&
+                 p.material_sources_closed == 1751 &&
+                 p.halo_triangles_closed == 8100;
+  for (auto& c : d.cells) {
+    for (std::size_t p = 0; p < 15; ++p) {
+      c.world.material_sources_closed[p] =
+          static_cast<std::uint32_t>(d.world_parts[p].material_sources_closed);
+      c.world.material_triangles_closed[p] = static_cast<std::uint32_t>(
+          d.world_parts[p].material_triangles_closed);
+      c.world.halo_triangles_closed[p] =
+          static_cast<std::uint32_t>(d.world_parts[p].halo_triangles_closed);
+      c.world.body_identity[p] = d.world_parts[p].original_world_identity;
+      c.world.domain_complete[p] = d.world_parts[p].domain_complete;
+      c.world.material_complete[p] = stage.material_complete;
+      c.world.halo_complete[p] = stage.halo_complete;
+    }
+    c.world.arithmetic_supported = d.arithmetic_supported;
+    c.world.complete =
+        stage.domain_complete && stage.material_complete && stage.halo_complete;
+  }
+  d.world_complete =
+      stage.domain_complete && stage.material_complete && stage.halo_complete;
+  return State::accepted;
+}
+} // namespace apsis_drift::detail

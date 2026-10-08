@@ -99,3 +99,10 @@ auto intermediate_pause_pressure_bridge(
     const BoardingIntermediatePauseLimits&,
     BoardingIntermediatePauseSupportDiagnostic&) -> void;
 } // namespace apsis_drift::detail
+
+namespace apsis_drift::detail {
+// Same-base identity only; no contact/sweep success is transferred.
+auto root_z01_pause_base_matches(const OriginBoardingIntermediatePauseSupport&,
+                                 const NativeCraftBinding&,
+                                 const OriginBoardingBootSupport&) -> bool;
+} // namespace apsis_drift::detail
