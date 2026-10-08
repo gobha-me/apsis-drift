@@ -117,6 +117,9 @@ player's station-to-flight journey.
   [structured inventory](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_TEST_INVENTORY.json):
   one same-domain chart-factor program. [Implementation and first observation](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_IMPLEMENTATION.md)
   retain the unavailable restricted PORT knee interval before a generated height or original phase.
+- [Original knee-domain coverage audit](ORIGIN_BOARDING_KNEE_DOMAIN_COVERAGE_AUDIT.md):
+  unchanged ankle boundaries, conditional coverage ceilings and the recorded positive PORT offset;
+  actual feasibility and full boarding remain open.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
