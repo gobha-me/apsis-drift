@@ -1261,8 +1261,18 @@ auto prefix_mask(std::uint64_t count) -> std::uint64_t {
     if (h.certified)
       check(h.arithmetic_supported && h.nominal_unit_identity &&
                 h.upright_pelvis_identity && h.original_slab_identity &&
-                h.extent_evaluated && h.axis[1].upper < 0 &&
-                h.extent.upper < h.limit.lower && h.strict_gap.lower > 0,
+                h.extent_evaluated &&
+                finite(Scalar{h.axis[1].lower, h.axis[1].upper,
+                              h.arithmetic_supported}) &&
+                finite(Scalar{h.transverse.lower, h.transverse.upper,
+                              h.arithmetic_supported}) &&
+                finite(Scalar{h.extent.lower, h.extent.upper,
+                              h.arithmetic_supported}) &&
+                finite(Scalar{h.limit.lower, h.limit.upper,
+                              h.arithmetic_supported}) &&
+                finite(Scalar{h.strict_gap.lower, h.strict_gap.upper,
+                              h.arithmetic_supported}) &&
+                h.axis[1].upper < 0 && h.extent.upper < h.limit.lower,
             "Complement needs genuine negative unit axis and strict "
             "full-capsule proof");
   }
