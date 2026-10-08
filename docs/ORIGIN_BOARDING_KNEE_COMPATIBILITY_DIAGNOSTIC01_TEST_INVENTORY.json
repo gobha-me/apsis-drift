@@ -1,0 +1,2060 @@
+{
+  "status": "REGISTERED_SOURCE_FORECAST_ONLY_NO_IMPLEMENTATION_EVALUATION",
+  "issue": 535,
+  "matched_method": {
+    "path": "docs/ORIGIN_BOARDING_KNEE_COMPATIBILITY_DIAGNOSTIC01.md",
+    "sha256": "745768ce7580919cdde9df14262629e64c2bf81deda02e18b1703b36148a5a71"
+  },
+  "matched_core_literal_owner_input": {
+    "path": "build-native/issue515-validation/diagnostic01-author-complete-literal-owner-proposal-v3.json",
+    "sha256": "e94b4b3cd8c7ffd4d416dd9a5ee966e7fb80b1f6cd32671d2ddab358075d7a18",
+    "role": "historical author construction binding only; complete normative imported fields embedded below, no ignored-file availability dependency"
+  },
+  "original_source_inputs": [
+    {
+      "path": "docs/ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06.md",
+      "sha256": "4313aa484999e00d29b6247229bfc8c7f9128d72b74f8b0c0c345db698e4311d"
+    },
+    {
+      "path": "src/origin_boarding_planted_legs.cpp",
+      "sha256": "16f12e44f1f42048724ff0b2ed39a67a483bcb1eb22e999828eb3ea02854f23d"
+    },
+    {
+      "path": "src/origin_boarding_intermediate_endpoint01.cpp",
+      "sha256": "000ddb30745dec49f8ee2db972a123e5db50f7c41d07ef2031052b93441ace4d"
+    },
+    {
+      "path": "include/apsis_drift/origin_boarding_intermediate_pause_support.hpp",
+      "sha256": "bbdd67272511f4f29ccd7d177f078a88ab0f3ff8ce01c5d67d078ca8c318921b"
+    },
+    {
+      "path": "test/origin_boarding_intermediate_endpoint06_test.cpp",
+      "sha256": "c6f18b26f5214837f9df3d4b1442b090277b05c8720785b44b11c69c9fdba366"
+    },
+    {
+      "path": "docs/ORIGIN_BOARDING_KNEE_DOMAIN_COVERAGE_AUDIT.md",
+      "sha256": "7a27317f48d037430c339a72572e5519bb6248a896de7e5ea1391abb24df4cae"
+    }
+  ],
+  "scope": {
+    "one_creator": 1,
+    "max_consumers": 36,
+    "default_public_A01": 1,
+    "no_Candidate_Cell_Y_Key_Context_Token_graph_body_interval_or_fixture": true,
+    "all_actual_layout_frame_library_native_error_feasibility": "UNKNOWN",
+    "numeric_evaluations": 0
+  },
+  "api": {
+    "public": "assess_origin_boarding_knee_compatibility_diagnostic01(const OriginBoardingIntermediatePauseSupport&) -> BoardingKneeCompatibilityDiagnostic01Expected",
+    "private": "knee_compatibility_diagnostic01_bounded(const OriginBoardingIntermediatePauseSupport&, BoardingKneeCompatibilityDiagnostic01Limits = {}) -> BoardingKneeCompatibilityDiagnostic01Expected",
+    "issuer": "fresh private source_enroll adapter -> authenticated EMPTY Endpoint03 enrollment carrier only; no constructor/query/old report admission",
+    "version": 1,
+    "candidate": "NONE; exactly one PORT compatibility purpose",
+    "construction": "Expected result(std::in_place, provider); Diagnostic(const Provider&); no standalone/by-value Diagnostic or owning provider temporary"
+  },
+  "limits": {
+    "source_guards": 64,
+    "construction_operations": 255,
+    "construction_guards": 50,
+    "output_bytes": 16777216
+  },
+  "counts": {
+    "operations": 255,
+    "guards": 50,
+    "events": 305,
+    "operation_words": 4,
+    "operation_lastword": "0x7fffffffffffffff",
+    "guard_words": 1,
+    "guard_mask": "0x3ffffffffffff",
+    "operation_cursor_bits": 16,
+    "operation_sentinel": 65535,
+    "guard_cursor_bits": 8,
+    "guard_sentinel": 255,
+    "zero_mask_bits": 16,
+    "prefix_zero_branches": 8
+  },
+  "roster": [
+    {
+      "id": "A01",
+      "kind": "PUBLIC_DEFAULT",
+      "gate": "genuine creator success; safe original FP",
+      "expected": "any authentic structured/error outcome; no success selected"
+    },
+    {
+      "id": "A02",
+      "kind": "ZERO",
+      "field": "source_guards",
+      "value": 0,
+      "gate": "creator and safe FP; output unconditional, other fields A01 structured charged count>0",
+      "expected": "structured source capacity, charged source count0, no prefix/suffix bits"
+    },
+    {
+      "id": "A03",
+      "kind": "ZERO",
+      "field": "construction_operations",
+      "value": 0,
+      "gate": "creator and safe FP; output unconditional, other fields A01 structured charged count>0",
+      "expected": "structured operation capacity at O001 after G01-G06; op0, guards6 written"
+    },
+    {
+      "id": "A04",
+      "kind": "ZERO",
+      "field": "construction_guards",
+      "value": 0,
+      "gate": "creator and safe FP; output unconditional, other fields A01 structured charged count>0",
+      "expected": "structured G01 guard capacity before O001; no op/guard bits"
+    },
+    {
+      "id": "A05",
+      "kind": "ZERO",
+      "field": "output_bytes",
+      "value": 0,
+      "gate": "creator and safe FP; output unconditional, other fields A01 structured charged count>0",
+      "expected": "unexpected compatibility01 output headers; no Diagnostic/source"
+    },
+    {
+      "id": "A06",
+      "kind": "RAISED",
+      "field": "source_guards",
+      "value": 65,
+      "gate": "creator and safe FP",
+      "expected": "unexpected compatibility01 invalid limits, before Diagnostic/source"
+    },
+    {
+      "id": "A07",
+      "kind": "RAISED",
+      "field": "construction_operations",
+      "value": 256,
+      "gate": "creator and safe FP",
+      "expected": "unexpected compatibility01 invalid limits, before Diagnostic/source"
+    },
+    {
+      "id": "A08",
+      "kind": "RAISED",
+      "field": "construction_guards",
+      "value": 51,
+      "gate": "creator and safe FP",
+      "expected": "unexpected compatibility01 invalid limits, before Diagnostic/source"
+    },
+    {
+      "id": "A09",
+      "kind": "RAISED",
+      "field": "output_bytes",
+      "value": 16777217,
+      "gate": "creator and safe FP",
+      "expected": "unexpected compatibility01 invalid limits, before Diagnostic/source"
+    },
+    {
+      "id": "A10",
+      "kind": "USED_MINUS_ONE",
+      "field": "source_guards",
+      "gate": "output REQUIRED-1 after creator/safeFP; otherwise A01 structured used>1",
+      "value": "A01 charged field-1",
+      "expected": "output: structured capacity/output_capacity BEFORE source, required room recorded; otherwise exact first failed source/operation/guard charge with cap unchanged, upcoming cursor, no failed bit, all earned predecessors retained"
+    },
+    {
+      "id": "A11",
+      "kind": "USED_MINUS_ONE",
+      "field": "construction_operations",
+      "gate": "output REQUIRED-1 after creator/safeFP; otherwise A01 structured used>1",
+      "value": "A01 charged field-1",
+      "expected": "output: structured capacity/output_capacity BEFORE source, required room recorded; otherwise exact first failed source/operation/guard charge with cap unchanged, upcoming cursor, no failed bit, all earned predecessors retained"
+    },
+    {
+      "id": "A12",
+      "kind": "USED_MINUS_ONE",
+      "field": "construction_guards",
+      "gate": "output REQUIRED-1 after creator/safeFP; otherwise A01 structured used>1",
+      "value": "A01 charged field-1",
+      "expected": "output: structured capacity/output_capacity BEFORE source, required room recorded; otherwise exact first failed source/operation/guard charge with cap unchanged, upcoming cursor, no failed bit, all earned predecessors retained"
+    },
+    {
+      "id": "A13",
+      "kind": "USED_MINUS_ONE",
+      "field": "output_bytes",
+      "gate": "output REQUIRED-1 after creator/safeFP; otherwise A01 structured used>1",
+      "value": "REQUIRED-1",
+      "expected": "output: structured capacity/output_capacity BEFORE source, required room recorded; otherwise exact first failed source/operation/guard charge with cap unchanged, upcoming cursor, no failed bit, all earned predecessors retained"
+    },
+    {
+      "id": "A14",
+      "kind": "EXACT_USED",
+      "gate": "A01 genuine structured; safe FP",
+      "value": "three actual A01 charged counts plus output REQUIRED",
+      "expected": "same earned semantic partial evidence/digest/counts as A01; no assumption complete"
+    },
+    {
+      "id": "A15",
+      "kind": "FP",
+      "regime": "FE_DOWNWARD",
+      "gate": "platform regime expressible; restore full fenv/rounding/MXCSR; traps unchanged",
+      "expected": "unexpected compatibility01 unsupported floating point; no Diagnostic/source"
+    },
+    {
+      "id": "A16",
+      "kind": "FP",
+      "regime": "FE_UPWARD",
+      "gate": "platform regime expressible; restore full fenv/rounding/MXCSR; traps unchanged",
+      "expected": "unexpected compatibility01 unsupported floating point; no Diagnostic/source"
+    },
+    {
+      "id": "A17",
+      "kind": "FP",
+      "regime": "FE_TOWARDZERO",
+      "gate": "platform regime expressible; restore full fenv/rounding/MXCSR; traps unchanged",
+      "expected": "unexpected compatibility01 unsupported floating point; no Diagnostic/source"
+    },
+    {
+      "id": "A18",
+      "kind": "FP",
+      "regime": "MXCSR_FTZ15",
+      "gate": "platform regime expressible; restore full fenv/rounding/MXCSR; traps unchanged",
+      "expected": "unexpected compatibility01 unsupported floating point; no Diagnostic/source"
+    },
+    {
+      "id": "A19",
+      "kind": "FP",
+      "regime": "MXCSR_DAZ6",
+      "gate": "platform regime expressible; restore full fenv/rounding/MXCSR; traps unchanged",
+      "expected": "unexpected compatibility01 unsupported floating point; no Diagnostic/source"
+    },
+    {
+      "id": "A20",
+      "kind": "FP",
+      "regime": "MXCSR_ROUNDING_NONNEAREST",
+      "gate": "platform regime expressible; restore full fenv/rounding/MXCSR; traps unchanged",
+      "expected": "unexpected compatibility01 unsupported floating point; no Diagnostic/source"
+    },
+    {
+      "id": "A21",
+      "kind": "GENUINE_MOVED_EMPTY",
+      "gate": "genuine provider ownership lifetimes; valid counterparts compare only available A01",
+      "expected": "State identity6/stop invalid_binding2, charged source count1/evaluatedbit0, full translated source cursor0; no prefix/suffix attempts"
+    },
+    {
+      "id": "A22",
+      "kind": "MOVED_TO",
+      "gate": "genuine provider ownership lifetimes; valid counterparts compare only available A01",
+      "expected": "moved-empty charged source identity refuses without prefix/suffix; other owners same authentic current source/evidence if available"
+    },
+    {
+      "id": "A23",
+      "kind": "COPIED_SURVIVOR_AFTER_DISCARD_DESTRUCTION",
+      "gate": "genuine provider ownership lifetimes; valid counterparts compare only available A01",
+      "expected": "moved-empty charged source identity refuses without prefix/suffix; other owners same authentic current source/evidence if available"
+    },
+    {
+      "id": "A24",
+      "kind": "RESTORED_ORIGINAL",
+      "gate": "genuine provider ownership lifetimes; valid counterparts compare only available A01",
+      "expected": "moved-empty charged source identity refuses without prefix/suffix; other owners same authentic current source/evidence if available"
+    },
+    {
+      "id": "A25",
+      "kind": "SOURCE_PRIORITY",
+      "value": {
+        "source_guards": 0,
+        "construction_guards": 0
+      },
+      "gate": "A01 source work>0",
+      "expected": "source capacity before prefix guards; no op/guard bits"
+    },
+    {
+      "id": "A26",
+      "kind": "GUARD_PRIORITY",
+      "value": {
+        "construction_guards": 0,
+        "construction_operations": 0
+      },
+      "gate": "A01 constructor guard work>0 and enrolled source",
+      "expected": "G01 guard capacity before O001; masks0/no failed attempted bit"
+    },
+    {
+      "id": "A27",
+      "kind": "OPERATION_WORD_CROSSING",
+      "cap": 64,
+      "upcoming_operation": 65,
+      "prior_operation_written_count": 64,
+      "prior_guard_written": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "eligibility_bit": 0,
+      "expected": "capacity/operation_capacity; cursor=cap; attempted/written operation prefix exactly cap; guards unchanged after actual literal interleave; upcoming bit absent"
+    },
+    {
+      "id": "A28",
+      "kind": "OPERATION_WORD_CROSSING",
+      "cap": 65,
+      "upcoming_operation": 66,
+      "prior_operation_written_count": 65,
+      "prior_guard_written": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "eligibility_bit": 1,
+      "expected": "capacity/operation_capacity; cursor=cap; attempted/written operation prefix exactly cap; guards unchanged after actual literal interleave; upcoming bit absent"
+    },
+    {
+      "id": "A29",
+      "kind": "OPERATION_WORD_CROSSING",
+      "cap": 128,
+      "upcoming_operation": 129,
+      "prior_operation_written_count": 128,
+      "prior_guard_written": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "eligibility_bit": 2,
+      "expected": "capacity/operation_capacity; cursor=cap; attempted/written operation prefix exactly cap; guards unchanged after actual literal interleave; upcoming bit absent"
+    },
+    {
+      "id": "A30",
+      "kind": "OPERATION_WORD_CROSSING",
+      "cap": 129,
+      "upcoming_operation": 130,
+      "prior_operation_written_count": 129,
+      "prior_guard_written": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "eligibility_bit": 3,
+      "expected": "capacity/operation_capacity; cursor=cap; attempted/written operation prefix exactly cap; guards unchanged after actual literal interleave; upcoming bit absent"
+    },
+    {
+      "id": "A31",
+      "kind": "OPERATION_WORD_CROSSING",
+      "cap": 192,
+      "upcoming_operation": 193,
+      "prior_operation_written_count": 192,
+      "prior_guard_written": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "eligibility_bit": 4,
+      "expected": "capacity/operation_capacity; cursor=cap; attempted/written operation prefix exactly cap; guards unchanged after actual literal interleave; upcoming bit absent"
+    },
+    {
+      "id": "A32",
+      "kind": "OPERATION_WORD_CROSSING",
+      "cap": 193,
+      "upcoming_operation": 194,
+      "prior_operation_written_count": 193,
+      "prior_guard_written": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "eligibility_bit": 5,
+      "expected": "capacity/operation_capacity; cursor=cap; attempted/written operation prefix exactly cap; guards unchanged after actual literal interleave; upcoming bit absent"
+    },
+    {
+      "id": "A33",
+      "kind": "G42_HARD_CHARGE",
+      "cap": 41,
+      "field": "construction_guards",
+      "upcoming_operation": null,
+      "upcoming_guard": 42,
+      "prior_operation_written_count": 221,
+      "prior_guard_through": 41,
+      "eligibility_bit": 6,
+      "conditional_G42_hole_allowed": false,
+      "gate": "actual A01 written predecessor operations/guards; only fresh cuts_collapsed+G42 attempted authorizes G42 hole",
+      "expected": "capacity with exact upcoming cursor/no failed-charge bit; prior scalars/bounds/classifiers/first refusal retained"
+    },
+    {
+      "id": "A34",
+      "kind": "FIRST_SUFFIX_CHARGE",
+      "cap": 221,
+      "field": "construction_operations",
+      "upcoming_operation": 222,
+      "upcoming_guard": null,
+      "prior_operation_written_count": 221,
+      "prior_guard_through": 42,
+      "eligibility_bit": 7,
+      "conditional_G42_hole_allowed": true,
+      "gate": "actual A01 written predecessor operations/guards; only fresh cuts_collapsed+G42 attempted authorizes G42 hole",
+      "expected": "capacity with exact upcoming cursor/no failed-charge bit; prior scalars/bounds/classifiers/first refusal retained"
+    },
+    {
+      "id": "A35",
+      "kind": "LAST_SLACK_CHARGE",
+      "cap": 254,
+      "field": "construction_operations",
+      "upcoming_operation": 255,
+      "upcoming_guard": null,
+      "prior_operation_written_count": 254,
+      "prior_guard_through": 48,
+      "eligibility_bit": 8,
+      "conditional_G42_hole_allowed": true,
+      "gate": "actual A01 written predecessor operations/guards; only fresh cuts_collapsed+G42 attempted authorizes G42 hole",
+      "expected": "capacity with exact upcoming cursor/no failed-charge bit; prior scalars/bounds/classifiers/first refusal retained"
+    },
+    {
+      "id": "A36",
+      "kind": "FINAL_GUARD_CHARGE",
+      "cap": 49,
+      "field": "construction_guards",
+      "upcoming_operation": null,
+      "upcoming_guard": 50,
+      "prior_operation_written_count": 255,
+      "prior_guard_through": 49,
+      "eligibility_bit": 9,
+      "conditional_G42_hole_allowed": true,
+      "gate": "actual A01 written predecessor operations/guards; only fresh cuts_collapsed+G42 attempted authorizes G42 hole",
+      "expected": "capacity with exact upcoming cursor/no failed-charge bit; prior scalars/bounds/classifiers/first refusal retained"
+    }
+  ],
+  "roster_count": 36,
+  "signature_gates": {
+    "public_pointer": "Expected (*)(const Provider&)",
+    "bounded_pointer": "Expected (*)(const Provider&, Limits)",
+    "required_helper": "boarding_knee_compatibility_diagnostic01_required_output_bytes() -> size_t; nonconstructing TWO sizeof(Expected)",
+    "Provider": "no default construction; genuine copy/move/assignment per existing declaration; no synthetic public Data constructor",
+    "Diagnostic": "explicit const Provider& constructor; in-place Expected exactly; no byvalue creator/report input seam",
+    "authority": "no height/cap/report/Candidate parameter; fresh issuer enrolls genuine owner/data/parts/request; every qualification static false; no capability types exist"
+  },
+  "preflight_protocol": {
+    "priority": [
+      "original_FP",
+      "raised_Limits",
+      "ONE_actual_sizeof_Expected_room"
+    ],
+    "strings": [
+      "compatibility01 unsupported floating point",
+      "compatibility01 invalid limits",
+      "compatibility01 output headers"
+    ],
+    "required_room": "TWO actual sizeof(Expected); structured capacity/output_capacity before source; outputcapacity recordsrequired; output REQUIRED-1 is >=ONE header; output0 unexpected; noCell reserve"
+  },
+  "per_field_expected_refusal": {
+    "source": "capacity/source_capacity at first uncharged S64 row; no failed bit; full original cursor/metadata adapter; no prefix before success",
+    "operation": "capacity/operation_capacity at upcoming op zero-based uint16 cursor, no attempted/written bit, charged count cap",
+    "guard": "capacity/guard_capacity at upcoming guard zero-based uint8 cursor, no attempted/written bit, charged count cap",
+    "output": "ONE room failure unexpected; ONE<=room<REQUIRED structured output_capacity; no source; required bytes recorded",
+    "raised": "any raised field invalidlimits unexpected afterFP and before Diagnostic"
+  },
+  "guard_interleave": [
+    {
+      "guard": 1,
+      "after_operation": 0
+    },
+    {
+      "guard": 2,
+      "after_operation": 0
+    },
+    {
+      "guard": 3,
+      "after_operation": 0
+    },
+    {
+      "guard": 4,
+      "after_operation": 0
+    },
+    {
+      "guard": 5,
+      "after_operation": 0
+    },
+    {
+      "guard": 6,
+      "after_operation": 0
+    },
+    {
+      "guard": 7,
+      "after_operation": 45
+    },
+    {
+      "guard": 8,
+      "after_operation": 54
+    },
+    {
+      "guard": 9,
+      "after_operation": 56
+    },
+    {
+      "guard": 10,
+      "after_operation": 62
+    },
+    {
+      "guard": 11,
+      "after_operation": 67
+    },
+    {
+      "guard": 12,
+      "after_operation": 73
+    },
+    {
+      "guard": 13,
+      "after_operation": 78
+    },
+    {
+      "guard": 14,
+      "after_operation": 85
+    },
+    {
+      "guard": 15,
+      "after_operation": 92
+    },
+    {
+      "guard": 16,
+      "after_operation": 106
+    },
+    {
+      "guard": 17,
+      "after_operation": 108
+    },
+    {
+      "guard": 18,
+      "after_operation": 114
+    },
+    {
+      "guard": 19,
+      "after_operation": 119
+    },
+    {
+      "guard": 20,
+      "after_operation": 125
+    },
+    {
+      "guard": 21,
+      "after_operation": 130
+    },
+    {
+      "guard": 22,
+      "after_operation": 137
+    },
+    {
+      "guard": 23,
+      "after_operation": 144
+    },
+    {
+      "guard": 24,
+      "after_operation": 157
+    },
+    {
+      "guard": 25,
+      "after_operation": 157
+    },
+    {
+      "guard": 26,
+      "after_operation": 161
+    },
+    {
+      "guard": 27,
+      "after_operation": 166
+    },
+    {
+      "guard": 28,
+      "after_operation": 171
+    },
+    {
+      "guard": 29,
+      "after_operation": 173
+    },
+    {
+      "guard": 30,
+      "after_operation": 175
+    },
+    {
+      "guard": 31,
+      "after_operation": 179
+    },
+    {
+      "guard": 32,
+      "after_operation": 183
+    },
+    {
+      "guard": 33,
+      "after_operation": 185
+    },
+    {
+      "guard": 34,
+      "after_operation": 187
+    },
+    {
+      "guard": 35,
+      "after_operation": 190
+    },
+    {
+      "guard": 36,
+      "after_operation": 192
+    },
+    {
+      "guard": 37,
+      "after_operation": 196
+    },
+    {
+      "guard": 38,
+      "after_operation": 200
+    },
+    {
+      "guard": 39,
+      "after_operation": 202
+    },
+    {
+      "guard": 40,
+      "after_operation": 204
+    },
+    {
+      "guard": 41,
+      "after_operation": 207
+    },
+    {
+      "guard": 42,
+      "after_operation": 221
+    },
+    {
+      "guard": 43,
+      "after_operation": 223
+    },
+    {
+      "guard": 44,
+      "after_operation": 225
+    },
+    {
+      "guard": 45,
+      "after_operation": 227
+    },
+    {
+      "guard": 46,
+      "after_operation": 233
+    },
+    {
+      "guard": 47,
+      "after_operation": 239
+    },
+    {
+      "guard": 48,
+      "after_operation": 247
+    },
+    {
+      "guard": 49,
+      "after_operation": 255
+    },
+    {
+      "guard": 50,
+      "after_operation": 255
+    }
+  ],
+  "publication": [
+    {
+      "name": "base_lo",
+      "row": 154,
+      "ready_bit": 0,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "base_hi",
+      "row": 157,
+      "ready_bit": 1,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "factor_lower_PORT",
+      "row": 183,
+      "ready_bit": 2,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "factor_lower_STAR",
+      "row": 200,
+      "ready_bit": 3,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "current_cap_PORT",
+      "row": 190,
+      "ready_bit": 4,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "W_PORT",
+      "row": 208,
+      "ready_bit": null,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "Lsum",
+      "row": 36,
+      "ready_bit": null,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "threshold",
+      "row": 171,
+      "ready_bit": null,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "p_PORT",
+      "row": 219,
+      "ready_bit": 5,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "q_PORT",
+      "row": 221,
+      "ready_bit": 6,
+      "readability": "named operation-written bit"
+    },
+    {
+      "name": "L1_L2",
+      "row": "nonarithmetic authentic constant copies inside successful G05 before its written bit",
+      "ready_bit": null,
+      "readability": "G05 written"
+    }
+  ],
+  "certification": {
+    "BASE": 24,
+    "factor_PORT": 32,
+    "factor_STAR": 38,
+    "current_cap": 35,
+    "W": "all prefix guards1..41 and O208 written",
+    "threshold": 29,
+    "pq": "G42 successful cuts_available; ordinary localized failure cuts_collapsed with G42 unwritten"
+  },
+  "states": {
+    "not_run": 0,
+    "source_refused": 1,
+    "prefix_refused": 2,
+    "evidence_complete": 3,
+    "capacity": 4,
+    "unsupported": 5,
+    "identity": 6,
+    "suffix_domain_unavailable": 7
+  },
+  "prefix_states": {
+    "not_run": 0,
+    "cuts_available": 1,
+    "cuts_collapsed": 2
+  },
+  "stop_categories": {
+    "none": 0,
+    "invalid_limits": 1,
+    "invalid_binding": 2,
+    "output_capacity": 3,
+    "source_capacity": 4,
+    "source_identity": 5,
+    "prefix_domain": 6,
+    "guard_capacity": 7,
+    "operation_capacity": 8,
+    "unsupported_arithmetic": 9,
+    "suffix_domain": 10,
+    "source_refusal": 11
+  },
+  "mask_protocol": {
+    "operation_final": [
+      "0xffffffffffffffff",
+      "0xffffffffffffffff",
+      "0xffffffffffffffff",
+      "0x7fffffffffffffff"
+    ],
+    "guard_final": "0x3ffffffffffff",
+    "G42hole": "ONLY cuts_collapsed AND G42 attempted allows writtenbit41 absent; allother gaps prohibit late controls; ordinaryfirstrefusal retained independently of laterstop",
+    "failed_charge": "upcoming cursor but no attempted/written/work increment; no uncomputed bound",
+    "prefix_functions": "count0/count64 special; shifts0..63; contiguous words inspectedbyref",
+    "eligibility_bitmap": "uint16 bits0..9, not sentinel; exact10 conditional crossing/handoff controls"
+  },
+  "zero_branch_availability": [
+    {
+      "bit": 0,
+      "written_row": 89
+    },
+    {
+      "bit": 1,
+      "written_row": 141
+    },
+    {
+      "bit": 2,
+      "written_row": 63
+    },
+    {
+      "bit": 3,
+      "written_row": 74
+    },
+    {
+      "bit": 4,
+      "written_row": 115
+    },
+    {
+      "bit": 5,
+      "written_row": 126
+    },
+    {
+      "bit": 6,
+      "written_row": 81
+    },
+    {
+      "bit": 7,
+      "written_row": 133
+    }
+  ],
+  "readiness": {
+    "scalar": {
+      "base_lo": 0,
+      "base_hi": 1,
+      "factor_PORT": 2,
+      "factor_STAR": 3,
+      "current_cap_PORT": 4,
+      "p_PORT": 5,
+      "q_PORT": 6
+    },
+    "classifier": {
+      "scalar_current_G46": 0,
+      "scalar_best_G47": 1,
+      "universal_current_G48": 2,
+      "universal_best_G49": 3
+    },
+    "source_constant_L1_L2": "G05 written",
+    "W": "O208 written",
+    "threshold": "O171 written",
+    "Lsum": "O036 written"
+  },
+  "completion": "G50 checks guard-written bits0..48 before its own written bit; expected0x1ffffffffffff minus bit41 only when cuts_collapsed. G50 written after success yields0x3ffffffffffff minus that conditional bit. Guard attempted all50 only at actual completion.",
+  "classification": {
+    "ordinals": {
+      "not_run": 0,
+      "excluded": 1,
+      "necessary_compatible": 2,
+      "inconclusive": 3
+    },
+    "groups": {
+      "scalar_current": [
+        228,
+        230,
+        233
+      ],
+      "scalar_best": [
+        234,
+        236,
+        239
+      ],
+      "common_current": [
+        240,
+        242,
+        245,
+        247
+      ],
+      "common_best": [
+        248,
+        250,
+        253,
+        255
+      ]
+    },
+    "guards": [
+      46,
+      47,
+      48,
+      49
+    ],
+    "ordered_rule": "first supported high<=0 =>excluded; else all supported low>0=>necessary_compatible; otherwiseinconclusive. No classifier before full supported group/guard. Unsupported/missing isnot_run",
+    "first_excluding_index": "derive ascending index for Test assertion only; no nonexistent returned index field",
+    "quantifiers": "scalar selected strict component versus ONE common window ALL w inW; universal failure NEVER authentic scalar exclusion; neither original whole-body feasibility"
+  },
+  "digest": {
+    "tag_before_content": true,
+    "hash": "scalar-streamed FNV-1a uint64 wrap defined, bitcast finite doubles; sourcecount/fullmask/identities/current purpose/version, state/stop/work/output and masks/cursors/readiness/zero bits, taggedbounds/scalars/classifiers/fullrefusal onlywhenearned",
+    "qualification_flags": "all false; no phase/body/Y/Key invented",
+    "first_refusal": "has_refusal tag BEFORE all full fresh and nestedoriginal fields; supportedlimiting tag BEFORE endpoints; nested sentinel255 stays; fresh sourceoperation255 translates65535",
+    "no_snapshot_archive": "one Summary hash/work/output/eligibility/exists only; result diesbefore next consumer",
+    "excluded_content": "stack/Diagnostic/Request addresses, pointer padding and unused Limits room; semantic same-earned-evidence comparison only. Genuine currentcall owner/Data/parts/request correspondence separately checked, never hash-authorized."
+  },
+  "oracle": {
+    "calls": 1,
+    "gate": "A01 genuine source64 enrollment; perstage actual written/tag/domain prerequisites; no predicted complete prefix/suffix",
+    "source_binding": "independent fixed horizontal Request literals exact original seed; rootY not selected/read/passed; source IDs/parts/compiler tuple authenticated first. No additional API/query/creator/fixture. Fixed original double products evaluated in original binary64 order beforeLD singleton lift.",
+    "stages": [
+      {
+        "name": "CHART",
+        "formula": "original proper rational yaw (c=(1-h\u00b2)/(1+h\u00b2), positive s=2h/(1+h\u00b2); R.X=(c,0,-s),R.Y=(0,1,0),R.Z=(s,0,c)); signed original x,w=-z,a, distinct BOTHorigins, exact lengths and original hip capsule/box threshold tuples",
+        "gate": "source authentic; relevant original closed/positive premises"
+      },
+      {
+        "name": "NOMINAL_BASE",
+        "formula": "p0=max(-.5,(w-L1)/L2);q0=min(.5,(w+L1)/L2,w/S). r(tau)=sqrt(L1\u00b2-(w-L2*tau)\u00b2)+L2sqrt(1-tau\u00b2). side low=a+max(sqrt(max(0,r(p0)\u00b2-x\u00b2)),sqrt(max(0,(L1-L2)\u00b2-x\u00b2-w\u00b2)),abs(x)/(2-sqrt3)); side high=a+min(sqrt(r(q0)\u00b2-x\u00b2),sqrt(S\u00b2-x\u00b2-w\u00b2)). BOTH maxlow/minhigh. Signedw; independently robust p0<q0, closedvaliddomain, strictly positive upper radicands. Endpoint theorem alone permits thigh radicand nonnegative intersection; no arbitrary repair.",
+        "gate": "both BASE readable/certified G24; ambiguous domain INCONCLUSIVE"
+      },
+      {
+        "name": "SAME_BASE_FACTOR",
+        "formula": "H=reported_BASElo-authentic_a, M=abs(authentic_x); safe=max(1/sqrt(1+(2-sqrt3)\u00b2),H/sqrt(M\u00b2+H\u00b2)) with independently H>0; exactzeroM conditional factor1. ReportedBASElo fixedcomparisondomain only.",
+        "gate": "G24 and sidefactor G32/G38"
+      },
+      {
+        "name": "THRESHOLD_CURRENT_CAP_CUT",
+        "formula": "authentic t=(L*hy+r*sqrt(L\u00b2+r\u00b2-hy\u00b2))/(L\u00b2+r\u00b2), original L/r/hy and residual/domainpremises; k=t/reportedPORTfactor, permissibleg=L1sqrt(1-k\u00b2). Comparecurrentg one-sided. Then reconstruct restricted nominalp/q from independentw and fixedreportedcurrentg; never import absent H/M/k/cuts/hiddenoldp.",
+        "gate": "thresholdG29/capG35/factorG32; independently strict0<k<1; p/qreadable independently ofG42success"
+      },
+      {
+        "name": "IDEAL_BEST_CAP",
+        "formula": "L1sqrt(1-authentic_t\u00b2), independent t; producerbestcap interval comparison only, no Csingleton used tocompute t",
+        "gate": "bestcapO225/G44; independent0<t<1"
+      },
+      {
+        "name": "SCALAR_AND_COMMON_STREAM",
+        "formula": "scalar(w,g): w+L2/2, g+L2/2-w, g*S/L1-w; common(wl,wh,g):wl+L2/2,g+L2/2-wh,g+L2*wl/S-wh,g-(wh-wl). currentg is exactselecteddatum; bestg independentideal. Common uses reported W endpoints as fixeddomain endpoints, scalar uses independentauthenticw. ONE result compare thenoverwrite.",
+        "gate": "only each namedreadable interval with genuine G05 positivity/domain; classifier predicate separately checked onlyG46..49ready"
+      }
+    ],
+    "primitive_policy": {
+      "lift": "finite exact binary64 singleton beforeLD arithmetic; literal full double products frozen",
+      "ADD_SUB_NEG": "endpoint outward nextafterl, finite order",
+      "MUL": "four products sequential in named scalarwork; min/max beforeoverwrite; exact structural zero only proven sign cases",
+      "SQUARE_ABS": "sign aware; spanning0 exactlower0; upper outward; no negativezero sqrt domain invented",
+      "DIV": "finite denominator whollypositive ORwhollynegative, reciprocalthenMUL; zero/straddle unavailable, no epsilon",
+      "SQRT": "finite nonnegative domain plus guarded sqrtl and nextafterl; exactclosedtheorem intersection ONLYnamed radial/projected lower analyticMAX0; no numericalrepair",
+      "MAX_MIN": "monotone endpoint max/min; equality firstoperand policycheckedproduction bitwise",
+      "failure": "INCONCLUSIVE, do not dropcandidate/sign branch, nofallback/iteration/solver/retune"
+    },
+    "comparison_table": [
+      {
+        "claim": "BASE lower inward",
+        "margin": "reported_BASElo - independent_nominal_lower",
+        "prerequisite": "G24 and both BASE scalar-ready"
+      },
+      {
+        "claim": "BASE upper inward",
+        "margin": "independent_nominal_upper - reported_BASEhi",
+        "prerequisite": "G24 and both BASE scalar-ready"
+      },
+      {
+        "claim": "same-BASE factor lower",
+        "margin": "independent_safe_factor - reported_factor",
+        "prerequisite": "BASE G24 and side G32/G38; fixed reported BASElo used only as domain datum"
+      },
+      {
+        "claim": "used PORT cap upper constraint",
+        "margin": "independent L1*sqrt(1-(authentic_t/reported_C_PORT)^2) - reported_currentg",
+        "prerequisite": "G29/G32/G35; independently strict 0<t/C<1"
+      },
+      {
+        "claim": "current p inward",
+        "margin": "reported_p - independent max(-.5,(w-L1)/L2,(w-reported_currentg)/L2)",
+        "prerequisite": "allprefixG1..41, O219; no stored-window success required"
+      },
+      {
+        "claim": "current q inward",
+        "margin": "independent min(.5,(w+L1)/L2,w/S,w/L2) - reported_q",
+        "prerequisite": "allprefixG1..41, O221; no stored-window success required"
+      },
+      {
+        "claim": "W/S/t and best/slack lower enclosure",
+        "margin": "independent ideal lower - reported lower",
+        "prerequisite": "named written field plus its exact domain/source prerequisites"
+      },
+      {
+        "claim": "W/S/t and best/slack upper enclosure",
+        "margin": "reported upper - independent ideal upper",
+        "prerequisite": "same as lower enclosure"
+      }
+    ],
+    "allowance": "epsilon=2e-12L*max(1,abs(independent.low),abs(independent.high),abs(reference)); enclosure uses both reportedendpoints. Margin lower>epsilon CORROBORATED; margin upper<-epsilon FAIL; otherwiseINCONCLUSIVE. Exact structurally proved singleton equality permits nonstrict corroboration only. Tags/policy/classification strictcomparisons NO allowance.",
+    "rigorous_interval_enclosure_theorem": false,
+    "production_policy_authority": false,
+    "Bounds24_slots": {
+      "0": "active original x",
+      "1": "active signed original w",
+      "2": "active original a",
+      "3": "nominal/restricted p",
+      "4": "nominal/restricted q",
+      "5": "r(p)",
+      "6": "r(q)",
+      "7": "side nominal image lower",
+      "8": "side nominal image upper",
+      "9": "BOTH nominal lower then fixed reported BASElo",
+      "10": "BOTH nominal upper then fixed reported BASEhi",
+      "11": "active same-BASE factor",
+      "12": "authentic threshold retained through last slack",
+      "13": "genuine L1 retained",
+      "14": "genuine L2 retained",
+      "15": "genuine S retained",
+      "16": "active permissible cap then independent ideal best cap retained",
+      "17": "one current independent slack/comparison result",
+      "18": "six primitive argument/local/work/current-pending slots A",
+      "19": "six primitive argument/local/work/current-pending slots B",
+      "20": "six primitive argument/local/work/current-pending slots C",
+      "21": "six primitive argument/local/work/current-pending slots D",
+      "22": "six primitive argument/local/work/current-pending slots E",
+      "23": "six primitive argument/local/work/current-pending slots F"
+    },
+    "LD64_slots": {
+      "0..7": "original source root/yaw/length scalars8",
+      "8..15": "active side horizontal chart terms8",
+      "16..31": "nominal radial/reach/roll/factor/cap coefficients16",
+      "32..47": "deep scalar endpoints/work/operands/current-pending16",
+      "48..55": "streamed scalar/universal slack arithmetic8",
+      "56..63": "comparison allowance/lifted actual reference/control terms8"
+    },
+    "primitive_extension": "six additional Bounds32 current/pending/return argument-work ceilings192 retained alongside all24declaredslots, no aggregateBounds/Point return",
+    "constant_full_expression320": {
+      "source_terms": "24double currentpending192 +8liftedcapsule/box/linkterms64 +8savedproduct/constantterms64",
+      "finite_predicate_alternative": "atmostFIVE Scalar24currentpendingpairs240 +TENhelddouble8slots80; allparams retained throughwhole&&expression; source term/literal owners diebeforethisepoch"
+    },
+    "ref_control256": {
+      "ExceptionState": 16,
+      "four_indices": 32,
+      "thirteen_borrowed_refs": 104,
+      "current_pending_why32_plus_constant_termview16": 48,
+      "eight_status_flags": 8,
+      "eight_pending_bool": 8,
+      "five_integer_controls": 40
+    },
+    "refs13_deep_chain": {
+      "utility": 2,
+      "same_side": 2,
+      "yaw": 2,
+      "div": 3,
+      "mul": 3,
+      "ready": 1
+    },
+    "ref_alternatives": "quietcheck after numeric primitive returns; check why ref and reference compare refs replace inactive primitive refs, never add unseen references. Exterior construction audit Diagnostic ref separately caller. No owning sourceConstant copy.",
+    "exterior_Request": "current680 plus pendingoptional688=1368; outer completeRequest reconstruction before separate noinline borrowedutility; no arbitraryframe subtraction",
+    "epochs": [
+      "fixedslots declaredthroughreturn; sourcechart/lengths throughlastslack",
+      "nominalBOTH9/10 lastconsumer inclusion thenfixedreportedBASE domain",
+      "activefactor11 side-by-side overwrittenaftercomparison",
+      "threshold12/L1-L2-S13..15/idealbest16 retainedto lastslack",
+      "cut3/4 onlyafterfactor/cap eligibility, overwritten afterp/qcorroboration",
+      "slack17 currentcompareoverwrite; no14resultarray",
+      "fixedhelper/workspace/RequestdieBEFOREformatting/reporting/error-string alternatives"
+    ],
+    "scratch": {
+      "objects": {
+        "twentyfour_LD_Bounds32_persistent_reused": 768,
+        "sixtyfour_LD16_source_coefficients_reference_scalars": 1024,
+        "six_Bounds32_current_pending_primitive_extension": 192,
+        "constant_full_expression_Scalar_arguments": 320,
+        "references_control": 256,
+        "prospective_success_numeric_library": 512
+      },
+      "named": 3072,
+      "unused": 1024,
+      "selected": 4096
+    }
+  },
+  "core_schema_members": {
+    "PrefixEvidence": [
+      [
+        "operation_attempted4",
+        0,
+        32
+      ],
+      [
+        "operation_written4",
+        32,
+        32
+      ],
+      [
+        "guard_attempted",
+        64,
+        8
+      ],
+      [
+        "guard_written",
+        72,
+        8
+      ],
+      [
+        "limiting_bound",
+        80,
+        24
+      ],
+      [
+        "base_lo_base_hi",
+        104,
+        16
+      ],
+      [
+        "factor_lower2",
+        120,
+        16
+      ],
+      [
+        "current_cap_PORT",
+        136,
+        8
+      ],
+      [
+        "p_q_PORT",
+        144,
+        16
+      ],
+      [
+        "W_PORT",
+        160,
+        24
+      ],
+      [
+        "threshold",
+        184,
+        24
+      ],
+      [
+        "Lsum",
+        208,
+        24
+      ],
+      [
+        "L1_L2",
+        232,
+        16
+      ],
+      [
+        "operation_uint16",
+        248,
+        2
+      ],
+      [
+        "guard_side_condition_prefixstate_preflight_arithmetic_six_uint8",
+        250,
+        6
+      ],
+      [
+        "scalar_ready7_uint16",
+        256,
+        2
+      ],
+      [
+        "zero_mask_uint16",
+        258,
+        2
+      ],
+      [
+        "padding",
+        260,
+        4
+      ]
+    ],
+    "OptimisticEvidence": [
+      [
+        "best_cap",
+        0,
+        24
+      ],
+      [
+        "scalar_current3",
+        24,
+        72
+      ],
+      [
+        "scalar_best3",
+        96,
+        72
+      ],
+      [
+        "common_current4",
+        168,
+        96
+      ],
+      [
+        "common_best4",
+        264,
+        96
+      ],
+      [
+        "classification4_uint8",
+        360,
+        4
+      ],
+      [
+        "classifier_ready_domain_condition_complete_three_uint8",
+        364,
+        3
+      ],
+      [
+        "padding",
+        367,
+        1
+      ]
+    ],
+    "Diagnostic": [
+      [
+        "Provider",
+        0,
+        16
+      ],
+      [
+        "parts15_PhasePartBinding64",
+        16,
+        960
+      ],
+      [
+        "Counters_three_uint64",
+        976,
+        24
+      ],
+      [
+        "PrefixEvidence",
+        1000,
+        264
+      ],
+      [
+        "OptimisticEvidence",
+        1264,
+        368
+      ],
+      [
+        "first_refusal_full192",
+        1632,
+        192
+      ],
+      [
+        "source_evaluated",
+        1824,
+        8
+      ],
+      [
+        "output_capacity_bytes",
+        1832,
+        8
+      ],
+      [
+        "version_uint32",
+        1840,
+        4
+      ],
+      [
+        "state_stop_hasrefusal_sourceenrolled_arithmetic_complete_six_uint8",
+        1844,
+        6
+      ],
+      [
+        "padding",
+        1850,
+        6
+      ]
+    ],
+    "Expected": [
+      [
+        "union_Diagnostic_or_string32",
+        0,
+        1856
+      ],
+      [
+        "expected_tag_plus_padding",
+        1856,
+        8
+      ]
+    ]
+  },
+  "layout_forecast": {
+    "profile": "LP64 member offsets above are source forecasts, not sizeof; explicit widths/layout gates mandatory later",
+    "Provider": 16,
+    "parts": 960,
+    "Counters": 24,
+    "PrefixEvidence": 264,
+    "OptimisticEvidence": 368,
+    "Refusal": 192,
+    "Diagnostic": 1856,
+    "predicted_Expected": 1864,
+    "selected_Expected_ceiling": 1920,
+    "Limits": 32,
+    "TWOExpected": 3840,
+    "FOURLimits": 128,
+    "TWORequest": 1368,
+    "TWOexteriorRefusal": 384,
+    "no_Cell_Key_Context_Token_or_Data_output_allocation": true,
+    "Request_current": 680,
+    "Request_pending_optional": 688
+  },
+  "core_source_pools": {
+    "prefix": {
+      "named_components": {
+        "direct_local_aggregate_87Intervals24_18double8_2bool_padding6": 2240,
+        "eight_primitive_argument_local_pending_intervals": 192,
+        "constant_sign_arrays": 96,
+        "certified_small_root_terms_scratch_scalars": 176,
+        "full_parameters_Control_forwarded_current_pending_closures_deep_refs_views_controls": 424,
+        "two_validator_expected": 80,
+        "success_library_environment": 512,
+        "row_reset_full_refusal_initializer": 192
+      },
+      "named_bytes": 3912,
+      "unused_bytes": 184,
+      "reservation_bytes": 4096
+    },
+    "optimistic": {
+      "named_components": {
+        "five_fixed_Intervals24_scratch": 120,
+        "eight_current_pending_primitive_Intervals24": 192,
+        "constant_sign_arrays": 96,
+        "certified_small_root_terms_and_scalars": 176,
+        "full_refs_Control_forwarded_current_pending_closure_and_controls": 424,
+        "row_reset_full_Refusal_initializer": 192,
+        "success_library_environment": 512
+      },
+      "named_bytes": 1712,
+      "reservation_bytes": 2048,
+      "unused_bytes": 336
+    },
+    "creator_caller": {
+      "named_components": {
+        "summary": 120,
+        "two_streams": 176,
+        "mutable_globals_target": 156,
+        "boot_native_expected": 80,
+        "provider": 24,
+        "saved_buffers_bytes": 24,
+        "references": 32,
+        "errors": 160
+      },
+      "named_bytes": 772,
+      "unused_bytes": 252,
+      "reservation_bytes": 1024
+    },
+    "numerical_caller": {
+      "named_components": {
+        "entire_preserved_endpoint03_named_caller": 1871,
+        "ONE_static_first_failure_borrowed_view": 16
+      },
+      "named_bytes": 1887,
+      "unused_bytes": 161,
+      "reservation_bytes": 2048
+    },
+    "complete_error": {
+      "bytes": 4096,
+      "kind": "PROSPECTIVE_ALL_INCLUSIVE_SOURCE_ERROR_CEILING",
+      "typed_owner_constraints": {
+        "two_borrowed_bad_alloc_exception_storage_slots_including_header_chunk": 384,
+        "current_pending_unexpected_string_stack_wrappers": 64,
+        "caught_exception_and_destructor_allocator_reference_slots": 32,
+        "allocation_count_branch_and_catch_control": 32,
+        "remaining_simultaneous_external_call_frames_and_unwind_personality_tls_cleanup_terminal_leaf_budget": 3584
+      },
+      "note": "These disjoint named charges sum4096; two exception slots each have selected192-byte ceiling. This is a proposed budget partition, not an actual allocator/ELF upper proof. A fresh complete measured chain that violates any owner limit or total stops before FIRST; no cap raise, warmup, arbitrary callback or predicted failure exclusion."
+    },
+    "Test_oracle": {
+      "named_components": {
+        "twentyfour_LD_Bounds32_persistent_reused": 768,
+        "sixtyfour_LD16_source_coefficients_reference_scalars": 1024,
+        "six_Bounds32_current_pending_primitive_extension": 192,
+        "constant_full_expression_Scalar_arguments": 320,
+        "references_control": 256,
+        "prospective_success_numeric_library": 512
+      },
+      "named_bytes": 3072,
+      "unused_bytes": 1024,
+      "reservation_bytes": 4096
+    }
+  },
+  "source_stage_maps": {
+    "creator": {
+      "components": {
+        "entire_old_creator": 7000,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88
+      },
+      "bytes": 7240,
+      "ceiling": 8192,
+      "headroom": 952,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "preflight": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "success_leaf": 512
+      },
+      "bytes": 10928,
+      "ceiling": 49152,
+      "headroom": 38224,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "required_room": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "success_leaf": 512
+      },
+      "bytes": 12680,
+      "ceiling": 49152,
+      "headroom": 36472,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "source_enrollment": {
+      "components": {
+        "entire_old_Endpoint03_enrollment_including_EMPTYcarrier": 33208,
+        "new_TWOExpected": 3840,
+        "new_FOURLimits": 128,
+        "new_TWOfullRefusal": 384,
+        "new_TWORequest_exterior_overcharge": 1368,
+        "new_outercontrol": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "full_new_numerical_caller_overcharge": 2048
+      },
+      "bytes": 41280,
+      "ceiling": 49152,
+      "headroom": 7872,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "source_plus_disjoint_prefix_overcharge": {
+      "components": {
+        "entire_old_Endpoint03_enrollment_including_EMPTYcarrier": 33208,
+        "new_TWOExpected": 3840,
+        "new_FOURLimits": 128,
+        "new_TWOfullRefusal": 384,
+        "new_TWORequest_exterior_overcharge": 1368,
+        "new_outercontrol": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "disjoint_prefix_pool_retained": 4096,
+        "full_new_numerical_caller_overcharge": 2048
+      },
+      "bytes": 45376,
+      "ceiling": 49152,
+      "headroom": 3776,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "prefix": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "full_prefix_pool": 4096,
+        "independent_success_leaf_overcharge": 512
+      },
+      "bytes": 16776,
+      "ceiling": 49152,
+      "headroom": 32376,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "optimistic": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "full_post_prefix_pool": 2048,
+        "independent_success_leaf_overcharge": 512
+      },
+      "bytes": 14728,
+      "ceiling": 49152,
+      "headroom": 34424,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "Test_oracle_pending_matched_inventory": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "independent_prefix_only_oracle_reservation": 4096,
+        "scalar_metadata_success_overcharge": 1024
+      },
+      "bytes": 17288,
+      "ceiling": 49152,
+      "headroom": 31864,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "post_helper_metadata": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "scalar_metadata_success_overcharge": 1024
+      },
+      "bytes": 13192,
+      "ceiling": 49152,
+      "headroom": 35960,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "owned_inline_output": {
+      "components": {
+        "TWOExpected_selected": 3840
+      },
+      "bytes": 3840,
+      "ceiling": 16777216,
+      "headroom": 16773376,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    }
+  },
+  "source_error_maps": {
+    "creator_before_arena": {
+      "components": {
+        "current_pending_ctor_evidence": 1040,
+        "port_partition": 376,
+        "current_pending_creator_expected": 80,
+        "creator_limits": 96,
+        "native_boot_aliases": 32,
+        "full_selected_creator_caller": 1024,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 7304,
+      "ceiling": 8192,
+      "headroom": 888,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "preflight_error": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "complete_error": 4096,
+        "fixed_error_buffers_headers": 320
+      },
+      "bytes": 14832,
+      "ceiling": 49152,
+      "headroom": 34320,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "structured_room_error": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "complete_error": 4096,
+        "fixed_error_buffers_headers": 320
+      },
+      "bytes": 16584,
+      "ceiling": 49152,
+      "headroom": 32568,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "source_enrollment_error": {
+      "components": {
+        "entire_old_Endpoint03_enrollment_including_EMPTYcarrier": 33208,
+        "new_TWOExpected": 3840,
+        "new_FOURLimits": 128,
+        "new_TWOfullRefusal": 384,
+        "new_TWORequest_exterior_overcharge": 1368,
+        "new_outercontrol": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "complete_error": 4096,
+        "fixed_error_buffers_headers": 320,
+        "full_new_numerical_caller_overcharge": 2048
+      },
+      "bytes": 45696,
+      "ceiling": 49152,
+      "headroom": 3456,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "post_prefix_error": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "complete_error": 4096,
+        "fixed_error_buffers_headers": 320
+      },
+      "bytes": 16584,
+      "ceiling": 49152,
+      "headroom": 32568,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    },
+    "post_oracle_teardown_error": {
+      "components": {
+        "two_headers": 3840,
+        "provider_arena": 4096,
+        "four_current_pending_Limits": 128,
+        "full_numerical_caller": 2048,
+        "current_pending_Request": 1368,
+        "current_pending_exteriorRefusal": 384,
+        "outer_control": 64,
+        "static_scalar_owner": 152,
+        "conservative_native_JSON_owner": 88,
+        "complete_error": 4096,
+        "fixed_error_buffers_headers": 320
+      },
+      "bytes": 16584,
+      "ceiling": 49152,
+      "headroom": 32568,
+      "kind": "SOURCE_FORECAST_NOT_ACTUAL"
+    }
+  },
+  "core_ref_control_components": {
+    "four_constructor_parameter_references": 32,
+    "borrowed_three_reference_Control": 24,
+    "current_pending_compute_closures_eight_references_each": 128,
+    "destination_reference": 8,
+    "current_pending_guard_closures_eight_references_each": 128,
+    "deep_guard_forwarding_supported_path": 56,
+    "three_borrowed_part_views": 24,
+    "loop_cursor_certificate_controls": 24,
+    "capture_semantics": "Every current/pending compute or guard closure includes explicit workspace reference within its at-most-eight-ref allowance; Control carries owner/refusal/Limits only. No separate workspace-ref owner is hidden in aggregate padding. Forwarded lambda object-reference and closure-this are separately counted by deep56. If actual source needs more than these role maxima registration is HOLD."
+  },
+  "core_last_consumer_plan": {
+    "prefix": "full Endpoint06 fixed slot plan O001..221 copied; immutable BASE only writers154/157, erased floor/chart/k/cap Interval provenance not reread; PORT cap190 captured and STAR cap207 helper-local; old p/q overwritten only after old BASE endpoints",
+    "handoff": "capture W208,t171,S36,L1/L2G05,base154/157,factors183/200,g190,p219/q221 into owned header within operation assignment before written bit (G05 constants before guard written); no aggregate return. Request/pendingRequest remain exterior conservative charge. Prefix Workspace/Control dies before separate noinline optimistic continuation",
+    "optimistic": "scratch0 t\u00b2 then1-t\u00b2 thenroot, last225; scratch1 halfL2 retained255; scratch2 ratio retained252; scratch3 overwrite sequential product/add/div/sub only after operand evaluation, output always direct-owned; scratch4 width246 then254. Full five declaration slots remain charged until return; whole best_cap retained225..255; W/S/t/L1/L2/currentg header not overwritten"
+  },
+  "Test_source_pools": {
+    "creator1024": {
+      "objects": {
+        "Summary_reservation": 120,
+        "two_StreamCounter": 176,
+        "mutable_globals_reservation": 156,
+        "native_boot_Expected": 80,
+        "provider_optional": 24,
+        "saved_stream_pointers_and_bytes": 24,
+        "references": 32,
+        "current_pending_errors": 160
+      },
+      "named": 772,
+      "unused": 252,
+      "selected": 1024
+    },
+    "numerical_caller2048": {
+      "objects": {
+        "Summary_reservation": 120,
+        "two_StreamCounter": 176,
+        "mutable_globals_reservation": 156,
+        "native_boot_Expected": 80,
+        "provider_optional": 24,
+        "four_alias_slots": 64,
+        "saved_stream_pointers_and_bytes": 24,
+        "references_arguments": 96,
+        "saved_environment_slots": 64,
+        "current_pending_errors_check_arguments": 256,
+        "Hash": 8,
+        "two_word_prefix_current_pending_arrays": 32,
+        "interleaved_pair_array_and_initializer_list_view_peak": 136,
+        "slot_field_cursor_status": 112,
+        "semantic_hash_scalar_bool_arguments": 13,
+        "metadata_field_views_and_view": 32,
+        "source_identity_hash_scalar_owner": 96,
+        "readiness_count_scalar_owner": 14,
+        "current_work3_array_ceiling": 192,
+        "pending_work3_array_ceiling_noelision": 192
+      },
+      "named": 1887,
+      "unused": 161,
+      "selected": 2048,
+      "implementation_constraints": [
+        "FOUR Limits128/TWOExpected3840/TWO exterior Requests1368/TWO exterior full Refusals384 are outside caller2048.",
+        "Summary<=120: three uint32 charged counts, digest64/output64, uint16 eligibility10 bits and exists; no full evidence/mask/refusal archive.",
+        "Totals<=120 and globals156 are conservatively retained, no original graph/body/Cell is entered.",
+        "Current and pending work3 arrays each24 remain bounded by separately preserved192 owner ceilings; no NRVO deduction.",
+        "Prefix words scalar-streamed, current/pending two-word helper array ceiling32; guards interleave blocks<=15pairs with view, ceiling136; no persistent305event table.",
+        "Old edge/jet/flag/count owner ceilings are conservative metadata/hash-scalar allowances only, no geometry records or unused Oracles constructed.",
+        "quiet check has only static borrowed labels; all numerical parent owners remain charged; status/refusal/skip/firstfailure prints after utility and exterior Request die."
+      ]
+    },
+    "independent_oracle4096": {
+      "objects": {
+        "twentyfour_LD_Bounds32_persistent_reused": 768,
+        "sixtyfour_LD16_source_coefficients_reference_scalars": 1024,
+        "six_Bounds32_current_pending_primitive_extension": 192,
+        "constant_full_expression_Scalar_arguments": 320,
+        "references_control": 256,
+        "prospective_success_numeric_library": 512
+      },
+      "named": 3072,
+      "unused": 1024,
+      "selected": 4096
+    }
+  },
+  "finite_counter_exception_proof": {
+    "per_consumer_groups": {
+      "source_work_identity_accounting": 256,
+      "protocol_masks50interleaves8zeros7scalars": 256,
+      "taggedslack/classifiers/digest": 256,
+      "dispatch_capacity_ownership_refusal": 256
+    },
+    "per_consumer": 1024,
+    "consumers": 36,
+    "oracle_once": 1024,
+    "fixed_creator_skips_ownership_FP_final_reporting": 4096,
+    "computed_checks": 41984,
+    "selected_checks_ceiling": 65536,
+    "failures": "<=checks<=65536<UINT32_MAX",
+    "checks": "uint64",
+    "Totals_work": "FOURuint32slots:source,operations,guards,FP; outputbytes NOTworkaggregate",
+    "aggregate_cap_only_ceilings": {
+      "source": 2340,
+      "operations": 9216,
+      "guards": 1836,
+      "FP": 36
+    },
+    "aggregate_basis": "36*(default+1), evenraisedpreflight broadbound. Eachgenuinework<=chosenlimits; unexpected contributes0. Validate fields/ranges beforeaggregate/narrowing.",
+    "Summary_counts": "threeuint32counts max64/255/50; no8bitops; requiredoutputuint64; eligibilityuint16bits0..9",
+    "seven_uint16_bounds": {
+      "creators": 1,
+      "consumers": 36,
+      "skips": 36,
+      "next_slot": 37,
+      "oracle_calls": 1,
+      "oracle_slacks": 14,
+      "classifiers_checked": 144
+    },
+    "loop_bounds": "sourceparts15, opwords4, guards50, scalarfields7, zerochoices8, slackgroups4 with3/3/4/4 records; alltags/counts validatedbeforecontent loops; interleave blocks<=15pairs noarchive",
+    "unreachable_exceptions": "checkedadd/checkoverflow,slotexhaustion,invalidaggregateindex,narrowing andboundstorage cannotoccur underliteral36 finiteprogram anddeclaredcounters; all integerguards remain implemented/source-reviewed. No assumptionsaboutA01geometry/classifications.",
+    "numeric_noallocation": "fixedPOD/fundamental/bounds/byreferencewrites+quietstaticchecklabels; no containers/string/formatting/callback inindependent arithmetic/tag checking; guardedCmath/fenv nonC++throw currentbranch prooffuturemandatory",
+    "source_allocation_errors": "genuinecreator/sourceenrollment/factory/validator/errorcleanup remainCore4096 separatecutpointobligation, not movedtopresentation; completeactualerrorUNKNOWN",
+    "oracle1024_groups": {
+      "source_chart": 256,
+      "nominal_BASE": 256,
+      "factor_threshold": 128,
+      "cap_cut": 128,
+      "streamedslacks": 128,
+      "comparison_availability": 128
+    },
+    "protocol256_breakdown": {
+      "fourwords_attemptedwritten_count": 32,
+      "50guards_two_checks": 100,
+      "eightzero_threechecks": 24,
+      "sevenscalars_fivechecks": 35,
+      "protocol_flags": 64,
+      "named": 255,
+      "unused": 1
+    },
+    "check_design": "No per-operation checker/primitive check counter injected; masks scalar-streamed perword, interleaves50 bounded, active tags then constant finite field checks. Quiet checks have fixed source-label callsites; future source integer enumeration must bindthese maxima before compile/evaluation; largeractual count/HOLD cannotborrow slack."
+  },
+  "quiet_check": {
+    "global": "ONE source-static-literal borrowed string_view16, defaultempty; firstfalse only; neverreset; noqueue/archive/report",
+    "mutable_globals156": "Totals selected120+checks8+failures4+shared_bytes8+first_failure16; actualsizes futureUNKNOWN, everyresidentnonzero",
+    "caller": "creator772/1024; numerical1887/2048; args/labels currentpending inside existing256/errorarg andhelper256 tables",
+    "no_helper_reporting": true,
+    "deferred_reporting": "FIRST/refusal/skip/final/firstfailure after independenthelper AND exteriorRequest death; result/provider/caller presentremaincharged; no extra query",
+    "label_lifetime": "const source-static string literals only; one first_failure view assigned onfirstfalse andneverreset; no local formatted/reason/source name is saved into it. Existing source_name refusal view is hash/read only underowner lifetime."
+  },
+  "error_partition": {
+    "bytes": 4096,
+    "kind": "PROSPECTIVE_ALL_INCLUSIVE_SOURCE_ERROR_CEILING",
+    "typed_owner_constraints": {
+      "two_borrowed_bad_alloc_exception_storage_slots_including_header_chunk": 384,
+      "current_pending_unexpected_string_stack_wrappers": 64,
+      "caught_exception_and_destructor_allocator_reference_slots": 32,
+      "allocation_count_branch_and_catch_control": 32,
+      "remaining_simultaneous_external_call_frames_and_unwind_personality_tls_cleanup_terminal_leaf_budget": 3584
+    },
+    "note": "These disjoint named charges sum4096; two exception slots each have selected192-byte ceiling. This is a proposed budget partition, not an actual allocator/ELF upper proof. A fresh complete measured chain that violates any owner limit or total stops before FIRST; no cap raise, warmup, arbitrary callback or predicted failure exclusion."
+  },
+  "source_refusal_adapter": {
+    "fields": "original full Refusal metadata fields retained in fresh type, source-condition and predicate-source-condition uint8 are original ordinal metadata, not fresh stop enums; operation uint16 UNSET65535; unchanged nested PhaseRefusal retains255",
+    "source_translation": "old uint8 operation255 maps65535; other reached S64 operations preserve value; full phase/limiting/optional side edge axis/key/name/pair/region/sign/stage/source-edge copied by reference",
+    "first_refusal": "stored full192 plus has_refusal flag; first ordinary G42 refusal remains when later classifier succeeds; stop category separate; later capacity/unsupported retains all previous data"
+  },
+  "closed_Linux_profile": {
+    "assignments": {
+      "LD_BIND_NOW": "1",
+      "LC_ALL": "C",
+      "LANG": "C",
+      "GLIBC_TUNABLES": "glibc.malloc.tcache_count=0"
+    },
+    "unsets": [
+      "LD_PRELOAD",
+      "LD_AUDIT",
+      "LD_LIBRARY_PATH",
+      "LD_PROFILE",
+      "LD_DEBUG",
+      "LD_DEBUG_OUTPUT",
+      "LD_BIND_NOT",
+      "LD_ORIGIN_PATH",
+      "LD_ASSUME_KERNEL",
+      "LD_HWCAP_MASK",
+      "LD_TRACE_LOADED_OBJECTS",
+      "LD_USE_LOAD_BIAS",
+      "GLIBCXX_TUNABLES",
+      "MALLOC_CHECK_",
+      "MALLOC_PERTURB_",
+      "MALLOC_ARENA_MAX",
+      "MALLOC_ARENA_TEST",
+      "MALLOC_MMAP_THRESHOLD_",
+      "MALLOC_MMAP_MAX_",
+      "MALLOC_TRIM_THRESHOLD_",
+      "MALLOC_TOP_PAD_",
+      "MALLOC_MXFAST_",
+      "LD_DYNAMIC_WEAK",
+      "LD_SHOW_AUXV",
+      "LD_PROFILE_OUTPUT",
+      "LD_VERBOSE",
+      "LD_WARN"
+    ],
+    "actual_generated_environment_ELF_and_startup_applicability": "UNKNOWN until implementation admission"
+  },
+  "output_contract": {
+    "minimum": "ONEactualsizeof(Expected)",
+    "required": "TWOactualsizeof(Expected)",
+    "selected_forecast": 3840,
+    "cap": 16777216,
+    "max_log": 16384,
+    "Report": "inlineownednoData/Cellheap; currentpendingfullowners3840 kept, providerarena4096 independent; physicalreturned/currentroomdifferent",
+    "formatting": "fixedStreamCounter wrappers withactualstocktargets/profileboundfuture; persistentstdout8192+locale144+unknownallocatoroverhead processresidents maystaycolive butnevergeometryauthority; no totalprocess48KiBclaim",
+    "emitted_design": "A01 only full earnedprefix/slacks, eachlaterpurpose ONEcompactstatus/SKIPline, finalcounts/firststaticfailureonce; noarchive/replay. FixedStreamCounter16KiBcap; truncationfail; futureliteralformatterbudget/profileproofrequired."
+  },
+  "actual_future_gates": [
+    "completefreshGCCClang PIC/native layout/rawduplicateSU/prologue/CFI/redzone/entry/outgoingargs/fullnontailcallDAG",
+    "TWOExpected/currentpendingRequest/fullRefusal/Limits/global/caller/helper/library/allocator/native/error/destructor/free sourceandactualmaps, noNRVO/frame subtraction",
+    "completeprehashedactualrealtools/DSO/systemMD/source/generatedclosure",
+    "normalwholeobject/archive/ELFimports/memoryIFUNC/profile/fenv/eagerbinding/error/cleanup/TLS/callbackbounds",
+    "immutableFIRSTfreezebeforeone A01andliteralroster percompiler; nooldfrozenreplay/retune/replacement"
+  ],
+  "authority": {
+    "qualification_flags_all_false": true,
+    "no_height_originalgraph_body_or_boarding_success": true,
+    "scalar_optimistic_exclusion_is_necessary_strict_component_only": true,
+    "universal_exclusion_cannot_exclude_actualscalar": true,
+    "new_report_cannot_retroactively_expose_old_p": true,
+    "parents_open": [
+      462,
+      361,
+      352
+    ],
+    "FirstFlight_open": true
+  },
+  "source_state_mapping": {
+    "invalid_binding": {
+      "state": 6,
+      "stop": 2,
+      "source_count": 1,
+      "source_evaluated": "bit0",
+      "prefix_attempts": 0
+    },
+    "source_identity": {
+      "state": 6,
+      "stop": 5
+    },
+    "source_capacity": {
+      "state": 4,
+      "stop": 4
+    },
+    "source_unsupported": {
+      "state": 5,
+      "stop": 9
+    },
+    "other_ordinary": {
+      "state": 1,
+      "stop": 11
+    }
+  },
+  "first_contract": {
+    "creator": "one unchanged authentic source creator percompiler, creator failure entire36honestSKIP",
+    "A01": "ONE genuine publicdefault consumer; no predicted result/classifier; ordinal/querycount preserved onerror; capture Summary only",
+    "oracle": "atmostONE byref stagedoracle scopedafter genuine A01 source; each actual readable stagegate; no sourcequeries/fixture/witness",
+    "remaining": "literal35bounded purposes calledonceorSKIP, no substitute/retry/conditional extra program",
+    "later": "separate implementationissue/sourcepeer/resource/objectnormalprofileadmission/immutablefreeze beforeanycall; compileronceFIRSTlogs frozenNEVERreplay"
+  },
+  "layout_gates": {
+    "Expected": "actualsizeof<=selected1920; predicted1864 notactualclaim; requiredhelperexactly2*sizeof actualExpected",
+    "Provider": "actualsizeof<=16",
+    "Limits": "four size_t LP64 selected32",
+    "Request": "current680/pendingoptional688 separate exterior1368, neither returnedcopied intohelper",
+    "Bounds": "two LD16 endpoints32; fixed24array768; no hidden supportarray",
+    "Summary": "<=120",
+    "Totals": "<=120",
+    "globals": "fullselected156 retained; actualnm/source owner inventory required",
+    "compiler": "fresh bothGCCClang PIC/native raw duplicate rows/ABI/fullDAG/normalcorrespondence; no cap/frame subtraction orNRVO"
+  },
+  "WORLD_temporal_scope": "Boot/world preparation and its runtime_error/string/native/loader/unwind owners before Summary/provider/create_source creatorcharge remain separate NONZERO/UNKNOWN completeprocess peak. All numeric-origin/reenteredworld/error/allocatordescendants staynumericalcaps; placementprovedfromfutureactualsource, not assumed fromhistoricalmain.",
+  "control_handoff_details": {
+    "A33": "guard41 means G42 failedcharge: prefixnot_run, neither cutsavailable norcollapsed; p/qreadable butG42notattempted, classifiersnot_run",
+    "A34": "O222 failedcharge: actualG42success/collapse retained; nooptimisticrows/classifiers; priorG42firstrefusal iff collapsed",
+    "A35": "O255 failedcharge: all prior254 opswritten, G46-G48readybits0..2; commonbestthree intermediatewritten slackrecords retained, fourthmissing andG49not_run; G42hole onlyactualcollapsed",
+    "A36": "G50 failedcharge: all255opswritten, G46-G49ready0xf; completefalse, lastarithmeticcursor254 preserved andguardcursor49; all earnedfourclassifiers remain"
+  },
+  "core_source_refusal_state_mapping": {
+    "original_invalid_binding": {
+      "state": "identity",
+      "state_ordinal": 6,
+      "stop": "invalid_binding",
+      "stop_ordinal": 2
+    },
+    "original_source_identity": {
+      "state": "identity",
+      "state_ordinal": 6,
+      "stop": "source_identity",
+      "stop_ordinal": 5
+    },
+    "original_source_capacity": {
+      "state": "capacity",
+      "state_ordinal": 4,
+      "stop": "source_capacity",
+      "stop_ordinal": 4
+    },
+    "original_unsupported": {
+      "state": "unsupported",
+      "state_ordinal": 5,
+      "stop": "unsupported_arithmetic",
+      "stop_ordinal": 9
+    },
+    "remaining_ordinary_source_refusals": {
+      "state": "source_refused",
+      "state_ordinal": 1,
+      "source_metadata_ordinals": "preserved in full typed Refusal; never success authority",
+      "stop": "source_refusal",
+      "stop_ordinal": 11
+    },
+    "moved_empty": {
+      "source_guard_count": 1,
+      "source_evaluated_mask": 1,
+      "prefix_guard_attempted": 0,
+      "prefix_operation_attempted": 0,
+      "state": "identity",
+      "stop": "invalid_binding"
+    }
+  }
+}

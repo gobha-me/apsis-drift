@@ -120,6 +120,10 @@ player's station-to-flight journey.
 - [Original knee-domain coverage audit](ORIGIN_BOARDING_KNEE_DOMAIN_COVERAGE_AUDIT.md):
   unchanged ankle boundaries, conditional coverage ceilings and the recorded positive PORT offset;
   actual feasibility and full boarding remain open.
+- [Knee compatibility diagnostic registration](ORIGIN_BOARDING_KNEE_COMPATIBILITY_DIAGNOSTIC01.md):
+  one source-bound current-cut and optimistic-ceiling diagnostic, with a
+  [matched Test](ORIGIN_BOARDING_KNEE_COMPATIBILITY_DIAGNOSTIC01_TEST_MANIFEST.md);
+  evaluation and actual feasibility remain pending.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
