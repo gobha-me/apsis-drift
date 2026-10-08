@@ -112,6 +112,10 @@ player's station-to-flight journey.
   exact scalar/common-enclosure compatibility and conditional descent dependence; actual feasibility unknown.
 - [Conditional same-domain chart-factor construction](ORIGIN_BOARDING_CHART_FACTOR_CONSTRUCTION.md):
   independent base-height premises and BOTH image intersection; actual improvement and feasibility unknown.
+- [Endpoint06 base-first registration](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06.md),
+  [matched Test](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_TEST_MANIFEST.md) and
+  [structured inventory](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_TEST_INVENTORY.json):
+  one same-domain chart-factor program; implementation and actual feasibility remain unknown.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):

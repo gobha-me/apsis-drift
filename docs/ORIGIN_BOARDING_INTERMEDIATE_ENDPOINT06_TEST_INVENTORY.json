@@ -1,0 +1,4870 @@
+{
+  "status": "AUTHOR_COMPLETE_SOURCE_ONLY_PREREGISTRATION_PENDING_INDEPENDENT_FINAL_REVIEW",
+  "issue": 529,
+  "proof_merge": "bb5b9860e984e4fc36c22af961a071c1c340616a",
+  "scope": "ONE immutable version6 program;107 finite controls; registration ONLY. No code/compiler/API/source-coordinate/sign/bound/candidate numerical evaluation/frozen replay/fixture/extra witness/extra creator.",
+  "program": {
+    "version": 6,
+    "candidate": "root_y_same_base_chart_factor_both_hip_ankle_reach_roll_slice",
+    "candidate_ordinal": 0,
+    "creators": 1,
+    "public_A01_calls": 1,
+    "additional_public_probe": false
+  },
+  "current_package": {
+    "method": "ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06.md",
+    "manifest": "ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_TEST_MANIFEST.md",
+    "inventory": "ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_TEST_INVENTORY.json",
+    "final_byte_hashes": "external paired receipt, no hash cycle"
+  },
+  "historical_source_inputs": {
+    "Endpoint05_inventory_sha256": "52fb4fdf3a0ab84ea40dbb8870833529694a0386627f6062217fa27df60a95c7",
+    "meaning": "original source/typed-pool/protocol provenance ONLY; old current_package/ELF/SU/actualresource/FIRST pins NOT reused as Endpoint06 authority"
+  },
+  "matched_method_input": {
+    "sha256": "4313aa484999e00d29b6247229bfc8c7f9128d72b74f8b0c0c345db698e4311d",
+    "literal_schema_owner_proposal_sha256": "e034e2cc8ac04e8238f9d9601fbc849f2c782e0a18b63f12538f12fa43f4005d",
+    "binding": "closed source inputs; final public bytes externally bound"
+  },
+  "actual_admission": {
+    "GCC_Clang_sizeof_frames_ELF_libraries_errors_cleanup": "UNKNOWN",
+    "source_feasibility": "UNKNOWN",
+    "full_endpoint_route_seat_First_Flight": "UNKNOWN",
+    "numerical_evaluations": 0
+  },
+  "summary": {
+    "used_counts": {
+      "count": 24,
+      "type": "uint32",
+      "bytes": 96
+    },
+    "hash_output": {
+      "count": 2,
+      "type": "uint64",
+      "bytes": 16
+    },
+    "crossing_eligibility_bitmap": {
+      "type": "uint16",
+      "bits_needed": 16,
+      "bytes": 2
+    },
+    "exists": {
+      "type": "bool",
+      "source_bytes": 1
+    },
+    "source_bytes_before_alignment": 115,
+    "selected_reservation": 120,
+    "actual_size": "UNKNOWN",
+    "mask_report_coordinate_archive": false,
+    "binding": "14operation+2guard eligibility bits0..15; no bitmap sentinel, 0xffff valid; exists separate; actualsizeofUNKNOWN."
+  },
+  "work_order": [
+    "phase.graphs",
+    "phase.legs",
+    "phase.bodies",
+    "phase.sectors",
+    "phase.timing",
+    "source_guards",
+    "projection_guards",
+    "definition_guards",
+    "sole_extrema",
+    "source_coordinates",
+    "intersection_operations",
+    "midpoint_operations",
+    "allocation_operations",
+    "pressure_candidates",
+    "disk_edges",
+    "self_body_guards",
+    "self_pairs",
+    "self_axes",
+    "self_signed_trials",
+    "self_owners",
+    "self_hip_complements",
+    "unit_axis_operations",
+    "construction_guards",
+    "construction_operations",
+    "phase_calls",
+    "preflight_guards"
+  ],
+  "caps": {
+    "creator": 8192,
+    "numerical_worker": 49152,
+    "numerical_helper": 4096,
+    "owned_output": 16777216,
+    "shared_emitted_streams": 16384,
+    "original_graph_reservation": 32768
+  },
+  "true_signature_binding": {
+    "public": "assess_origin_boarding_intermediate_endpoint06(const OriginBoardingIntermediatePauseSupport&, BoardingIntermediateEndpoint06Candidate) -> BoardingIntermediateEndpoint06Expected",
+    "bounded": "detail::intermediate_endpoint06_bounded(const OriginBoardingIntermediatePauseSupport&, BoardingIntermediateEndpoint06Candidate, BoardingIntermediateEndpoint06Limits={}) -> BoardingIntermediateEndpoint06Expected",
+    "ProgramKey": "!is_constructible_v<detail::BoardingIntermediateEndpoint06ProgramKey,double,BoardingIntermediateEndpoint06Candidate>",
+    "AdmissionContext": "!is_constructible_v<detail::BoardingIntermediateEndpoint06AdmissionContext,const BoardingIntermediateEndpoint06Diagnostic&,const BoardingRouteFootPhaseRequest&,const detail::BoardingIntermediateEndpoint06ProgramKey&>",
+    "CurrentToken": "!is_constructible_v<detail::BoardingIntermediateEndpoint06CurrentToken,const detail::BoardingIntermediateEndpoint06AdmissionContext&,const BoardingIntermediateEndpoint06Diagnostic&,const BoardingIntermediateEndpoint06Cell&,const BoardingRouteFootPhaseRequest&>",
+    "Context_deleted": "copy/move construction andcopy/moveassignment false",
+    "default": "Key/Context/Token not defaultconstructible",
+    "lifetime": "synchronous actualDiagnostic/Data/parts/Request/Key/Cell anchors, constructor+validator dead beforeissuer, sourcecarrier dead beforeconstructor",
+    "admission": "actualdeclaredsignatures/sourcefriendancestry later compile-only gate; this doc probes nothing"
+  },
+  "per_field_expected_refusal_protocol": [
+    {
+      "index": 0,
+      "field": "phase.graphs",
+      "proposed_default": 1,
+      "zero_label": "A02",
+      "raised_label": "A27",
+      "used_minus_label": "A52",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "phase_prerequisite with exactoriginalnestedcapacity andoriginalfirst/last/depth/side metadata; nestedlimitingdoubles NOT_INTERPRETED absentcarrier",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "phase_prerequisite",
+      "stage": "phase",
+      "original_phase_condition": "graph_capacity",
+      "operation_cursor": 65535,
+      "mask": "onlyactualoriginalphasepartialfields; phase.completefalse, projection/contact/SELFNOT_RUN; newSlicecomplete remains; actualphasecalls1"
+    },
+    {
+      "index": 1,
+      "field": "phase.legs",
+      "proposed_default": 2,
+      "zero_label": "A03",
+      "raised_label": "A28",
+      "used_minus_label": "A53",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "phase_prerequisite with exactoriginalnestedcapacity andoriginalfirst/last/depth/side metadata; nestedlimitingdoubles NOT_INTERPRETED absentcarrier",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "phase_prerequisite",
+      "stage": "phase",
+      "original_phase_condition": "leg_capacity",
+      "operation_cursor": 65535,
+      "mask": "onlyactualoriginalphasepartialfields; phase.completefalse, projection/contact/SELFNOT_RUN; newSlicecomplete remains; actualphasecalls1"
+    },
+    {
+      "index": 2,
+      "field": "phase.bodies",
+      "proposed_default": 1,
+      "zero_label": "A04",
+      "raised_label": "A29",
+      "used_minus_label": "A54",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "phase_prerequisite with exactoriginalnestedcapacity andoriginalfirst/last/depth/side metadata; nestedlimitingdoubles NOT_INTERPRETED absentcarrier",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "phase_prerequisite",
+      "stage": "phase",
+      "original_phase_condition": "body_capacity",
+      "operation_cursor": 65535,
+      "mask": "onlyactualoriginalphasepartialfields; phase.completefalse, projection/contact/SELFNOT_RUN; newSlicecomplete remains; actualphasecalls1"
+    },
+    {
+      "index": 3,
+      "field": "phase.sectors",
+      "proposed_default": 3,
+      "zero_label": "A05",
+      "raised_label": "A30",
+      "used_minus_label": "A55",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "phase_prerequisite with exactoriginalnestedcapacity andoriginalfirst/last/depth/side metadata; nestedlimitingdoubles NOT_INTERPRETED absentcarrier",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "phase_prerequisite",
+      "stage": "phase",
+      "original_phase_condition": "sector_capacity",
+      "operation_cursor": 65535,
+      "mask": "onlyactualoriginalphasepartialfields; phase.completefalse, projection/contact/SELFNOT_RUN; newSlicecomplete remains; actualphasecalls1"
+    },
+    {
+      "index": 4,
+      "field": "phase.timing",
+      "proposed_default": 6,
+      "zero_label": "A06",
+      "raised_label": "A31",
+      "used_minus_label": "A56",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "phase_prerequisite with exactoriginalnestedcapacity andoriginalfirst/last/depth/side metadata; nestedlimitingdoubles NOT_INTERPRETED absentcarrier",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "phase_prerequisite",
+      "stage": "phase",
+      "original_phase_condition": "timing_capacity",
+      "operation_cursor": 65535,
+      "mask": "onlyactualoriginalphasepartialfields; phase.completefalse, projection/contact/SELFNOT_RUN; newSlicecomplete remains; actualphasecalls1"
+    },
+    {
+      "index": 5,
+      "field": "source_guards",
+      "proposed_default": 64,
+      "zero_label": "A07",
+      "raised_label": "A32",
+      "used_minus_label": "A57",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "source_capacity",
+      "stage": "source",
+      "mask": "source_evaluated exactchargedprefix; source_enrolledfalse; constructorNOT_RUN",
+      "operation_cursor": "loweredcap",
+      "original_phase_calls": 0,
+      "requested_clock": 0,
+      "Cell_count": 0
+    },
+    {
+      "index": 6,
+      "field": "projection_guards",
+      "proposed_default": 256,
+      "zero_label": "A08",
+      "raised_label": "A33",
+      "used_minus_label": "A58",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "projection_capacity",
+      "stage": "projection",
+      "mask": "projection_completefalse; actualcompleted11carrierblocks only; nocurrentToken/laterpressure",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 7,
+      "field": "definition_guards",
+      "proposed_default": 31,
+      "zero_label": "A09",
+      "raised_label": "A34",
+      "used_minus_label": "A59",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "definition_capacity",
+      "stage": "definition",
+      "mask": "definition_evaluatedlow31 prefix inCell whenpresent; cap<3=>noCell/nooriginalcall; cap>=3=>oneallocatedCell andoneoriginalcall beforeD04",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 8,
+      "field": "sole_extrema",
+      "proposed_default": 4,
+      "zero_label": "A10",
+      "raised_label": "A35",
+      "used_minus_label": "A60",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "sole_extrema_capacity",
+      "stage": "sole_extrema",
+      "mask": "sole_extrema_evaluated[axis][which], ordinal2*axis+which prefix, chargedbeforemath",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 9,
+      "field": "source_coordinates",
+      "proposed_default": 8,
+      "zero_label": "A11",
+      "raised_label": "A36",
+      "used_minus_label": "A61",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "source_coordinate_capacity",
+      "stage": "source_coordinates",
+      "mask": "source_coordinate_evaluated[vertex][axis], ordinal2*vertex+axis prefix, chargedbeforemath",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 10,
+      "field": "intersection_operations",
+      "proposed_default": 4,
+      "zero_label": "A12",
+      "raised_label": "A37",
+      "used_minus_label": "A62",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "intersection_capacity",
+      "stage": "intersection",
+      "mask": "intersection_evaluated[axis][which], ordinal2*axis+which prefix",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 11,
+      "field": "midpoint_operations",
+      "proposed_default": 4,
+      "zero_label": "A13",
+      "raised_label": "A38",
+      "used_minus_label": "A63",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "midpoint_capacity",
+      "stage": "midpoint",
+      "mask": "midpoint_evaluated[axis][which], ordinal2*axis+which prefix; candidatechargedearlierbutnotnecessarilypressure_evaluated",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 12,
+      "field": "allocation_operations",
+      "proposed_default": 6,
+      "zero_label": "A14",
+      "raised_label": "A39",
+      "used_minus_label": "A64",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "allocation_capacity",
+      "stage": "allocation",
+      "mask": "allocation_evaluated[axis][which], ordinal3*axis+which prefix; STARcandidatechargedearlierbutnotnecessarilycomplete",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 13,
+      "field": "pressure_candidates",
+      "proposed_default": 2,
+      "zero_label": "A15",
+      "raised_label": "A40",
+      "used_minus_label": "A65",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "pressure_capacity",
+      "stage": "pressure_candidate",
+      "mask": "pressure_evaluated markscompletedPORT/STARexpression, NOT candidatecharge itself; flagcount<=chargedcount",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 14,
+      "field": "disk_edges",
+      "proposed_default": 16,
+      "zero_label": "A16",
+      "raised_label": "A41",
+      "used_minus_label": "A66",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "edge_capacity",
+      "stage": "disk",
+      "mask": "sole/sourceedgeevaluatedonlyactuallychargededge; op=8*side+4*source_edge+edge; nofailededgemask/record",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 15,
+      "field": "self_body_guards",
+      "proposed_default": 63,
+      "zero_label": "A17",
+      "raised_label": "A42",
+      "used_minus_label": "A67",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "self_body_capacity",
+      "stage": "body",
+      "mask": "self_body_evaluatedlow63 chargedprefix; incompletebody=>Unit24/laterpairsNOT_RUN",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 16,
+      "field": "self_pairs",
+      "proposed_default": 105,
+      "zero_label": "A18",
+      "raised_label": "A43",
+      "used_minus_label": "A68",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "self_pair_capacity",
+      "stage": "pair",
+      "mask": "examined_pairs==chargedself_pairs; acceptedprefix<=examined; nofailednewpair/certificate",
+      "operation_cursor": 65535,
+      "other_cursors": "actual upcoming pair<105/region<14/axis<14/sign<2 or their declaredsentinels; ownerregion mustmatchlexicographicpair; no predictednewgeometry",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 17,
+      "field": "self_axes",
+      "proposed_default": 1470,
+      "zero_label": "A19",
+      "raised_label": "A44",
+      "used_minus_label": "A69",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "self_axis_capacity",
+      "stage": "separation",
+      "mask": "retainedacceptedlexicographiccertificateprefix; upcomingactualpair/axis, selfsign255 beforetrial; noacceptedfailedtrialplane",
+      "operation_cursor": 65535,
+      "other_cursors": "actual upcoming pair<105/region<14/axis<14/sign<2 or their declaredsentinels; ownerregion mustmatchlexicographicpair; no predictednewgeometry",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 18,
+      "field": "self_signed_trials",
+      "proposed_default": 2940,
+      "zero_label": "A20",
+      "raised_label": "A45",
+      "used_minus_label": "A70",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "self_signed_capacity",
+      "stage": "separation",
+      "mask": "retainedacceptedprefix; upcomingactualpair/axis/sign; selectedplaneonlyafteractualsuccessfultrial",
+      "operation_cursor": 65535,
+      "other_cursors": "actual upcoming pair<105/region<14/axis<14/sign<2 or their declaredsentinels; ownerregion mustmatchlexicographicpair; no predictednewgeometry",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 19,
+      "field": "self_owners",
+      "proposed_default": 14,
+      "zero_label": "A21",
+      "raised_label": "A46",
+      "used_minus_label": "A71",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "self_owner_capacity",
+      "stage": "owner",
+      "mask": "owner_attemptedmask high2clear; chargedownerbeforeattemptbit andnumericrecord, notfailedowner; retainedotherowners",
+      "operation_cursor": 65535,
+      "other_cursors": "actual upcoming pair<105/region<14/axis<14/sign<2 or their declaredsentinels; ownerregion mustmatchlexicographicpair; no predictednewgeometry",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 20,
+      "field": "self_hip_complements",
+      "proposed_default": 2,
+      "zero_label": "A22",
+      "raised_label": "A47",
+      "used_minus_label": "A72",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "self_hip_capacity",
+      "stage": "hip",
+      "mask": "complementattemptedonlyafterhipcharge; actualsamepair/region/side; oldfailedownerretained; nofailedcomplementrecord",
+      "operation_cursor": 65535,
+      "other_cursors": "actual upcoming pair<105/region<14/axis<14/sign<2 or their declaredsentinels; ownerregion mustmatchlexicographicpair; no predictednewgeometry",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 21,
+      "field": "unit_axis_operations",
+      "proposed_default": 24,
+      "zero_label": "A23",
+      "raised_label": "A48",
+      "used_minus_label": "A73",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "unit_axis_capacity",
+      "stage": "unit_axes",
+      "mask": "unit_axis_attemptedlow24 exactchargeprefix; written subset; each6rowSUB3/DIV3blockcompleteonlyafterallwrites; incompleteunits=>pairs0",
+      "operation_cursor": "loweredcap",
+      "new_constructor": "complete458/75+actualgeneratedpacket; requestedduration2 remains, notauthorityforfailedstage"
+    },
+    {
+      "index": 22,
+      "field": "output_bytes",
+      "proposed_default": 16777216,
+      "zero_label": "A24",
+      "raised_label": "A49",
+      "used_minus_label": "A74",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "output0/raised creatoronly; REQUIRED−1 genuine structuredFIRST",
+      "state": "capacity",
+      "work": "allsource/constructor/phase/cellwork0, preflight1",
+      "first_refusal": "output_capacity samefirst/terminal; requiredformula TWOsizeofExpected+sizeofCell",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "zero": "unexpected exactoutputheaders",
+      "terminal_condition": "output_capacity",
+      "stage": "not_run",
+      "operation_cursor": 65535,
+      "mask": "noCell, source/SliceallNOT_RUN, clock0, outputownTWOheadersonly"
+    },
+    {
+      "index": 23,
+      "field": "construction_guards",
+      "proposed_default": 75,
+      "zero_label": "A25",
+      "raised_label": "A50",
+      "used_minus_label": "A75",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "slice_guard_capacity",
+      "stage": "slice_guard",
+      "mask": "TWOwordattempted exactchargedprefix up to75, written subset; upcomingguardcursorcap, nofailedchargebit/count; earlier scalar publications remain by written bits",
+      "operation_cursor": "loweredcap",
+      "original_phase_calls": 0,
+      "requested_clock": 0,
+      "Cell_count": 0,
+      "issuer": "absent"
+    },
+    {
+      "index": 24,
+      "field": "construction_operations",
+      "proposed_default": 458,
+      "zero_label": "A26",
+      "raised_label": "A51",
+      "used_minus_label": "A76",
+      "raised": "unexpected exactinvalidlimits; FPguard1 andnoDiagnostic",
+      "reachability": "zero work requiresFIRSTchargedcount>0; usedminusrequires>1; count0/1SKIP",
+      "state": "capacity",
+      "work": "targetchargedcount==selectedloweredcap; nofailedchargeincrement; allworkwithinactualLimits/defaults",
+      "first_refusal": "actualearliestchronologicalordinary/hardrefusal preserved; do notrequireterminal==firstafterearlierordinaryfindings",
+      "terminal": "exacttargetcapacity stop survivesordinarypriorfindings; currentrefusal condition/predicate targetcapacity; stopstage/cursorsreflectactualupcomingtuple",
+      "earlier_evidence": "allactuallyearnedpriorrecords/masks/supportedbounds survive; nofuture fieldsread; no substitute baselinearchive",
+      "terminal_condition": "slice_operation_capacity",
+      "stage": "slice_operation",
+      "mask": "EIGHTwordattempted exactchargedprefix up to458, written subset; upcomingopcursorcap, nofailedchargebit/count; earlier scalar publications remain by written bits",
+      "operation_cursor": "loweredcap",
+      "original_phase_calls": 0,
+      "requested_clock": 0,
+      "Cell_count": 0,
+      "issuer": "absent"
+    }
+  ],
+  "independent_arithmetic_table": [
+    {
+      "primitive": "LIFT/TERMS",
+      "recipe": "unchangedbinary64literaloractualY converts toLDsingleton; sumactualboundedConstanttermsinoriginalorder; canonicalunused/countidentityfirst",
+      "unsupported": "conversionnotexactonselectedplatform ornonfinite=>UNAVAILABLE; noproducercomputedthreshold"
+    },
+    {
+      "primitive": "ADD/SUB/NEG",
+      "recipe": "finiteorderedLDintervalendpointsum/difference/negate withnextafterl outward; currentpendingboundschargedinslots",
+      "unsupported": "nonfinite/invalidorder=>UNAVAILABLE; nozero-tolerancecollapse"
+    },
+    {
+      "primitive": "MUL",
+      "recipe": "fourendpointproducts, finiteorderedmin/max outward; exactstructuralzeroonlyifsingletoncertifiedzero",
+      "unsupported": "nonfinite=>UNAVAILABLE; computedsmallisnotstructuralzero"
+    },
+    {
+      "primitive": "SQUARE/ABS",
+      "recipe": "sign-awareendpoints; spanningzero lowerexact0 frommathematicalnonnegativeidentity, outwardupper; nostoredroundedorthogonality",
+      "unsupported": "nonfinite/invalidorder=>UNAVAILABLE"
+    },
+    {
+      "primitive": "DIV",
+      "recipe": "denominatororderedfinite interval strictlyawayfrom0; outwardreciprocal thenmultiply; originalfixedL1exactpositive; allargument/pendingreturnslotsnamed",
+      "unsupported": "denominatorincludes0=>UNAVAILABLE, notexactzero/fallbackepsilon"
+    },
+    {
+      "primitive": "SQRT",
+      "recipe": "finiteorderedargumentlow>=0, C sqrtl onendpoints thenoutwardnextafterl; exactzeroonlyknownstructuralzero; noselectedlibraryrigorousULPtheoremassumed",
+      "unsupported": "negative/uncertaindomain/nonfinite=>UNAVAILABLE; noMAXclippingfallback"
+    },
+    {
+      "primitive": "YAW/DOT/VECTOR",
+      "recipe": "sourceproperrationalyaw, completecolumns beforeanydot; threeproducts/twoadds percomponent; source-certifiedheldsoleidentity; byrefdestinations; K-H=Rside(-F1U-G1ez) thenfixedL1divide",
+      "unsupported": "nomatrixinverse/normalization; incompletecomponent/domain=>UNAVAILABLE"
+    },
+    {
+      "primitive": "MIN/MAX",
+      "recipe": "finiteordered endpointwisemin/max of nominalfunctions; firstoperand on exactstructuraltie; uncertainty never grants issuer/physicalauthority",
+      "unsupported": "uncertainrequired strictdomain=>INCONCLUSIVE"
+    },
+    {
+      "primitive": "CLOSED_ENDPOINT_NONNEG_INTERSECTION",
+      "recipe": "ONLY independent closed-domain theorem for SAMEw/analyticcut permits radicand intersection[0,+infinity); supportedhigh>=0 and exactlower0; nounsupportedrepair/genericclipping",
+      "unsupported": "noearned closedcertificate orunsupportedhigh=>INCONCLUSIVE; VALUE not derivative"
+    }
+  ],
+  "independent_comparison_table": [
+    {
+      "check": "source/packet/availability/Ymembership",
+      "rule": "exactbinary64/count/staticidentity andactual lo<Y<hi; NO arithmeticallowance; invalidsourceidentity FAIL or unavailable absentearnedread"
+    },
+    {
+      "check": "finite original reach/gamma/rho/down/F1/F2/G1 andstrict hipextent",
+      "rule": "Form signed difference I in required positive direction. eps=frozen allowance. CORROBORATED iff supported finite I.low>eps; FAIL iff supported finite I.high< -eps; otherwise INCONCLUSIVE. Strict production source predicate is checked separately exactly."
+    },
+    {
+      "check": "closed ankle/roll margins",
+      "rule": "CORROBORATED iff exact structural singletonzero or supported finite I.low>eps; FAIL iff supported finite I.high< -eps; otherwise INCONCLUSIVE. No computational zero/equality or policy allowance."
+    },
+    {
+      "check": "link identities",
+      "rule": "Form independent identity difference I and fixed eps. CORROBORATED iff supportedfinite I.low>=-eps AND I.high<=eps; FAIL iff I.low>eps OR I.high< -eps; otherwise INCONCLUSIVE. No normalization/refit."
+    },
+    {
+      "check": "available originalsource/phase/Unit24 enclosure",
+      "rule": "For supported finite original b and independent I, eps uses max(1,abs(I.low),abs(I.high),abs(b.low),abs(b.high)). CORROBORATED iff b.low<=I.low+eps AND b.high>=I.high-eps; else FAIL iff I.high<b.low-eps OR I.low>b.high+eps; else INCONCLUSIVE. No rigorous inclusion theorem or extra query."
+    },
+    {
+      "check": "certifiedoriginalhip",
+      "rule": "mandatoryactualsupportedflags/identities/uy.high<0/extent.high<limit.low/finitegap; independentlydirect transverse/extent/limit/gap enclosurecorroboration; no gap.low>0"
+    },
+    {
+      "check": "A01 downstream derivative/body/contact/SELF",
+      "rule": "originalconditionalfullbodyandintervalauditsonlywhenearned; preservealloriginalstrict/nonstrictcertificatepolicies; noequivalenceofclosedendpointVALUEandderivative"
+    },
+    {
+      "comparison": "BASE/finalinward",
+      "rule": "signedmargin publishedlower-independentnominalLower OR independentnominalUpper-publishedupper; robustpositive/negative/structuralzero/INCONCLUSIVE rule; no equality or certifiedinclusion demand"
+    },
+    {
+      "comparison": "sameBASEfactor",
+      "rule": "signedmargin independentlysafe max-publishedC; nonstrict frozenarithmeticonly rule; actual0<C<=1 exact. ActualC denominator reference only, notdirectaxis operand"
+    }
+  ],
+  "canonical_original_hip_policy": {
+    "negativeaxis": "supported genuineuy.upper<0",
+    "strictextent": "extent.upper<limit.lower",
+    "strictgap": "supported exactstoredoriginalgap/enclosure, NO gap.lower>0 additionalpolicy",
+    "legacy_Test_discrepancy": "HISTORICAL pre-#521 Endpoint04 Test extra gap.lower>0 assertion; #521 merged bffb0fab aligned current Endpoint04 Test with unchanged production certificate before bb5b9860 baseline. Historical source/FIRST provenance preserved; fresh Test matches current production.",
+    "legacy_reachability": "Historical extra-assert reachability UNKNOWN; no current failure/gameplay bug shown or new geometry query selected."
+  },
+  "lowerable_limits": [
+    {
+      "index": 0,
+      "field": "phase.graphs",
+      "historical_endpoint04_default": 1,
+      "proposed_default": 1,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 1,
+      "field": "phase.legs",
+      "historical_endpoint04_default": 2,
+      "proposed_default": 2,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 2,
+      "field": "phase.bodies",
+      "historical_endpoint04_default": 1,
+      "proposed_default": 1,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 3,
+      "field": "phase.sectors",
+      "historical_endpoint04_default": 3,
+      "proposed_default": 3,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 4,
+      "field": "phase.timing",
+      "historical_endpoint04_default": 6,
+      "proposed_default": 6,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 5,
+      "field": "source_guards",
+      "historical_endpoint04_default": 64,
+      "proposed_default": 64,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 6,
+      "field": "projection_guards",
+      "historical_endpoint04_default": 256,
+      "proposed_default": 256,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 7,
+      "field": "definition_guards",
+      "historical_endpoint04_default": 31,
+      "proposed_default": 31,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 8,
+      "field": "sole_extrema",
+      "historical_endpoint04_default": 4,
+      "proposed_default": 4,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 9,
+      "field": "source_coordinates",
+      "historical_endpoint04_default": 8,
+      "proposed_default": 8,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 10,
+      "field": "intersection_operations",
+      "historical_endpoint04_default": 4,
+      "proposed_default": 4,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 11,
+      "field": "midpoint_operations",
+      "historical_endpoint04_default": 4,
+      "proposed_default": 4,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 12,
+      "field": "allocation_operations",
+      "historical_endpoint04_default": 6,
+      "proposed_default": 6,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 13,
+      "field": "pressure_candidates",
+      "historical_endpoint04_default": 2,
+      "proposed_default": 2,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 14,
+      "field": "disk_edges",
+      "historical_endpoint04_default": 16,
+      "proposed_default": 16,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 15,
+      "field": "self_body_guards",
+      "historical_endpoint04_default": 63,
+      "proposed_default": 63,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 16,
+      "field": "self_pairs",
+      "historical_endpoint04_default": 105,
+      "proposed_default": 105,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 17,
+      "field": "self_axes",
+      "historical_endpoint04_default": 1470,
+      "proposed_default": 1470,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 18,
+      "field": "self_signed_trials",
+      "historical_endpoint04_default": 2940,
+      "proposed_default": 2940,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 19,
+      "field": "self_owners",
+      "historical_endpoint04_default": 14,
+      "proposed_default": 14,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 20,
+      "field": "self_hip_complements",
+      "historical_endpoint04_default": 2,
+      "proposed_default": 2,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 21,
+      "field": "unit_axis_operations",
+      "historical_endpoint04_default": 24,
+      "proposed_default": 24,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 22,
+      "field": "output_bytes",
+      "historical_endpoint04_default": 16777216,
+      "proposed_default": 16777216,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 23,
+      "field": "construction_guards",
+      "historical_endpoint04_default": 37,
+      "proposed_default": 75,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    },
+    {
+      "index": 24,
+      "field": "construction_operations",
+      "historical_endpoint04_default": 226,
+      "proposed_default": 458,
+      "binding": "Endpoint06 held458O/75G; source forecast not implementation admission"
+    }
+  ],
+  "layout_forecast": {
+    "basis": "SOURCE_MEMBER_ORDER_FORECAST_ON_FROZEN_8BYTE_POINTER_ALIGNMENT_PROFILE_NOT_NEW_SIZEOF",
+    "primitive_sizes": {
+      "double": 8,
+      "uint64": 8,
+      "uint32": 4,
+      "uint16": 2,
+      "uint8_bool": 1,
+      "pointer_reference": 8,
+      "Provider": 16,
+      "PhasePartBinding": 64,
+      "vector": 24,
+      "string": 32,
+      "ScalarBounds": 24,
+      "PhaseRefusal": 64,
+      "optional_size_t": 16,
+      "TriangleKey": 12,
+      "optional_TriangleKey": 16,
+      "string_view": 16
+    },
+    "Slice": [
+      [
+        "operation_attempted8",
+        0,
+        64
+      ],
+      [
+        "operation_written8",
+        64,
+        64
+      ],
+      [
+        "guard_attempted2",
+        128,
+        16
+      ],
+      [
+        "guard_written2",
+        144,
+        16
+      ],
+      [
+        "limiting_bound",
+        160,
+        24
+      ],
+      [
+        "y_lo_hi",
+        184,
+        24
+      ],
+      [
+        "base_lo_hi",
+        208,
+        16
+      ],
+      [
+        "factor_lower2",
+        224,
+        16
+      ],
+      [
+        "operation_uint16",
+        240,
+        2
+      ],
+      [
+        "guard_side",
+        242,
+        2
+      ],
+      [
+        "condition",
+        244,
+        1
+      ],
+      [
+        "arithmetic_complete",
+        245,
+        2
+      ],
+      [
+        "preflight",
+        247,
+        1
+      ],
+      [
+        "zero_mask_uint16",
+        248,
+        2
+      ],
+      [
+        "tail_padding",
+        250,
+        6
+      ]
+    ],
+    "Refusal": [
+      [
+        "condition_predicate",
+        0,
+        2
+      ],
+      [
+        "alignment_padding",
+        2,
+        6
+      ],
+      [
+        "limiting_bound",
+        8,
+        24
+      ],
+      [
+        "phase",
+        32,
+        64
+      ],
+      [
+        "optional_side_edge_axis",
+        96,
+        48
+      ],
+      [
+        "optional_source_key",
+        144,
+        16
+      ],
+      [
+        "source_name",
+        160,
+        16
+      ],
+      [
+        "self_pair",
+        176,
+        2
+      ],
+      [
+        "operation_uint16",
+        178,
+        2
+      ],
+      [
+        "self_region_axis_sign",
+        180,
+        3
+      ],
+      [
+        "self_stage",
+        183,
+        1
+      ],
+      [
+        "source_edge",
+        184,
+        1
+      ],
+      [
+        "tail_padding",
+        185,
+        7
+      ]
+    ],
+    "Diagnostic": [
+      [
+        "Provider",
+        0,
+        16
+      ],
+      [
+        "parts15",
+        16,
+        960
+      ],
+      [
+        "Counters",
+        976,
+        200
+      ],
+      [
+        "Slice",
+        1176,
+        256
+      ],
+      [
+        "vector_Cell",
+        1432,
+        24
+      ],
+      [
+        "optional_Refusal",
+        1456,
+        200
+      ],
+      [
+        "source_evaluated",
+        1656,
+        8
+      ],
+      [
+        "output_capacity_bytes",
+        1664,
+        8
+      ],
+      [
+        "reporting_elapsed_seconds",
+        1672,
+        8
+      ],
+      [
+        "version_selfversion",
+        1680,
+        8
+      ],
+      [
+        "candidate_condition_state_stage",
+        1688,
+        4
+      ],
+      [
+        "stop_self_pair",
+        1692,
+        2
+      ],
+      [
+        "stop_operation_uint16",
+        1694,
+        2
+      ],
+      [
+        "stop_self_region_axis_sign",
+        1696,
+        3
+      ],
+      [
+        "thirteen_boolean_flags",
+        1699,
+        13
+      ]
+    ],
+    "predicted_sizes": {
+      "Slice": 256,
+      "Refusal": 192,
+      "optional_Refusal": 200,
+      "Diagnostic": 1712,
+      "Expected": 1720,
+      "Cell": 10944,
+      "Limits": 200,
+      "Work": 200,
+      "Key": 16,
+      "Context": 40,
+      "Token": 40,
+      "validatorExpected": 40,
+      "Summary": 120,
+      "Totals": 120
+    },
+    "proposed_ceilings": {
+      "Expected": 1744,
+      "Cell": 11032,
+      "Refusal": 192,
+      "Slice": 256,
+      "Limits": 200,
+      "Work": 200,
+      "Key": 16,
+      "Context": 40,
+      "Token": 40,
+      "validatorExpected": 40,
+      "Summary": 120,
+      "Totals": 120,
+      "mutable_globals": 156,
+      "Oracle": 8400
+    },
+    "Expected_reason": "Diagnostic1712 vs string32, independent discriminator/padding8 gives predicted1720; selected1744. Source forecast only, actual fresh both-compiler sizeof unknown.",
+    "Cell_reason": "Every Cell member retains the identical type/extent/order; all remapped enum underlying types remainuint8; no constructor Slice/axis/threshold is added to Cell. Historical10944 is applicability input only, not freshsizeof.",
+    "Summary_reason": "24 checked uint32 used96 + hash8 + output8 + uint16 crossing_bitmap2 + exists1 =115 rounded8→120. No mask or report archive.",
+    "Totals_reason": "107 consumers/107 SKIPs/next_slot108 from91 generic+14 operation crossings+2 guard crossings; no observed count. Summary16 eligibility bits fitsuint16/120 source target.",
+    "mutable_globals_components": {
+      "Totals": 120,
+      "checks_uint64": 8,
+      "failures_uint32": 4,
+      "shared_bytes_size_t": 8,
+      "first_failure_static_label_string_view": 16
+    }
+  },
+  "core_source_pools": {
+    "constructor": {
+      "named_components": {
+        "direct_local_aggregate_87Intervals24_18double8_2bool_padding6": 2240,
+        "eight_primitive_argument_local_pending_intervals": 192,
+        "constant_sign_arrays": 96,
+        "certified_small_root_terms_scratch_scalars": 176,
+        "full_parameters_Control_forwarded_current_pending_closures_deep_refs_views_controls": 424,
+        "two_validator_expected": 80,
+        "success_library_environment": 512,
+        "row_reset_full_refusal_initializer": 192
+      },
+      "named_bytes": 3912,
+      "unused_bytes": 184,
+      "reservation_bytes": 4096
+    },
+    "factory": {
+      "named_components": {
+        "eight_optional_request_returns": 5504,
+        "request": 680,
+        "six_constants": 576,
+        "step": 96,
+        "references_error": 512
+      },
+      "named_bytes": 7368,
+      "unused_bytes": 312,
+      "reservation_bytes": 7680
+    },
+    "tuple": {
+      "named_components": {
+        "three_region_arrays": 672,
+        "two_part_records": 128,
+        "descriptors": 256,
+        "references_error": 512,
+        "sort": 480
+      },
+      "named_bytes": 2048,
+      "unused_bytes": 0,
+      "reservation_bytes": 2048
+    },
+    "pressure": {
+      "named_components": {
+        "entire_preserved_pressure_named_inventory": 3192,
+        "row_reset_full_refusal_initializer": 192
+      },
+      "named_bytes": 3384,
+      "unused_bytes": 2760,
+      "reservation_bytes": 6144
+    },
+    "SELF": {
+      "named_components": {
+        "relative_points": 1296,
+        "whole_region": 224,
+        "four_solid_local_caller_pending_returns": 768,
+        "six_points": 432,
+        "twentyfour_intervals": 576,
+        "two_squared_scratch": 112,
+        "eight_vectors": 192,
+        "three_owner_returns": 168,
+        "three_hip_and_three_half_ray_returns": 336,
+        "extra_intervals": 192,
+        "doubles": 192,
+        "references": 160,
+        "error": 512,
+        "row_reset_full_refusal_initializer": 192
+      },
+      "named_bytes": 5352,
+      "unused_bytes": 792,
+      "reservation_bytes": 6144
+    },
+    "region_factory": {
+      "named_components": {
+        "three_region_arrays": 672,
+        "tuple_references": 512,
+        "error": 256
+      },
+      "named_bytes": 1440,
+      "unused_bytes": 0,
+      "reservation_bytes": 1440
+    },
+    "construction_audit": {
+      "named_components": {
+        "twenty_LD_bounds32": 640,
+        "eight_LD_vectors96_by_reference": 768,
+        "sixtyfour_LD_scalars16": 1024,
+        "forty_double8_slots": 320,
+        "references_environment_indices_control": 256,
+        "independent_success_library_leaf": 512
+      },
+      "named_bytes": 3520,
+      "unused_bytes": 576,
+      "reservation_bytes": 4096
+    },
+    "body_audit": {
+      "named_components": {
+        "preserved_body_named_inventory": 7904
+      },
+      "named_bytes": 7904,
+      "unused_bytes": 288,
+      "reservation_bytes": 8192
+    },
+    "interval_audit": {
+      "named_components": {
+        "fiftyfour_Intervals24": 1296,
+        "twentyfour_points72": 1728,
+        "sixteen_frames72": 1152,
+        "TWO_solid_allowance": 1024,
+        "pending_proof_returns": 512,
+        "scalar_owner_hip_error_helpers_INCLUDING_success_library512": 2480
+      },
+      "named_bytes": 8192,
+      "unused_bytes": 0,
+      "reservation_bytes": 8192
+    },
+    "creator_caller": {
+      "named_components": {
+        "summary": 120,
+        "two_streams": 176,
+        "mutable_globals_target": 156,
+        "boot_native_expected": 80,
+        "provider": 24,
+        "saved_buffers_bytes": 24,
+        "references": 32,
+        "errors": 160
+      },
+      "named_bytes": 772,
+      "unused_bytes": 252,
+      "reservation_bytes": 1024
+    },
+    "graph_caller": {
+      "named_components": {
+        "entire_preserved_endpoint03_named_caller": 1871,
+        "ONE_static_first_failure_borrowed_view": 16
+      },
+      "named_bytes": 1887,
+      "unused_bytes": 161,
+      "reservation_bytes": 2048
+    }
+  },
+  "source_stage_maps": {
+    "creator": {
+      "components": {
+        "entire_old_creator": 7000,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 7240,
+      "ceiling": 8192,
+      "headroom": 952
+    },
+    "preflight": {
+      "components": {
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "library_error": 512,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 11248,
+      "ceiling": 49152,
+      "headroom": 37904
+    },
+    "required_room_refusal": {
+      "components": {
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "library_error": 512,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "current_request": 680,
+        "current_pending_refusal": 384,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 12312,
+      "ceiling": 49152,
+      "headroom": 36840
+    },
+    "source_enrollment": {
+      "components": {
+        "full_old_endpoint03_enrollment": 33208,
+        "new_two_headers": 3488,
+        "new_four_limits": 800,
+        "new_current_pending_refusal": 384,
+        "new_context": 40,
+        "new_token_reservation": 40,
+        "new_current_pending_key": 32,
+        "new_control": 64,
+        "new_exterior_current_pending_request_overcharge": 1368,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 39664,
+      "ceiling": 49152,
+      "headroom": 9488
+    },
+    "source_plus_disjoint_construction_overcharge": {
+      "components": {
+        "full_old_endpoint03_enrollment": 33208,
+        "new_two_headers": 3488,
+        "new_four_limits": 800,
+        "new_current_pending_refusal": 384,
+        "new_context": 40,
+        "new_token_reservation": 40,
+        "new_current_pending_key": 32,
+        "new_control": 64,
+        "new_exterior_current_pending_request_overcharge": 1368,
+        "phase_scalar_limits_global": 152,
+        "disjoint_full_constructor_pool": 4096,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 43760,
+      "ceiling": 49152,
+      "headroom": 5392
+    },
+    "construction": {
+      "components": {
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "current_pending_key": 32,
+        "context": 40,
+        "old_caps_reason_work": 176,
+        "constructor_pool": 4096,
+        "independent_error": 512,
+        "outer_control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 17344,
+      "ceiling": 49152,
+      "headroom": 31808
+    },
+    "reset": {
+      "components": {
+        "two_full_cells": 22064,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "context": 40,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "two_initializer_arrays": 210,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 35010,
+      "ceiling": 49152,
+      "headroom": 14142
+    },
+    "original_graph": {
+      "components": {
+        "entire_original_graph": 32768,
+        "two_headers": 3488,
+        "arena": 4096,
+        "cell_delta": 3296,
+        "four_limits": 800,
+        "caller": 2048,
+        "old_caps": 72,
+        "old_reason": 64,
+        "pending_optional_request": 688,
+        "current_request": 680,
+        "current_pending_refusal": 384,
+        "context": 40,
+        "token_reservation": 40,
+        "current_pending_key": 32,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 48800,
+      "ceiling": 49152,
+      "headroom": 352
+    },
+    "canonical": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "factory_pool": 7680,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 31488,
+      "ceiling": 49152,
+      "headroom": 17664
+    },
+    "pressure_SELF": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "helper_pool": 6144,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 29952,
+      "ceiling": 49152,
+      "headroom": 19200
+    },
+    "region_factory": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "region_factory": 1440,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 25248,
+      "ceiling": 49152,
+      "headroom": 23904
+    },
+    "construction_audit": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "scalar_error": 1024,
+        "inactive_key_context_overcharge": 40,
+        "phase_scalar_limits_global": 152,
+        "construction_audit_utility": 4096,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 28232,
+      "ceiling": 49152,
+      "headroom": 20920
+    },
+    "body_audit": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "scalar_error": 1024,
+        "inactive_key_context_overcharge": 40,
+        "phase_scalar_limits_global": 152,
+        "two_oracles": 16800,
+        "body_utility": 8192,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 49128,
+      "ceiling": 49152,
+      "headroom": 24
+    },
+    "interval_audit": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "scalar_error": 1024,
+        "inactive_key_context_overcharge": 40,
+        "phase_scalar_limits_global": 152,
+        "interval_utility": 8192,
+        "native_prepared_and_source_json_global_overcharge": 88
+      },
+      "bytes": 32328,
+      "ceiling": 49152,
+      "headroom": 16824
+    },
+    "owned_capacity1_output": {
+      "components": {
+        "two_headers": 3488,
+        "capacity1_cell": 11032
+      },
+      "bytes": 14520,
+      "ceiling": 16777216,
+      "headroom": 16762696
+    }
+  },
+  "new_error_allocator_cleanup_stage_maps": {
+    "creator_before_arena": {
+      "components": {
+        "current_pending_ctor_evidence": 1040,
+        "port_partition": 376,
+        "current_pending_creator_expected": 80,
+        "creator_limits": 96,
+        "native_boot_aliases": 32,
+        "full_selected_creator_caller": 1024,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 7304,
+      "ceiling": 8192,
+      "headroom": 888,
+      "kind": "PROPOSED_SOURCE_FORECAST_NOT_MEASUREMENT"
+    },
+    "public_preflight": {
+      "components": {
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 15152,
+      "ceiling": 49152,
+      "headroom": 34000,
+      "kind": "PROPOSED_SOURCE_FORECAST_NOT_MEASUREMENT"
+    },
+    "structured_room_conservative_error_alternative": {
+      "components": {
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "current_request": 680,
+        "current_pending_refusal": 384,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 16216,
+      "ceiling": 49152,
+      "headroom": 32936,
+      "kind": "PROPOSED_SOURCE_FORECAST_NOT_MEASUREMENT"
+    },
+    "source_enrollment_error_overcharge": {
+      "components": {
+        "full_old_endpoint03_enrollment": 33208,
+        "new_two_headers": 3488,
+        "new_four_limits": 800,
+        "new_current_pending_refusal": 384,
+        "new_context": 40,
+        "new_token_reservation": 40,
+        "new_current_pending_key": 32,
+        "new_control": 64,
+        "new_exterior_current_pending_request_overcharge": 1368,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 44080,
+      "ceiling": 49152,
+      "headroom": 5072,
+      "kind": "PROPOSED_SOURCE_FORECAST_NOT_MEASUREMENT"
+    },
+    "single_cell_reserve_after_constructor_return": {
+      "components": {
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "current_pending_key": 32,
+        "context": 40,
+        "old_caps_reason_work": 176,
+        "outer_control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 17152,
+      "ceiling": 49152,
+      "headroom": 32000,
+      "kind": "PROPOSED_SOURCE_FORECAST_NOT_MEASUREMENT"
+    },
+    "post_helper_or_audit_teardown": {
+      "components": {
+        "full_cell": 11032,
+        "two_headers": 3488,
+        "arena": 4096,
+        "four_limits": 800,
+        "caller": 2048,
+        "current_pending_request": 1368,
+        "current_pending_refusal": 384,
+        "context_token": 80,
+        "current_pending_key": 32,
+        "old_caps_reason_work": 176,
+        "control": 64,
+        "phase_scalar_limits_global": 152,
+        "native_prepared_and_source_json_global_overcharge": 88,
+        "complete_error_pool": 4096,
+        "fixed_error_buffers_and_chunk_headers": 320
+      },
+      "bytes": 28224,
+      "ceiling": 49152,
+      "headroom": 20928,
+      "kind": "PROPOSED_SOURCE_FORECAST_NOT_MEASUREMENT"
+    }
+  },
+  "complete_error_pool": {
+    "bytes": 4096,
+    "kind": "PROSPECTIVE_ALL_INCLUSIVE_SOURCE_ERROR_CEILING",
+    "typed_owner_constraints": {
+      "two_borrowed_bad_alloc_exception_storage_slots_including_header_chunk": 384,
+      "current_pending_unexpected_string_stack_wrappers": 64,
+      "caught_exception_and_destructor_allocator_reference_slots": 32,
+      "allocation_count_branch_and_catch_control": 32,
+      "remaining_simultaneous_external_call_frames_and_unwind_personality_tls_cleanup_terminal_leaf_budget": 3584
+    },
+    "note": "These disjoint named charges sum4096; two exception slots each have selected192-byte ceiling. This is a proposed budget partition, not an actual allocator/ELF upper proof. A fresh complete measured chain that violates any owner limit or total stops before FIRST; no cap raise, warmup, arbitrary callback or predicted failure exclusion."
+  },
+  "fixed_error_string_and_chunk_owner_plan": {
+    "bytes": 320,
+    "components": {
+      "two_live_or_pending_fixed_literal_string_buffers_each128_including_NUL_capacity": 256,
+      "two_separate_allocator_chunk_headers_each32": 64
+    },
+    "constraints": "All planned new fixed preflight/creator/validator error messages have payload length<=127. No formatting, concatenation, request-value stringification or owning source-name copy. Future pinned string allocator capacity<=128 and chunk header<=32 must be measured/proved. The string32 stack owners are already in TWO Expected or the explicit error-pool wrappers; borrowed bad_alloc chunks are separate within4096."
+  },
+  "stage_allocation_and_exception_classification": {
+    "creator": "Fixed unexpected strings and the one arena allocation may enter the creator_before_arena alternative. The Data ctor/port copy/initialize have no owning dynamic fields beyond already-created shared references and the one arena; successful construction may not enter an additional throwing allocation after the arena exists. This exact source/normal-object property is a future admission requirement.",
+    "preflight": "FP/Candidate/lowered-limit/header-room failure strings may allocate before constructor/source helpers or output Cell exist. Public_preflight retains TWO headers and the arena conservatively, even where the former do not yet exist.",
+    "required_room_refusal": "Expected in-place Diagnostic, Refusal resets/copies, borrowed-provider aliases, and structured output refusal use fixed fields/string_views/empty vector and allocate nothing. A conservative error alternative is retained anyway; it does not authorize arbitrary allocator entry with constructor scratch alive.",
+    "source_enrollment": "All 33208 old enrollment bytes, including 28880 and nested 24680, remain. Any old preflight/validator fixed error allocation before S64 success is covered by the additive enrollment alternative; no old capability or creator is added. The complete new constructor has not been entered.",
+    "construction": "458 operations/75 charged guards, fixed arrays and fixed Refusal/validator Expected objects only. G75 branches are mapped individually below. Do not coadd the 4096 error pool to the 3912 constructor while claiming helper4096: all allocating validator branches must be source-unreachable by the earned packet predicates; otherwise this plan is HOLD until a separately reviewed lifetime boundary is registered.",
+    "reset": "Cell storage was reserved once and emplace has capacity. Cell/default-member/reset/Refusal field assignments are fixed and nonallocating; the actual reserved-one allocator max_size and noexcept/default-field closure must be verified. Reset cannot inherit an arbitrary error pool just because its source total fits.",
+    "original_graph": "Use the unchanged private one-Cell compiler, not any allocating public phase assessor. Generated Request is immutable after G75; its repeated original validator has the same branch map. Full graph/body/other/region paths use fixed arrays, fundamental Interval/Jet/Point values, borrowed strings and checked tags; source get_if/part identity guards must dominate throwing variant get. Full32768 is retained and no predicted refusal excludes a descendant.",
+    "canonical": "Original phase4 request controls and their Step02/Step01 source factories return fixed Request/optional<Request> records and mutate only fixed fields. They do not call the public allocating step assessor. All current/pending Request returns remain charged.",
+    "pressure_SELF": "Fresh Context/Token and fixed pressure/SELF pools with row-reset Refusal192, fixed current/pending tuple returns, bounded nominal fields/variants, borrowed source names, and unchanged primitives; no owning containers or allocating public evaluator may replace the selected internal bridges.",
+    "region_factory": "The genuine original region getter uses fixed values and checked identities. Current/pending region returns are in the named typed pool; there is no heap catalog creator or report-as-input authority.",
+    "construction_audit": "Independent source/Y-based oracle uses only registered fixed arrays/fundamental arithmetic and guarded C libm/fenv; no production threshold/cut feedback or extra query. Checked counters/aggregate narrowing are source-unreachable throw branches under the finite Test ledger.",
+    "body_audit": "Independent TWO8400 Oracles and full8192 utility remain live and counted. The ONE full15-mass/pose body audit is conditional/sequential with the separate <=121 interval records and the construction audit. Fixed numeric helpers allocate/throw no C++ exceptions. Counter/aggregate/roster guards are discharged by the finite Test ledger, not observed pass results. Universal counter-only checks perform no I/O/heap/callback; status/first-failure reporting starts only after helper/Request/Oracle/workspace death. A sole source-static first-failure string_view16 is explicitly named inside globals156 and preserved caller1024/2048. Later code/objects must prove this selected cut.",
+    "interval_audit": "At most121 original interval records; fixed arrays/fundamental helpers, no extra API query. Same finite check/aggregate proof and same selected universal quiet-check/after-audit reporting cut as body audit; full8192 retained.",
+    "owned_capacity1_output": "Two full Expected headers and one capacity-one Cell output remain14520. The actual live owning arena and Cell each have separately charged allocator chunk headers within the selected success leaf/metadata plan; language move transfers each sole buffer, while TWO headers and all pending frames remain charged. No copy/NRVO reduction.",
+    "post_helper_or_audit_teardown": "Enter only after constructor/source/graph/pressure/SELF or independent Oracle/helper activation returns and any audit Oracle objects have been destroyed. Keep full remaining exterior owners plus error/cleanup pool. Destructor/free/EH paths and reference-count last-owner applicability are future actual proof obligations; this cut is not a scope exemption."
+  },
+  "validator_error_applicability": [
+    {
+      "branch": "root constant count/finite term/unused/supported-sum failure",
+      "earned_or_precheck": "G01 genuine full S64 source enrollment includes original S33 (zero-based32) request validator success; G04 term/count/unused domains; G74 byte-exact unchanged non-Y fields and count1 {Y,+0,+0} in BOTH Y constants; G57 finite abs(Y)<=8; G75 structural/domain recheck before original validator",
+      "proof": "Every unchanged root constant retains authenticated original phase_constant support. New single-term Y has at most two nonzero addends in either four-term comparison with +/-8, finite bounded sums and no expansion-capacity overflow; exact sign tests cannot establish Y<-8 or Y>8. The original interval value clips to [-8,8] and remains supported under the original qualified FP environment."
+    },
+    {
+      "branch": "sole constant count/finite term/unused/supported-sum failure",
+      "earned_or_precheck": "G01 original S33 validator success; G04 domains; G74 exact whole generated packet identity; G75 structural/domain recheck",
+      "proof": "Sole term lists and counts are byte-identical to the validated seed; there is no second source value or changed sole-Y term."
+    },
+    {
+      "branch": "sole yaw finite/abs1 failure",
+      "earned_or_precheck": "G01 original validator success; G74 exact seed yaw fields; G75 generated packet identity/domain checks",
+      "proof": "Both endpoint yaw fields remain the original authenticated fields."
+    },
+    {
+      "branch": "swing finite/[0,.25] failure",
+      "earned_or_precheck": "G01 original validator success; G74 whole-packet identity; G75 identity/domain checks",
+      "proof": "Both original swing fields are unchanged; no constructor row writes them."
+    },
+    {
+      "branch": "root yaw finite/abs1 failure",
+      "earned_or_precheck": "G01 original validator success; G74 whole-packet identity; G75 identity/domain checks",
+      "proof": "Both root-yaw carrier entries are unchanged."
+    },
+    {
+      "branch": "torso finite/abs1 failure",
+      "earned_or_precheck": "G01 original validator success; G74 whole-packet identity; G75 identity/domain checks",
+      "proof": "Both torso carrier entries are unchanged."
+    },
+    {
+      "branch": "reaction fraction finite/[0,1] failure",
+      "earned_or_precheck": "G01 original validator success; G74 whole-packet identity; G75 identity/domain checks",
+      "proof": "Both original reaction fractions are unchanged."
+    },
+    {
+      "branch": "seconds finite/[1,120] failure",
+      "earned_or_precheck": "G01 original validator success; G74 whole-packet identity; G75 identity/domain checks",
+      "proof": "Original duration is unchanged."
+    }
+  ],
+  "error_pre_FIRST_gates": [
+    "Complete fresh source lexical proof for all15 maps and6 error alternatives; G75 and repeated private compiler validator branch coverage",
+    "Fresh sizeof/current-pending layouts, full allocation/chunk/object capacities and error class/typed-owner limits",
+    "GCC/Clang complete real caller/helper/library/EH/free/destructor/TLS/terminal chains, ABI entries and cold resolver/loader applicability under selected exact launch profile",
+    "Actual success512 library/metadata and error4096 partition proof; no missing frame=0, reserved=measured or old companion reroot",
+    "Universal quiet-check/after-audit reporting design and source-static first-failure view/counter/aggregate bounds exactly match actual Test source; all current/pending numeric parents remain counted",
+    "Current/normal object/archive/ELF/dependency correspondence and immutable one-FIRST packet before any execution"
+  ],
+  "source_refusal_adapter": {
+    "original_full_operation_type": "uint8",
+    "original_unset": 255,
+    "fresh_full_operation_type": "uint16",
+    "fresh_unset": 65535,
+    "mapping": "old UNSET255 -> new UNSET65535; actual old source cursors0..63 widen faithfully; preserve side/stage/condition; nested unchanged PhaseRefusal operation255 stays255",
+    "fresh_fields": [
+      "Slice.operation",
+      "Refusal.operation",
+      "Diagnostic.stop_operation",
+      "Summary terminal checks/hash/printf"
+    ]
+  },
+  "quiet_check_design": {
+    "status": "ROOT_SELECTED_SOURCE_DESIGN; noimplementation oractualproof",
+    "check": "void check(bool,string_view), universally counter-only; no stream/heap/formatting/callback/queue; finite counter branches unreachable",
+    "first_failure": {
+      "type": "std::string_view",
+      "bytes": 16,
+      "lifetime": "one mutableglobal, defaultempty; assign only firstfalse source-static registered literal; neverreset; noexistsflag, noowninglabel/report/archive",
+      "globals_named": 156,
+      "creator_named": 772,
+      "creator_unused": 252,
+      "graph_named": 1887,
+      "graph_unused": 161
+    },
+    "argument_and_return_ownership": "current/pending why arguments in named256 callercheck/error arguments; reference-return from assignment borrowed, existingrefslots; noownedaggregate return; helpervoid; finalprint reads globaldirectly under existing112 status/index and256labelargument slots",
+    "reporting": "FIRST/refusal/skip/final retained; explicit auditstatus/firstfailure print only afterhelper AND Request/Oracle/workspace scopesdie. Remainingsource/Data/Cell/parentowners staycharged. StockStreamCountercallbacks/formatting-profile evidence stillmandatory.",
+    "authority": "nooldTestchange, no math/checkorder/count/producerpolicychange"
+  },
+  "constructor_reference_control_components": {
+    "four_constructor_parameter_references": 32,
+    "borrowed_three_reference_Control": 24,
+    "current_pending_compute_closures_eight_references_each": 128,
+    "destination_reference": 8,
+    "current_pending_guard_closures_eight_references_each": 128,
+    "deep_guard_forwarding_supported_path": 56,
+    "three_borrowed_part_views": 24,
+    "loop_cursor_certificate_controls": 24,
+    "capture_semantics": "Every current/pending compute or guard closure includes explicit workspace reference within its at-most-eight-ref allowance; Control carries owner/refusal/Limits only. No separate workspace-ref owner is hidden in aggregate padding. Forwarded lambda object-reference and closure-this are separately counted by deep56. If actual source needs more than these role maxima registration is HOLD."
+  },
+  "constructor_workspace_fields": {
+    "input_Intervals": 8,
+    "yaw_Intervals": 6,
+    "chart_Intervals": 16,
+    "link_Intervals": 9,
+    "cut_Intervals": 12,
+    "endpoint_Intervals": 18,
+    "direct_Intervals": 18,
+    "cuts_double": 10,
+    "selected_double": 8,
+    "endpoint_certificate_bool": 2,
+    "alignment_padding_bytes": 6
+  },
+  "closed_Linux_profile": {
+    "assignments": {
+      "LD_BIND_NOW": "1",
+      "LC_ALL": "C",
+      "LANG": "C",
+      "GLIBC_TUNABLES": "glibc.malloc.tcache_count=0"
+    },
+    "unsets": [
+      "LD_PRELOAD",
+      "LD_AUDIT",
+      "LD_LIBRARY_PATH",
+      "LD_PROFILE",
+      "LD_DEBUG",
+      "LD_DEBUG_OUTPUT",
+      "LD_BIND_NOT",
+      "LD_ORIGIN_PATH",
+      "LD_ASSUME_KERNEL",
+      "LD_HWCAP_MASK",
+      "LD_TRACE_LOADED_OBJECTS",
+      "LD_USE_LOAD_BIAS",
+      "GLIBCXX_TUNABLES",
+      "MALLOC_CHECK_",
+      "MALLOC_PERTURB_",
+      "MALLOC_ARENA_MAX",
+      "MALLOC_ARENA_TEST",
+      "MALLOC_MMAP_THRESHOLD_",
+      "MALLOC_MMAP_MAX_",
+      "MALLOC_TRIM_THRESHOLD_",
+      "MALLOC_TOP_PAD_",
+      "MALLOC_MXFAST_",
+      "LD_DYNAMIC_WEAK",
+      "LD_SHOW_AUXV",
+      "LD_PROFILE_OUTPUT",
+      "LD_VERBOSE",
+      "LD_WARN"
+    ],
+    "actual_generated_environment_ELF_and_startup_applicability": "UNKNOWN until implementation admission"
+  },
+  "test_source_pools": {
+    "creator1024": {
+      "objects": {
+        "Summary_reservation": 120,
+        "two_StreamCounter": 176,
+        "mutable_globals_reservation": 156,
+        "native_boot_Expected": 80,
+        "provider_optional": 24,
+        "saved_stream_pointers_and_bytes": 24,
+        "references": 32,
+        "current_pending_errors": 160
+      },
+      "named": 772,
+      "unused": 252,
+      "selected": 1024
+    },
+    "graph2048": {
+      "objects": {
+        "Summary_reservation": 120,
+        "two_StreamCounter": 176,
+        "mutable_globals_reservation": 156,
+        "native_boot_Expected": 80,
+        "provider_optional": 24,
+        "four_alias_slots": 64,
+        "saved_stream_pointers_and_bytes": 24,
+        "references_arguments": 96,
+        "slot_field_candidate_cursor_status": 112,
+        "saved_environment_slots": 64,
+        "current_pending_errors_check_arguments": 256,
+        "post_return_work_array": 192,
+        "Hash": 8,
+        "two_word_prefix_current_pending_arrays": 32,
+        "interleaved_pair_array_and_initializer_list_view_peak": 136,
+        "self_accounting_certificate_count_array": 14,
+        "semantic_hash_boolean_initializer_list": 13,
+        "edge_pointer_initializer_list_and_view": 32,
+        "hash_jet_velocity_current_and_saved_original": 96,
+        "separate_pending_work_array_return_no_elision": 192
+      },
+      "named": 1887,
+      "unused": 161,
+      "selected": 2048,
+      "historical_registered_named": 1388,
+      "historical_registered_unused": 660,
+      "implementation_constraints": [
+        "8operationwords/2guardwords validated by reference and scalar-per-word prefix under retained32, no mask archive.",
+        "75guard interleaves sequential in blocks<=15pairs +16byte view, peak136; no persistent75entry table.",
+        "Summary120 contains24uint32counts/hash/output/exists/uint16eligibility16bits; no bitmap sentinel.",
+        "FOUR Limits800/TWOExpected3488/TWORequests1368 and all Oracles exterior to caller2048.",
+        "Allcheck counter-only; first_failure16 borrowed source-static literal only, no queue/heap/callback.",
+        "Retain labels/errors256,refs96,status112,currentpendingWork384. Reporting after helper/Request/Oracle/workspace death."
+      ]
+    },
+    "body8192": {
+      "objects": {
+        "outer_Jets_and_root_points": 768,
+        "side_loop_points_Jets_scalars": 2144,
+        "twelve_Point_slots": 1728,
+        "twelve_Jet_slots": 576,
+        "four_Matrix_slots": 1728,
+        "loop_indices_control": 96,
+        "ExceptionState": 16,
+        "norm_root_scalar_returns": 96,
+        "angle_trig_reciprocal_returns": 96,
+        "check_arguments_labels_references": 128,
+        "library_error_leaf": 512,
+        "current_pending_y_arguments": 16
+      },
+      "named": 7904,
+      "unused": 288,
+      "selected": 8192
+    },
+    "interval8192": {
+      "objects": {
+        "relative_54_original_supported_intervals": 1296,
+        "LD_points_operands_local_pending": 1728,
+        "LD_frames_operands_local_pending": 1152,
+        "two_solid_description_allowance": 1024,
+        "pending_proof_returns": 512,
+        "scalar_owner_hip_error_helpers_including_library512": 2480
+      },
+      "named": 8192,
+      "unused": 0,
+      "selected": 8192
+    },
+    "construction4096": {
+      "named_components": {
+        "twenty_LD_bounds32": 640,
+        "eight_LD_vectors96_by_reference": 768,
+        "sixtyfour_LD_scalars16": 1024,
+        "forty_double8_slots": 320,
+        "references_environment_indices_control": 256,
+        "independent_success_library_leaf": 512
+      },
+      "named_bytes": 3520,
+      "unused_bytes": 576,
+      "reservation_bytes": 4096
+    }
+  },
+  "pool_applicability": "Fresh SOURCE FORECAST ONLY. Complete concrete old body/interval owner terms retained. New headers substituted in all15+6 maps. Old frames/layouts/actual library uppers are historical risks, not admission or free slack.",
+  "cursor_table": {
+    "source": 63,
+    "projection": 250,
+    "definition": 30,
+    "sole_extrema": 3,
+    "source_coordinates": 7,
+    "intersection": 3,
+    "midpoint": 3,
+    "allocation": 5,
+    "pressure_candidate": 1,
+    "disk": 15,
+    "body": 62,
+    "unit_axes": 23,
+    "slice_guard": 74,
+    "slice_operation": 457,
+    "all_other_stages": 65535,
+    "type": "uint16; guard.selfpair/region/axis/signprotocols separate"
+  },
+  "mask_contract": {
+    "operations_complete": [
+      "UINT64_MAX",
+      "UINT64_MAX",
+      "UINT64_MAX",
+      "UINT64_MAX",
+      "UINT64_MAX",
+      "UINT64_MAX",
+      "UINT64_MAX",
+      "0x3ff"
+    ],
+    "guards_complete": [
+      "UINT64_MAX",
+      "0x7ff"
+    ],
+    "operation_terminal_cursor": 457,
+    "guard_terminal_cursor": 74,
+    "side_terminal": 255,
+    "operation_sentinel": 65535,
+    "guard_sentinel": 255,
+    "unused_last_operation_bits": 54,
+    "unused_last_guard_bits": 53,
+    "zero_type": "uint16",
+    "zero_bits": 14,
+    "zero_unused_high_bits": 2,
+    "failedcharge": "upcomingstage/cursor/side + clearedlimiting beforecharge; no count/attempt/write",
+    "charged_false": "attempted/unwritten; hardunsupported before ordinarycomparison; prior data lifecycle per method",
+    "safe_prefix": "count0/count64 explicit, uint64 shifts0..63, independent word indexing"
+  },
+  "zero_branch_availability": [
+    {
+      "bit": 0,
+      "written_operation": 89,
+      "word": 1,
+      "offset": 24,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 1,
+      "written_operation": 141,
+      "word": 2,
+      "offset": 12,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 2,
+      "written_operation": 63,
+      "word": 0,
+      "offset": 62,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 3,
+      "written_operation": 74,
+      "word": 1,
+      "offset": 9,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 4,
+      "written_operation": 115,
+      "word": 1,
+      "offset": 50,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 5,
+      "written_operation": 126,
+      "word": 1,
+      "offset": 61,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 6,
+      "written_operation": 81,
+      "word": 1,
+      "offset": 16,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 7,
+      "written_operation": 133,
+      "word": 2,
+      "offset": 4,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 8,
+      "written_operation": 230,
+      "word": 3,
+      "offset": 37,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 9,
+      "written_operation": 241,
+      "word": 3,
+      "offset": 48,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 10,
+      "written_operation": 277,
+      "word": 4,
+      "offset": 20,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 11,
+      "written_operation": 288,
+      "word": 4,
+      "offset": 31,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 12,
+      "written_operation": 248,
+      "word": 3,
+      "offset": 55,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    },
+    {
+      "bit": 13,
+      "written_operation": 295,
+      "word": 4,
+      "offset": 38,
+      "meaning": "VALUE0 positiveoperand, VALUE1 actualcanonical+0; uninterpreted untilwritten"
+    }
+  ],
+  "scalar_availability": {
+    "base_lo": {
+      "written_operation": 154,
+      "word": 2,
+      "offset": 25,
+      "read_gate": "operationwritten; NOT domain/capability"
+    },
+    "base_hi": {
+      "written_operation": 157,
+      "word": 2,
+      "offset": 28,
+      "read_gate": "operationwritten; NOT domain/capability"
+    },
+    "factor_lower_PORT": {
+      "written_operation": 183,
+      "word": 2,
+      "offset": 54,
+      "read_gate": "operationwritten; NOT domain/capability"
+    },
+    "factor_lower_STAR": {
+      "written_operation": 200,
+      "word": 3,
+      "offset": 7,
+      "read_gate": "operationwritten; NOT domain/capability"
+    },
+    "lo": {
+      "written_operation": 303,
+      "word": 4,
+      "offset": 46,
+      "read_gate": "operationwritten; NOT domain/capability"
+    },
+    "hi": {
+      "written_operation": 305,
+      "word": 4,
+      "offset": 48,
+      "read_gate": "operationwritten; NOT domain/capability"
+    },
+    "y": {
+      "written_operation": 308,
+      "word": 4,
+      "offset": 51,
+      "read_gate": "operationwritten; NOT domain/capability"
+    }
+  },
+  "claim_guards": {
+    "BASE": [
+      24
+    ],
+    "PORT_factor": [
+      24,
+      26,
+      30,
+      31,
+      32
+    ],
+    "STAR_factor": [
+      24,
+      26,
+      36,
+      37,
+      38
+    ],
+    "final_interval": [
+      24,
+      42,
+      47,
+      48,
+      49,
+      54,
+      55,
+      56
+    ],
+    "stored_membership": [
+      56,
+      57,
+      58,
+      59
+    ],
+    "complete": "all458writes/all75guards/finaloriginalvalidator+FP",
+    "Key_clock": "aftercomplete only; requested2seconds not accepted graph/timing/contact"
+  },
+  "first_contract": "ONE publicdefault A01; outcomeUNKNOWN. StructuredFIRST enables only reached controls; unexpected disables baseline-dependent controls. Creator failure SKIPs107. No geometry/body/SELF outcome assumed. Availability tags precede digest; current/first/terminal semantics independent.",
+  "roster": [
+    {
+      "label": "A01",
+      "purpose": "ONE default FIRST",
+      "input": "public assess_origin_boarding_intermediate_endpoint06(provider,Candidate::root_y_same_base_chart_factor_both_hip_ankle_reach_roll_slice) ONCE; future signature/source/object bind",
+      "gate": "one authentic creator success",
+      "outcome": "UNKNOWN",
+      "exact_expectation": "ONE publicdefault FIRST; outcome UNKNOWN; check earned source/work/masks/flags/output/digest accounting before conditionalmandatory expectations; no oldFIRST226/37/SelfPair2 expectation"
+    },
+    {
+      "label": "A02",
+      "purpose": "zero",
+      "field": "phase.graphs",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 0
+    },
+    {
+      "label": "A03",
+      "purpose": "zero",
+      "field": "phase.legs",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 1
+    },
+    {
+      "label": "A04",
+      "purpose": "zero",
+      "field": "phase.bodies",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 2
+    },
+    {
+      "label": "A05",
+      "purpose": "zero",
+      "field": "phase.sectors",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 3
+    },
+    {
+      "label": "A06",
+      "purpose": "zero",
+      "field": "phase.timing",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 4
+    },
+    {
+      "label": "A07",
+      "purpose": "zero",
+      "field": "source_guards",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 5
+    },
+    {
+      "label": "A08",
+      "purpose": "zero",
+      "field": "projection_guards",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 6
+    },
+    {
+      "label": "A09",
+      "purpose": "zero",
+      "field": "definition_guards",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 7
+    },
+    {
+      "label": "A10",
+      "purpose": "zero",
+      "field": "sole_extrema",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 8
+    },
+    {
+      "label": "A11",
+      "purpose": "zero",
+      "field": "source_coordinates",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 9
+    },
+    {
+      "label": "A12",
+      "purpose": "zero",
+      "field": "intersection_operations",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 10
+    },
+    {
+      "label": "A13",
+      "purpose": "zero",
+      "field": "midpoint_operations",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 11
+    },
+    {
+      "label": "A14",
+      "purpose": "zero",
+      "field": "allocation_operations",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 12
+    },
+    {
+      "label": "A15",
+      "purpose": "zero",
+      "field": "pressure_candidates",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 13
+    },
+    {
+      "label": "A16",
+      "purpose": "zero",
+      "field": "disk_edges",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 14
+    },
+    {
+      "label": "A17",
+      "purpose": "zero",
+      "field": "self_body_guards",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 15
+    },
+    {
+      "label": "A18",
+      "purpose": "zero",
+      "field": "self_pairs",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 16
+    },
+    {
+      "label": "A19",
+      "purpose": "zero",
+      "field": "self_axes",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 17
+    },
+    {
+      "label": "A20",
+      "purpose": "zero",
+      "field": "self_signed_trials",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 18
+    },
+    {
+      "label": "A21",
+      "purpose": "zero",
+      "field": "self_owners",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 19
+    },
+    {
+      "label": "A22",
+      "purpose": "zero",
+      "field": "self_hip_complements",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 20
+    },
+    {
+      "label": "A23",
+      "purpose": "zero",
+      "field": "unit_axis_operations",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 21
+    },
+    {
+      "label": "A24",
+      "purpose": "zero",
+      "field": "output_bytes",
+      "input": 0,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact intermediate endpoint06 output headers; FPguard1; noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 22
+    },
+    {
+      "label": "A25",
+      "purpose": "zero",
+      "field": "construction_guards",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 23
+    },
+    {
+      "label": "A26",
+      "purpose": "zero",
+      "field": "construction_operations",
+      "input": 0,
+      "gate": "genuine structured FIRST successful field count > 0",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 24
+    },
+    {
+      "label": "A27",
+      "purpose": "raised",
+      "field": "phase.graphs",
+      "input": 2,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 0
+    },
+    {
+      "label": "A28",
+      "purpose": "raised",
+      "field": "phase.legs",
+      "input": 3,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 1
+    },
+    {
+      "label": "A29",
+      "purpose": "raised",
+      "field": "phase.bodies",
+      "input": 2,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 2
+    },
+    {
+      "label": "A30",
+      "purpose": "raised",
+      "field": "phase.sectors",
+      "input": 4,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 3
+    },
+    {
+      "label": "A31",
+      "purpose": "raised",
+      "field": "phase.timing",
+      "input": 7,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 4
+    },
+    {
+      "label": "A32",
+      "purpose": "raised",
+      "field": "source_guards",
+      "input": 65,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 5
+    },
+    {
+      "label": "A33",
+      "purpose": "raised",
+      "field": "projection_guards",
+      "input": 257,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 6
+    },
+    {
+      "label": "A34",
+      "purpose": "raised",
+      "field": "definition_guards",
+      "input": 32,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 7
+    },
+    {
+      "label": "A35",
+      "purpose": "raised",
+      "field": "sole_extrema",
+      "input": 5,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 8
+    },
+    {
+      "label": "A36",
+      "purpose": "raised",
+      "field": "source_coordinates",
+      "input": 9,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 9
+    },
+    {
+      "label": "A37",
+      "purpose": "raised",
+      "field": "intersection_operations",
+      "input": 5,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 10
+    },
+    {
+      "label": "A38",
+      "purpose": "raised",
+      "field": "midpoint_operations",
+      "input": 5,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 11
+    },
+    {
+      "label": "A39",
+      "purpose": "raised",
+      "field": "allocation_operations",
+      "input": 7,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 12
+    },
+    {
+      "label": "A40",
+      "purpose": "raised",
+      "field": "pressure_candidates",
+      "input": 3,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 13
+    },
+    {
+      "label": "A41",
+      "purpose": "raised",
+      "field": "disk_edges",
+      "input": 17,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 14
+    },
+    {
+      "label": "A42",
+      "purpose": "raised",
+      "field": "self_body_guards",
+      "input": 64,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 15
+    },
+    {
+      "label": "A43",
+      "purpose": "raised",
+      "field": "self_pairs",
+      "input": 106,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 16
+    },
+    {
+      "label": "A44",
+      "purpose": "raised",
+      "field": "self_axes",
+      "input": 1471,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 17
+    },
+    {
+      "label": "A45",
+      "purpose": "raised",
+      "field": "self_signed_trials",
+      "input": 2941,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 18
+    },
+    {
+      "label": "A46",
+      "purpose": "raised",
+      "field": "self_owners",
+      "input": 15,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 19
+    },
+    {
+      "label": "A47",
+      "purpose": "raised",
+      "field": "self_hip_complements",
+      "input": 3,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 20
+    },
+    {
+      "label": "A48",
+      "purpose": "raised",
+      "field": "unit_axis_operations",
+      "input": 25,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 21
+    },
+    {
+      "label": "A49",
+      "purpose": "raised",
+      "field": "output_bytes",
+      "input": 16777217,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 22
+    },
+    {
+      "label": "A50",
+      "purpose": "raised",
+      "field": "construction_guards",
+      "input": 76,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 23
+    },
+    {
+      "label": "A51",
+      "purpose": "raised",
+      "field": "construction_operations",
+      "input": 459,
+      "gate": "creator success",
+      "exact_expectation": "unexpected exact string intermediate endpoint06 invalid limits; one fixed FPguard, noDiagnostic/source/constructor/phase evidence",
+      "expected_protocol_index": 24
+    },
+    {
+      "label": "A52",
+      "purpose": "reached_used_minus_one",
+      "field": "phase.graphs",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 0
+    },
+    {
+      "label": "A53",
+      "purpose": "reached_used_minus_one",
+      "field": "phase.legs",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 1
+    },
+    {
+      "label": "A54",
+      "purpose": "reached_used_minus_one",
+      "field": "phase.bodies",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 2
+    },
+    {
+      "label": "A55",
+      "purpose": "reached_used_minus_one",
+      "field": "phase.sectors",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 3
+    },
+    {
+      "label": "A56",
+      "purpose": "reached_used_minus_one",
+      "field": "phase.timing",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 4
+    },
+    {
+      "label": "A57",
+      "purpose": "reached_used_minus_one",
+      "field": "source_guards",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 5
+    },
+    {
+      "label": "A58",
+      "purpose": "reached_used_minus_one",
+      "field": "projection_guards",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 6
+    },
+    {
+      "label": "A59",
+      "purpose": "reached_used_minus_one",
+      "field": "definition_guards",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 7
+    },
+    {
+      "label": "A60",
+      "purpose": "reached_used_minus_one",
+      "field": "sole_extrema",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 8
+    },
+    {
+      "label": "A61",
+      "purpose": "reached_used_minus_one",
+      "field": "source_coordinates",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 9
+    },
+    {
+      "label": "A62",
+      "purpose": "reached_used_minus_one",
+      "field": "intersection_operations",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 10
+    },
+    {
+      "label": "A63",
+      "purpose": "reached_used_minus_one",
+      "field": "midpoint_operations",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 11
+    },
+    {
+      "label": "A64",
+      "purpose": "reached_used_minus_one",
+      "field": "allocation_operations",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 12
+    },
+    {
+      "label": "A65",
+      "purpose": "reached_used_minus_one",
+      "field": "pressure_candidates",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 13
+    },
+    {
+      "label": "A66",
+      "purpose": "reached_used_minus_one",
+      "field": "disk_edges",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 14
+    },
+    {
+      "label": "A67",
+      "purpose": "reached_used_minus_one",
+      "field": "self_body_guards",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 15
+    },
+    {
+      "label": "A68",
+      "purpose": "reached_used_minus_one",
+      "field": "self_pairs",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 16
+    },
+    {
+      "label": "A69",
+      "purpose": "reached_used_minus_one",
+      "field": "self_axes",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 17
+    },
+    {
+      "label": "A70",
+      "purpose": "reached_used_minus_one",
+      "field": "self_signed_trials",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 18
+    },
+    {
+      "label": "A71",
+      "purpose": "reached_used_minus_one",
+      "field": "self_owners",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 19
+    },
+    {
+      "label": "A72",
+      "purpose": "reached_used_minus_one",
+      "field": "self_hip_complements",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 20
+    },
+    {
+      "label": "A73",
+      "purpose": "reached_used_minus_one",
+      "field": "unit_axis_operations",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 21
+    },
+    {
+      "label": "A74",
+      "purpose": "reached_used_minus_one",
+      "field": "output_bytes",
+      "input": "REQUIRED - 1",
+      "gate": "genuine structured FIRST",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 22
+    },
+    {
+      "label": "A75",
+      "purpose": "reached_used_minus_one",
+      "field": "construction_guards",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 23
+    },
+    {
+      "label": "A76",
+      "purpose": "reached_used_minus_one",
+      "field": "construction_operations",
+      "input": "FIRST successful charged count - 1",
+      "gate": "genuine structured FIRST successful field count > 1; count0/1 honestly SKIP",
+      "exact_expectation": "exact per_field_expected_refusal_protocol[index] applies at this literal cap; raised validation/unsafeFP earlier unless safe fixedcontrol; preserve actual prior earned records and original first chronological refusal",
+      "expected_protocol_index": 24
+    },
+    {
+      "label": "A77",
+      "purpose": "all24 work fields exact-used; output REQUIRED",
+      "gate": "any genuine structured FIRST; unexpected disables baseline controls",
+      "input": "actual FIRST charged counts, never hypothetical completed counts",
+      "exact_expectation": "anystructuredFIRST: repeat exactused24work and REQUIRED once, match available semantic digest/state/condition/earnedcounts excluding actualselected outputroom; no original producer report input or archivedcell"
+    },
+    {
+      "label": "A78",
+      "purpose": "unsupported FP",
+      "input": "FE_DOWNWARD",
+      "gate": "creator success and representable/restorable control; otherwise SKIP",
+      "restore": "full original flags/rounding/MXCSR; no trap changes",
+      "exact_expectation": "unsupported selected FP environment: exact unexpected intermediate endpoint06 unsupported floating point; one FPguard, noDiagnostic/numericevidence; fullsavedfenv/MXCSRrestore; unsupported regime SKIP"
+    },
+    {
+      "label": "A79",
+      "purpose": "unsupported FP",
+      "input": "FE_UPWARD",
+      "gate": "creator success and representable/restorable control; otherwise SKIP",
+      "restore": "full original flags/rounding/MXCSR; no trap changes",
+      "exact_expectation": "unsupported selected FP environment: exact unexpected intermediate endpoint06 unsupported floating point; one FPguard, noDiagnostic/numericevidence; fullsavedfenv/MXCSRrestore; unsupported regime SKIP"
+    },
+    {
+      "label": "A80",
+      "purpose": "unsupported FP",
+      "input": "FE_TOWARDZERO",
+      "gate": "creator success and representable/restorable control; otherwise SKIP",
+      "restore": "full original flags/rounding/MXCSR; no trap changes",
+      "exact_expectation": "unsupported selected FP environment: exact unexpected intermediate endpoint06 unsupported floating point; one FPguard, noDiagnostic/numericevidence; fullsavedfenv/MXCSRrestore; unsupported regime SKIP"
+    },
+    {
+      "label": "A81",
+      "purpose": "unsupported FP",
+      "input": "MXCSR_FTZ15",
+      "gate": "creator success and representable/restorable control; otherwise SKIP",
+      "restore": "full original flags/rounding/MXCSR; no trap changes",
+      "exact_expectation": "unsupported selected FP environment: exact unexpected intermediate endpoint06 unsupported floating point; one FPguard, noDiagnostic/numericevidence; fullsavedfenv/MXCSRrestore; unsupported regime SKIP"
+    },
+    {
+      "label": "A82",
+      "purpose": "unsupported FP",
+      "input": "MXCSR_DAZ6",
+      "gate": "creator success and representable/restorable control; otherwise SKIP",
+      "restore": "full original flags/rounding/MXCSR; no trap changes",
+      "exact_expectation": "unsupported selected FP environment: exact unexpected intermediate endpoint06 unsupported floating point; one FPguard, noDiagnostic/numericevidence; fullsavedfenv/MXCSRrestore; unsupported regime SKIP"
+    },
+    {
+      "label": "A83",
+      "purpose": "unsupported FP",
+      "input": "MXCSR_nonnearest",
+      "gate": "creator success and representable/restorable control; otherwise SKIP",
+      "restore": "full original flags/rounding/MXCSR; no trap changes",
+      "exact_expectation": "unsupported selected FP environment: exact unexpected intermediate endpoint06 unsupported floating point; one FPguard, noDiagnostic/numericevidence; fullsavedfenv/MXCSRrestore; unsupported regime SKIP"
+    },
+    {
+      "label": "A84",
+      "purpose": "invalid candidate in safe environment",
+      "input": 255,
+      "gate": "creator success",
+      "exact_expectation": "safeFP invalidCandidate255 exact unexpected intermediate endpoint06 invalid candidate; FPguard1; noDiagnostic/source/constructor/phase"
+    },
+    {
+      "label": "A85",
+      "purpose": "genuinely moved-empty alias while original valid",
+      "gate": "creator success and actual supported handle operations",
+      "exact_expectation": "Stateunresolved; first_refusal/stop invalid_binding at charged S01, source_guards1/source_evaluated1, source_enrolledfalse; constructor0/phase0/clock0/cells0; preserve exact original source tuple and translate only original operationUNSET255 to65535"
+    },
+    {
+      "label": "A86",
+      "purpose": "valid moved-to original, restore afterward",
+      "gate": "creator success and actual supported handle operations",
+      "exact_expectation": "safe valid provider lifetime alias matches current default FIRST semantic digest and available state/counts/ownedoutput; source identity authentic; no unrelated oldobject/report authority"
+    },
+    {
+      "label": "A87",
+      "purpose": "copied survivor; destroy moved-original discard before assessment; restore afterward",
+      "gate": "creator success and actual supported handle operations",
+      "exact_expectation": "safe valid provider lifetime alias matches current default FIRST semantic digest and available state/counts/ownedoutput; source identity authentic; no unrelated oldobject/report authority"
+    },
+    {
+      "label": "A88",
+      "purpose": "restored original",
+      "gate": "creator success and actual supported handle operations",
+      "exact_expectation": "safe valid provider lifetime alias matches current default FIRST semantic digest and available state/counts/ownedoutput; source identity authentic; no unrelated oldobject/report authority"
+    },
+    {
+      "label": "A89",
+      "purpose": "priority source_guards0 + construction_guards0",
+      "gate": "structured FIRST source successful count>0",
+      "expectation": "source charge capacity before any newconstructor guard; no issuer/clock/phase",
+      "exact_expectation": "sourcecapacity reached first: sourceguards0/mask0, source_enrolledfalse, constructor0/graph0/clock0/noCell; terminal source_capacity/source/upcoming sourcecursor0; earlier emptyprecondition gates literal"
+    },
+    {
+      "label": "A90",
+      "purpose": "priority construction_guards0 + construction_operations0",
+      "gate": "structured FIRST construction guard successful count>0",
+      "expectation": "G01charge capacity beforeO001; no issuer/clock/phase",
+      "exact_expectation": "G01 capacity reached first: Statecapacity/slice_guard_capacity/stageslice_guard/operation0, guardattempted/written0, constructionoperations0, sourcefull64, graph0/clock0/noCell"
+    },
+    {
+      "label": "A91",
+      "purpose": "priority construction_operations0 + phase.graphs0",
+      "gate": "structured FIRST construction operation successful count>0",
+      "expectation": "G01–G06true thenO001capacity; no issuer/clock/phase",
+      "exact_expectation": "G01–G06 pass then O001 capacity: Statecapacity/slice_operation_capacity/stageslice_operation/operation0, guardmasklow6/writtenlow6, opcount0/masks0, sourcefull64, graph0/clock0/noCell"
+    },
+    {
+      "label": "A92",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 64,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">64",
+        "last_prior_operation_actually_written": 64,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 65,
+      "upcoming_cursor": 64,
+      "last_written_expression": "SMALL_ROOT WHOLE clip →F1endpoint",
+      "failed_deferred_expression": "ADD F1endpoint+F2endpoint →rho_p",
+      "failed_side": "PORT",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        10,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": false,
+        "base_hi": false,
+        "factor_lower_PORT": false,
+        "factor_lower_STAR": false,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 4,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A93",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 65,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">65",
+        "last_prior_operation_actually_written": 65,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 66,
+      "upcoming_cursor": 65,
+      "last_written_expression": "ADD F1endpoint+F2endpoint →rho_p",
+      "failed_deferred_expression": "SQUARE point(q) →tau2",
+      "failed_side": "PORT",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        10,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": false,
+        "base_hi": false,
+        "factor_lower_PORT": false,
+        "factor_lower_STAR": false,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 4,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A94",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 128,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">128",
+        "last_prior_operation_actually_written": 128,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 129,
+      "upcoming_cursor": 128,
+      "last_written_expression": "ADD F1endpoint+F2endpoint →rho_q",
+      "failed_deferred_expression": "POINT_UPPER rho_p →u",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        20,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": false,
+        "base_hi": false,
+        "factor_lower_PORT": false,
+        "factor_lower_STAR": false,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 125,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A95",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 129,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">129",
+        "last_prior_operation_actually_written": 129,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 130,
+      "upcoming_cursor": 129,
+      "last_written_expression": "POINT_UPPER rho_p →u",
+      "failed_deferred_expression": "POINT_LOWER rho_q →v",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        20,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": false,
+        "base_hi": false,
+        "factor_lower_PORT": false,
+        "factor_lower_STAR": false,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 125,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A96",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 192,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">192",
+        "last_prior_operation_actually_written": 192,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 193,
+      "upcoming_cursor": 192,
+      "last_written_expression": "POINT_LOWER floorInterval →singleton H_STAR",
+      "failed_deferred_expression": "POINT_UPPER WHOLE absX_STAR →singleton Xmax_STAR",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        36,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": false,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 255,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A97",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 193,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">193",
+        "last_prior_operation_actually_written": 193,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 194,
+      "upcoming_cursor": 193,
+      "last_written_expression": "POINT_UPPER WHOLE absX_STAR →singleton Xmax_STAR",
+      "failed_deferred_expression": "SQUARE point(Xmax_STAR) →lateralSquare",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        36,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": false,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 255,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A98",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 256,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">256",
+        "last_prior_operation_actually_written": 256,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 257,
+      "upcoming_cursor": 256,
+      "last_written_expression": "SUB W−pointL1 →cutlowNum",
+      "failed_deferred_expression": "DIV cutlowNum/pointL2 →cutlow",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        0,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        48,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 5119,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A99",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 257,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">257",
+        "last_prior_operation_actually_written": 257,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 258,
+      "upcoming_cursor": 257,
+      "last_written_expression": "DIV cutlowNum/pointL2 →cutlow",
+      "failed_deferred_expression": "ADD W+pointL1 →cuthiNum",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        1,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        48,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": false,
+        "hi": false,
+        "y": false
+      },
+      "interpretable_zero_bits": 5119,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A100",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 320,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">320",
+        "last_prior_operation_actually_written": 320,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 321,
+      "upcoming_cursor": 320,
+      "last_written_expression": "SQUARE D →D2",
+      "failed_deferred_expression": "MUL point4*D2 →gammaDen",
+      "failed_side": "PORT",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        0,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        60,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A101",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 321,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">321",
+        "last_prior_operation_actually_written": 321,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 322,
+      "upcoming_cursor": 321,
+      "last_written_expression": "MUL point4*D2 →gammaDen",
+      "failed_deferred_expression": "DIV gammaNum/gammaDen →gamma2",
+      "failed_side": "PORT",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        1,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        60,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A102",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 384,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">384",
+        "last_prior_operation_actually_written": 384,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 385,
+      "upcoming_cursor": 384,
+      "last_written_expression": "SUB pointY−WHOLE A_STAR →h",
+      "failed_deferred_expression": "SQUARE h →h2",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        64,
+        2
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A103",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 385,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">385",
+        "last_prior_operation_actually_written": 385,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 386,
+      "upcoming_cursor": 385,
+      "last_written_expression": "SQUARE h →h2",
+      "failed_deferred_expression": "ADD WHOLE X2_STAR+h2 →rho2",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        1,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        64,
+        2
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A104",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 448,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">448",
+        "last_prior_operation_actually_written": 448,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 449,
+      "upcoming_cursor": 448,
+      "last_written_expression": "ENDPOINT_DIV WORLD knee−hip Y/unchanged L1 →uy",
+      "failed_deferred_expression": "ENDPOINT_DIV WORLD knee−hip Z/unchanged L1 →uz",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        64,
+        7
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A105",
+      "purpose": "conditional_operation_mask_word_crossing",
+      "field": "construction_operations",
+      "input": 449,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_operation_count": ">449",
+        "last_prior_operation_actually_written": 449,
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72
+        ]
+      },
+      "expected_protocol_index": 24,
+      "upcoming_one_based_row": 450,
+      "upcoming_cursor": 449,
+      "last_written_expression": "ENDPOINT_DIV WORLD knee−hip Z/unchanged L1 →uz",
+      "failed_deferred_expression": "SQUARE WHOLE ux →uxSquared",
+      "failed_side": "STAR",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        1
+      ],
+      "guard_attempted_written_prefix_counts": [
+        64,
+        8
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_operation_capacity/upcomingstage20/cursorcap/side; limitingunsupported; failedcharge hasno count/bit. Retain actualpriorpublished scalars/zeros. G74–75NOT_RUN, seed Y unchanged, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A106",
+      "purpose": "conditional_guard_mask_word_crossing",
+      "field": "construction_guards",
+      "input": 64,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_guard_count": ">64",
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64
+        ],
+        "all_operations_actually_written_through": 374
+      },
+      "expected_protocol_index": 23,
+      "upcoming_one_based_guard": 65,
+      "upcoming_cursor": 64,
+      "failed_side": "PORT",
+      "failed_deferred_predicate": "supported finite genuine endpoint-divided ux/uy/uz; uy.high<0 (hip_verification_inconclusive)",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        54,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        64,
+        0
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_guard_capacity/upcomingstage19/cursorcap/side; limitingunsupported; failedguard no count/bit. Preserve priorprefix. All7scalarpublications and storedmembership earned, G74–75NOT_RUN, noKey/clock/phase/Cell."
+    },
+    {
+      "label": "A107",
+      "purpose": "conditional_guard_mask_word_crossing",
+      "field": "construction_guards",
+      "input": 65,
+      "gate": {
+        "authentic_source_success": true,
+        "FIRST_guard_count": ">65",
+        "all_prior_guards_actually_written": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65
+        ],
+        "all_operations_actually_written_through": 383
+      },
+      "expected_protocol_index": 23,
+      "upcoming_one_based_guard": 66,
+      "upcoming_cursor": 65,
+      "failed_side": "PORT",
+      "failed_deferred_predicate": "supported finite transverse/extent/bottom/strictGap; extent.high<bottom.low (hip_verification_inconclusive; supported gap is reported, no gap positivity predicate)",
+      "operation_attempted_written_prefix_counts": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        63,
+        0,
+        0
+      ],
+      "guard_attempted_written_prefix_counts": [
+        64,
+        1
+      ],
+      "readable_scalars": {
+        "base_lo": true,
+        "base_hi": true,
+        "factor_lower_PORT": true,
+        "factor_lower_STAR": true,
+        "lo": true,
+        "hi": true,
+        "y": true
+      },
+      "interpretable_zero_bits": 16383,
+      "exact_expectation": "capacity/slice_guard_capacity/upcomingstage19/cursorcap/side; limitingunsupported; failedguard no count/bit. Preserve priorprefix. All7scalarpublications and storedmembership earned, G74–75NOT_RUN, noKey/clock/phase/Cell."
+    }
+  ],
+  "roster_count": 107,
+  "roster_selection": "107literal purposes:91generic+14operation+2guardword crossings; same boundedprogram, noextraquery/fixture.",
+  "aggregate_work_ceilings": [
+    {
+      "slot": 0,
+      "field": "phase.graphs",
+      "default": 1,
+      "raised_conservative_per_call": 2,
+      "aggregate_upper": 214
+    },
+    {
+      "slot": 1,
+      "field": "phase.legs",
+      "default": 2,
+      "raised_conservative_per_call": 3,
+      "aggregate_upper": 321
+    },
+    {
+      "slot": 2,
+      "field": "phase.bodies",
+      "default": 1,
+      "raised_conservative_per_call": 2,
+      "aggregate_upper": 214
+    },
+    {
+      "slot": 3,
+      "field": "phase.sectors",
+      "default": 3,
+      "raised_conservative_per_call": 4,
+      "aggregate_upper": 428
+    },
+    {
+      "slot": 4,
+      "field": "phase.timing",
+      "default": 6,
+      "raised_conservative_per_call": 7,
+      "aggregate_upper": 749
+    },
+    {
+      "slot": 5,
+      "field": "source_guards",
+      "default": 64,
+      "raised_conservative_per_call": 65,
+      "aggregate_upper": 6955
+    },
+    {
+      "slot": 6,
+      "field": "projection_guards",
+      "default": 256,
+      "raised_conservative_per_call": 257,
+      "aggregate_upper": 27499
+    },
+    {
+      "slot": 7,
+      "field": "definition_guards",
+      "default": 31,
+      "raised_conservative_per_call": 32,
+      "aggregate_upper": 3424
+    },
+    {
+      "slot": 8,
+      "field": "sole_extrema",
+      "default": 4,
+      "raised_conservative_per_call": 5,
+      "aggregate_upper": 535
+    },
+    {
+      "slot": 9,
+      "field": "source_coordinates",
+      "default": 8,
+      "raised_conservative_per_call": 9,
+      "aggregate_upper": 963
+    },
+    {
+      "slot": 10,
+      "field": "intersection_operations",
+      "default": 4,
+      "raised_conservative_per_call": 5,
+      "aggregate_upper": 535
+    },
+    {
+      "slot": 11,
+      "field": "midpoint_operations",
+      "default": 4,
+      "raised_conservative_per_call": 5,
+      "aggregate_upper": 535
+    },
+    {
+      "slot": 12,
+      "field": "allocation_operations",
+      "default": 6,
+      "raised_conservative_per_call": 7,
+      "aggregate_upper": 749
+    },
+    {
+      "slot": 13,
+      "field": "pressure_candidates",
+      "default": 2,
+      "raised_conservative_per_call": 3,
+      "aggregate_upper": 321
+    },
+    {
+      "slot": 14,
+      "field": "disk_edges",
+      "default": 16,
+      "raised_conservative_per_call": 17,
+      "aggregate_upper": 1819
+    },
+    {
+      "slot": 15,
+      "field": "self_body_guards",
+      "default": 63,
+      "raised_conservative_per_call": 64,
+      "aggregate_upper": 6848
+    },
+    {
+      "slot": 16,
+      "field": "self_pairs",
+      "default": 105,
+      "raised_conservative_per_call": 106,
+      "aggregate_upper": 11342
+    },
+    {
+      "slot": 17,
+      "field": "self_axes",
+      "default": 1470,
+      "raised_conservative_per_call": 1471,
+      "aggregate_upper": 157397
+    },
+    {
+      "slot": 18,
+      "field": "self_signed_trials",
+      "default": 2940,
+      "raised_conservative_per_call": 2941,
+      "aggregate_upper": 314687
+    },
+    {
+      "slot": 19,
+      "field": "self_owners",
+      "default": 14,
+      "raised_conservative_per_call": 15,
+      "aggregate_upper": 1605
+    },
+    {
+      "slot": 20,
+      "field": "self_hip_complements",
+      "default": 2,
+      "raised_conservative_per_call": 3,
+      "aggregate_upper": 321
+    },
+    {
+      "slot": 21,
+      "field": "unit_axis_operations",
+      "default": 24,
+      "raised_conservative_per_call": 25,
+      "aggregate_upper": 2675
+    },
+    {
+      "slot": 22,
+      "field": "construction_guards",
+      "default": 75,
+      "raised_conservative_per_call": 76,
+      "aggregate_upper": 8132
+    },
+    {
+      "slot": 23,
+      "field": "construction_operations",
+      "default": 458,
+      "raised_conservative_per_call": 459,
+      "aggregate_upper": 49113
+    },
+    {
+      "slot": 24,
+      "field": "phase_calls",
+      "default": 1,
+      "raised_conservative_per_call": 1,
+      "aggregate_upper": 107
+    },
+    {
+      "slot": 25,
+      "field": "preflight_guards",
+      "default": 1,
+      "raised_conservative_per_call": 1,
+      "aggregate_upper": 107
+    }
+  ],
+  "finite_counter_exception_proof": {
+    "basis": "finite literal107SOURCEPLAN all outcomes/earlyreturns/skips/duplicatevalidation; noFIRSTassumption",
+    "per_consumer_check_maxima": {
+      "metadata_source_work_hash": 512,
+      "originalphase_projection_contact_timing": 512,
+      "Unit24_105pairs_14owners_2hips": 2048,
+      "dispatch_refusal_exact_output_lifetime": 512,
+      "Slice8opwords_2guardwords_75interleaves_14zeros_7scalars_crossings": 512
+    },
+    "per_consumer_checks": 4096,
+    "consumer_slots": 107,
+    "construction_audit_checks": 1024,
+    "body_audit_checks": 2048,
+    "interval_record_checks": 512,
+    "interval_records": 121,
+    "fixed_creator_final_scope_skips_callback_checks": 4096,
+    "computed_total_checks": 507392,
+    "selected_conservative_check_ceiling": 524288,
+    "uint64_checks_safe": true,
+    "uint32_failures_safe": "failures<=checks<=524288<UINT32_MAX",
+    "seven_uint16_bounds": {
+      "creators": 1,
+      "consumers": 107,
+      "skips": 107,
+      "next_slot": 108,
+      "construction_audits": 1,
+      "body_poses": 1,
+      "interval_records": 121
+    },
+    "work_aggregate": "slots0..23 cap-only107*(default+1), maximum314687=107*2941; slot24phase_calls and25FP each<=107; outputbytes NOT aggregate",
+    "Summary_narrowing": "24 defaultchargedcounts<=2940;458 notuint8;16 eligibilitybitsuint16 withno sentinel",
+    "slot_arguments": "literal1..107 monotonic, next_slot<=108; noextra/replacement oncatch",
+    "indices": "aggregate0..25,field0..24,opword0..7,guardword0..1,guard0..74,op0..457,zero0..13; payload bounds beforeloops",
+    "source_constraints": "fixedoneCellcapacity<=1; genuineproducerwork<=limits; malformed/unavailablepayload short-circuitbeforeloops/aggregation/narrowing; no substituteorconsumer",
+    "throw_applicability": "checkoverflow/rosterexhaustion/boundstorage/aggregateoverflow/invalidindex/narrowing unreachable underthisfiniteprogram; actualsourcebindingmandatory; no numericalEHwaiver",
+    "no_heap_body_interval": "fixedarrays/fundamental copies, byrefwrites,currentpendingRequest/Oracle slots; noallocatingcontainer/string/errorconstruction inarithmetic; finiteguarded C libm/fenv returns; noC++throw primitives; futureactualsource/loadedprofileproofmandatory",
+    "stream_failure_reporting": "ROOT_SELECTED universalcounter-onlycheck plus first_failurestaticborrowedview16; reporting onlyafterfullaudithelper/Request/Oracle/workspace death; fixedStreamCounter/stocktargets/profile provedlater; no numericalEHwaiver",
+    "error_paths": "source/constructor/payload/creator numericallocationerrors remainfreshCoreerrorstageobligation; body/interval cannotimport4096EHbelownearfullstage withoutnewadditiveproof",
+    "construction1024_groups": {
+      "source_identity": 128,
+      "nominal_BASE": 256,
+      "floor_factor_cap": 128,
+      "restricted_images_intersection": 128,
+      "direct_originalY": 256,
+      "comparison_availability": 128
+    },
+    "Slice512_groups": {
+      "operationword": 96,
+      "guardword": 24,
+      "75interleaves2checks": 150,
+      "14zeros3checks": 42,
+      "7scalars5checks": 35,
+      "protocol": 64,
+      "one_dispatched_crossing_extra": 80,
+      "named": 491,
+      "unused": 21
+    }
+  },
+  "construction_oracle": {
+    "calls": 1,
+    "gate": "A01 authenticsource+complete458/75/newgeneratedY; downstreamoriginalphase need not be accepted",
+    "stages": [
+      {
+        "name": "CHART",
+        "recipe": "Proper original rational yaw from exact binary64 terms; original signed x,w=-z,a and BOTHdistinctorigins; horizontal chart independentofY. Frozen double(-230000)*1e-6 product is lifted BEFORE LD arithmetic."
+      },
+      {
+        "name": "NOMINAL_BASE",
+        "recipe": "Eachside p0=max(-1/2,(w-L1)/L2),q0=min(1/2,(w+L1)/L2,w/(L1+L2)); independent supported robust p0<q0/closed domain. r(t)=sqrt(L1²-(w-L2t)²)+L2sqrt(1-t²). Original inward height/reach/roll nominal formulas use authentic a/x/z. Aggregate BOTH maxlow/minhigh. Compare producerBASElo>=nominalLower, BASEhi<=nominalUpper; no equality demand."
+      },
+      {
+        "name": "SAME_BASE_FACTOR",
+        "recipe": "Authenticated reportedBASElo is fixed domain datum ONLY. Href=BASElo-independenta; Mref=ABS(independentx). PositiveHref support then SAMEHref/sqrt(Mref²+Href²), originalrollfactor and MAX. PublishedC<=independent safe nominalmax is reference comparison. C=1 conditional limit valid; no improvement. Never read absent H/M/chart/cap."
+      },
+      {
+        "name": "CAP_AND_IMAGES",
+        "recipe": "Recompute authenticthreshold t; kref=t/LIFT(publishedC) uses actualselected denominator as reference ONLY, gref=L1sqrt(1-kref²). Independently p=max(p0,(w-gref)/L2),q=min(q0,w/L2), conditionaldomains. Recompute analytic closed radial/inwardheight images; intersect with reportedfixedBASE. Compare publishedlo>=referenceLower, publishedhi<=referenceUpper one-sided. No auxiliary physicalposture/Y is selected/compiled/probed."
+      },
+      {
+        "name": "DIRECT_ORIGINAL_Y",
+        "recipe": "At actualY reconstruct rho²=x²+h²,D=rho²+z²,alpha=(L1²-L2²+D)/(2D),positiveoriginalgamma. F1=alpha*rho+gamma*z,G1=gamma*rho-alpha*z,F2=rho-F1,G2=w-G1. U=(-x,h,0)/rho,K-H=Rside(-F1U-G1ez),actualknee,axis=(K-H)/L1. Direct sqrt(uX²+uZ²),L*uY+r*transverse, originalregularity/ankle/reach/roll/joint/identities. No producerfactor/threshold/cut/axis/normalization/idealmidpoint operands."
+      }
+    ],
+    "independence": "ONEstagedsource-boundoracle, no secondproducer/API/factory/fixture/witness. Auxiliaryanalyticbounds are not physicalpostures. DirectoriginalY stages still run when their own inputs are available even if auxiliary correspondence INCONCLUSIVE.",
+    "producer_claim_reads": "BASE/factor outputs comparison/domain/denominator references ONLY, neverphysicalaxis operands; actualoriginalphase/Unit/hip records compared onlyif genuinecurrentcall earned",
+    "exact_policy": "When earned: source/bits/support and base_lo<=lo<Y<hi<=base_hi exactbinary64; factorfinite0<C<=1 exact; readability!=domain; no allowance on issuer/strictproduction predicates",
+    "comparison": "signedpositive margins; frozen2e-12L*max(1,abs(independent.low),abs(independent.high),abs(reference)); robustpositive>eps CORROBORATED, robustnegative<-eps FAIL, otherwiseINCONCLUSIVE. Nonstrict permits structurally provedexactzero only. Arithmetic only, neither certifiedrigor nor production allowance.",
+    "original_hip": "actualsupported authentic uy.high<0 ANDextent.high<bottom.low; directtransverse/extent/limit/gap; no gap.lower>0",
+    "rigorous_enclosure_claim": false,
+    "outcomes": "CORROBORATED/FAIL/INCONCLUSIVE; unavailablefield NOT_RUN; no outcomeissuesauthority",
+    "scratch": {
+      "named_components": {
+        "twenty_LD_bounds32": 640,
+        "eight_LD_vectors96_by_reference": 768,
+        "sixtyfour_LD_scalars16": 1024,
+        "forty_double8_slots": 320,
+        "references_environment_indices_control": 256,
+        "independent_success_library_leaf": 512
+      },
+      "named_bytes": 3520,
+      "unused_bytes": 576,
+      "reservation_bytes": 4096
+    },
+    "Bounds20_slots": {
+      "0": "activeX",
+      "1": "signedW",
+      "2": "authenticA",
+      "3": "activep",
+      "4": "activeq",
+      "5": "radiallower",
+      "6": "radialupper",
+      "7": "activeimagelower",
+      "8": "activeimageupper",
+      "9": "BOTHreference_lower",
+      "10": "BOTHreference_upper",
+      "11": "factor/coefficient epoch",
+      "12": "threshold/coefficient epoch",
+      "13": "cap/coefficient epoch",
+      "14..19": "SIXprimitive argument/local/pending/work slots; no byvalueBoundsreturn"
+    },
+    "Point8_slots": [
+      "root",
+      "sole",
+      "rotatedoffset",
+      "hip",
+      "ankle",
+      "displacement",
+      "knee",
+      "axis"
+    ],
+    "LD64_slots": {
+      "retained_source_yaw_lengths_root": 8,
+      "active_chart": 6,
+      "coefficients_margins_OR_DISJOINT_analyticcutscalar_epoch": 18,
+      "directaxis_extent_OR_DISJOINT_BASEfactorcapcomparison_epoch": 12,
+      "deepprimitive_operand_local_pending": 16,
+      "allowance": 4
+    },
+    "double320_disjoint_alternatives": {
+      "constant": "24termcurrentpending192+8Yselection64+8capsule/slab/linkliteral64=320",
+      "certifiedrecord": "FIVE Scalar24currentpendingpairs240+10helddouble8slots80=320; term/literaltemporariesdead",
+      "utility_finite": "FOUR Scalar24currentpendingpairs192+16helddouble8slots128=320; entirefull-expression counted"
+    },
+    "ref_control256": {
+      "ExceptionState": 16,
+      "four_indices": 32,
+      "twelve_refs": 96,
+      "currentpendingwhy32_and_Constanttermview16": 48,
+      "eight_flags": 8,
+      "eight_pending_bool": 8,
+      "six_integer_control": 48
+    },
+    "refs12": [
+      "Diagnostic",
+      "Request",
+      "workspace",
+      "Slice",
+      "part",
+      "sourceConstant",
+      "destination",
+      "primitive_a",
+      "primitive_b",
+      "comparison_reference",
+      "label_assignment_reference",
+      "sidecontext"
+    ],
+    "lifetime": "All fixedslots retained, reuses only afterlastconsumer. TWORequests1368 exterior; byrefprimitive output/destinations; no hidden aggregate return/archive/constant copy. Utility andRequests diebeforebody outerTWOOracles16800/TWORequests1368/separatecomparisonutility. Interval afterward.",
+    "library": "512 SOURCEFORECAST not actuallibm upper. Full futurebothcompiler ABI/nested/library/cold/error/allocator proof required; historicaltrig1032/sqrt256 warnings not admission."
+  },
+  "domain_sign_equality_controls": {
+    "fixtures": false,
+    "scope": "source/literal symbolic obligations and actuallyearnedA01; no mutation/extraquery",
+    "cases": [
+      "independentBASE beforehip",
+      "uniform positivefloor notpointwiseh>0",
+      "zerolateral factor1 conditional, no C<1 and no fabricatedzero",
+      "sameH/sameBASE/independent per-sidefactor",
+      "exactpublishedClower denominator",
+      "BASE intersect BOTHimages; endpoints VALUEonly",
+      "thresholdplusroot/sign/k<1/g>0/signedcuts/closedrootcertificate",
+      "actualstoredstrictmembership/directnegativeaxis/strictextent/supportedgap",
+      "one conservativeprogram unavailable not allheight/collision/route theorem"
+    ]
+  },
+  "authority": "Freshversion6/Candidate0 packet/currentKey/context/token onlyactualsamecall. OldEndpoint01–05 reports/Keys/contexts/tokens/Cells cannot authorize newY.",
+  "sequential_audits": {
+    "chart": "atmost1A01complete stagedoracle; utility andRequestsdeadbeforebody",
+    "body": "originalphaseaccepted only; TWO8400Oracles/TWORequests1368 EXTERIOR separatebyrefutility8192",
+    "interval": "afterbody ownersdead; earned<=105pair+14owner+2hips, no automatic121records",
+    "returns": "TWOExpected3488 plus fullcurrentpendingCell/Request/refusal/key/context/token/primitiveowners retained; noNRVO/padding/sizeof subtraction"
+  },
+  "output_contract": {
+    "required": "2*sizeof(Expected)+sizeof(Cell)",
+    "source_ceiling": 14520,
+    "formula": "2*1744+11032",
+    "actual_required": "UNKNOWN",
+    "owned": "TWO actualheaders + actualCellcapacity*sizeof(Cell); error/allocator/chunk/cleanup owners separately",
+    "lifetime": "reserve1 onlyafterconstructordeath; abnormalcapacity/bad_alloc destroys actualslot beforeheaders-onlyrefusal; no archive",
+    "header0": "FPfirst then exactunexpected outputheaders",
+    "REQUIRED_minus1": "structuredoutput_capacity before source, noCell/clock/issuer"
+  },
+  "presentation_world_scope": "Numerical-origin/reentrant allocator/EH/destructor/error remains numerical. Bootstrap world/native/string errors BEFOREcreatorcharge and genuinepostworker presentation separatelyNONZERO/UNKNOWNprocesspeak. Physicallycolive stdout8192/locale144+unknownoverhead outside explicitnumericownershipdomain; no numericalparent/source/report/scratch migration.",
+  "source_integer_checks": {
+    "operations": 458,
+    "guards": 75,
+    "fields": 25,
+    "roster": 107,
+    "operation_crossings": 14,
+    "guard_crossings": 2,
+    "scalar_publications": 7,
+    "zero_branches": 14,
+    "source_maps": 15,
+    "error_maps": 6,
+    "check_sum": 507392,
+    "check_ceiling": 524288,
+    "aggregate_max": 314687,
+    "meaning": "integer/source inventory only, not new geometric evaluation/resource admission"
+  }
+}
