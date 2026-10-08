@@ -10346,3 +10346,3256 @@ auto detail::intermediate_endpoint04_template_valid(const EP4Request& request,
   return d.slice.complete;
 }
 } // namespace apsis_drift
+
+// Endpoint05: all preceding source bytes are the immutable registered prefix.
+#include "origin_boarding_intermediate_endpoint05_internal.hpp"
+namespace apsis_drift {
+namespace {
+using EP5D = BoardingIntermediateEndpoint05Diagnostic;
+using EP5C = BoardingIntermediateEndpoint05Cell;
+using EP5R = BoardingIntermediateEndpoint05Refusal;
+using EP5L = detail::BoardingIntermediateEndpoint05Limits;
+using EP5W = BoardingIntermediateEndpoint05Condition;
+using EP5S = BoardingIntermediateEndpoint05State;
+using EP5Stage = BoardingIntermediateEndpoint05SelfStage;
+using EP5Cert = BoardingIntermediateEndpoint05Certificate;
+auto ep5_source_bit(const EP5D& d, std::size_t i) -> bool {
+  return (d.source_evaluated & (std::uint64_t{1} << i)) != 0;
+}
+auto ep5_valid(Interval x) -> bool {
+  return x.supported && std::isfinite(x.low) && std::isfinite(x.high) &&
+         x.low <= x.high;
+}
+auto ep5_scalar(const BoardingFootSiteScalarBounds& x) -> Interval {
+  return x.supported ? interval(x.lower, x.upper) : failed();
+}
+auto ep5_axis(const EP5C& c, std::size_t axis) -> Point {
+  return {ep5_scalar(c.unit_axes[axis][0]), ep5_scalar(c.unit_axes[axis][1]),
+          ep5_scalar(c.unit_axes[axis][2])};
+}
+auto ep5_component(const BoardingPlantedLegPointBounds& b, std::size_t j)
+    -> Interval {
+  return interval(j == 0   ? b.lower.x
+                  : j == 1 ? b.lower.y
+                           : b.lower.z,
+                  j == 0   ? b.upper.x
+                  : j == 1 ? b.upper.y
+                           : b.upper.z);
+}
+// Direct endpoint division encloses genuine D/L, never a rounded reciprocal.
+auto ep5_unit_divide(Interval numerator, double length) -> Interval {
+  if (!ep5_valid(numerator) || !std::isfinite(length) || length <= 0)
+    return failed();
+  if (numerator.low == 0 && numerator.high == 0) return point(0);
+  const auto low = numerator.low / length, high = numerator.high / length;
+  if (!std::isfinite(low) || !std::isfinite(high) ||
+      low == -std::numeric_limits<double>::max() ||
+      high == std::numeric_limits<double>::max())
+    return failed();
+  return interval(down(low), up(high));
+}
+[[gnu::noinline]] auto ep5_units(EP5D& d, EP5C& c, const EP5L& l, EP5R& r)
+    -> bool {
+  for (std::size_t axis = 0; axis < 4; ++axis) {
+    const auto side = axis % 2;
+    const auto knee =
+        side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+    const auto from = axis < 2 ? (side == 0 ? BodyPointId::port_hip
+                                            : BodyPointId::starboard_hip)
+                               : (side == 0 ? BodyPointId::port_ankle
+                                            : BodyPointId::starboard_ankle);
+    Point displacement{};
+    for (std::size_t operation = 0; operation < 6; ++operation) {
+      const auto row = 6 * axis + operation, component = operation % 3;
+      r = EP5R{};
+      r.self_stage = EP5Stage::unit_axes;
+      r.operation = static_cast<std::uint16_t>(row);
+      c.unit_axis_cursor = static_cast<std::uint8_t>(row);
+      if (!detail::intermediate_endpoint05_charge(
+              d, r, d.work.unit_axis_operations, l.unit_axis_operations,
+              EP5W::unit_axis_capacity))
+        return false;
+      c.unit_axis_attempted |= std::uint32_t{1} << row;
+      const auto length = axis < 2 ? thigh_length : shin_length;
+      if (!c.self_body_complete || !ss_leg(c.phase.legs[side]) ||
+          !ep5_source_bit(d, 62) ||
+          (axis < 2 ? length != .47285 : length != .47478))
+        return detail::intermediate_endpoint05_refuse(d, r,
+                                                      EP5W::unit_axis_identity);
+      const auto result =
+          operation < 3
+              ? subtract(ep5_component(c.phase.points[body_index(knee)].value,
+                                       component),
+                         ep5_component(c.phase.points[body_index(from)].value,
+                                       component))
+              : ep5_unit_divide(displacement[component], length);
+      if (!ep5_valid(result) ||
+          (operation < 3 && (result.low < -16 || result.high > 16)))
+        return detail::intermediate_endpoint05_refuse(
+            d, r, EP5W::unsupported_arithmetic);
+      if (operation < 3)
+        displacement[component] = result;
+      else
+        c.unit_axes[axis][component] = {result.low, result.high, true};
+      c.unit_axis_written |= std::uint32_t{1} << row;
+    }
+    c.unit_axis_complete_mask |=
+        static_cast<std::uint8_t>(std::uint8_t{1} << axis);
+  }
+  return (c.unit_axis_written == kBoardingIntermediateEndpoint05UnitMask &&
+          c.unit_axis_complete_mask == 15) ||
+         detail::intermediate_endpoint05_refuse(d, r, EP5W::unit_axis_identity);
+}
+[[gnu::noinline]] auto ep5_owner(
+    const EP5C& c,
+    const std::array<Point, kBoardingPlantedBodyPointCount>& relative,
+    const SelfRegion& region, BoardingLowerFootTransferOwner& out) -> void {
+  if (region.junction != Junction::hip && region.junction != Junction::ankle) {
+    ss_owner(c.phase, relative, region, out);
+    return;
+  }
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  const auto u = ep5_axis(c, (region.junction == Junction::hip ? 0 : 2) + side);
+  auto extent = failed();
+  if (region.junction == Junction::hip) {
+    const auto x = unload_frame_dot(c.phase.frames[0], 0, u),
+               y = unload_frame_dot(c.phase.frames[0], 1, u),
+               z = unload_frame_dot(c.phase.frames[0], 2, u);
+    extent = add(add(subtract(multiply(point(.24), absolute(x)),
+                              multiply(point(side == 0 ? -.14 : .14), x)),
+                     multiply(point(.12), absolute(y))),
+                 multiply(point(.18), absolute(z)));
+  } else {
+    if (.075 > region.limit_metres || region.limit_metres >= shin_length ||
+        !ep5_valid(u[1]))
+      return;
+    // The original nominal sole is WORLD-Y, and bootC-A=-.05 WORLD-Y;
+    // B63 authenticates that construction. Cancellation needs nonnegative uY.
+    if (u[1].low < 0) {
+      out.arithmetic_supported = true;
+      return;
+    }
+    const auto x = unload_frame_dot(c.phase.frames[side + 2], 0, u),
+               z = unload_frame_dot(c.phase.frames[side + 2], 2, u);
+    extent = add(multiply(point(.06), absolute(x)),
+                 multiply(point(.14), absolute(z)));
+  }
+  const auto limit = point(region.limit_metres), gap = subtract(limit, extent);
+  out.arithmetic_supported =
+      ep5_valid(extent) && ep5_valid(limit) && ep5_valid(gap);
+  if (!out.arithmetic_supported) return;
+  out.extent = bounds(extent);
+  out.limit = bounds(limit);
+  out.secondary_extent = bounds(point(0));
+  out.structural_identity = true;
+  out.certificate = SelfCert::original_axis_box_support;
+  out.certified = gap.low >= 0;
+}
+[[gnu::noinline]] auto ep5_hip(
+    const EP5C& c, const SelfRegion& region, std::size_t region_index,
+    std::size_t pair, BoardingRouteCheckpointUnloadHipComplement& result)
+    -> void {
+  result.attempted = true;
+  result.region = region_index;
+  result.pair = pair;
+  const auto side = static_cast<std::size_t>(region.second) >= 9
+                        ? std::size_t{1}
+                        : std::size_t{0};
+  result.side = side;
+  result.slab_limit_metres = region.limit_metres;
+  const auto hip =
+      side == 0 ? BodyPointId::port_hip : BodyPointId::starboard_hip;
+  const auto knee =
+      side == 0 ? BodyPointId::port_knee : BodyPointId::starboard_knee;
+  const auto thigh = side == 0 ? PartId::port_thigh : PartId::starboard_thigh;
+  if (!c.self_body_complete || c.unit_axis_complete_mask != 15 ||
+      !ss_leg(c.phase.legs[side]) || region.junction != Junction::hip ||
+      region.first != PartId::pelvis || region.second != thigh ||
+      region.root != hip || region.toward != knee ||
+      region.limit_metres != kBoardingSelfHipLengthMetres ||
+      .105 > region.limit_metres || region.limit_metres >= thigh_length)
+    return;
+  result.nominal_unit_identity = result.upright_pelvis_identity =
+      result.original_slab_identity = true;
+  const auto u = ep5_axis(c, side);
+  for (std::size_t i = 0; i < 3; ++i) {
+    if (!ep5_valid(u[i])) return;
+    result.axis[i] = bounds(u[i]);
+  }
+  if (u[1].high >= 0) {
+    result.arithmetic_supported = true;
+    return;
+  }
+  result.extent_evaluated = true;
+  const auto proof = self02_hip_expression(u, .105, region.limit_metres, -.12);
+  result.arithmetic_supported = proof.arithmetic_supported;
+  if (!proof.arithmetic_supported) return;
+  result.transverse = proof.transverse;
+  result.extent = proof.extent;
+  result.limit = proof.limit;
+  result.strict_gap = proof.strict_gap;
+  result.certified = proof.negative_axis && proof.strict_extent_below_bottom;
+}
+[[gnu::noinline]] auto ep5_separate(const UnloadSolid& a, const UnloadSolid& b,
+                                    EP5D& d, EP5C& c, const EP5L& l, EP5R& r,
+                                    std::size_t pair) -> bool {
+  const auto count = std::size_t{4} +
+                     (a.shape.shape == SelfShape::capsule ? 2 : 3) +
+                     (b.shape.shape == SelfShape::capsule ? 2 : 3);
+  const auto proposal = [&](std::size_t i) -> Vec {
+    if (i < 3)
+      return i == 0 ? Vec{1, 0, 0} : i == 1 ? Vec{0, 1, 0} : Vec{0, 0, 1};
+    if (i == 3)
+      return self_difference(self_reporting(self_center(b.shape)),
+                             self_reporting(self_center(a.shape)));
+    i -= 4;
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape != SelfShape::capsule) {
+        if (i < 3)
+          return s->frame ? self_reporting(
+                                body_intervals(s->frame->columns[i].value))
+                          : Vec{};
+        i -= 3;
+      }
+    for (const auto* s : {&a, &b})
+      if (s->shape.shape == SelfShape::capsule) {
+        if (i < 2) {
+          const auto& other = s == &a ? b : a;
+          return self_difference(
+              self_reporting(i == 0 ? s->shape.first : s->shape.second),
+              self_reporting(self_center(other.shape)));
+        }
+        i -= 2;
+      }
+    return {};
+  };
+  r.self_stage = EP5Stage::separation;
+  for (std::size_t i = 0; i < count; ++i) {
+    r.self_axis = static_cast<std::uint8_t>(i);
+    r.self_sign = 255;
+    if (!detail::intermediate_endpoint05_charge(
+            d, r, d.work.self_axes, l.self_axes, EP5W::self_axis_capacity))
+      return false;
+    const auto axis = proposal(i);
+    if (!self_direction(axis)) continue;
+    for (std::size_t sign = 0; sign < 2; ++sign) {
+      r.self_sign = static_cast<std::uint8_t>(sign);
+      if (!detail::intermediate_endpoint05_charge(
+              d, r, d.work.self_signed_trials, l.self_signed_trials,
+              EP5W::self_signed_capacity))
+        return false;
+      const auto n = sign == 0 ? axis : self_negate(axis);
+      const auto total =
+          add(unload_support(a, n), unload_support(b, self_negate(n)));
+      if (!total.supported || !std::isfinite(total.low) ||
+          !std::isfinite(total.high))
+        return detail::intermediate_endpoint05_refuse(
+            d, r, EP5W::unsupported_arithmetic);
+      if (total.high <= 0) {
+        c.self_axes[pair] = static_cast<std::uint8_t>(i | (sign == 0 ? 0 : 16));
+        return true;
+      }
+    }
+  }
+  return detail::intermediate_endpoint05_refuse(d, r,
+                                                EP5W::unresolved_self_pair);
+}
+} // namespace
+auto detail::intermediate_endpoint05_self_bridge(
+    const BoardingIntermediateEndpoint05CurrentToken& token, EP5D& d, EP5C& c,
+    const EP5L& l, EP5R& r) -> EP5S {
+  std::size_t body_index_record{};
+  const auto body = [&](auto predicate, EP5W why = EP5W::self_body_identity) {
+    r = EP5R{};
+    r.self_stage = EP5Stage::body;
+    r.operation = static_cast<std::uint16_t>(body_index_record);
+    if (!intermediate_endpoint05_charge(d, r, d.work.self_body_guards,
+                                        l.self_body_guards,
+                                        EP5W::self_body_capacity))
+      return false;
+    c.self_body_evaluated |= std::uint64_t{1} << body_index_record++;
+    return predicate() || intermediate_endpoint05_refuse(d, r, why);
+  };
+  if (!body([&] {
+        return token.context() && token.owner() == &d && token.cell() == &c &&
+               token.request() && token.context()->owner() == &d &&
+               token.context()->parts() == &d.parts &&
+               token.context()->request() == token.request() &&
+               token.context()->key() &&
+               token.context()->key()->version() == 5 &&
+               token.context()->key()->candidate() == d.candidate &&
+               token.context()->key()->y() == d.slice.y && d.slice.complete &&
+               d.work.phase_calls == 1 &&
+               BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+               token.data() ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+               token.context()->data() == token.data() && token.data() &&
+               d.cells.size() == 1 && d.cells.capacity() == 1 &&
+               &d.cells.front() == &c && d.work.phase_calls == 1;
+      }))
+    return d.state;
+  if (!body([&] { return boarding_route_foot_phase_environment(); },
+            EP5W::unsupported_arithmetic))
+    return d.state;
+  const auto& p = c.phase;
+  if (!body([&] {
+        return p.complete && p.arithmetic_supported && p.nominal_links &&
+               p.target_sole_identities && p.joint_sectors &&
+               p.derivative_domains && p.timing_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.candidate == BoardingIntermediateEndpoint05Candidate::
+                                  root_y_both_hip_ankle_reach_roll_slice &&
+               d.version == 5 && p.first == 0 && p.last == 1 &&
+               token.request()->seconds_per_parameter == 2 &&
+               c.projection_complete;
+      }))
+    return d.state;
+  if (!body([&] {
+        return d.source_enrolled && d.self_version == 1 &&
+               d.source_evaluated == UINT64_MAX;
+      }))
+    return d.state;
+  if (!body([&] {
+        return ep5_source_bit(d, 62) && p.nominal_links &&
+               p.target_sole_identities;
+      }))
+    return d.state;
+  if (!body([&] {
+        return ep5_source_bit(d, 63) && p.arithmetic_supported &&
+               c.projected_carrier_complete[0];
+      }))
+    return d.state;
+  if (!body([&] {
+        return c.nominal_support_complete && c.nominal_equilibrium &&
+               c.star_support && d.stop_condition == EP5W::none;
+      }))
+    return d.state;
+  for (std::size_t i = 0; i < 18; ++i)
+    if (!body(
+            [&] {
+              return ss_point_valid(body_intervals(p.points[i].value), 8);
+            },
+            EP5W::unsupported_arithmetic))
+      return d.state;
+  for (std::size_t f = 0; f < 4; ++f)
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!body(
+              [&] {
+                return ss_point_valid(
+                    body_intervals(p.frames[f].columns[j].value), 8);
+              },
+              EP5W::unsupported_arithmetic))
+        return d.state;
+  for (std::size_t side = 0; side < 2; ++side)
+    if (!body([&] {
+          const auto first = side == 0 ? std::size_t{36} : std::size_t{42};
+          return ss_leg(p.legs[side]) && ep5_source_bit(d, 62) &&
+                 ep5_source_bit(d, first) && ep5_source_bit(d, first + 1) &&
+                 ss_same_part(d.parts[first - 33], ss_part(first - 33)) &&
+                 ss_same_part(d.parts[first - 32], ss_part(first - 32));
+        }))
+      return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[0], ss_part(0)) &&
+               ss_same_part(d.parts[1], ss_part(1)) && ep5_source_bit(d, 33) &&
+               ep5_source_bit(d, 34) && ep5_source_bit(d, 48);
+      }))
+    return d.state;
+  if (!body([&] {
+        return ss_same_part(d.parts[1], ss_part(1)) &&
+               ss_same_part(d.parts[2], ss_part(2)) && ep5_source_bit(d, 34) &&
+               ep5_source_bit(d, 35) && ep5_source_bit(d, 51) &&
+               ep5_source_bit(d, 63);
+      }))
+    return d.state;
+  if (!body([&] {
+        if (!ep5_source_bit(d, 63)) return false;
+        for (const auto part :
+             {std::size_t{6}, std::size_t{7}, std::size_t{8}, std::size_t{12},
+              std::size_t{13}, std::size_t{14}})
+          if (!ep5_source_bit(d, 33 + part) ||
+              !ss_same_part(d.parts[part], ss_part(part)))
+            return false;
+        for (const auto region :
+             {std::size_t{4}, std::size_t{5}, std::size_t{8}, std::size_t{9},
+              std::size_t{12}, std::size_t{13}})
+          if (!ep5_source_bit(d, 48 + region)) return false;
+        return true;
+      }))
+    return d.state;
+  SelfRegions regions{};
+  if (!body([&] {
+        regions = self_regions();
+        for (std::size_t i = 0; i < 14; ++i)
+          if (!ep5_source_bit(d, 48 + i) ||
+              !ss_same_region(regions[i], ss_region(i)))
+            return false;
+        return true;
+      }))
+    return d.state;
+  std::array<Point, kBoardingPlantedBodyPointCount> relative;
+  if (!body([&] {
+        relative[0] = {point(0), point(0), point(0)};
+        return true;
+      }))
+    return d.state;
+  for (std::size_t i = 1; i < 18; ++i)
+    if (!body(
+            [&] {
+              relative[i] =
+                  unload_difference(body_intervals(p.points[i].value),
+                                    body_intervals(p.points[0].value));
+              return ss_point_valid(relative[i], 16);
+            },
+            EP5W::unsupported_arithmetic))
+      return d.state;
+  if (!body([&] {
+        return body_index_record == 63 &&
+               c.self_body_evaluated ==
+                   kBoardingIntermediateEndpoint05BodyMask &&
+               token.owner() == &d && token.cell() == &c &&
+               token.data() ==
+                   BoardingIntermediatePauseSupportAccess::data(d.source);
+      }))
+    return d.state;
+  c.self_body_complete = true;
+  if (!ep5_units(d, c, l, r)) return d.state;
+  std::size_t pair{};
+  for (std::size_t a = 0; a < 15; ++a)
+    for (std::size_t b = a + 1; b < 15; ++b, ++pair) {
+      r = EP5R{};
+      r.self_stage = EP5Stage::not_run;
+      r.self_pair = static_cast<std::uint16_t>(pair);
+      r.self_region = 255;
+      r.self_axis = 255;
+      r.self_sign = 255;
+      r.self_stage = EP5Stage::pair;
+      if (!intermediate_endpoint05_charge(d, r, d.work.self_pairs, l.self_pairs,
+                                          EP5W::self_pair_capacity))
+        return d.state;
+      ++c.examined_pairs;
+      auto certificate = EP5Cert::not_run;
+      for (std::size_t region = 0; region < 14; ++region)
+        if (static_cast<std::size_t>(regions[region].first) == a &&
+            static_cast<std::size_t>(regions[region].second) == b) {
+          r.self_stage = EP5Stage::owner;
+          r.self_region = static_cast<std::uint8_t>(region);
+          if (!intermediate_endpoint05_charge(d, r, d.work.self_owners,
+                                              l.self_owners,
+                                              EP5W::self_owner_capacity))
+            return d.state;
+          c.owner_attempted_mask |=
+              static_cast<std::uint16_t>(std::uint16_t{1} << region);
+          ep5_owner(c, relative, regions[region], c.owners[region]);
+          if (!c.owners[region].arithmetic_supported) {
+            intermediate_endpoint05_refuse(d, r, EP5W::unsupported_arithmetic);
+            return d.state;
+          }
+          if (c.owners[region].certified)
+            certificate = static_cast<EP5Cert>(c.owners[region].certificate);
+          else if (regions[region].junction == Junction::hip) {
+            r.self_stage = EP5Stage::hip;
+            if (!intermediate_endpoint05_charge(
+                    d, r, d.work.self_hip_complements, l.self_hip_complements,
+                    EP5W::self_hip_capacity))
+              return d.state;
+            const auto side = b >= 9 ? std::size_t{1} : std::size_t{0};
+            ep5_hip(c, regions[region], region, pair, c.hip_complements[side]);
+            if (!c.hip_complements[side].arithmetic_supported) {
+              intermediate_endpoint05_refuse(d, r,
+                                             EP5W::unsupported_arithmetic);
+              return d.state;
+            }
+            if (c.hip_complements[side].certified)
+              certificate = EP5Cert::original_capsule_slab_complement;
+          }
+          break;
+        }
+      if (certificate == EP5Cert::not_run) {
+        const auto first = unload_solid(d.parts[a], relative, p),
+                   second = unload_solid(d.parts[b], relative, p);
+        if (!ep5_separate(first, second, d, c, l, r, pair)) return d.state;
+        certificate = EP5Cert::convex_support_plane;
+      }
+      c.self_certificates[pair] = certificate;
+      ++c.self_certificate_counts[static_cast<std::size_t>(certificate)];
+      ++c.accepted_pairs;
+    }
+  c.self_complete = pair == 105 && c.accepted_pairs == 105;
+  if (!c.self_complete) {
+    intermediate_endpoint05_refuse(d, r, EP5W::incomplete_endpoint);
+    return d.state;
+  }
+  r.self_pair = 65535;
+  r.self_region = 255;
+  r.self_axis = 255;
+  r.self_sign = 255;
+  r.self_stage = EP5Stage::complete;
+  c.complete = true;
+  c.state = d.state = EP5S::accepted;
+  return d.state;
+}
+} // namespace apsis_drift
+
+namespace apsis_drift {
+namespace {
+using Slice5Why = BoardingIntermediateEndpoint05SliceCondition;
+using EP5Request = BoardingRouteFootPhaseRequest;
+auto ep5_packet(const BoardingRoutePhaseConstant& c,
+                const std::array<double, 3>& terms, std::size_t count) -> bool {
+  return c.count == count && c.terms == terms;
+}
+// Comparison-only structure; no numeric sum or construction evaluation.
+// Called only within the already charged G04/G50 deferred predicates.
+auto ep5_packet_structure(const EP5Request& request) -> bool {
+  const auto canonical = [](const BoardingRoutePhaseConstant& c) {
+    if (c.count == 0 || c.count > c.terms.size()) return false;
+    for (std::size_t i = c.count; i < c.terms.size(); ++i)
+      if (c.terms[i] != 0 || std::signbit(c.terms[i])) return false;
+    return true;
+  };
+  for (const auto& root : request.root)
+    for (const auto& c : root.coordinates)
+      if (!canonical(c)) return false;
+  for (const auto& foot : request.feet)
+    for (const auto& sole : foot.sole)
+      for (const auto& c : sole.coordinates)
+        if (!canonical(c)) return false;
+  return true;
+}
+auto ep5_packet_domains(const EP5Request& request) -> bool {
+  const auto valid = [](const BoardingRoutePhaseConstant& c) {
+    if (c.count == 0 || c.count > 3) return false;
+    for (std::size_t i = 0; i < 3; ++i)
+      if (!std::isfinite(c.terms[i]) || std::abs(c.terms[i]) > 8 ||
+          (i >= c.count && (c.terms[i] != 0 || std::signbit(c.terms[i]))))
+        return false;
+    return true;
+  };
+  for (const auto& root : request.root)
+    for (const auto& c : root.coordinates)
+      if (!valid(c)) return false;
+  for (const auto& foot : request.feet)
+    for (const auto& sole : foot.sole)
+      for (const auto& c : sole.coordinates)
+        if (!valid(c)) return false;
+  return std::isfinite(request.seconds_per_parameter) &&
+         std::isfinite(request.root_yaw_half[0]) &&
+         std::isfinite(request.root_yaw_half[1]) &&
+         std::isfinite(request.torso_lean_half[0]) &&
+         std::isfinite(request.torso_lean_half[1]) &&
+         std::isfinite(request.port_reaction_fraction[0]) &&
+         std::isfinite(request.port_reaction_fraction[1]);
+}
+auto ep5_construction_packet_domains(const EP5Request& request) -> bool {
+  for (std::size_t i = 0; i < 8; ++i) {
+    const auto& c =
+        i < 2 ? request.root[0].coordinates[i == 0 ? 0 : 2]
+              : request.feet[i < 5 ? 0 : 1].sole[0].coordinates[(i - 2) % 3];
+    if (c.count == 0 || c.count > 3) return false;
+    for (std::size_t j = 0; j < 3; ++j)
+      if (!std::isfinite(c.terms[j]) || std::abs(c.terms[j]) > 8 ||
+          (j >= c.count && (c.terms[j] != 0 || std::signbit(c.terms[j]))))
+        return false;
+  }
+  return true;
+}
+auto ep5_slice_stop(EP5D& d, EP5R& r, EP5W why, Slice5Why condition) -> bool {
+  d.slice.condition = condition;
+  r.limiting_bound = d.slice.limiting_bound;
+  return detail::intermediate_endpoint05_refuse(d, r, why);
+}
+} // namespace
+// This is a literal packet predicate, not a source issuer or new factory.
+auto detail::intermediate_endpoint05_template_valid(const EP5Request& request,
+                                                    bool generated, double y)
+    -> bool {
+  for (const auto& root : request.root) {
+    if (!ep5_packet(root.coordinates[0], {.16, .16, -.0075}, 3) ||
+        !ep5_packet(root.coordinates[2], {-.55, -.17, .19}, 3) ||
+        !(generated ? ep5_packet(root.coordinates[1], {y, 0, 0}, 1)
+                    : ep5_packet(root.coordinates[1],
+                                 {.847, .012, (-.359) / 2.0}, 3)))
+      return false;
+  }
+  for (std::size_t side = 0; side < 2; ++side) {
+    const auto& foot = request.feet[side];
+    for (const auto& sole : foot.sole) {
+      if (side == 0) {
+        if (!ep5_packet(sole.coordinates[0], {.16, -.14, .16}, 3) ||
+            !ep5_packet(sole.coordinates[1],
+                        {static_cast<double>(-230000) * 1e-6, 0, 0}, 1) ||
+            !ep5_packet(sole.coordinates[2], {-1.14, 0, 0}, 1))
+          return false;
+      } else {
+        if (!ep5_packet(sole.coordinates[0], {.16, .14, 0}, 2) ||
+            !ep5_packet(sole.coordinates[1],
+                        {static_cast<double>(-160000) * 1e-6, 0, 0}, 1) ||
+            !ep5_packet(sole.coordinates[2], {-.8, 0, 0}, 1))
+          return false;
+      }
+    }
+    if (foot.yaw_half != std::array<double, 2>{0, 0} ||
+        foot.swing_height_metres != 0)
+      return false;
+  }
+  return request.root_yaw_half == std::array<double, 2>{.125, .125} &&
+         request.torso_lean_half == std::array<double, 2>{-.30, -.30} &&
+         request.port_reaction_fraction ==
+             std::array<double, 2>{.0625, .0625} &&
+         request.seconds_per_parameter == 2;
+}
+namespace {
+// Direct local aggregate: all registered fields retain their complete lifetime.
+struct Endpoint05ConstructorWorkspace {
+  // All construction storage dies before Key issuance and the original graph.
+  std::array<Interval, 8> input{};
+  std::array<Interval, 6> yaw{};
+  // Per side: signed X/Z, X2/Z2, C, A, full ABS(X), rollLower.
+  std::array<Interval, 16> chart{};
+  // Lsum, M, Ldiff, m, L1sq, L2sq, Delta, sqrt3half, b.
+  std::array<Interval, 9> link{};
+  // Per side: W, cutlow, cuthi, cutturn, p, q; no overwritten origins.
+  std::array<Interval, 12> cut{};
+  // Per side: rho_p/rho_q, ankle lower/upper, reach lower/upper;
+  // the last six slots are sequential endpoint/current primitive scratch.
+  std::array<Interval, 18> endpoint{};
+  std::array<Interval, 18> direct{};
+  std::array<double, 10> cuts{};
+  std::array<double, 8> selected{};
+  std::array<bool, 2> endpoint_certificate{};
+};
+// Borrowed numerical controls only; this object issues no program authority.
+struct Endpoint05ConstructorControl {
+  EP5D& d;
+  EP5R& r;
+  const EP5L& limits;
+  template <class Predicate>
+  auto guard(std::uint8_t row, std::uint8_t side, Predicate&& predicate,
+             Slice5Why ordinary) -> bool {
+    r = EP5R{};
+    r.self_stage = EP5Stage::slice_guard;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.slice.guard = row;
+    d.slice.side = side;
+    d.slice.limiting_bound = {};
+    if (!detail::intermediate_endpoint05_charge(
+            d, r, d.work.construction_guards, limits.construction_guards,
+            EP5W::slice_guard_capacity)) {
+      d.slice.condition = Slice5Why::guard_capacity;
+      return false;
+    }
+    d.slice.guard_attempted |= std::uint64_t{1} << row;
+    EP5W why = ordinary == Slice5Why::identity ? EP5W::slice_identity
+                                               : EP5W::slice_unavailable;
+    const bool good = predicate(why);
+    if (!good)
+      return ep5_slice_stop(
+          d, r, why,
+          why == EP5W::unsupported_arithmetic
+              ? Slice5Why::unsupported_arithmetic
+              : ((row == 36 || row == 43) &&
+                         d.slice.condition == Slice5Why::hip_descent_unavailable
+                     ? Slice5Why::hip_descent_unavailable
+                     : ordinary));
+    d.slice.guard_written |= std::uint64_t{1} << row;
+    return true;
+  }
+  template <class Compute>
+  auto operation(std::uint16_t row, std::uint8_t side, Interval& output,
+                 Compute&& compute) -> bool {
+    r = EP5R{};
+    r.self_stage = EP5Stage::slice_operation;
+    r.operation = row;
+    if (side < 2) r.side = side;
+    d.slice.operation = row;
+    d.slice.side = side;
+    d.slice.limiting_bound = {};
+    if (!detail::intermediate_endpoint05_charge(
+            d, r, d.work.construction_operations,
+            limits.construction_operations, EP5W::slice_operation_capacity)) {
+      d.slice.condition = Slice5Why::operation_capacity;
+      return false;
+    }
+    d.slice.operation_attempted[row / 64] |= std::uint64_t{1} << (row % 64);
+    const auto value = compute();
+    if (!ep5_valid(value))
+      return ep5_slice_stop(d, r, EP5W::unsupported_arithmetic,
+                            Slice5Why::unsupported_arithmetic);
+    output = value;
+    d.slice.limiting_bound = {value.low, value.high, true};
+    d.slice.operation_written[row / 64] |= std::uint64_t{1} << (row % 64);
+    d.slice.arithmetic_supported = true;
+    return true;
+  }
+  auto supported(EP5W& why, const Interval& v) -> bool {
+    if (ep5_valid(v)) return true;
+    why = EP5W::unsupported_arithmetic;
+    return false;
+  }
+  auto attach(const Interval& v) -> bool {
+    d.slice.limiting_bound = {v.low, v.high, true};
+    return false;
+  }
+};
+} // namespace
+[[gnu::noinline]] auto detail::intermediate_endpoint05_construct(
+    EP5D& d, EP5Request& request, const EP5L& limits, EP5R& r) -> bool {
+  // Directly initialized; no factory, copy, aggregate return, heap or arena.
+  Endpoint05ConstructorWorkspace workspace{};
+  Endpoint05ConstructorControl control{d, r, limits};
+  // G01
+  if (!control.guard(
+          0, 255,
+          [&](EP5W&) {
+            return d.source_enrolled && d.work.source_guards == 64 &&
+                   d.source_evaluated == UINT64_MAX &&
+                   BoardingIntermediatePauseSupportAccess::valid(d.source) &&
+                   BoardingIntermediatePauseSupportAccess::data(d.source) &&
+                   d.parts.size() == 15;
+          },
+          Slice5Why::identity))
+    return false;
+  // G02
+  if (!control.guard(
+          1, 255,
+          [&](EP5W& why) {
+            why = EP5W::unsupported_arithmetic;
+            return boarding_route_foot_phase_environment();
+          },
+          Slice5Why::unsupported_arithmetic))
+    return false;
+  // G03
+  if (!control.guard(
+          2, 255,
+          [&](EP5W&) {
+            return d.version == 5 &&
+                   d.candidate == BoardingIntermediateEndpoint05Candidate::
+                                      root_y_both_hip_ankle_reach_roll_slice &&
+                   intermediate_endpoint05_template_valid(request, false, 0);
+          },
+          Slice5Why::identity))
+    return false;
+  // G04
+  if (!control.guard(
+          3, 255,
+          [&](EP5W& why) {
+            if (!ep5_packet_structure(request) ||
+                !intermediate_endpoint05_template_valid(request, false, 0))
+              return false;
+            if (!ep5_packet_domains(request) ||
+                !ep5_construction_packet_domains(request)) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            return true;
+          },
+          Slice5Why::identity))
+    return false;
+  // G05
+  if (!control.guard(
+          4, 255,
+          [&](EP5W& why) {
+            if (!std::isfinite(thigh_length) || !std::isfinite(shin_length) ||
+                thigh_length <= 0 || shin_length <= 0 || thigh_length > 1 ||
+                shin_length > 1) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            const auto* pelvis = std::get_if<BoardingRoutePhaseBoxBinding>(
+                &d.parts[0].reservation);
+            const auto* port = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+                &d.parts[3].reservation);
+            const auto* star = std::get_if<BoardingPlantedBodyCapsuleBinding>(
+                &d.parts[9].reservation);
+            const auto port_region = ss_region(1), star_region = ss_region(2);
+            if (kBoardingRouteFootPhaseVersion != 1 || thigh_length != .47285 ||
+                shin_length != .47478 || !ep5_source_bit(d, 62) || !pelvis ||
+                !port || !star || d.parts[0].id != PartId::pelvis ||
+                d.parts[3].id != PartId::port_thigh ||
+                d.parts[9].id != PartId::starboard_thigh ||
+                pelvis->center != BodyPointId::root ||
+                pelvis->frame != BoardingRoutePhaseFrame::root ||
+                pelvis->half_size_metres != RigidVector3{.24, .12, .18} ||
+                port->start != BodyPointId::port_hip ||
+                port->end != BodyPointId::port_knee ||
+                star->start != BodyPointId::starboard_hip ||
+                star->end != BodyPointId::starboard_knee ||
+                port->radius_metres != .105 || star->radius_metres != .105 ||
+                port_region.first != PartId::pelvis ||
+                port_region.second != PartId::port_thigh ||
+                star_region.first != PartId::pelvis ||
+                star_region.second != PartId::starboard_thigh ||
+                port_region.junction != Junction::hip ||
+                star_region.junction != Junction::hip ||
+                port_region.root != BodyPointId::port_hip ||
+                port_region.toward != BodyPointId::port_knee ||
+                star_region.root != BodyPointId::starboard_hip ||
+                star_region.toward != BodyPointId::starboard_knee ||
+                port_region.limit_metres != kBoardingSelfHipLengthMetres ||
+                star_region.limit_metres != kBoardingSelfHipLengthMetres ||
+                kBoardingSelfHipLengthMetres != 0x1.bb0cd605d7512p-3) {
+              why = EP5W::slice_identity;
+              return false;
+            }
+            if (!std::isfinite(kBoardingSelfHipLengthMetres)) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            return .12 > 0 && kBoardingSelfHipLengthMetres > .12 && .105 > 0 &&
+                   .105 <= kBoardingSelfHipLengthMetres &&
+                   kBoardingSelfHipLengthMetres < thigh_length;
+          },
+          Slice5Why::hip_threshold_domain))
+    return false;
+  // G06
+  if (!control.guard(
+          5, 255,
+          [&](EP5W&) {
+            // The source compiler's exact-real nominal rational workspace.yaw
+            // construction, not midpoint or rounded affine orthogonality, owns
+            // these identities.
+            return ep5_source_bit(d, 63) &&
+                   kBoardingRouteFootPhaseVersion == 1 &&
+                   intermediate_endpoint05_template_valid(request, false, 0) &&
+                   request.feet[0].yaw_half == std::array<double, 2>{0, 0} &&
+                   request.feet[1].yaw_half == std::array<double, 2>{0, 0};
+          },
+          Slice5Why::identity))
+    return false;
+  // O001
+  if (!control.operation(0, 255, workspace.input[0], [&] {
+        return phase_constant(request.root[0].coordinates[0]);
+      }))
+    return false;
+  // O002
+  if (!control.operation(1, 255, workspace.input[1], [&] {
+        return phase_constant(request.root[0].coordinates[2]);
+      }))
+    return false;
+  // O003
+  if (!control.operation(2, 255, workspace.input[2], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[0]);
+      }))
+    return false;
+  // O004
+  if (!control.operation(3, 255, workspace.input[3], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[1]);
+      }))
+    return false;
+  // O005
+  if (!control.operation(4, 255, workspace.input[4], [&] {
+        return phase_constant(request.feet[0].sole[0].coordinates[2]);
+      }))
+    return false;
+  // O006
+  if (!control.operation(5, 255, workspace.input[5], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[0]);
+      }))
+    return false;
+  // O007
+  if (!control.operation(6, 255, workspace.input[6], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[1]);
+      }))
+    return false;
+  // O008
+  if (!control.operation(7, 255, workspace.input[7], [&] {
+        return phase_constant(request.feet[1].sole[0].coordinates[2]);
+      }))
+    return false;
+  // O009
+  if (!control.operation(8, 255, workspace.yaw[0], [&] {
+        return square(point(request.root_yaw_half[0]));
+      }))
+    return false;
+  // O010
+  if (!control.operation(9, 255, workspace.yaw[1],
+                         [&] { return add(point(1), workspace.yaw[0]); }))
+    return false;
+  // O011
+  if (!control.operation(10, 255, workspace.yaw[2],
+                         [&] { return subtract(point(1), workspace.yaw[0]); }))
+    return false;
+  // O012
+  if (!control.operation(11, 255, workspace.yaw[3], [&] {
+        return divide(workspace.yaw[2], workspace.yaw[1]);
+      }))
+    return false;
+  // O013
+  if (!control.operation(12, 255, workspace.yaw[2], [&] {
+        return multiply(point(2), point(request.root_yaw_half[0]));
+      }))
+    return false;
+  // O014
+  if (!control.operation(13, 255, workspace.yaw[4], [&] {
+        return divide(workspace.yaw[2], workspace.yaw[1]);
+      }))
+    return false;
+  // O015
+  if (!control.operation(14, 255, workspace.yaw[5],
+                         [&] { return negate(workspace.yaw[4]); }))
+    return false;
+  // O016
+  if (!control.operation(15, 0, workspace.endpoint[12], [&] {
+        return multiply(point(-.14), workspace.yaw[3]);
+      }))
+    return false;
+  // O017
+  if (!control.operation(16, 0, workspace.endpoint[13], [&] {
+        return multiply(point(-.14), workspace.yaw[5]);
+      }))
+    return false;
+  // O018
+  if (!control.operation(17, 0, workspace.endpoint[14], [&] {
+        return add(workspace.input[0], workspace.endpoint[12]);
+      }))
+    return false;
+  // O019
+  if (!control.operation(18, 0, workspace.endpoint[15], [&] {
+        return add(workspace.input[1], workspace.endpoint[13]);
+      }))
+    return false;
+  // O020
+  if (!control.operation(19, 0, workspace.chart[0], [&] {
+        return subtract(workspace.input[2], workspace.endpoint[14]);
+      }))
+    return false;
+  // O021
+  if (!control.operation(20, 0, workspace.chart[1], [&] {
+        return subtract(workspace.input[4], workspace.endpoint[15]);
+      }))
+    return false;
+  // O022
+  if (!control.operation(21, 0, workspace.chart[2],
+                         [&] { return square(workspace.chart[0]); }))
+    return false;
+  // O023
+  if (!control.operation(22, 0, workspace.chart[3],
+                         [&] { return square(workspace.chart[1]); }))
+    return false;
+  // O024
+  if (!control.operation(23, 0, workspace.chart[4], [&] {
+        return add(workspace.chart[2], workspace.chart[3]);
+      }))
+    return false;
+  // O025
+  if (!control.operation(24, 0, workspace.chart[5],
+                         [&] { return add(workspace.input[3], point(.1)); }))
+    return false;
+  // O026
+  if (!control.operation(25, 1, workspace.endpoint[12], [&] {
+        return multiply(point(.14), workspace.yaw[3]);
+      }))
+    return false;
+  // O027
+  if (!control.operation(26, 1, workspace.endpoint[13], [&] {
+        return multiply(point(.14), workspace.yaw[5]);
+      }))
+    return false;
+  // O028
+  if (!control.operation(27, 1, workspace.endpoint[14], [&] {
+        return add(workspace.input[0], workspace.endpoint[12]);
+      }))
+    return false;
+  // O029
+  if (!control.operation(28, 1, workspace.endpoint[15], [&] {
+        return add(workspace.input[1], workspace.endpoint[13]);
+      }))
+    return false;
+  // O030
+  if (!control.operation(29, 1, workspace.chart[8], [&] {
+        return subtract(workspace.input[5], workspace.endpoint[14]);
+      }))
+    return false;
+  // O031
+  if (!control.operation(30, 1, workspace.chart[9], [&] {
+        return subtract(workspace.input[7], workspace.endpoint[15]);
+      }))
+    return false;
+  // O032
+  if (!control.operation(31, 1, workspace.chart[10],
+                         [&] { return square(workspace.chart[8]); }))
+    return false;
+  // O033
+  if (!control.operation(32, 1, workspace.chart[11],
+                         [&] { return square(workspace.chart[9]); }))
+    return false;
+  // O034
+  if (!control.operation(33, 1, workspace.chart[12], [&] {
+        return add(workspace.chart[10], workspace.chart[11]);
+      }))
+    return false;
+  // O035
+  if (!control.operation(34, 1, workspace.chart[13],
+                         [&] { return add(workspace.input[6], point(.1)); }))
+    return false;
+  // O036
+  if (!control.operation(35, 255, workspace.link[0], [&] {
+        return add(point(thigh_length), point(shin_length));
+      }))
+    return false;
+  // O037
+  if (!control.operation(36, 255, workspace.link[1],
+                         [&] { return square(workspace.link[0]); }))
+    return false;
+  // O038
+  if (!control.operation(37, 255, workspace.link[2], [&] {
+        return subtract(point(thigh_length), point(shin_length));
+      }))
+    return false;
+  // O039
+  if (!control.operation(38, 255, workspace.link[3],
+                         [&] { return square(workspace.link[2]); }))
+    return false;
+  // O040
+  if (!control.operation(39, 255, workspace.link[4],
+                         [&] { return square(point(thigh_length)); }))
+    return false;
+  // O041
+  if (!control.operation(40, 255, workspace.link[5],
+                         [&] { return square(point(shin_length)); }))
+    return false;
+  // O042
+  if (!control.operation(41, 255, workspace.link[6], [&] {
+        return subtract(workspace.link[4], workspace.link[5]);
+      }))
+    return false;
+  // O043
+  if (!control.operation(42, 255, workspace.yaw[0],
+                         [&] { return transfer_small_root(point(3)); }))
+    return false;
+  // O044
+  if (!control.operation(43, 255, workspace.link[7],
+                         [&] { return divide(workspace.yaw[0], point(2)); }))
+    return false;
+  // O045
+  if (!control.operation(44, 255, workspace.link[8],
+                         [&] { return subtract(point(2), workspace.yaw[0]); }))
+    return false;
+  // G07
+  if (!control.guard(
+          6, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.link[8])) return false;
+            return workspace.link[8].low > 0 ||
+                   control.attach(workspace.link[8]);
+          },
+          Slice5Why::no_positive_roll_factor))
+    return false;
+  // O046
+  if (!control.operation(45, 255, workspace.direct[0],
+                         [&] { return square(workspace.link[8]); }))
+    return false;
+  // O047
+  if (!control.operation(46, 255, workspace.direct[0],
+                         [&] { return add(point(1), workspace.direct[0]); }))
+    return false;
+  // O048
+  if (!control.operation(47, 255, workspace.direct[0], [&] {
+        return transfer_small_root(workspace.direct[0]);
+      }))
+    return false;
+  // O049
+  if (!control.operation(48, 255, workspace.direct[1],
+                         [&] { return divide(point(1), workspace.direct[0]); }))
+    return false;
+  // G08
+  if (!control.guard(
+          7, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[1])) return false;
+            if (workspace.direct[1].low <= 0 || workspace.direct[1].high >= 1)
+              return control.attach(workspace.direct[1]);
+            return true;
+          },
+          Slice5Why::hip_threshold_domain))
+    return false;
+  // O050
+  if (!control.operation(49, 255, workspace.direct[2], [&] {
+        return square(point(kBoardingSelfHipLengthMetres));
+      }))
+    return false;
+  // O051
+  if (!control.operation(50, 255, workspace.direct[3],
+                         [&] { return square(point(.105)); }))
+    return false;
+  // O052
+  if (!control.operation(51, 255, workspace.direct[4],
+                         [&] { return square(point(.12)); }))
+    return false;
+  // O053
+  if (!control.operation(52, 255, workspace.direct[2], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O054
+  if (!control.operation(53, 255, workspace.direct[3], [&] {
+        return subtract(workspace.direct[2], workspace.direct[4]);
+      }))
+    return false;
+  // G09
+  if (!control.guard(
+          8, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[2]) ||
+                !control.supported(why, workspace.direct[3]))
+              return false;
+            if (workspace.direct[2].low <= 0)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[3].low > 0 ||
+                   control.attach(workspace.direct[3]);
+          },
+          Slice5Why::hip_threshold_domain))
+    return false;
+  // O055
+  if (!control.operation(54, 255, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[3]);
+      }))
+    return false;
+  // O056
+  if (!control.operation(55, 255, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[3]);
+      }))
+    return false;
+  // O057
+  if (!control.operation(56, 255, workspace.direct[4], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres), point(.12));
+      }))
+    return false;
+  // O058
+  if (!control.operation(57, 255, workspace.direct[3], [&] {
+        return add(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O059
+  if (!control.operation(58, 255, workspace.direct[3], [&] {
+        return divide(workspace.direct[3], workspace.direct[2]);
+      }))
+    return false;
+  // G10
+  if (!control.guard(
+          9, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[3])) return false;
+            if (workspace.direct[3].low <= 0 || workspace.direct[3].high >= 1)
+              return control.attach(workspace.direct[3]);
+            return true;
+          },
+          Slice5Why::hip_threshold_domain))
+    return false;
+  // O060
+  if (!control.operation(59, 255, workspace.direct[4], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[3]);
+      }))
+    return false;
+  // O061
+  if (!control.operation(60, 255, workspace.direct[4], [&] {
+        return subtract(workspace.direct[4], point(.12));
+      }))
+    return false;
+  // G11
+  if (!control.guard(
+          10, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[4])) return false;
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice5Why::hip_threshold_domain))
+    return false;
+  // O062
+  if (!control.operation(61, 255, workspace.direct[3], [&] {
+        return divide(workspace.direct[3], workspace.direct[1]);
+      }))
+    return false;
+  // O063
+  if (!control.operation(62, 255, workspace.direct[3],
+                         [&] { return point(workspace.direct[3].high); }))
+    return false;
+  workspace.selected[5] = workspace.direct[3].low;
+  // G12
+  if (!control.guard(
+          11, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[3])) return false;
+            if (workspace.direct[3].low != workspace.direct[3].high) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.direct[3].low <= 0 || workspace.direct[3].high >= 1)
+              return control.attach(workspace.direct[3]);
+            return true;
+          },
+          Slice5Why::hip_descent_unavailable))
+    return false;
+  // O064
+  if (!control.operation(63, 255, workspace.direct[3],
+                         [&] { return square(point(workspace.selected[5])); }))
+    return false;
+  // O065
+  if (!control.operation(64, 255, workspace.direct[3], [&] {
+        return subtract(point(1), workspace.direct[3]);
+      }))
+    return false;
+  // G13
+  if (!control.guard(
+          12, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[3])) return false;
+            return workspace.direct[3].low > 0 ||
+                   control.attach(workspace.direct[3]);
+          },
+          Slice5Why::hip_descent_unavailable))
+    return false;
+  // O066
+  if (!control.operation(65, 255, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[3]);
+      }))
+    return false;
+  // O067
+  if (!control.operation(66, 255, workspace.direct[3], [&] {
+        return multiply(point(thigh_length), workspace.direct[3]);
+      }))
+    return false;
+  // O068
+  if (!control.operation(67, 255, workspace.direct[4],
+                         [&] { return point(workspace.direct[3].low); }))
+    return false;
+  workspace.selected[5] = workspace.direct[4].low;
+  // G14
+  if (!control.guard(
+          13, 255,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[3]) ||
+                !control.supported(why, workspace.direct[4]))
+              return false;
+            if (workspace.direct[4].low != workspace.direct[4].high ||
+                workspace.direct[4].low != workspace.direct[3].low ||
+                workspace.selected[5] != workspace.direct[4].low) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            return workspace.direct[4].low > 0 ||
+                   control.attach(workspace.direct[4]);
+          },
+          Slice5Why::hip_descent_unavailable))
+    return false;
+  // O069
+  if (!control.operation(68, 0, workspace.cut[0],
+                         [&] { return negate(workspace.chart[1]); }))
+    return false;
+  // O070
+  if (!control.operation(69, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O071
+  if (!control.operation(70, 0, workspace.cut[1], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O072
+  if (!control.operation(71, 0, workspace.endpoint[12], [&] {
+        return add(workspace.cut[0], point(thigh_length));
+      }))
+    return false;
+  // O073
+  if (!control.operation(72, 0, workspace.cut[2], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O074
+  if (!control.operation(73, 0, workspace.cut[3], [&] {
+        return divide(workspace.cut[0], workspace.link[0]);
+      }))
+    return false;
+  // O075
+  if (!control.operation(74, 0, workspace.cut[4], [&] {
+        return point(std::max(-.5, workspace.cut[1].high));
+      }))
+    return false;
+  // O076
+  if (!control.operation(75, 0, workspace.cut[5], [&] {
+        return point(std::min(.5, workspace.cut[2].low));
+      }))
+    return false;
+  // O077
+  if (!control.operation(76, 0, workspace.cut[5], [&] {
+        return point(std::min(workspace.cut[5].low, workspace.cut[3].low));
+      }))
+    return false;
+  // O078
+  if (!control.operation(77, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[0], point(workspace.selected[5]));
+      }))
+    return false;
+  // O079
+  if (!control.operation(78, 0, workspace.endpoint[12], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O080
+  if (!control.operation(79, 0, workspace.cut[4], [&] {
+        return point(
+            std::max(workspace.cut[4].low, workspace.endpoint[12].high));
+      }))
+    return false;
+  // O081
+  if (!control.operation(80, 0, workspace.endpoint[13], [&] {
+        return divide(workspace.cut[0], point(shin_length));
+      }))
+    return false;
+  // O082
+  if (!control.operation(81, 0, workspace.cut[5], [&] {
+        return point(
+            std::min(workspace.cut[5].low, workspace.endpoint[13].low));
+      }))
+    return false;
+  // G15
+  if (!control.guard(
+          14, 0,
+          [&](EP5W& why) {
+            for (const auto* v :
+                 {&workspace.cut[0], &workspace.cut[1], &workspace.cut[2],
+                  &workspace.cut[3], &workspace.cut[4], &workspace.cut[5]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[4].low != workspace.cut[4].high ||
+                workspace.cut[5].low != workspace.cut[5].high) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[4].low < -.5)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[4].low >= workspace.cut[5].low ||
+                workspace.cut[5].low > .5)
+              return control.attach(workspace.cut[5]);
+            if (workspace.cut[4].low < workspace.cut[1].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.cut[2].low ||
+                workspace.cut[5].low > workspace.cut[3].low)
+              return control.attach(workspace.cut[5]);
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.cut[4].low < workspace.endpoint[12].high)
+              return control.attach(workspace.cut[4]);
+            if (workspace.cut[5].low > workspace.endpoint[13].low)
+              return control.attach(workspace.cut[5]);
+            if (!std::isfinite(workspace.selected[5]) ||
+                workspace.selected[5] <= 0) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            workspace.endpoint_certificate[0] = true;
+            return true;
+          },
+          Slice5Why::no_tau_interval))
+    return false;
+  // O083
+  if (!control.operation(82, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[4]); }))
+    return false;
+  // O084
+  if (!control.operation(83, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G16
+  if (!control.guard(
+          15, 0,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O085
+  if (!control.operation(84, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O086
+  if (!control.operation(85, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O087
+  if (!control.operation(86, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[4]);
+      }))
+    return false;
+  // O088
+  if (!control.operation(87, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O089
+  if (!control.operation(88, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O090
+  if (!control.operation(89, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G17
+  if (!control.guard(
+          16, 0,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O091
+  if (!control.operation(90, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 2;
+          return value;
+        }();
+      }))
+    return false;
+  // O092
+  if (!control.operation(91, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O093
+  if (!control.operation(92, 0, workspace.endpoint[0], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O094
+  if (!control.operation(93, 0, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[5]); }))
+    return false;
+  // O095
+  if (!control.operation(94, 0, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G18
+  if (!control.guard(
+          17, 0,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O096
+  if (!control.operation(95, 0, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O097
+  if (!control.operation(96, 0, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O098
+  if (!control.operation(97, 0, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[5]);
+      }))
+    return false;
+  // O099
+  if (!control.operation(98, 0, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[0], workspace.endpoint[15]);
+      }))
+    return false;
+  // O100
+  if (!control.operation(99, 0, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O101
+  if (!control.operation(100, 0, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G19
+  if (!control.guard(
+          18, 0,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[0]) return false;
+            for (const auto* v : {&workspace.cut[0], &workspace.cut[4],
+                                  &workspace.cut[5], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O102
+  if (!control.operation(101, 0, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 3;
+          return value;
+        }();
+      }))
+    return false;
+  // O103
+  if (!control.operation(102, 0, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O104
+  if (!control.operation(103, 0, workspace.endpoint[1], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O105
+  if (!control.operation(104, 0, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[0].high); }))
+    return false;
+  workspace.cuts[0] = workspace.endpoint[12].low;
+  // O106
+  if (!control.operation(105, 0, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[1].low); }))
+    return false;
+  workspace.cuts[1] = workspace.endpoint[13].low;
+  // G20
+  if (!control.guard(
+          19, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cuts[0] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.cuts[0] < workspace.cuts[1] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice5Why::no_radial_interval))
+    return false;
+  // O107
+  if (!control.operation(106, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[0])); }))
+    return false;
+  // O108
+  if (!control.operation(107, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].low));
+      }))
+    return false;
+  // O109
+  if (!control.operation(108, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 6;
+          return value;
+        }();
+      }))
+    return false;
+  // O110
+  if (!control.operation(109, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O111
+  if (!control.operation(110, 0, workspace.endpoint[2], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O112
+  if (!control.operation(111, 0, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[1])); }))
+    return false;
+  // O113
+  if (!control.operation(112, 0, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[2].high));
+      }))
+    return false;
+  // G21
+  if (!control.guard(
+          20, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice5Why::no_positive_upper))
+    return false;
+  // O114
+  if (!control.operation(113, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O115
+  if (!control.operation(114, 0, workspace.endpoint[3], [&] {
+        return add(point(workspace.chart[5].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O116
+  if (!control.operation(115, 0, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[3].high),
+                        point(workspace.chart[4].low));
+      }))
+    return false;
+  // O117
+  if (!control.operation(116, 0, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 0;
+          return value;
+        }();
+      }))
+    return false;
+  // O118
+  if (!control.operation(117, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O119
+  if (!control.operation(118, 0, workspace.endpoint[4], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O120
+  if (!control.operation(119, 0, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[1].low),
+                        point(workspace.chart[4].high));
+      }))
+    return false;
+  // G22
+  if (!control.guard(
+          21, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice5Why::no_positive_upper))
+    return false;
+  // O121
+  if (!control.operation(120, 0, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O122
+  if (!control.operation(121, 0, workspace.endpoint[5], [&] {
+        return add(point(workspace.chart[5].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O123
+  if (!control.operation(122, 0, workspace.chart[6],
+                         [&] { return absolute(workspace.chart[0]); }))
+    return false;
+  // O124
+  if (!control.operation(123, 0, workspace.endpoint[12], [&] {
+        return divide(workspace.chart[6], workspace.link[8]);
+      }))
+    return false;
+  // O125
+  if (!control.operation(124, 0, workspace.chart[7], [&] {
+        return add(point(workspace.chart[5].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O126
+  if (!control.operation(125, 1, workspace.cut[6],
+                         [&] { return negate(workspace.chart[9]); }))
+    return false;
+  // O127
+  if (!control.operation(126, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O128
+  if (!control.operation(127, 1, workspace.cut[7], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O129
+  if (!control.operation(128, 1, workspace.endpoint[12], [&] {
+        return add(workspace.cut[6], point(thigh_length));
+      }))
+    return false;
+  // O130
+  if (!control.operation(129, 1, workspace.cut[8], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O131
+  if (!control.operation(130, 1, workspace.cut[9], [&] {
+        return divide(workspace.cut[6], workspace.link[0]);
+      }))
+    return false;
+  // O132
+  if (!control.operation(131, 1, workspace.cut[10], [&] {
+        return point(std::max(-.5, workspace.cut[7].high));
+      }))
+    return false;
+  // O133
+  if (!control.operation(132, 1, workspace.cut[11], [&] {
+        return point(std::min(.5, workspace.cut[8].low));
+      }))
+    return false;
+  // O134
+  if (!control.operation(133, 1, workspace.cut[11], [&] {
+        return point(std::min(workspace.cut[11].low, workspace.cut[9].low));
+      }))
+    return false;
+  // O135
+  if (!control.operation(134, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.cut[6], point(workspace.selected[5]));
+      }))
+    return false;
+  // O136
+  if (!control.operation(135, 1, workspace.endpoint[12], [&] {
+        return divide(workspace.endpoint[12], point(shin_length));
+      }))
+    return false;
+  // O137
+  if (!control.operation(136, 1, workspace.cut[10], [&] {
+        return point(
+            std::max(workspace.cut[10].low, workspace.endpoint[12].high));
+      }))
+    return false;
+  // O138
+  if (!control.operation(137, 1, workspace.endpoint[13], [&] {
+        return divide(workspace.cut[6], point(shin_length));
+      }))
+    return false;
+  // O139
+  if (!control.operation(138, 1, workspace.cut[11], [&] {
+        return point(
+            std::min(workspace.cut[11].low, workspace.endpoint[13].low));
+      }))
+    return false;
+  // G23
+  if (!control.guard(
+          22, 1,
+          [&](EP5W& why) {
+            for (const auto* v :
+                 {&workspace.cut[6], &workspace.cut[7], &workspace.cut[8],
+                  &workspace.cut[9], &workspace.cut[10], &workspace.cut[11]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.cut[10].low != workspace.cut[10].high ||
+                workspace.cut[11].low != workspace.cut[11].high) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cut[10].low < -.5)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[10].low >= workspace.cut[11].low ||
+                workspace.cut[11].low > .5)
+              return control.attach(workspace.cut[11]);
+            if (workspace.cut[10].low < workspace.cut[7].high)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[11].low > workspace.cut[8].low ||
+                workspace.cut[11].low > workspace.cut[9].low)
+              return control.attach(workspace.cut[11]);
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.cut[10].low < workspace.endpoint[12].high)
+              return control.attach(workspace.cut[10]);
+            if (workspace.cut[11].low > workspace.endpoint[13].low)
+              return control.attach(workspace.cut[11]);
+            if (!std::isfinite(workspace.selected[5]) ||
+                workspace.selected[5] <= 0) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            workspace.endpoint_certificate[1] = true;
+            return true;
+          },
+          Slice5Why::no_tau_interval))
+    return false;
+  // O140
+  if (!control.operation(139, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[10]); }))
+    return false;
+  // O141
+  if (!control.operation(140, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G24
+  if (!control.guard(
+          23, 1,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O142
+  if (!control.operation(141, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O143
+  if (!control.operation(142, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O144
+  if (!control.operation(143, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[10]);
+      }))
+    return false;
+  // O145
+  if (!control.operation(144, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O146
+  if (!control.operation(145, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O147
+  if (!control.operation(146, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G25
+  if (!control.guard(
+          24, 1,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O148
+  if (!control.operation(147, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 4;
+          return value;
+        }();
+      }))
+    return false;
+  // O149
+  if (!control.operation(148, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O150
+  if (!control.operation(149, 1, workspace.endpoint[6], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O151
+  if (!control.operation(150, 1, workspace.endpoint[12],
+                         [&] { return square(workspace.cut[11]); }))
+    return false;
+  // O152
+  if (!control.operation(151, 1, workspace.endpoint[13], [&] {
+        return subtract(point(1), workspace.endpoint[12]);
+      }))
+    return false;
+  // G26
+  if (!control.guard(
+          25, 1,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            if (!control.supported(why, workspace.endpoint[13])) return false;
+            return workspace.endpoint[13].low > 0 ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O153
+  if (!control.operation(152, 1, workspace.endpoint[13], [&] {
+        return transfer_small_root(workspace.endpoint[13]);
+      }))
+    return false;
+  // O154
+  if (!control.operation(153, 1, workspace.endpoint[14], [&] {
+        return multiply(point(shin_length), workspace.endpoint[13]);
+      }))
+    return false;
+  // O155
+  if (!control.operation(154, 1, workspace.endpoint[15], [&] {
+        return multiply(point(shin_length), workspace.cut[11]);
+      }))
+    return false;
+  // O156
+  if (!control.operation(155, 1, workspace.endpoint[15], [&] {
+        return subtract(workspace.cut[6], workspace.endpoint[15]);
+      }))
+    return false;
+  // O157
+  if (!control.operation(156, 1, workspace.endpoint[16],
+                         [&] { return square(workspace.endpoint[15]); }))
+    return false;
+  // O158
+  if (!control.operation(157, 1, workspace.endpoint[16], [&] {
+        return subtract(workspace.link[4], workspace.endpoint[16]);
+      }))
+    return false;
+  // G27
+  if (!control.guard(
+          26, 1,
+          [&](EP5W& why) {
+            if (!workspace.endpoint_certificate[1]) return false;
+            for (const auto* v : {&workspace.cut[6], &workspace.cut[10],
+                                  &workspace.cut[11], &workspace.endpoint[16]})
+              if (!control.supported(why, *v)) return false;
+            return workspace.endpoint[16].high >= 0 ||
+                   control.attach(workspace.endpoint[16]);
+          },
+          Slice5Why::endpoint_domain_unavailable))
+    return false;
+  // O159
+  if (!control.operation(158, 1, workspace.endpoint[16], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[16].low <= 0;
+          const auto value =
+              interval(zero_branch ? +0.0 : workspace.endpoint[16].low,
+                       workspace.endpoint[16].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 5;
+          return value;
+        }();
+      }))
+    return false;
+  // O160
+  if (!control.operation(159, 1, workspace.endpoint[17], [&] {
+        return transfer_small_root(workspace.endpoint[16]);
+      }))
+    return false;
+  // O161
+  if (!control.operation(160, 1, workspace.endpoint[7], [&] {
+        return add(workspace.endpoint[17], workspace.endpoint[14]);
+      }))
+    return false;
+  // O162
+  if (!control.operation(161, 1, workspace.endpoint[12],
+                         [&] { return point(workspace.endpoint[6].high); }))
+    return false;
+  workspace.cuts[2] = workspace.endpoint[12].low;
+  // O163
+  if (!control.operation(162, 1, workspace.endpoint[13],
+                         [&] { return point(workspace.endpoint[7].low); }))
+    return false;
+  workspace.cuts[3] = workspace.endpoint[13].low;
+  // G28
+  if (!control.guard(
+          27, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.endpoint[12]) ||
+                !control.supported(why, workspace.endpoint[13]))
+              return false;
+            if (workspace.endpoint[12].low != workspace.endpoint[12].high ||
+                workspace.endpoint[13].low != workspace.endpoint[13].high) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (workspace.cuts[2] < 0)
+              return control.attach(workspace.endpoint[12]);
+            return workspace.cuts[2] < workspace.cuts[3] ||
+                   control.attach(workspace.endpoint[13]);
+          },
+          Slice5Why::no_radial_interval))
+    return false;
+  // O164
+  if (!control.operation(163, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[2])); }))
+    return false;
+  // O165
+  if (!control.operation(164, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12], point(workspace.chart[10].low));
+      }))
+    return false;
+  // O166
+  if (!control.operation(165, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 7;
+          return value;
+        }();
+      }))
+    return false;
+  // O167
+  if (!control.operation(166, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O168
+  if (!control.operation(167, 1, workspace.endpoint[8], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O169
+  if (!control.operation(168, 1, workspace.endpoint[12],
+                         [&] { return square(point(workspace.cuts[3])); }))
+    return false;
+  // O170
+  if (!control.operation(169, 1, workspace.endpoint[12], [&] {
+        return subtract(workspace.endpoint[12],
+                        point(workspace.chart[10].high));
+      }))
+    return false;
+  // G29
+  if (!control.guard(
+          28, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice5Why::no_positive_upper))
+    return false;
+  // O171
+  if (!control.operation(170, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O172
+  if (!control.operation(171, 1, workspace.endpoint[9], [&] {
+        return add(point(workspace.chart[13].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O173
+  if (!control.operation(172, 1, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[3].high),
+                        point(workspace.chart[12].low));
+      }))
+    return false;
+  // O174
+  if (!control.operation(173, 1, workspace.endpoint[12], [&] {
+        return [&] {
+          const bool zero_branch = workspace.endpoint[12].high <= 0;
+          const auto value =
+              point(zero_branch ? +0.0 : workspace.endpoint[12].high);
+          if (ep5_valid(value) && zero_branch)
+            d.slice.zero_mask |= std::uint8_t{1} << 1;
+          return value;
+        }();
+      }))
+    return false;
+  // O175
+  if (!control.operation(174, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(workspace.endpoint[12]);
+      }))
+    return false;
+  // O176
+  if (!control.operation(175, 1, workspace.endpoint[10], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O177
+  if (!control.operation(176, 1, workspace.endpoint[12], [&] {
+        return subtract(point(workspace.link[1].low),
+                        point(workspace.chart[12].high));
+      }))
+    return false;
+  // G30
+  if (!control.guard(
+          29, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.endpoint[12])) return false;
+            return workspace.endpoint[12].low > 0 ||
+                   control.attach(workspace.endpoint[12]);
+          },
+          Slice5Why::no_positive_upper))
+    return false;
+  // O178
+  if (!control.operation(177, 1, workspace.endpoint[12], [&] {
+        return transfer_small_root(point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O179
+  if (!control.operation(178, 1, workspace.endpoint[11], [&] {
+        return add(point(workspace.chart[13].low),
+                   point(workspace.endpoint[12].low));
+      }))
+    return false;
+  // O180
+  if (!control.operation(179, 1, workspace.chart[14],
+                         [&] { return absolute(workspace.chart[8]); }))
+    return false;
+  // O181
+  if (!control.operation(180, 1, workspace.endpoint[12], [&] {
+        return divide(workspace.chart[14], workspace.link[8]);
+      }))
+    return false;
+  // O182
+  if (!control.operation(181, 1, workspace.chart[15], [&] {
+        return add(point(workspace.chart[13].high),
+                   point(workspace.endpoint[12].high));
+      }))
+    return false;
+  // O183
+  if (!control.operation(182, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.endpoint[2].high, workspace.endpoint[8].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O184
+  if (!control.operation(183, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.selected[0], workspace.endpoint[4].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O185
+  if (!control.operation(184, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::max(workspace.selected[0], workspace.endpoint[10].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O186
+  if (!control.operation(185, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.selected[0], workspace.chart[7].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  // O187
+  if (!control.operation(186, 255, workspace.endpoint[12], [&] {
+        return point(std::max(workspace.selected[0], workspace.chart[15].high));
+      }))
+    return false;
+  workspace.selected[0] = workspace.endpoint[12].low;
+  d.slice.lo = workspace.selected[0];
+  // O188
+  if (!control.operation(187, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.endpoint[3].low, workspace.endpoint[9].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // O189
+  if (!control.operation(188, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.selected[1], workspace.endpoint[5].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  // O190
+  if (!control.operation(189, 255, workspace.endpoint[12], [&] {
+        return point(
+            std::min(workspace.selected[1], workspace.endpoint[11].low));
+      }))
+    return false;
+  workspace.selected[1] = workspace.endpoint[12].low;
+  d.slice.hi = workspace.selected[1];
+  // G31
+  if (!control.guard(
+          30, 255,
+          [&](EP5W& why) {
+            if (!std::isfinite(d.slice.lo) || !std::isfinite(d.slice.hi)) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            return d.slice.lo < d.slice.hi || control.attach(point(d.slice.hi));
+          },
+          Slice5Why::empty_inward_interval))
+    return false;
+  // O191
+  if (!control.operation(190, 255, workspace.endpoint[12],
+                         [&] { return point(d.slice.hi - d.slice.lo); }))
+    return false;
+  workspace.selected[2] = workspace.endpoint[12].low;
+  // O192
+  if (!control.operation(191, 255, workspace.endpoint[12],
+                         [&] { return point(workspace.selected[2] * .5); }))
+    return false;
+  workspace.selected[3] = workspace.endpoint[12].low;
+  // O193
+  if (!control.operation(192, 255, workspace.endpoint[12], [&] {
+        return point(d.slice.lo + workspace.selected[3]);
+      }))
+    return false;
+  workspace.selected[4] = workspace.endpoint[12].low;
+  d.slice.y = workspace.selected[4];
+  // G32
+  if (!control.guard(
+          31, 255,
+          [&](EP5W& why) {
+            if (!std::isfinite(d.slice.y)) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            return std::abs(d.slice.y) <= 8 || control.attach(point(d.slice.y));
+          },
+          Slice5Why::candidate_domain))
+    return false;
+  // G33
+  if (!control.guard(
+          32, 255,
+          [&](EP5W& why) {
+            (void)why;
+            return d.slice.y > d.slice.lo || control.attach(point(d.slice.y));
+          },
+          Slice5Why::midpoint_unavailable))
+    return false;
+  // G34
+  if (!control.guard(
+          33, 255,
+          [&](EP5W& why) {
+            (void)why;
+            return d.slice.y < d.slice.hi || control.attach(point(d.slice.y));
+          },
+          Slice5Why::midpoint_unavailable))
+    return false;
+  // O194
+  if (!control.operation(193, 0, workspace.direct[0], [&] {
+        return subtract(point(d.slice.y), workspace.chart[5]);
+      }))
+    return false;
+  // O195
+  if (!control.operation(194, 0, workspace.direct[1],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O196
+  if (!control.operation(195, 0, workspace.direct[1], [&] {
+        return add(workspace.chart[2], workspace.direct[1]);
+      }))
+    return false;
+  // O197
+  if (!control.operation(196, 0, workspace.direct[2], [&] {
+        return add(workspace.direct[1], workspace.chart[3]);
+      }))
+    return false;
+  // G35
+  if (!control.guard(
+          34, 0,
+          [&](EP5W& why) {
+            for (const auto* v : {&workspace.direct[0], &workspace.direct[1],
+                                  &workspace.direct[2]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[0].low <= 0)
+              return control.attach(workspace.direct[0]);
+            if (workspace.direct[1].low <= 0)
+              return control.attach(workspace.direct[1]);
+            if (workspace.direct[2].low <= workspace.link[3].high)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[2].high < workspace.link[1].low ||
+                   control.attach(workspace.direct[2]);
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O198
+  if (!control.operation(197, 0, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O199
+  if (!control.operation(198, 0, workspace.direct[4], [&] {
+        return add(workspace.link[6], workspace.direct[2]);
+      }))
+    return false;
+  // O200
+  if (!control.operation(199, 0, workspace.direct[5], [&] {
+        return multiply(point(2), workspace.direct[2]);
+      }))
+    return false;
+  // O201
+  if (!control.operation(200, 0, workspace.direct[4], [&] {
+        return divide(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // O202
+  if (!control.operation(201, 0, workspace.direct[6], [&] {
+        return subtract(workspace.link[1], workspace.direct[2]);
+      }))
+    return false;
+  // O203
+  if (!control.operation(202, 0, workspace.direct[7], [&] {
+        return subtract(workspace.direct[2], workspace.link[3]);
+      }))
+    return false;
+  // O204
+  if (!control.operation(203, 0, workspace.direct[6], [&] {
+        return multiply(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // O205
+  if (!control.operation(204, 0, workspace.direct[7],
+                         [&] { return square(workspace.direct[2]); }))
+    return false;
+  // O206
+  if (!control.operation(205, 0, workspace.direct[7], [&] {
+        return multiply(point(4), workspace.direct[7]);
+      }))
+    return false;
+  // O207
+  if (!control.operation(206, 0, workspace.direct[7], [&] {
+        return divide(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // G36
+  if (!control.guard(
+          35, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[7])) return false;
+            return workspace.direct[7].low > 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O208
+  if (!control.operation(207, 0, workspace.direct[7], [&] {
+        return transfer_small_root(workspace.direct[7]);
+      }))
+    return false;
+  // O209
+  if (!control.operation(208, 0, workspace.direct[5], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // O210
+  if (!control.operation(209, 0, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O211
+  if (!control.operation(210, 0, workspace.direct[9], [&] {
+        return multiply(workspace.direct[7], workspace.chart[1]);
+      }))
+    return false;
+  // O212
+  if (!control.operation(211, 0, workspace.direct[8], [&] {
+        return add(workspace.direct[8], workspace.direct[9]);
+      }))
+    return false;
+  // O213
+  if (!control.operation(212, 0, workspace.direct[10], [&] {
+        return multiply(workspace.direct[7], workspace.direct[3]);
+      }))
+    return false;
+  // O214
+  if (!control.operation(213, 0, workspace.direct[11], [&] {
+        return multiply(workspace.direct[4], workspace.chart[1]);
+      }))
+    return false;
+  // O215
+  if (!control.operation(214, 0, workspace.direct[11], [&] {
+        return subtract(workspace.direct[10], workspace.direct[11]);
+      }))
+    return false;
+  // O216
+  if (!control.operation(215, 0, workspace.direct[12], [&] {
+        return multiply(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O217
+  if (!control.operation(216, 0, workspace.direct[12], [&] {
+        return subtract(workspace.direct[12], workspace.direct[9]);
+      }))
+    return false;
+  // O218
+  if (!control.operation(217, 0, workspace.direct[13], [&] {
+        return multiply(workspace.direct[5], workspace.chart[1]);
+      }))
+    return false;
+  // O219
+  if (!control.operation(218, 0, workspace.direct[13], [&] {
+        return add(workspace.direct[13], workspace.direct[10]);
+      }))
+    return false;
+  // O220
+  if (!control.operation(219, 0, workspace.direct[13],
+                         [&] { return negate(workspace.direct[13]); }))
+    return false;
+  // G37
+  if (!control.guard(
+          36, 0,
+          [&](EP5W& why) {
+            for (const auto* v : {&workspace.direct[8], &workspace.direct[12],
+                                  &workspace.direct[11], &workspace.direct[13]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[8].low <= 0)
+              return control.attach(workspace.direct[8]);
+            if (workspace.direct[12].low <= 0)
+              return control.attach(workspace.direct[12]);
+            if (workspace.direct[11].low <= 0) {
+              d.slice.condition = Slice5Why::hip_descent_unavailable;
+              return control.attach(workspace.direct[11]);
+            }
+            return true;
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O221
+  if (!control.operation(220, 0, workspace.direct[14],
+                         [&] { return absolute(workspace.direct[13]); }))
+    return false;
+  // O222
+  if (!control.operation(221, 0, workspace.direct[15], [&] {
+        return multiply(workspace.direct[12], point(.5));
+      }))
+    return false;
+  // O223
+  if (!control.operation(222, 0, workspace.direct[14], [&] {
+        return multiply(workspace.direct[14], workspace.link[7]);
+      }))
+    return false;
+  // O224
+  if (!control.operation(223, 0, workspace.direct[15], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // O225
+  if (!control.operation(224, 0, workspace.direct[16], [&] {
+        return multiply(workspace.direct[0], workspace.link[8]);
+      }))
+    return false;
+  // O226
+  if (!control.operation(225, 0, workspace.direct[16], [&] {
+        return subtract(workspace.direct[16], workspace.chart[6]);
+      }))
+    return false;
+  // G38
+  if (!control.guard(
+          37, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            if (workspace.direct[15].low < 0)
+              return control.attach(workspace.direct[15]);
+            return workspace.direct[16].low >= 0 ||
+                   control.attach(workspace.direct[16]);
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O227
+  if (!control.operation(226, 0, workspace.direct[1], [&] {
+        return multiply(workspace.chart[0], workspace.chart[1]);
+      }))
+    return false;
+  // O228
+  if (!control.operation(227, 0, workspace.direct[1], [&] {
+        return divide(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O229
+  if (!control.operation(228, 0, workspace.direct[2],
+                         [&] { return negate(workspace.direct[0]); }))
+    return false;
+  // O230
+  if (!control.operation(229, 0, workspace.direct[5], [&] {
+        return multiply(workspace.direct[2], workspace.chart[1]);
+      }))
+    return false;
+  // O231
+  if (!control.operation(230, 0, workspace.direct[5], [&] {
+        return divide(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O232
+  if (!control.operation(231, 0, workspace.direct[6],
+                         [&] { return negate(workspace.direct[3]); }))
+    return false;
+  // O233
+  if (!control.operation(232, 0, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.chart[0]);
+      }))
+    return false;
+  // O234
+  if (!control.operation(233, 0, workspace.direct[9], [&] {
+        return multiply(workspace.direct[4], workspace.direct[2]);
+      }))
+    return false;
+  // O235
+  if (!control.operation(234, 0, workspace.direct[10], [&] {
+        return multiply(workspace.direct[4], workspace.chart[1]);
+      }))
+    return false;
+  // O236
+  if (!control.operation(235, 0, workspace.direct[11], [&] {
+        return multiply(workspace.direct[7], workspace.direct[1]);
+      }))
+    return false;
+  // O237
+  if (!control.operation(236, 0, workspace.direct[12], [&] {
+        return multiply(workspace.direct[7], workspace.direct[5]);
+      }))
+    return false;
+  // O238
+  if (!control.operation(237, 0, workspace.direct[13], [&] {
+        return multiply(workspace.direct[7], workspace.direct[6]);
+      }))
+    return false;
+  // O239
+  if (!control.operation(238, 0, workspace.direct[14], [&] {
+        return add(workspace.direct[8], workspace.direct[11]);
+      }))
+    return false;
+  // O240
+  if (!control.operation(239, 0, workspace.direct[15], [&] {
+        return add(workspace.direct[9], workspace.direct[12]);
+      }))
+    return false;
+  // O241
+  if (!control.operation(240, 0, workspace.direct[16], [&] {
+        return add(workspace.direct[10], workspace.direct[13]);
+      }))
+    return false;
+  // O242
+  if (!control.operation(241, 0, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(1));
+      }))
+    return false;
+  // O243
+  if (!control.operation(242, 0, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O244
+  if (!control.operation(243, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O245
+  if (!control.operation(244, 0, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O246
+  if (!control.operation(245, 0, workspace.direct[4], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O247
+  if (!control.operation(246, 0, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O248
+  if (!control.operation(247, 0, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(1));
+      }))
+    return false;
+  // O249
+  if (!control.operation(248, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O250
+  if (!control.operation(249, 0, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O251
+  if (!control.operation(250, 0, workspace.direct[7], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O252
+  if (!control.operation(251, 0, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O253
+  if (!control.operation(252, 0, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O254
+  if (!control.operation(253, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O255
+  if (!control.operation(254, 0, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(1));
+      }))
+    return false;
+  // O256
+  if (!control.operation(255, 0, workspace.direct[0], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // G39
+  if (!control.guard(
+          38, 0,
+          [&](EP5W& why) {
+            if (!ep5_source_bit(d, 63) || kBoardingRouteFootPhaseVersion != 1 ||
+                !intermediate_endpoint05_template_valid(request, false, 0) ||
+                request.feet[0].yaw_half != std::array<double, 2>{0, 0}) {
+              why = EP5W::slice_identity;
+              return false;
+            }
+            for (const auto* v : {&workspace.direct[4], &workspace.direct[7],
+                                  &workspace.direct[0]}) {
+              if (!control.supported(why, *v)) return false;
+              if (v->low < -16 || v->high > 16) {
+                why = EP5W::unsupported_arithmetic;
+                return control.attach(*v);
+              }
+            }
+            return true;
+          },
+          Slice5Why::hip_verification_inconclusive))
+    return false;
+  // O257
+  if (!control.operation(256, 0, workspace.direct[4], [&] {
+        return ep5_unit_divide(workspace.direct[4], thigh_length);
+      }))
+    return false;
+  // O258
+  if (!control.operation(257, 0, workspace.direct[7], [&] {
+        return ep5_unit_divide(workspace.direct[7], thigh_length);
+      }))
+    return false;
+  // O259
+  if (!control.operation(258, 0, workspace.direct[0], [&] {
+        return ep5_unit_divide(workspace.direct[0], thigh_length);
+      }))
+    return false;
+  // G40
+  if (!control.guard(
+          39, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.direct[7]) ||
+                !control.supported(why, workspace.direct[0]))
+              return false;
+            return workspace.direct[7].high < 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice5Why::hip_verification_inconclusive))
+    return false;
+  // O260
+  if (!control.operation(259, 0, workspace.direct[1],
+                         [&] { return square(workspace.direct[4]); }))
+    return false;
+  // O261
+  if (!control.operation(260, 0, workspace.direct[2],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O262
+  if (!control.operation(261, 0, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O263
+  if (!control.operation(262, 0, workspace.direct[1], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O264
+  if (!control.operation(263, 0, workspace.direct[2], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[7]);
+      }))
+    return false;
+  // O265
+  if (!control.operation(264, 0, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[1]);
+      }))
+    return false;
+  // O266
+  if (!control.operation(265, 0, workspace.direct[14], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O267
+  if (!control.operation(266, 0, workspace.direct[15],
+                         [&] { return negate(point(.12)); }))
+    return false;
+  // O268
+  if (!control.operation(267, 0, workspace.direct[16], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // G41
+  if (!control.guard(
+          40, 0,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.direct[14]) ||
+                !control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            return workspace.direct[14].high < workspace.direct[15].low ||
+                   control.attach(workspace.direct[14]);
+          },
+          Slice5Why::hip_verification_inconclusive))
+    return false;
+  // O269
+  if (!control.operation(268, 1, workspace.direct[0], [&] {
+        return subtract(point(d.slice.y), workspace.chart[13]);
+      }))
+    return false;
+  // O270
+  if (!control.operation(269, 1, workspace.direct[1],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O271
+  if (!control.operation(270, 1, workspace.direct[1], [&] {
+        return add(workspace.chart[10], workspace.direct[1]);
+      }))
+    return false;
+  // O272
+  if (!control.operation(271, 1, workspace.direct[2], [&] {
+        return add(workspace.direct[1], workspace.chart[11]);
+      }))
+    return false;
+  // G42
+  if (!control.guard(
+          41, 1,
+          [&](EP5W& why) {
+            for (const auto* v : {&workspace.direct[0], &workspace.direct[1],
+                                  &workspace.direct[2]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[0].low <= 0)
+              return control.attach(workspace.direct[0]);
+            if (workspace.direct[1].low <= 0)
+              return control.attach(workspace.direct[1]);
+            if (workspace.direct[2].low <= workspace.link[3].high)
+              return control.attach(workspace.direct[2]);
+            return workspace.direct[2].high < workspace.link[1].low ||
+                   control.attach(workspace.direct[2]);
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O273
+  if (!control.operation(272, 1, workspace.direct[3], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O274
+  if (!control.operation(273, 1, workspace.direct[4], [&] {
+        return add(workspace.link[6], workspace.direct[2]);
+      }))
+    return false;
+  // O275
+  if (!control.operation(274, 1, workspace.direct[5], [&] {
+        return multiply(point(2), workspace.direct[2]);
+      }))
+    return false;
+  // O276
+  if (!control.operation(275, 1, workspace.direct[4], [&] {
+        return divide(workspace.direct[4], workspace.direct[5]);
+      }))
+    return false;
+  // O277
+  if (!control.operation(276, 1, workspace.direct[6], [&] {
+        return subtract(workspace.link[1], workspace.direct[2]);
+      }))
+    return false;
+  // O278
+  if (!control.operation(277, 1, workspace.direct[7], [&] {
+        return subtract(workspace.direct[2], workspace.link[3]);
+      }))
+    return false;
+  // O279
+  if (!control.operation(278, 1, workspace.direct[6], [&] {
+        return multiply(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // O280
+  if (!control.operation(279, 1, workspace.direct[7],
+                         [&] { return square(workspace.direct[2]); }))
+    return false;
+  // O281
+  if (!control.operation(280, 1, workspace.direct[7], [&] {
+        return multiply(point(4), workspace.direct[7]);
+      }))
+    return false;
+  // O282
+  if (!control.operation(281, 1, workspace.direct[7], [&] {
+        return divide(workspace.direct[6], workspace.direct[7]);
+      }))
+    return false;
+  // G43
+  if (!control.guard(
+          42, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[7])) return false;
+            return workspace.direct[7].low > 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O283
+  if (!control.operation(282, 1, workspace.direct[7], [&] {
+        return transfer_small_root(workspace.direct[7]);
+      }))
+    return false;
+  // O284
+  if (!control.operation(283, 1, workspace.direct[5], [&] {
+        return subtract(point(1), workspace.direct[4]);
+      }))
+    return false;
+  // O285
+  if (!control.operation(284, 1, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.direct[3]);
+      }))
+    return false;
+  // O286
+  if (!control.operation(285, 1, workspace.direct[9], [&] {
+        return multiply(workspace.direct[7], workspace.chart[9]);
+      }))
+    return false;
+  // O287
+  if (!control.operation(286, 1, workspace.direct[8], [&] {
+        return add(workspace.direct[8], workspace.direct[9]);
+      }))
+    return false;
+  // O288
+  if (!control.operation(287, 1, workspace.direct[10], [&] {
+        return multiply(workspace.direct[7], workspace.direct[3]);
+      }))
+    return false;
+  // O289
+  if (!control.operation(288, 1, workspace.direct[11], [&] {
+        return multiply(workspace.direct[4], workspace.chart[9]);
+      }))
+    return false;
+  // O290
+  if (!control.operation(289, 1, workspace.direct[11], [&] {
+        return subtract(workspace.direct[10], workspace.direct[11]);
+      }))
+    return false;
+  // O291
+  if (!control.operation(290, 1, workspace.direct[12], [&] {
+        return multiply(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O292
+  if (!control.operation(291, 1, workspace.direct[12], [&] {
+        return subtract(workspace.direct[12], workspace.direct[9]);
+      }))
+    return false;
+  // O293
+  if (!control.operation(292, 1, workspace.direct[13], [&] {
+        return multiply(workspace.direct[5], workspace.chart[9]);
+      }))
+    return false;
+  // O294
+  if (!control.operation(293, 1, workspace.direct[13], [&] {
+        return add(workspace.direct[13], workspace.direct[10]);
+      }))
+    return false;
+  // O295
+  if (!control.operation(294, 1, workspace.direct[13],
+                         [&] { return negate(workspace.direct[13]); }))
+    return false;
+  // G44
+  if (!control.guard(
+          43, 1,
+          [&](EP5W& why) {
+            for (const auto* v : {&workspace.direct[8], &workspace.direct[12],
+                                  &workspace.direct[11], &workspace.direct[13]})
+              if (!control.supported(why, *v)) return false;
+            if (workspace.direct[8].low <= 0)
+              return control.attach(workspace.direct[8]);
+            if (workspace.direct[12].low <= 0)
+              return control.attach(workspace.direct[12]);
+            if (workspace.direct[11].low <= 0) {
+              d.slice.condition = Slice5Why::hip_descent_unavailable;
+              return control.attach(workspace.direct[11]);
+            }
+            return true;
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O296
+  if (!control.operation(295, 1, workspace.direct[14],
+                         [&] { return absolute(workspace.direct[13]); }))
+    return false;
+  // O297
+  if (!control.operation(296, 1, workspace.direct[15], [&] {
+        return multiply(workspace.direct[12], point(.5));
+      }))
+    return false;
+  // O298
+  if (!control.operation(297, 1, workspace.direct[14], [&] {
+        return multiply(workspace.direct[14], workspace.link[7]);
+      }))
+    return false;
+  // O299
+  if (!control.operation(298, 1, workspace.direct[15], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // O300
+  if (!control.operation(299, 1, workspace.direct[16], [&] {
+        return multiply(workspace.direct[0], workspace.link[8]);
+      }))
+    return false;
+  // O301
+  if (!control.operation(300, 1, workspace.direct[16], [&] {
+        return subtract(workspace.direct[16], workspace.chart[14]);
+      }))
+    return false;
+  // G45
+  if (!control.guard(
+          44, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            if (workspace.direct[15].low < 0)
+              return control.attach(workspace.direct[15]);
+            return workspace.direct[16].low >= 0 ||
+                   control.attach(workspace.direct[16]);
+          },
+          Slice5Why::verification_inconclusive))
+    return false;
+  // O302
+  if (!control.operation(301, 1, workspace.direct[1], [&] {
+        return multiply(workspace.chart[8], workspace.chart[9]);
+      }))
+    return false;
+  // O303
+  if (!control.operation(302, 1, workspace.direct[1], [&] {
+        return divide(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O304
+  if (!control.operation(303, 1, workspace.direct[2],
+                         [&] { return negate(workspace.direct[0]); }))
+    return false;
+  // O305
+  if (!control.operation(304, 1, workspace.direct[5], [&] {
+        return multiply(workspace.direct[2], workspace.chart[9]);
+      }))
+    return false;
+  // O306
+  if (!control.operation(305, 1, workspace.direct[5], [&] {
+        return divide(workspace.direct[5], workspace.direct[3]);
+      }))
+    return false;
+  // O307
+  if (!control.operation(306, 1, workspace.direct[6],
+                         [&] { return negate(workspace.direct[3]); }))
+    return false;
+  // O308
+  if (!control.operation(307, 1, workspace.direct[8], [&] {
+        return multiply(workspace.direct[4], workspace.chart[8]);
+      }))
+    return false;
+  // O309
+  if (!control.operation(308, 1, workspace.direct[9], [&] {
+        return multiply(workspace.direct[4], workspace.direct[2]);
+      }))
+    return false;
+  // O310
+  if (!control.operation(309, 1, workspace.direct[10], [&] {
+        return multiply(workspace.direct[4], workspace.chart[9]);
+      }))
+    return false;
+  // O311
+  if (!control.operation(310, 1, workspace.direct[11], [&] {
+        return multiply(workspace.direct[7], workspace.direct[1]);
+      }))
+    return false;
+  // O312
+  if (!control.operation(311, 1, workspace.direct[12], [&] {
+        return multiply(workspace.direct[7], workspace.direct[5]);
+      }))
+    return false;
+  // O313
+  if (!control.operation(312, 1, workspace.direct[13], [&] {
+        return multiply(workspace.direct[7], workspace.direct[6]);
+      }))
+    return false;
+  // O314
+  if (!control.operation(313, 1, workspace.direct[14], [&] {
+        return add(workspace.direct[8], workspace.direct[11]);
+      }))
+    return false;
+  // O315
+  if (!control.operation(314, 1, workspace.direct[15], [&] {
+        return add(workspace.direct[9], workspace.direct[12]);
+      }))
+    return false;
+  // O316
+  if (!control.operation(315, 1, workspace.direct[16], [&] {
+        return add(workspace.direct[10], workspace.direct[13]);
+      }))
+    return false;
+  // O317
+  if (!control.operation(316, 1, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(1));
+      }))
+    return false;
+  // O318
+  if (!control.operation(317, 1, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O319
+  if (!control.operation(318, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O320
+  if (!control.operation(319, 1, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O321
+  if (!control.operation(320, 1, workspace.direct[4], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O322
+  if (!control.operation(321, 1, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O323
+  if (!control.operation(322, 1, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(1));
+      }))
+    return false;
+  // O324
+  if (!control.operation(323, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O325
+  if (!control.operation(324, 1, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(0));
+      }))
+    return false;
+  // O326
+  if (!control.operation(325, 1, workspace.direct[7], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // O327
+  if (!control.operation(326, 1, workspace.direct[1], [&] {
+        return multiply(workspace.direct[14], point(0));
+      }))
+    return false;
+  // O328
+  if (!control.operation(327, 1, workspace.direct[2], [&] {
+        return multiply(workspace.direct[15], point(0));
+      }))
+    return false;
+  // O329
+  if (!control.operation(328, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O330
+  if (!control.operation(329, 1, workspace.direct[3], [&] {
+        return multiply(workspace.direct[16], point(1));
+      }))
+    return false;
+  // O331
+  if (!control.operation(330, 1, workspace.direct[0], [&] {
+        return add(workspace.direct[1], workspace.direct[3]);
+      }))
+    return false;
+  // G46
+  if (!control.guard(
+          45, 1,
+          [&](EP5W& why) {
+            if (!ep5_source_bit(d, 63) || kBoardingRouteFootPhaseVersion != 1 ||
+                !intermediate_endpoint05_template_valid(request, false, 0) ||
+                request.feet[1].yaw_half != std::array<double, 2>{0, 0}) {
+              why = EP5W::slice_identity;
+              return false;
+            }
+            for (const auto* v : {&workspace.direct[4], &workspace.direct[7],
+                                  &workspace.direct[0]}) {
+              if (!control.supported(why, *v)) return false;
+              if (v->low < -16 || v->high > 16) {
+                why = EP5W::unsupported_arithmetic;
+                return control.attach(*v);
+              }
+            }
+            return true;
+          },
+          Slice5Why::hip_verification_inconclusive))
+    return false;
+  // O332
+  if (!control.operation(331, 1, workspace.direct[4], [&] {
+        return ep5_unit_divide(workspace.direct[4], thigh_length);
+      }))
+    return false;
+  // O333
+  if (!control.operation(332, 1, workspace.direct[7], [&] {
+        return ep5_unit_divide(workspace.direct[7], thigh_length);
+      }))
+    return false;
+  // O334
+  if (!control.operation(333, 1, workspace.direct[0], [&] {
+        return ep5_unit_divide(workspace.direct[0], thigh_length);
+      }))
+    return false;
+  // G47
+  if (!control.guard(
+          46, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[4]) ||
+                !control.supported(why, workspace.direct[7]) ||
+                !control.supported(why, workspace.direct[0]))
+              return false;
+            return workspace.direct[7].high < 0 ||
+                   control.attach(workspace.direct[7]);
+          },
+          Slice5Why::hip_verification_inconclusive))
+    return false;
+  // O335
+  if (!control.operation(334, 1, workspace.direct[1],
+                         [&] { return square(workspace.direct[4]); }))
+    return false;
+  // O336
+  if (!control.operation(335, 1, workspace.direct[2],
+                         [&] { return square(workspace.direct[0]); }))
+    return false;
+  // O337
+  if (!control.operation(336, 1, workspace.direct[1], [&] {
+        return add(workspace.direct[1], workspace.direct[2]);
+      }))
+    return false;
+  // O338
+  if (!control.operation(337, 1, workspace.direct[1], [&] {
+        return transfer_small_root(workspace.direct[1]);
+      }))
+    return false;
+  // O339
+  if (!control.operation(338, 1, workspace.direct[2], [&] {
+        return multiply(point(kBoardingSelfHipLengthMetres),
+                        workspace.direct[7]);
+      }))
+    return false;
+  // O340
+  if (!control.operation(339, 1, workspace.direct[3], [&] {
+        return multiply(point(.105), workspace.direct[1]);
+      }))
+    return false;
+  // O341
+  if (!control.operation(340, 1, workspace.direct[14], [&] {
+        return add(workspace.direct[2], workspace.direct[3]);
+      }))
+    return false;
+  // O342
+  if (!control.operation(341, 1, workspace.direct[15],
+                         [&] { return negate(point(.12)); }))
+    return false;
+  // O343
+  if (!control.operation(342, 1, workspace.direct[16], [&] {
+        return subtract(workspace.direct[15], workspace.direct[14]);
+      }))
+    return false;
+  // G48
+  if (!control.guard(
+          47, 1,
+          [&](EP5W& why) {
+            if (!control.supported(why, workspace.direct[1]) ||
+                !control.supported(why, workspace.direct[14]) ||
+                !control.supported(why, workspace.direct[15]) ||
+                !control.supported(why, workspace.direct[16]))
+              return false;
+            return workspace.direct[14].high < workspace.direct[15].low ||
+                   control.attach(workspace.direct[14]);
+          },
+          Slice5Why::hip_verification_inconclusive))
+    return false;
+  // G49
+  if (!control.guard(
+          48, 255,
+          [&](EP5W&) {
+            if (!intermediate_endpoint05_template_valid(request, false, 0))
+              return false;
+            for (auto& root : request.root)
+              root.coordinates[1] = {{d.slice.y, +0.0, +0.0}, 1};
+            return intermediate_endpoint05_template_valid(request, true,
+                                                          d.slice.y);
+          },
+          Slice5Why::identity))
+    return false;
+  // G50
+  if (!control.guard(
+          49, 255,
+          [&](EP5W& why) {
+            if (!boarding_route_foot_phase_environment()) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (!ep5_packet_structure(request) || d.version != 5 ||
+                d.candidate != BoardingIntermediateEndpoint05Candidate::
+                                   root_y_both_hip_ankle_reach_roll_slice ||
+                !intermediate_endpoint05_template_valid(request, true,
+                                                        d.slice.y))
+              return false;
+            for (const auto& root : request.root)
+              if (std::bit_cast<std::uint64_t>(root.coordinates[1].terms[0]) !=
+                  std::bit_cast<std::uint64_t>(d.slice.y))
+                return false;
+            if (!ep5_packet_domains(request)) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            const auto valid = boarding_route_foot_phase_request_valid(request);
+            if (!valid) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            if (!boarding_route_foot_phase_environment()) {
+              why = EP5W::unsupported_arithmetic;
+              return false;
+            }
+            return true;
+          },
+          Slice5Why::identity))
+    return false;
+  d.slice.complete = d.slice.operation_written ==
+                         std::array<std::uint64_t, 6>{
+                             UINT64_MAX, UINT64_MAX, UINT64_MAX,
+                             UINT64_MAX, UINT64_MAX, 0x00000000007fffffULL} &&
+                     d.slice.guard_written == 0x0003ffffffffffffULL;
+  d.slice.side = 255;
+  return d.slice.complete;
+}
+} // namespace apsis_drift

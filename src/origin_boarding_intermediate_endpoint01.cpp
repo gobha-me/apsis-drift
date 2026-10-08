@@ -1211,3 +1211,74 @@ namespace apsis_drift {
   return result;
 }
 } // namespace apsis_drift
+
+#include "origin_boarding_intermediate_endpoint05_internal.hpp"
+namespace apsis_drift {
+[[gnu::noinline]] auto detail::intermediate_endpoint05_source_enroll(
+    BoardingIntermediateEndpoint05Diagnostic& d,
+    BoardingRouteFootPhaseRequest& request,
+    const BoardingIntermediateEndpoint05Limits& limits,
+    BoardingIntermediateEndpoint05Refusal& reason) -> bool {
+  // Genuine seed authentication only. The EMPTY old carrier, all old source
+  // factories and old typed scratch die here before the NEW constructor.
+  BoardingIntermediateEndpoint03Diagnostic original(d.source);
+  BoardingIntermediateEndpoint03Limits source_limits;
+  source_limits.source_guards = limits.source_guards;
+  BoardingIntermediateEndpoint03Refusal old_reason;
+  const bool good = intermediate_endpoint03_source_enroll(
+      original, request, source_limits, old_reason);
+  d.parts = original.parts;
+  d.work.source_guards = original.work.source_guards;
+  d.source_evaluated = original.source_evaluated;
+  d.source_enrolled = good && original.source_enrolled &&
+                      original.work.source_guards == 64 &&
+                      original.source_evaluated == UINT64_MAX;
+  if (d.source_enrolled) return true;
+  if (good && original.source_enrolled) {
+    // A reported success still needs the complete genuine enrollment prefix.
+    // This identity stop does not invent a source guard or a geometric bound.
+    reason = {};
+    reason.self_stage = BoardingIntermediateEndpoint05SelfStage::source;
+    return intermediate_endpoint05_refuse(
+        d, reason, BoardingIntermediateEndpoint05Condition::source_identity);
+  }
+  // Full by-reference typed forwarding; no old report/key/constructor return
+  // is retained or consumed as authority and no metadata is truncated.
+  reason.condition = static_cast<BoardingIntermediateEndpoint05Condition>(
+      old_reason.condition);
+  reason.predicate_condition =
+      static_cast<BoardingIntermediateEndpoint05Condition>(
+          old_reason.predicate_condition);
+  reason.limiting_bound = old_reason.limiting_bound;
+  reason.phase = old_reason.phase;
+  reason.side = old_reason.side;
+  reason.edge = old_reason.edge;
+  reason.axis = old_reason.axis;
+  reason.source_key = old_reason.source_key;
+  reason.source_name = old_reason.source_name;
+  reason.self_pair = old_reason.self_pair;
+  reason.operation = old_reason.operation == std::uint8_t{255}
+                         ? std::uint16_t{65535}
+                         : static_cast<std::uint16_t>(old_reason.operation);
+  reason.self_region = old_reason.self_region;
+  reason.self_axis = old_reason.self_axis;
+  reason.self_sign = old_reason.self_sign;
+  reason.self_stage = static_cast<BoardingIntermediateEndpoint05SelfStage>(
+      old_reason.self_stage);
+  reason.source_edge = old_reason.source_edge;
+  return intermediate_endpoint05_refuse(d, reason, reason.condition);
+}
+[[gnu::noinline]] auto detail::intermediate_endpoint05_canonical(
+    const BoardingIntermediateEndpoint05ProgramKey& key)
+    -> std::optional<BoardingRouteFootPhaseRequest> {
+  if (key.version() != 5 || key.candidate() !=
+                                BoardingIntermediateEndpoint05Candidate::
+                                    root_y_both_hip_ankle_reach_roll_slice)
+    return {};
+  auto result = intermediate_pause_support02_request();
+  if (result)
+    for (auto& root : result->root)
+      root.coordinates[1] = {{key.y(), +0.0, +0.0}, 1};
+  return result;
+}
+} // namespace apsis_drift
