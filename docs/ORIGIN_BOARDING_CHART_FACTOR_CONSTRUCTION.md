@@ -267,3 +267,8 @@ Full graph/body/contact/load/SELF, WORLD/material/HALO, moving forward/reverse
 acquisition, route/seat, actor/save integration and First Flight remain separate
 and unqualified. Parents #462/#361/#352 stay open. No all-height impossibility
 theorem or additional witness program is needed to close this proof child.
+
+The subsequent [Endpoint06 registration](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06.md)
+and [matched independent Test](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT06_TEST_MANIFEST.md)
+specify one literal base-first program under this conditional proof. Actual
+implementation, admission and numerical observations remain separate gates.
