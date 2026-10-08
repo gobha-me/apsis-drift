@@ -260,3 +260,7 @@ SELF pairs, WORLD/material/HALO, continuous reversible route/seat, actor
 movement, save/dynamics and First Flight acceptance remain separate.
 Parents #462, #361 and #352 remain open. No all-height impossibility theorem
 or additional witness program is required to close this bounded audit.
+
+The subsequent [same-domain chart-factor proof](ORIGIN_BOARDING_CHART_FACTOR_CONSTRUCTION.md)
+derives that conditional base/factor/BOTH-intersection implication. It evaluates
+no source bound and selects no arithmetic program or candidate.

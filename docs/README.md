@@ -110,6 +110,8 @@ player's station-to-flight journey.
   admitted implementation; unavailable PORT knee interval before a generated height or original phase.
 - [Selected knee-cut coverage audit](ORIGIN_BOARDING_KNEE_CUT_COVERAGE_AUDIT.md):
   exact scalar/common-enclosure compatibility and conditional descent dependence; actual feasibility unknown.
+- [Conditional same-domain chart-factor construction](ORIGIN_BOARDING_CHART_FACTOR_CONSTRUCTION.md):
+  independent base-height premises and BOTH image intersection; actual improvement and feasibility unknown.
 - [Intermediate nominal support and SELF01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT_SELF01.md):
   certified starting phase; retained unresolved port-hip obligation in the full maneuver.
 - [Complete intermediate nominal support01](ORIGIN_BOARDING_ROUTE_INTERMEDIATE_SUPPORT01.md):
