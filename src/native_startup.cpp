@@ -156,6 +156,7 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
   const FreedomSaveDocument* origin{};
+  std::uint32_t physical_catalog = kPhysicalLocalSystemGeneratorVersion;
   if (const auto* boarding =
           std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
     if (auto v = validate_freedom_boarding_document(*boarding); !v)
@@ -163,18 +164,21 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
     if (boarding->boarding.phase == FreedomBoardingPhase::seated)
       return std::unexpected{"Seated voyage uses the flight presentation"};
     origin = &boarding->voyage.flight.origin;
+    physical_catalog = boarding->voyage.flight.model.physical_catalog;
   } else if (const auto* assembly =
                  std::get_if<FreedomStartingAssemblySaveDocument>(
                      &selected.document)) {
     if (auto v = validate_freedom_starting_assembly_document(*assembly); !v)
       return std::unexpected{v.error().detail};
     origin = &assembly->journey.voyage.flight.origin;
+    physical_catalog = assembly->journey.voyage.flight.model.physical_catalog;
   } else if (const auto* journey =
                  std::get_if<FreedomJourneySaveDocument>(&selected.document)) {
     if (auto valid = validate_freedom_journey_document(*journey); !valid)
       return std::unexpected{"Journey station bootstrap refused: " +
                              valid.error().detail};
     origin = &journey->voyage.flight.origin;
+    physical_catalog = journey->voyage.flight.model.physical_catalog;
   } else
     origin = std::get_if<FreedomSaveDocument>(&selected.document);
   if (!origin)
@@ -184,7 +188,8 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
   if (const auto valid = validate_freedom_save_document(save); !valid)
     return std::unexpected{"Freedom save rejected: " + valid.error().path +
                            ": " + valid.error().detail};
-  auto system = generate_physical_origin_system(save.recipe.universe_seed);
+  auto system = generate_physical_origin_system(save.recipe.universe_seed,
+                                                physical_catalog);
   if (!system)
     return std::unexpected{"Physical origin catalog rejected the saved seed"};
   const auto& home =

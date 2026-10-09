@@ -449,6 +449,7 @@ add_library(apsis_drift_core STATIC
   src/mission_board.cpp
   src/native_startup.cpp
   src/native_flight_session.cpp
+  src/native_port_approach.cpp
   src/onboarding.cpp
   src/origin_station.cpp
   src/station_geometry.cpp

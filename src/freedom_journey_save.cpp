@@ -78,7 +78,8 @@ auto validate_freedom_journey_document(
 auto make_freedom_journey_new_game_document(Seed seed)
     -> std::expected<FreedomJourneySaveDocument, SaveSchemaError> {
   auto origin = make_freedom_new_game_document(seed);
-  auto system = generate_physical_origin_system(seed);
+  auto system = generate_physical_origin_system(
+      seed, kContinuousPhysicalLocalSystemGeneratorVersion);
   const auto station = generate_origin_station(seed);
   const auto geometry = origin_station_geometry(station);
   if (!system || !geometry)
@@ -94,6 +95,8 @@ auto make_freedom_journey_new_game_document(Seed seed)
   FreedomJourneySaveDocument document{
       {{std::move(origin), *body, {}}, {1, {station.id, 1}, true}},
       {1, 1, {}, {}, std::numbers::pi / 2.0}};
+  document.voyage.flight.model.physical_catalog = system->generator_version;
+  document.voyage.flight.model.physical_ephemeris = system->ephemeris_version;
   if (auto valid = validate_freedom_journey_document(document); !valid)
     return std::unexpected{valid.error()};
   return document;

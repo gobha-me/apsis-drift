@@ -48,6 +48,7 @@ var assets_root := ""
 var station_geometry: Dictionary = {}
 var dock_status: RichTextLabel
 var port_buttons: Array[Button] = []
+var approach_button: Button
 var capture_button: Button
 var unboard_menu_button: Button
 var unboard_button: Button
@@ -205,6 +206,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	near_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	near_container.stretch = true
 	near_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var close_material := ShaderMaterial.new()
+	close_material.shader = preload("res://shaders/native_close_composite.gdshader")
+	near_container.material = close_material
 	add_child(near_container)
 	near_viewport = SubViewport.new()
 	near_viewport.size = viewport.size
@@ -321,6 +325,11 @@ func build_ui() -> void:
 			port_buttons.append(button)
 		dock_status = hud_text()
 		column.add_child(dock_status)
+		approach_button = Button.new()
+		approach_button.text = "Approach port with thrusters"
+		approach_button.focus_mode = Control.FOCUS_NONE
+		approach_button.pressed.connect(func(): port_command("cancel_freedom_port_approach" if state.get("port_approach", {}).get("active", false) else "begin_freedom_port_approach"))
+		column.add_child(approach_button)
 		capture_button = Button.new()
 		capture_button.text = "Capture port"
 		capture_button.focus_mode = Control.FOCUS_NONE
@@ -476,6 +485,9 @@ func open_save_dialog() -> void:
 
 
 func pause_controls(reason: String, show_menu := true) -> void:
+	if state.get("port_approach", {}).get("active", false):
+		bridge.cancel_freedom_port_approach()
+		state = bridge.get_freedom_flight_state()
 	paused = true
 	controls_armed = false
 	if player_input != null:
@@ -526,6 +538,11 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
+	if command == "begin_freedom_port_approach":
+		observe_neutral_controls()
+		if not controls_armed:
+			save_status.text = "Release flight controls before starting the approach aid."
+			return
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
 		save_status.text = str(bridge.get_last_error())
@@ -535,7 +552,10 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if state.attached:
 		save_status.text = "Attached to D%d. Release before firing propulsion." % state.target_port
 	elif command == "release_freedom_port":
-		save_status.text = "Released D%d. Use thrusters to depart." % state.target_port
+		var family := "pad" if player_input.last_device == "pad" else "key"
+		save_status.text = "Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)]
+	elif command.ends_with("port_approach"):
+		save_status.text = state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else "")
 	else:
 		save_status.text = "Port selected. Capture requires physical alignment and low closure."
 
@@ -707,6 +727,13 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		elif not assessment.is_empty():
 			var offset: PackedFloat64Array = assessment.offset_body_metres
 			dock_status.text = "D%d · %s\nCollar %.3f m · attitude %.2f°\nInward %.3f m/s · lateral %.3f m/s\nPort offset: right %.2f · up %.2f · back %.2f m" % [state.target_port, assessment.reason, assessment.separation, rad_to_deg(assessment.alignment_radians), assessment.inward_speed, assessment.lateral_speed, offset[0], offset[1], offset[2]]
+		var approach: Dictionary = state.get("port_approach", {})
+		dock_status.text += "\n" + str(approach.get("note", "Approach aid off"))
+		if approach.get("active", false):
+			dock_status.text += " · %.1f s left" % approach.remaining_seconds
+		approach_button.text = "Cancel approach aid" if approach.get("active", false) else "Approach port with thrusters"
+		approach_button.disabled = not approach.get("active", false) and not approach.get("available", false)
+		approach_button.tooltip_text = "Manual input cancels. Capture remains your action." if approach.get("available", false) else str(approach.get("refusal", "Select a port first."))
 		capture_button.disabled = state.attached or assessment.is_empty() or not assessment.get("ready", false)
 		release_button.disabled = not state.attached or (not boarding.is_empty() and boarding.state != "seated")
 		unboard_button.visible = state.attached and state.target_port == 1 and boarding.get("state") == "seated"

@@ -20,6 +20,17 @@ struct NativeFlightStep {
   RigidVector3 applied_hold_force_body_newtons;
 };
 
+// Transient player command, never part of the save/world recipe. The aid only
+// translates an already aligned craft near a selected port using real thrust.
+struct NativePortApproach {
+  bool active{};
+  std::uint32_t remaining_ticks{};
+  std::string note{"Approach aid off"};
+  friend auto operator==(const NativePortApproach&, const NativePortApproach&)
+      -> bool = default;
+};
+inline constexpr std::uint32_t kNativePortApproachTicks{7200};
+
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
 // Presentation has no mutable access to state, catalog or recipe selections.
@@ -64,6 +75,13 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto assess_port() const
       -> std::expected<OriginDockAssessment, std::string>;
   [[nodiscard]] auto capture_port() -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_port_approach() -> std::expected<void, std::string>;
+  auto cancel_port_approach() -> void;
+  [[nodiscard]] auto port_approach() const -> const NativePortApproach& {
+    return port_approach_;
+  }
+  [[nodiscard]] auto port_approach_available() const
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto walker() const -> const std::optional<OriginWalkerState>& {
     return actor_;
   }
@@ -89,6 +107,8 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto port_approach_controls() const
+      -> std::expected<NativeFlightControls, std::string>;
   [[nodiscard]] auto begin_boarding_route(GameplayBoardingDirection)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto boarding_document() const -> FreedomBoardingSaveDocument;
@@ -107,5 +127,6 @@ class NativeFreedomFlightSession {
   std::optional<NativeStartingAssemblySelection> starting_assembly_;
   NativeCraftBinding craft_binding_;
   std::optional<FreedomBoardingState> boarding_;
+  NativePortApproach port_approach_;
 };
 } // namespace apsis_drift

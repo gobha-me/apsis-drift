@@ -149,6 +149,21 @@ autosave. The existing unsaved study cannot use this save operation.
 
 ## Main-exhaust source and license
 
+The transparent close-camera viewport uses a premultiplied-alpha canvas
+compositor (`native_close_composite.gdshader`). The 3D pass already weights
+exhaust RGB by surface alpha; ordinary canvas blending applies alpha again and
+can erase a low-thrust additive plume. Opaque ship/station pixels retain their
+existing depth tests. This changes presentation only. Godot documents the
+[canvas blend mode](https://docs.godotengine.org/en/4.7/tutorials/shaders/shader_reference/canvas_item_shader.html).
+
+`studies/captures/native_exhaust_alpha_capture.gd` is an opt-in render-only
+regression fixture: pass an absolute output directory on a rendering display.
+It compares identical raw 3D attachments with ordinary and premultiplied canvas
+composition, checks visible 10% thrust and zero-thrust darkness, and records
+PNG hashes, shader identity and renderer metadata. It neither loads a journey
+nor advances physics. The composed boarding capture separately records actual
+main/withdrawal forces and close-camera attachments during the real round trip.
+
 The original procedural plume shader/mesh arrangement is BSD-3-Clause under
 the repository license. The underlying imported model remains under its
 existing [native asset provenance and licenses](NATIVE_STARTER_ASSETS.md).

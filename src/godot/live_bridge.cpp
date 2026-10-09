@@ -277,6 +277,10 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::select_freedom_port);
     godot::ClassDB::bind_method(godot::D_METHOD("capture_freedom_port"),
                                 &FreedomBridge::capture_freedom_port);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_port_approach"),
+                                &FreedomBridge::begin_freedom_port_approach);
+    godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_port_approach"),
+                                &FreedomBridge::cancel_freedom_port_approach);
     godot::ClassDB::bind_method(godot::D_METHOD("release_freedom_port"),
                                 &FreedomBridge::release_freedom_port);
     godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_flight",
@@ -785,6 +789,21 @@ class FreedomBridge : public godot::RefCounted {
         true);
   }
 
+  auto begin_freedom_port_approach() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_port_approach();
+    });
+  }
+  auto cancel_freedom_port_approach() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session)
+            -> std::expected<void, std::string> {
+          session.cancel_port_approach();
+          return {};
+        },
+        true);
+  }
+
   auto begin_freedom_boarding() -> bool {
     return change_freedom_port(
         [](NativeFreedomFlightSession& session) {
@@ -1094,6 +1113,17 @@ class FreedomBridge : public godot::RefCounted {
         docking["offset_body_metres"] = coordinates(offset);
       }
       result["docking"] = docking;
+      const auto available = session.port_approach_available();
+      godot::Dictionary approach;
+      approach["available"] = available.has_value();
+      approach["refusal"] = available
+                                ? godot::String{}
+                                : godot::String{available.error().c_str()};
+      approach["active"] = session.port_approach().active;
+      approach["remaining_seconds"] =
+          session.port_approach().remaining_ticks / 120.0;
+      approach["note"] = godot::String{session.port_approach().note.c_str()};
+      result["port_approach"] = approach;
       const auto force = selected.last_step
                              ? selected.last_step->actuation.central.propulsion
                              : VacuumActuation{};

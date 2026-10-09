@@ -173,7 +173,8 @@ auto invalid() -> void {
   auto& flight = terminal.voyage.flight;
   flight.flight.tick = std::numeric_limits<SimulationTick>::max() - 2;
   flight.origin.state.tick = flight.flight.tick;
-  const auto physical = require(generate_physical_origin_system(Seed{42}));
+  const auto physical = require(
+      generate_physical_origin_system(Seed{42}, flight.model.physical_catalog));
   const auto station = generate_origin_station(Seed{42});
   const auto geometry = require(origin_station_geometry(station));
   flight.flight = require(release_origin_port(

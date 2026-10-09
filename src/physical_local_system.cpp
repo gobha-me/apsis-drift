@@ -38,7 +38,7 @@ auto mass_for(Seed star_seed) -> std::uint32_t {
 }
 
 auto physical_catalog(LocalSystemDescriptor catalog,
-                      std::optional<Seed> universe_seed)
+                      std::optional<Seed> universe_seed, std::uint32_t version)
     -> std::expected<PhysicalLocalSystem, PhysicalLocalSystemError> {
   const auto mass = mass_for(catalog.star.seed);
   const std::uint64_t gm =
@@ -59,32 +59,48 @@ auto physical_catalog(LocalSystemDescriptor catalog,
       return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
     planet.orbit.period_ticks = static_cast<SimulationTick>(ticks);
   }
-  return PhysicalLocalSystem{.origin_universe_seed = universe_seed,
-                             .catalog = std::move(catalog),
-                             .stellar_mass_millisolar = mass,
-                             .stellar_gm_km3_per_second2 = gm};
+  return PhysicalLocalSystem{
+      .generator_version = version,
+      .ephemeris_version =
+          version == kContinuousPhysicalLocalSystemGeneratorVersion
+              ? kContinuousAnalyticEphemerisVersion
+              : kAnalyticEphemerisVersion,
+      .origin_universe_seed = universe_seed,
+      .catalog = std::move(catalog),
+      .stellar_mass_millisolar = mass,
+      .stellar_gm_km3_per_second2 = gm};
 }
 } // namespace
 
 auto generate_physical_local_system(Seed system_seed, std::uint32_t version)
     -> std::expected<PhysicalLocalSystem, PhysicalLocalSystemError> {
-  if (version != kPhysicalLocalSystemGeneratorVersion)
+  if (version != kPhysicalLocalSystemGeneratorVersion &&
+      version != kContinuousPhysicalLocalSystemGeneratorVersion)
     return std::unexpected{PhysicalLocalSystemError::unsupported_version};
-  return physical_catalog(generate_local_system(system_seed), std::nullopt);
+  return physical_catalog(generate_local_system(system_seed), std::nullopt,
+                          version);
 }
 
 auto generate_physical_origin_system(Seed universe_seed, std::uint32_t version)
     -> std::expected<PhysicalLocalSystem, PhysicalLocalSystemError> {
-  if (version != kPhysicalLocalSystemGeneratorVersion)
+  if (version != kPhysicalLocalSystemGeneratorVersion &&
+      version != kContinuousPhysicalLocalSystemGeneratorVersion)
     return std::unexpected{PhysicalLocalSystemError::unsupported_version};
-  return physical_catalog(generate_origin_system(universe_seed), universe_seed);
+  return physical_catalog(generate_origin_system(universe_seed), universe_seed,
+                          version);
 }
 
 auto validate_local_system(const PhysicalLocalSystem& system)
     -> std::expected<void, PhysicalLocalSystemError> {
-  if (system.generator_version != kPhysicalLocalSystemGeneratorVersion ||
-      system.source_catalog_generator != kLocalSystemGeneratorVersion ||
-      system.ephemeris_version != kAnalyticEphemerisVersion)
+  const bool legacy =
+      system.generator_version == kPhysicalLocalSystemGeneratorVersion &&
+      system.ephemeris_version == kAnalyticEphemerisVersion;
+  const bool continuous =
+      system.generator_version ==
+          kContinuousPhysicalLocalSystemGeneratorVersion &&
+      system.ephemeris_version == kContinuousAnalyticEphemerisVersion;
+  if ((!legacy && !continuous) ||
+      system.source_catalog_generator != kLocalSystemGeneratorVersion)
     return std::unexpected{PhysicalLocalSystemError::unsupported_version};
   if ((system.catalog.kind != LocalSystemKind::procedural &&
        system.catalog.kind != LocalSystemKind::origin_home) ||
@@ -98,8 +114,10 @@ auto validate_local_system(const PhysicalLocalSystem& system)
     return std::unexpected{PhysicalLocalSystemError::invalid_context};
   const auto expected =
       system.origin_universe_seed
-          ? generate_physical_origin_system(*system.origin_universe_seed)
-          : generate_physical_local_system(system.catalog.seed);
+          ? generate_physical_origin_system(*system.origin_universe_seed,
+                                            system.generator_version)
+          : generate_physical_local_system(system.catalog.seed,
+                                           system.generator_version);
   if (!expected) return std::unexpected{expected.error()};
   if (system != *expected)
     return std::unexpected{PhysicalLocalSystemError::invalid_context};
@@ -130,8 +148,9 @@ auto resolve_planet_ephemeris(const PhysicalLocalSystem& system,
     return std::unexpected{PhysicalLocalSystemError::invalid_tick};
   const auto body = find_local_system_planet(system, planet);
   if (!body) return std::unexpected{body.error()};
-  const auto result =
-      detail::resolve_validated_circular_orbit((*body)->orbit, time);
+  const auto result = detail::resolve_validated_circular_orbit(
+      (*body)->orbit, time,
+      system.ephemeris_version == kContinuousAnalyticEphemerisVersion);
   if (!result)
     return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
   return *result;
@@ -158,11 +177,13 @@ auto resolve_origin_station_ephemeris(const PhysicalLocalSystem& system,
   // Catalog ownership is already checked above. Reuse the exact physical
   // planet orbit geometry without regenerating the catalog a second time.
   const auto host = detail::resolve_validated_circular_orbit(
-      system.catalog.planets[kOriginHomePlanetOrdinal].orbit, time);
+      system.catalog.planets[kOriginHomePlanetOrdinal].orbit, time,
+      system.ephemeris_version == kContinuousAnalyticEphemerisVersion);
   if (!host)
     return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
-  const auto resolved =
-      detail::resolve_validated_station_orbit(station, *host, time);
+  const auto resolved = detail::resolve_validated_station_orbit(
+      station, *host, time,
+      system.ephemeris_version == kContinuousAnalyticEphemerisVersion);
   if (!resolved)
     return std::unexpected{PhysicalLocalSystemError::unsafe_arithmetic};
   return *resolved;

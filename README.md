@@ -27,7 +27,10 @@ stick walks; right-drag or the right stick looks. Escape pauses.
 Walk through the workshop to D1, release movement controls and press **E**,
 controller **A** or **Board Wayfarer**. A short authored boarding sequence moves
 through the hatch into the pilot seat. Release the port to use the existing
-flight controls; **Leave seat** returns you to the station while attached at D1.
+flight controls. Withdraw with **Fall** and brake with **Rise**; clear the port
+column before forward thrust. An optional [approach aid](docs/PORT_APPROACH_AID.md)
+helps an aligned craft return using thrusters; **Capture port** remains your
+action. **Leave seat** returns you to the station while attached at D1.
 The open docking well still stops ordinary unsupported walking.
 
 Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with

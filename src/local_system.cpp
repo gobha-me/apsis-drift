@@ -319,7 +319,8 @@ auto resolve_planet_ephemeris(const LocalSystemDescriptor& system,
 }
 
 auto detail::resolve_validated_circular_orbit(const PlanetOrbit& orbit,
-                                              EphemerisQueryTime time)
+                                              EphemerisQueryTime time,
+                                              bool continuous)
     -> std::expected<PlanetEphemeris, LocalSystemError> {
   if (orbit.period_ticks == 0) {
     return std::unexpected{LocalSystemError::invalid_orbit};
@@ -347,25 +348,30 @@ auto detail::resolve_validated_circular_orbit(const PlanetOrbit& orbit,
   const double sin_node = std::sin(node);
   const double cos_inclination = std::cos(inclination);
   const double sin_inclination = std::sin(inclination);
+  const auto position_value = [continuous](double value) {
+    return continuous ? value : quantized_position(value);
+  };
+  const auto velocity_value = [continuous](double value) {
+    return continuous ? value : quantized_velocity(value);
+  };
   const SystemPositionMetres position{
-      quantized_position(radius * (cos_phase * cos_node -
-                                   sin_phase * sin_node * cos_inclination)),
-      quantized_position(radius * (cos_phase * sin_node +
-                                   sin_phase * cos_node * cos_inclination)),
-      quantized_position(radius * sin_phase * sin_inclination),
+      position_value(radius * (cos_phase * cos_node -
+                               sin_phase * sin_node * cos_inclination)),
+      position_value(radius * (cos_phase * sin_node +
+                               sin_phase * cos_node * cos_inclination)),
+      position_value(radius * sin_phase * sin_inclination),
   };
   const double radians_per_second = std::numbers::pi_v<double> * 2.0 *
                                     static_cast<double>(kSimulationHz) /
                                     static_cast<double>(orbit.period_ticks);
   const SystemVelocityMetresPerSecond velocity{
-      quantized_velocity(
+      velocity_value(
           radius * radians_per_second *
           (-sin_phase * cos_node - cos_phase * sin_node * cos_inclination)),
-      quantized_velocity(
+      velocity_value(
           radius * radians_per_second *
           (-sin_phase * sin_node + cos_phase * cos_node * cos_inclination)),
-      quantized_velocity(radius * radians_per_second * cos_phase *
-                         sin_inclination),
+      velocity_value(radius * radians_per_second * cos_phase * sin_inclination),
   };
   if (!finite(phase) || !finite(position.x) || !finite(position.y) ||
       !finite(position.z) || !finite(velocity.x) || !finite(velocity.y) ||
@@ -406,7 +412,7 @@ auto resolve_origin_station_ephemeris(const LocalSystemDescriptor& system,
 
 auto detail::resolve_validated_station_orbit(
     const OriginStationDescriptor& station, const PlanetEphemeris& host,
-    EphemerisQueryTime time)
+    EphemerisQueryTime time, bool continuous)
     -> std::expected<OriginStationEphemeris, LocalSystemError> {
   if (station.orbit.period_ticks == 0 || station.orbit.radius_kilometres == 0 ||
       station.orbit.host_planet != host.planet ||
@@ -455,14 +461,20 @@ auto detail::resolve_validated_station_orbit(
       (-sin_phase * sin_node + cos_phase * cos_node * cos_inclination);
   const double relative_vz =
       radius * radians_per_second * cos_phase * sin_inclination;
+  const auto position_value = [continuous](double value) {
+    return continuous ? value : quantized_position(value);
+  };
+  const auto velocity_value = [continuous](double value) {
+    return continuous ? value : quantized_velocity(value);
+  };
   const SystemPositionMetres position{
-      quantized_position(host.position.x + relative_x),
-      quantized_position(host.position.y + relative_y),
-      quantized_position(host.position.z + relative_z)};
+      position_value(host.position.x + relative_x),
+      position_value(host.position.y + relative_y),
+      position_value(host.position.z + relative_z)};
   const SystemVelocityMetresPerSecond velocity{
-      quantized_velocity(host.velocity.x + relative_vx),
-      quantized_velocity(host.velocity.y + relative_vy),
-      quantized_velocity(host.velocity.z + relative_vz)};
+      velocity_value(host.velocity.x + relative_vx),
+      velocity_value(host.velocity.y + relative_vy),
+      velocity_value(host.velocity.z + relative_vz)};
   if (!finite(phase) || !finite(position.x) || !finite(position.y) ||
       !finite(position.z) || !finite(velocity.x) || !finite(velocity.y) ||
       !finite(velocity.z)) {
@@ -473,12 +485,12 @@ auto detail::resolve_validated_station_orbit(
       .host_planet = station.orbit.host_planet,
       .position = position,
       .velocity = velocity,
-      .host_relative_position = {quantized_position(relative_x),
-                                 quantized_position(relative_y),
-                                 quantized_position(relative_z)},
-      .host_relative_velocity = {quantized_velocity(relative_vx),
-                                 quantized_velocity(relative_vy),
-                                 quantized_velocity(relative_vz)},
+      .host_relative_position = {position_value(relative_x),
+                                 position_value(relative_y),
+                                 position_value(relative_z)},
+      .host_relative_velocity = {velocity_value(relative_vx),
+                                 velocity_value(relative_vy),
+                                 velocity_value(relative_vz)},
       .cycle_tick = cycle_tick,
       .phase_radians = phase,
   };

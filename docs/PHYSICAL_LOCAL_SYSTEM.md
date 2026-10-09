@@ -122,3 +122,28 @@ and stream noninterference. Existing catalog, station, rotation and frame
 handoff goldens remain separate unchanged regression gates.
 The physical station contract adds identity/host composition, radius/speed,
 refusal and exact geometry-hash checks under GCC and Clang.
+
+## Continuous native motion — 2026-10-09
+
+Physical catalog version2 selects analytic ephemeris2. It preserves the version1
+seed streams, generated descriptors, stellar mass, integer orbit parameters and
+Kepler periods. The existing analytic expressions resolve double-precision
+positions and velocities without the metre / 0.001 m/s rounding used by version1.
+Both planets and the home station share this selection through the existing
+C++ frame and rotation owners. This fixes the jumping docking target: the old
+one-metre position step exceeded the 0.15-metre capture tolerance.
+
+Ordinary native New Game explicitly writes `{physical_catalog: 2,
+physical_ephemeris: 2}` into the existing flight-model payload. Catalog/ephemeris
+pairs 1/1 and 2/2 are supported; mixed or unknown versions refuse. Default
+provider calls and historical flight-model defaults remain 1/1, and old saved
+bodies are never migrated or reinterpreted on Continue. Formats18–22 already
+carry the required version fields, so their schemas remain unchanged. Origin
+identity/history and the original source-catalog generator versions also remain
+unchanged. A station presentation bootstrap follows the saved flight-model
+selection rather than regenerating a default version1 station.
+
+Existing version1 numerical goldens remain required. Version2 adds position /
+velocity continuity checks and seeded physical approach/return tests. The
+[port approach aid](PORT_APPROACH_AID.md) is available for continuous journeys;
+historical rounded-motion journeys retain their manual flight and capture path.
