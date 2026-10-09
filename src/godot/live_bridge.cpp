@@ -196,7 +196,8 @@ class FreedomBridge : public godot::RefCounted {
 
   auto commit_freedom_start(NativeStartup selected) -> bool {
     if (std::holds_alternative<FreedomStartingAssemblySaveDocument>(
-            selected.document))
+            selected.document) ||
+        std::holds_alternative<FreedomBoardingSaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -263,6 +264,12 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("advance_freedom_walk", "elapsed", "controls"),
         &FreedomBridge::advance_freedom_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_boarding"),
+                                &FreedomBridge::begin_freedom_boarding);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_disembarking"),
+                                &FreedomBridge::begin_freedom_disembarking);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_boarding_state"),
+                                &FreedomBridge::get_freedom_boarding_state);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
                                 &FreedomBridge::get_freedom_flight_state);
     godot::ClassDB::bind_method(
@@ -355,6 +362,31 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  static auto project_operating_pose(const OperatingPose& pose)
+      -> godot::Dictionary {
+    const auto matrices = [](const auto& values, const auto& ids) {
+      godot::Dictionary result;
+      for (std::size_t index = 0; index < values.size(); ++index) {
+        godot::PackedFloat64Array columns;
+        for (const auto& column : values[index].columns) {
+          columns.append(column.x);
+          columns.append(column.y);
+          columns.append(column.z);
+        }
+        result[godot::String{std::string{ids[index]}.c_str()}] = columns;
+      }
+      return result;
+    };
+    godot::Dictionary result;
+    result["craft_world_deltas"] =
+        matrices(pose.craft_world_deltas, kOperatingCraftGroupIds);
+    result["station_node_local"] =
+        matrices(pose.station_node_local, kOperatingStationGroupIds);
+    result["station_contact_deltas"] =
+        matrices(pose.station_contact_deltas, kOperatingStationGroupIds);
+    return result;
+  }
+
   auto get_operating_motion_pose(double roof_transfer, double inner_door,
                                  double seat_boarding, double station_closure)
       -> godot::Dictionary {
@@ -366,26 +398,7 @@ class FreedomBridge : public godot::RefCounted {
           *operating_motion_recipe,
           {roof_transfer, inner_door, seat_boarding, station_closure});
       if (!pose) throw std::invalid_argument(pose.error());
-      const auto matrices = [](const auto& values, const auto& ids) {
-        godot::Dictionary result;
-        for (std::size_t index = 0; index < values.size(); ++index) {
-          godot::PackedFloat64Array columns;
-          for (const auto& column : values[index].columns) {
-            columns.append(column.x);
-            columns.append(column.y);
-            columns.append(column.z);
-          }
-          result[godot::String{std::string{ids[index]}.c_str()}] = columns;
-        }
-        return result;
-      };
-      godot::Dictionary result;
-      result["craft_world_deltas"] =
-          matrices(pose->craft_world_deltas, kOperatingCraftGroupIds);
-      result["station_node_local"] =
-          matrices(pose->station_node_local, kOperatingStationGroupIds);
-      result["station_contact_deltas"] =
-          matrices(pose->station_contact_deltas, kOperatingStationGroupIds);
+      const auto result = project_operating_pose(*pose);
       last_error = godot::String{};
       return result;
     } catch (const std::exception& error) {
@@ -495,6 +508,8 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomDockingSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomJourneySaveDocument>(selected.document) ||
         std::holds_alternative<FreedomStartingAssemblySaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomBoardingSaveDocument>(
             selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
@@ -770,6 +785,64 @@ class FreedomBridge : public godot::RefCounted {
         true);
   }
 
+  auto begin_freedom_boarding() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.begin_boarding();
+        },
+        true);
+  }
+  auto begin_freedom_disembarking() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.begin_disembarking();
+        },
+        true);
+  }
+
+  static auto project_boarding_state(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto& session = selected.session;
+    if (!session.boarding()) return result;
+    try {
+      const auto view = require(session.boarding_view());
+      const auto vector = [](RigidVector3 value) {
+        godot::PackedFloat64Array a;
+        for (const auto v : {value.x, value.y, value.z})
+          a.append(v);
+        return a;
+      };
+      switch (session.boarding()->phase) {
+        case FreedomBoardingPhase::station: result["state"] = "station"; break;
+        case FreedomBoardingPhase::boarding:
+          result["state"] = "boarding";
+          break;
+        case FreedomBoardingPhase::seated: result["state"] = "seated"; break;
+        case FreedomBoardingPhase::disembarking:
+          result["state"] = "disembarking";
+          break;
+      }
+      constexpr std::array names{"approach", "ladder",   "cabin",
+                                 "seat",     "hardware", "complete"};
+      result["phase"] = names[static_cast<std::size_t>(view.phase)];
+      result["progress"] = view.progress;
+      result["heading_radians"] = view.heading_radians;
+      result["eye_station"] = vector(view.eye_station);
+      result["eye_craft"] = vector(view.eye_craft);
+      result["seated"] = view.seated;
+      result["complete"] = view.complete;
+      result["pose"] = project_operating_pose(view.operating_pose);
+    } catch (const std::exception&) {
+      result.clear();
+    }
+    return result;
+  }
+  auto get_freedom_boarding_state() const -> godot::Dictionary {
+    return saved_flight ? project_boarding_state(*saved_flight)
+                        : godot::Dictionary{};
+  }
+
   auto advance_freedom_walk(double elapsed,
                             const godot::PackedFloat64Array& controls) -> bool {
     try {
@@ -790,7 +863,9 @@ class FreedomBridge : public godot::RefCounted {
       const auto scheduled = require(clock.advance(SimulationSeconds{elapsed}));
       const OriginWalkControls demand{controls[0], controls[1], controls[2]};
       for (int i = 0; i < scheduled.steps; ++i)
-        actuation = require(candidate.advance_walk(demand));
+        actuation = candidate.walker()
+                        ? require(candidate.advance_walk(demand))
+                        : require(candidate.advance(NativeFlightControls{}));
       (void)project_saved_flight(candidate);
       saved_flight->session = std::move(candidate);
       saved_flight->clock = clock;
@@ -834,8 +909,12 @@ class FreedomBridge : public godot::RefCounted {
       const auto foot = actor.foot_position_metres;
       // Eye height is presentation framing inside the qualified standing body.
       // The station-relative support point remains entirely application-owned.
-      const RigidVector3 eye{foot.x, foot.y + kOriginWalkerEyeHeightMetres,
-                             foot.z};
+      RigidVector3 eye{foot.x, foot.y + kOriginWalkerEyeHeightMetres, foot.z};
+      const auto boarding = project_boarding_state(selected);
+      if (session.boarding() &&
+          (session.boarding()->phase == FreedomBoardingPhase::boarding ||
+           session.boarding()->phase == FreedomBoardingPhase::disembarking))
+        eye = require(session.boarding_view()).eye_station;
       const auto project = [&](RigidVector3 value) {
         // Complete subtraction/projection in binary64 before the renderer cast.
         const auto& axes = view.system_axes;
@@ -878,6 +957,7 @@ class FreedomBridge : public godot::RefCounted {
           ephemeris.position.x + foot.x, ephemeris.position.y + foot.y,
           ephemeris.position.z + foot.z});
       result["dropped_seconds"] = selected.dropped_seconds;
+      if (!boarding.is_empty()) result["boarding"] = boarding;
     } catch (const std::exception&) {
       // Read-only presentation queries do not overwrite a command refusal.
       result.clear();
@@ -920,6 +1000,8 @@ class FreedomBridge : public godot::RefCounted {
             i, local_vector(view.system_axes[static_cast<std::size_t>(i)]));
       }
       result["mode"] = "freedom_flight";
+      const auto boarding = project_boarding_state(selected);
+      if (!boarding.is_empty()) result["boarding"] = boarding;
       result["universe_seed"] =
           decimal(document.origin.recipe.universe_seed.value);
       result["system_id"] = decimal(session.system().catalog.id.value);

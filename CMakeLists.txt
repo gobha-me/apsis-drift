@@ -382,8 +382,10 @@ add_library(apsis_drift_core STATIC
   src/freedom_docking_save.cpp
   src/freedom_journey_save.cpp
   src/freedom_starting_assembly_save.cpp
+  src/freedom_boarding_save.cpp
   src/native_starting_assembly.cpp
   src/origin_walker.cpp
+  src/origin_gameplay_boarding.cpp
   src/operating_motion.cpp
   src/origin_boarding_support.cpp
   src/origin_cabin_seam.cpp
@@ -491,6 +493,8 @@ set_property(SOURCE src/origin_boarding_route_body.cpp src/origin_boarding_route
 set_property(SOURCE src/origin_boarding_route_intermediate_hip_diagnostic02.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_route_intermediate_root_z01.cpp APPEND PROPERTY COMPILE_OPTIONS
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
+set_property(SOURCE src/origin_gameplay_boarding.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_intermediate_endpoint01.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
@@ -1309,6 +1313,18 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME starting-assembly-save-contract COMMAND apsis-drift-starting-assembly-save-tests)
   set_tests_properties(starting-assembly-save-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-gameplay-boarding-tests test/origin_gameplay_boarding_test.cpp)
+  target_link_libraries(apsis-drift-gameplay-boarding-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-gameplay-boarding-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME gameplay-boarding-contract COMMAND apsis-drift-gameplay-boarding-tests)
+  set_tests_properties(gameplay-boarding-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-boarding-save-tests test/freedom_boarding_save_test.cpp)
+  target_link_libraries(apsis-drift-boarding-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-boarding-save-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME boarding-save-contract COMMAND apsis-drift-boarding-save-tests)
+  set_tests_properties(boarding-save-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-freedom-docking-save-tests test/freedom_docking_save_test.cpp)
   target_link_libraries(apsis-drift-freedom-docking-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-docking-save-tests PRIVATE

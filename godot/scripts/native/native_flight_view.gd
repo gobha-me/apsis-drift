@@ -1,4 +1,5 @@
 extends Control
+signal journey_mode_changed
 ## Ordinary saved-flight consumer. C++ owns time, state, terrain and propulsion.
 const PlanetStreamView = preload("res://scripts/world/planet_stream.gd")
 const MainExhaust = preload("res://scripts/native/native_main_exhaust.gd")
@@ -48,10 +49,13 @@ var station_geometry: Dictionary = {}
 var dock_status: RichTextLabel
 var port_buttons: Array[Button] = []
 var capture_button: Button
+var unboard_menu_button: Button
+var unboard_button: Button
 var release_button: Button
 var error := ""
 var activated := false
 var staged_model: Node3D
+var mode_change_pending := false
 
 
 static func actuator_fractions(axes: PackedFloat64Array) -> PackedFloat64Array:
@@ -127,8 +131,8 @@ func initialize(owner: Variant, assets: String) -> bool:
 	activate()
 	return true
 
-func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D) -> bool:
-	if bridge != null or (model != null and (model.get_parent() != null or not model.valid_installed())):
+func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, handoff := false) -> bool:
+	if bridge != null or (model != null and (model.get_parent() != null or not (model.valid_current_pose() if handoff else model.valid_installed()))):
 		error = "Fresh view and complete detached model required"
 		return false
 	set_process(false)
@@ -166,6 +170,12 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D) -
 			error = "Selected Wayfarer model is required"
 			return false
 		staged_model = model
+		var boarding: Dictionary = state.get("boarding", {})
+		if not boarding.is_empty():
+			if not model.set_pose(boarding.pose):
+				error = "The Wayfarer boarding pose is unavailable"
+				return false
+			cockpit = boarding.state == "seated"
 		ship.add_child(model)
 		# This camera reference is presentation only. Boarding/seat ownership is
 		# a separate journey transition, not authorized by toggling this camera.
@@ -248,7 +258,7 @@ func activate() -> void:
 	set_process_input(true)
 
 func ready_to_commit() -> bool:
-	return not activated and error.is_empty() and (state.frame_id != "2" or (is_instance_valid(staged_model) and staged_model.valid_installed() and is_instance_valid(exhaust) and exhaust.valid_bound_skin()))
+	return not activated and error.is_empty() and (state.frame_id != "2" or (is_instance_valid(staged_model) and staged_model.valid_current_pose() and is_instance_valid(exhaust) and exhaust.valid_bound_skin()))
 
 
 static func set_ship_layer(node: Node) -> void:
@@ -316,6 +326,11 @@ func build_ui() -> void:
 		capture_button.focus_mode = Control.FOCUS_NONE
 		capture_button.pressed.connect(func(): port_command("capture_freedom_port"))
 		column.add_child(capture_button)
+		unboard_button = Button.new()
+		unboard_button.text = "Unboard to station"
+		unboard_button.focus_mode = Control.FOCUS_NONE
+		unboard_button.pressed.connect(unboard_requested)
+		column.add_child(unboard_button)
 		release_button = Button.new()
 		release_button.text = "Release port"
 		release_button.focus_mode = Control.FOCUS_NONE
@@ -411,6 +426,10 @@ func setup_controls() -> void:
 	controls_menu.saved_flight = true
 	controls_menu.saved_wayfarer = state.frame_id == "2"
 	add_child(controls_menu)
+	if state.frame_id == "2":
+		var menu_column: Node = controls_menu.save_button.get_parent()
+		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
+		menu_column.move_child(unboard_menu_button, controls_menu.save_button.get_index() + 1)
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func():
@@ -424,7 +443,7 @@ func setup_controls() -> void:
 	controls_menu.port_requested.connect(port_command)
 	controls_menu.quit_requested.connect(func(): get_tree().quit())
 	controls_menu.sync_saved_state(state, false)
-	controls_menu.show_menu("Paused after Continue. Release controls, then resume explicitly.")
+	controls_menu.show_menu("Seated in Wayfarer. Release controls, then resume to fly." if state.get("boarding", {}).get("state") == "seated" else "Paused after Continue. Release controls, then resume explicitly.")
 	refresh_control_hint()
 
 
@@ -486,6 +505,21 @@ func recenter_camera() -> void:
 	if error.is_empty() and focused and not paused and not save_dialog.visible:
 		look_offset = Vector2.ZERO
 		update_view(0.0)
+
+
+func unboard_requested() -> void:
+	if not error.is_empty() or not focused or save_dialog.visible or player_input == null: return
+	observe_neutral_controls()
+	if not controls_armed:
+		save_status.text = "Release flight controls before leaving the seat."
+		return
+	if not bridge.begin_freedom_disembarking():
+		save_status.text = str(bridge.get_last_error())
+		return
+	pause_controls("Returning to the station.")
+	if not mode_change_pending:
+		mode_change_pending = true
+		journey_mode_changed.emit()
 
 
 func port_command(command: String, ordinal: int = 0) -> void:
@@ -580,6 +614,12 @@ func _process(delta: float) -> void:
 	if not focused:
 		hide_exhaust()
 		return
+	if not bridge.get_freedom_walk_state().is_empty():
+		hide_exhaust()
+		if not mode_change_pending:
+			mode_change_pending = true
+			journey_mode_changed.emit()
+		return
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
 	var demand := actuator_fractions(resolved.thrust_axes)
@@ -615,6 +655,13 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
+	var boarding: Dictionary = state.get("boarding", {})
+	if not boarding.is_empty():
+		if not staged_model.set_pose(boarding.pose):
+			pause_on_error("The Wayfarer operating pose changed unexpectedly")
+			return
+		if boarding.state == "seated":
+			pilot_eye = Vector3(boarding.eye_craft[0], boarding.eye_craft[1], boarding.eye_craft[2])
 	ship.basis = state.body_basis
 	if station == null and state.station_position.length() < 1000.0:
 		station = StationPresentation.new()
@@ -661,6 +708,9 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			var offset: PackedFloat64Array = assessment.offset_body_metres
 			dock_status.text = "D%d · %s\nCollar %.3f m · attitude %.2f°\nInward %.3f m/s · lateral %.3f m/s\nPort offset: right %.2f · up %.2f · back %.2f m" % [state.target_port, assessment.reason, assessment.separation, rad_to_deg(assessment.alignment_radians), assessment.inward_speed, assessment.lateral_speed, offset[0], offset[1], offset[2]]
 		capture_button.disabled = state.attached or assessment.is_empty() or not assessment.get("ready", false)
-		release_button.disabled = not state.attached
+		release_button.disabled = not state.attached or (not boarding.is_empty() and boarding.state != "seated")
+		unboard_button.visible = state.attached and state.target_port == 1 and boarding.get("state") == "seated"
+		if unboard_menu_button != null:
+			unboard_menu_button.visible = unboard_button.visible
 		for button in port_buttons:
 			button.disabled = state.attached

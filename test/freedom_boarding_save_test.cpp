@@ -1,0 +1,210 @@
+#include "apsis_drift/native_flight_session.hpp"
+
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <nlohmann/json.hpp>
+#include <stdexcept>
+
+namespace {
+using namespace apsis_drift;
+int failures{};
+auto check(bool value, std::string_view why) -> void {
+  if (!value) {
+    ++failures;
+    std::cerr << "FAIL: " << why << '\n';
+  }
+}
+template <class T, class E> auto required(std::expected<T, E> value) -> T {
+  if (!value) throw std::runtime_error("Boarding session fixture refused");
+  return std::move(*value);
+}
+auto require_ok(std::expected<void, std::string> value) -> void {
+  if (!value) throw std::runtime_error(value.error());
+}
+struct Files {
+  std::filesystem::path dir{
+      std::filesystem::temp_directory_path() /
+      ("apsis-boarding-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()))};
+  Files() { std::filesystem::create_directory(dir); }
+  ~Files() {
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+  }
+};
+auto text(const std::filesystem::path& path) -> std::string {
+  std::ifstream in{path};
+  return {std::istreambuf_iterator<char>{in}, {}};
+}
+auto resume(const std::filesystem::path& path) -> NativeFreedomFlightSession {
+  return required(
+      NativeFreedomFlightSession::open(required(native_continue(path))));
+}
+auto run() -> void {
+  // Buffer/shape rejection precedes source construction.
+  check(!decode_freedom_boarding_document_json("{"), "truncated JSON refuses");
+  check(!decode_freedom_boarding_document_json(
+            std::string(kMaximumSaveDocumentBytes + 1, ' ')),
+        "oversized buffer refuses");
+  check(!decode_freedom_boarding_document_json(std::string(65, '[') +
+                                               std::string(65, ']')),
+        "excess nesting refuses");
+  check(!decode_freedom_boarding_document_json(
+            "{\"format_version\":22,\"format_version\":22}"),
+        "duplicate version refuses");
+  Files files;
+  auto session = required(
+      NativeFreedomFlightSession::open(required(native_new_game(Seed{42}))));
+  check(session.walker().has_value() && !session.boarding(),
+        "new21 remains a station actor without invented seated state");
+  const auto initial = session.document();
+  check(!session.begin_boarding() && session.document() == initial &&
+            !session.boarding(),
+        "distant boarding transaction refuses");
+  for (int i = 0; i < 2960; ++i)
+    (void)required(session.advance_walk({0, -1, 0}));
+  const auto entry = *session.walker();
+  check(entry.foot_position_metres.x < -20 &&
+            entry.foot_position_metres.x > -23.12,
+        "real walker reaches D1 approach");
+  const auto initial_tick = session.document().flight.tick;
+  require_ok(session.begin_boarding());
+  check(session.boarding()->phase == FreedomBoardingPhase::boarding &&
+            session.walker().has_value(),
+        "boarding keeps walk presentation");
+  check(session.document().flight.tick == initial_tick,
+        "begin action does not invent a tick");
+  const auto before = session.document();
+  const auto route_before = *session.boarding();
+  check(!session.advance_walk({std::numeric_limits<double>::quiet_NaN(), 0, 0}),
+        "nonfinite transition input refuses");
+  check(!session.advance_walk({}, SimulationSeconds{1.0 / 60}),
+        "nonfixed transition step refuses");
+  check(session.document() == before && *session.boarding() == route_before,
+        "invalid transition input is transactional");
+  check(!session.advance({}) && !session.release_port() &&
+            !session.set_assistance(false),
+        "flight controls stay gated while boarding");
+  for (int i = 0; i < 600; ++i)
+    (void)required(session.advance_walk({}));
+  const auto mid = files.dir / "mid.json";
+  require_ok(session.save_as(mid));
+  const auto original_mid = text(mid);
+  const auto saved = required(load_native_save_file(mid));
+  check(std::holds_alternative<FreedomBoardingSaveDocument>(saved),
+        "genuine board action upgrades to22");
+  auto document = std::get<FreedomBoardingSaveDocument>(saved);
+  const auto encoded =
+      required(encode_freedom_boarding_document_json(document));
+  check(required(decode_freedom_boarding_document_json(encoded)) == document,
+        "22 exact roundtrip");
+  auto bad = document;
+  bad.boarding.route.station_entry_eye.x =
+      std::numeric_limits<double>::infinity();
+  check(!validate_freedom_boarding_document(bad),
+        "nonfinite saved route refuses");
+  bad = document;
+  ++bad.boarding.started_tick;
+  check(!validate_freedom_boarding_document(bad),
+        "inconsistent shared progress clock refuses");
+  bad = document;
+  bad.boarding.route.craft_station_position.x += .001;
+  check(!validate_freedom_boarding_document(bad),
+        "changed captured transform refuses");
+  bad = document;
+  bad.starting_assembly.frame_sha256 = "altered";
+  check(!validate_freedom_boarding_document(bad),
+        "changed assembly pins refuse");
+  bad = document;
+  bad.voyage.docking.attached = false;
+  check(!validate_freedom_boarding_document(bad),
+        "detached transition refuses");
+  bad = document;
+  bad.boarding.phase = FreedomBoardingPhase::seated;
+  check(!validate_freedom_boarding_document(bad),
+        "premature seated flag refuses");
+  auto json = nlohmann::ordered_json::parse(encoded);
+  json["boarding"]["route"]["elapsed_ticks"] = kGameplayBoardingTicks + 1;
+  check(!decode_freedom_boarding_document_json(json.dump()),
+        "one-past progress buffer refuses");
+  json = nlohmann::ordered_json::parse(encoded);
+  json["boarding"]["extra"] = 0;
+  check(!decode_freedom_boarding_document_json(json.dump()),
+        "unknown closed-schema field refuses");
+  auto continued = resume(mid);
+  check(continued.document() == session.document() &&
+            continued.boarding() == session.boarding() &&
+            continued.walker() == session.walker(),
+        "midroute resume retains craft, clock, progress and projected actor");
+  for (int i = 600; i < static_cast<int>(kGameplayBoardingTicks); ++i) {
+    (void)required(session.advance_walk({}));
+    (void)required(continued.advance_walk({}));
+    check(session.document() == continued.document() &&
+              session.boarding() == continued.boarding(),
+          "resumed board continuation deterministic");
+  }
+  check(!session.walker() &&
+            session.boarding()->phase == FreedomBoardingPhase::seated,
+        "seat completion unlocks flight presentation");
+  check(session.document().flight.tick == initial_tick + kGameplayBoardingTicks,
+        "route and craft share exactly1440ticks");
+  check(required(session.boarding_view()).hardware == OperatingProgress{},
+        "hardware closes before flight");
+  (void)required(session.advance_walk({}));
+  check(session.document().flight.tick ==
+            initial_tick + kGameplayBoardingTicks + 1,
+        "neutral batch consumes post-seat remainder");
+  auto seated_attached = session;
+  require_ok(session.release_port());
+  check(!session.begin_disembarking(), "detached pilot cannot disembark");
+  NativeFlightControls thrust{};
+  thrust.positive_translation = {0, 0, 1};
+  (void)required(session.advance(thrust));
+  const auto flight = files.dir / "flight.json";
+  require_ok(session.save_as(flight));
+  auto flight_resume = resume(flight);
+  check(!flight_resume.walker() &&
+            flight_resume.boarding()->phase == FreedomBoardingPhase::seated &&
+            flight_resume.document() == session.document(),
+        "seated freeflight22 resumes without floor actor");
+  check(text(mid) == original_mid,
+        "SaveAs and Continue never mutate original save");
+  require_ok(seated_attached.begin_disembarking());
+  check(seated_attached.walker().has_value(),
+        "unboard immediately selects walk presentation");
+  const auto reverse_mid = files.dir / "reverse.json";
+  for (int i = 0; i < 400; ++i)
+    (void)required(seated_attached.advance_walk({}));
+  require_ok(seated_attached.save_as(reverse_mid));
+  auto reverse_resume = resume(reverse_mid);
+  for (int i = 400; i < static_cast<int>(kGameplayBoardingTicks); ++i) {
+    (void)required(seated_attached.advance_walk({}));
+    (void)required(reverse_resume.advance_walk({}));
+  }
+  check(seated_attached.walker() == entry && reverse_resume.walker() == entry,
+        "disembark restores exact real entry actor");
+  check(seated_attached.boarding()->phase == FreedomBoardingPhase::station,
+        "unboard returns station mode");
+  (void)required(seated_attached.advance_walk({0, 1, 0}));
+  const auto station = files.dir / "station.json";
+  require_ok(seated_attached.save_as(station));
+  check(resume(station).walker() == seated_attached.walker() &&
+            seated_attached.walker() != entry,
+        "station save retains updated walking pose");
+  require_ok(seated_attached.begin_boarding());
+  check(seated_attached.boarding()->station_entry == *resume(station).walker(),
+        "reboarding records current real entry");
+}
+} // namespace
+auto main() -> int {
+  try {
+    run();
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << '\n';
+    return 1;
+  }
+  return failures == 0 ? 0 : 1;
+}

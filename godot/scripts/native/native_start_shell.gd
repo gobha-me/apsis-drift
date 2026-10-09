@@ -236,11 +236,51 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 	add_child(candidate)
 	current_view = candidate
 	bridge = owner
+	assets_root = assets
+	connect_journey_view(candidate)
 	candidate.activate()
 	log_selection(pending, "opened", candidate)
 	if previous != null: previous.free()
 	error = ""
 	return true
+
+func connect_journey_view(view: Control) -> void:
+	if view.has_signal("journey_mode_changed"):
+		view.journey_mode_changed.connect(switch_journey_view, CONNECT_DEFERRED)
+
+
+func switch_journey_view() -> void:
+	if bridge == null or current_view == null: return
+	var walk: Dictionary = bridge.get_freedom_walk_state()
+	var wants_walk := not walk.is_empty()
+	if (wants_walk and current_view is WalkView) or (not wants_walk and current_view is FlightView): return
+	var previous := current_view
+	var model: Node3D = previous.staged_model
+	if not is_instance_valid(model) or not model.valid_current_pose() or model.selected_binding != bridge.get_freedom_craft_binding():
+		previous.error = "The current Wayfarer presentation changed unexpectedly"
+		previous.pause_controls(previous.error)
+		return
+	var parent := model.get_parent()
+	parent.remove_child(model)
+	var candidate: Control = WalkView.new() if wants_walk else FlightView.new()
+	var pending := {"walk_state": walk, "flight_state": bridge.get_freedom_flight_state(), "station_geometry": bridge.get_freedom_station_geometry()}
+	if not candidate.stage(bridge, assets_root, pending, model, true) or not candidate.ready_to_commit():
+		error = candidate.error if not candidate.error.is_empty() else "Wayfarer view handoff failed"
+		if model.get_parent() != null: model.get_parent().remove_child(model)
+		parent.add_child(model)
+		candidate.free()
+		previous.error = error
+		previous.pause_controls(error)
+		return
+	# Only presentation changes here: C++ already owns the committed journey.
+	remove_child(previous)
+	add_child(candidate)
+	current_view = candidate
+	connect_journey_view(candidate)
+	candidate.activate()
+	previous.free()
+	error = ""
+
 
 func _ready() -> void:
 	if presentation_only: return

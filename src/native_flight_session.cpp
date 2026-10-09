@@ -5,6 +5,17 @@
 #include <utility>
 
 namespace apsis_drift {
+namespace {
+auto route_actor(const FreedomBoardingState& b,
+                 const GameplayBoardingView& view) -> OriginWalkerState {
+  auto actor = b.station_entry;
+  actor.foot_position_metres = view.eye_station;
+  actor.foot_position_metres.y -= kOriginWalkerEyeHeightMetres;
+  actor.velocity_metres_per_second = {};
+  actor.heading_radians = view.heading_radians;
+  return actor;
+}
+} // namespace
 NativeFreedomFlightSession::NativeFreedomFlightSession(
     FreedomFlightSaveDocument document, FreedomFlightHydration hydrated,
     std::optional<std::filesystem::path> source)
@@ -15,6 +26,19 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
   std::optional<NativeStartingAssemblySelection> assembly;
+  std::optional<FreedomBoardingState> boarding;
+  std::optional<OriginWalkerState> actor;
+  if (auto* d = std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Boarding requires Freedom"};
+    if (auto v = validate_freedom_boarding_document(*d); !v)
+      return std::unexpected{v.error().detail};
+    assembly = d->starting_assembly;
+    boarding = d->boarding;
+    actor = d->station_actor;
+    auto voyage = std::move(d->voyage);
+    selected.document = std::move(voyage);
+  }
   if (auto* d = std::get_if<FreedomStartingAssemblySaveDocument>(
           &selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
@@ -25,7 +49,6 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     auto journey = std::move(d->journey);
     selected.document = std::move(journey);
   }
-  std::optional<OriginWalkerState> actor;
   if (selected.mode == NativeStartup::Mode::freedom &&
       std::holds_alternative<FreedomJourneySaveDocument>(selected.document)) {
     auto& journey = std::get<FreedomJourneySaveDocument>(selected.document);
@@ -71,7 +94,79 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     result.starting_assembly_ = assembly;
     result.craft_binding_ = std::move(*binding);
   }
+  result.boarding_ = boarding;
+  if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
+                   boarding->phase == FreedomBoardingPhase::disembarking)) {
+    auto view = result.boarding_view();
+    if (!view) return std::unexpected{view.error()};
+    result.actor_ = route_actor(*boarding, *view);
+  }
   return result;
+}
+
+auto NativeFreedomFlightSession::boarding_document() const
+    -> FreedomBoardingSaveDocument {
+  return {{document_, *docking_},
+          *starting_assembly_,
+          *boarding_,
+          boarding_->phase == FreedomBoardingPhase::station ? actor_
+                                                            : std::nullopt};
+}
+auto NativeFreedomFlightSession::boarding_view() const
+    -> std::expected<GameplayBoardingView, std::string> {
+  if (!boarding_) return std::unexpected{"No gameplay boarding route"};
+  return view_origin_gameplay_boarding(craft_binding_, boarding_->route);
+}
+auto NativeFreedomFlightSession::begin_boarding()
+    -> std::expected<void, std::string> {
+  if (!actor_ ||
+      (boarding_ && boarding_->phase != FreedomBoardingPhase::station))
+    return std::unexpected{"Boarding requires a station actor"};
+  return begin_boarding_route(GameplayBoardingDirection::board);
+}
+auto NativeFreedomFlightSession::begin_disembarking()
+    -> std::expected<void, std::string> {
+  if (actor_ || !boarding_ || boarding_->phase != FreedomBoardingPhase::seated)
+    return std::unexpected{"Disembarking requires a seated pilot"};
+  return begin_boarding_route(GameplayBoardingDirection::disembark);
+}
+auto NativeFreedomFlightSession::begin_boarding_route(
+    GameplayBoardingDirection direction) -> std::expected<void, std::string> {
+  if (!starting_assembly_ || !docking_ || !docking_->attached ||
+      docking_->target.ordinal != 1)
+    return std::unexpected{"Boarding requires the Wayfarer attached to D1"};
+  const auto entry = direction == GameplayBoardingDirection::board
+                         ? *actor_
+                         : boarding_->station_entry;
+  if (auto valid = validate_origin_walker(entry); !valid)
+    return std::unexpected{valid.error()};
+  const auto station =
+      generate_origin_station(document_.origin.recipe.universe_seed);
+  const auto geometry = origin_station_geometry(station);
+  if (!geometry) return std::unexpected{"Origin geometry unavailable"};
+  const auto pose = resolve_origin_port_pose(
+      system_, station, *geometry, docking_->target, document_.flight.tick);
+  if (!pose) return std::unexpected{"D1 pose unavailable"};
+  auto eye = entry.foot_position_metres;
+  eye.y += kOriginWalkerEyeHeightMetres;
+  auto route = begin_origin_gameplay_boarding(craft_binding_, *pose, eye,
+                                              entry.heading_radians, direction);
+  if (!route) return std::unexpected{route.error()};
+  auto candidate = *this;
+  candidate.boarding_ =
+      FreedomBoardingState{direction == GameplayBoardingDirection::board
+                               ? FreedomBoardingPhase::boarding
+                               : FreedomBoardingPhase::disembarking,
+                           entry, document_.flight.tick, *route};
+  const auto view = candidate.boarding_view();
+  if (!view) return std::unexpected{view.error()};
+  candidate.actor_ = route_actor(*candidate.boarding_, *view);
+  if (auto valid =
+          validate_freedom_boarding_document(candidate.boarding_document());
+      !valid)
+    return std::unexpected{valid.error().detail};
+  *this = std::move(candidate);
+  return {};
 }
 
 auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
@@ -271,26 +366,59 @@ auto NativeFreedomFlightSession::advance_craft_tick(
 auto NativeFreedomFlightSession::advance_walk(
     const OriginWalkControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (!std::isfinite(controls.forward) || !std::isfinite(controls.right) ||
+      !std::isfinite(controls.heading_radians) ||
+      std::abs(controls.forward) > 1 || std::abs(controls.right) > 1 ||
+      std::abs(controls.heading_radians) > 1e6)
+    return std::unexpected{"Walking controls must be finite and bounded"};
+  if (boarding_ && boarding_->phase == FreedomBoardingPhase::seated)
+    return advance_craft_tick({}, step);
   if (!actor_ || !docking_)
-    return std::unexpected{"Walking requires a supported station actor"};
-  auto actor = advance_origin_walker(*actor_, controls, step);
-  if (!actor) return std::unexpected{actor.error()};
+    return std::unexpected{"Walking requires a station actor"};
   auto candidate = *this;
   auto flight = candidate.advance_craft_tick({}, step);
   if (!flight) return std::unexpected{flight.error()};
-  candidate.actor_ = *actor;
-  if (auto valid = validate_freedom_journey_document(
-          {{candidate.document_, *candidate.docking_}, *actor});
-      !valid)
-    return std::unexpected{"Walking candidate refused: " +
-                           valid.error().detail};
-  if (candidate.starting_assembly_) {
-    if (auto valid = validate_freedom_starting_assembly_document(
-            {{{candidate.document_, *candidate.docking_}, *candidate.actor_},
-             *candidate.starting_assembly_});
+  if (boarding_ && boarding_->phase != FreedomBoardingPhase::station) {
+    auto route = step_origin_gameplay_boarding(boarding_->route);
+    if (!route) return std::unexpected{route.error()};
+    candidate.boarding_->route = *route;
+    auto view = candidate.boarding_view();
+    if (!view) return std::unexpected{view.error()};
+    if (view->complete) {
+      if (route->direction == GameplayBoardingDirection::board) {
+        candidate.boarding_->phase = FreedomBoardingPhase::seated;
+        candidate.actor_.reset();
+      } else {
+        candidate.boarding_->phase = FreedomBoardingPhase::station;
+        candidate.actor_ = candidate.boarding_->station_entry;
+      }
+    } else
+      candidate.actor_ = route_actor(*candidate.boarding_, *view);
+  } else {
+    auto actor = advance_origin_walker(*actor_, controls, step);
+    if (!actor) return std::unexpected{actor.error()};
+    candidate.actor_ = *actor;
+  }
+  if (candidate.boarding_) {
+    if (auto valid =
+            validate_freedom_boarding_document(candidate.boarding_document());
         !valid)
-      return std::unexpected{"Starting assembly walking candidate refused: " +
+      return std::unexpected{"Boarding candidate refused: " +
                              valid.error().detail};
+  } else {
+    if (auto valid = validate_freedom_journey_document(
+            {{candidate.document_, *candidate.docking_}, *candidate.actor_});
+        !valid)
+      return std::unexpected{"Walking candidate refused: " +
+                             valid.error().detail};
+    if (candidate.starting_assembly_) {
+      if (auto valid = validate_freedom_starting_assembly_document(
+              {{{candidate.document_, *candidate.docking_}, *candidate.actor_},
+               *candidate.starting_assembly_});
+          !valid)
+        return std::unexpected{"Starting assembly walking candidate refused: " +
+                               valid.error().detail};
+    }
   }
   *this = std::move(candidate);
   return *flight;
@@ -304,7 +432,9 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      starting_assembly_
+      boarding_
+          ? write_freedom_boarding_file_atomically(path, boarding_document())
+      : starting_assembly_ && actor_ && docking_
           ? write_freedom_starting_assembly_file_atomically(
                 path, {{{document_, *docking_}, *actor_}, *starting_assembly_})
       : actor_ ? write_freedom_journey_file_atomically(

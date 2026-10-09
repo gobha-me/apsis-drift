@@ -1,4 +1,5 @@
 extends Control
+signal journey_mode_changed
 ## First-person station presentation. C++ resolves support, motion and shared time.
 const StationPresentation = preload("res://scripts/native/native_station_view.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
@@ -12,6 +13,7 @@ var scene: Node3D
 var viewport: SubViewport
 var telemetry: Label
 var pause_button: Button
+var board_button: Button
 var save_button: Button
 var save_dialog: FileDialog
 var save_status: Label
@@ -30,6 +32,7 @@ var pitch := 0.0
 var error := ""
 var activated := false
 var staged_model: Node3D
+var mode_change_pending := false
 
 
 static func finite_triplet(value: Variant) -> bool:
@@ -76,8 +79,8 @@ func initialize(owner: Variant, assets: String) -> bool:
 	activate()
 	return true
 
-func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D) -> bool:
-	if bridge != null or model == null or model.get_parent() != null or not model.valid_installed():
+func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, handoff := false) -> bool:
+	if bridge != null or model == null or model.get_parent() != null or not (model.valid_current_pose() if handoff else model.valid_installed()):
 		error = "Fresh view and complete detached model required"
 		return false
 	set_process(false)
@@ -92,6 +95,10 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D) -
 		error = "The walking journey has no attached D1 Wayfarer"
 		return false
 	staged_model = model
+	var boarding: Dictionary = state.get("boarding", {})
+	if not boarding.is_empty() and not model.set_pose(boarding.pose):
+		error = "The Wayfarer boarding pose is unavailable"
+		return false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var container := SubViewportContainer.new()
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -156,7 +163,7 @@ func activate() -> void:
 	set_process_input(true)
 
 func ready_to_commit() -> bool:
-	return not activated and error.is_empty() and is_instance_valid(staged_model) and staged_model.valid_installed()
+	return not activated and error.is_empty() and is_instance_valid(staged_model) and staged_model.valid_current_pose()
 
 
 func build_ui() -> void:
@@ -182,8 +189,13 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	var hint := hud_text()
 	hud_hint = hint
-	hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk through the workshop toward D1"
+	hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk toward D1 · E / A board Wayfarer"
 	column.add_child(hint)
+	board_button = Button.new()
+	board_button.text = "Board Wayfarer · E / A"
+	board_button.focus_mode = Control.FOCUS_NONE
+	board_button.pressed.connect(board_requested)
+	column.add_child(board_button)
 	pause_button = Button.new()
 	pause_button.focus_mode = Control.FOCUS_ALL
 	pause_button.text = "Resume" if paused else "Pause"
@@ -194,7 +206,7 @@ func build_ui() -> void:
 	save_button.focus_mode = Control.FOCUS_ALL
 	column.add_child(save_button)
 	save_status = hud_text()
-	save_status.text = "D1 access: hatch, ladder and seating are in development."
+	save_status.text = "Approach the D1 ladder to board."
 	column.add_child(save_status)
 	save_dialog = FileDialog.new()
 	save_dialog.title = "Save station journey"
@@ -233,7 +245,7 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [pause_button, save_button]:
+	for button in [board_button, pause_button, save_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
 	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y)
@@ -249,6 +261,7 @@ func set_paused(value: bool) -> void:
 func pause_controls(reason: String) -> void:
 	paused = true
 	controls_armed = false
+	if board_button != null: board_button.disabled = true
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
@@ -274,6 +287,7 @@ func resume_requested() -> void:
 		save_status.text = "Release WASD, both sticks and right mouse before Resume."
 		return
 	paused = false
+	board_button.disabled = not focused
 	pause_button.text = "Pause"
 	pause_button.release_focus()
 	save_button.release_focus()
@@ -327,7 +341,7 @@ static func stick(value: float) -> float:
 
 
 func input_controls(delta: float) -> PackedFloat64Array:
-	if paused or not focused or not error.is_empty() or save_dialog.visible:
+	if paused or not focused or not error.is_empty() or save_dialog.visible or boarding_transition():
 		return PackedFloat64Array([0.0, 0.0, requested_heading])
 	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
@@ -351,17 +365,64 @@ func advance_requested(delta: float, commands: PackedFloat64Array) -> bool:
 	return true
 
 
+func boarding_transition() -> bool:
+	return state.get("boarding", {}).get("state", "") in ["boarding", "disembarking"]
+
+
+func board_requested() -> void:
+	if paused or not focused or not error.is_empty() or save_dialog.visible or boarding_transition(): return
+	if not current_controls_neutral():
+		save_status.text = "Release movement and look controls to board."
+		return
+	if not bridge.begin_freedom_boarding():
+		save_status.text = str(bridge.get_last_error())
+		return
+	pitch = 0.0
+	update_view()
+
+
 func update_view() -> void:
 	state = bridge.get_freedom_walk_state()
+	if state.is_empty() and bridge.get_freedom_boarding_state().get("state") == "seated":
+		# Consume the completed C++ pose before deferred view replacement. A
+		# render frame can contain several ticks; the previous walker camera is
+		# then several ticks behind the moving station and floating origin.
+		var seated: Dictionary = bridge.get_freedom_boarding_state()
+		var flight: Dictionary = bridge.get_freedom_flight_state()
+		if not FlightView.valid_state(flight) or not finite_triplet(seated.eye_craft) or not staged_model.set_pose(seated.pose):
+			error = "C++ returned an invalid completed boarding pose"
+			set_paused(true)
+			return
+		station.transform = Transform3D(flight.station_basis, flight.station_position)
+		ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
+		camera.transform = Transform3D(flight.body_basis, flight.body_basis * Vector3(seated.eye_craft[0], seated.eye_craft[1], seated.eye_craft[2]))
+		if not mode_change_pending:
+			mode_change_pending = true
+			journey_mode_changed.emit()
+		return
 	if not valid_state(state):
 		error = "C++ returned an invalid station actor pose"
 		set_paused(true)
 		return
+	var boarding: Dictionary = state.get("boarding", {})
+	if not boarding.is_empty() and not staged_model.set_pose(boarding.pose):
+		error = "The Wayfarer boarding pose changed unexpectedly"
+		set_paused(true)
+		return
+	if boarding_transition():
+		requested_heading = state.heading_radians
+		pitch = 0.0
 	var flight: Dictionary = bridge.get_freedom_flight_state()
 	station.transform = Transform3D(state.station_basis, state.station_position)
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians) * Basis(Vector3.RIGHT, pitch), state.actor_eye_position)
-	telemetry.text = "Origin Station · Tick %s\nD1 workshop access · %.2f, %.2f, %.2f m%s" % [state.tick, state.foot_position_metres[0], state.foot_position_metres[1], state.foot_position_metres[2], "\n" + error if not error.is_empty() else ""]
+	board_button.visible = not boarding_transition()
+	board_button.disabled = paused or not focused
+	if boarding_transition():
+		var cues := {"approach": "Approaching the ladder", "ladder": "Climbing through the hatch", "cabin": "Moving into the cabin", "seat": "Taking the pilot seat", "hardware": "Securing the hatch", "complete": "Ready"}
+		telemetry.text = "%s · %d%%\n%s" % ["Boarding Wayfarer" if boarding.state == "boarding" else "Returning to the station", roundi(boarding.progress * 100.0), cues.get(boarding.phase, "Moving")]
+	else:
+		telemetry.text = "Origin Station · D1 workshop\nWalk to the Wayfarer ladder to board.%s" % ("\n" + error if not error.is_empty() else "")
 
 
 func _process(delta: float) -> void:
@@ -418,6 +479,9 @@ func _input(event: InputEvent) -> void:
 		else:
 			resume_requested()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and not paused and error.is_empty() and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+	elif pressed and not paused and (key == KEY_E or button == JOY_BUTTON_A):
+		board_requested()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and not boarding_transition() and not paused and error.is_empty() and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		requested_heading = wrapf(requested_heading - event.relative.x * 0.003, -PI, PI)
 		pitch = clampf(pitch - event.relative.y * 0.003, -1.3, 1.3)
