@@ -219,3 +219,21 @@ hardware presentation qualification remain separate parts of #245. The
 contact diagnostics; landing/liftoff, hull clearance and impact consequences
 remain separate work. These checkpoints do not activate NPC/dialogue, AG
 failure, EVA, weapons, missions or paid-economy horizons.
+
+## Landing and surface preparation checkpoint — 2026-10-09
+
+The [landed craft prototype](LANDED_CRAFT.md) now integrates actual gear,
+generated whole-pad support, bounded hull clearance, planet-fixed idle,
+Save/Continue and continuous thruster liftoff (#202/#203). The assisted Landing
+action operates only within a bounded aligned local envelope; manual Landing
+deploys gear without a pose snap. Both compiler traces and native lifecycle
+saves agree. Manual/controller play and hardware rendering remain separate
+qualification; close-ground presentation and gear/exhaust refinements are
+documented without gating further development.
+
+[Immutable ambient environment](PLANET_AMBIENT.md) supplies separately versioned
+planetary hazard envelopes for future capability and suited walking consumers.
+It preserves existing worlds and saves and introduces no weather clock, force,
+damage or raw cockpit disclosure. Suited planetary walking (#199), knowledge
+and observations (#175/#189), resource state (#133/#251), jump integration and
+standard recovery remain necessary parts of the wider Freedom loop.

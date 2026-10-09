@@ -23,6 +23,12 @@ enum class PlanetDescriptorStream : std::uint64_t {
   palette = 6,
   celestial = 7,
   rotation = 8,
+  ambient_temperature = 9,
+  ambient_radiation = 10,
+  ambient_electrical = 11,
+  ambient_turbulence = 12,
+  ambient_ground_motion = 13,
+  ambient_visibility = 14,
 };
 
 struct PlanetId {
