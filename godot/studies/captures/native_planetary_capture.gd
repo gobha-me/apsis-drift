@@ -96,6 +96,8 @@ func run() -> void:
 		check(owner.get_freedom_flight_state() == state, "Paused checkpoint advanced time")
 		if rendered:
 			if view is FlightView:
+				# Keep the real Continue pause, but uncover its frozen scene.
+				view.controls_menu.hide_menu()
 				view.cockpit = false
 				view.update_view(0.0)
 				for frame in 3000:
