@@ -34,8 +34,9 @@ action. **Leave seat** returns you to the station while attached at D1.
 The open docking well still stops ordinary unsupported walking.
 
 Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with
-animation and body-clearance refinements deferred. The composed planetary
-contact and home-return journey still need integration; First Flight is not complete.
+animation and body-clearance refinements deferred. The [planetary voyage check](docs/PLANETARY_VOYAGE_PROTOTYPE.md) covers
+atmospheric flight and return through public controls and real saves. Landing
+and the complete playable journey still need integration; First Flight is not complete.
 
 **Save As** writes the actor, craft, history and clock through C++. Continue
 starts paused; quitting does not autosave. Missing, corrupt or unsupported saves
