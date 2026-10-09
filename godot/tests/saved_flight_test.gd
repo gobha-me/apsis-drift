@@ -230,6 +230,9 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 		for frame in 3:
 			await process_frame
 		if before.frame_id == "2":
+			var nearby: bool = before.attached or before.station_position.length() < 1000.0
+			check(view.dock_status.visible == nearby and view.port_row.visible == nearby and view.approach_button.visible == nearby, "HUD presented remote collar diagnostics or hid nearby ports")
+			check(view.home_marker.mouse_filter == Control.MOUSE_FILTER_IGNORE and "Origin Station ·" in view.home_cue.text and str(before.station_id) in view.home_cue.tooltip_text, "Home cue lost readable range, owner identity or input pass-through")
 			check(view.port_buttons.size() == 2 and view.capture_button.disabled == (before.attached or not before.docking.ready) and view.release_button.disabled == not before.attached, "Responsive HUD changed real port assessment")
 			check(view.port_buttons[0].disabled == before.attached and (before.attached and "Attached to D" in view.dock_status.text or not before.attached and str(before.docking.reason) in view.dock_status.text), "Responsive HUD lost port target/refusal")
 		else:

@@ -30,7 +30,8 @@ through the hatch into the pilot seat. Release the port to use the existing
 flight controls. Withdraw with **Fall** and brake with **Rise**; clear the port
 column before forward thrust. An optional [approach aid](docs/PORT_APPROACH_AID.md)
 helps an aligned craft return using thrusters; **Capture port** remains your
-action. **Leave seat** returns you to the station while attached at D1.
+action. The cyan [HOME marker](docs/HOME_NAVIGATION.md) shows the station bearing
+and range during flight. **Leave seat** returns you to the station while attached at D1.
 The open docking well still stops ordinary unsupported walking.
 
 Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with

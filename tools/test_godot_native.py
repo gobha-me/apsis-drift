@@ -29,6 +29,7 @@ TESTS = {
     "planet_lighting": "none",
     "flight_plan_menu": "none",
     "flight_basics": "none",
+    "home_navigation": "none",
     "film": "none",
     "asset_materials": "none",
     "pilot_presentation": "none",
