@@ -36,8 +36,10 @@ The open docking well still stops ordinary unsupported walking.
 
 Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with
 animation and body-clearance refinements deferred. The [planetary voyage check](docs/PLANETARY_VOYAGE_PROTOTYPE.md) covers
-atmospheric flight and return through public controls and real saves. Landing
-and the complete playable journey still need integration; First Flight is not complete.
+station departure, atmospheric flight and return through public controls and
+real saves, including an uninterrupted native-session regression. Manual/controller
+qualification remains for First Flight; landing and the wider Freedom journey
+are separate integration work.
 
 **Save As** writes the actor, craft, history and clock through C++. Continue
 starts paused; quitting does not autosave. Missing, corrupt or unsupported saves

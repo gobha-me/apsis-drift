@@ -57,4 +57,4 @@ cmake -S . -B "$build_dir" \
   -clang-tidy-binary "$tidy" \
   -warnings-as-errors='*' \
   -quiet \
-  "^${repo_root}/((src|test)/(?!godot/).*|(src|test)/godot/(contact_(surface|patch)|saved_contact_geometry)(_test)?)[.]cpp$"
+  "^${repo_root}/((src|test)/(?!godot/).*|(src|test)/godot/((contact_(surface|patch)|saved_contact_geometry)(_test)?|freedom_planetary_fixture))[.]cpp$"

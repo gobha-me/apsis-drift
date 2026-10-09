@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <stdexcept>
 
 // An opt-in integration fixture, not a gameplay autopilot. Every movement uses
@@ -59,11 +61,83 @@ auto coordinates(V v) -> Json {
   return Json::array({v.x, v.y, v.z});
 }
 
+struct Commands {
+  std::ofstream stream;
+  std::string operation;
+  Json arguments = Json::array();
+  unsigned ticks{}, rows{};
+  std::size_t bytes{};
+  explicit Commands(const std::filesystem::path& output)
+      : stream{output / "commands.jsonl"} {}
+  auto write(std::string_view op, unsigned count, const Json& args) -> void {
+    const auto line = Json::array({op, count, args}).dump() + '\n';
+    check(line.size() <= 4096 && rows < 100000 &&
+              bytes + line.size() <= std::size_t{32} * 1024 * 1024,
+          "Command stream exceeded bounds");
+    stream << line;
+    check(static_cast<bool>(stream), "Command stream write failed");
+    ++rows;
+    bytes += line.size();
+  }
+  auto flush() -> void {
+    if (ticks != 0) write(operation, ticks, arguments);
+    ticks = 0;
+  }
+  auto step(std::string_view op, const Json& args) -> void {
+    Json encoded = Json::array();
+    constexpr std::string_view digits = "0123456789abcdef";
+    for (const auto& value : args) {
+      const auto bits = std::bit_cast<std::uint64_t>(value.get<double>());
+      std::string hex(16, '0');
+      for (std::size_t byte = 0; byte < 8; ++byte) {
+        const auto octet = (bits >> (byte * 8)) & 255;
+        hex[byte * 2] = digits[octet >> 4];
+        hex[byte * 2 + 1] = digits[octet & 15];
+      }
+      encoded.push_back(hex);
+    }
+    if (operation != op || arguments != encoded || ticks == kMaxCatchUpSteps)
+      flush();
+    operation = op;
+    arguments = std::move(encoded);
+    ++ticks;
+  }
+  auto action(std::string_view op, const Json& args = Json::array()) -> void {
+    flush();
+    write(op, 0, args);
+  }
+};
+
 struct Trace {
   NativeFreedomFlightSession session;
   std::filesystem::path output;
   TerrainTileCache cache;
   Json checkpoints = Json::array();
+  Commands* commands{};
+  auto flight(const NativeFlightControls& c)
+      -> std::expected<NativeFlightStep, std::string> {
+    auto result = session.advance(c);
+    if (result && commands)
+      commands->step(
+          "flight",
+          Json::array({c.positive_translation.x, c.positive_translation.y,
+                       c.positive_translation.z, c.negative_translation.x,
+                       c.negative_translation.y, c.negative_translation.z,
+                       c.positive_rotation.x, c.positive_rotation.y,
+                       c.positive_rotation.z, c.negative_rotation.x,
+                       c.negative_rotation.y, c.negative_rotation.z}));
+    return result;
+  }
+  auto walk(const OriginWalkControls& c) -> decltype(session.advance_walk(c)) {
+    auto result = session.advance_walk(c);
+    if (result && commands)
+      commands->step("walk",
+                     Json::array({c.forward, c.right, c.heading_radians}));
+    return result;
+  }
+  auto action(std::string_view op) -> void {
+    if (commands) commands->action(op);
+  }
 
   auto fixed_position() const -> V {
     const auto view = godot_spike::project_saved_flight(session);
@@ -80,6 +154,7 @@ struct Trace {
     return sample.elevation_metres;
   }
   auto checkpoint(std::string_view label) -> void {
+    if (commands) commands->action("checkpoint", Json::array({label}));
     const auto path = output / (std::string{label} + ".json");
     need(session.save_as(path));
     auto continued = need(NativeFreedomFlightSession::open(
@@ -129,7 +204,8 @@ struct Trace {
          {"attached", session.docking()->attached},
          {"walking", session.walker().has_value()}});
     std::cout << label << " tick=" << body.tick << " checksum=" << checksum
-              << std::endl;
+              << '\n'
+              << std::flush;
   }
 };
 
@@ -181,29 +257,37 @@ auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
   return result;
 }
 
-auto run(const std::filesystem::path& output) -> void {
+auto run(const std::filesystem::path& output, bool record_commands) -> void {
   Trace trace{need(NativeFreedomFlightSession::open(
                        need(native_new_game(Seed{42}), "New Game refused")),
                    "New session refused"),
               output,
               need(TerrainTileCache::create(), "Terrain cache refused")};
+  std::optional<Commands> commands;
+  if (record_commands) {
+    commands.emplace(output);
+    trace.commands = &*commands;
+  }
   auto& session = trace.session;
   const auto discoveries = session.document().origin.state.discoveries;
   trace.checkpoint("station-start");
   for (int i = 0; i < 2960; ++i)
-    (void)need(session.advance_walk({0, -1, 0}), "Walk refused");
+    (void)need(trace.walk({0, -1, 0}), "Walk refused");
   const auto entry = *session.walker();
   need(session.begin_boarding());
+  trace.action("board");
   for (unsigned i = 0; i < kGameplayBoardingTicks; ++i)
-    (void)need(session.advance_walk({}), "Boarding refused");
+    (void)need(trace.walk({}), "Boarding refused");
   const auto original_q = session.document().flight.orientation;
   trace.checkpoint("seated");
   need(session.set_assistance(false));
+  trace.action("assistance_off");
   need(session.release_port());
+  trace.action("release");
   NativeFlightControls withdrawal;
   withdrawal.negative_translation.y = .25;
   for (int i = 0; i < 720; ++i)
-    (void)need(session.advance(withdrawal), "Withdrawal refused");
+    (void)need(trace.flight(withdrawal), "Withdrawal refused");
   trace.checkpoint("departed");
   const auto station = generate_origin_station(Seed{42});
   const auto geometry =
@@ -221,6 +305,7 @@ auto run(const std::filesystem::path& output) -> void {
   V cruise_start{}, cruise_end{};
   double minimum_terrain_clearance = start_altitude;
   SimulationTick approach_tick{};
+  NativeFlightControls held;
   for (int tick = 0; tick < 120 * 6000; ++tick) {
     // Value copy stays valid when a checkpoint reloads the identical session.
     const auto body = session.document().flight;
@@ -359,11 +444,13 @@ auto run(const std::filesystem::path& output) -> void {
       approach_tick = body.tick;
       trace.checkpoint("near-port");
       need(session.begin_port_approach());
+      trace.action("approach");
       for (int i = 0; i < 7200; ++i) {
-        (void)need(session.advance({}), "Approach refused");
+        (void)need(trace.flight({}), "Approach refused");
         if (need(session.assess_port(), "Assessment refused").decision ==
             OriginDockDecision::capture_ready) {
           need(session.capture_port());
+          trace.action("capture");
           captured = true;
           break;
         }
@@ -371,19 +458,21 @@ auto run(const std::filesystem::path& output) -> void {
       check(captured, "Thruster approach did not reach capture");
       break;
     }
-    (void)need(session.advance(controls(body, frame, observed.atmosphere,
-                                        acceleration, {right, up, back})),
-               "Flight step refused");
+    if (!record_commands || tick % kMaxCatchUpSteps == 0)
+      held = controls(body, frame, observed.atmosphere, acceleration,
+                      {right, up, back});
+    (void)need(trace.flight(held), "Flight step refused");
   }
   check(captured, "Planetary trace exceeded 6000 game seconds");
   trace.checkpoint("captured");
   need(session.begin_disembarking());
+  trace.action("unboard");
   for (unsigned i = 0; i < kGameplayBoardingTicks; ++i)
-    (void)need(session.advance_walk({}), "Disembarking refused");
+    (void)need(trace.walk({}), "Disembarking refused");
   check(session.walker()->foot_position_metres == entry.foot_position_metres,
         "Return did not restore actual station entry");
   for (int i = 0; i < 120; ++i)
-    (void)need(session.advance_walk({0, .25, 0}), "Returned walking refused");
+    (void)need(trace.walk({0, .25, 0}), "Returned walking refused");
   check(session.walker()->foot_position_metres != entry.foot_position_metres &&
             session.document().origin.state.discoveries == discoveries,
         "Returned movement failed or fabricated discoveries");
@@ -394,22 +483,29 @@ auto run(const std::filesystem::path& output) -> void {
       radius * std::atan2(length(cross(cruise_start, cruise_end)),
                           dot(cruise_start, cruise_end));
   check(cruise_distance > 5000, "Cruise did not cross five surface kilometres");
-  const Json report{
-      {"schema_version", 1},
-      {"seed", "42"},
-      {"scope", "Public-command planetary voyage with exact phase Save "
-                "As/Continue; test pilot only, no pose writes, landing, "
-                "continuous collision or native/manual acceptance"},
-      {"physical_catalog", session.system().generator_version},
-      {"physical_ephemeris", session.system().ephemeris_version},
-      {"terrain_source_lod", 8},
-      {"terrain_relief_version", 0},
-      {"minimum_sampled_clearance_metres", minimum_terrain_clearance},
-      {"cruise_surface_distance_metres", cruise_distance},
-      {"approach_tick", std::to_string(approach_tick)},
-      {"final_tick", std::to_string(session.document().flight.tick)},
-      {"compiler", __VERSION__},
-      {"checkpoints", trace.checkpoints}};
+  if (commands) commands->flush();
+  Json report{{"schema_version", 1},
+              {"seed", "42"},
+              {"scope",
+               "Public-command planetary voyage with exact phase Save "
+               "As/Continue; test pilot only, no pose writes, landing, "
+               "continuous collision or native/manual acceptance"},
+              {"physical_catalog", session.system().generator_version},
+              {"physical_ephemeris", session.system().ephemeris_version},
+              {"terrain_source_lod", 8},
+              {"terrain_relief_version", 0},
+              {"minimum_sampled_clearance_metres", minimum_terrain_clearance},
+              {"cruise_surface_distance_metres", cruise_distance},
+              {"approach_tick", std::to_string(approach_tick)},
+              {"final_tick", std::to_string(session.document().flight.tick)},
+              {"compiler", __VERSION__},
+              {"checkpoints", trace.checkpoints}};
+  if (commands)
+    report["command_stream"] = {{"file", "commands.jsonl"},
+                                {"rows", commands->rows},
+                                {"bytes", commands->bytes},
+                                {"cadence_ticks", kMaxCatchUpSteps},
+                                {"float_encoding", "ieee754-le-hex"}};
   std::ofstream stream{output / "trace.json"};
   stream << report.dump(2) << '\n';
   check(static_cast<bool>(stream), "Trace report write failed");
@@ -420,16 +516,17 @@ auto run(const std::filesystem::path& output) -> void {
 } // namespace
 int main(int argc, char** argv) {
   try {
-    if (argc != 2)
-      throw std::invalid_argument(
-          "Expected one absolute empty output directory");
+    if ((argc != 2 && argc != 3) ||
+        (argc == 3 && std::string_view{argv[2]} != "--commands"))
+      throw std::invalid_argument("Expected one absolute empty output "
+                                  "directory and optional --commands");
     const std::filesystem::path output{argv[1]};
     if (!output.is_absolute() || output.native().size() > 4000 ||
         !std::filesystem::is_directory(output) ||
         !std::filesystem::is_empty(output))
       throw std::invalid_argument(
           "Expected one bounded absolute empty output directory");
-    run(output);
+    run(output, argc == 3);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
