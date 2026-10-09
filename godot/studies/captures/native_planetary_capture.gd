@@ -26,7 +26,7 @@ static func decimal(value: Variant) -> bool:
 	return true
 
 static func valid_trace(value: Variant) -> bool:
-	if not value is Dictionary or value.get("schema_version") != 1 or value.get("seed") != "42" or value.get("physical_catalog") != 2 or value.get("physical_ephemeris") != 2: return false
+	if not value is Dictionary or value.get("schema_version") != 1 or value.get("seed") != "42" or value.get("physical_catalog") != 2 or value.get("physical_ephemeris") != 2 or value.get("terrain_source_lod") != 8 or value.get("terrain_relief_version") != 0: return false
 	var rows: Variant = value.get("checkpoints")
 	if not rows is Array or rows.size() != LABELS.size(): return false
 	for i in rows.size():
@@ -62,12 +62,13 @@ func run() -> void:
 	source.close()
 	if not check(valid_trace(trace), "Malformed planetary checkpoint manifest"): quit(1); return
 	# Shape/nonfinite/path refusal precedes model construction and visual review.
-	for damage in ["shape", "nonfinite", "path", "version"]:
+	for damage in ["shape", "nonfinite", "path", "version", "terrain_recipe"]:
 		var bad: Dictionary = trace.duplicate(true)
 		if damage == "shape": bad.checkpoints[0].position_metres.append(0.0)
 		elif damage == "nonfinite": bad.checkpoints[0].altitude_metres = NAN
 		elif damage == "path": bad.checkpoints[0].file = "../unrelated.json"
-		else: bad.physical_ephemeris = 3
+		elif damage == "version": bad.physical_ephemeris = 3
+		else: bad.terrain_relief_version = 1
 		check(not valid_trace(bad), "Invalid checkpoint accepted: " + damage)
 	if failed: quit(1); return
 	if not ClassDB.class_exists("FreedomBridge"): GDExtensionManager.load_extension("res://bin/freedom.gdextension")

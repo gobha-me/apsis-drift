@@ -59,8 +59,8 @@ the planet. Final closure uses the existing bounded approach aid and explicit
 capture.
 
 The surface cruise covers about 5.97 kilometres. Terrain heights are recorded at checkpoints, and clearance is checked every
-60 game seconds with source LOD8 and relief version1. Minimum checked
-clearance is about 24.4 kilometres. This high-altitude check does not
+60 game seconds with source LOD8 and relief version0, matching saved native terrain rather
+than experimental relief. Minimum checked clearance is recorded in the trace. This high-altitude check does not
 certify continuous terrain collision or low-level landing clearance. C++ owns
 both those terrain samples and Godot's streamed world. Existing boarding and
 exhaust presentation refinements remain documented in

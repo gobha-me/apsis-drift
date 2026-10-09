@@ -77,7 +77,7 @@ struct Trace {
     const PlanetFixedPositionMetres p{fixed.x, fixed.y, fixed.z};
     const auto sample = need(sample_planet_surface(view.planet, p, 8, cache),
                              "Terrain sample refused");
-    return godot_spike::with_relief(sample, view.planet, p, 1).elevation_metres;
+    return sample.elevation_metres;
   }
   auto checkpoint(std::string_view label) -> void {
     const auto path = output / (std::string{label} + ".json");
@@ -403,7 +403,7 @@ auto run(const std::filesystem::path& output) -> void {
       {"physical_catalog", session.system().generator_version},
       {"physical_ephemeris", session.system().ephemeris_version},
       {"terrain_source_lod", 8},
-      {"terrain_relief_version", 1},
+      {"terrain_relief_version", 0},
       {"minimum_sampled_clearance_metres", minimum_terrain_clearance},
       {"cruise_surface_distance_metres", cruise_distance},
       {"approach_tick", std::to_string(approach_tick)},
