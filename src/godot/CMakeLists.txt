@@ -63,7 +63,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   endif ()
   find_package(Threads REQUIRED)
   add_executable(apsis-drift-contact-surface-tests
-    contact_surface.cpp "${PROJECT_SOURCE_DIR}/test/godot/contact_surface_test.cpp")
+    "${PROJECT_SOURCE_DIR}/test/godot/contact_surface_test.cpp")
   target_link_libraries(apsis-drift-contact-surface-tests PRIVATE
     apsis-drift::core nlohmann_json::nlohmann_json Threads::Threads)
   target_compile_options(apsis-drift-contact-surface-tests PRIVATE
@@ -71,7 +71,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME godot-contact-surface-contract COMMAND apsis-drift-contact-surface-tests)
   set_tests_properties(godot-contact-surface-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-contact-patch-tests
-    contact_surface.cpp contact_patch.cpp "${PROJECT_SOURCE_DIR}/test/godot/contact_patch_test.cpp")
+    "${PROJECT_SOURCE_DIR}/test/godot/contact_patch_test.cpp")
   target_link_libraries(apsis-drift-contact-patch-tests PRIVATE
     apsis-drift::core nlohmann_json::nlohmann_json Threads::Threads)
   target_compile_options(apsis-drift-contact-patch-tests PRIVATE
@@ -79,7 +79,6 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   add_test(NAME godot-contact-patch-contract COMMAND apsis-drift-contact-patch-tests)
   set_tests_properties(godot-contact-patch-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-saved-contact-geometry-tests
-    contact_surface.cpp contact_patch.cpp saved_contact_geometry.cpp
     "${PROJECT_SOURCE_DIR}/test/godot/saved_contact_geometry_test.cpp")
   target_include_directories(apsis-drift-saved-contact-geometry-tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}")

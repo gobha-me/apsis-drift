@@ -52,3 +52,8 @@ nonzero-tick frame oracle, origin/procedural separation, full rectangle extrema,
 retained indexed refusals, authored pad dimensions, cache independence, session
 lifetime and unchanged saved document bytes. Existing contact surface and patch
 contracts continue to check the legacy APIs and their golden outputs.
+
+The application-owned [terrain touchdown provider](TERRAIN_TOUCHDOWN.md) adds
+an explicit support policy, whole-segment radial-cone qualification and material
+semantics before composing these primitives with the pad envelope. Geometry
+alone retains the experimental refusal and non-support contract above.
