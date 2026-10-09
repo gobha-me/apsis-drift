@@ -41,12 +41,12 @@ auto main() -> int {
     check(created->mode == NativeStartup::Mode::freedom,
           "New Game did not select Freedom mode");
     check(
-        std::holds_alternative<FreedomResourceSaveDocument>(created->document),
+        std::holds_alternative<FreedomKnowledgeSaveDocument>(created->document),
         "New Game selected a career document");
     const auto journey =
         std::get<FreedomStartingAssemblySaveDocument>(
-            std::get<FreedomResourceSaveDocument>(created->document)
-                .voyage.base)
+            std::get<FreedomKnowledgeSaveDocument>(created->document)
+                .voyage.voyage.base)
             .journey;
     const auto freedom = journey.voyage.flight.origin;
     check(freedom == make_freedom_new_game_document(seed),

@@ -94,12 +94,13 @@ auto run() -> void {
   require_ok(session.save_as(mid));
   const auto original_mid = text(mid);
   const auto saved = required(load_native_save_file(mid));
-  check(std::holds_alternative<FreedomResourceSaveDocument>(saved) &&
-            std::holds_alternative<FreedomBoardingSaveDocument>(
-                std::get<FreedomResourceSaveDocument>(saved).voyage.base),
-        "genuine board action retains24 with nested22");
+  check(
+      std::holds_alternative<FreedomKnowledgeSaveDocument>(saved) &&
+          std::holds_alternative<FreedomBoardingSaveDocument>(
+              std::get<FreedomKnowledgeSaveDocument>(saved).voyage.voyage.base),
+      "genuine board action retains25 with nested22");
   auto document = std::get<FreedomBoardingSaveDocument>(
-      std::get<FreedomResourceSaveDocument>(saved).voyage.base);
+      std::get<FreedomKnowledgeSaveDocument>(saved).voyage.voyage.base);
   const auto encoded =
       required(encode_freedom_boarding_document_json(document));
   check(required(decode_freedom_boarding_document_json(encoded)) == document,

@@ -55,6 +55,12 @@ class NativeFreedomFlightSession {
       -> const std::optional<FreedomResources>& {
     return resources_;
   }
+  [[nodiscard]] auto knowledge() const
+      -> const std::optional<FreedomKnowledge>& {
+    return knowledge_;
+  }
+  [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;
@@ -157,6 +163,7 @@ class NativeFreedomFlightSession {
                              std::optional<std::filesystem::path> source);
   FreedomFlightSaveDocument document_;
   std::optional<FreedomResources> resources_;
+  std::optional<FreedomKnowledge> knowledge_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;

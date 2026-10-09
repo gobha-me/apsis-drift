@@ -374,6 +374,12 @@ auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError> {
   auto contents = read_save_bytes(path);
   if (!contents) return std::unexpected{contents.error()};
+  auto knowledge = decode_freedom_knowledge_document_json(*contents);
+  if (knowledge) return NativeSaveDocument{std::move(*knowledge)};
+  if (knowledge.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "save file is malformed or incompatible", knowledge.error()}};
   auto resource = decode_freedom_resource_document_json(*contents);
   if (resource) return NativeSaveDocument{std::move(*resource)};
   if (resource.error().code != SaveSchemaErrorCode::unsupported_format_version)
@@ -575,6 +581,22 @@ auto write_freedom_resource_file_atomically(
     return std::unexpected{
         SaveFileError{SaveFileErrorCode::invalid_document, path,
                       "resource state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
+}
+
+auto write_freedom_knowledge_file_atomically(
+    const std::filesystem::path& path, const FreedomKnowledgeSaveDocument& d)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_freedom_knowledge_document_json(d);
+  if (!encoded)
+    return std::unexpected{
+        SaveFileError{SaveFileErrorCode::invalid_document, path,
+                      "knowledge state cannot be encoded", encoded.error()}};
   return write_atomically(path, *encoded,
                           detail::AtomicSaveTestInterruption::none);
 }

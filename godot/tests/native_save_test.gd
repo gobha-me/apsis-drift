@@ -114,6 +114,7 @@ func run() -> void:
 	var extreme: Dictionary = bridge.get_freedom_walk_state()
 	check(bridge.save_freedom_as(destination) and commit_fixture_continue(reloaded, destination), "Maximum-seed native save refused")
 	check(reloaded.get_freedom_flight_state().resources == bridge.get_freedom_flight_state().resources and bridge.get_freedom_flight_state().resources.selected, "Extreme-seed resource save lost exact owner/quantities")
+	check(reloaded.get_freedom_flight_state().chart == bridge.get_freedom_flight_state().chart and bridge.get_freedom_flight_state().chart.selected and bridge.get_freedom_flight_state().chart.rows.size() == 2, "Extreme-seed knowledge save lost the bounded starting chart")
 	extreme.continued = true
 	check(not extreme.is_empty() and reloaded.get_freedom_walk_state() == extreme, "Maximum-seed actor save lost identity precision")
 	for i in 4:
