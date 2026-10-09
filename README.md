@@ -38,8 +38,9 @@ Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with
 animation and body-clearance refinements deferred. The [planetary voyage check](docs/PLANETARY_VOYAGE_PROTOTYPE.md) covers
 station departure, atmospheric flight and return through public controls and
 real saves, including an uninterrupted native-session regression. Manual/controller
-qualification remains for First Flight; landing and the wider Freedom journey
-are separate integration work.
+qualification remains for First Flight. The [landed craft prototype](docs/LANDED_CRAFT.md)
+adds deployed gear, certified touchdown, saved surface idle and thruster liftoff;
+the wider Freedom journey remains separate work.
 
 **Save As** writes the actor, craft, history and clock through C++. Continue
 starts paused; quitting does not autosave. Missing, corrupt or unsupported saves

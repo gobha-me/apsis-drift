@@ -54,6 +54,13 @@ class TerrainTouchdownSnapshot {
       std::size_t cache_capacity = kDefaultTerrainTileCacheCapacity)
       -> std::expected<TerrainTouchdownSnapshot,
                        godot_spike::SavedContactError>;
+  [[nodiscard]] static auto create(
+      const PhysicalLocalSystem&, const PhysicalPlanetRotationRecipe&,
+      const RigidBodyState&, bool gear_deployed,
+      std::uint32_t policy_version = kTerrainTouchdownPolicyVersion,
+      std::size_t cache_capacity = kDefaultTerrainTileCacheCapacity)
+      -> std::expected<TerrainTouchdownSnapshot,
+                       godot_spike::SavedContactError>;
   [[nodiscard]] auto query() -> TerrainTouchdownResult;
   [[nodiscard]] auto cache_size() const -> std::size_t {
     return geometry_.cache_size();

@@ -443,6 +443,10 @@ add_library(apsis_drift_core STATIC
   src/vacuum_dynamics.cpp
   src/touchdown.cpp
   src/terrain_touchdown.cpp
+  src/terrain_hull_clearance.cpp
+  src/landed_craft.cpp
+  src/native_surface_maneuver.cpp
+  src/freedom_surface_save.cpp
   src/godot/contact_surface.cpp
   src/godot/contact_patch.cpp
   src/godot/saved_contact_geometry.cpp
@@ -491,7 +495,7 @@ target_link_libraries(apsis_drift_core PRIVATE nlohmann_json::nlohmann_json)
 
 # Native state v1 specifies rounded binary64 products/sums, not fused multiply
 # adds. Keep this local: legacy replay math has its own compatibility contract.
-set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/terrain_touchdown.cpp src/godot/contact_surface.cpp src/godot/contact_patch.cpp src/godot/saved_contact_geometry.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_source_endpoint_surface_checkpoint.cpp src/origin_boarding_lower_foot_transfer.cpp src/origin_boarding_lower_foot_transfer_surface_sweep.cpp src/origin_boarding_planted_legs.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
+set_property(SOURCE src/rigid_body.cpp src/rigid_frame_handoff.cpp src/planet_rotation.cpp src/physical_local_system.cpp src/vacuum_dynamics.cpp src/touchdown.cpp src/terrain_touchdown.cpp src/terrain_hull_clearance.cpp src/landed_craft.cpp src/native_surface_maneuver.cpp src/godot/contact_surface.cpp src/godot/contact_patch.cpp src/godot/saved_contact_geometry.cpp src/origin_walker.cpp src/operating_motion.cpp src/origin_boarding_support.cpp src/origin_cabin_seam.cpp src/origin_lower_cockpit_contact.cpp src/origin_cabin_corridor.cpp src/origin_boarding_body.cpp src/origin_boarding_boot_support.cpp src/origin_boarding_world_checkpoint.cpp src/origin_boarding_source_endpoint_surface_checkpoint.cpp src/origin_boarding_lower_foot_transfer.cpp src/origin_boarding_lower_foot_transfer_surface_sweep.cpp src/origin_boarding_planted_legs.cpp src/origin_boarding_self_model02.cpp src/origin_boarding_self_model03.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
 set_property(SOURCE src/origin_boarding_route_body.cpp src/origin_boarding_route_foot_phase.cpp src/origin_boarding_route_intermediate_step.cpp src/origin_boarding_route_intermediate_step02.cpp src/origin_boarding_intermediate_pause_support.cpp src/origin_boarding_intermediate_pause_envelope.cpp src/origin_boarding_intermediate_pause_support02.cpp src/origin_boarding_route_intermediate_load01.cpp src/origin_boarding_route_intermediate_unloaded01.cpp src/origin_boarding_route_intermediate_support01.cpp src/origin_boarding_route_intermediate_support_self01.cpp src/origin_boarding_route_intermediate_hip_diagnostic01.cpp src/origin_boarding_initial_material.cpp src/origin_boarding_checkpoint_material_extension.cpp src/origin_boarding_hatch_seal_material.cpp src/origin_boarding_separation_ring_material.cpp src/origin_boarding_route_port_unload.cpp src/origin_boarding_route_checkpoint_unload.cpp src/origin_boarding_route_checkpoint_unload_self02.cpp src/origin_boarding_route_checkpoint_world_material.cpp APPEND PROPERTY COMPILE_OPTIONS
   $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>)
@@ -1450,6 +1454,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME atmospheric-flight-contract COMMAND apsis-drift-atmospheric-flight-tests)
   set_tests_properties(atmospheric-flight-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-landed-craft-tests test/landed_craft_test.cpp)
+  target_include_directories(apsis-drift-landed-craft-tests PRIVATE src/godot)
+  target_link_libraries(apsis-drift-landed-craft-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-landed-craft-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME landed-craft-contract COMMAND apsis-drift-landed-craft-tests)
+  set_tests_properties(landed-craft-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-terrain-touchdown-tests test/terrain_touchdown_test.cpp)
   target_include_directories(apsis-drift-terrain-touchdown-tests PRIVATE src src/godot)
   target_link_libraries(apsis-drift-terrain-touchdown-tests PRIVATE apsis-drift::core)

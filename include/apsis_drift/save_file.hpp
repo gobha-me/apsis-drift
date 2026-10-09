@@ -12,6 +12,7 @@
 #include "apsis_drift/freedom_journey_save.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
+#include "apsis_drift/freedom_surface_save.hpp"
 #include "apsis_drift/save_schema.hpp"
 
 namespace apsis_drift {
@@ -53,7 +54,7 @@ using NativeSaveDocument =
     std::variant<FreedomSaveDocument, SaveDocument, FreedomFlightSaveDocument,
                  FreedomDockingSaveDocument, FreedomJourneySaveDocument,
                  FreedomStartingAssemblySaveDocument,
-                 FreedomBoardingSaveDocument>;
+                 FreedomBoardingSaveDocument, FreedomSurfaceSaveDocument>;
 
 [[nodiscard]] auto make_new_game_document(
     Seed universe_seed,
@@ -96,5 +97,8 @@ using NativeSaveDocument =
     -> std::expected<void, SaveFileError>;
 [[nodiscard]] auto write_freedom_boarding_file_atomically(
     const std::filesystem::path&, const FreedomBoardingSaveDocument&)
+    -> std::expected<void, SaveFileError>;
+[[nodiscard]] auto write_freedom_surface_file_atomically(
+    const std::filesystem::path&, const FreedomSurfaceSaveDocument&)
     -> std::expected<void, SaveFileError>;
 } // namespace apsis_drift

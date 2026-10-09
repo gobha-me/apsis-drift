@@ -28,6 +28,18 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   std::optional<NativeStartingAssemblySelection> assembly;
   std::optional<FreedomBoardingState> boarding;
   std::optional<OriginWalkerState> actor;
+  std::optional<FreedomSurfaceState> surface;
+  if (auto* d = std::get_if<FreedomSurfaceSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Surface state requires Freedom"};
+    if (auto valid = validate_freedom_surface_document(*d); !valid)
+      return std::unexpected{valid.error().detail};
+    surface = d->surface;
+    auto base = std::move(d->base);
+    selected.document = std::visit(
+        [](auto& value) -> NativeSaveDocument { return std::move(value); },
+        base);
+  }
   if (auto* d = std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
       return std::unexpected{"Boarding requires Freedom"};
@@ -95,6 +107,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     result.craft_binding_ = std::move(*binding);
   }
   result.boarding_ = boarding;
+  result.surface_ = surface;
   if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
                    boarding->phase == FreedomBoardingPhase::disembarking)) {
     auto view = result.boarding_view();
@@ -202,6 +215,8 @@ auto NativeFreedomFlightSession::capture_port()
     -> std::expected<void, std::string> {
   if (actor_)
     return std::unexpected{"Board and sit before controlling the craft"};
+  if (surface_ && (surface_->gear_deployed || surface_->landed))
+    return std::unexpected{"Stow landing gear before station capture"};
   if (!docking_ || docking_->attached)
     return std::unexpected{"Select a free Origin port before capture"};
   const auto assessed = assess_port();
@@ -269,6 +284,12 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     -> std::expected<void, std::string> {
   if (actor_)
     return std::unexpected{"Board and sit before controlling the craft"};
+  if (surface_ && surface_->landed && request.target)
+    return std::unexpected{"Lift off before requesting orbit hold"};
+  if (request.target &&
+      surface_maneuver_.kind != NativeSurfaceManeuverKind::off)
+    return std::unexpected{
+        "Cancel surface maneuver before requesting orbit hold"};
   const auto observed = observe();
   if (!observed) return std::unexpected{observed.error()};
   if (!validate_orbit_hold_request(
@@ -288,6 +309,9 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
+  if (surface_ && (surface_->gear_deployed || surface_->landed ||
+                   surface_maneuver_.kind != NativeSurfaceManeuverKind::off))
+    return advance_surface(controls, step);
   if (!port_approach_.active) return advance_craft_tick(controls, step);
   // Validate the actual player input before an aid can replace neutral input.
   // Invalid input/steps must retain both the body and this transient command.
@@ -350,6 +374,27 @@ auto NativeFreedomFlightSession::advance_craft_tick(
       document_.model.central);
   if (!air)
     return std::unexpected{"Flight input or atmospheric observation refused"};
+  if (surface_ && surface_->landed) {
+    if (controls.positive_translation != RigidVector3{} ||
+        controls.negative_translation != RigidVector3{} ||
+        controls.positive_rotation != RigidVector3{} ||
+        controls.negative_rotation != RigidVector3{})
+      return std::unexpected{"Select Liftoff before firing propulsion"};
+    const auto pose = resolve_landed_craft(
+        system_, rotation_, *surface_->landed, document_.flight.tick + 1);
+    if (!pose) return std::unexpected{"Landed clock advance refused"};
+    auto candidate = *this;
+    candidate.document_.flight = *pose;
+    candidate.document_.origin.state.tick = pose->tick;
+    const auto observed = candidate.observe();
+    if (!observed) return std::unexpected{observed.error()};
+    NativeFlightStep result{};
+    result.actuation.initial = *air;
+    result.actuation.after = observed->atmosphere;
+    result.actuation.observation_after = observed->orbit;
+    document_ = std::move(candidate.document_);
+    return result;
+  }
   if (docking_ && docking_->attached) {
     if (controls.positive_translation != RigidVector3{} ||
         controls.negative_translation != RigidVector3{} ||
@@ -477,7 +522,8 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      boarding_
+      surface_ ? write_freedom_surface_file_atomically(path, surface_document())
+      : boarding_
           ? write_freedom_boarding_file_atomically(path, boarding_document())
       : starting_assembly_ && actor_ && docking_
           ? write_freedom_starting_assembly_file_atomically(
@@ -489,6 +535,84 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
           : write_freedom_flight_file_atomically(path, document_);
   if (!written)
     return std::unexpected{save_file_error_message(written.error())};
+  return {};
+}
+
+auto NativeFreedomFlightSession::surface_document() const
+    -> FreedomSurfaceSaveDocument {
+  FreedomSurfaceBaseSave base = document_;
+  if (boarding_)
+    base = boarding_document();
+  else if (starting_assembly_ && actor_ && docking_)
+    base = FreedomStartingAssemblySaveDocument{
+        {{document_, *docking_}, *actor_}, *starting_assembly_};
+  else if (actor_ && docking_)
+    base = FreedomJourneySaveDocument{{document_, *docking_}, *actor_};
+  else if (docking_)
+    base = FreedomDockingSaveDocument{document_, *docking_};
+  return {std::move(base), surface_.value_or(FreedomSurfaceState{})};
+}
+auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
+    -> std::expected<void, std::string> {
+  if (actor_ || (docking_ && docking_->attached))
+    return std::unexpected{
+        "Release the station port and sit before changing gear"};
+  if (surface_ && surface_->landed && !deployed)
+    return std::unexpected{"Lift off before stowing landing gear"};
+  if (!surface_) surface_ = FreedomSurfaceState{};
+  surface_->gear_deployed = deployed;
+  if (deployed) cancel_port_approach();
+  if (!deployed) cancel_surface_maneuver();
+  return {};
+}
+auto NativeFreedomFlightSession::commit_touchdown(
+    std::uint64_t expected_source_checksum)
+    -> std::expected<void, std::string> {
+  if (actor_ || (docking_ && docking_->attached) || !surface_ ||
+      !surface_->gear_deployed || surface_->landed)
+    return std::unexpected{
+        "Touchdown requires deployed gear and a free airborne craft"};
+  const auto anchor =
+      prepare_landed_craft(system_, rotation_, document_.flight,
+                           surface_->gear_deployed, expected_source_checksum);
+  if (!anchor)
+    return std::unexpected{
+        "Touchdown refused by terrain, hull or motion checks"};
+  const auto pose =
+      resolve_landed_craft(system_, rotation_, *anchor, document_.flight.tick);
+  if (!pose) return std::unexpected{"Touchdown pose refused"};
+  auto candidate = *this;
+  candidate.document_.flight = *pose;
+  candidate.surface_->landed = *anchor;
+  candidate.document_.model.hold = {};
+  candidate.cancel_port_approach();
+  candidate.cancel_surface_maneuver();
+  candidate.surface_maneuver_.note = "Landed on certified dry terrain";
+  if (auto valid =
+          validate_freedom_surface_document(candidate.surface_document());
+      !valid)
+    return std::unexpected{valid.error().detail};
+  *this = std::move(candidate);
+  return {};
+}
+auto NativeFreedomFlightSession::release_surface()
+    -> std::expected<void, std::string> {
+  if (!surface_ || !surface_->landed || actor_ ||
+      (docking_ && docking_->attached))
+    return std::unexpected{"Liftoff requires a landed craft"};
+  const auto pose = release_landed_craft(system_, rotation_, *surface_->landed,
+                                         document_.flight.tick);
+  if (!pose)
+    return std::unexpected{"Liftoff terrain or thrust authority refused"};
+  auto candidate = *this;
+  candidate.document_.flight = *pose;
+  candidate.surface_->landed.reset();
+  candidate.surface_maneuver_ = {
+      NativeSurfaceManeuverKind::liftoff, 1200,
+      "Lifting with thrusters; manual input cancels"};
+  if (auto controls = candidate.surface_maneuver_controls(); !controls)
+    return std::unexpected{controls.error()};
+  *this = std::move(candidate);
   return {};
 }
 } // namespace apsis_drift

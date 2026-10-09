@@ -89,7 +89,7 @@ func _ready() -> void:
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
 		left.add_child(saved_assist_button)
 		if saved_wayfarer:
-			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Approach port with thrusters", "begin_freedom_port_approach", 0], ["Cancel approach aid", "cancel_freedom_port_approach", 0], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0]]:
+			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Approach port with thrusters", "begin_freedom_port_approach", 0], ["Cancel approach aid", "cancel_freedom_port_approach", 0], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0], ["Land / deploy gear", "request_freedom_landing", 0], ["Stow landing gear", "stow_freedom_landing_gear", 0], ["Liftoff with thrusters", "liftoff_freedom_surface", 0], ["Cancel surface aid", "cancel_freedom_surface_maneuver", 0]]:
 				var button := add_button(left, item[0], func(): port_requested.emit(item[1], item[2]))
 				saved_port_buttons[item[0]] = button
 	if saved_flight or controls.thrust_mode:
@@ -255,7 +255,18 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 	for name in saved_port_buttons:
 		var button: Button = saved_port_buttons[name]
 		button.disabled = failed
-		if name.begins_with("Target"):
+		var surface: Dictionary = state.get("surface", {})
+		var landed: bool = surface.get("landed", false)
+		if name == "Land / deploy gear":
+			button.text = "Land with thrusters" if state.get("assistance", false) else "Deploy gear · manual landing"
+			button.disabled = failed or attached or landed
+		elif name == "Stow landing gear":
+			button.disabled = failed or attached or landed or not surface.get("gear_deployed", false)
+		elif name == "Liftoff with thrusters":
+			button.disabled = failed or not landed
+		elif name == "Cancel surface aid":
+			button.disabled = failed or surface.get("maneuver", "off") == "off"
+		elif name.begins_with("Target"):
 			button.disabled = failed or attached
 			button.tooltip_text = "Release the attached port before selecting another." if attached else "Select the port to approach."
 		elif name == "Release attached port":
@@ -269,7 +280,7 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 			button.disabled = failed or not state.get("port_approach", {}).get("active", false)
 			button.tooltip_text = "Cancel thruster approach."
 		else:
-			button.disabled = failed or attached or not assessment.get("ready", false)
+			button.disabled = failed or attached or surface.get("gear_deployed", false) or not assessment.get("ready", false)
 			button.tooltip_text = "Already attached." if attached else str(assessment.get("reason", "Select a port for approach."))
 
 func refresh_bindings() -> void:

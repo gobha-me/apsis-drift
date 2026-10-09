@@ -135,10 +135,20 @@ auto TerrainTouchdownSnapshot::create(const NativeFreedomFlightSession& session,
                                       std::uint32_t policy_version,
                                       std::size_t cache_capacity)
     -> std::expected<TerrainTouchdownSnapshot, godot_spike::SavedContactError> {
+  return create(session.system(), session.rotation(), session.document().flight,
+                gear_deployed, policy_version, cache_capacity);
+}
+auto TerrainTouchdownSnapshot::create(
+    const PhysicalLocalSystem& owner,
+    const PhysicalPlanetRotationRecipe& rotation, const RigidBodyState& source,
+    bool gear_deployed, std::uint32_t policy_version,
+    std::size_t cache_capacity)
+    -> std::expected<TerrainTouchdownSnapshot, godot_spike::SavedContactError> {
   if (policy_version != kTerrainTouchdownPolicyVersion)
     return std::unexpected{godot_spike::SavedContactError::unsupported_recipe};
   auto geometry = godot_spike::SavedContactGeometry::create(
-      session, godot_spike::kExperimentalSavedContactSurface, cache_capacity);
+      owner, rotation, source, godot_spike::kExperimentalSavedContactSurface,
+      cache_capacity);
   if (!geometry) return std::unexpected{geometry.error()};
   return TerrainTouchdownSnapshot{std::move(*geometry), gear_deployed};
 }

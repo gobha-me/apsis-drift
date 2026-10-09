@@ -59,6 +59,15 @@ class SavedContactGeometry {
       ContactSurfaceRecipe = kExperimentalSavedContactSurface,
       std::size_t cache_capacity = kDefaultTerrainTileCacheCapacity)
       -> std::expected<SavedContactGeometry, SavedContactError>;
+  // The same validated C++ owner/state seam also serves save validation without
+  // recursively opening a live session. It never infers a physical owner from
+  // bare numeric IDs or accepts an unvalidated caller-built descriptor.
+  [[nodiscard]] static auto create(
+      const PhysicalLocalSystem&, const PhysicalPlanetRotationRecipe&,
+      const RigidBodyState&,
+      ContactSurfaceRecipe = kExperimentalSavedContactSurface,
+      std::size_t cache_capacity = kDefaultTerrainTileCacheCapacity)
+      -> std::expected<SavedContactGeometry, SavedContactError>;
   [[nodiscard]] auto query() -> SavedContactGeometryBatch;
   [[nodiscard]] auto provenance() const -> const SavedContactProvenance& {
     return provenance_;
