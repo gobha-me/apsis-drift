@@ -117,7 +117,7 @@ func run() -> void:
 			var navigation := {}
 			if view is FlightView:
 				var cue: Dictionary = view.home_marker.cue
-				navigation = {"text": view.home_cue.text, "port_diagnostics_visible": view.dock_status.visible, "marker_visible": not cue.is_empty()}
+				navigation = {"text": view.home_cue.text, "port_diagnostics_visible": view.dock_status.visible, "marker_visible": not cue.is_empty(), "logical_view_size": [view.home_marker.size.x, view.home_marker.size.y], "render_scale": view.home_marker.render_scale}
 				if not cue.is_empty():
 					navigation.merge({"position": [cue.position.x, cue.position.y], "in_view": cue.in_view, "behind": cue.behind})
 			captures.append({"label": row.label, "file": name, "sha256": FileAccess.get_sha256(args[2].path_join(name)), "save_sha256": FileAccess.get_sha256(path), "tick": state.tick, "checksum": state.checksum, "width": picture.get_width(), "height": picture.get_height(), "terrain": view.terrain.report() if view is FlightView else {}, "home_navigation": navigation})

@@ -18,6 +18,8 @@ func run() -> void:
 	# Invalid geometry refuses before any projection or drawing.
 	for bounds in [Vector2.ZERO, Vector2(-1, 720), Vector2(1280, 56), Vector2(NAN, 720), Vector2(1280, INF)]:
 		check(Navigation.project(camera, Vector3(0, 0, -10), bounds).is_empty(), "Invalid marker dimensions accepted")
+	for inset in [0.0, -1.0, NAN, INF, 1000.0]:
+		check(Navigation.project(camera, Vector3.FORWARD, Vector2(1280, 720), inset).is_empty(), "Invalid marker inset accepted")
 	for point in [Vector3.ZERO, Vector3(NAN, 0, -10), Vector3(0, INF, -10), Vector3(1.0e30, 0, -10)]:
 		check(Navigation.project(camera, point, Vector2(1280, 720)).is_empty(), "Invalid/coincident marker target accepted")
 	check(Navigation.project(null, Vector3.FORWARD, Vector2(1280, 720)).is_empty(), "Missing camera accepted")
@@ -53,6 +55,8 @@ func run() -> void:
 	for radius in [NAN, INF, -1.0, 0.0]: check(not Navigation.globe_occludes(Vector3(-20, 0, 0), Vector3(20, 0, 0), Vector3.ZERO, radius), "Invalid globe geometry used")
 	var marker := Navigation.new()
 	root.add_child(marker)
+	marker.update_cue(camera, forward, false)
+	check(absf(marker.render_scale * root.size.x / marker.size.x - 1.0) < 0.0001, "Marker changed physical size under viewport stretch")
 	marker.update_cue(camera, forward, true)
 	check(marker.cue.is_empty() and marker.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Attached marker persisted or intercepted input")
 	marker.free()
