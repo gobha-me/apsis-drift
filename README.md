@@ -24,11 +24,15 @@ Choose exactly one mode. New Game accepts unsigned 64-bit seeds, including zero.
 It starts a first-person actor on Origin Station's hub floor. WASD or the left
 stick walks; right-drag or the right stick looks. Escape pauses.
 
-The supported route reaches the workshop and D1 access. The real open docking
-well stops unsupported walking. Wayfarer remains attached at D1 while the shared
-C++ clock advances. **Boarding, ladder traversal and the seat transition remain
-incomplete.** Departure from New Game, planetary contact and the composed
-home-return journey still need integration; First Flight is not complete.
+Walk through the workshop to D1, release movement controls and press **E**,
+controller **A** or **Board Wayfarer**. A short authored boarding sequence moves
+through the hatch into the pilot seat. Release the port to use the existing
+flight controls; **Leave seat** returns you to the station while attached at D1.
+The open docking well still stops ordinary unsupported walking.
+
+Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with
+animation and body-clearance refinements deferred. The composed planetary
+contact and home-return journey still need integration; First Flight is not complete.
 
 **Save As** writes the actor, craft, history and clock through C++. Continue
 starts paused; quitting does not autosave. Missing, corrupt or unsupported saves

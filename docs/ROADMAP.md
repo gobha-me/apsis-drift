@@ -125,6 +125,13 @@ world, refund a committed jump, duplicate a craft or fabricate progress.
 
 ### Owner minimum playable handoff — 2026-09-30
 
+2026-10-09 delivery amendment: prioritize the playable interaction over complete
+anatomical certification. [The boarding prototype](PLAYABLE_BOARDING_PROTOTYPE.md)
+uses an application-owned authored route, simple gameplay body proxy and explicit
+saved actor phases. Preserve the detailed studies as deferred research, record
+imperfections and revisit them after the journey works. Their negative or
+unresolved findings no longer gate prototype boarding or imply completion.
+
 Before asking the owner to playtest, ordinary play must start on the station;
 allow walking to the craft, boarding and sitting, takeoff and station exit;
 show animated exhaust from actual applied propulsion; and preserve controllable

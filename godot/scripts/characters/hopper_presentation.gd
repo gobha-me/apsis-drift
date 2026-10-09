@@ -7,6 +7,7 @@ var exterior_surface := 18
 var selected_binding: Dictionary = {}
 var replacement_nodes: Array[Node3D] = []
 var operating_nodes: Dictionary = {}
+var runtime_pose: Dictionary = {}
 var atlas_material: StandardMaterial3D
 var glass_material: StandardMaterial3D
 var atlas_state: Array = []
@@ -301,6 +302,46 @@ func valid_installed() -> bool:
 		if not is_instance_valid(node) or nodes.get(Operating.GROUP_NODES[id]) != node or node.get_parent() != model or node.transform != selected_binding.craft_world_deltas[index]:
 			return false
 	return true
+
+# Complete application-derived transforms; these are visual poses only.
+static func projected_pose(value: Variant) -> Dictionary:
+	if not value is Dictionary or not value.get("craft_world_deltas") is Dictionary:
+		return {}
+	var columns: Dictionary = value.craft_world_deltas
+	if columns.size() != Operating.GROUP_NODES.size(): return {}
+	var poses := {}
+	for id in Operating.GROUP_NODES:
+		var v: Variant = columns.get(id)
+		if not v is PackedFloat64Array or v.size() != 12: return {}
+		for component in v:
+			if not is_finite(component): return {}
+		var pose := Transform3D(Basis(Vector3(v[0], v[1], v[2]), Vector3(v[3], v[4], v[5]), Vector3(v[6], v[7], v[8])), Vector3(v[9], v[10], v[11]))
+		if not valid_rigid_pose(pose): return {}
+		poses[id] = pose
+	return poses
+
+func valid_current_pose() -> bool:
+	if runtime_pose.is_empty(): return valid_installed()
+	if not valid_binding(selected_binding) or selected_binding.profile != "wayfarer-stowed-01" or get_child_count() != 1 or not calibration_unchanged(): return false
+	var model := get_child(0)
+	var nodes := Operating.unique_nodes(model)
+	if nodes.is_empty() or nodes.has("WFOpSeatLift") or replacement_nodes.size() != 14 or operating_nodes.size() != 12: return false
+	for index in STOWED_ROOTS.size():
+		var node: Variant = nodes.get(STOWED_ROOTS[index])
+		if not is_instance_valid(node) or node != replacement_nodes[index] or node.get_parent() != model or node.transform != runtime_pose.seat_lift: return false
+	for id in operating_nodes:
+		var node: Variant = operating_nodes[id]
+		if not is_instance_valid(node) or nodes.get(Operating.GROUP_NODES[id]) != node or node.get_parent() != model or node.transform != runtime_pose[id]: return false
+	return true
+
+func set_pose(value: Dictionary) -> bool:
+	var candidate := projected_pose(value)
+	if candidate.is_empty() or not valid_current_pose(): return false
+	# Every known root receives its complete delta once, with no new hierarchy.
+	for node in replacement_nodes: node.transform = candidate.seat_lift
+	for id in operating_nodes: operating_nodes[id].transform = candidate[id]
+	runtime_pose = candidate
+	return valid_current_pose()
 
 func set_gear_preview(deployed: float) -> bool:
 	# Explicit asset inspection, never inferred from altitude or used as landing state.

@@ -48,6 +48,13 @@ See [saved station walking](SAVED_STATION_WALK.md) for bounds and qualification.
 
 ## Native memory budgeting
 
+2026-10-09 prototype amendment: [playable boarding](PLAYABLE_BOARDING_PROTOTYPE.md)
+uses a compact authored kinematic interaction. The anatomical certification
+programs and their exact scratch profiles are deferred research. Their 8/48 KiB
+limits do not constrain new gameplay systems or become startup prerequisites.
+Measure gameplay memory and frame cost when they affect the working slice;
+do not invent another whole-game RAM ceiling.
+
 Numerical working-storage budgets do not limit total native-game RAM. The
 registered 8 KiB creator and 48 KiB worker limits describe bounded numerical
 work; fixed world loading and retained scene/contact data have separate memory
@@ -67,7 +74,7 @@ and library helpers, errors, cleanup and independent audits. Immutability does
 not exclude a candidate-owned allocation. Existing cold setup calls and source
 authentication remain unchanged; separate accounting permits no warm-up or
 extra creator. See the [active Endpoint04 resource registration](ORIGIN_BOARDING_INTERMEDIATE_ENDPOINT04.md#9-complete-additive-source-forecasts-and-actual-gates)
-for the precise stage and ownership definitions.
+for the historical research stage and ownership definitions.
 
 ## Build boundary
 

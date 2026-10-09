@@ -70,6 +70,14 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_walk(const OriginWalkControls&,
                                   SimulationSeconds = kSimulationStep)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto boarding() const
+      -> const std::optional<FreedomBoardingState>& {
+    return boarding_;
+  }
+  [[nodiscard]] auto boarding_view() const
+      -> std::expected<GameplayBoardingView, std::string>;
+  [[nodiscard]] auto begin_boarding() -> std::expected<void, std::string>;
+  [[nodiscard]] auto begin_disembarking() -> std::expected<void, std::string>;
   [[nodiscard]] auto release_port() -> std::expected<void, std::string>;
 
   [[nodiscard]] auto starting_assembly() const
@@ -81,6 +89,9 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto begin_boarding_route(GameplayBoardingDirection)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto boarding_document() const -> FreedomBoardingSaveDocument;
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
@@ -95,5 +106,6 @@ class NativeFreedomFlightSession {
   std::optional<OriginWalkerState> actor_;
   std::optional<NativeStartingAssemblySelection> starting_assembly_;
   NativeCraftBinding craft_binding_;
+  std::optional<FreedomBoardingState> boarding_;
 };
 } // namespace apsis_drift

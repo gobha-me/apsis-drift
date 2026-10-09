@@ -22,6 +22,7 @@ player's station-to-flight journey.
 
 ## Current native play and presentation
 
+- [Playable boarding prototype and deferred refinements](PLAYABLE_BOARDING_PROTOTYPE.md)
 - [Saved station walking](SAVED_STATION_WALK.md)
 - [Saved flight](SAVED_NATIVE_FLIGHT.md) and [port lifecycle](NATIVE_PORT_LIFECYCLE.md)
 - [Starting assembly](NATIVE_STARTING_ASSEMBLY.md) and [station view](NATIVE_STATION_VIEW.md)
@@ -35,6 +36,12 @@ player's station-to-flight journey.
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)
 - [Boarding body](ORIGIN_BOARDING_BODY.md), [support](ORIGIN_BOARDING_SUPPORT.md)
   and [lower cockpit contact](LOWER_COCKPIT_CONTACT.md)
+<details>
+<summary>Deferred anatomical boarding research and preserved observations</summary>
+
+The owner deferred this certification work on 2026-10-09. It does not gate the
+playable kinematic interaction described above.
+
 - [Actual foot sites](ORIGIN_BOARDING_FOOT_SITES02.md),
   [fixed body endpoint](ORIGIN_BOARDING_SOURCE_ENDPOINT01.md) and
   [complete static self check](ORIGIN_BOARDING_SOURCE_ENDPOINT_SELF01.md)
@@ -140,6 +147,8 @@ player's station-to-flight journey.
   registered adjacent-band containment after the retained single-band refusal.
 - [Checkpoint material extension01](ORIGIN_BOARDING_CHECKPOINT_MATERIAL_EXTENSION01.md):
   registered two-source completion and same-cover WORLD02 consumer.
+
+</details>
 
 - [System-flight validation cost](SYSTEM_FLIGHT_VALIDATION.md): per-call catalog authentication preserves flight behavior and removes repeated work.
 

@@ -110,6 +110,16 @@ auto select_document(FreedomStartingAssemblySaveDocument document,
   selected->document = std::move(document);
   return selected;
 }
+auto select_document(FreedomBoardingSaveDocument document,
+                     std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto v = validate_freedom_boarding_document(document); !v)
+    return std::unexpected{"Boarding save rejected: " + v.error().detail};
+  auto selected = select_document(document.voyage, source_save);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
 } // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
@@ -146,8 +156,16 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
   const FreedomSaveDocument* origin{};
-  if (const auto* assembly = std::get_if<FreedomStartingAssemblySaveDocument>(
-          &selected.document)) {
+  if (const auto* boarding =
+          std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
+    if (auto v = validate_freedom_boarding_document(*boarding); !v)
+      return std::unexpected{v.error().detail};
+    if (boarding->boarding.phase == FreedomBoardingPhase::seated)
+      return std::unexpected{"Seated voyage uses the flight presentation"};
+    origin = &boarding->voyage.flight.origin;
+  } else if (const auto* assembly =
+                 std::get_if<FreedomStartingAssemblySaveDocument>(
+                     &selected.document)) {
     if (auto v = validate_freedom_starting_assembly_document(*assembly); !v)
       return std::unexpected{v.error().detail};
     origin = &assembly->journey.voyage.flight.origin;
@@ -194,6 +212,14 @@ auto native_save_freedom(const NativeStartup& selected,
   if (bytes.empty() || bytes.size() > 4'096 ||
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
+  if (const auto* boarding =
+          std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
+    const auto written =
+        write_freedom_boarding_file_atomically(destination, *boarding);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   // Revalidate the authoritative recipe/state before any filesystem mutation.
   if (const auto prepared = prepare_native_freedom_station_start(selected);
       !prepared)
