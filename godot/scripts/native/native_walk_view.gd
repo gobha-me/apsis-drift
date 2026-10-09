@@ -384,6 +384,18 @@ func board_requested() -> void:
 func update_view() -> void:
 	state = bridge.get_freedom_walk_state()
 	if state.is_empty() and bridge.get_freedom_boarding_state().get("state") == "seated":
+		# Consume the completed C++ pose before deferred view replacement. A
+		# render frame can contain several ticks; the previous walker camera is
+		# then several ticks behind the moving station and floating origin.
+		var seated: Dictionary = bridge.get_freedom_boarding_state()
+		var flight: Dictionary = bridge.get_freedom_flight_state()
+		if not FlightView.valid_state(flight) or not finite_triplet(seated.eye_craft) or not staged_model.set_pose(seated.pose):
+			error = "C++ returned an invalid completed boarding pose"
+			set_paused(true)
+			return
+		station.transform = Transform3D(flight.station_basis, flight.station_position)
+		ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
+		camera.transform = Transform3D(flight.body_basis, flight.body_basis * Vector3(seated.eye_craft[0], seated.eye_craft[1], seated.eye_craft[2]))
 		if not mode_change_pending:
 			mode_change_pending = true
 			journey_mode_changed.emit()
