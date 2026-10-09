@@ -54,6 +54,7 @@ TESTS = {
     "native_walk": "freedom_saves",
     "native_assembly": "native_assets",
     "native_start_staging": "freedom_saves",
+    "native_planetary": "planetary_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
     "physical_lighting_integration": "physical_snapshots",
@@ -142,6 +143,7 @@ def main(argv=None):
     exporter = build / "apsis-drift-godot-snapshot"
     bridge = build / "bin/libapsis_freedom_bridge.so"
     start_fixture = build / "apsis-drift-freedom-start-fixture"
+    planetary_fixture = build / "apsis-drift-freedom-planetary-fixture"
     for path in (engine, exporter):
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable: {path}")
@@ -151,6 +153,9 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
             parser.error(f"missing C++ save fixture: {start_fixture}")
+    if "native_planetary" in selected:
+        if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
+            parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
     def prepare_physical_fixtures():
         for seed in (42, 43):
             path = work / f"physical-{seed}.json"
@@ -218,6 +223,9 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         shutil.copy2(start_fixture, work / start_fixture.name)
         start_fixture = work / start_fixture.name
+    if "native_planetary" in selected:
+        shutil.copy2(planetary_fixture, work / planetary_fixture.name)
+        planetary_fixture = work / planetary_fixture.name
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -237,7 +245,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_port", "native_walk", "native_start_staging") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_port", "native_walk", "native_start_staging", "native_planetary") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -354,6 +362,32 @@ def main(argv=None):
             report["setup"][-1]["save_sha256"] = sha256(path)
             save()
         (work / "corrupt.json").write_text("{broken json\n")
+    if "native_planetary" in selected:
+        phases = work / "planetary"
+        phases.mkdir()
+        log = work / "planetary-fixture.log"
+        # Invalid output bounds must refuse before constructing a world or
+        # generating artifacts. The expensive valid voyage runs only once.
+        for index, invalid in enumerate(([], ["relative"], [str(phases), "extra"],
+                                          ["/" + "x" * 4001])):
+            refusal_log = work / f"planetary-refusal-{index}.log"
+            code, timed_out, _ = run_logged(
+                [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
+            if code == 0 or timed_out or any(phases.iterdir()):
+                print(f"FAIL planetary argument refusal: {refusal_log}", flush=True)
+                return 1
+        code, timed_out, elapsed = run_logged(
+            [str(planetary_fixture), str(phases)], log, env, args.timeout)
+        report["setup"].append({"family": "planetary_saves", "returncode": code,
+                                "timed_out": timed_out, "seconds": elapsed,
+                                "fixture_sha256": sha256(planetary_fixture)})
+        save()
+        if code != 0 or timed_out:
+            print(f"FAIL planetary fixture: {log}", flush=True)
+            return 1
+        report["setup"][-1]["files_sha256"] = {
+            path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
+        save()
     for name in selected:
         if name == "native_shell":
             cases = (
@@ -541,6 +575,9 @@ def main(argv=None):
             arguments = [str(work / path) for path in
                          ("freedom-0.json", "freedom-25.json", "career.json",
                           "corrupt.json", "snapshot-42.json")]
+        elif TESTS[name] == "planetary_saves":
+            arguments = [str(work / path) for path in
+                         ("planetary", "native-assets", "planetary-native")]
         elif TESTS[name] == "native_assets":
             arguments = [str(work / "native-assets"), str(work / "native-asset-import.json")]
         elif TESTS[name] == "operating_assets":

@@ -5,6 +5,12 @@ target_compile_options(apsis-drift-godot-snapshot PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
 
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  # Opt-in composed voyage exporter. Its conservative pilot is test code only;
+  # consumers render the actual phase saves rather than relocated practice starts.
+  add_executable(apsis-drift-freedom-planetary-fixture "${PROJECT_SOURCE_DIR}/test/godot/freedom_planetary_fixture.cpp")
+  target_link_libraries(apsis-drift-freedom-planetary-fixture PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-planetary-fixture PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_executable(apsis-drift-freedom-start-fixture "${PROJECT_SOURCE_DIR}/test/godot/freedom_start_fixture.cpp")
   target_link_libraries(apsis-drift-freedom-start-fixture PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-freedom-start-fixture PRIVATE
