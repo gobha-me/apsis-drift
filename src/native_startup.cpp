@@ -147,6 +147,18 @@ auto select_document(FreedomResourceSaveDocument d,
   return selected;
 }
 } // namespace
+namespace {
+auto select_document(FreedomKnowledgeSaveDocument d,
+                     std::optional<std::filesystem::path> source)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto v = validate_freedom_knowledge_document(d); !v)
+    return std::unexpected{v.error().detail};
+  auto selected = select_document(d.voyage, source);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(d);
+  return selected;
+}
+} // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   auto document =
@@ -156,8 +168,11 @@ auto native_new_game(Seed universe_seed)
   const auto& flight = document->journey.voyage.flight;
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              flight.flight.tick};
+  auto knowledge = make_freedom_starting_knowledge(universe_seed);
+  if (!knowledge) return std::unexpected{"Starting chart rejected"};
   return select_document(
-      FreedomResourceSaveDocument{{std::move(*document), {}}, resources},
+      FreedomKnowledgeSaveDocument{{{std::move(*document), {}}, resources},
+                                   std::move(*knowledge)},
       std::nullopt);
 }
 
@@ -186,6 +201,17 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
                            "flight save yet"};
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
+  if (const auto* k =
+          std::get_if<FreedomKnowledgeSaveDocument>(&selected.document)) {
+    if (auto v = validate_freedom_knowledge_document(*k); !v)
+      return std::unexpected{v.error().detail};
+    auto inner = selected;
+    inner.document = k->voyage;
+    auto prepared = prepare_native_freedom_station_start(std::move(inner));
+    if (!prepared) return std::unexpected{prepared.error()};
+    prepared->selected.document = std::move(selected.document);
+    return prepared;
+  }
   if (const auto* r =
           std::get_if<FreedomResourceSaveDocument>(&selected.document)) {
     if (auto v = validate_freedom_resource_document(*r); !v)
@@ -263,6 +289,18 @@ auto native_save_freedom(const NativeStartup& selected,
   if (bytes.empty() || bytes.size() > 4'096 ||
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
+  if (const auto* k =
+          std::get_if<FreedomKnowledgeSaveDocument>(&selected.document)) {
+    auto canonical = select_document(*k, selected.source_save);
+    if (!canonical || canonical->home_planet != selected.home_planet)
+      return std::unexpected{
+          "Knowledge Save As requires its selected physical home"};
+    const auto written =
+        write_freedom_knowledge_file_atomically(destination, *k);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (const auto* r =
           std::get_if<FreedomResourceSaveDocument>(&selected.document)) {
     const auto canonical = select_document(*r, selected.source_save);

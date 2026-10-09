@@ -177,6 +177,7 @@ struct Trace {
               continued.docking() == session.docking() &&
               continued.starting_assembly() == session.starting_assembly() &&
               continued.resources() == session.resources() &&
+              continued.knowledge() == session.knowledge() &&
               !continued.port_approach().active,
           "Checkpoint changed the voyage or restored transient guidance");
     session = std::move(continued);

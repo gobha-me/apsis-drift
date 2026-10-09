@@ -200,7 +200,9 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomBoardingSaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document) ||
-        std::holds_alternative<FreedomResourceSaveDocument>(selected.document))
+        std::holds_alternative<FreedomResourceSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomKnowledgeSaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -531,6 +533,8 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomResourceSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomKnowledgeSaveDocument>(
             selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
@@ -1207,6 +1211,38 @@ class FreedomBridge : public godot::RefCounted {
         resources["propulsion_refused"] = reading.propulsion_refused;
       }
       result["resources"] = resources;
+      godot::Dictionary chart;
+      chart["selected"] = session.knowledge().has_value();
+      if (session.knowledge()) {
+        const auto& ledger = *session.knowledge();
+        const auto route =
+            generate_first_universe_route(ledger.recipe.universe_seed);
+        // Native neighboring travel has not installed a different current
+        // system owner yet. This read-only chart remains the origin baseline.
+        const auto view = require(resolve_freedom_knowledge_chart(
+            ledger, route.origin, *session.resources()));
+        godot::Array rows;
+        for (const auto& row : view.destinations) {
+          godot::Dictionary item;
+          item["system_id"] =
+              godot::String{system_id_string(row.system).c_str()};
+          item["name"] =
+              row.system == route.origin ? "Home system" : "Nearby system";
+          item["confidence"] = godot::String{
+              navigation_knowledge_level_name(row.knowledge).data()};
+          item["current"] = row.system == view.current_system;
+          item["affordable"] = row.affordable;
+          item["disabled_reason"] = godot::String{
+              navigation_disabled_reason_name(row.disabled_reason).data()};
+          if (row.distance_metres)
+            item["distance_light_seconds"] =
+                decimal(route.distance_light_seconds);
+          rows.append(item);
+        }
+        chart["rows"] = rows;
+        chart["baseline"] = "Starting chart";
+      }
+      result["chart"] = chart;
 
       const auto force = selected.last_step && !(session.surface() &&
                                                  session.surface()->landed)

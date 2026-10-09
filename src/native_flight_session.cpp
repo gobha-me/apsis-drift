@@ -25,6 +25,16 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<FreedomKnowledge> knowledge;
+  if (auto* d = std::get_if<FreedomKnowledgeSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Knowledge state requires Freedom"};
+    if (auto v = validate_freedom_knowledge_document(*d); !v)
+      return std::unexpected{v.error().detail};
+    knowledge = std::move(d->knowledge);
+    auto voyage = std::move(d->voyage);
+    selected.document = std::move(voyage);
+  }
   std::optional<FreedomResources> resources;
   if (auto* d = std::get_if<FreedomResourceSaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
@@ -119,6 +129,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   result.boarding_ = boarding;
   result.surface_ = surface;
   result.resources_ = resources;
+  result.knowledge_ = std::move(knowledge);
   if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
                    boarding->phase == FreedomBoardingPhase::disembarking)) {
     auto view = result.boarding_view();
@@ -582,8 +593,10 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      resources_ ? write_freedom_resource_file_atomically(
-                       path, {surface_document(), *resources_})
+      knowledge_ ? write_freedom_knowledge_file_atomically(
+                       path, {{surface_document(), *resources_}, *knowledge_})
+      : resources_ ? write_freedom_resource_file_atomically(
+                         path, {surface_document(), *resources_})
       : surface_
           ? write_freedom_surface_file_atomically(path, surface_document())
       : boarding_
@@ -611,6 +624,16 @@ auto NativeFreedomFlightSession::replenish_resources()
       replenish_freedom_resources(*resources_, {document_, *docking_});
   if (!next) return std::unexpected{"Attached resource service refused"};
   resources_ = *next;
+  return {};
+}
+
+auto NativeFreedomFlightSession::record_observation(const KnowledgeEvidence& e)
+    -> std::expected<void, std::string> {
+  if (!knowledge_)
+    return std::unexpected{"This save has no selected knowledge ledger"};
+  auto next = apply_freedom_knowledge(*knowledge_, e, document_.flight.tick);
+  if (!next) return std::unexpected{"Observation provenance refused"};
+  knowledge_ = std::move(*next);
   return {};
 }
 

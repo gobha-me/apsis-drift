@@ -253,3 +253,14 @@ mission-free native neighboring travel and its persisted committed arrival
 remain #176/#194. Standard replacement/recovery #247 and full integrated #245
 acceptance remain open. This checkpoint advances #251 and the initial service
 seam, without marking those unavailable consumers complete.
+
+## Starting chart and knowledge checkpoint — 2026-10-09
+
+The [bounded topology decision](FREEDOM_TOPOLOGY.md) reuses the existing seeded
+origin and nearby anchors. [Persistent knowledge](FREEDOM_KNOWLEDGE.md) explicitly
+grants starting infrastructure and stores per-fact confidence/provenance in new
+native sessions. Older saves retain their selected semantics. The collapsible
+cockpit chart shows granted locations and actual charge affordability; reading
+it grants no visits or observations. Actual survey triggers #189, wider sensor
+presentation #171/#215 and physical native jumps #193/#176/#194 remain separate
+implementation work.

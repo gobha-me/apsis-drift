@@ -483,6 +483,8 @@ add_library(apsis_drift_core STATIC
   src/terrain_tiles.cpp
   src/universe_navigation.cpp
   src/freedom_navigation.cpp
+  src/freedom_knowledge.cpp
+  src/freedom_knowledge_save.cpp
   src/universe_navigation_acceptance.cpp
   src/world_delta_journal.cpp
 )
@@ -1439,6 +1441,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME freedom-starting-chart-contract COMMAND apsis-drift-freedom-starting-chart-tests)
   set_tests_properties(freedom-starting-chart-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-freedom-knowledge-tests test/freedom_knowledge_test.cpp)
+  target_link_libraries(apsis-drift-freedom-knowledge-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-knowledge-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME freedom-knowledge-contract COMMAND apsis-drift-freedom-knowledge-tests)
+  set_tests_properties(freedom-knowledge-contract PROPERTIES TIMEOUT 90)
   add_test(NAME freedom-reserve-surface-escape COMMAND apsis-drift-landed-craft-tests --resources)
   set_tests_properties(freedom-reserve-surface-escape PROPERTIES TIMEOUT 90)
   set_tests_properties(freedom-resource-contract PROPERTIES TIMEOUT 90)

@@ -60,6 +60,8 @@ var stow_gear_button: Button
 var liftoff_button: Button
 var surface_status: RichTextLabel
 var resource_status: RichTextLabel
+var chart_status: RichTextLabel
+var chart_button: CheckButton
 var service_button: Button
 var release_button: Button
 var error := ""
@@ -314,6 +316,14 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	resource_status = hud_text()
 	column.add_child(resource_status)
+	chart_button = CheckButton.new()
+	chart_button.text = "Starting chart"
+	chart_button.focus_mode = Control.FOCUS_ALL
+	chart_button.toggled.connect(func(shown: bool): chart_status.visible = shown)
+	column.add_child(chart_button)
+	chart_status = hud_text()
+	chart_status.visible = false
+	column.add_child(chart_status)
 	service_button = Button.new()
 	service_button.text = "Replenish flight fuel and jump charges · free"
 	service_button.focus_mode = Control.FOCUS_ALL
@@ -784,6 +794,16 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	else:
 		resource_status.text = "Historical save · resource recipe unselected"
 		service_button.visible = false
+	var chart: Dictionary = state.get("chart", {})
+	chart_button.visible = chart.get("selected", false)
+	chart_status.visible = chart_button.visible and chart_button.button_pressed
+	if chart_button.visible:
+		chart_status.text = "Starting chart · granted positions"
+		for row: Dictionary in chart.rows:
+			var detail: String = " · current" if row.current else " · %.1f light-hours · %s" % [float(row.distance_light_seconds) / 3600.0, "1 charge available" if row.affordable else "No jump charges"]
+			chart_status.text += "\n%s · %s%s" % [row.name, row.confidence.to_upper(), detail]
+	else:
+		chart_status.visible = false
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	home_marker.update_cue(camera, target, state.attached)

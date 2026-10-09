@@ -48,6 +48,8 @@ func run() -> void:
 	check(shell.current_view != null and shell.current_view.activated and shell.current_view.staged_model.valid_installed(), "Committed view was not complete")
 	var initial_resources: Dictionary = bridge.get_freedom_flight_state().resources
 	check(initial_resources.selected and initial_resources.quantity_quanta == "3032640000000000" and initial_resources.jump_charges == 3, "Staged New Game lost finite C++ resources")
+	var initial_chart: Dictionary = bridge.get_freedom_flight_state().chart
+	check(initial_chart.selected and initial_chart.rows.size() == 2 and initial_chart.rows[0].current and initial_chart.rows[0].confidence == "resolved" and initial_chart.rows[1].confidence == "resolved" and initial_chart.rows[1].affordable, "Starting chart leaked extra rows, invented visits or lost granted route")
 	var current: Dictionary = bridge.get_freedom_walk_state()
 	check(current.universe_seed == "42" and current.tick == "0" and bridge.get_pending_freedom_start().is_empty(), "Presentation changed new actor clock or left pending")
 	var view: Control = shell.current_view
@@ -105,6 +107,11 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(flight.camera.transform.origin.distance_to(seat_camera.origin) < 0.002 and flight.camera.transform.basis.is_equal_approx(seat_camera.basis), "Seated camera jumped at view handoff")
 	check(model.valid_current_pose() and model.replacement_nodes == roots and model.get_child_count() == 1, "Boarding replaced or reparented the hardware roster")
 	check(flight.state.resources.quantity_quanta == "3032640000000000" and "90.0 min at full main" in flight.resource_status.text and flight.service_button.focus_mode == Control.FOCUS_ALL and flight.service_button.visible, "Walking/boarding burned fuel or cockpit lost accessible resource service")
+	check(flight.chart_button.visible and flight.chart_button.focus_mode == Control.FOCUS_ALL and not flight.chart_status.visible and "Starting chart" in flight.chart_status.text and "Nearby system" in flight.chart_status.text, "Cockpit lost accessible, collapsed C++ chart readings")
+	var chart_state_before: Dictionary = bridge.get_freedom_flight_state()
+	flight.chart_button.button_pressed = true
+	check(flight.chart_status.visible and bridge.get_freedom_flight_state() == chart_state_before, "Reading chart granted evidence or changed fuel/flight/time")
+	flight.chart_button.button_pressed = false
 	check(not flight.unboard_button.disabled and flight.unboard_button.visible and flight.unboard_menu_button.visible and flight.unboard_menu_button.focus_mode == Control.FOCUS_ALL and not flight.release_button.disabled and flight.exhaust.valid_bound_skin(), "Seated UI lost unboard/release/exhaust")
 	var save_path: String = OS.get_cmdline_user_args()[1].get_base_dir().path_join("playable-seated.json")
 	check(bridge.save_freedom_as(save_path), "Seated Save As refused")
@@ -116,6 +123,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	if continued_shell.current_view != null:
 		check(continued_shell.current_view is FlightView and continued_shell.current_view.cockpit and continued_shell.current_view.paused and continued_shell.current_view.staged_model.valid_current_pose(), "Seated Continue lost pose, cockpit or neutral pause")
 	check(continued_owner.get_freedom_flight_state().resources == bridge.get_freedom_flight_state().resources, "Staged Continue changed exact resource readings")
+	check(continued_owner.get_freedom_flight_state().chart == bridge.get_freedom_flight_state().chart, "Continue changed granted chart knowledge or invented visits")
 	continued_shell.free()
 	flight.port_command("release_freedom_port")
 	check(not bridge.get_freedom_flight_state().attached and "12 m" in flight.save_status.text, "Release lost mapped withdrawal guidance")
