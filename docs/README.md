@@ -40,6 +40,7 @@ player's station-to-flight journey.
 - [Persistent Freedom knowledge and provenance](FREEDOM_KNOWLEDGE.md)
 - [Local ship observations](FREEDOM_OBSERVATIONS.md): selected sensor policy, physical triggers and save/resume.
 - [Native First Jump](FREEDOM_NATIVE_TRAVEL.md): actual spool, commitment, world handoff, return and phase persistence.
+- [Native round-trip verification](FREEDOM_NATIVE_ROUNDTRIP.md): station departure, neighboring observation, physical docking/service and disembarking.
 - [Freedom jump targeting](FREEDOM_JUMP_TARGETING.md): actual endpoint geometry, provisional in-range envelope and frozen arrival point.
 - [Measured Freedom endurance contract](FREEDOM_ENDURANCE.md)
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)

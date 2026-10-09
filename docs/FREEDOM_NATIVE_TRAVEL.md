@@ -79,8 +79,10 @@ certificate. Atmospheric jumps, extended reach, wrong-system arrivals, condition
 stress and early repeat consequences require the unselected policies in #248/#253.
 Standard replacement-craft recovery remains unimplemented in #247. No hard
 cooldown or invented damage/death law is added here. Full body-render redaction remains #215.
-The composed departure, surface visit, physical return docking and fuel-margin
-acceptance remains #194.
+The [bounded normal-trip trace](FREEDOM_NATIVE_ROUNDTRIP.md) composes real station
+departure, neighboring observation, physical return docking/service and
+disembarking. Wider recovery acceptance remains #194/#247; the separate planetary
+voyage retains surface-flight coverage.
 
 `native-first-jump-contract` tests actual C++ round trips for three seeds in both
 piloting profiles, cancellation, every saved boundary, malformed saves and station
