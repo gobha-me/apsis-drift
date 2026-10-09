@@ -1,5 +1,11 @@
 # Discovered-Universe Navigation and Direct Travel
 
+The active mission-free decision is [Freedom starting topology](FREEDOM_TOPOLOGY.md).
+It reuses these version-1 anchors, explicitly grants both anchors as RESOLVED
+without visits, and consumes the current jump-charge ledger. The onboarding
+projection, zero-resource measurements and analytical cruise below remain
+historical contracts; they are not native Freedom travel or fuel affordability.
+
 Version 1 records the bounded navigation contract for the authored
 origin-to-first-target route. It answers the product and scale questions needed
 by onboarding contract three without implementing a galaxy renderer, arbitrary
