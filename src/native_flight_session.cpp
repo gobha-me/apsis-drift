@@ -265,9 +265,15 @@ auto NativeFreedomFlightSession::capture_port()
       !valid)
     return std::unexpected{"Captured state cannot be persisted: " +
                            valid.error().detail};
-  document_ = std::move(candidate);
-  docking_ = attachment;
-  cancel_port_approach();
+  auto captured = *this;
+  captured.document_ = std::move(candidate);
+  captured.docking_ = attachment;
+  captured.cancel_port_approach();
+  if (auto observed =
+          captured.refresh_knowledge(LocalObservationEvent::port_capture);
+      !observed)
+    return observed;
+  *this = std::move(captured);
   return {};
 }
 
@@ -418,9 +424,13 @@ auto NativeFreedomFlightSession::advance_craft_tick(
       auto next =
           advance_freedom_resource_tick(*resources_, document_.flight.tick, 0);
       if (!next) return std::unexpected{"Constrained resource clock refused"};
-      resources_ = *next;
+      candidate.resources_ = *next;
     }
-    document_ = std::move(candidate.document_);
+    if (auto learned =
+            candidate.refresh_knowledge(LocalObservationEvent::sensor_tick);
+        !learned)
+      return std::unexpected{learned.error()};
+    *this = std::move(candidate);
     return result;
   }
   if (docking_ && docking_->attached) {
@@ -457,9 +467,13 @@ auto NativeFreedomFlightSession::advance_craft_tick(
       auto next =
           advance_freedom_resource_tick(*resources_, document_.flight.tick, 0);
       if (!next) return std::unexpected{"Constrained resource clock refused"};
-      resources_ = *next;
+      candidate.resources_ = *next;
     }
-    document_ = std::move(candidate.document_);
+    if (auto learned =
+            candidate.refresh_knowledge(LocalObservationEvent::sensor_tick);
+        !learned)
+      return std::unexpected{learned.error()};
+    *this = std::move(candidate);
     return result;
   }
   const auto correction = evaluate_orbit_hold_correction(
@@ -513,8 +527,21 @@ auto NativeFreedomFlightSession::advance_craft_tick(
                    correction->status == OrbitHoldStatus::saturated))
     result.applied_hold_force_body_newtons =
         actuation->central.propulsion.applied_force_newtons;
+  std::optional<FreedomKnowledge> learned;
+  if (knowledge_ &&
+      knowledge_->recipe.version == kFreedomObservedKnowledgeVersion &&
+      candidate.flight.tick % kFreedomLocalObservationInterval == 0) {
+    auto observed = *this;
+    observed.document_ = candidate;
+    observed.resources_ = ledger;
+    if (auto v = observed.refresh_knowledge(LocalObservationEvent::sensor_tick);
+        !v)
+      return std::unexpected{v.error()};
+    learned = std::move(observed.knowledge_);
+  }
   document_ = std::move(candidate);
   resources_ = ledger;
+  if (learned) knowledge_ = std::move(learned);
   if (refused) {
     cancel_port_approach();
     port_approach_.note = "Approach stopped: insufficient flight fuel";
@@ -637,6 +664,20 @@ auto NativeFreedomFlightSession::record_observation(const KnowledgeEvidence& e)
   return {};
 }
 
+auto NativeFreedomFlightSession::refresh_knowledge(LocalObservationEvent event)
+    -> std::expected<void, std::string> {
+  if (!knowledge_ || knowledge_->recipe.version == kFreedomKnowledgeVersion)
+    return {};
+  if (event == LocalObservationEvent::sensor_tick &&
+      (actor_ || document_.flight.tick % kFreedomLocalObservationInterval != 0))
+    return {};
+  auto next =
+      observe_freedom_local_ship(*knowledge_, surface_document(), event);
+  if (!next) return std::unexpected{"Physical observation transaction refused"};
+  knowledge_ = std::move(*next);
+  return {};
+}
+
 auto NativeFreedomFlightSession::surface_document() const
     -> FreedomSurfaceSaveDocument {
   FreedomSurfaceBaseSave base = document_;
@@ -691,6 +732,10 @@ auto NativeFreedomFlightSession::commit_touchdown(
           validate_freedom_surface_document(candidate.surface_document());
       !valid)
     return std::unexpected{valid.error().detail};
+  if (auto observed =
+          candidate.refresh_knowledge(LocalObservationEvent::touchdown);
+      !observed)
+    return observed;
   *this = std::move(candidate);
   return {};
 }

@@ -49,6 +49,7 @@ func run() -> void:
 	var initial_resources: Dictionary = bridge.get_freedom_flight_state().resources
 	check(initial_resources.selected and initial_resources.quantity_quanta == "3032640000000000" and initial_resources.jump_charges == 3, "Staged New Game lost finite C++ resources")
 	var initial_chart: Dictionary = bridge.get_freedom_flight_state().chart
+	check(initial_chart.local_sensors and initial_chart.observed_facts == 0, "New Game silently invented ship observations")
 	check(initial_chart.selected and initial_chart.rows.size() == 2 and initial_chart.rows[0].current and initial_chart.rows[0].confidence == "resolved" and initial_chart.rows[1].confidence == "resolved" and initial_chart.rows[1].affordable, "Starting chart leaked extra rows, invented visits or lost granted route")
 	var current: Dictionary = bridge.get_freedom_walk_state()
 	check(current.universe_seed == "42" and current.tick == "0" and bridge.get_pending_freedom_start().is_empty(), "Presentation changed new actor clock or left pending")
@@ -137,6 +138,8 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	flight.update_view(0.0)
 	check(flight.state.docking.separation > 80.0 and flight.state.negative_force_body[1] > 0.0, "Same craft never departed under withdrawal thrust")
 	check(flight.state.resources.quantity_quanta.to_int() < 3032640000000000 and flight.state.resources.jump_charges == 3 and not flight.service_button.visible, "Actual departure did not burn flight fuel or exposed free-flight service")
+	check(flight.state.chart.rows[0].confidence == "visited" and flight.state.chart.rows[1].confidence == "resolved", "Actual free flight failed to record only the physically visited system")
+	check(flight.state.chart.observed_facts > 0 and "Ship sensors" in flight.chart_status.text, "Committed local evidence remained invisible in chart summary")
 	check(flight.exhaust.update_applied(flight.state, 1.0 / 60.0, false) and flight.exhaust.withdrawal_intensity > 0.0, "Composed departure exhaust stayed dark")
 	var approach_menu: Button = flight.controls_menu.saved_port_buttons["Approach port with thrusters"]
 	check(not flight.approach_button.disabled and not approach_menu.disabled and approach_menu.focus_mode == Control.FOCUS_ALL, "Aligned return lost controller-accessible approach")

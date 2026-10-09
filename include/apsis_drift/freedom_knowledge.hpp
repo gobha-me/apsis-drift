@@ -7,6 +7,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomKnowledgeVersion{1};
+inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
@@ -62,6 +63,8 @@ struct FreedomKnowledgeRecipe {
       kContinuousPhysicalLocalSystemGeneratorVersion};
   std::uint32_t ephemeris{kContinuousAnalyticEphemerisVersion};
   std::uint32_t ambient{kPlanetAmbientGeneratorVersion};
+  // Version 1 stays unselected; version 2 explicitly selects local sensors.
+  std::uint32_t observation_policy{};
   friend auto operator==(const FreedomKnowledgeRecipe&,
                          const FreedomKnowledgeRecipe&) -> bool = default;
 };
@@ -155,7 +158,8 @@ struct KnowledgeReading {
       -> bool = default;
 };
 
-[[nodiscard]] auto make_freedom_starting_knowledge(Seed)
+[[nodiscard]] auto make_freedom_starting_knowledge(
+    Seed, std::uint32_t version = kFreedomKnowledgeVersion)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError>;
 [[nodiscard]] auto validate_freedom_knowledge(const FreedomKnowledge&,
                                               SimulationTick now)

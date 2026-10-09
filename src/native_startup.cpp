@@ -168,7 +168,8 @@ auto native_new_game(Seed universe_seed)
   const auto& flight = document->journey.voyage.flight;
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              flight.flight.tick};
-  auto knowledge = make_freedom_starting_knowledge(universe_seed);
+  auto knowledge = make_freedom_starting_knowledge(
+      universe_seed, kFreedomObservedKnowledgeVersion);
   if (!knowledge) return std::unexpected{"Starting chart rejected"};
   return select_document(
       FreedomKnowledgeSaveDocument{{{std::move(*document), {}}, resources},

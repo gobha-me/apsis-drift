@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apsis_drift/freedom_local_observations.hpp"
 #include "apsis_drift/native_craft_binding.hpp"
 #include "apsis_drift/native_startup.hpp"
 
@@ -144,6 +145,8 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto refresh_knowledge(LocalObservationEvent)
+      -> std::expected<void, std::string>;
   [[nodiscard]] auto port_approach_controls() const
       -> std::expected<NativeFlightControls, std::string>;
   [[nodiscard]] auto begin_boarding_route(GameplayBoardingDirection)

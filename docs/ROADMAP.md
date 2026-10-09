@@ -264,3 +264,12 @@ cockpit chart shows granted locations and actual charge affordability; reading
 it grants no visits or observations. Actual survey triggers #189, wider sensor
 presentation #171/#215 and physical native jumps #193/#176/#194 remain separate
 implementation work.
+
+## Local observation checkpoint — 2026-10-09
+
+New native games select knowledge recipe2/local observation policy1. Real
+committed flight, qualified touchdown and port capture update the persistent
+ledger; station walking, chart focus, camera and Save As/Continue do not. Coarse
+planet models and separate physical presence remain bounded/read-only to Godot.
+See [the selected local policy](FREEDOM_OBSERVATIONS.md). Neighboring arrival,
+complete knowledge-filtered rendering and recovery remain their existing owners.
