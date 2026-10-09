@@ -76,6 +76,8 @@ struct TouchdownPadAssessment {
   double normal_velocity_metres_per_second{}; // positive separates
   double tangential_speed_metres_per_second{};
   double compression_capacity_metres{}; // body-Y stroke projected onto normal
+  friend auto operator==(const TouchdownPadAssessment&,
+                         const TouchdownPadAssessment&) -> bool = default;
 };
 
 struct TouchdownAssessment {
@@ -84,6 +86,8 @@ struct TouchdownAssessment {
   std::uint32_t failed_margins{};
   std::uint8_t support_count{};
   std::array<TouchdownPadAssessment, 4> supports{};
+  friend auto operator==(const TouchdownAssessment&, const TouchdownAssessment&)
+      -> bool = default;
 };
 
 enum class TouchdownError : std::uint8_t {

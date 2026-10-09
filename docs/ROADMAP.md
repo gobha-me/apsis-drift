@@ -210,7 +210,12 @@ the actual actor, voyage and selected hardware. Historical formats16–20 retain
 their contracts and original presentation. The bounded hub/workshop/D1 route is documented in
 [saved station walking](SAVED_STATION_WALK.md).
 
-Open-hatch/ladder boarding, a real seat transition, departure from New Game,
-surface contact and the composed home-return handoff remain active #245/#291
-work. This checkpoint does not satisfy the owner's complete minimum or activate
-NPC/dialogue, AG failure, EVA, weapons, missions or paid-economy horizons.
+Open-hatch/ladder boarding and the seat transition are integrated (#291).
+New Game departure, atmospheric flight and home return now have the
+[uninterrupted native voyage regression](PLANETARY_VOYAGE_PROTOTYPE.md), retaining
+one craft model and matching C++ saves throughout. Manual/controller play and
+hardware presentation qualification remain separate parts of #245. The
+[generated terrain pad assessment](TERRAIN_TOUCHDOWN.md) supplies read-only
+contact diagnostics; landing/liftoff, hull clearance and impact consequences
+remain separate work. These checkpoints do not activate NPC/dialogue, AG
+failure, EVA, weapons, missions or paid-economy horizons.
