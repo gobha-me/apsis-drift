@@ -252,6 +252,7 @@ jobs:
           --test saved_flight
           --test native_port --test native_walk
           --test native_assembly --test native_start_staging --test native_planetary
+          --test home_navigation
           --test wayfarer_operating
           --test recorded_audio_shutdown
 

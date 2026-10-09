@@ -7,6 +7,7 @@ const HopperPresentation = preload("res://scripts/characters/hopper_presentation
 const StationPresentation = preload("res://scripts/native/native_station_view.gd")
 const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dece656be8"
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
+const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 var bridge: Variant
@@ -26,6 +27,8 @@ var hud_stacked := false
 var orbital_forecast: RichTextLabel
 var telemetry: RichTextLabel
 var home_cue: RichTextLabel
+var home_marker: Control
+var port_row: HBoxContainer
 var pause_button: Button
 var assist_button: CheckButton
 var save_dialog: FileDialog
@@ -290,6 +293,11 @@ func build_ui() -> void:
 	hud_scroll_style = hud_scroll.get_v_scroll_bar().get_theme_stylebox("scroll").duplicate()
 	hud_scroll.get_v_scroll_bar().add_theme_stylebox_override("scroll", hud_scroll_style)
 	add_child(hud_scroll)
+	var navigation_layer := CanvasLayer.new()
+	navigation_layer.layer = 3
+	add_child(navigation_layer)
+	home_marker = HomeNavigation.new()
+	navigation_layer.add_child(home_marker)
 	var column := VBoxContainer.new()
 	hud_column = column
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -315,6 +323,7 @@ func build_ui() -> void:
 	column.add_child(assist_button)
 	if state.frame_id == "2":
 		var ports := HBoxContainer.new()
+		port_row = ports
 		column.add_child(ports)
 		for ordinal in [1, 2]:
 			var button := Button.new()
@@ -417,7 +426,7 @@ func layout_hud() -> void:
 		orbital_forecast.fit_content = false
 		orbital_forecast.size = Vector2(460 * scale, 190 * scale)
 		orbital_forecast.position = Vector2(size.x - orbital_forecast.size.x - margin, margin)
-		hud_scroll.size = Vector2(minf(480 * scale, usable.x - orbital_forecast.size.x - margin), usable.y)
+		hud_scroll.size = Vector2(minf(480 * scale, usable.x - orbital_forecast.size.x - margin), minf(usable.y, maxf(260 * scale, hud_column.get_combined_minimum_size().y)))
 	hud_scroll.position = Vector2.ONE * margin
 
 
@@ -717,8 +726,18 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
-	var suffix := " · off screen" if camera.is_position_behind(target) or not Rect2(Vector2.ZERO, camera.get_viewport().size).has_point(camera.unproject_position(target)) else ""
-	home_cue.text = "Origin Station %s · %.1f km%s" % [state.station_id, target.length() / 1000.0, suffix]
+	home_marker.update_cue(camera, target, state.attached)
+	var navigation: Dictionary = home_marker.cue
+	var direction := " · behind you" if navigation.get("behind", false) else (" · follow HOME marker" if not navigation.get("in_view", false) else " · ahead")
+	if navigation.is_empty(): direction = " · direction unavailable"
+	var occluded := HomeNavigation.globe_occludes(camera.position, target, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius)
+	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
+	home_cue.tooltip_text = "Station " + state.station_id + " · HOME marks its projected direction. It does not steer or certify a route."
+	var near_port: bool = state.attached or target.length() < 1000.0
+	if dock_status != null:
+		var changed: bool = dock_status.visible != near_port
+		for item in [port_row, dock_status, approach_button, capture_button, release_button]: item.visible = near_port
+		if changed: call_deferred("layout_hud")
 	if dock_status != null:
 		var assessment: Dictionary = state.docking
 		dock_status.text = "Select a port for approach"

@@ -114,7 +114,13 @@ func run() -> void:
 			var picture := root.get_texture().get_image()
 			var name: String = row.label + ".png"
 			if not check(picture != null and not picture.is_empty() and picture.save_png(args[2].path_join(name)) == OK, "Could not save checkpoint image"): break
-			captures.append({"label": row.label, "file": name, "sha256": FileAccess.get_sha256(args[2].path_join(name)), "save_sha256": FileAccess.get_sha256(path), "tick": state.tick, "checksum": state.checksum, "width": picture.get_width(), "height": picture.get_height(), "terrain": view.terrain.report() if view is FlightView else {}})
+			var navigation := {}
+			if view is FlightView:
+				var cue: Dictionary = view.home_marker.cue
+				navigation = {"text": view.home_cue.text, "port_diagnostics_visible": view.dock_status.visible, "marker_visible": not cue.is_empty()}
+				if not cue.is_empty():
+					navigation.merge({"position": [cue.position.x, cue.position.y], "in_view": cue.in_view, "behind": cue.behind})
+			captures.append({"label": row.label, "file": name, "sha256": FileAccess.get_sha256(args[2].path_join(name)), "save_sha256": FileAccess.get_sha256(path), "tick": state.tick, "checksum": state.checksum, "width": picture.get_width(), "height": picture.get_height(), "terrain": view.terrain.report() if view is FlightView else {}, "home_navigation": navigation})
 		# Resume and advance one real neutral tick through the public bridge;
 		# independently exported C++ bytes must match the complete native save.
 		if view is WalkView: view.resume_requested()
@@ -131,7 +137,7 @@ func run() -> void:
 		if failed: break
 	if rendered and not failed:
 		var hashes := {}
-		for name in ["studies/captures/native_planetary_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_flight_view.gd", "scripts/world/planet_stream.gd", "shaders/terrain.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
+		for name in ["studies/captures/native_planetary_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_flight_view.gd", "scripts/native/home_navigation.gd", "scripts/world/planet_stream.gd", "shaders/terrain.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
 			hashes[name] = FileAccess.get_sha256("res://" + name)
 		var report := FileAccess.open(args[2].path_join("capture.json"), FileAccess.WRITE)
 		if report == null: shell.free(); quit(1); return
