@@ -56,6 +56,7 @@ TESTS = {
     "native_assembly": "native_assets",
     "native_start_staging": "freedom_saves",
     "native_planetary": "planetary_saves",
+    "native_voyage": "voyage_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
     "physical_lighting_integration": "physical_snapshots",
@@ -154,7 +155,7 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
             parser.error(f"missing C++ save fixture: {start_fixture}")
-    if "native_planetary" in selected:
+    if any(name in selected for name in ("native_planetary", "native_voyage")):
         if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
             parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
     def prepare_physical_fixtures():
@@ -224,7 +225,7 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         shutil.copy2(start_fixture, work / start_fixture.name)
         start_fixture = work / start_fixture.name
-    if "native_planetary" in selected:
+    if any(name in selected for name in ("native_planetary", "native_voyage")):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
     env = os.environ.copy()
@@ -246,7 +247,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_port", "native_walk", "native_start_staging", "native_planetary") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -363,7 +364,7 @@ def main(argv=None):
             report["setup"][-1]["save_sha256"] = sha256(path)
             save()
         (work / "corrupt.json").write_text("{broken json\n")
-    if "native_planetary" in selected:
+    if any(name in selected for name in ("native_planetary", "native_voyage")):
         phases = work / "planetary"
         phases.mkdir()
         log = work / "planetary-fixture.log"
@@ -378,7 +379,7 @@ def main(argv=None):
                 print(f"FAIL planetary argument refusal: {refusal_log}", flush=True)
                 return 1
         code, timed_out, elapsed = run_logged(
-            [str(planetary_fixture), str(phases)], log, env, args.timeout)
+            [str(planetary_fixture), str(phases), *(["--commands"] if "native_voyage" in selected else [])], log, env, args.timeout)
         report["setup"].append({"family": "planetary_saves", "returncode": code,
                                 "timed_out": timed_out, "seconds": elapsed,
                                 "fixture_sha256": sha256(planetary_fixture)})
@@ -387,7 +388,7 @@ def main(argv=None):
             print(f"FAIL planetary fixture: {log}", flush=True)
             return 1
         report["setup"][-1]["files_sha256"] = {
-            path.name: sha256(path) for path in sorted(phases.glob("*.json"))}
+            path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
     for name in selected:
         if name == "native_shell":
@@ -576,9 +577,9 @@ def main(argv=None):
             arguments = [str(work / path) for path in
                          ("freedom-0.json", "freedom-25.json", "career.json",
                           "corrupt.json", "snapshot-42.json")]
-        elif TESTS[name] == "planetary_saves":
+        elif TESTS[name] in ("planetary_saves", "voyage_saves"):
             arguments = [str(work / path) for path in
-                         ("planetary", "native-assets", "planetary-native")]
+                         ("planetary", "native-assets", "voyage-native" if name == "native_voyage" else "planetary-native")]
         elif TESTS[name] == "native_assets":
             arguments = [str(work / "native-assets"), str(work / "native-asset-import.json")]
         elif TESTS[name] == "operating_assets":

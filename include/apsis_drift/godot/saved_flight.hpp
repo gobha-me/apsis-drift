@@ -105,7 +105,7 @@ struct SavedFlightWorld {
     (void)project_saved_flight(candidate);
     session = std::move(candidate);
     clock = candidate_clock;
-    last_step = std::move(actuation);
+    last_step = actuation;
     dropped_seconds += scheduled.dropped.count();
   }
 };

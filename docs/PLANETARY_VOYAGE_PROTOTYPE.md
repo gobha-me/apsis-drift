@@ -65,3 +65,40 @@ certify continuous terrain collision or low-level landing clearance. C++ owns
 both those terrain samples and Godot's streamed world. Existing boarding and
 exhaust presentation refinements remain documented in
 [the boarding prototype](PLAYABLE_BOARDING_PROTOTYPE.md).
+
+## Uninterrupted native session
+
+`--test native_voyage` additionally generates a bounded command stream and runs
+one native session from ordinary New Game, through the shell's boarding and
+return view handoffs. The Wayfarer model must retain its instance identity;
+no phase reload or pose assignment is used. Complete saved files must match
+the independently generated C++ reference at every checkpoint.
+
+```sh
+python3 tools/test_godot_native.py --godot /absolute/path/to/godot \
+  --build-dir build --timeout 600 --test native_voyage
+```
+
+The exporter takes an optional `--commands` after its absolute empty output
+directory. Only this mode holds test-pilot demands for fifteen ticks (0.125
+seconds); the default fixture and its existing checkpoints remain unchanged.
+Commands carry exact IEEE754 binary64 values as little-endian hexadecimal bytes,
+avoiding decimal-parser rounding between C++ and Godot. The file is bounded to
+32 MiB, 100,000 rows and fifteen ticks per batch. Closed command names, finite
+control buffers, checkpoint order and tick totals are validated before staging.
+
+The flight check feeds recorded semantic input through the real view process,
+actuator mapping, C++ clock, terrain and applied-force exhaust. It substitutes
+only the operating-system input sampler; controller mapping, focus and neutral
+latches retain their separate tests and manual qualification. Automatic node
+processing is disabled during explicit playback, so render waits and deferred
+view handoffs cannot change authoritative time. This is accelerated integration
+playback, not a gameplay autopilot or a frame-pacing measurement.
+
+For optional GPU review, `res://studies/captures/native_voyage_capture.gd` accepts
+the same three absolute directories as the checkpoint review. It renders the
+actual uninterrupted session at each phase, waiting for streamed terrain with
+simulation frozen, and writes `voyage.json` with source/input/image hashes,
+engine/renderer information and the existing asset license location. Preserve
+those compact records and selected licensed captures, then remove temporary
+copied asset packages and projects.

@@ -251,7 +251,7 @@ jobs:
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight
           --test native_port --test native_walk
-          --test native_assembly --test native_start_staging --test native_planetary
+          --test native_assembly --test native_start_staging --test native_planetary --test native_voyage
           --test home_navigation
           --test wayfarer_operating
           --test recorded_audio_shutdown
@@ -265,5 +265,6 @@ jobs:
             build-native-contracts/native-contracts-*/report.json
             build-native-contracts/native-contracts-*/*.log
             build-native-contracts/native-contracts-*/planetary/*.json
+            build-native-contracts/native-contracts-*/voyage-native/*.json
           if-no-files-found: warn
           retention-days: 7
