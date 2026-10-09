@@ -59,7 +59,7 @@ auto fixture(Seed seed, bool assisted = true) -> NativeFreedomFlightSession {
   FreedomResourceSaveDocument fueled{std::move(surface), resources};
   FreedomKnowledgeSaveDocument mapped{std::move(fueled), std::move(knowledge)};
   FreedomTravelSaveDocument document{
-      std::move(mapped), {}, NativeStartingAssemblySelection{}};
+      std::move(mapped), {}, NativeStartingAssemblySelection{}, {}};
   return need(NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, document, body, {}}));
 }
@@ -206,6 +206,74 @@ auto invalid(const std::filesystem::path& path) -> void {
         "Excessive root nesting is bounded before JSON parse");
   live = resume(live, path);
 }
+auto seated_continuity(const std::filesystem::path& path) -> void {
+  auto on_station =
+      need(NativeFreedomFlightSession::open(need(native_new_game({42}))));
+  const OriginWalkControls walk{0, -1, 0};
+  for (SimulationTick t = 0; t < 2960; ++t)
+    need(on_station.advance_walk(walk));
+  need(on_station.begin_boarding());
+  for (SimulationTick t = 0; t < kGameplayBoardingTicks; ++t)
+    need(on_station.advance_walk({}));
+  const auto pilot = *on_station.boarding();
+  check(pilot.phase == FreedomBoardingPhase::seated && !on_station.walker(),
+        "Pilot history comes from actual walking and completed boarding");
+  // Jump contract starts in a valid space fixture. The composed route test owns
+  // actual departure/braking/rendezvous; retain the real pilot, not a fake
+  // seat.
+  auto document = need(fixture({42}).travel_document());
+  auto& flight =
+      std::get<FreedomFlightSaveDocument>(document.voyage.voyage.voyage.base);
+  flight.flight.tick = on_station.document().flight.tick;
+  flight.origin.state.tick = flight.flight.tick;
+  document.voyage.voyage.resources.tick = flight.flight.tick;
+  document.seated_pilot = pilot;
+  auto live = need(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       document,
+       on_station.system().catalog.planets[0].descriptor,
+       {}}));
+  live = resume(live, path);
+  check(live.boarding() == pilot && need(live.boarding_view()).seated,
+        "Independent seated history resumes without a phantom current port");
+  const auto ids = generate_first_intersystem_identities({42});
+  need(live.select_jump(ids.target_system));
+  leg(live, path);
+  check(live.boarding() == pilot && need(live.boarding_view()).seated &&
+            need(live.travel_document()).seated_pilot == pilot,
+        "Outbound jump preserves actual pilot, entry and seat presentation");
+  auto corrupt = Json::parse(
+      need(encode_freedom_travel_document_json(need(live.travel_document()))));
+  corrupt["seated_pilot"]["phase"] = "station";
+  check(!decode_freedom_travel_document_json(corrupt.dump()),
+        "Free travel cannot manufacture a walking actor from a seat record");
+  corrupt = Json::parse(
+      need(encode_freedom_travel_document_json(need(live.travel_document()))));
+  corrupt["seated_pilot"]["started_tick"] = "18446744073709551615";
+  check(!decode_freedom_travel_document_json(corrupt.dump()),
+        "Seat history requires an already completed route on the shared clock");
+  const auto before = need(live.travel_document());
+  check(!live.begin_disembarking() && need(live.travel_document()) == before,
+        "Preserved entry does not create a neighbor station for disembarking");
+  need(live.select_jump(ids.origin_system));
+  leg(live, path);
+  live = resume(live, path);
+  need(live.select_port(1));
+  check(live.boarding() == pilot &&
+            !need(live.travel_document()).seated_pilot &&
+            std::holds_alternative<FreedomBoardingSaveDocument>(
+                live.surface_document().base),
+        "Real home port selection transfers sole pilot ownership to boarding "
+        "voyage");
+  live = resume(live, path);
+  check(live.boarding() == pilot && need(live.boarding_view()).seated,
+        "Home port Save/Continue preserves the original entry without "
+        "reboarding");
+  auto duplicate = need(live.travel_document());
+  duplicate.seated_pilot = pilot;
+  check(!validate_freedom_travel_document(duplicate),
+        "A nested boarding voyage and outer seat cannot both own a pilot");
+}
 auto station_selection(const std::filesystem::path& path) -> void {
   auto live =
       need(NativeFreedomFlightSession::open(need(native_new_game({42}))));
@@ -234,6 +302,7 @@ auto main() -> int {
     std::filesystem::create_directories(directory);
     invalid(directory / "phase.json");
     station_selection(directory / "phase.json");
+    seated_continuity(directory / "phase.json");
     for (auto seed :
          {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}})
       for (bool assisted : {true, false})
@@ -244,7 +313,7 @@ auto main() -> int {
     std::filesystem::remove_all(directory);
     return 1;
   }
-  check(fingerprint == 13968603585411398936ULL,
+  check(fingerprint == 14140637698110517716ULL,
         "Three-seed dual-profile physical round-trip golden remains exact");
   std::cout << checks << " native jump checks; fingerprint " << fingerprint
             << '\n';

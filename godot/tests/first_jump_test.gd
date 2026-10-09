@@ -63,6 +63,7 @@ func run() -> void:
 			if t in [1, 360, 361, 600]:
 				state = owner.get_freedom_flight_state()
 				check(FlightView.valid_state(state), "Current-world native projection invalid")
+				check(owner.get_freedom_boarding_state().state == "seated" and owner.get_freedom_boarding_state().seated, "Jump lost actual seated pilot presentation")
 				view.state = state
 				view.update_view(0.0)
 				checkpoint(owner, directory.path_join("phase.json"), trace + ".leg%d.%d.json" % [leg, t])
@@ -72,6 +73,7 @@ func run() -> void:
 				check(not pending.is_empty() and restored.commit_pending_freedom_start(pending.candidate_id), "Native phase Continue could not commit")
 				check(restored.get_freedom_flight_state().position_metres == state.position_metres and restored.get_freedom_flight_state().system_id == state.system_id, "Native resumed phase changed actual pose/world")
 				check(restored.get_freedom_craft_binding().operating_model_sha256 == owner.get_freedom_craft_binding().operating_model_sha256, "Continue lost authored craft binding")
+				check(restored.get_freedom_boarding_state() == owner.get_freedom_boarding_state(), "Continue changed actual pilot/entry/seat projection")
 		state = owner.get_freedom_flight_state()
 		check(state.jump.phase == "idle" and state.resources.jump_charges == 2-leg, "Native leg did not install arrival/one-charge bill")
 		check(not view.terrain.nodes.has("old-cover") and not old_node.visible, "Arrival reused old GPU terrain cover")

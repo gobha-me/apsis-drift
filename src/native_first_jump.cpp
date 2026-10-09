@@ -11,7 +11,8 @@ auto NativeFreedomFlightSession::travel_document() const
   FreedomTravelSaveDocument result{
       {{surface_document(), *resources_}, *knowledge_},
       *travel_,
-      starting_assembly_};
+      starting_assembly_,
+      boarding_ && !docking_ ? boarding_ : std::nullopt};
   if (auto v = validate_freedom_travel_document(result); !v)
     return std::unexpected{v.error().detail};
   return result;
@@ -196,7 +197,7 @@ auto NativeFreedomFlightSession::advance_jump(
         ++candidate.travel_->next_attempt;
         candidate.travel_->phase = FreedomJumpPhase::transit;
         candidate.docking_.reset();
-        candidate.boarding_.reset();
+        // Port attachment ends here; the actual seated pilot does not.
         result.jump_committed = true;
       }
     }

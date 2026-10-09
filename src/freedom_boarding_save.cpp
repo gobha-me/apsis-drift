@@ -100,16 +100,104 @@ auto assembly_json() -> Json {
 }
 constexpr std::array<std::string_view, 4> phases{"station", "boarding",
                                                  "seated", "disembarking"};
+auto boarding_value(const Json& b)
+    -> std::expected<FreedomBoardingState, SaveSchemaError> {
+  if (!fields(b, {"phase", "station_entry", "started_tick", "route"}) ||
+      !b["phase"].is_string())
+    return std::unexpected{
+        failure("$.boarding", "invalid closed boarding shape")};
+  std::size_t phase = phases.size();
+  for (std::size_t i = 0; i < phases.size(); ++i)
+    if (b["phase"] == phases[i]) phase = i;
+  const auto entry = actor_value(b["station_entry"]);
+  const auto started = decimal(b["started_tick"]);
+  const auto& s = b["route"];
+  if (phase == phases.size() || !entry || !started ||
+      !fields(s, {"direction", "elapsed_ticks", "station_entry_eye",
+                  "station_entry_heading_radians", "craft_station_position",
+                  "craft_station_orientation"}) ||
+      (s["direction"] != "board" && s["direction"] != "disembark") ||
+      !s["elapsed_ticks"].is_number_unsigned() ||
+      s["elapsed_ticks"] > kGameplayBoardingTicks ||
+      !s["station_entry_heading_radians"].is_number())
+    return std::unexpected{
+        failure("$.boarding", "invalid phase, clock or route")};
+  const auto eye = vector_value(s["station_entry_eye"]),
+             position = vector_value(s["craft_station_position"]);
+  const auto& q = s["craft_station_orientation"];
+  if (!eye || !position || !q.is_array() || q.size() != 4)
+    return std::unexpected{failure("$.boarding.route", "invalid transform")};
+  for (const auto& x : q)
+    if (!x.is_number())
+      return std::unexpected{
+          failure("$.boarding.route", "numeric quaternion required")};
+  return FreedomBoardingState{static_cast<FreedomBoardingPhase>(phase),
+                              *entry,
+                              *started,
+                              {s["direction"] == "board"
+                                   ? GameplayBoardingDirection::board
+                                   : GameplayBoardingDirection::disembark,
+                               s["elapsed_ticks"].get<std::uint32_t>(),
+                               *eye,
+                               s["station_entry_heading_radians"].get<double>(),
+                               *position,
+                               {q[0].get<double>(), q[1].get<double>(),
+                                q[2].get<double>(), q[3].get<double>()}}};
+}
+auto boarding_json(const FreedomBoardingState& b) -> Json {
+  const auto& s = b.route;
+  const auto q = s.craft_station_orientation;
+  return {{"phase", phases[static_cast<std::size_t>(b.phase)]},
+          {"station_entry", actor_json(b.station_entry)},
+          {"started_tick", std::to_string(b.started_tick)},
+          {"route",
+           {{"direction", s.direction == GameplayBoardingDirection::board
+                              ? "board"
+                              : "disembark"},
+            {"elapsed_ticks", s.elapsed_ticks},
+            {"station_entry_eye", vector_json(s.station_entry_eye)},
+            {"station_entry_heading_radians", s.station_entry_heading_radians},
+            {"craft_station_position", vector_json(s.craft_station_position)},
+            {"craft_station_orientation", Json::array({q.w, q.x, q.y, q.z})}}}};
+}
+auto parse_boarding(std::string_view text)
+    -> std::expected<Json, SaveSchemaError> {
+  if (text.size() > kMaximumSaveDocumentBytes)
+    return std::unexpected{
+        SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
+                        "boarding save exceeds limit"}};
+  if (!nesting(text))
+    return std::unexpected{
+        SaveSchemaError{SaveSchemaErrorCode::malformed_json, "$",
+                        "unbalanced or excessive JSON nesting"}};
+  bool duplicate{};
+  std::vector<std::unordered_set<std::string>> keys;
+  const Json::parser_callback_t callback = [&](int, Json::parse_event_t e,
+                                               Json& v) {
+    if (e == Json::parse_event_t::object_start) keys.emplace_back();
+    if (e == Json::parse_event_t::key &&
+        (keys.empty() || !keys.back().insert(v.get<std::string>()).second))
+      duplicate = true;
+    if (e == Json::parse_event_t::object_end && !keys.empty()) keys.pop_back();
+    return true;
+  };
+  Json root;
+  try {
+    root = Json::parse(text.begin(), text.end(), callback);
+  } catch (const Json::exception& e) {
+    return std::unexpected{
+        SaveSchemaError{SaveSchemaErrorCode::malformed_json, "$", e.what()}};
+  }
+  if (duplicate)
+    return std::unexpected{SaveSchemaError{SaveSchemaErrorCode::duplicate_key,
+                                           "$", "repeated JSON key"}};
+  return root;
+}
 } // namespace
 
-auto validate_freedom_boarding_document(const FreedomBoardingSaveDocument& d)
+auto validate_freedom_boarding_state(const FreedomBoardingState& b,
+                                     SimulationTick tick)
     -> std::expected<void, SaveSchemaError> {
-  if (auto v = validate_freedom_docking_document(d.voyage); !v)
-    return std::unexpected{v.error()};
-  if (d.starting_assembly != NativeStartingAssemblySelection{})
-    return std::unexpected{
-        failure("$.starting_assembly", "unsupported geometry/rest reference")};
-  const auto& b = d.boarding;
   const auto& route = b.route;
   if (auto v = validate_origin_walker(b.station_entry); !v)
     return std::unexpected{failure("$.boarding.station_entry", v.error())};
@@ -117,7 +205,6 @@ auto validate_freedom_boarding_document(const FreedomBoardingSaveDocument& d)
     return std::unexpected{failure("$.boarding.route", v.error())};
   auto eye = b.station_entry.foot_position_metres;
   eye.y += kOriginWalkerEyeHeightMetres;
-  const auto tick = d.voyage.flight.flight.tick;
   const bool complete = route.elapsed_ticks == kGameplayBoardingTicks;
   const auto expected = route.direction == GameplayBoardingDirection::board
                             ? (complete ? FreedomBoardingPhase::seated
@@ -130,6 +217,40 @@ auto validate_freedom_boarding_document(const FreedomBoardingSaveDocument& d)
       (!complete && tick - b.started_tick != route.elapsed_ticks))
     return std::unexpected{
         failure("$.boarding", "route phase, entry and shared clock disagree")};
+  return {};
+}
+auto encode_freedom_boarding_state_json(const FreedomBoardingState& b,
+                                        SimulationTick tick)
+    -> std::expected<std::string, SaveSchemaError> {
+  if (auto v = validate_freedom_boarding_state(b, tick); !v)
+    return std::unexpected{v.error()};
+  return boarding_json(b).dump();
+}
+auto decode_freedom_boarding_state_json(std::string_view text,
+                                        SimulationTick tick)
+    -> std::expected<FreedomBoardingState, SaveSchemaError> {
+  auto root = parse_boarding(text);
+  if (!root) return std::unexpected{root.error()};
+  auto b = boarding_value(*root);
+  if (!b) return std::unexpected{b.error()};
+  if (auto v = validate_freedom_boarding_state(*b, tick); !v)
+    return std::unexpected{v.error()};
+  return b;
+}
+auto validate_freedom_boarding_document(const FreedomBoardingSaveDocument& d)
+    -> std::expected<void, SaveSchemaError> {
+  if (auto v = validate_freedom_docking_document(d.voyage); !v)
+    return std::unexpected{v.error()};
+  if (d.starting_assembly != NativeStartingAssemblySelection{})
+    return std::unexpected{
+        failure("$.starting_assembly", "unsupported geometry/rest reference")};
+  if (auto v = validate_freedom_boarding_state(d.boarding,
+                                               d.voyage.flight.flight.tick);
+      !v)
+    return v;
+  const auto& b = d.boarding;
+  const auto& route = b.route;
+  const auto tick = d.voyage.flight.flight.tick;
   if (b.phase != FreedomBoardingPhase::seated &&
       (!d.voyage.docking.attached || d.voyage.docking.target.ordinal != 1))
     return std::unexpected{
@@ -167,28 +288,12 @@ auto encode_freedom_boarding_document_json(const FreedomBoardingSaveDocument& d)
     return std::unexpected{v.error()};
   auto voyage = encode_freedom_docking_document_json(d.voyage);
   if (!voyage) return std::unexpected{voyage.error()};
-  const auto& b = d.boarding;
-  const auto& s = b.route;
-  const auto q = s.craft_station_orientation;
-  Json root = {
-      {"format_version", kFreedomBoardingSaveFormatVersion},
-      {"voyage", Json::parse(*voyage)},
-      {"starting_assembly", assembly_json()},
-      {"boarding",
-       {{"phase", phases[static_cast<std::size_t>(b.phase)]},
-        {"station_entry", actor_json(b.station_entry)},
-        {"started_tick", std::to_string(b.started_tick)},
-        {"route",
-         {{"direction", s.direction == GameplayBoardingDirection::board
-                            ? "board"
-                            : "disembark"},
-          {"elapsed_ticks", s.elapsed_ticks},
-          {"station_entry_eye", vector_json(s.station_entry_eye)},
-          {"station_entry_heading_radians", s.station_entry_heading_radians},
-          {"craft_station_position", vector_json(s.craft_station_position)},
-          {"craft_station_orientation", Json::array({q.w, q.x, q.y, q.z})}}}}},
-      {"station_actor",
-       d.station_actor ? actor_json(*d.station_actor) : Json(nullptr)}};
+  Json root = {{"format_version", kFreedomBoardingSaveFormatVersion},
+               {"voyage", Json::parse(*voyage)},
+               {"starting_assembly", assembly_json()},
+               {"boarding", boarding_json(d.boarding)},
+               {"station_actor", d.station_actor ? actor_json(*d.station_actor)
+                                                 : Json(nullptr)}};
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{
@@ -198,35 +303,9 @@ auto encode_freedom_boarding_document_json(const FreedomBoardingSaveDocument& d)
 }
 auto decode_freedom_boarding_document_json(std::string_view text)
     -> std::expected<FreedomBoardingSaveDocument, SaveSchemaError> {
-  if (text.size() > kMaximumSaveDocumentBytes)
-    return std::unexpected{
-        SaveSchemaError{SaveSchemaErrorCode::document_too_large, "$",
-                        "boarding save exceeds limit"}};
-  if (!nesting(text))
-    return std::unexpected{
-        SaveSchemaError{SaveSchemaErrorCode::malformed_json, "$",
-                        "unbalanced or excessive JSON nesting"}};
-  bool duplicate{};
-  std::vector<std::unordered_set<std::string>> keys;
-  const Json::parser_callback_t callback = [&](int, Json::parse_event_t e,
-                                               Json& v) {
-    if (e == Json::parse_event_t::object_start) keys.emplace_back();
-    if (e == Json::parse_event_t::key &&
-        (keys.empty() || !keys.back().insert(v.get<std::string>()).second))
-      duplicate = true;
-    if (e == Json::parse_event_t::object_end && !keys.empty()) keys.pop_back();
-    return true;
-  };
-  Json root;
-  try {
-    root = Json::parse(text.begin(), text.end(), callback);
-  } catch (const Json::exception& e) {
-    return std::unexpected{
-        SaveSchemaError{SaveSchemaErrorCode::malformed_json, "$", e.what()}};
-  }
-  if (duplicate)
-    return std::unexpected{SaveSchemaError{SaveSchemaErrorCode::duplicate_key,
-                                           "$", "repeated JSON key"}};
+  auto parsed = parse_boarding(text);
+  if (!parsed) return std::unexpected{parsed.error()};
+  const auto& root = *parsed;
   if (!root.is_object() || !root.contains("format_version") ||
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
@@ -243,36 +322,8 @@ auto decode_freedom_boarding_document_json(std::string_view text)
       root["starting_assembly"] != assembly_json())
     return std::unexpected{
         failure("$", "invalid wrapper or assembly reference")};
-  const auto& b = root["boarding"];
-  if (!fields(b, {"phase", "station_entry", "started_tick", "route"}) ||
-      !b["phase"].is_string())
-    return std::unexpected{
-        failure("$.boarding", "invalid closed boarding shape")};
-  std::size_t phase = phases.size();
-  for (std::size_t i = 0; i < phases.size(); ++i)
-    if (b["phase"] == phases[i]) phase = i;
-  const auto entry = actor_value(b["station_entry"]);
-  const auto started = decimal(b["started_tick"]);
-  const auto& s = b["route"];
-  if (phase == phases.size() || !entry || !started ||
-      !fields(s, {"direction", "elapsed_ticks", "station_entry_eye",
-                  "station_entry_heading_radians", "craft_station_position",
-                  "craft_station_orientation"}) ||
-      (s["direction"] != "board" && s["direction"] != "disembark") ||
-      !s["elapsed_ticks"].is_number_unsigned() ||
-      s["elapsed_ticks"] > kGameplayBoardingTicks ||
-      !s["station_entry_heading_radians"].is_number())
-    return std::unexpected{
-        failure("$.boarding", "invalid phase, clock or route")};
-  const auto eye = vector_value(s["station_entry_eye"]),
-             position = vector_value(s["craft_station_position"]);
-  const auto& q = s["craft_station_orientation"];
-  if (!eye || !position || !q.is_array() || q.size() != 4)
-    return std::unexpected{failure("$.boarding.route", "invalid transform")};
-  for (const auto& x : q)
-    if (!x.is_number())
-      return std::unexpected{
-          failure("$.boarding.route", "numeric quaternion required")};
+  auto boarding = boarding_value(root["boarding"]);
+  if (!boarding) return std::unexpected{boarding.error()};
   std::optional<OriginWalkerState> actor;
   if (!root["station_actor"].is_null()) {
     actor = actor_value(root["station_actor"]);
@@ -282,21 +333,7 @@ auto decode_freedom_boarding_document_json(std::string_view text)
   }
   auto voyage = decode_freedom_docking_document_json(root["voyage"].dump());
   if (!voyage) return std::unexpected{voyage.error()};
-  FreedomBoardingSaveDocument d{
-      std::move(*voyage),
-      {},
-      {static_cast<FreedomBoardingPhase>(phase),
-       *entry,
-       *started,
-       {s["direction"] == "board" ? GameplayBoardingDirection::board
-                                  : GameplayBoardingDirection::disembark,
-        s["elapsed_ticks"].get<std::uint32_t>(),
-        *eye,
-        s["station_entry_heading_radians"].get<double>(),
-        *position,
-        {q[0].get<double>(), q[1].get<double>(), q[2].get<double>(),
-         q[3].get<double>()}}},
-      actor};
+  FreedomBoardingSaveDocument d{std::move(*voyage), {}, *boarding, actor};
   if (auto v = validate_freedom_boarding_document(d); !v)
     return std::unexpected{v.error()};
   return d;

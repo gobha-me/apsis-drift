@@ -27,6 +27,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
   std::optional<FreedomTravelState> travel;
   std::optional<NativeStartingAssemblySelection> travel_binding;
+  std::optional<FreedomBoardingState> travel_pilot;
   if (auto* d = std::get_if<FreedomTravelSaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
       return std::unexpected{"Travel state requires Freedom"};
@@ -34,6 +35,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
       return std::unexpected{v.error().detail};
     travel = std::move(d->travel);
     travel_binding = std::move(d->craft_binding);
+    travel_pilot = d->seated_pilot;
     auto voyage = std::move(d->voyage);
     selected.document = std::move(voyage);
   }
@@ -140,6 +142,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
     result.starting_assembly_ = assembly;
     result.craft_binding_ = std::move(*binding);
   }
+  if (!boarding) boarding = travel_pilot;
   result.boarding_ = boarding;
   result.surface_ = surface;
   result.resources_ = resources;
@@ -649,7 +652,8 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
       travel_ ? write_freedom_travel_file_atomically(
                     path, {{{surface_document(), *resources_}, *knowledge_},
                            *travel_,
-                           starting_assembly_})
+                           starting_assembly_,
+                           boarding_ && !docking_ ? boarding_ : std::nullopt})
       : knowledge_ ? write_freedom_knowledge_file_atomically(
                          path, {{surface_document(), *resources_}, *knowledge_})
       : resources_ ? write_freedom_resource_file_atomically(
@@ -711,7 +715,7 @@ auto NativeFreedomFlightSession::refresh_knowledge(LocalObservationEvent event)
 auto NativeFreedomFlightSession::surface_document() const
     -> FreedomSurfaceSaveDocument {
   FreedomSurfaceBaseSave base = document_;
-  if (boarding_)
+  if (boarding_ && docking_)
     base = boarding_document();
   else if (starting_assembly_ && actor_ && docking_)
     base = FreedomStartingAssemblySaveDocument{

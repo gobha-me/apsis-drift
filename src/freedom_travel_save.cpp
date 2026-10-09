@@ -239,6 +239,32 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
       generate_first_universe_route(flight.origin.recipe.universe_seed);
   const auto current = flight.world->system;
   const auto now = flight.flight.tick;
+  if (d.seated_pilot) {
+    if (!std::holds_alternative<FreedomFlightSaveDocument>(voyage.base) ||
+        d.seated_pilot->phase != FreedomBoardingPhase::seated)
+      return std::unexpected{
+          failure("seated pilot requires a sole free-flight owner")};
+    if (auto v = validate_freedom_boarding_state(*d.seated_pilot, now); !v)
+      return v;
+    // The route is history in the origin station, not a port in this world.
+    auto home =
+        generate_physical_origin_system(flight.origin.recipe.universe_seed, 2);
+    const auto station =
+        generate_origin_station(flight.origin.recipe.universe_seed);
+    const auto geometry = origin_station_geometry(station);
+    if (!home || !geometry)
+      return std::unexpected{failure("Origin geometry unavailable")};
+    const auto pose = resolve_origin_port_pose(*home, station, *geometry,
+                                               {station.id, 1}, now);
+    if (!pose ||
+        d.seated_pilot->route.craft_station_position !=
+            pose->station_relative.position_metres ||
+        d.seated_pilot->route.craft_station_orientation !=
+            pose->station_relative.orientation)
+      return std::unexpected{
+          failure("saved pilot route differs from canonical entry")};
+  }
+
   if (s.selected &&
       (*s.selected == current ||
        (*s.selected != route.origin && *s.selected != route.destination)))
@@ -327,6 +353,14 @@ auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
     if (!encoded) return std::unexpected{encoded.error()};
     frozen = std::move(*encoded);
   }
+  Json pilot = nullptr;
+  if (d.seated_pilot) {
+    auto encoded = encode_freedom_boarding_state_json(
+        *d.seated_pilot,
+        surface_base_flight(d.voyage.voyage.voyage.base).flight.tick);
+    if (!encoded) return std::unexpected{encoded.error()};
+    pilot = Json::parse(*encoded);
+  }
   const auto& s = d.travel;
   const Json root = {
       {"format_version", kFreedomTravelSaveFormatVersion},
@@ -342,7 +376,8 @@ auto encode_freedom_travel_document_json(const FreedomTravelSaveDocument& d)
                                      ? resources_json(*s.commitment_resources)
                                      : Json(nullptr)}}},
       {"craft_binding",
-       d.craft_binding ? binding_json(*d.craft_binding) : Json(nullptr)}};
+       d.craft_binding ? binding_json(*d.craft_binding) : Json(nullptr)},
+      {"seated_pilot", std::move(pilot)}};
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure("travel save exceeds limit")};
@@ -358,7 +393,8 @@ auto decode_freedom_travel_document_json(std::string_view text)
     return std::unexpected{
         SaveSchemaError{SaveSchemaErrorCode::unsupported_format_version,
                         "$.format_version", "unsupported travel format"}};
-  if (!fields(*root, {"format_version", "voyage", "travel", "craft_binding"}))
+  if (!fields(*root, {"format_version", "voyage", "travel", "craft_binding",
+                      "seated_pilot"}))
     return std::unexpected{failure("invalid closed travel shape")};
   const auto& s = (*root)["travel"];
   if (!fields(s, {"version", "phase", "selected", "spool_tick", "next_attempt",
@@ -405,6 +441,13 @@ auto decode_freedom_travel_document_json(std::string_view text)
       if (binding[key] != value)
         return std::unexpected{failure("unsupported saved craft binding")};
     result.craft_binding = NativeStartingAssemblySelection{};
+  }
+  if (!(*root)["seated_pilot"].is_null()) {
+    auto pilot = decode_freedom_boarding_state_json(
+        (*root)["seated_pilot"].dump(),
+        surface_base_flight(result.voyage.voyage.voyage.base).flight.tick);
+    if (!pilot) return std::unexpected{pilot.error()};
+    result.seated_pilot = *pilot;
   }
   if (auto v = validate_freedom_travel_document(result); !v)
     return std::unexpected{v.error()};

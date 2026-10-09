@@ -27,6 +27,9 @@ struct FreedomTravelSaveDocument {
   FreedomTravelState travel;
   // Preserve the existing authored spacecraft selection across world handoff.
   std::optional<NativeStartingAssemblySelection> craft_binding;
+  // When there is no current port, preserve the completed, actual entry route.
+  // A nested boarding voyage owns this state instead when a port is selected.
+  std::optional<FreedomBoardingState> seated_pilot;
   friend auto operator==(const FreedomTravelSaveDocument&,
                          const FreedomTravelSaveDocument&) -> bool = default;
 };

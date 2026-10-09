@@ -142,6 +142,19 @@ namespace {
 auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
                   apsis_drift::SimulationTick tick) -> bool {
   using namespace apsis_drift;
+  auto start = native_new_game(seed);
+  if (!start) return false;
+  auto boarding = NativeFreedomFlightSession::open(std::move(*start));
+  if (!boarding) return false;
+  for (unsigned t = 0; t < 2960; ++t)
+    if (!boarding->advance_walk({0, -1, 0})) return false;
+  if (!boarding->begin_boarding()) return false;
+  for (unsigned t = 0; t < kGameplayBoardingTicks; ++t)
+    if (!boarding->advance_walk({})) return false;
+  // This is still a saved space fixture, with actual completed pilot history.
+  // Physical departure and return rendezvous belong to the composed trace.
+  if (tick < boarding->document().flight.tick)
+    tick = boarding->document().flight.tick;
   const auto system = generate_physical_origin_system(seed, 2);
   if (!system) return false;
   const auto& body = system->catalog.planets[0].descriptor;
@@ -165,8 +178,10 @@ auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
   FreedomSurfaceSaveDocument surface{flight, {}};
   FreedomResourceSaveDocument fueled{std::move(surface), resources};
   FreedomKnowledgeSaveDocument mapped{std::move(fueled), std::move(*knowledge)};
-  FreedomTravelSaveDocument document{
-      std::move(mapped), {}, NativeStartingAssemblySelection{}};
+  FreedomTravelSaveDocument document{std::move(mapped),
+                                     {},
+                                     NativeStartingAssemblySelection{},
+                                     boarding->boarding()};
   auto session = NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, document, body, {}});
   if (!session || !session->save_as(path)) return false;
