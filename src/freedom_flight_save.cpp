@@ -1,5 +1,8 @@
 #include "apsis_drift/freedom_flight_save.hpp"
 
+#include "apsis_drift/universe_navigation.hpp"
+
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <format>
@@ -11,6 +14,30 @@
 namespace apsis_drift {
 namespace {
 using Json = nlohmann::ordered_json;
+auto bounded_nesting(std::string_view text) -> bool {
+  std::array<char, 64> stack{};
+  std::size_t depth{};
+  bool quoted{}, escaped{};
+  for (char c : text) {
+    if (quoted) {
+      if (escaped)
+        escaped = false;
+      else if (c == '\\')
+        escaped = true;
+      else if (c == '"')
+        quoted = false;
+    } else if (c == '"')
+      quoted = true;
+    else if (c == '{' || c == '[') {
+      if (depth == stack.size()) return false;
+      stack[depth++] = c;
+    } else if (c == '}' || c == ']') {
+      if (!depth || stack[depth - 1] != (c == '}' ? '{' : '[')) return false;
+      --depth;
+    }
+  }
+  return !depth && !quoted;
+}
 auto failure(SaveSchemaErrorCode code, std::string path, std::string detail)
     -> SaveSchemaError {
   return {code, std::move(path), std::move(detail)};
@@ -41,10 +68,12 @@ auto version(const Json& object, std::string_view name)
                                    "expected an unsigned u32 version")};
   return x.get<std::uint32_t>();
 }
-auto decimal(const Json& x) -> std::expected<std::uint64_t, SaveSchemaError> {
+auto decimal(const Json& x, std::string_view path =
+                                "$.flight_model.orbit_hold.target.planet_id")
+    -> std::expected<std::uint64_t, SaveSchemaError> {
   if (!x.is_string())
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
-                                   "$.flight_model.orbit_hold.target.planet_id",
+                                   std::string{path},
                                    "expected canonical decimal string")};
   const auto& digits = x.get_ref<const std::string&>();
   std::uint64_t result{};
@@ -53,7 +82,7 @@ auto decimal(const Json& x) -> std::expected<std::uint64_t, SaveSchemaError> {
   if (digits.empty() || (digits.size() > 1 && digits.front() == '0') ||
       read.ec != std::errc{} || read.ptr != digits.data() + digits.size())
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_value,
-                                   "$.flight_model.orbit_hold.target.planet_id",
+                                   std::string{path},
                                    "malformed or overflowing identity")};
   return result;
 }
@@ -70,6 +99,34 @@ auto number(const Json& x, std::string path)
                                    "non-finite numerical component")};
   return value;
 }
+auto resolve_world(const FreedomSaveDocument& origin,
+                   const FreedomFlightModel& model,
+                   const std::optional<FreedomActiveWorldSelection>& world)
+    -> std::expected<PhysicalLocalSystem, SaveSchemaError> {
+  const auto seed = origin.recipe.universe_seed;
+  if (world && (world->version != kFreedomActiveWorldVersion ||
+                model.physical_catalog != 2 || model.physical_ephemeris != 2))
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::incompatible_generator_version, "$.world_owner",
+        "unsupported active-world policy or physical recipe")};
+  const auto ids = generate_first_intersystem_identities(seed);
+  if (world && world->system != ids.origin_system &&
+      world->system != ids.target_system)
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.world_owner.system_id",
+                "active world is outside the selected seeded pair")};
+  auto system =
+      world && world->system == ids.target_system
+          ? generate_physical_local_system(ids.target_system_seed,
+                                           model.physical_catalog)
+          : generate_physical_origin_system(seed, model.physical_catalog);
+  if (!system)
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::incompatible_generator_version,
+                "$.flight_model.physical_catalog",
+                "physical catalog selection is unsupported")};
+  return std::move(*system);
+}
 } // namespace
 
 auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
@@ -82,21 +139,26 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
         failure(SaveSchemaErrorCode::invalid_state, "$.flight.tick",
                 "history/flight clocks differ or flight cannot advance")};
   const auto& model = document.model;
-  auto system = generate_physical_origin_system(
-      document.origin.recipe.universe_seed, model.physical_catalog);
+  auto system = resolve_world(document.origin, model, document.world);
   if (!system || system->ephemeris_version != model.physical_ephemeris ||
       model.rotation_owner != kPhysicalPlanetRotationOwnerVersion)
     return std::unexpected{failure(
         SaveSchemaErrorCode::incompatible_generator_version, "$.flight_model",
         "physical catalog, ephemeris or rotation owner is unsupported")};
+  const auto planet = document.world ? document.world->planet
+                                     : document.origin.recipe.home_planet;
   if (document.flight.frame.kind != RigidFrameKind::planet_relative_inertial ||
-      document.flight.frame.planet != document.origin.recipe.home_planet)
-    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
-                                   "$.flight.frame",
-                                   "saved flight requires the physical origin "
-                                   "home planet in its nonrotating frame")};
-  auto rotation = generate_planet_rotation_recipe(
-      *system, document.origin.recipe.home_planet, model.rotation_generator);
+      document.flight.frame.system != system->catalog.id ||
+      document.flight.frame.planet != planet ||
+      (document.world &&
+       document.flight.craft !=
+           CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion}))
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.flight.frame",
+                "saved flight requires its explicitly selected "
+                "physical planet in the nonrotating frame")};
+  auto rotation = generate_planet_rotation_recipe(*system, planet,
+                                                  model.rotation_generator);
   if (!rotation)
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
@@ -137,7 +199,14 @@ auto encode_freedom_flight_document_json(
                                    "$.flight",
                                    "rigid state cannot be encoded")};
   Json root = Json::parse(*origin);
-  root["format_version"] = kFreedomFlightSaveFormatVersion;
+  root["format_version"] = document.world
+                               ? kFreedomActiveFlightSaveFormatVersion
+                               : kFreedomFlightSaveFormatVersion;
+  if (document.world)
+    root["world_owner"] = {
+        {"version", document.world->version},
+        {"system_id", std::to_string(document.world->system.value)},
+        {"planet_id", std::to_string(document.world->planet.value)}};
   root["state"]["location"] = "planetary_flight";
   root["flight"] = Json::parse(*flight);
   const auto& model = document.model;
@@ -170,6 +239,9 @@ auto decode_freedom_flight_document_json(std::string_view text)
   if (text.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
                                    "flight save exceeds the document limit")};
+  if (!bounded_nesting(text))
+    return std::unexpected{failure(SaveSchemaErrorCode::malformed_json, "$",
+                                   "unbalanced or excessive JSON nesting")};
   bool duplicate = false;
   std::vector<std::unordered_set<std::string>> keys;
   const Json::parser_callback_t callback = [&](int, Json::parse_event_t event,
@@ -199,17 +271,42 @@ auto decode_freedom_flight_document_json(std::string_view text)
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
                                    "$.format_version",
                                    "expected unsigned save version")};
-  if (root["format_version"] != kFreedomFlightSaveFormatVersion)
+  const bool active =
+      root["format_version"] == kFreedomActiveFlightSaveFormatVersion;
+  if (root["format_version"] != kFreedomFlightSaveFormatVersion && !active)
     return std::unexpected{
         failure(SaveSchemaErrorCode::unsupported_format_version,
                 "$.format_version", "unsupported Freedom flight save version")};
-  if (auto valid =
-          fields(root,
-                 {"application", "application_version", "format_version",
-                  "mode", "recipe", "state", "flight", "flight_model"},
-                 "$");
-      !valid)
-    return std::unexpected{valid.error()};
+  auto shape =
+      active ? fields(root,
+                      {"application", "application_version", "format_version",
+                       "mode", "recipe", "state", "flight", "flight_model",
+                       "world_owner"},
+                      "$")
+             : fields(root,
+                      {"application", "application_version", "format_version",
+                       "mode", "recipe", "state", "flight", "flight_model"},
+                      "$");
+  if (!shape) return std::unexpected{shape.error()};
+  std::optional<FreedomActiveWorldSelection> selection;
+  if (active) {
+    const auto& w = root["world_owner"];
+    if (auto valid =
+            fields(w, {"version", "system_id", "planet_id"}, "$.world_owner");
+        !valid)
+      return std::unexpected{valid.error()};
+    if (!w["version"].is_number_unsigned() ||
+        w["version"] != kFreedomActiveWorldVersion)
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::incompatible_generator_version,
+                  "$.world_owner.version", "unsupported active-world owner")};
+    auto system = decimal(w["system_id"], "$.world_owner.system_id"),
+         planet = decimal(w["planet_id"], "$.world_owner.planet_id");
+    if (!system) return std::unexpected{system.error()};
+    if (!planet) return std::unexpected{planet.error()};
+    selection = FreedomActiveWorldSelection{
+        kFreedomActiveWorldVersion, {*system}, {*planet}};
+  }
   if (!root["state"].is_object() || !root["state"].contains("location") ||
       root["state"]["location"] != "planetary_flight")
     return std::unexpected{
@@ -218,6 +315,7 @@ auto decode_freedom_flight_document_json(std::string_view text)
   Json origin = root;
   origin.erase("flight");
   origin.erase("flight_model");
+  origin.erase("world_owner");
   origin["format_version"] = kFreedomSaveFormatVersion;
   origin["state"]["location"] = "docked_at_origin";
   // Shared identity/history validation only; original format18 location was
@@ -290,8 +388,7 @@ auto decode_freedom_flight_document_json(std::string_view text)
     if (!z) return std::unexpected{z.error()};
     model.hold.target = OrbitHoldTarget{{*planet}, *radius, {*x, *y, *z}};
   }
-  auto system = generate_physical_origin_system(decoded->recipe.universe_seed,
-                                                model.physical_catalog);
+  auto system = resolve_world(*decoded, model, selection);
   if (!system)
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
@@ -303,7 +400,8 @@ auto decode_freedom_flight_document_json(std::string_view text)
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.flight",
                 "rigid state/owner projection is malformed or incompatible")};
-  FreedomFlightSaveDocument document{std::move(*decoded), *flight, model};
+  FreedomFlightSaveDocument document{std::move(*decoded), *flight, model,
+                                     selection};
   if (auto valid = hydrate_freedom_flight_document(document); !valid)
     return std::unexpected{valid.error()};
   return document;

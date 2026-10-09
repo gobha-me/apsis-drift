@@ -116,8 +116,11 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
               {"ephemeris", r.ephemeris},
               {"ambient", r.ambient}}},
             {"entries", std::move(entries)}};
-  if (r.version == kFreedomObservedKnowledgeVersion)
+  if (r.version == kFreedomObservedKnowledgeVersion ||
+      r.version == kFreedomTravelKnowledgeVersion)
     root["recipe"]["observation_policy"] = r.observation_policy;
+  if (r.version == kFreedomTravelKnowledgeVersion)
+    root["recipe"]["world_domain"] = r.world_domain;
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -130,14 +133,20 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   if (!fields(*root, {"recipe", "entries"}) || !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
   const auto& r = (*root)["recipe"];
-  const bool observed = r.contains("version") &&
-                        r["version"].is_number_unsigned() &&
-                        r["version"] == kFreedomObservedKnowledgeVersion;
-  if (!(observed ? fields(r, {"version", "universe_seed", "chart", "topology",
-                              "physical_catalog", "ephemeris", "ambient",
-                              "observation_policy"})
-                 : fields(r, {"version", "universe_seed", "chart", "topology",
-                              "physical_catalog", "ephemeris", "ambient"})))
+  const bool travel = r.contains("version") &&
+                      r["version"].is_number_unsigned() &&
+                      r["version"] == kFreedomTravelKnowledgeVersion;
+  const bool observed =
+      r.contains("version") && r["version"].is_number_unsigned() &&
+      (r["version"] == kFreedomObservedKnowledgeVersion || travel);
+  if (!(travel     ? fields(r, {"version", "universe_seed", "chart", "topology",
+                                "physical_catalog", "ephemeris", "ambient",
+                                "observation_policy", "world_domain"})
+        : observed ? fields(r, {"version", "universe_seed", "chart", "topology",
+                                "physical_catalog", "ephemeris", "ambient",
+                                "observation_policy"})
+                   : fields(r, {"version", "universe_seed", "chart", "topology",
+                                "physical_catalog", "ephemeris", "ambient"})))
     return std::unexpected{failure("invalid closed knowledge shape")};
   if (!unsigned_fields(r, {"version", "universe_seed", "chart", "topology",
                            "physical_catalog", "ephemeris", "ambient"}))
@@ -158,6 +167,11 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                       r["ambient"].get<std::uint32_t>()},
                      {}};
   if (observed) k.recipe.observation_policy = 1;
+  if (travel) {
+    if (!r["world_domain"].is_number_unsigned() || r["world_domain"] != 1)
+      return std::unexpected{failure("unsupported travel knowledge domain")};
+    k.recipe.world_domain = 1;
+  }
   const auto& entries = (*root)["entries"];
   if (!entries.is_array() || entries.size() > kMaximumFreedomKnowledgeFacts)
     return std::unexpected{failure("invalid or oversized fact array")};
@@ -208,7 +222,8 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
   if (r.universe_seed != flight.origin.recipe.universe_seed ||
       r.physical_catalog != flight.model.physical_catalog ||
       r.ephemeris != flight.model.physical_ephemeris ||
-      !validate_freedom_knowledge(d.knowledge, flight.flight.tick))
+      !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
+      (r.version == kFreedomTravelKnowledgeVersion) != flight.world.has_value())
     return std::unexpected{
         failure("knowledge owner, recipe or clock mismatch")};
   return {};

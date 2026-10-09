@@ -1,5 +1,8 @@
 # Local ship observations
 
+For the explicit active-world/travel extension, see [Native First Jump](FREEDOM_NATIVE_TRAVEL.md). The historical recipes described below retain their meanings.
+
+
 The minimal #189 implementation selects knowledge recipe **2** with explicit
 `observation_policy=1` for new native games. Format 25 retains the same outer
 knowledge/resource/voyage ownership; another wrapper is unnecessary. Recipe 1

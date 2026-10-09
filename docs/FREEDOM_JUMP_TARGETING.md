@@ -2,8 +2,8 @@
 
 Policy 1, recorded 2026-10-09 for the in-range portion of #193. This is the
 numerical provider for native travel #176, using the existing nearby pair
-from [the starting chart](FREEDOM_TOPOLOGY.md). It does not yet enable jumps
-in Godot. Existing jump-version-4 contracts, missions and saved games retain
+from [the starting chart](FREEDOM_TOPOLOGY.md). The [native travel consumer](FREEDOM_NATIVE_TRAVEL.md) enables its qualified
+in-range jumps in Godot. Existing jump-version-4 contracts, missions and saved games retain
 their previous behavior.
 
 ## Actual geometry

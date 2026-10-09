@@ -40,6 +40,12 @@ auto validate_freedom_docking_document(
   const auto& body = document.flight.flight;
   const auto station =
       generate_origin_station(document.flight.origin.recipe.universe_seed);
+  if (body.frame.system != generate_first_intersystem_identities(
+                               document.flight.origin.recipe.universe_seed)
+                               .origin_system ||
+      body.frame.planet != station.orbit.host_planet)
+    return std::unexpected{
+        failure("$.docking", "Origin Station is not in the current frame")};
   const auto geometry = origin_station_geometry(station);
   if (!geometry || state.geometry_version != geometry->version ||
       body.craft != CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion})
@@ -123,9 +129,11 @@ auto decode_freedom_docking_document_json(std::string_view text)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom docking save version"}};
-  if (!exact_fields(root, {"application", "application_version",
-                           "format_version", "mode", "recipe", "state",
-                           "flight", "flight_model", "docking"}) ||
+  auto shape = root;
+  shape.erase("world_owner");
+  if (!exact_fields(shape, {"application", "application_version",
+                            "format_version", "mode", "recipe", "state",
+                            "flight", "flight_model", "docking"}) ||
       !exact_fields(root["docking"],
                     {"geometry_version", "target", "attached"}))
     return std::unexpected{failure("$", "unexpected or missing docking field")};
@@ -151,7 +159,9 @@ auto decode_freedom_docking_document_json(std::string_view text)
     return std::unexpected{
         failure("$.state.location", "attachment/location mismatch")};
   root.erase("docking");
-  root["format_version"] = kFreedomFlightSaveFormatVersion;
+  root["format_version"] = root.contains("world_owner")
+                               ? kFreedomActiveFlightSaveFormatVersion
+                               : kFreedomFlightSaveFormatVersion;
   root["state"]["location"] = "planetary_flight";
   auto flight = decode_freedom_flight_document_json(root.dump());
   if (!flight) return std::unexpected{flight.error()};

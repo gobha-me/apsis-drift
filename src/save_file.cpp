@@ -374,6 +374,12 @@ auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError> {
   auto contents = read_save_bytes(path);
   if (!contents) return std::unexpected{contents.error()};
+  auto travel = decode_freedom_travel_document_json(*contents);
+  if (travel) return NativeSaveDocument{std::move(*travel)};
+  if (travel.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "save file is malformed or incompatible", travel.error()}};
   auto knowledge = decode_freedom_knowledge_document_json(*contents);
   if (knowledge) return NativeSaveDocument{std::move(*knowledge)};
   if (knowledge.error().code != SaveSchemaErrorCode::unsupported_format_version)
@@ -601,6 +607,21 @@ auto write_freedom_knowledge_file_atomically(
                           detail::AtomicSaveTestInterruption::none);
 }
 
+auto write_freedom_travel_file_atomically(const std::filesystem::path& path,
+                                          const FreedomTravelSaveDocument& d)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_freedom_travel_document_json(d);
+  if (!encoded)
+    return std::unexpected{SaveFileError{SaveFileErrorCode::invalid_document,
+                                         path, "travel state cannot be encoded",
+                                         encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
+}
 auto save_file_error_message(const SaveFileError& error) -> std::string {
   std::string message =
       std::format("{}: {}", error.path.string(), error.detail);

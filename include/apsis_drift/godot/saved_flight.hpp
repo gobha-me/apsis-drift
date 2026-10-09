@@ -29,6 +29,7 @@ struct SavedFlightProjection {
   std::array<LocalPositionMetres, 3> system_axes;
   LocalPositionMetres station_position;
   OriginStationDescriptor station;
+  bool station_available{};
 };
 inline auto project_saved_flight(const NativeFreedomFlightSession& session)
     -> SavedFlightProjection {
@@ -55,21 +56,31 @@ inline auto project_saved_flight(const NativeFreedomFlightSession& session)
   };
   const auto station =
       generate_origin_station(session.document().origin.recipe.universe_seed);
-  const auto ephemeris =
-      require(resolve_origin_station_ephemeris(system, station, {body.tick}));
-  const auto& p = ephemeris.host_relative_position;
-  return {
-      planet,
-      rotation,
-      pose,
-      tangent,
-      {local_axis(rotate_saved(body.orientation, {1, 0, 0})),
-       local_axis(rotate_saved(body.orientation, {0, 1, 0})),
-       local_axis(rotate_saved(body.orientation, {0, 0, 1}))},
-      {local_axis({1, 0, 0}), local_axis({0, 1, 0}), local_axis({0, 0, 1})},
-      local_axis({p.x - body.position_metres.x, p.y - body.position_metres.y,
-                  p.z - body.position_metres.z}),
-      station};
+  const bool station_available =
+      system.catalog.id == generate_first_intersystem_identities(
+                               session.document().origin.recipe.universe_seed)
+                               .origin_system &&
+      planet.id == station.orbit.host_planet;
+  LocalPositionMetres station_position{};
+  if (station_available) {
+    const auto ephemeris =
+        require(resolve_origin_station_ephemeris(system, station, {body.tick}));
+    const auto& p = ephemeris.host_relative_position;
+    station_position =
+        local_axis({p.x - body.position_metres.x, p.y - body.position_metres.y,
+                    p.z - body.position_metres.z});
+  }
+  return {planet,
+          rotation,
+          pose,
+          tangent,
+          {local_axis(rotate_saved(body.orientation, {1, 0, 0})),
+           local_axis(rotate_saved(body.orientation, {0, 1, 0})),
+           local_axis(rotate_saved(body.orientation, {0, 0, 1}))},
+          {local_axis({1, 0, 0}), local_axis({0, 1, 0}), local_axis({0, 0, 1})},
+          station_position,
+          station,
+          station_available};
 }
 
 struct SavedFlightWorld {

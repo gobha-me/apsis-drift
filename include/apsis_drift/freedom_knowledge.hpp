@@ -8,6 +8,7 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomKnowledgeVersion{1};
 inline constexpr std::uint32_t kFreedomObservedKnowledgeVersion{2};
+inline constexpr std::uint32_t kFreedomTravelKnowledgeVersion{3};
 inline constexpr std::uint32_t kFreedomStartingChartVersion{1};
 inline constexpr std::size_t kMaximumFreedomKnowledgeFacts{128};
 inline constexpr std::size_t kMaximumFreedomKnowledgeTransitions{4};
@@ -65,6 +66,9 @@ struct FreedomKnowledgeRecipe {
   std::uint32_t ambient{kPlanetAmbientGeneratorVersion};
   // Version 1 stays unselected; version 2 explicitly selects local sensors.
   std::uint32_t observation_policy{};
+  // Version 3 registers the same seeded neighbor's planets. Earlier domains
+  // stay origin-only; registration itself grants no observations.
+  std::uint32_t world_domain{};
   friend auto operator==(const FreedomKnowledgeRecipe&,
                          const FreedomKnowledgeRecipe&) -> bool = default;
 };

@@ -172,9 +172,11 @@ auto decode_freedom_journey_document_json(std::string_view text)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom journey save version"}};
-  if (!exact_fields(root, {"application", "application_version",
-                           "format_version", "mode", "recipe", "state",
-                           "flight", "flight_model", "docking", "actor"}) ||
+  auto shape = root;
+  shape.erase("world_owner");
+  if (!exact_fields(shape, {"application", "application_version",
+                            "format_version", "mode", "recipe", "state",
+                            "flight", "flight_model", "docking", "actor"}) ||
       !exact_fields(root["actor"],
                     {"geometry_version", "actor_id", "frame",
                      "foot_position_metres", "velocity_metres_per_second",

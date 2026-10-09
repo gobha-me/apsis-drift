@@ -70,7 +70,8 @@ auto decode_base(const Json& j)
         failure("$.base", "unsigned nested format required")};
   const auto text = j.dump();
   const auto& version = j["format_version"];
-  if (version == kFreedomFlightSaveFormatVersion) {
+  if (version == kFreedomFlightSaveFormatVersion ||
+      version == kFreedomActiveFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};

@@ -45,7 +45,8 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
   if (!validate_freedom_knowledge(knowledge, flight.flight.tick) ||
       !validate_freedom_surface_document(voyage))
     return std::unexpected{Error::invalid_ledger};
-  if (knowledge.recipe.version != kFreedomObservedKnowledgeVersion ||
+  if ((knowledge.recipe.version != kFreedomObservedKnowledgeVersion &&
+       knowledge.recipe.version != kFreedomTravelKnowledgeVersion) ||
       knowledge.recipe.observation_policy != kFreedomLocalObservationPolicy)
     return std::unexpected{Error::unsupported_recipe};
   if (knowledge.recipe.universe_seed != flight.origin.recipe.universe_seed ||
@@ -54,13 +55,18 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
     return std::unexpected{Error::invalid_subject};
   if (event != LocalObservationEvent::sensor_tick &&
       event != LocalObservationEvent::touchdown &&
-      event != LocalObservationEvent::port_capture)
+      event != LocalObservationEvent::port_capture &&
+      event != LocalObservationEvent::system_arrival)
     return std::unexpected{Error::invalid_source};
   const auto pilot = pilot_context(voyage.base);
   if ((event == LocalObservationEvent::touchdown &&
        (!pilot.aboard || !voyage.surface.landed)) ||
       (event == LocalObservationEvent::port_capture &&
-       (!pilot.aboard || !pilot.attached)))
+       (!pilot.aboard || !pilot.attached)) ||
+      (event == LocalObservationEvent::system_arrival &&
+       (!pilot.aboard || pilot.attached || voyage.surface.landed ||
+        !flight.world ||
+        knowledge.recipe.version != kFreedomTravelKnowledgeVersion)))
     return std::unexpected{Error::invalid_source};
   if (!pilot.aboard ||
       (event == LocalObservationEvent::sensor_tick &&
@@ -70,8 +76,12 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
   auto hydrated = hydrate_freedom_flight_document(flight);
   if (!hydrated) return std::unexpected{Error::invalid_ledger};
   const auto& system = hydrated->system;
-  const auto origin =
+  const auto origin = system.catalog.id;
+  const auto home_system =
       generate_first_universe_route(knowledge.recipe.universe_seed).origin;
+  if (knowledge.recipe.version == kFreedomObservedKnowledgeVersion &&
+      origin != home_system)
+    return std::unexpected{Error::invalid_subject};
   const auto home = resolve_planet_ephemeris(
       system, *flight.flight.frame.planet, {flight.flight.tick, 0});
   if (!home) return std::unexpected{Error::invalid_subject};
@@ -139,6 +149,7 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
               KnowledgeFact::presence, NavigationKnowledgeLevel::visited))
     return std::unexpected{Error::invalid_transition};
   if (pilot.attached) {
+    if (origin != home_system) return std::unexpected{Error::invalid_subject};
     const auto station =
         generate_origin_station(knowledge.recipe.universe_seed);
     if (!record({KnowledgeSubjectKind::station, origin, station.id.value},

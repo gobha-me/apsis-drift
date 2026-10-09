@@ -202,7 +202,9 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomResourceSaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomKnowledgeSaveDocument>(selected.document))
+        std::holds_alternative<FreedomKnowledgeSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomTravelSaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -277,6 +279,13 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_freedom_boarding_state);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
                                 &FreedomBridge::get_freedom_flight_state);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("select_freedom_jump", "system_id"),
+        &FreedomBridge::select_freedom_jump);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_jump"),
+                                &FreedomBridge::begin_freedom_jump);
+    godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_jump"),
+                                &FreedomBridge::cancel_freedom_jump);
     godot::ClassDB::bind_method(
         godot::D_METHOD("select_freedom_port", "ordinal"),
         &FreedomBridge::select_freedom_port);
@@ -535,14 +544,16 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomResourceSaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomKnowledgeSaveDocument>(
-            selected.document)) {
+            selected.document) ||
+        std::holds_alternative<FreedomTravelSaveDocument>(selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
       const auto view = project_saved_flight(*opened);
       candidate->flight = std::make_unique<SavedFlightWorld>(
           SavedFlightWorld{std::move(*opened), {}, {}, 0});
       if (project_flight_state(*candidate->flight).is_empty() ||
-          project_station_geometry(view.station).is_empty() ||
+          (view.station_available &&
+           project_station_geometry(view.station).is_empty()) ||
           (candidate->flight->session.walker() &&
            project_walk_state(*candidate->flight).is_empty()))
         throw std::runtime_error("Pending Freedom presentation is unavailable");
@@ -625,10 +636,13 @@ class FreedomBridge : public godot::RefCounted {
                                   ? project_station_start(*pending->station)
                                   : godot::Dictionary{};
     result["station_geometry"] =
-        pending->station ? project_station_geometry(pending->station->station)
-                         : project_station_geometry(generate_origin_station(
-                               pending->flight->session.document()
-                                   .origin.recipe.universe_seed));
+        pending->station
+            ? project_station_geometry(pending->station->station)
+            : (project_saved_flight(pending->flight->session).station_available
+                   ? project_station_geometry(generate_origin_station(
+                         pending->flight->session.document()
+                             .origin.recipe.universe_seed))
+                   : godot::Dictionary{});
     return result;
   }
   auto matching_candidate(const godot::String& id) const -> bool {
@@ -742,10 +756,19 @@ class FreedomBridge : public godot::RefCounted {
     try {
       if (!saved_flight)
         throw std::invalid_argument("Continue a physical flight save first");
-      saved_flight->advance(
+      const auto previous_frame = saved_flight->session.document().flight.frame;
+      auto candidate = std::make_unique<SavedFlightWorld>(*saved_flight);
+      candidate->advance(
           elapsed,
           {fractions.ptr(), static_cast<std::size_t>(fractions.size())},
           paused);
+      if (previous_frame != candidate->session.document().flight.frame) {
+        auto replacement = std::make_unique<PlanetStream>(
+            project_saved_flight(candidate->session).planet, 8, 0);
+        stream = std::move(replacement);
+        exported.clear();
+      }
+      saved_flight = std::move(candidate);
       last_error = godot::String{};
       return true;
     } catch (const std::exception& error) {
@@ -788,6 +811,33 @@ class FreedomBridge : public godot::RefCounted {
     }
   }
 
+  auto select_freedom_jump(const godot::String& system_id) -> bool {
+    return change_freedom_port([&](NativeFreedomFlightSession& session)
+                                   -> std::expected<void, std::string> {
+      const auto utf8 = system_id.utf8();
+      const std::string_view text{utf8.get_data(),
+                                  static_cast<std::size_t>(utf8.length())};
+      if (text.size() != 23 || !text.starts_with("system-"))
+        return std::unexpected{"Select a chart destination"};
+      SystemId id;
+      const auto parsed = std::from_chars(
+          text.data() + 7, text.data() + text.size(), id.value, 16);
+      if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() ||
+          system_id_string(id) != text)
+        return std::unexpected{"Invalid chart destination"};
+      return session.select_jump(id);
+    });
+  }
+  auto begin_freedom_jump() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.begin_jump();
+    });
+  }
+  auto cancel_freedom_jump() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.cancel_jump();
+    });
+  }
   auto select_freedom_port(std::int64_t ordinal) -> bool {
     return change_freedom_port([ordinal](NativeFreedomFlightSession& session)
                                    -> std::expected<void, std::string> {
@@ -1079,7 +1129,10 @@ class FreedomBridge : public godot::RefCounted {
           decimal(document.origin.recipe.universe_seed.value);
       result["system_id"] = decimal(session.system().catalog.id.value);
       result["planet_id"] = decimal(body.frame.planet->value);
-      result["station_id"] = decimal(view.station.id.value);
+      result["station_available"] = view.station_available;
+      result["station_id"] = view.station_available
+                                 ? decimal(view.station.id.value)
+                                 : godot::String{};
       result["craft_id"] = decimal(document.origin.state.craft.value);
       result["frame_id"] = decimal(body.craft.id.value);
       result["frame_version"] = static_cast<std::int64_t>(body.craft.version);
@@ -1229,10 +1282,10 @@ class FreedomBridge : public godot::RefCounted {
         chart["last_observation_tick"] = decimal(last_observation);
         const auto route =
             generate_first_universe_route(ledger.recipe.universe_seed);
-        // Native neighboring travel has not installed a different current
-        // system owner yet. This read-only chart remains the origin baseline.
         const auto view = require(resolve_freedom_knowledge_chart(
-            ledger, route.origin, *session.resources()));
+            ledger, session.system().catalog.id, *session.resources(),
+            !session.travel() ||
+                session.travel()->phase == FreedomJumpPhase::idle));
         godot::Array rows;
         for (const auto& row : view.destinations) {
           godot::Dictionary item;
@@ -1243,7 +1296,14 @@ class FreedomBridge : public godot::RefCounted {
           item["confidence"] = godot::String{
               navigation_knowledge_level_name(row.knowledge).data()};
           item["current"] = row.system == view.current_system;
+          item["known"] = row.known;
+          item["valid"] = row.valid;
+          item["authorized"] =
+              row.authorized && session.starting_assembly().has_value();
           item["affordable"] = row.affordable;
+          item["available"] = row.available;
+          item["selectable"] =
+              row.selectable && session.starting_assembly().has_value();
           item["disabled_reason"] = godot::String{
               navigation_disabled_reason_name(row.disabled_reason).data()};
           if (row.distance_metres)
@@ -1255,6 +1315,45 @@ class FreedomBridge : public godot::RefCounted {
         chart["baseline"] = "Starting chart";
       }
       result["chart"] = chart;
+      godot::Dictionary jump;
+      const auto& travel = session.travel();
+      const auto jump_available = session.jump_available();
+      jump["available"] = jump_available.has_value();
+      jump["refusal"] = jump_available
+                            ? godot::String{}
+                            : godot::String{jump_available.error().c_str()};
+      jump["phase"] = !travel || travel->phase == FreedomJumpPhase::idle
+                          ? "idle"
+                      : travel->phase == FreedomJumpPhase::spool ? "spool"
+                                                                 : "transit";
+      jump["selected"] =
+          travel && travel->selected
+              ? godot::String{system_id_string(*travel->selected).c_str()}
+              : godot::String{};
+      jump["remaining_seconds"] =
+          travel && travel->phase == FreedomJumpPhase::spool
+              ? (kJumpSpoolTicks - (body.tick - travel->spool_tick)) / 120.0
+          : travel && travel->phase == FreedomJumpPhase::transit
+              ? (travel->committed->preview.arrival_tick - body.tick) / 120.0
+              : 0.0;
+      if (const auto preview = session.jump_preview(); preview) {
+        jump["distance_light_hours"] =
+            preview->distance_metres / (kMetresPerLightSecond * 3600.0);
+        jump["heading_error_degrees"] =
+            preview->alignment.heading_error_millidegrees / 1000.0;
+        jump["drift_percent"] =
+            preview->alignment.velocity_error_basis_points / 100.0;
+        jump["quality"] = godot::String{
+            intersystem_arrival_quality_name(preview->alignment.quality)
+                .data()};
+        jump["envelope_radius_metres"] =
+            preview->distance.envelope_radius_metres
+                ? godot::Variant{static_cast<std::int64_t>(
+                      *preview->distance.envelope_radius_metres)}
+                : godot::Variant{};
+      }
+      // No hidden sampled point, destination body identity or catalog leaks.
+      result["jump"] = jump;
 
       const auto force = selected.last_step && !(session.surface() &&
                                                  session.surface()->landed)
@@ -1334,7 +1433,8 @@ class FreedomBridge : public godot::RefCounted {
 
   auto get_freedom_station_geometry() const -> godot::Dictionary {
     if (native_start) return project_station_geometry(native_start->station);
-    if (saved_flight)
+    if (saved_flight &&
+        project_saved_flight(saved_flight->session).station_available)
       return project_station_geometry(generate_origin_station(
           saved_flight->session.document().origin.recipe.universe_seed));
     return {};

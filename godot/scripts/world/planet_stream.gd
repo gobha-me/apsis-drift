@@ -19,6 +19,22 @@ var error := ""
 var render_layer := 1
 
 
+func reset_world() -> void:
+	for node: MeshInstance3D in nodes.values():
+		node.visible = false
+		node.queue_free()
+	nodes.clear()
+	anchors.clear()
+	pending.clear()
+	wanted.clear()
+	resident_ids.clear()
+	upload_index = 0
+	timer = 0.0
+	is_ready = false
+	last_report.clear()
+	error = ""
+
+
 func tick(delta: float, observer: Vector3) -> void:
 	if not error.is_empty():
 		return

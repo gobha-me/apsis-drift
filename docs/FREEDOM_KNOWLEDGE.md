@@ -1,5 +1,8 @@
 # Persistent Freedom knowledge
 
+For the explicit active-world/travel extension, see [Native First Jump](FREEDOM_NATIVE_TRAVEL.md). The historical recipes described below retain their meanings.
+
+
 The minimal #175 implementation provides a sparse, versioned C++ ledger for
 native sessions. It records what is known about existing system, planet and
 station identities, while generated truth remains independent. The minimal

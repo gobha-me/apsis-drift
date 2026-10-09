@@ -61,6 +61,10 @@ var liftoff_button: Button
 var surface_status: RichTextLabel
 var resource_status: RichTextLabel
 var chart_status: RichTextLabel
+var jump_status: RichTextLabel
+var jump_button: Button
+var jump_destinations: Array[Button] = []
+var rendered_world := ""
 var chart_button: CheckButton
 var service_button: Button
 var release_button: Button
@@ -159,7 +163,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		return false
 	assets_root = assets
 	station_geometry = pending.station_geometry.duplicate(true)
-	if not StationPresentation.valid_geometry(station_geometry, state.station_id) or FileAccess.get_sha256(assets.path_join("station-reference.glb")) != StationPresentation.STATION_HASH:
+	if state.get("station_available", true) and (not StationPresentation.valid_geometry(station_geometry, state.station_id) or FileAccess.get_sha256(assets.path_join("station-reference.glb")) != StationPresentation.STATION_HASH):
 		error = "The selected Origin Station geometry/export is missing or changed"
 		return false
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -248,7 +252,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	close_environment.background_mode = Environment.BG_CLEAR_COLOR
 	camera.environment = close_environment
 	set_ship_layer(ship)
-	if state.station_position.length() < 1000.0:
+	if state.get("station_available", true) and state.station_position.length() < 1000.0:
 		station = StationPresentation.new()
 		scene.add_child(station)
 		if not station.initialize({"station_id": state.station_id}, station_geometry, assets_root, false):
@@ -258,6 +262,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	terrain = PlanetStreamView.new()
 	terrain.bridge = bridge
 	scene.add_child(terrain)
+	rendered_world = str(state.system_id) + ":" + str(state.planet_id)
 	build_ui()
 	return true
 
@@ -324,6 +329,18 @@ func build_ui() -> void:
 	chart_status = hud_text()
 	chart_status.visible = false
 	column.add_child(chart_status)
+	for ordinal in 2:
+		var destination := Button.new()
+		destination.focus_mode = Control.FOCUS_ALL
+		destination.pressed.connect(func(): select_jump_destination(ordinal))
+		column.add_child(destination)
+		jump_destinations.append(destination)
+	jump_status = hud_text()
+	column.add_child(jump_status)
+	jump_button = Button.new()
+	jump_button.focus_mode = Control.FOCUS_ALL
+	jump_button.pressed.connect(jump_requested)
+	column.add_child(jump_button)
 	service_button = Button.new()
 	service_button.text = "Replenish flight fuel and jump charges · free"
 	service_button.focus_mode = Control.FOCUS_ALL
@@ -585,6 +602,32 @@ func unboard_requested() -> void:
 		journey_mode_changed.emit()
 
 
+func select_jump_destination(ordinal: int) -> void:
+	if not error.is_empty() or not focused or save_dialog.visible: return
+	var rows: Array = state.get("chart", {}).get("rows", [])
+	if ordinal >= rows.size(): return
+	if not bridge.select_freedom_jump(rows[ordinal].system_id):
+		save_status.text = str(bridge.get_last_error())
+		return
+	state = bridge.get_freedom_flight_state()
+	update_view(0.0)
+
+
+func jump_requested() -> void:
+	if not error.is_empty() or not focused or save_dialog.visible: return
+	observe_neutral_controls()
+	if not controls_armed:
+		save_status.text = "Release flight controls before changing the jump drive."
+		return
+	var cancel: bool = state.get("jump", {}).get("phase", "idle") == "spool"
+	if not bridge.call("cancel_freedom_jump" if cancel else "begin_freedom_jump"):
+		save_status.text = str(bridge.get_last_error())
+		return
+	state = bridge.get_freedom_flight_state()
+	save_status.text = "Spool canceled · no jump charge spent" if cancel else "Spooling · Resume flight explicitly." if paused else "Spooling · one charge commits after 3 seconds"
+	update_view(0.0)
+
+
 func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
@@ -730,6 +773,17 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
+	var owner_key := str(state.system_id) + ":" + str(state.planet_id)
+	if owner_key != rendered_world:
+		# C++ has already installed the actual world/stream. Retire old GPU
+		# tiles before any of their same-shaped keys can alias the new planet.
+		terrain.reset_world()
+		if station != null:
+			station.visible = false
+			station.queue_free()
+			station = null
+		station_geometry = bridge.get_freedom_station_geometry()
+		rendered_world = owner_key
 	var boarding: Dictionary = state.get("boarding", {})
 	if not boarding.is_empty():
 		if not staged_model.set_pose(boarding.pose):
@@ -744,12 +798,12 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if landing_button != null:
 		var landed: bool = surface.get("landed", false)
 		landing_button.text = "Land with thrusters" if state.assistance else "Deploy gear · manual landing"
-		landing_button.disabled = state.attached or landed
-		stow_gear_button.disabled = state.attached or landed or not surface.get("gear_deployed", false)
+		landing_button.disabled = state.attached or landed or state.get("jump", {}).get("phase", "idle") != "idle"
+		stow_gear_button.disabled = state.attached or landed or not surface.get("gear_deployed", false) or state.get("jump", {}).get("phase", "idle") != "idle"
 		liftoff_button.disabled = not landed
 		surface_status.text = ("Landed" if landed else "Airborne") + " · Gear " + ("deployed" if surface.get("gear_deployed", false) else "stowed") + "\n" + str(surface.get("note", "Surface aid off"))
 	ship.basis = state.body_basis
-	if station == null and state.station_position.length() < 1000.0:
+	if station == null and state.get("station_available", true) and state.station_position.length() < 1000.0:
 		station = StationPresentation.new()
 		scene.add_child(station)
 		if not station.initialize({"station_id": state.station_id}, station_geometry, assets_root, false):
@@ -758,7 +812,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		set_ship_layer(station)
 	if station != null:
 		station.transform = Transform3D(state.station_basis, state.station_position)
-		station.visible = state.station_position.length() < 1000.0
+		station.visible = state.get("station_available", true) and state.station_position.length() < 1000.0
 	terrain_camera.far = minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
 	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
 	var look_basis := Basis(Vector3.UP, -look_offset.x) * Basis(Vector3.RIGHT, -look_offset.y)
@@ -806,16 +860,38 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			chart_status.text += "\n%s · %s%s" % [row.name, row.confidence.to_upper(), detail]
 	else:
 		chart_status.visible = false
+	var jump: Dictionary = state.get("jump", {})
+	var phase: String = jump.get("phase", "idle")
+	assist_button.disabled = phase != "idle"
+	var rows: Array = chart.get("rows", [])
+	for i in jump_destinations.size():
+		var button: Button = jump_destinations[i]
+		button.visible = i < rows.size() and chart_button.button_pressed
+		if i < rows.size():
+			button.text = "Select " + str(rows[i].name)
+			button.disabled = not rows[i].get("selectable", false)
+	jump_button.visible = chart.get("selected", false)
+	jump_button.text = "Cancel spool · no jump charge" if phase == "spool" else "In transit" if phase == "transit" else "Spool jump · 1 charge"
+	jump_button.disabled = phase == "transit" or (phase == "idle" and not jump.get("available", false))
+	jump_button.tooltip_text = str(jump.get("refusal", "Select a destination first"))
+	jump_status.text = "Jump drive · %s" % phase.capitalize()
+	if phase != "idle": jump_status.text += " · %.1f s" % jump.get("remaining_seconds", 0.0)
+	if jump.has("distance_light_hours"):
+		jump_status.text += "\n%.1f light-hours · %s arrival envelope %.0f m\nHeading %.1f° · drift %.1f%%" % [jump.distance_light_hours, str(jump.quality), jump.envelope_radius_metres, jump.heading_error_degrees, jump.drift_percent]
+	elif phase == "idle": jump_status.text += "\nSelect a chart destination"
+	if phase == "idle" and not jump.get("available", false): jump_status.text += "\n" + str(jump.get("refusal", ""))
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
-	home_marker.update_cue(camera, target, state.attached)
+	home_marker.visible = state.get("station_available", true)
+	home_cue.visible = home_marker.visible
+	if home_marker.visible: home_marker.update_cue(camera, target, state.attached)
 	var navigation: Dictionary = home_marker.cue
 	var direction := " · behind you" if navigation.get("behind", false) else (" · follow HOME marker" if not navigation.get("in_view", false) else " · ahead")
 	if navigation.is_empty(): direction = " · direction unavailable"
 	var occluded := HomeNavigation.globe_occludes(camera.position, target, Vector3(0, -state.planet_radius - state.altitude, 0), state.planet_radius)
 	home_cue.text = "Origin Station · %.1f km%s%s" % [target.length() / 1000.0, " · attached" if state.attached else direction, "\nBeyond horizon · direction only, not a safe route" if occluded and not state.attached else ""]
 	home_cue.tooltip_text = "Station " + state.station_id + " · HOME marks its projected direction. It does not steer or certify a route."
-	var near_port: bool = state.attached or target.length() < 1000.0
+	var near_port: bool = state.get("station_available", true) and (state.attached or target.length() < 1000.0)
 	if dock_status != null:
 		var changed: bool = dock_status.visible != near_port
 		for item in [port_row, dock_status, approach_button, capture_button, release_button]: item.visible = near_port
@@ -841,4 +917,4 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		if unboard_menu_button != null:
 			unboard_menu_button.visible = unboard_button.visible
 		for button in port_buttons:
-			button.disabled = state.attached
+			button.disabled = state.attached or not state.get("station_available", true) or phase != "idle"

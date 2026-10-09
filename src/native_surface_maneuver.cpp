@@ -44,6 +44,8 @@ auto NativeFreedomFlightSession::cancel_surface_maneuver() -> void {
 }
 auto NativeFreedomFlightSession::request_landing()
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before landing aid"};
   if (actor_ || (docking_ && docking_->attached) ||
       (surface_ && surface_->landed))
     return std::unexpected{
