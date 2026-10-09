@@ -167,11 +167,11 @@ auto fresh_starters(const std::filesystem::path& directory) -> void {
     const auto selection = require(native_new_game(seed));
     check(selection.mode == NativeStartup::Mode::freedom &&
               !selection.source_save &&
-              std::holds_alternative<FreedomStartingAssemblySaveDocument>(
+              std::holds_alternative<FreedomResourceSaveDocument>(
                   selection.document),
-          "Ordinary New Game explicitly selects21 without a source save");
-    const auto document =
-        std::get<FreedomStartingAssemblySaveDocument>(selection.document);
+          "Ordinary New Game explicitly selects24 without a source save");
+    const auto document = std::get<FreedomStartingAssemblySaveDocument>(
+        std::get<FreedomResourceSaveDocument>(selection.document).voyage.base);
     const auto old = require(make_freedom_journey_new_game_document(seed));
     check(document.journey == old &&
               require(encode_freedom_journey_document_json(document.journey)) ==
@@ -215,11 +215,14 @@ auto fresh_starters(const std::filesystem::path& directory) -> void {
     const auto path = directory / (std::to_string(seed.value) + "-new21.json");
     require(session.save_as(path));
     const auto raw = contents(path);
-    check(Json::parse(raw)["format_version"] == 21 &&
+    check(Json::parse(raw)["format_version"] == 24 &&
               std::get<FreedomStartingAssemblySaveDocument>(
-                  require(load_native_save_file(path))) == document &&
+                  std::get<FreedomResourceSaveDocument>(
+                      require(load_native_save_file(path)))
+                      .voyage.base) == document &&
               !session.source_save(),
-          "New session SaveAs persists exact21 without claiming a source");
+          "New session SaveAs persists24 and exact nested21 without claiming a "
+          "source");
     const auto continued = require(native_continue(path));
     auto reopened = require(NativeFreedomFlightSession::open(continued));
     check(journey(reopened) == before &&

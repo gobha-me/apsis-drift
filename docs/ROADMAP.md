@@ -237,3 +237,19 @@ It preserves existing worlds and saves and introduces no weather clock, force,
 damage or raw cockpit disclosure. Suited planetary walking (#199), knowledge
 and observations (#175/#189), resource state (#133/#251), jump integration and
 standard recovery remain necessary parts of the wider Freedom loop.
+
+## Resource implementation checkpoint — 2026-10-09
+
+The [measured endurance recipe](FREEDOM_ENDURANCE.md) selects shared gross-effort
+flight fuel and three charges (#133). [Live C++ resource state](FREEDOM_RESOURCES.md)
+now composes new native sessions with exact saved quantities, whole-tick passive
+depletion, cockpit readings and explicit free attached-port replenishment. Old
+saves retain their resource-unselected behavior. The recorded home voyage and
+separate initialized near-ground reserve-funded ascent qualify this starter
+budget without introducing an economy or new assets.
+
+The retained historical jump adapter demonstrates atomic charge accounting;
+mission-free native neighboring travel and its persisted committed arrival
+remain #176/#194. Standard replacement/recovery #247 and full integrated #245
+acceptance remain open. This checkpoint advances #251 and the initial service
+seam, without marking those unavailable consumers complete.

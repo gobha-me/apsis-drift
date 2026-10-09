@@ -25,6 +25,16 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<FreedomResources> resources;
+  if (auto* d = std::get_if<FreedomResourceSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Resource state requires Freedom"};
+    if (auto v = validate_freedom_resource_document(*d); !v)
+      return std::unexpected{v.error().detail};
+    resources = d->resources;
+    auto voyage = std::move(d->voyage);
+    selected.document = std::move(voyage);
+  }
   std::optional<NativeStartingAssemblySelection> assembly;
   std::optional<FreedomBoardingState> boarding;
   std::optional<OriginWalkerState> actor;
@@ -108,6 +118,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   }
   result.boarding_ = boarding;
   result.surface_ = surface;
+  result.resources_ = resources;
   if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
                    boarding->phase == FreedomBoardingPhase::disembarking)) {
     auto view = result.boarding_view();
@@ -392,6 +403,12 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     result.actuation.initial = *air;
     result.actuation.after = observed->atmosphere;
     result.actuation.observation_after = observed->orbit;
+    if (resources_) {
+      auto next =
+          advance_freedom_resource_tick(*resources_, document_.flight.tick, 0);
+      if (!next) return std::unexpected{"Constrained resource clock refused"};
+      resources_ = *next;
+    }
     document_ = std::move(candidate.document_);
     return result;
   }
@@ -425,6 +442,12 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     result.actuation.initial = *air;
     result.actuation.after = observed->atmosphere;
     result.actuation.observation_after = observed->orbit;
+    if (resources_) {
+      auto next =
+          advance_freedom_resource_tick(*resources_, document_.flight.tick, 0);
+      if (!next) return std::unexpected{"Constrained resource clock refused"};
+      resources_ = *next;
+    }
     document_ = std::move(candidate.document_);
     return result;
   }
@@ -434,22 +457,59 @@ auto NativeFreedomFlightSession::advance_craft_tick(
       document_.model.central);
   if (!correction) return std::unexpected{"Flight hold correction refused"};
   auto candidate = document_;
-  const auto actuation = advance_atmospheric_flight(
+  auto actuation = advance_atmospheric_flight(
       context, candidate.flight, correction->commands, rotation_,
       candidate.model.atmosphere, candidate.model.central, step);
   if (!actuation)
     return std::unexpected{
         "Flight integration or post-step observation refused"};
+  std::optional<FreedomResources> ledger = resources_;
+  std::uint64_t debit{};
+  bool refused{};
+  if (ledger) {
+    if (!validate_freedom_resources(*ledger, document_))
+      return std::unexpected{"Flight resource owner or clock refused"};
+    const auto bill =
+        freedom_propulsion_tick_quanta(actuation->central.propulsion);
+    if (!bill) return std::unexpected{"Applied propulsion bill refused"};
+    debit = *bill;
+    if (debit > ledger->flight_quanta) {
+      // Retry from the original body, bypassing hold and stabilization while
+      // retaining the pilot's saved preferences. Aerodynamics/gravity remain.
+      candidate = document_;
+      const VacuumIntent passive{{}, {}, {}, {}, false};
+      actuation = advance_atmospheric_flight(
+          context, candidate.flight, passive, rotation_,
+          candidate.model.atmosphere, candidate.model.central, step);
+      if (!actuation) return std::unexpected{"Passive depleted flight refused"};
+      debit = 0;
+      refused = true;
+    }
+    const auto next =
+        advance_freedom_resource_tick(*ledger, document_.flight.tick, debit);
+    if (!next) return std::unexpected{"Flight resource transaction refused"};
+    ledger = *next;
+  }
   candidate.origin.state.tick = candidate.flight.tick;
   if (const auto valid = hydrate_freedom_flight_document(candidate); !valid)
     return std::unexpected{"Flight candidate cannot be persisted: " +
                            valid.error().path + ": " + valid.error().detail};
-  NativeFlightStep result{*correction, *actuation, {}};
-  if (correction->status == OrbitHoldStatus::active ||
-      correction->status == OrbitHoldStatus::saturated)
+  NativeFlightStep result{*correction, *actuation, {}, debit, refused};
+  if (refused)
+    result.hold = {
+        OrbitHoldStatus::paused_advanced, {{}, {}, {}, {}, false}, {}, {}};
+  if (!refused && (correction->status == OrbitHoldStatus::active ||
+                   correction->status == OrbitHoldStatus::saturated))
     result.applied_hold_force_body_newtons =
         actuation->central.propulsion.applied_force_newtons;
   document_ = std::move(candidate);
+  resources_ = ledger;
+  if (refused) {
+    cancel_port_approach();
+    port_approach_.note = "Approach stopped: insufficient flight fuel";
+    cancel_surface_maneuver();
+    surface_maneuver_.note = "Surface aid stopped: insufficient flight fuel";
+  }
   return result;
 }
 
@@ -522,7 +582,10 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      surface_ ? write_freedom_surface_file_atomically(path, surface_document())
+      resources_ ? write_freedom_resource_file_atomically(
+                       path, {surface_document(), *resources_})
+      : surface_
+          ? write_freedom_surface_file_atomically(path, surface_document())
       : boarding_
           ? write_freedom_boarding_file_atomically(path, boarding_document())
       : starting_assembly_ && actor_ && docking_
@@ -535,6 +598,19 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
           : write_freedom_flight_file_atomically(path, document_);
   if (!written)
     return std::unexpected{save_file_error_message(written.error())};
+  return {};
+}
+
+auto NativeFreedomFlightSession::replenish_resources()
+    -> std::expected<void, std::string> {
+  if (!docking_)
+    return std::unexpected{"Replenishment requires an attached service port"};
+  if (!resources_)
+    return std::unexpected{"Historical save has no selected resource recipe"};
+  const auto next =
+      replenish_freedom_resources(*resources_, {document_, *docking_});
+  if (!next) return std::unexpected{"Attached resource service refused"};
+  resources_ = *next;
   return {};
 }
 

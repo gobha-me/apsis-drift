@@ -46,6 +46,8 @@ func run() -> void:
 	check(bridge.get_freedom_walk_state() == old and bridge.get_freedom_flight_state() == old_flight, "Source-only validation committed")
 	check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "assets": args[0]}), "Ready model/session transaction refused: " + shell.error)
 	check(shell.current_view != null and shell.current_view.activated and shell.current_view.staged_model.valid_installed(), "Committed view was not complete")
+	var initial_resources: Dictionary = bridge.get_freedom_flight_state().resources
+	check(initial_resources.selected and initial_resources.quantity_quanta == "3032640000000000" and initial_resources.jump_charges == 3, "Staged New Game lost finite C++ resources")
 	var current: Dictionary = bridge.get_freedom_walk_state()
 	check(current.universe_seed == "42" and current.tick == "0" and bridge.get_pending_freedom_start().is_empty(), "Presentation changed new actor clock or left pending")
 	var view: Control = shell.current_view
@@ -102,6 +104,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	flight.set_process(false)
 	check(flight.camera.transform.origin.distance_to(seat_camera.origin) < 0.002 and flight.camera.transform.basis.is_equal_approx(seat_camera.basis), "Seated camera jumped at view handoff")
 	check(model.valid_current_pose() and model.replacement_nodes == roots and model.get_child_count() == 1, "Boarding replaced or reparented the hardware roster")
+	check(flight.state.resources.quantity_quanta == "3032640000000000" and "90.0 min at full main" in flight.resource_status.text and flight.service_button.focus_mode == Control.FOCUS_ALL and flight.service_button.visible, "Walking/boarding burned fuel or cockpit lost accessible resource service")
 	check(not flight.unboard_button.disabled and flight.unboard_button.visible and flight.unboard_menu_button.visible and flight.unboard_menu_button.focus_mode == Control.FOCUS_ALL and not flight.release_button.disabled and flight.exhaust.valid_bound_skin(), "Seated UI lost unboard/release/exhaust")
 	var save_path: String = OS.get_cmdline_user_args()[1].get_base_dir().path_join("playable-seated.json")
 	check(bridge.save_freedom_as(save_path), "Seated Save As refused")
@@ -112,6 +115,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(continued_shell.select_start(continued_owner, {"mode": "continue", "value": save_path, "assets": shell.assets_root}), "Seated Continue could not stage: " + continued_shell.error)
 	if continued_shell.current_view != null:
 		check(continued_shell.current_view is FlightView and continued_shell.current_view.cockpit and continued_shell.current_view.paused and continued_shell.current_view.staged_model.valid_current_pose(), "Seated Continue lost pose, cockpit or neutral pause")
+	check(continued_owner.get_freedom_flight_state().resources == bridge.get_freedom_flight_state().resources, "Staged Continue changed exact resource readings")
 	continued_shell.free()
 	flight.port_command("release_freedom_port")
 	check(not bridge.get_freedom_flight_state().attached and "12 m" in flight.save_status.text, "Release lost mapped withdrawal guidance")
@@ -124,6 +128,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	flight.state = bridge.get_freedom_flight_state()
 	flight.update_view(0.0)
 	check(flight.state.docking.separation > 80.0 and flight.state.negative_force_body[1] > 0.0, "Same craft never departed under withdrawal thrust")
+	check(flight.state.resources.quantity_quanta.to_int() < 3032640000000000 and flight.state.resources.jump_charges == 3 and not flight.service_button.visible, "Actual departure did not burn flight fuel or exposed free-flight service")
 	check(flight.exhaust.update_applied(flight.state, 1.0 / 60.0, false) and flight.exhaust.withdrawal_intensity > 0.0, "Composed departure exhaust stayed dark")
 	var approach_menu: Button = flight.controls_menu.saved_port_buttons["Approach port with thrusters"]
 	check(not flight.approach_button.disabled and not approach_menu.disabled and approach_menu.focus_mode == Control.FOCUS_ALL, "Aligned return lost controller-accessible approach")
@@ -176,6 +181,9 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	flight.update_view(0.0)
 	flight.port_command("capture_freedom_port")
 	check(flight.state.attached and flight.exhaust.withdrawal_intensity == 0.0, "Composed capture lost attachment or retained propulsion")
+	var service_tick: String = flight.state.tick
+	flight.service_button.pressed.emit()
+	check(flight.state.resources.quantity_quanta == "3032640000000000" and flight.state.resources.jump_charges == 3 and flight.state.tick == service_tick and "free station service" in flight.save_status.text, "Attached cockpit action failed exact free replenishment")
 	flight.unboard_menu_button.pressed.emit()
 	shell.switch_journey_view()
 	walk = shell.current_view

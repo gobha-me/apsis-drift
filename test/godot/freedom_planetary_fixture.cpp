@@ -120,8 +120,14 @@ struct Trace {
   auto flight(const NativeFlightControls& c)
       -> std::expected<NativeFlightStep, std::string> {
     auto result = session.advance(c);
-    if (result && endurance)
+    if (result && endurance) {
       endurance->sample(result->actuation.central.propulsion);
+      if (session.resources())
+        check(!result->propulsion_refused &&
+                  session.resources()->flight_quanta ==
+                      kFreedomFlightCapacityQuanta - endurance->effort_quanta,
+              "Fuel-enabled voyage differs from independent actual-work meter");
+    }
     if (result && commands)
       commands->step(
           "flight",
@@ -170,6 +176,7 @@ struct Trace {
               continued.walker() == session.walker() &&
               continued.docking() == session.docking() &&
               continued.starting_assembly() == session.starting_assembly() &&
+              continued.resources() == session.resources() &&
               !continued.port_approach().active,
           "Checkpoint changed the voyage or restored transient guidance");
     session = std::move(continued);
@@ -529,7 +536,8 @@ auto run(const std::filesystem::path& output, bool record_commands,
     const Json measured{
         {"schema_version", 1},
         {"accounting_proposal_version", 1},
-        {"scope", "Test-only gross propulsion observation; no fuel state"},
+        {"scope", "Independent gross propulsion observation of the current "
+                  "native session"},
         {"quanta_per_equivalent_newton_second",
          research::kEffortQuantaPerNewtonSecond},
         {"flight_ticks", trace.endurance->ticks},

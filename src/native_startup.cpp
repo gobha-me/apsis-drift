@@ -135,13 +135,30 @@ auto select_document(FreedomSurfaceSaveDocument document,
   return selected;
 }
 } // namespace
+namespace {
+auto select_document(FreedomResourceSaveDocument d,
+                     std::optional<std::filesystem::path> source)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto v = validate_freedom_resource_document(d); !v)
+    return std::unexpected{"Resource save rejected: " + v.error().detail};
+  auto selected = select_document(d.voyage, source);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(d);
+  return selected;
+}
+} // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   auto document =
       make_freedom_starting_assembly_new_game_document(universe_seed);
   if (!document)
     return std::unexpected{"New Game rejected: " + document.error().detail};
-  return select_document(std::move(*document), std::nullopt);
+  const auto& flight = document->journey.voyage.flight;
+  FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
+                             flight.flight.tick};
+  return select_document(
+      FreedomResourceSaveDocument{{std::move(*document), {}}, resources},
+      std::nullopt);
 }
 
 auto native_legacy_new_game(Seed universe_seed)
@@ -169,6 +186,19 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
                            "flight save yet"};
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
+  if (const auto* r =
+          std::get_if<FreedomResourceSaveDocument>(&selected.document)) {
+    if (auto v = validate_freedom_resource_document(*r); !v)
+      return std::unexpected{v.error().detail};
+    auto inner = selected;
+    inner.document =
+        std::visit([](const auto& base) -> NativeSaveDocument { return base; },
+                   r->voyage.base);
+    auto prepared = prepare_native_freedom_station_start(std::move(inner));
+    if (!prepared) return std::unexpected{prepared.error()};
+    prepared->selected.document = std::move(selected.document);
+    return prepared;
+  }
   const FreedomSaveDocument* origin{};
   std::uint32_t physical_catalog = kPhysicalLocalSystemGeneratorVersion;
   if (const auto* boarding =
@@ -227,10 +257,24 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
 auto native_save_freedom(const NativeStartup& selected,
                          const std::filesystem::path& destination)
     -> std::expected<void, std::string> {
+  if (selected.mode != NativeStartup::Mode::freedom)
+    return std::unexpected{"Freedom Save As requires Freedom mode"};
   const auto& bytes = destination.native();
   if (bytes.empty() || bytes.size() > 4'096 ||
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
+  if (const auto* r =
+          std::get_if<FreedomResourceSaveDocument>(&selected.document)) {
+    const auto canonical = select_document(*r, selected.source_save);
+    if (!canonical || canonical->home_planet != selected.home_planet)
+      return std::unexpected{
+          "Resource Save As requires its selected physical home"};
+    const auto written =
+        write_freedom_resource_file_atomically(destination, *r);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (const auto* surface =
           std::get_if<FreedomSurfaceSaveDocument>(&selected.document)) {
     const auto written =
