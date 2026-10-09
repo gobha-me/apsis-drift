@@ -198,7 +198,9 @@ auto roundtrip() -> void {
        {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
     auto selected = require(native_new_game(seed));
     const auto fresh =
-        std::get<FreedomStartingAssemblySaveDocument>(selected.document)
+        std::get<FreedomStartingAssemblySaveDocument>(
+            std::get<FreedomResourceSaveDocument>(selected.document)
+                .voyage.base)
             .journey;
     const OriginWalkerState spawn{1, 1, {}, {}, std::numbers::pi / 2.0};
     check(fresh.actor == spawn && fresh.voyage.docking.attached &&

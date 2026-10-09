@@ -268,6 +268,8 @@ auto hull_and_idle(const Fixture& f) -> void {
 auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f,
                       research::FlightEnduranceMeter* meter = nullptr) -> void {
   required(session.set_landing_gear(false));
+  const auto initial_resources = session.resources();
+  const auto initial_effort = meter ? meter->effort_quanta : 0;
   const auto initial_history = session.document().origin.state;
   const auto initial_tick = session.document().flight.tick;
   const auto initial_body = session.document().flight;
@@ -370,6 +372,28 @@ auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f,
             session.document().origin.state.world_deltas ==
                 initial_history.world_deltas,
         "complete ascent preserves vehicle identity and authoritative history");
+  if (initial_resources && meter) {
+    check(
+        session.resources()->flight_quanta ==
+                initial_resources->flight_quanta -
+                    (meter->effort_quanta - initial_effort) &&
+            session.resources()->jump_charges == 3,
+        "Reserve-funded ascent debits exact observed effort without jump fuel");
+    const auto resource_text = required(encode_freedom_resource_document_json(
+        {session.surface_document(), *session.resources()}));
+    const auto resource_restored = required(NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom,
+         required(decode_freedom_resource_document_json(resource_text)),
+         f.planet,
+         {}}));
+    check(resource_restored.resources() == session.resources() &&
+              resource_restored.document() == session.document() &&
+              resource_restored.surface() == session.surface(),
+          "Fuel-funded landing/ascent checkpoint preserves exact quantity and "
+          "orbit");
+    std::cout << "reserve-funded final quantity "
+              << session.resources()->flight_quanta << '\n';
+  }
   const auto encoded = required(
       encode_freedom_surface_document_json(session.surface_document()));
   const auto continued = required(NativeFreedomFlightSession::open(
@@ -388,8 +412,8 @@ auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f,
         "orbital state continues through the existing physical system frame");
 }
 auto assisted_commands(const Fixture& f,
-                       research::FlightEnduranceMeter* meter = nullptr)
-    -> void {
+                       research::FlightEnduranceMeter* meter = nullptr,
+                       bool resources = false) -> void {
   auto fixed = f.fixed;
   fixed.position_metres =
       add(fixed.position_metres, rotate(fixed.orientation, {0, .7, 0}));
@@ -399,12 +423,19 @@ auto assisted_commands(const Fixture& f,
   flight.model.physical_catalog = 2;
   flight.model.physical_ephemeris = 2;
   const auto open = [&]() {
+    NativeSaveDocument selected = flight;
+    if (resources)
+      selected = FreedomResourceSaveDocument{
+          {flight, {}},
+          {1, flight.origin.state.craft, flight.flight.craft,
+           flight.flight.tick, kFreedomFlightReserveQuanta, 3}};
     return required(NativeFreedomFlightSession::open(
-        {NativeStartup::Mode::freedom, flight, f.planet, {}}));
+        {NativeStartup::Mode::freedom, std::move(selected), f.planet, {}}));
   };
   auto session = open();
   required(session.set_assistance(true));
-  check(!session.surface() &&
+  check((!session.surface() ||
+         (!session.surface()->gear_deployed && !session.surface()->landed)) &&
             session.surface_maneuver().kind == NativeSurfaceManeuverKind::off,
         "enabling assist alone does not deploy gear or start landing");
   required(session.request_landing());
@@ -699,6 +730,12 @@ auto main(int argc, char** argv) -> int {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
       native_fixtures(f, directory);
+    } else if (argc == 2 && std::string_view{argv[1]} == "--resources") {
+      research::FlightEnduranceMeter meter;
+      assisted_commands(f, &meter, true);
+      check(
+          meter.effort_quanta == 266'483'611'299'623ULL,
+          "Resource-enabled surface trace retains the selected research total");
     } else if (argc == 1) {
       hull_and_idle(f);
       persistence_and_session(f);

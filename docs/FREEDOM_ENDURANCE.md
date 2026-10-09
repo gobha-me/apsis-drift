@@ -1,9 +1,11 @@
 # Freedom endurance contract v 1
 
 #133 selects numerical resource rules; #251 implements actual state and
-consumption. This document is a measured initial game contract. The current
-native game still has unlimited propulsion and no charge ledger. Test observers
-measure actual allocations without changing a control, save, pose or velocity.
+consumption. This document is a measured initial game contract. The initial research cut used resource-free native flight. The subsequent
+[resource implementation](FREEDOM_RESOURCES.md) applies this contract to new
+native sessions; historical saves retain their resource-unselected behavior.
+Test observers measure actual allocations without changing a control, save, pose
+or velocity.
 
 The approved Freedom resource count is **two**: one flight reserve for all
 sub-light/surface propulsion, plus **three discrete jump charges**. The retained

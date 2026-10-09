@@ -18,6 +18,8 @@ struct NativeFlightStep {
   OrbitHoldCorrection hold;
   AtmosphericFlightActuation actuation;
   RigidVector3 applied_hold_force_body_newtons;
+  std::uint64_t fuel_debit_quanta{};
+  bool propulsion_refused{};
 };
 
 // Transient player command, never part of the save/world recipe. The aid only
@@ -49,6 +51,11 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto document() const -> const FreedomFlightSaveDocument& {
     return document_;
   }
+  [[nodiscard]] auto resources() const
+      -> const std::optional<FreedomResources>& {
+    return resources_;
+  }
+  [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
   [[nodiscard]] auto system() const -> const PhysicalLocalSystem& {
     return system_;
   }
@@ -149,6 +156,7 @@ class NativeFreedomFlightSession {
                              FreedomFlightHydration hydrated,
                              std::optional<std::filesystem::path> source);
   FreedomFlightSaveDocument document_;
+  std::optional<FreedomResources> resources_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;

@@ -94,9 +94,12 @@ auto run() -> void {
   require_ok(session.save_as(mid));
   const auto original_mid = text(mid);
   const auto saved = required(load_native_save_file(mid));
-  check(std::holds_alternative<FreedomBoardingSaveDocument>(saved),
-        "genuine board action upgrades to22");
-  auto document = std::get<FreedomBoardingSaveDocument>(saved);
+  check(std::holds_alternative<FreedomResourceSaveDocument>(saved) &&
+            std::holds_alternative<FreedomBoardingSaveDocument>(
+                std::get<FreedomResourceSaveDocument>(saved).voyage.base),
+        "genuine board action retains24 with nested22");
+  auto document = std::get<FreedomBoardingSaveDocument>(
+      std::get<FreedomResourceSaveDocument>(saved).voyage.base);
   const auto encoded =
       required(encode_freedom_boarding_document_json(document));
   check(required(decode_freedom_boarding_document_json(encoded)) == document,
@@ -137,13 +140,15 @@ auto run() -> void {
   auto continued = resume(mid);
   check(continued.document() == session.document() &&
             continued.boarding() == session.boarding() &&
-            continued.walker() == session.walker(),
+            continued.walker() == session.walker() &&
+            continued.resources() == session.resources(),
         "midroute resume retains craft, clock, progress and projected actor");
   for (int i = 600; i < static_cast<int>(kGameplayBoardingTicks); ++i) {
     (void)required(session.advance_walk({}));
     (void)required(continued.advance_walk({}));
     check(session.document() == continued.document() &&
-              session.boarding() == continued.boarding(),
+              session.boarding() == continued.boarding() &&
+              session.resources() == continued.resources(),
           "resumed board continuation deterministic");
   }
   check(!session.walker() &&
@@ -182,7 +187,8 @@ auto run() -> void {
       << required(encode_freedom_boarding_document_json(legacy));
   auto historical = resume(legacy_path);
   check(historical.document() == legacy.voyage.flight &&
-            historical.system().ephemeris_version == 1,
+            historical.system().ephemeris_version == 1 &&
+            !historical.resources(),
         "historical seated22 retains original rounded motion exactly");
   require_ok(historical.release_port());
   check(!historical.begin_port_approach(),

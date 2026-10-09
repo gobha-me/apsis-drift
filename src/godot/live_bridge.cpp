@@ -199,7 +199,8 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomBoardingSaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document))
+        std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomResourceSaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -292,6 +293,8 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::begin_freedom_port_approach);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_port_approach"),
                                 &FreedomBridge::cancel_freedom_port_approach);
+    godot::ClassDB::bind_method(godot::D_METHOD("replenish_freedom_resources"),
+                                &FreedomBridge::replenish_freedom_resources);
     godot::ClassDB::bind_method(godot::D_METHOD("release_freedom_port"),
                                 &FreedomBridge::release_freedom_port);
     godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_flight",
@@ -526,7 +529,9 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomBoardingSaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document)) {
+        std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomResourceSaveDocument>(
+            selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
       const auto view = project_saved_flight(*opened);
@@ -790,6 +795,13 @@ class FreedomBridge : public godot::RefCounted {
     return change_freedom_port(
         [](NativeFreedomFlightSession& session) {
           return session.capture_port();
+        },
+        true);
+  }
+  auto replenish_freedom_resources() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.replenish_resources();
         },
         true);
   }
@@ -1175,6 +1187,26 @@ class FreedomBridge : public godot::RefCounted {
       surface["remaining_seconds"] = maneuver.remaining_ticks / 120.0;
       surface["note"] = godot::String{maneuver.note.c_str()};
       result["surface"] = surface;
+      godot::Dictionary resources;
+      resources["selected"] = session.resources().has_value();
+      if (session.resources()) {
+        const auto reading = require(freedom_resource_reading(
+            *session.resources(),
+            selected.last_step ? selected.last_step->fuel_debit_quanta : 0,
+            selected.last_step && selected.last_step->propulsion_refused));
+        resources["quantity_quanta"] = decimal(reading.quantity_quanta);
+        resources["capacity_quanta"] = decimal(reading.capacity_quanta);
+        resources["last_tick_quanta"] = decimal(reading.last_tick_quanta);
+        resources["fraction"] = reading.fraction;
+        resources["main_equivalent_seconds"] = reading.main_equivalent_seconds;
+        resources["equivalent_newtons"] = reading.equivalent_newtons;
+        resources["jump_charges"] =
+            static_cast<std::int64_t>(reading.jump_charges);
+        resources["reserve"] = reading.reserve;
+        resources["operationally_empty"] = reading.operationally_empty;
+        resources["propulsion_refused"] = reading.propulsion_refused;
+      }
+      result["resources"] = resources;
 
       const auto force = selected.last_step && !(session.surface() &&
                                                  session.surface()->landed)

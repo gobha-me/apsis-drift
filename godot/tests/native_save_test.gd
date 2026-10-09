@@ -113,6 +113,7 @@ func run() -> void:
 	check(commit_fixture_new_game(bridge, "18446744073709551615"), "Maximum uint64 seed refused")
 	var extreme: Dictionary = bridge.get_freedom_walk_state()
 	check(bridge.save_freedom_as(destination) and commit_fixture_continue(reloaded, destination), "Maximum-seed native save refused")
+	check(reloaded.get_freedom_flight_state().resources == bridge.get_freedom_flight_state().resources and bridge.get_freedom_flight_state().resources.selected, "Extreme-seed resource save lost exact owner/quantities")
 	extreme.continued = true
 	check(not extreme.is_empty() and reloaded.get_freedom_walk_state() == extreme, "Maximum-seed actor save lost identity precision")
 	for i in 4:

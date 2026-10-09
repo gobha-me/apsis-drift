@@ -59,6 +59,8 @@ var landing_button: Button
 var stow_gear_button: Button
 var liftoff_button: Button
 var surface_status: RichTextLabel
+var resource_status: RichTextLabel
+var service_button: Button
 var release_button: Button
 var error := ""
 var activated := false
@@ -310,6 +312,13 @@ func build_ui() -> void:
 	column.theme = hud_theme
 	telemetry = hud_text()
 	column.add_child(telemetry)
+	resource_status = hud_text()
+	column.add_child(resource_status)
+	service_button = Button.new()
+	service_button.text = "Replenish flight fuel and jump charges · free"
+	service_button.focus_mode = Control.FOCUS_ALL
+	service_button.pressed.connect(func(): port_command("replenish_freedom_resources"))
+	column.add_child(service_button)
 	home_cue = hud_text()
 	column.add_child(home_cue)
 	hint = hud_text()
@@ -581,7 +590,9 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		return
 	state = bridge.get_freedom_flight_state()
 	update_view(0.0)
-	if state.attached:
+	if command == "replenish_freedom_resources":
+		save_status.text = "Flight reserve and three jump charges replenished · free station service"
+	elif state.attached:
 		save_status.text = "Attached to D%d. Release before firing propulsion." % state.target_port
 	elif command == "release_freedom_port":
 		var family := "pad" if player_input.last_device == "pad" else "key"
@@ -760,6 +771,19 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
+	var resources: Dictionary = state.get("resources", {})
+	if resources.get("selected", false):
+		var burn := "No applied propulsion burn" if resources.equivalent_newtons == 0.0 else "Last applied burn %.1f kN equivalent" % (resources.equivalent_newtons / 1000.0)
+		var notice := " · RESERVE" if resources.reserve else ""
+		if resources.operationally_empty: notice = " · EMPTY"
+		resource_status.text = "Flight fuel %.1f%%%s · Jump charges %d/3\n%.1f min at full main · %s" % [resources.fraction * 100.0, notice, resources.jump_charges, resources.main_equivalent_seconds / 60.0, burn]
+		if resources.propulsion_refused:
+			resource_status.text += "\nInsufficient fuel for requested tick · propulsion aids stopped"
+		service_button.visible = state.attached
+		service_button.disabled = not state.attached
+	else:
+		resource_status.text = "Historical save · resource recipe unselected"
+		service_button.visible = false
 	orbital_forecast.text = orbit_text(state)
 	var target: Vector3 = state.station_position
 	home_marker.update_cue(camera, target, state.attached)
