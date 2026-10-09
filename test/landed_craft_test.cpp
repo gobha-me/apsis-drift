@@ -648,6 +648,64 @@ auto persistence_and_session(const Fixture& f) -> void {
   check(historical == required(encode_freedom_flight_document_json(flight)),
         "original historical format18 bytes remain unchanged");
 }
+auto observed_lifecycle(const Fixture& f) -> void {
+  FreedomFlightSaveDocument flight{
+      make_freedom_new_game_document(Seed{42}), f.source(f.fixed), {}};
+  flight.origin.state.tick = flight.flight.tick;
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  FreedomKnowledgeSaveDocument selected;
+  selected.voyage.voyage.base = flight;
+  selected.voyage.voyage.surface.gear_deployed = true;
+  selected.voyage.resources = {1, flight.origin.state.craft,
+                               flight.flight.craft, flight.flight.tick};
+  selected.knowledge = required(make_freedom_starting_knowledge(Seed{42}, 2));
+  auto session = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, selected, f.planet, {}}));
+  const auto checksum =
+      required(rigid_body_state_checksum(f.context, flight.flight));
+  const auto initial = session.knowledge();
+  check(!session.commit_touchdown(checksum ^ 1) &&
+            session.knowledge() == initial,
+        "Rejected actual touchdown cannot award a visit");
+  required(session.commit_touchdown(checksum));
+  const KnowledgeSubject subject{KnowledgeSubjectKind::planet,
+                                 f.owner.catalog.id, f.planet.id.value};
+  const auto presence = required(query_freedom_knowledge(
+      *session.knowledge(), subject, KnowledgeFact::presence,
+      session.document().flight.tick));
+  check(presence &&
+            presence->provenance.level == NavigationKnowledgeLevel::visited &&
+            presence->provenance.tick == flight.flight.tick,
+        "Qualified actual touchdown records physical presence once");
+  const auto landed_knowledge = session.knowledge();
+  for (unsigned tick = 0; tick < 120; ++tick)
+    required(session.advance({}));
+  check(
+      session.knowledge() == landed_knowledge,
+      "Actual landed clock cannot duplicate or erase survey/visit provenance");
+  required(session.release_surface());
+  for (unsigned tick = 0; tick < 120; ++tick)
+    required(session.advance({}));
+  check(session.knowledge() == landed_knowledge &&
+            session.resources()->flight_quanta < kFreedomFlightCapacityQuanta,
+        "Real thrust liftoff retains visits and still bills finite propulsion");
+  const auto path =
+      std::filesystem::temp_directory_path() /
+      ("apsis-observed-surface-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()) +
+       ".json");
+  required(session.save_as(path));
+  const auto resumed = required(
+      NativeFreedomFlightSession::open(required(native_continue(path))));
+  check(resumed.knowledge() == session.knowledge() &&
+            resumed.document() == session.document() &&
+            resumed.resources() == session.resources(),
+        "Actual landed/ascent Save As and Continue retain all selected owners");
+  std::filesystem::remove(path);
+}
+
 auto native_fixtures(const Fixture& f, const std::filesystem::path& directory)
     -> void {
   using Json = nlohmann::ordered_json;
@@ -736,6 +794,8 @@ auto main(int argc, char** argv) -> int {
       check(
           meter.effort_quanta == 266'483'611'299'623ULL,
           "Resource-enabled surface trace retains the selected research total");
+    } else if (argc == 2 && std::string_view{argv[1]} == "--observations") {
+      observed_lifecycle(f);
     } else if (argc == 1) {
       hull_and_idle(f);
       persistence_and_session(f);

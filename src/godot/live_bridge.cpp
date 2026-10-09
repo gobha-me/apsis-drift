@@ -1215,6 +1215,18 @@ class FreedomBridge : public godot::RefCounted {
       chart["selected"] = session.knowledge().has_value();
       if (session.knowledge()) {
         const auto& ledger = *session.knowledge();
+        std::uint32_t observed_facts{};
+        SimulationTick last_observation{};
+        for (const auto& entry : ledger.entries) {
+          const auto& evidence = entry.transitions.back();
+          if (evidence.source != KnowledgeSource::starting_chart) {
+            ++observed_facts;
+            last_observation = std::max(last_observation, evidence.tick);
+          }
+        }
+        chart["local_sensors"] = ledger.recipe.observation_policy == 1;
+        chart["observed_facts"] = observed_facts;
+        chart["last_observation_tick"] = decimal(last_observation);
         const auto route =
             generate_first_universe_route(ledger.recipe.universe_seed);
         // Native neighboring travel has not installed a different current

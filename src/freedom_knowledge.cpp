@@ -17,7 +17,12 @@ struct KnowledgeWorld {
 };
 auto world(const FreedomKnowledgeRecipe& r)
     -> std::expected<KnowledgeWorld, Error> {
-  if (r != FreedomKnowledgeRecipe{kFreedomKnowledgeVersion, r.universe_seed})
+  auto expected = FreedomKnowledgeRecipe{r.version, r.universe_seed};
+  if (r.version == kFreedomObservedKnowledgeVersion)
+    expected.observation_policy = 1;
+  if ((r.version != kFreedomKnowledgeVersion &&
+       r.version != kFreedomObservedKnowledgeVersion) ||
+      r != expected)
     return std::unexpected{Error::unsupported_recipe};
   auto origin =
       generate_physical_origin_system(r.universe_seed, r.physical_catalog);
@@ -239,9 +244,11 @@ auto value(const KnowledgeWorld& w, const KnowledgeEntry& e)
 }
 } // namespace
 
-auto make_freedom_starting_knowledge(Seed seed)
+auto make_freedom_starting_knowledge(Seed seed, std::uint32_t version)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError> {
-  FreedomKnowledgeRecipe recipe{kFreedomKnowledgeVersion, seed};
+  FreedomKnowledgeRecipe recipe{version, seed};
+  if (version == kFreedomObservedKnowledgeVersion)
+    recipe.observation_policy = 1;
   auto w = world(recipe);
   if (!w) return std::unexpected{w.error()};
   return FreedomKnowledge{recipe, baseline(*w)};

@@ -799,6 +799,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	chart_status.visible = chart_button.visible and chart_button.button_pressed
 	if chart_button.visible:
 		chart_status.text = "Starting chart · granted positions"
+		if chart.get("local_sensors", false):
+			chart_status.text += "\nShip sensors · %d recorded findings" % chart.observed_facts
 		for row: Dictionary in chart.rows:
 			var detail: String = " · current" if row.current else " · %.1f light-hours · %s" % [float(row.distance_light_seconds) / 3600.0, "1 charge available" if row.affordable else "No jump charges"]
 			chart_status.text += "\n%s · %s%s" % [row.name, row.confidence.to_upper(), detail]

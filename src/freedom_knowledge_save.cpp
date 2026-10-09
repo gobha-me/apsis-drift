@@ -116,6 +116,8 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
               {"ephemeris", r.ephemeris},
               {"ambient", r.ambient}}},
             {"entries", std::move(entries)}};
+  if (r.version == kFreedomObservedKnowledgeVersion)
+    root["recipe"]["observation_policy"] = r.observation_policy;
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -125,12 +127,18 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     -> std::expected<FreedomKnowledge, SaveSchemaError> {
   auto root = parse(text, kMaximumFreedomKnowledgeBytes);
   if (!root) return std::unexpected{root.error()};
-  if (!fields(*root, {"recipe", "entries"}) ||
-      !fields((*root)["recipe"],
-              {"version", "universe_seed", "chart", "topology",
-               "physical_catalog", "ephemeris", "ambient"}))
+  if (!fields(*root, {"recipe", "entries"}) || !(*root)["recipe"].is_object())
     return std::unexpected{failure("invalid closed knowledge shape")};
   const auto& r = (*root)["recipe"];
+  const bool observed = r.contains("version") &&
+                        r["version"].is_number_unsigned() &&
+                        r["version"] == kFreedomObservedKnowledgeVersion;
+  if (!(observed ? fields(r, {"version", "universe_seed", "chart", "topology",
+                              "physical_catalog", "ephemeris", "ambient",
+                              "observation_policy"})
+                 : fields(r, {"version", "universe_seed", "chart", "topology",
+                              "physical_catalog", "ephemeris", "ambient"})))
+    return std::unexpected{failure("invalid closed knowledge shape")};
   if (!unsigned_fields(r, {"version", "universe_seed", "chart", "topology",
                            "physical_catalog", "ephemeris", "ambient"}))
     return std::unexpected{failure("unsigned recipe fields required")};
@@ -138,6 +146,9 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                     "ephemeris", "ambient"})
     if (r[name] > std::numeric_limits<std::uint32_t>::max())
       return std::unexpected{failure("recipe value cannot narrow")};
+  if (observed && (!r["observation_policy"].is_number_unsigned() ||
+                   r["observation_policy"] != 1))
+    return std::unexpected{failure("unsupported observation policy")};
   FreedomKnowledge k{{r["version"].get<std::uint32_t>(),
                       {r["universe_seed"].get<std::uint64_t>()},
                       r["chart"].get<std::uint32_t>(),
@@ -146,6 +157,7 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
                       r["ephemeris"].get<std::uint32_t>(),
                       r["ambient"].get<std::uint32_t>()},
                      {}};
+  if (observed) k.recipe.observation_policy = 1;
   const auto& entries = (*root)["entries"];
   if (!entries.is_array() || entries.size() > kMaximumFreedomKnowledgeFacts)
     return std::unexpected{failure("invalid or oversized fact array")};

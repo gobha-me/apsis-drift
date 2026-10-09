@@ -1,10 +1,11 @@
 # Persistent Freedom knowledge
 
-The minimal #175 implementation selects a sparse, versioned C++ ledger for new
+The minimal #175 implementation provides a sparse, versioned C++ ledger for
 native sessions. It records what is known about existing system, planet and
-station identities, while generated truth remains independent. Actual equipment
-and observation triggers remain #189; broader sensor/render presentation remains
-#171/#215. This ledger does not implement a scan minigame or a new body hierarchy.
+station identities, while generated truth remains independent. The minimal
+physical local triggers are documented under #189; broader equipment and
+sensor/render presentation remains #171/#215. This ledger does not implement
+a scan minigame or a new body hierarchy.
 
 ## Explicit starting chart
 
@@ -54,6 +55,12 @@ an experience-point ladder. Only a physical-arrival source can record presence
 as VISITED. Property facts cannot become VISITED. No mission, probe, relay or
 replacement-craft source is accepted by version 1; those owners must extend the
 recipe explicitly. #247 replacement identity integration remains necessary.
+
+Recipe 1 has no automatic observations. New native games now explicitly select
+recipe 2 / observation policy 1 through [local ship observations](FREEDOM_OBSERVATIONS.md).
+Its starting chart and fact/provenance meanings are unchanged; the additional
+policy selects authoritative local triggers. Continue preserves either recipe
+without upgrade, and the original recipe-1 codec/ledger goldens stay exact.
 
 Each fact retains up to four strictly increasing confidence transitions with
 source ID, tick and flight owner. The ledger is canonically ordered and capped
