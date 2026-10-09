@@ -9,7 +9,8 @@ inline constexpr SimulationTick kFreedomLocalObservationInterval{120};
 enum class LocalObservationEvent : std::uint8_t {
   sensor_tick,
   touchdown,
-  port_capture
+  port_capture,
+  system_arrival
 };
 // Sensor model 1 uses authoritative position and integer clock, never a camera.
 // Committed events require the actual validated constraint; reads/load do not

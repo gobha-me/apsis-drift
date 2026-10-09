@@ -1,4 +1,6 @@
+#include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/native_startup.hpp"
+#include "apsis_drift/universe_navigation.hpp"
 
 #include <array>
 #include <bit>
@@ -335,6 +337,109 @@ auto continuation(Seed seed, unsigned mode,
   std::cout << "flight-save " << seed.value << " mode " << mode << " checksum "
             << required(rigid_body_state_checksum(context, a.flight)) << '\n';
 }
+auto active_worlds(const std::filesystem::path& directory) -> void {
+  for (Seed seed :
+       {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const auto ids = generate_first_intersystem_identities(seed);
+    for (bool target : {false, true}) {
+      const auto system = required(
+          target ? generate_physical_local_system(ids.target_system_seed, 2)
+                 : generate_physical_origin_system(seed, 2));
+      const auto& body = system.catalog.planets.back().descriptor;
+      auto d = document(seed);
+      d.model.physical_catalog = 2;
+      d.model.physical_ephemeris = 2;
+      d.flight.craft = {kWayfarerFrameId, kWayfarerFrameVersion};
+      d.flight.frame = {RigidFrameKind::planet_relative_inertial,
+                        system.catalog.id,
+                        body.id,
+                        {}};
+      d.flight.position_metres = {body.radius.value * 10000.0, 0, 0};
+      d.flight.linear_velocity_metres_per_second = {};
+      d.world = FreedomActiveWorldSelection{1, system.catalog.id, body.id};
+      const auto text = required(encode_freedom_flight_document_json(d));
+      check(Json::parse(text)["format_version"] == 26 &&
+                required(decode_freedom_flight_document_json(text)) == d,
+            "Explicit active physical owner encodes/decodes without aliasing "
+            "origin");
+      const auto path =
+          directory / (target ? "active-target.json" : "active-origin.json");
+      check(write_freedom_flight_file_atomically(path, d).has_value(),
+            "Active owner uses existing atomic file writer");
+      const auto selected = required(native_continue(path));
+      check(selected.home_planet == body,
+            "Continue selects actual owning planet, including nonzero ordinal");
+      auto live = required(NativeFreedomFlightSession::open(selected));
+      check(
+          live.system() == system && !live.docking() && !live.walker(),
+          "Active owner has actual physics and no phantom station constraint");
+      check(live.advance({}).has_value() &&
+                live.document().flight.tick == d.flight.tick + 1 &&
+                live.document().world == d.world,
+            "Actual native flight advances in selected generated world");
+      check(live.save_as(directory / "active-continued.json").has_value(),
+            "Selected world persists after actual native physics");
+      const auto resumed = required(NativeFreedomFlightSession::open(
+          required(native_continue(directory / "active-continued.json"))));
+      check(resumed.document() == live.document() &&
+                resumed.system() == live.system(),
+            "Selected-world SaveAs/Continue retains exact active state");
+      auto bad = d;
+      bad.world.reset();
+      if (target || body.id != d.origin.recipe.home_planet)
+        check(
+            !hydrate_freedom_flight_document(bad),
+            "Foreign/nonhome frame cannot opt itself into historical format18");
+      else
+        check(
+            hydrate_freedom_flight_document(bad).has_value(),
+            "Historical actual home flight retains its original owner meaning");
+      bad = d;
+      bad.world->system = {0};
+      check(!hydrate_freedom_flight_document(bad),
+            "Unknown active system refuses without a generated fallback");
+      bad = d;
+      bad.world->planet = {0};
+      check(!hydrate_freedom_flight_document(bad),
+            "Unknown owning planet refuses");
+      bad = d;
+      ++bad.world->version;
+      check(!hydrate_freedom_flight_document(bad),
+            "Unsupported active owner version refuses");
+      bad = d;
+      bad.model.physical_catalog = 1;
+      check(!hydrate_freedom_flight_document(bad),
+            "New owner cannot select old physical recipe implicitly");
+      const auto root = Json::parse(text);
+      for (auto key : {"version", "system_id", "planet_id"}) {
+        auto corrupt = root;
+        corrupt["world_owner"].erase(key);
+        check(!decode_freedom_flight_document_json(corrupt.dump()),
+              "Active owner shape is closed and mandatory");
+      }
+      auto corrupt = root;
+      corrupt["format_version"] = 18;
+      check(!decode_freedom_flight_document_json(corrupt.dump()),
+            "World metadata cannot be smuggled into format18");
+      corrupt = root;
+      corrupt["world_owner"]["version"] =
+          std::numeric_limits<std::uint64_t>::max();
+      check(!decode_freedom_flight_document_json(corrupt.dump()),
+            "Wide owner version refuses before narrowing");
+      corrupt = root;
+      corrupt["world_owner"]["system_id"] = "01";
+      check(!decode_freedom_flight_document_json(corrupt.dump()),
+            "Noncanonical owner identity refuses");
+      corrupt = root;
+      corrupt["world_owner"]["planet_id"] = body.id.value;
+      check(!decode_freedom_flight_document_json(corrupt.dump()),
+            "Owner identity requires canonical string type");
+    }
+  }
+  check(!decode_freedom_flight_document_json(std::string(65, '[') + "0" +
+                                             std::string(65, ']')),
+        "Excessive nesting refuses before recursive JSON parsing");
+}
 auto files(const std::filesystem::path& directory) -> void {
   const auto path = directory / "existing.json";
   auto d = document(Seed{42});
@@ -384,6 +489,7 @@ int main() {
              std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(directory);
     files(directory);
+    active_worlds(directory);
     for (Seed seed :
          {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}})
       for (unsigned mode = 0; mode < 3; ++mode)

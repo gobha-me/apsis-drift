@@ -21,6 +21,7 @@ struct NativeFlightStep {
   RigidVector3 applied_hold_force_body_newtons;
   std::uint64_t fuel_debit_quanta{};
   bool propulsion_refused{};
+  bool jump_committed{}, jump_arrived{};
 };
 
 // Transient player command, never part of the save/world recipe. The aid only
@@ -60,6 +61,18 @@ class NativeFreedomFlightSession {
       -> const std::optional<FreedomKnowledge>& {
     return knowledge_;
   }
+  [[nodiscard]] auto travel() const
+      -> const std::optional<FreedomTravelState>& {
+    return travel_;
+  }
+  [[nodiscard]] auto travel_document() const
+      -> std::expected<FreedomTravelSaveDocument, std::string>;
+  [[nodiscard]] auto select_jump(SystemId) -> std::expected<void, std::string>;
+  [[nodiscard]] auto jump_preview() const
+      -> std::expected<FreedomJumpPreview, std::string>;
+  [[nodiscard]] auto begin_jump() -> std::expected<void, std::string>;
+  [[nodiscard]] auto jump_available() const -> std::expected<void, std::string>;
+  [[nodiscard]] auto cancel_jump() -> std::expected<void, std::string>;
   [[nodiscard]] auto record_observation(const KnowledgeEvidence&)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto replenish_resources() -> std::expected<void, std::string>;
@@ -76,6 +89,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto observe() const
       -> std::expected<NativeFlightObservation, std::string>;
   auto set_assistance(bool enabled) -> std::expected<void, std::string> {
+    if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+      return std::unexpected{
+          "Cancel the active jump before changing assistance"};
     if (actor_)
       return std::unexpected{"Board and sit before controlling the craft"};
     document_.model.assistance = enabled;
@@ -145,6 +161,9 @@ class NativeFreedomFlightSession {
   }
 
  private:
+  [[nodiscard]] auto advance_jump(const NativeFlightControls&,
+                                  SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto refresh_knowledge(LocalObservationEvent)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto port_approach_controls() const
@@ -167,6 +186,7 @@ class NativeFreedomFlightSession {
   FreedomFlightSaveDocument document_;
   std::optional<FreedomResources> resources_;
   std::optional<FreedomKnowledge> knowledge_;
+  std::optional<FreedomTravelState> travel_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;

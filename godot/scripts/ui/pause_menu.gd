@@ -248,13 +248,17 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 	if not saved_flight:
 		return
 	saved_assist_button.set_pressed_no_signal(state.get("assistance", false))
-	saved_assist_button.disabled = failed
+	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
+	saved_assist_button.disabled = failed or jumping
 	resume_button.disabled = failed
 	var attached: bool = state.get("attached", false)
 	var assessment: Dictionary = state.get("docking", {})
 	for name in saved_port_buttons:
 		var button: Button = saved_port_buttons[name]
 		button.disabled = failed
+		if jumping:
+			button.disabled = true
+			continue
 		var surface: Dictionary = state.get("surface", {})
 		var landed: bool = surface.get("landed", false)
 		if name == "Land / deploy gear":
@@ -267,7 +271,7 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		elif name == "Cancel surface aid":
 			button.disabled = failed or surface.get("maneuver", "off") == "off"
 		elif name.begins_with("Target"):
-			button.disabled = failed or attached
+			button.disabled = failed or attached or not state.get("station_available", true)
 			button.tooltip_text = "Release the attached port before selecting another." if attached else "Select the port to approach."
 		elif name == "Release attached port":
 			button.disabled = failed or not attached

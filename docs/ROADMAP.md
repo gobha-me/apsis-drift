@@ -273,3 +273,14 @@ ledger; station walking, chart focus, camera and Save As/Continue do not. Coarse
 planet models and separate physical presence remain bounded/read-only to Godot.
 See [the selected local policy](FREEDOM_OBSERVATIONS.md). Neighboring arrival,
 complete knowledge-filtered rendering and recovery remain their existing owners.
+
+## Native travel checkpoint — 2026-10-09
+
+[Native First Jump](FREEDOM_NATIVE_TRAVEL.md) now composes the installed starter
+with the known neighboring route: actual flight during spool, cancel, one-charge
+commitment, immutable arrival, world/terrain handoff and physical return. Explicit
+formats 26/27 and knowledge recipe3 preserve current ownership and every phase;
+older Save/Continue remains unchanged. Neighbor observations use the actual world,
+and the authored craft survives without a phantom home station or resource service.
+The composed surface/return-docking proof #194, wider consequences #248/#253,
+replacement recovery #247 and final native visual qualification remain open.

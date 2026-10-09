@@ -15,6 +15,7 @@
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
 #include "apsis_drift/freedom_surface_save.hpp"
+#include "apsis_drift/freedom_travel_save.hpp"
 #include "apsis_drift/save_schema.hpp"
 
 namespace apsis_drift {
@@ -57,7 +58,8 @@ using NativeSaveDocument =
                  FreedomDockingSaveDocument, FreedomJourneySaveDocument,
                  FreedomStartingAssemblySaveDocument,
                  FreedomBoardingSaveDocument, FreedomSurfaceSaveDocument,
-                 FreedomResourceSaveDocument, FreedomKnowledgeSaveDocument>;
+                 FreedomResourceSaveDocument, FreedomKnowledgeSaveDocument,
+                 FreedomTravelSaveDocument>;
 
 [[nodiscard]] auto make_new_game_document(
     Seed universe_seed,
@@ -75,6 +77,9 @@ using NativeSaveDocument =
 
 [[nodiscard]] auto write_freedom_knowledge_file_atomically(
     const std::filesystem::path&, const FreedomKnowledgeSaveDocument&)
+    -> std::expected<void, SaveFileError>;
+[[nodiscard]] auto write_freedom_travel_file_atomically(
+    const std::filesystem::path&, const FreedomTravelSaveDocument&)
     -> std::expected<void, SaveFileError>;
 
 [[nodiscard]] auto write_save_file_atomically(const std::filesystem::path& path,

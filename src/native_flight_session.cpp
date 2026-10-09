@@ -25,6 +25,20 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<FreedomTravelState> travel;
+  std::optional<NativeStartingAssemblySelection> travel_binding;
+  std::optional<FreedomBoardingState> travel_pilot;
+  if (auto* d = std::get_if<FreedomTravelSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Travel state requires Freedom"};
+    if (auto v = validate_freedom_travel_document(*d); !v)
+      return std::unexpected{v.error().detail};
+    travel = std::move(d->travel);
+    travel_binding = std::move(d->craft_binding);
+    travel_pilot = d->seated_pilot;
+    auto voyage = std::move(d->voyage);
+    selected.document = std::move(voyage);
+  }
   std::optional<FreedomKnowledge> knowledge;
   if (auto* d = std::get_if<FreedomKnowledgeSaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
@@ -112,24 +126,28 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   if (!hydrated)
     return std::unexpected{"Flight session rejected: " + hydrated.error().path +
                            ": " + hydrated.error().detail};
-  if (selected.home_planet !=
-      hydrated->system.catalog.planets[kOriginHomePlanetOrdinal].descriptor)
+  const auto reference =
+      find_local_system_planet(hydrated->system, *document.flight.frame.planet);
+  if (!reference || selected.home_planet != (*reference)->descriptor)
     return std::unexpected{
         "Selected home planet differs from the saved physical owner"};
   NativeFreedomFlightSession result{std::move(document), std::move(*hydrated),
                                     std::move(selected.source_save)};
   result.docking_ = docking;
   result.actor_ = actor;
+  if (!assembly && travel_binding) assembly = std::move(travel_binding);
   if (assembly) {
     auto binding = make_native_starting_assembly_binding(*assembly);
     if (!binding) return std::unexpected{binding.error()};
     result.starting_assembly_ = assembly;
     result.craft_binding_ = std::move(*binding);
   }
+  if (!boarding) boarding = travel_pilot;
   result.boarding_ = boarding;
   result.surface_ = surface;
   result.resources_ = resources;
   result.knowledge_ = std::move(knowledge);
+  result.travel_ = std::move(travel);
   if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
                    boarding->phase == FreedomBoardingPhase::disembarking)) {
     auto view = result.boarding_view();
@@ -167,6 +185,8 @@ auto NativeFreedomFlightSession::begin_disembarking()
 }
 auto NativeFreedomFlightSession::begin_boarding_route(
     GameplayBoardingDirection direction) -> std::expected<void, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before boarding actions"};
   if (!starting_assembly_ || !docking_ || !docking_->attached ||
       docking_->target.ordinal != 1)
     return std::unexpected{"Boarding requires the Wayfarer attached to D1"};
@@ -206,6 +226,8 @@ auto NativeFreedomFlightSession::begin_boarding_route(
 
 auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before port actions"};
   if (actor_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (docking_ && docking_->attached)
@@ -235,6 +257,8 @@ auto NativeFreedomFlightSession::assess_port() const
 
 auto NativeFreedomFlightSession::capture_port()
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before capture"};
   if (actor_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (surface_ && (surface_->gear_deployed || surface_->landed))
@@ -310,6 +334,8 @@ auto NativeFreedomFlightSession::observe() const
 
 auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before changing hold"};
   if (actor_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (surface_ && surface_->landed && request.target)
@@ -334,6 +360,8 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
 auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
                                          SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return advance_jump(controls, step);
   if (actor_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
@@ -529,7 +557,8 @@ auto NativeFreedomFlightSession::advance_craft_tick(
         actuation->central.propulsion.applied_force_newtons;
   std::optional<FreedomKnowledge> learned;
   if (knowledge_ &&
-      knowledge_->recipe.version == kFreedomObservedKnowledgeVersion &&
+      (knowledge_->recipe.version == kFreedomObservedKnowledgeVersion ||
+       knowledge_->recipe.version == kFreedomTravelKnowledgeVersion) &&
       candidate.flight.tick % kFreedomLocalObservationInterval == 0) {
     auto observed = *this;
     observed.document_ = candidate;
@@ -620,8 +649,13 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
   const auto written =
-      knowledge_ ? write_freedom_knowledge_file_atomically(
-                       path, {{surface_document(), *resources_}, *knowledge_})
+      travel_ ? write_freedom_travel_file_atomically(
+                    path, {{{surface_document(), *resources_}, *knowledge_},
+                           *travel_,
+                           starting_assembly_,
+                           boarding_ && !docking_ ? boarding_ : std::nullopt})
+      : knowledge_ ? write_freedom_knowledge_file_atomically(
+                         path, {{surface_document(), *resources_}, *knowledge_})
       : resources_ ? write_freedom_resource_file_atomically(
                          path, {surface_document(), *resources_})
       : surface_
@@ -681,7 +715,7 @@ auto NativeFreedomFlightSession::refresh_knowledge(LocalObservationEvent event)
 auto NativeFreedomFlightSession::surface_document() const
     -> FreedomSurfaceSaveDocument {
   FreedomSurfaceBaseSave base = document_;
-  if (boarding_)
+  if (boarding_ && docking_)
     base = boarding_document();
   else if (starting_assembly_ && actor_ && docking_)
     base = FreedomStartingAssemblySaveDocument{
@@ -694,6 +728,8 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before changing gear"};
   if (actor_ || (docking_ && docking_->attached))
     return std::unexpected{
         "Release the station port and sit before changing gear"};

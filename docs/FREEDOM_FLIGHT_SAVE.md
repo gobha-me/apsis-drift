@@ -1,5 +1,8 @@
 # Explicit Freedom flight save format
 
+For the explicit active-world/travel extension, see [Native First Jump](FREEDOM_NATIVE_TRAVEL.md). The historical recipes described below retain their meanings.
+
+
 2026-09-30, #328, format **18**. This is application-owned canonical flight
 persistence and C++ selection. Existing career format16 and docked Freedom
 format17 retain their exact meanings and encoders. New Game still creates a

@@ -138,6 +138,78 @@ auto orbital_readout(const std::filesystem::path& path, std::uint64_t seed,
 
 } // namespace
 
+namespace {
+auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
+                  apsis_drift::SimulationTick tick) -> bool {
+  using namespace apsis_drift;
+  auto start = native_new_game(seed);
+  if (!start) return false;
+  auto boarding = NativeFreedomFlightSession::open(std::move(*start));
+  if (!boarding) return false;
+  for (unsigned t = 0; t < 2960; ++t)
+    if (!boarding->advance_walk({0, -1, 0})) return false;
+  if (!boarding->begin_boarding()) return false;
+  for (unsigned t = 0; t < kGameplayBoardingTicks; ++t)
+    if (!boarding->advance_walk({})) return false;
+  // This is still a saved space fixture, with actual completed pilot history.
+  // Physical departure and return rendezvous belong to the composed trace.
+  if (tick < boarding->document().flight.tick)
+    tick = boarding->document().flight.tick;
+  const auto system = generate_physical_origin_system(seed, 2);
+  if (!system) return false;
+  const auto& body = system->catalog.planets[0].descriptor;
+  FreedomFlightSaveDocument flight;
+  flight.origin = make_freedom_new_game_document(seed);
+  flight.origin.state.tick = tick;
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  flight.flight.craft = {kWayfarerFrameId, kWayfarerFrameVersion};
+  flight.flight.frame = {RigidFrameKind::planet_relative_inertial,
+                         system->catalog.id,
+                         body.id,
+                         {}};
+  flight.flight.tick = tick;
+  flight.flight.position_metres = {0, 0, body.radius.value * 10000.0};
+  flight.world = FreedomActiveWorldSelection{1, system->catalog.id, body.id};
+  auto knowledge = make_freedom_starting_knowledge(seed, 3);
+  if (!knowledge) return false;
+  FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
+                             tick};
+  FreedomSurfaceSaveDocument surface{flight, {}};
+  FreedomResourceSaveDocument fueled{std::move(surface), resources};
+  FreedomKnowledgeSaveDocument mapped{std::move(fueled), std::move(*knowledge)};
+  FreedomTravelSaveDocument document{std::move(mapped),
+                                     {},
+                                     NativeStartingAssemblySelection{},
+                                     boarding->boarding()};
+  auto session = NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, document, body, {}});
+  if (!session || !session->save_as(path)) return false;
+  const auto ids = generate_first_intersystem_identities(seed);
+  for (unsigned leg = 0; leg < 2; ++leg) {
+    if (!session->select_jump(leg == 0 ? ids.target_system
+                                       : ids.origin_system) ||
+        !session->begin_jump())
+      return false;
+    const auto checkpoint = [&](SimulationTick offset) {
+      return session
+          ->save_as(path.string() + ".leg" + std::to_string(leg) + "." +
+                    std::to_string(offset) + ".json")
+          .has_value();
+    };
+    if (!checkpoint(0)) return false;
+    for (SimulationTick t = 1; t <= kJumpSpoolTicks + kJumpTransitTicks; ++t) {
+      if (!session->advance({})) return false;
+      if ((t == 1 || t == kJumpSpoolTicks || t == kJumpSpoolTicks + 1 ||
+           t == kJumpSpoolTicks + kJumpTransitTicks) &&
+          !checkpoint(t))
+        return false;
+    }
+  }
+  return true;
+}
+} // namespace
+
 auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
   if (argc != 5) {
@@ -155,7 +227,9 @@ auto main(int argc, char** argv) -> int {
     std::cerr << "invalid fixture path, seed or tick\n";
     return 2;
   }
-  if (mode == "orbital-readout") {
+  if (mode == "travel-trace") {
+    return travel_trace(path, Seed{*seed}, *tick) ? 0 : 1;
+  } else if (mode == "orbital-readout") {
     return orbital_readout(path, *seed, *tick) ? 0 : 1;
   } else if (mode == "freedom") {
     auto save = make_freedom_new_game_document(Seed{*seed});

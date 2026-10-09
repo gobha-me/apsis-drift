@@ -14,22 +14,34 @@ struct KnowledgeWorld {
   FirstUniverseRoute route;
   PhysicalLocalSystem origin;
   OriginStationDescriptor station;
+  std::optional<PhysicalLocalSystem> neighbor;
 };
 auto world(const FreedomKnowledgeRecipe& r)
     -> std::expected<KnowledgeWorld, Error> {
   auto expected = FreedomKnowledgeRecipe{r.version, r.universe_seed};
-  if (r.version == kFreedomObservedKnowledgeVersion)
+  if (r.version == kFreedomObservedKnowledgeVersion ||
+      r.version == kFreedomTravelKnowledgeVersion)
     expected.observation_policy = 1;
+  if (r.version == kFreedomTravelKnowledgeVersion) expected.world_domain = 1;
   if ((r.version != kFreedomKnowledgeVersion &&
-       r.version != kFreedomObservedKnowledgeVersion) ||
+       r.version != kFreedomObservedKnowledgeVersion &&
+       r.version != kFreedomTravelKnowledgeVersion) ||
       r != expected)
     return std::unexpected{Error::unsupported_recipe};
   auto origin =
       generate_physical_origin_system(r.universe_seed, r.physical_catalog);
   if (!origin) return std::unexpected{Error::unsupported_recipe};
-  return KnowledgeWorld{generate_first_universe_route(r.universe_seed),
-                        std::move(*origin),
-                        generate_origin_station(r.universe_seed)};
+  std::optional<PhysicalLocalSystem> neighbor;
+  if (r.version == kFreedomTravelKnowledgeVersion) {
+    const auto ids = generate_first_intersystem_identities(r.universe_seed);
+    auto system = generate_physical_local_system(ids.target_system_seed,
+                                                 r.physical_catalog);
+    if (!system) return std::unexpected{Error::unsupported_recipe};
+    neighbor = std::move(*system);
+  }
+  return KnowledgeWorld{
+      generate_first_universe_route(r.universe_seed), std::move(*origin),
+      generate_origin_station(r.universe_seed), std::move(neighbor)};
 }
 auto key(KnowledgeSubject s, KnowledgeFact f) {
   return std::tuple{s.kind, s.system.value, s.identity, f};
@@ -42,15 +54,21 @@ auto locate(const FreedomKnowledge& k, KnowledgeSubject s, KnowledgeFact f) {
     return e.subject == s && e.fact == f;
   });
 }
+auto system_for(const KnowledgeWorld& w, SystemId id)
+    -> const PhysicalLocalSystem* {
+  if (id == w.origin.catalog.id) return &w.origin;
+  if (w.neighbor && id == w.neighbor->catalog.id) return &*w.neighbor;
+  return nullptr;
+}
 auto planet(const KnowledgeWorld& w, KnowledgeSubject s)
     -> const LocalSystemPlanet* {
-  if (s.kind != KnowledgeSubjectKind::planet || s.system != w.route.origin)
-    return nullptr;
+  const auto* system = system_for(w, s.system);
+  if (s.kind != KnowledgeSubjectKind::planet || !system) return nullptr;
   const auto found = std::ranges::find_if(
-      w.origin.catalog.planets, [&](const LocalSystemPlanet& p) {
+      system->catalog.planets, [&](const LocalSystemPlanet& p) {
         return p.descriptor.id.value == s.identity;
       });
-  return found == w.origin.catalog.planets.end() ? nullptr : &*found;
+  return found == system->catalog.planets.end() ? nullptr : &*found;
 }
 auto valid_subject(const KnowledgeWorld& w, KnowledgeSubject s) -> bool {
   switch (s.kind) {
@@ -215,9 +233,11 @@ auto value(const KnowledgeWorld& w, const KnowledgeEntry& e)
       return KnownAtmosphere{p->descriptor.atmosphere_class,
                              p->descriptor.atmosphere_pressure.value};
     case KnowledgeFact::hazards: {
-      auto recipe = generate_planet_ambient_recipe(w.origin, p->descriptor.id);
+      const auto* system = system_for(w, e.subject.system);
+      if (!system) return std::unexpected{Error::invalid_subject};
+      auto recipe = generate_planet_ambient_recipe(*system, p->descriptor.id);
       if (!recipe) return std::unexpected{Error::unsupported_recipe};
-      auto ambient = resolve_planet_ambient_environment(w.origin, *recipe);
+      auto ambient = resolve_planet_ambient_environment(*system, *recipe);
       if (!ambient) return std::unexpected{Error::unsupported_recipe};
       const auto& a = *ambient;
       return KnownHazards{a.minimum_temperature_millikelvin,
@@ -247,8 +267,10 @@ auto value(const KnowledgeWorld& w, const KnowledgeEntry& e)
 auto make_freedom_starting_knowledge(Seed seed, std::uint32_t version)
     -> std::expected<FreedomKnowledge, FreedomKnowledgeError> {
   FreedomKnowledgeRecipe recipe{version, seed};
-  if (version == kFreedomObservedKnowledgeVersion)
+  if (version == kFreedomObservedKnowledgeVersion ||
+      version == kFreedomTravelKnowledgeVersion)
     recipe.observation_policy = 1;
+  if (version == kFreedomTravelKnowledgeVersion) recipe.world_domain = 1;
   auto w = world(recipe);
   if (!w) return std::unexpected{w.error()};
   return FreedomKnowledge{recipe, baseline(*w)};

@@ -19,6 +19,17 @@ struct FreedomBoardingState {
   friend auto operator==(const FreedomBoardingState&,
                          const FreedomBoardingState&) -> bool = default;
 };
+// Route history is independent of a current station attachment. Travel may
+// retain a completed seated route while its one craft is in another world.
+[[nodiscard]] auto validate_freedom_boarding_state(const FreedomBoardingState&,
+                                                   SimulationTick)
+    -> std::expected<void, SaveSchemaError>;
+[[nodiscard]] auto encode_freedom_boarding_state_json(
+    const FreedomBoardingState&, SimulationTick)
+    -> std::expected<std::string, SaveSchemaError>;
+[[nodiscard]] auto decode_freedom_boarding_state_json(std::string_view,
+                                                      SimulationTick)
+    -> std::expected<FreedomBoardingState, SaveSchemaError>;
 // Version19 remains the sole craft/clock/history owner. Assembly is the
 // unchanged geometry/rest reference; operating hardware is derived from route
 // progress.
