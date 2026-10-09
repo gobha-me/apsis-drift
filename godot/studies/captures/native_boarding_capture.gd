@@ -79,6 +79,31 @@ func snapshot(label: String) -> void:
 		row["route_progress"] = before_boarding.progress
 		row["eye_craft"] = Array(before_boarding.eye_craft)
 	captures.append(row)
+	row["attached"] = before_flight.attached
+	row["positive_force_body"] = Array(before_flight.positive_force_body)
+	row["negative_force_body"] = Array(before_flight.negative_force_body)
+	row["docking"] = before_flight.docking
+	row["port_approach"] = before_flight.port_approach
+	if view is FlightView:
+		row["main_intensity"] = view.exhaust.intensity
+		row["withdrawal_intensity"] = view.exhaust.withdrawal_intensity
+		if label in ["main-exhaust", "withdrawal-exhaust"]:
+			var close_image: Image = view.near_viewport.get_texture().get_image()
+			var close_filename := "boarding-%s-close.png" % label
+			if close_image.save_png(output.path_join(close_filename)) != OK:
+				fail("Could not save close-camera attachment " + label)
+			row["close_attachment"] = {"file": close_filename, "sha256": FileAccess.get_sha256(output.path_join(close_filename))}
+
+
+func flight_ticks(count: int, controls: PackedFloat64Array) -> bool:
+	for tick in count:
+		if not owner.advance_freedom_flight(1.0 / 120.0, controls, false):
+			fail(str(owner.get_last_error()))
+			return false
+	var view: Control = shell.current_view
+	view.state = owner.get_freedom_flight_state()
+	view.update_view(1.0 / 30.0)
+	return true
 
 
 func run() -> void:
@@ -132,7 +157,48 @@ func run() -> void:
 			shell.current_view.update_view(0.0)
 		await snapshot(point[0])
 		if failed: quit(1); return
-	shell.current_view.unboard_requested()
+	var flight: Control = shell.current_view
+	flight.cockpit = false
+	flight.port_command("release_freedom_port")
+	if not owner.set_freedom_assistance(false): fail(str(owner.get_last_error()))
+	var controls := PackedFloat64Array()
+	controls.resize(12)
+	controls[4] = 0.25
+	if not flight_ticks(120, controls): quit(1); return
+	flight.look_offset = Vector2(0.5, -0.5)
+	flight.update_view(0.0)
+	await snapshot("withdrawal-exhaust")
+	flight.look_offset = Vector2.ZERO
+	if not flight_ticks(600, controls): quit(1); return
+	await snapshot("departed")
+	# A short real main burn after clearing the column shows both installed
+	# exhaust paths. It remains small enough for this near-port return review.
+	controls.fill(0.0)
+	controls[5] = 0.1
+	if not flight_ticks(12, controls): quit(1); return
+	await snapshot("main-exhaust")
+	flight.port_command("begin_freedom_port_approach")
+	if not owner.get_freedom_flight_state().port_approach.active:
+		fail(str(owner.get_last_error()))
+		quit(1)
+		return
+	controls.fill(0.0)
+	var approach_ticks := 0
+	while not owner.get_freedom_flight_state().docking.ready and approach_ticks < 7200:
+		if not flight_ticks(12, controls): quit(1); return
+		approach_ticks += 12
+	if not owner.get_freedom_flight_state().docking.ready:
+		fail("Actual return did not reach the physical capture gate: " + str(owner.get_freedom_flight_state().port_approach))
+		quit(1)
+		return
+	await snapshot("return-ready")
+	flight.port_command("capture_freedom_port")
+	if not owner.get_freedom_flight_state().attached:
+		fail(str(owner.get_last_error()))
+		quit(1)
+		return
+	await snapshot("returned-captured")
+	flight.unboard_requested()
 	shell.switch_journey_view()
 	freeze_view()
 	if not shell.current_view is WalkView or shell.current_view.staged_model != original_model:
@@ -153,11 +219,11 @@ func run() -> void:
 		quit(1)
 		return
 	var sources := {}
-	for name in ["studies/captures/native_boarding_capture.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_station_view.gd", "scripts/characters/hopper_presentation.gd", "bin/libapsis_freedom_bridge.so"]:
+	for name in ["studies/captures/native_boarding_capture.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_station_view.gd", "scripts/characters/hopper_presentation.gd", "shaders/native_main_exhaust.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
 		sources[name] = FileAccess.get_sha256("res://" + name)
 	var report := FileAccess.open(output.path_join("capture.json"), FileAccess.WRITE)
 	if report == null: quit(1); return
-	report.store_string(JSON.stringify({"schema_version": 1, "scope": "Playable authored boarding and reverse unboard on one authoritative C++ session; body proxy and corridor are authored gameplay approximations, not anatomical or continuous-collision certification", "seed": "42", "sources_sha256": sources, "selected_binding": WalkCapture.binding_metadata(owner.get_freedom_craft_binding()), "station_sha256": WalkView.StationPresentation.STATION_HASH, "render_path": "Actual NewGame42, public supported walk2960ticks plus one look tick, Board and Unboard; render waits freeze time; same model and session throughout", "asset_package": "freedom-starter-01", "licenses": ["LicenseRef-Apsis-Station-Kit-Output", "LicenseRef-Apsis-Hopper-Meshy-Output", "BSD-3-Clause"], "license_records": "assets/native/freedom-starter-01/licenses", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name(), "captures": captures}, "\t") + "\n")
+	report.store_string(JSON.stringify({"schema_version": 2, "scope": "Playable authored boarding, actuator departure/approach, explicit capture and reverse unboard on one authoritative C++ session; body proxy and corridor are gameplay approximations, not anatomical or continuous-collision certification", "seed": "42", "sources_sha256": sources, "selected_binding": WalkCapture.binding_metadata(owner.get_freedom_craft_binding()), "station_sha256": WalkView.StationPresentation.STATION_HASH, "render_path": "Actual NewGame42, public walk2960ticks plus one look tick, Board, Release, physical withdrawal720ticks then main12ticks, approach, Capture and Unboard; rendering waits freeze time; same model and session throughout", "asset_package": "freedom-starter-01", "licenses": ["LicenseRef-Apsis-Station-Kit-Output", "LicenseRef-Apsis-Hopper-Meshy-Output", "BSD-3-Clause"], "license_records": "assets/native/freedom-starter-01/licenses", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name(), "captures": captures}, "\t") + "\n")
 	report.close()
 	shell.free()
 	print("Native authored boarding captures: %d" % captures.size())

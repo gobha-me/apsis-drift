@@ -113,6 +113,69 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	if continued_shell.current_view != null:
 		check(continued_shell.current_view is FlightView and continued_shell.current_view.cockpit and continued_shell.current_view.paused and continued_shell.current_view.staged_model.valid_current_pose(), "Seated Continue lost pose, cockpit or neutral pause")
 	continued_shell.free()
+	flight.port_command("release_freedom_port")
+	check(not bridge.get_freedom_flight_state().attached and "12 m" in flight.save_status.text, "Release lost mapped withdrawal guidance")
+	check(bridge.set_freedom_assistance(false), "Explicit manual coast refused")
+	var commands := PackedFloat64Array()
+	commands.resize(12)
+	commands[4] = 0.25
+	for frame in 360:
+		check(bridge.advance_freedom_flight(1.0 / 60.0, commands, false), "Public departure refused")
+	flight.state = bridge.get_freedom_flight_state()
+	flight.update_view(0.0)
+	check(flight.state.docking.separation > 80.0 and flight.state.negative_force_body[1] > 0.0, "Same craft never departed under withdrawal thrust")
+	check(flight.exhaust.update_applied(flight.state, 1.0 / 60.0, false) and flight.exhaust.withdrawal_intensity > 0.0, "Composed departure exhaust stayed dark")
+	var approach_menu: Button = flight.controls_menu.saved_port_buttons["Approach port with thrusters"]
+	check(not flight.approach_button.disabled and not approach_menu.disabled and approach_menu.focus_mode == Control.FOCUS_ALL, "Aligned return lost controller-accessible approach")
+	approach_menu.pressed.emit()
+	check(bridge.get_freedom_flight_state().port_approach.active, "Menu approach did not arm C++ command")
+	flight._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(not bridge.get_freedom_flight_state().port_approach.active, "Focus loss retained approach thrust command")
+	flight._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	flight.toggle_pause()
+	flight.port_command("begin_freedom_port_approach")
+	var departure: Dictionary = bridge.get_freedom_flight_state()
+	var approach_save := save_path.get_base_dir().path_join("playable-approach.json")
+	check(bridge.save_freedom_as(approach_save), "Approach Save As refused")
+	var cadence: Variant = ClassDB.instantiate("FreedomBridge")
+	var cadence_shell := Shell.new()
+	cadence_shell.presentation_only = true
+	root.add_child(cadence_shell)
+	check(cadence_shell.select_start(cadence, {"mode": "continue", "value": approach_save, "assets": shell.assets_root}), "Approach Continue could not stage: " + cadence_shell.error)
+	if cadence_shell.current_view == null:
+		cadence_shell.free()
+		return
+	cadence_shell.current_view.set_process(false)
+	check(not cadence.get_freedom_flight_state().port_approach.active, "Continue armed unsaved approach command")
+	check(cadence.begin_freedom_port_approach(), "Resumed explicit approach refused")
+	commands.fill(0.0)
+	var invalid := commands.duplicate()
+	invalid[3] = NAN
+	check(not bridge.advance_freedom_flight(1.0 / 120.0, invalid, false) and bridge.get_freedom_flight_state() == departure, "Invalid command canceled approach or changed body")
+	for frame in 450:
+		check(bridge.advance_freedom_flight(1.0 / 30.0, commands, false), "30 Hz approach refused")
+	for frame in 900:
+		check(cadence.advance_freedom_flight(1.0 / 60.0, commands, false), "60 Hz approach refused")
+	var from_continue: Dictionary = cadence.get_freedom_flight_state()
+	var uninterrupted: Dictionary = bridge.get_freedom_flight_state()
+	# The source-save selection is intentionally different; physical results
+	# and transient command state must still agree exactly.
+	from_continue.erase("continued")
+	uninterrupted.erase("continued")
+	check(from_continue == uninterrupted, "Render cadence changed actual approach or actuator state")
+	cadence_shell.free()
+	var returned := false
+	for tick in 300:
+		var current: Dictionary = bridge.get_freedom_flight_state()
+		if current.docking.ready:
+			returned = true
+			break
+		check(bridge.advance_freedom_flight(1.0 / 120.0, commands, false), "Final close approach refused")
+	check(returned and not bridge.get_freedom_flight_state().attached and bridge.get_freedom_flight_state().port_approach.active, "Aid lost actual readiness, or auto-captured")
+	flight.state = bridge.get_freedom_flight_state()
+	flight.update_view(0.0)
+	flight.port_command("capture_freedom_port")
+	check(flight.state.attached and flight.exhaust.withdrawal_intensity == 0.0, "Composed capture lost attachment or retained propulsion")
 	flight.unboard_menu_button.pressed.emit()
 	shell.switch_journey_view()
 	walk = shell.current_view

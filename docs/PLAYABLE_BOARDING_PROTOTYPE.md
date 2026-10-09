@@ -56,3 +56,12 @@ debug HUD occupies substantial screen space. Reverse travel currently keeps
 the same view direction. These are recorded presentation improvements, not
 new anatomical proof prerequisites. The initial C++ run passed all 104 tests
 with both GCC and Clang, including atmospheric/surface flight regressions.
+
+The subsequent 15-image round-trip capture adds a real port release, downward
+withdrawal, brief main burn, thruster-assisted return and explicit capture before
+reversing the same boarding route. The same C++ session and Wayfarer model are
+retained throughout; the craft is not reset to its pre-departure state. See
+[close-range approach](PORT_APPROACH_AID.md) for the bounded aid and historical
+orbit compatibility. The low-thrust main plume now survives the transparent
+camera composite. The small withdrawal nozzles are difficult to read at chase
+distance; nozzle/camera readability remains a presentation refinement.

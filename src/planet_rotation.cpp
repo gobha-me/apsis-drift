@@ -247,12 +247,17 @@ auto resolve_planet_rotation(const PhysicalLocalSystem& system,
                              SimulationTick tick,
                              PlanetFixedPositionMetres observer)
     -> std::expected<PhysicalPlanetRotationGeometry, PlanetRotationError> {
+  const bool legacy = recipe.physical_catalog_generator ==
+                          kPhysicalLocalSystemGeneratorVersion &&
+                      recipe.ephemeris_version == kAnalyticEphemerisVersion;
+  const bool continuous =
+      recipe.physical_catalog_generator ==
+          kContinuousPhysicalLocalSystemGeneratorVersion &&
+      recipe.ephemeris_version == kContinuousAnalyticEphemerisVersion;
   if (recipe.catalog_family != PlanetRotationOwnerFamily::physical_circular ||
       recipe.owner_version != kPhysicalPlanetRotationOwnerVersion ||
-      recipe.physical_catalog_generator !=
-          kPhysicalLocalSystemGeneratorVersion ||
+      (!legacy && !continuous) ||
       recipe.source_catalog_generator != kLocalSystemGeneratorVersion ||
-      recipe.ephemeris_version != kAnalyticEphemerisVersion ||
       recipe.rotation.version != kPlanetRotationGeneratorVersion)
     return std::unexpected{PlanetRotationError::unsupported_version};
   if (!validate_local_system(system))

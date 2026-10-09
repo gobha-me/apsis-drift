@@ -33,8 +33,8 @@ struct Fixture {
   OriginStationDescriptor station;
   OriginStationGeometry geometry;
   PlanetDescriptor planet;
-  explicit Fixture(Seed s = Seed{42})
-      : seed(s), system(require(generate_physical_origin_system(s))),
+  explicit Fixture(Seed s = Seed{42}, std::uint32_t version = 1)
+      : seed(s), system(require(generate_physical_origin_system(s, version))),
         station(generate_origin_station(s)),
         geometry(require(origin_station_geometry(station))),
         planet(system.catalog.planets[kOriginHomePlanetOrdinal].descriptor) {}
@@ -50,7 +50,11 @@ struct Fixture {
                                          {station.id, port}, 25, separation))
             .planet_relative;
     body.craft = wayfarer_frame().recipe;
-    return {{origin, body, {}}, {1, {station.id, port}, false}};
+    FreedomDockingSaveDocument result{{origin, body, {}},
+                                      {1, {station.id, port}, false}};
+    result.flight.model.physical_catalog = system.generator_version;
+    result.flight.model.physical_ephemeris = system.ephemeris_version;
+    return result;
   }
   auto session(FreedomDockingSaveDocument d) const
       -> NativeFreedomFlightSession {
@@ -280,6 +284,54 @@ auto lifecycle(const std::filesystem::path& dir) -> void {
             legacy.docking()->target.ordinal == 2,
         "port selection is an explicit lifecycle state change");
 }
+auto approach_aid() -> void {
+  const Fixture fixture{Seed{42}, 2};
+  for (unsigned mutation = 0; mutation < 5; ++mutation) {
+    auto d = fixture.document(1, 12);
+    auto& b = d.flight.flight;
+    switch (mutation) {
+      case 0: b.position_metres.y += 13; break;
+      case 1: b.position_metres.y -= 150; break;
+      case 2: b.position_metres.x += 25; break;
+      case 3: b.orientation = {}; break;
+      case 4: b.linear_velocity_metres_per_second.y += 41; break;
+      default: break;
+    }
+    auto session = fixture.session(d);
+    const auto initial = session.document();
+    check(!session.begin_port_approach() && session.document() == initial &&
+              !session.port_approach().active,
+          "wrong-side/distant/outside-column/unaligned/fast aid refuses "
+          "atomically");
+  }
+  for (const auto seed :
+       {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const Fixture f{seed, 2};
+    for (const auto port : {1U, 2U}) {
+      auto session = f.session(f.document(port, 12));
+      check(session.begin_port_approach().has_value(),
+            "both aligned port approaches accept");
+      std::uint32_t elapsed{};
+      bool used_propulsion{};
+      while (session.port_approach().active &&
+             elapsed < kNativePortApproachTicks &&
+             require(session.assess_port()).decision !=
+                 OriginDockDecision::capture_ready) {
+        const auto step = require(session.advance({}));
+        used_propulsion |=
+            step.actuation.central.propulsion.applied_force_newtons !=
+            RigidVector3{};
+        ++elapsed;
+      }
+      check(used_propulsion && !session.docking()->attached &&
+                require(session.assess_port()).decision ==
+                    OriginDockDecision::capture_ready &&
+                session.capture_port().has_value(),
+            "both seeded port aids use real propulsion and the original "
+            "capture gate");
+    }
+  }
+}
 } // namespace
 auto main() -> int {
   auto dir = std::filesystem::temp_directory_path() /
@@ -290,6 +342,7 @@ auto main() -> int {
   try {
     invalid();
     lifecycle(dir);
+    approach_aid();
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     ++failures;

@@ -10,6 +10,11 @@ namespace apsis_drift {
 inline constexpr std::string_view kPhysicalLocalSystemRecipeFamily{
     "physical_circular"};
 inline constexpr std::uint32_t kPhysicalLocalSystemGeneratorVersion{1};
+// v2 retains seeded bodies/orbit parameters and resolves continuous positions
+// and velocities. New native journeys select it explicitly; v1 remains exact.
+inline constexpr std::uint32_t kContinuousPhysicalLocalSystemGeneratorVersion{
+    2};
+inline constexpr std::uint32_t kContinuousAnalyticEphemerisVersion{2};
 inline constexpr std::uint32_t kMinimumStellarMassMillisolar{80};
 inline constexpr std::uint32_t kMaximumStellarMassMillisolar{1'600};
 // IAU 2015 B3 nominal solar GM, exact nominal conversion constant.
@@ -57,7 +62,8 @@ enum class PhysicalLocalSystemError : std::uint8_t {
                                             PlanetId planet)
     -> std::expected<const LocalSystemPlanet*, PhysicalLocalSystemError>;
 
-// Same integer simulation clock, unchanged circular geometry/quantization.
+// Same integer simulation clock and circular geometry. v1 retains historical
+// quantization; explicitly selected v2 resolves continuous position/velocity.
 // The embedded catalog intentionally fails legacy catalog validation.
 // No physical station, native adapter or saved-career migration is implied.
 [[nodiscard]] auto resolve_planet_ephemeris(const PhysicalLocalSystem& system,

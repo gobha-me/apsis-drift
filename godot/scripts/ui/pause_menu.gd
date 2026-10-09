@@ -89,7 +89,7 @@ func _ready() -> void:
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
 		left.add_child(saved_assist_button)
 		if saved_wayfarer:
-			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0]]:
+			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Approach port with thrusters", "begin_freedom_port_approach", 0], ["Cancel approach aid", "cancel_freedom_port_approach", 0], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0]]:
 				var button := add_button(left, item[0], func(): port_requested.emit(item[1], item[2]))
 				saved_port_buttons[item[0]] = button
 	if saved_flight or controls.thrust_mode:
@@ -261,6 +261,13 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		elif name == "Release attached port":
 			button.disabled = failed or not attached
 			button.tooltip_text = "Release the physical attachment." if attached else "No port is attached."
+		elif name == "Approach port with thrusters":
+			var approach: Dictionary = state.get("port_approach", {})
+			button.disabled = failed or approach.get("active", false) or not approach.get("available", false)
+			button.tooltip_text = "Resume explicitly; manual control cancels. Capture is separate." if approach.get("available", false) else str(approach.get("refusal", "Select a port first."))
+		elif name == "Cancel approach aid":
+			button.disabled = failed or not state.get("port_approach", {}).get("active", false)
+			button.tooltip_text = "Cancel thruster approach."
 		else:
 			button.disabled = failed or attached or not assessment.get("ready", false)
 			button.tooltip_text = "Already attached." if attached else str(assessment.get("reason", "Select a port for approach."))

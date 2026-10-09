@@ -84,11 +84,19 @@ auto main() -> int {
     check(contents(save) == original, "Continue modified its source save");
     const auto continued_station =
         prepare_native_freedom_station_start(*continued);
-    check(continued_station &&
-              continued_station->ephemeris == created_station->ephemeris &&
-              continued_station->system == created_station->system &&
+    const auto legacy_system = generate_physical_origin_system(seed);
+    check(legacy_system.has_value(), "historical physical catalog refused");
+    const auto legacy_station = resolve_origin_station_ephemeris(
+        *legacy_system, generate_origin_station(seed), {0});
+    check(continued_station && legacy_station &&
+              continued_station->ephemeris == *legacy_station &&
+              continued_station->system == *legacy_system &&
+              continued_station->system.catalog ==
+                  created_station->system.catalog &&
+              created_station->system.ephemeris_version == 2 &&
               continued_station->selected.source_save == save,
-          "Continue did not resolve the same physical station as New Game");
+          "historical17 Continue changed its original motion recipe or station "
+          "identity");
 
     const auto copy_path = directory / "native-copy.json";
     check(native_save_freedom(*created, copy_path).has_value() &&

@@ -114,3 +114,8 @@ the original 720 ticks and preserves its forward-thrust timing. Its manifest now
 records separate main/withdrawal intensities, gross negative force and ratings,
 and visual phase. This increment qualifies propulsion presentation; boarding
 and the composed New Game journey remain open.
+
+2026-10-09: the [close-range approach aid](PORT_APPROACH_AID.md) adds an optional
+application-owned translation command through existing propulsion. The boarding
+prototype now composes New Game departure, return, explicit capture and station
+disembarking in one session. The complete planetary journey remains open.

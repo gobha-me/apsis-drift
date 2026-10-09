@@ -181,6 +181,7 @@ auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
       !valid)
     return std::unexpected{"Port selection refused: " + valid.error().detail};
   docking_ = candidate;
+  cancel_port_approach();
   return {};
 }
 
@@ -229,6 +230,7 @@ auto NativeFreedomFlightSession::capture_port()
                            valid.error().detail};
   document_ = std::move(candidate);
   docking_ = attachment;
+  cancel_port_approach();
   return {};
 }
 
@@ -276,6 +278,7 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     return std::unexpected{
         "Hold target/version refused for the saved body and air boundary"};
   document_.model.hold = request;
+  cancel_port_approach();
   return {};
 }
 
@@ -285,7 +288,49 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
   if (actor_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
-  return advance_craft_tick(controls, step);
+  if (!port_approach_.active) return advance_craft_tick(controls, step);
+  // Validate the actual player input before an aid can replace neutral input.
+  // Invalid input/steps must retain both the body and this transient command.
+  const VacuumIntent intent{
+      controls.positive_translation, controls.negative_translation,
+      controls.positive_rotation, controls.negative_rotation,
+      document_.model.assistance};
+  if (!evaluate_atmospheric_flight(
+          RigidBodyWorldContext{system_}, document_.flight, intent, rotation_,
+          document_.model.atmosphere, document_.model.central))
+    return std::unexpected{"Flight input or atmospheric observation refused"};
+  auto candidate = *this;
+  auto requested = controls;
+  const bool manual = controls.positive_translation != RigidVector3{} ||
+                      controls.negative_translation != RigidVector3{} ||
+                      controls.positive_rotation != RigidVector3{} ||
+                      controls.negative_rotation != RigidVector3{};
+  if (manual) {
+    candidate.cancel_port_approach();
+    candidate.port_approach_.note = "Approach canceled by manual control";
+  } else if (auto aid = port_approach_controls()) {
+    requested = *aid;
+    --candidate.port_approach_.remaining_ticks;
+  } else {
+    candidate.cancel_port_approach();
+    candidate.port_approach_.note = "Approach stopped: " + aid.error();
+  }
+  auto result = candidate.advance_craft_tick(requested, step);
+  if (!result) return std::unexpected{result.error()};
+  if (candidate.port_approach_.active) {
+    const auto assessed = candidate.assess_port();
+    if (assessed && assessed->decision == OriginDockDecision::capture_ready) {
+      candidate.port_approach_.note =
+          "Ready; select Capture port (holding with thrusters)";
+    }
+    if (candidate.port_approach_.remaining_ticks == 0) {
+      candidate.cancel_port_approach();
+      candidate.port_approach_.note =
+          "Approach timed out; resume manual control";
+    }
+  }
+  *this = std::move(candidate);
+  return result;
 }
 
 auto NativeFreedomFlightSession::advance_craft_tick(

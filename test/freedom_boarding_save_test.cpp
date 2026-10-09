@@ -157,12 +157,49 @@ auto run() -> void {
   check(session.document().flight.tick ==
             initial_tick + kGameplayBoardingTicks + 1,
         "neutral batch consumes post-seat remainder");
-  auto seated_attached = session;
+  check(!session.begin_port_approach(), "attached approach aid refuses");
+  check(session.document().model.physical_catalog == 2 &&
+            session.document().model.physical_ephemeris == 2,
+        "New Game explicitly selects continuous motion");
+  auto legacy =
+      FreedomBoardingSaveDocument{{session.document(), *session.docking()},
+                                  *session.starting_assembly(),
+                                  *session.boarding(),
+                                  {}};
+  const auto legacy_system =
+      required(generate_physical_origin_system(Seed{42}));
+  const auto station_descriptor = generate_origin_station(Seed{42});
+  const auto station_geometry =
+      required(origin_station_geometry(station_descriptor));
+  legacy.voyage.flight.model.physical_catalog = 1;
+  legacy.voyage.flight.model.physical_ephemeris = 1;
+  legacy.voyage.flight.flight = required(release_origin_port(
+      legacy_system, station_descriptor, station_geometry,
+      {1, legacy.voyage.docking.target, wayfarer_frame().recipe,
+       session.document().flight.tick}));
+  const auto legacy_path = files.dir / "legacy-seated.json";
+  std::ofstream{legacy_path}
+      << required(encode_freedom_boarding_document_json(legacy));
+  auto historical = resume(legacy_path);
+  check(historical.document() == legacy.voyage.flight &&
+            historical.system().ephemeris_version == 1,
+        "historical seated22 retains original rounded motion exactly");
+  require_ok(historical.release_port());
+  check(!historical.begin_port_approach(),
+        "historical aid refuses without migrating old body");
+  require_ok(session.set_assistance(false));
   require_ok(session.release_port());
   check(!session.begin_disembarking(), "detached pilot cannot disembark");
   NativeFlightControls thrust{};
-  thrust.positive_translation = {0, 0, 1};
-  (void)required(session.advance(thrust));
+  thrust.negative_translation = {0, .25, 0};
+  const auto first_departure = required(session.advance(thrust));
+  check(first_departure.actuation.central.propulsion.negative_force_newtons.y >
+            0,
+        "first departure applies the actual withdrawal thrusters");
+  for (int i = 1; i < 720; ++i)
+    (void)required(session.advance(thrust));
+  check(required(session.assess_port()).outward_separation_metres > 80,
+        "same New Game craft physically leaves the port column");
   const auto flight = files.dir / "flight.json";
   require_ok(session.save_as(flight));
   auto flight_resume = resume(flight);
@@ -172,30 +209,88 @@ auto run() -> void {
         "seated freeflight22 resumes without floor actor");
   check(text(mid) == original_mid,
         "SaveAs and Continue never mutate original save");
-  require_ok(seated_attached.begin_disembarking());
-  check(seated_attached.walker().has_value(),
+  const auto departure = session.document();
+  require_ok(session.begin_port_approach());
+  check(session.document() == departure && session.port_approach().active,
+        "approach command never relocates or advances craft");
+  const auto active = session.port_approach();
+  NativeFlightControls invalid;
+  invalid.positive_translation.x = std::numeric_limits<double>::quiet_NaN();
+  check(!session.advance(invalid) &&
+            !session.advance({}, SimulationSeconds{1.0 / 60}) &&
+            session.document() == departure &&
+            session.port_approach() == active,
+        "invalid input/step cannot cancel or advance approach");
+  auto manual = session;
+  (void)required(manual.advance(thrust));
+  check(!manual.port_approach().active &&
+            manual.document().flight.tick == departure.flight.tick + 1,
+        "manual input cancels aid and advances ordinary actuators");
+  const auto aid_save = files.dir / "aid.json";
+  require_ok(session.save_as(aid_save));
+  check(resume(aid_save).document() == session.document() &&
+            !resume(aid_save).port_approach().active,
+        "Continue retains actual body but never arms transient approach");
+  std::uint32_t return_ticks{};
+  while (session.port_approach().active &&
+         return_ticks < kNativePortApproachTicks &&
+         required(session.assess_port()).decision !=
+             OriginDockDecision::capture_ready) {
+    const auto applied =
+        required(session.advance({}))
+            .actuation.central.propulsion.applied_force_newtons;
+    ++return_ticks;
+    if (return_ticks % 240 == 0) {
+      const auto a = required(session.assess_port());
+      std::cout << "approach " << return_ticks << " out "
+                << a.outward_separation_metres << " lateral "
+                << a.lateral_separation_metres << " inward "
+                << a.inward_speed_metres_per_second << " force " << applied.x
+                << ',' << applied.y << ',' << applied.z << '\n';
+    }
+  }
+  std::cout << "New Game return: " << return_ticks << " ticks, "
+            << required(session.assess_port()).separation_metres << " m, "
+            << session.port_approach().note << '\n';
+  check(required(session.assess_port()).decision ==
+                OriginDockDecision::capture_ready &&
+            !session.docking()->attached && return_ticks > 120,
+        "ordinary thrusters return within unchanged gate without auto-capture");
+  for (int i = 0; i < 600; ++i) {
+    (void)required(session.advance({}));
+    ++return_ticks;
+  }
+  check(required(session.assess_port()).decision ==
+                OriginDockDecision::capture_ready &&
+            session.port_approach().active,
+        "aid retains real readiness while the pilot chooses Capture");
+  require_ok(session.capture_port());
+  check(session.document().flight.tick == departure.flight.tick + return_ticks,
+        "capture preserves actual journey clock");
+  require_ok(session.begin_disembarking());
+  check(session.walker().has_value(),
         "unboard immediately selects walk presentation");
   const auto reverse_mid = files.dir / "reverse.json";
   for (int i = 0; i < 400; ++i)
-    (void)required(seated_attached.advance_walk({}));
-  require_ok(seated_attached.save_as(reverse_mid));
+    (void)required(session.advance_walk({}));
+  require_ok(session.save_as(reverse_mid));
   auto reverse_resume = resume(reverse_mid);
   for (int i = 400; i < static_cast<int>(kGameplayBoardingTicks); ++i) {
-    (void)required(seated_attached.advance_walk({}));
+    (void)required(session.advance_walk({}));
     (void)required(reverse_resume.advance_walk({}));
   }
-  check(seated_attached.walker() == entry && reverse_resume.walker() == entry,
+  check(session.walker() == entry && reverse_resume.walker() == entry,
         "disembark restores exact real entry actor");
-  check(seated_attached.boarding()->phase == FreedomBoardingPhase::station,
+  check(session.boarding()->phase == FreedomBoardingPhase::station,
         "unboard returns station mode");
-  (void)required(seated_attached.advance_walk({0, 1, 0}));
+  (void)required(session.advance_walk({0, 1, 0}));
   const auto station = files.dir / "station.json";
-  require_ok(seated_attached.save_as(station));
-  check(resume(station).walker() == seated_attached.walker() &&
-            seated_attached.walker() != entry,
+  require_ok(session.save_as(station));
+  check(resume(station).walker() == session.walker() &&
+            session.walker() != entry,
         "station save retains updated walking pose");
-  require_ok(seated_attached.begin_boarding());
-  check(seated_attached.boarding()->station_entry == *resume(station).walker(),
+  require_ok(session.begin_boarding());
+  check(session.boarding()->station_entry == *resume(station).walker(),
         "reboarding records current real entry");
 }
 } // namespace

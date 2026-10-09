@@ -340,7 +340,7 @@ auto malformed() -> void {
   const auto original = required(generate_physical_origin_system(Seed{42}));
   const auto planet = original.catalog.planets.front().descriptor.id;
   for (const auto version :
-       {0U, 2U, std::numeric_limits<std::uint32_t>::max()}) {
+       {0U, 3U, std::numeric_limits<std::uint32_t>::max()}) {
     check(error_is(generate_physical_local_system(Seed{42}, version),
                    Error::unsupported_version),
           "Unknown physical generator accepted");
@@ -435,6 +435,62 @@ auto mass_boundaries() -> void {
   }
   check(minimum && maximum, "Mass endpoint fixtures not exercised");
 }
+auto continuous_motion() -> void {
+  for (const auto seed :
+       {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const auto legacy = required(generate_physical_origin_system(seed));
+    const auto smooth = required(generate_physical_origin_system(seed, 2));
+    check(smooth.catalog == legacy.catalog &&
+              smooth.stellar_gm_km3_per_second2 ==
+                  legacy.stellar_gm_km3_per_second2 &&
+              smooth.ephemeris_version == 2 &&
+              validate_local_system(smooth).has_value(),
+          "continuous recipe preserves seeded catalog and physical parameters");
+    const auto station = generate_origin_station(seed);
+    const auto a =
+        required(resolve_origin_station_ephemeris(smooth, station, {4799}));
+    const auto b =
+        required(resolve_origin_station_ephemeris(smooth, station, {4800}));
+    const auto c =
+        required(resolve_origin_station_ephemeris(smooth, station, {4801}));
+    const double dt = 2 * kSimulationStep.count();
+    check(std::hypot(
+              (c.host_relative_position.x - a.host_relative_position.x) / dt -
+                  b.host_relative_velocity.x,
+              (c.host_relative_position.y - a.host_relative_position.y) / dt -
+                  b.host_relative_velocity.y,
+              (c.host_relative_position.z - a.host_relative_position.z) / dt -
+                  b.host_relative_velocity.z) < .01,
+          "continuous station position derivative agrees with velocity");
+    for (const auto& planet : smooth.catalog.planets) {
+      const auto before = required(
+          resolve_planet_ephemeris(smooth, planet.descriptor.id, {4799}));
+      const auto at = required(
+          resolve_planet_ephemeris(smooth, planet.descriptor.id, {4800}));
+      const auto after = required(
+          resolve_planet_ephemeris(smooth, planet.descriptor.id, {4801}));
+      check(std::hypot(
+                (after.position.x - before.position.x) / dt - at.velocity.x,
+                (after.position.y - before.position.y) / dt - at.velocity.y,
+                (after.position.z - before.position.z) / dt - at.velocity.z) <
+                .05,
+            "continuous planetary position derivative agrees with velocity");
+      const auto rotation = required(
+          generate_planet_rotation_recipe(smooth, planet.descriptor.id));
+      check(resolve_planet_rotation(smooth, rotation, 4800).has_value(),
+            "rotation shares the selected continuous world recipe");
+    }
+    const auto old =
+        required(resolve_origin_station_ephemeris(legacy, station, {4800}));
+    check(old.host_relative_position.x ==
+                  std::round(b.host_relative_position.x) &&
+              old.host_relative_position.y ==
+                  std::round(b.host_relative_position.y) &&
+              old.host_relative_position.z ==
+                  std::round(b.host_relative_position.z),
+          "historical metre quantization remains available exactly");
+  }
+}
 } // namespace
 
 auto main() -> int {
@@ -445,6 +501,7 @@ auto main() -> int {
   mass_boundaries();
   corpus();
   station_contract();
+  continuous_motion();
   std::cout << "Physical local-system contracts: " << failures << " failures\n";
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
