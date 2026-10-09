@@ -437,6 +437,7 @@ add_library(apsis_drift_core STATIC
   src/rigid_body.cpp
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
+  src/planet_ambient.cpp
   src/physical_local_system.cpp
   src/orbital_telemetry.cpp
   src/orbit_hold.cpp
@@ -1418,6 +1419,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME physical-local-system-contract COMMAND apsis-drift-physical-local-system-tests)
   set_tests_properties(physical-local-system-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-planet-ambient-tests test/planet_ambient_test.cpp)
+  target_link_libraries(apsis-drift-planet-ambient-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-planet-ambient-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME planet-ambient-contract COMMAND apsis-drift-planet-ambient-tests)
+  set_tests_properties(planet-ambient-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-vacuum-dynamics-tests test/vacuum_dynamics_test.cpp)
   target_link_libraries(apsis-drift-vacuum-dynamics-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-vacuum-dynamics-tests PRIVATE

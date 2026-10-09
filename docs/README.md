@@ -27,12 +27,14 @@ player's station-to-flight journey.
 - [Saved flight](SAVED_NATIVE_FLIGHT.md) and [port lifecycle](NATIVE_PORT_LIFECYCLE.md)
 - [Starting assembly](NATIVE_STARTING_ASSEMBLY.md) and [station view](NATIVE_STATION_VIEW.md)
 - [Flight controls/reference](NATIVE_FLIGHT_REFERENCE.md)
+- [Terrain pad assessment](TERRAIN_TOUCHDOWN.md) and [landed craft lifecycle](LANDED_CRAFT.md)
 - [Starter assets](NATIVE_STARTER_ASSETS.md), [operating assets](WAYFARER_OPERATING_ASSETS.md)
   and [static stowed assets](WAYFARER_STOWED_ASSETS.md)
 
 ## Simulation, assets and bounded contracts
 
 - [Seed derivation](SEED_DERIVATION.md) and [planet generation](PLANET_GENERATION.md)
+- [Immutable planetary ambient environment](PLANET_AMBIENT.md)
 - [Audio](AUDIO.md) and [asset provenance](ASSET_PROVENANCE.md)
 - [Boarding body](ORIGIN_BOARDING_BODY.md), [support](ORIGIN_BOARDING_SUPPORT.md)
   and [lower cockpit contact](LOWER_COCKPIT_CONTACT.md)
