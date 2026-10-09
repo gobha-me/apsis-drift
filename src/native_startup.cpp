@@ -121,6 +121,20 @@ auto select_document(FreedomBoardingSaveDocument document,
   return selected;
 }
 } // namespace
+namespace {
+auto select_document(FreedomSurfaceSaveDocument document,
+                     std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto valid = validate_freedom_surface_document(document); !valid)
+    return std::unexpected{"Surface save rejected: " + valid.error().detail};
+  auto selected = std::visit(
+      [&](const auto& base) { return select_document(base, source_save); },
+      document.base);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
+} // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   auto document =
@@ -217,6 +231,14 @@ auto native_save_freedom(const NativeStartup& selected,
   if (bytes.empty() || bytes.size() > 4'096 ||
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
+  if (const auto* surface =
+          std::get_if<FreedomSurfaceSaveDocument>(&selected.document)) {
+    const auto written =
+        write_freedom_surface_file_atomically(destination, *surface);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (const auto* boarding =
           std::get_if<FreedomBoardingSaveDocument>(&selected.document)) {
     const auto written =

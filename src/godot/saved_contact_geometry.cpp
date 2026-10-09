@@ -87,8 +87,17 @@ auto SavedContactGeometry::create(const NativeFreedomFlightSession& session,
                                   ContactSurfaceRecipe recipe,
                                   std::size_t cache_capacity)
     -> std::expected<SavedContactGeometry, SavedContactError> {
-  auto prepared = detail::prepare_saved_contact(
-      session.system(), session.rotation(), session.document().flight, recipe);
+  return create(session.system(), session.rotation(), session.document().flight,
+                recipe, cache_capacity);
+}
+auto SavedContactGeometry::create(const PhysicalLocalSystem& owner,
+                                  const PhysicalPlanetRotationRecipe& rotation,
+                                  const RigidBodyState& source,
+                                  ContactSurfaceRecipe recipe,
+                                  std::size_t cache_capacity)
+    -> std::expected<SavedContactGeometry, SavedContactError> {
+  auto prepared =
+      detail::prepare_saved_contact(owner, rotation, source, recipe);
   if (!prepared) return std::unexpected{prepared.error()};
   auto cache = TerrainTileCache::create(cache_capacity);
   if (!cache) return std::unexpected{SavedContactError::invalid_cache_capacity};

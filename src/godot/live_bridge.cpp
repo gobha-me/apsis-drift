@@ -197,7 +197,9 @@ class FreedomBridge : public godot::RefCounted {
   auto commit_freedom_start(NativeStartup selected) -> bool {
     if (std::holds_alternative<FreedomStartingAssemblySaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomBoardingSaveDocument>(selected.document))
+        std::holds_alternative<FreedomBoardingSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -277,6 +279,15 @@ class FreedomBridge : public godot::RefCounted {
         &FreedomBridge::select_freedom_port);
     godot::ClassDB::bind_method(godot::D_METHOD("capture_freedom_port"),
                                 &FreedomBridge::capture_freedom_port);
+    godot::ClassDB::bind_method(godot::D_METHOD("request_freedom_landing"),
+                                &FreedomBridge::request_freedom_landing);
+    godot::ClassDB::bind_method(godot::D_METHOD("stow_freedom_landing_gear"),
+                                &FreedomBridge::stow_freedom_landing_gear);
+    godot::ClassDB::bind_method(godot::D_METHOD("liftoff_freedom_surface"),
+                                &FreedomBridge::liftoff_freedom_surface);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("cancel_freedom_surface_maneuver"),
+        &FreedomBridge::cancel_freedom_surface_maneuver);
     godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_port_approach"),
                                 &FreedomBridge::begin_freedom_port_approach);
     godot::ClassDB::bind_method(godot::D_METHOD("cancel_freedom_port_approach"),
@@ -514,7 +525,8 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomStartingAssemblySaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomBoardingSaveDocument>(
-            selected.document)) {
+            selected.document) ||
+        std::holds_alternative<FreedomSurfaceSaveDocument>(selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
       const auto view = project_saved_flight(*opened);
@@ -789,6 +801,32 @@ class FreedomBridge : public godot::RefCounted {
         true);
   }
 
+  auto request_freedom_landing() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.request_landing();
+    });
+  }
+  auto stow_freedom_landing_gear() -> bool {
+    return change_freedom_port([](NativeFreedomFlightSession& session) {
+      return session.set_landing_gear(false);
+    });
+  }
+  auto liftoff_freedom_surface() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.release_surface();
+        },
+        true);
+  }
+  auto cancel_freedom_surface_maneuver() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session)
+            -> std::expected<void, std::string> {
+          session.cancel_surface_maneuver();
+          return {};
+        },
+        true);
+  }
   auto begin_freedom_port_approach() -> bool {
     return change_freedom_port([](NativeFreedomFlightSession& session) {
       return session.begin_port_approach();
@@ -1124,7 +1162,22 @@ class FreedomBridge : public godot::RefCounted {
           session.port_approach().remaining_ticks / 120.0;
       approach["note"] = godot::String{session.port_approach().note.c_str()};
       result["port_approach"] = approach;
-      const auto force = selected.last_step
+      godot::Dictionary surface;
+      surface["gear_deployed"] =
+          session.surface() && session.surface()->gear_deployed;
+      surface["landed"] =
+          session.surface() && session.surface()->landed.has_value();
+      const auto& maneuver = session.surface_maneuver();
+      surface["maneuver"] =
+          maneuver.kind == NativeSurfaceManeuverKind::landing   ? "landing"
+          : maneuver.kind == NativeSurfaceManeuverKind::liftoff ? "liftoff"
+                                                                : "off";
+      surface["remaining_seconds"] = maneuver.remaining_ticks / 120.0;
+      surface["note"] = godot::String{maneuver.note.c_str()};
+      result["surface"] = surface;
+
+      const auto force = selected.last_step && !(session.surface() &&
+                                                 session.surface()->landed)
                              ? selected.last_step->actuation.central.propulsion
                              : VacuumActuation{};
       result["positive_force_body"] = coordinates(force.positive_force_newtons);

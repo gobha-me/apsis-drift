@@ -30,6 +30,14 @@ struct NativePortApproach {
       -> bool = default;
 };
 inline constexpr std::uint32_t kNativePortApproachTicks{7200};
+enum class NativeSurfaceManeuverKind : std::uint8_t { off, landing, liftoff };
+struct NativeSurfaceManeuver {
+  NativeSurfaceManeuverKind kind{NativeSurfaceManeuverKind::off};
+  std::uint32_t remaining_ticks{};
+  std::string note{"Surface aid off"};
+  friend auto operator==(const NativeSurfaceManeuver&,
+                         const NativeSurfaceManeuver&) -> bool = default;
+};
 
 // Application-owned mutable session. Moving/copying it never retains dangling
 // descriptor/context pointers; each query makes a transient qualified context.
@@ -57,6 +65,7 @@ class NativeFreedomFlightSession {
     if (actor_)
       return std::unexpected{"Board and sit before controlling the craft"};
     document_.model.assistance = enabled;
+    if (!enabled) cancel_surface_maneuver();
     return {};
   }
   [[nodiscard]] auto set_hold(OrbitHoldRequest)
@@ -105,6 +114,21 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto craft_binding() const -> const NativeCraftBinding& {
     return craft_binding_;
   }
+  [[nodiscard]] auto surface() const
+      -> const std::optional<FreedomSurfaceState>& {
+    return surface_;
+  }
+  [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
+  [[nodiscard]] auto set_landing_gear(bool deployed)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto commit_touchdown(std::uint64_t expected_source_checksum)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto release_surface() -> std::expected<void, std::string>;
+  [[nodiscard]] auto request_landing() -> std::expected<void, std::string>;
+  auto cancel_surface_maneuver() -> void;
+  [[nodiscard]] auto surface_maneuver() const -> const NativeSurfaceManeuver& {
+    return surface_maneuver_;
+  }
 
  private:
   [[nodiscard]] auto port_approach_controls() const
@@ -115,6 +139,12 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto surface_maneuver_controls() const
+      -> std::expected<NativeFlightControls, std::string>;
+  [[nodiscard]] auto advance_surface(const NativeFlightControls&,
+                                     SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
+  auto try_surface_contact() -> void;
   NativeFreedomFlightSession(FreedomFlightSaveDocument document,
                              FreedomFlightHydration hydrated,
                              std::optional<std::filesystem::path> source);
@@ -128,5 +158,7 @@ class NativeFreedomFlightSession {
   NativeCraftBinding craft_binding_;
   std::optional<FreedomBoardingState> boarding_;
   NativePortApproach port_approach_;
+  std::optional<FreedomSurfaceState> surface_;
+  NativeSurfaceManeuver surface_maneuver_;
 };
 } // namespace apsis_drift

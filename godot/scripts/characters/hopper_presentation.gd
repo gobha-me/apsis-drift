@@ -344,7 +344,8 @@ func set_pose(value: Dictionary) -> bool:
 	return valid_current_pose()
 
 func set_gear_preview(deployed: float) -> bool:
-	# Explicit asset inspection, never inferred from altitude or used as landing state.
+	# Visual calibration pose, selected by inspection or explicit C++ deployment.
+	# This method never infers or commits physical landing state.
 	if not is_finite(deployed) or deployed < 0 or deployed > 1:
 		return false
 	var sample := (1.0 - deployed) * (int(specification.gear_preview_samples) - 1)

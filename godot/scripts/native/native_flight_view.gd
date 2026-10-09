@@ -55,6 +55,10 @@ var approach_button: Button
 var capture_button: Button
 var unboard_menu_button: Button
 var unboard_button: Button
+var landing_button: Button
+var stow_gear_button: Button
+var liftoff_button: Button
+var surface_status: RichTextLabel
 var release_button: Button
 var error := ""
 var activated := false
@@ -354,6 +358,22 @@ func build_ui() -> void:
 		release_button.focus_mode = Control.FOCUS_NONE
 		release_button.pressed.connect(func(): port_command("release_freedom_port"))
 		column.add_child(release_button)
+		surface_status = hud_text()
+		column.add_child(surface_status)
+		landing_button = Button.new()
+		landing_button.focus_mode = Control.FOCUS_NONE
+		landing_button.pressed.connect(func(): port_command("request_freedom_landing"))
+		column.add_child(landing_button)
+		stow_gear_button = Button.new()
+		stow_gear_button.text = "Stow landing gear"
+		stow_gear_button.focus_mode = Control.FOCUS_NONE
+		stow_gear_button.pressed.connect(func(): port_command("stow_freedom_landing_gear"))
+		column.add_child(stow_gear_button)
+		liftoff_button = Button.new()
+		liftoff_button.text = "Liftoff with thrusters"
+		liftoff_button.focus_mode = Control.FOCUS_NONE
+		liftoff_button.pressed.connect(func(): port_command("liftoff_freedom_surface"))
+		column.add_child(liftoff_button)
 	var save_button := Button.new()
 	save_button.text = "Save As…"
 	save_button.focus_mode = Control.FOCUS_NONE
@@ -494,6 +514,9 @@ func open_save_dialog() -> void:
 
 
 func pause_controls(reason: String, show_menu := true) -> void:
+	if state.get("surface", {}).get("maneuver", "off") != "off":
+		bridge.cancel_freedom_surface_maneuver()
+		state = bridge.get_freedom_flight_state()
 	if state.get("port_approach", {}).get("active", false):
 		bridge.cancel_freedom_port_approach()
 		state = bridge.get_freedom_flight_state()
@@ -547,10 +570,10 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
-	if command == "begin_freedom_port_approach":
+	if command in ["begin_freedom_port_approach", "request_freedom_landing", "liftoff_freedom_surface"]:
 		observe_neutral_controls()
 		if not controls_armed:
-			save_status.text = "Release flight controls before starting the approach aid."
+			save_status.text = "Release flight controls before starting a thruster maneuver."
 			return
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
@@ -565,6 +588,8 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		save_status.text = "Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)]
 	elif command.ends_with("port_approach"):
 		save_status.text = state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else "")
+	elif command in ["request_freedom_landing", "stow_freedom_landing_gear", "liftoff_freedom_surface", "cancel_freedom_surface_maneuver"]:
+		save_status.text = state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else "")
 	else:
 		save_status.text = "Port selected. Capture requires physical alignment and low closure."
 
@@ -652,7 +677,7 @@ func _process(delta: float) -> void:
 	var resolved: Dictionary = player_input.sample()
 	controls_armed = not player_input.needs_neutral
 	var demand := actuator_fractions(resolved.thrust_axes)
-	if state.get("attached", false):
+	if state.get("attached", false) or state.get("surface", {}).get("landed", false):
 		demand.fill(0.0)
 	if not bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible):
 		pause_on_error(str(bridge.get_last_error()))
@@ -691,6 +716,17 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			return
 		if boarding.state == "seated":
 			pilot_eye = Vector3(boarding.eye_craft[0], boarding.eye_craft[1], boarding.eye_craft[2])
+	var surface: Dictionary = state.get("surface", {})
+	if staged_model != null and not staged_model.set_gear_preview(1.0 if surface.get("gear_deployed", false) else 0.0):
+		pause_on_error("The declared landing gear pose is unavailable")
+		return
+	if landing_button != null:
+		var landed: bool = surface.get("landed", false)
+		landing_button.text = "Land with thrusters" if state.assistance else "Deploy gear · manual landing"
+		landing_button.disabled = state.attached or landed
+		stow_gear_button.disabled = state.attached or landed or not surface.get("gear_deployed", false)
+		liftoff_button.disabled = not landed
+		surface_status.text = ("Landed" if landed else "Airborne") + " · Gear " + ("deployed" if surface.get("gear_deployed", false) else "stowed") + "\n" + str(surface.get("note", "Surface aid off"))
 	ship.basis = state.body_basis
 	if station == null and state.station_position.length() < 1000.0:
 		station = StationPresentation.new()
@@ -753,7 +789,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		approach_button.text = "Cancel approach aid" if approach.get("active", false) else "Approach port with thrusters"
 		approach_button.disabled = not approach.get("active", false) and not approach.get("available", false)
 		approach_button.tooltip_text = "Manual input cancels. Capture remains your action." if approach.get("available", false) else str(approach.get("refusal", "Select a port first."))
-		capture_button.disabled = state.attached or assessment.is_empty() or not assessment.get("ready", false)
+		capture_button.disabled = state.attached or surface.get("gear_deployed", false) or assessment.is_empty() or not assessment.get("ready", false)
 		release_button.disabled = not state.attached or (not boarding.is_empty() and boarding.state != "seated")
 		unboard_button.visible = state.attached and state.target_port == 1 and boarding.get("state") == "seated"
 		if unboard_menu_button != null:

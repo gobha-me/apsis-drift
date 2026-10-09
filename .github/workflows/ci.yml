@@ -239,6 +239,7 @@ jobs:
           apsis-drift-godot-snapshot
           apsis-drift-freedom-start-fixture
           apsis-drift-freedom-planetary-fixture
+          apsis-drift-landed-craft-tests
 
       - name: Check saved-start bridge, native shell and audio shutdown in Godot
         run: >-
@@ -252,7 +253,7 @@ jobs:
           --test saved_flight
           --test native_port --test native_walk
           --test native_assembly --test native_start_staging --test native_planetary --test native_voyage
-          --test home_navigation
+          --test home_navigation --test native_surface
           --test wayfarer_operating
           --test recorded_audio_shutdown
 
@@ -266,5 +267,7 @@ jobs:
             build-native-contracts/native-contracts-*/*.log
             build-native-contracts/native-contracts-*/planetary/*.json
             build-native-contracts/native-contracts-*/voyage-native/*.json
+            build-native-contracts/native-contracts-*/surface/*.json
+            build-native-contracts/native-contracts-*/surface-native/*.json
           if-no-files-found: warn
           retention-days: 7
