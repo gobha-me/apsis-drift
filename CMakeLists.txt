@@ -1425,6 +1425,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME planet-ambient-contract COMMAND apsis-drift-planet-ambient-tests)
   set_tests_properties(planet-ambient-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-flight-endurance-research-tests test/flight_endurance_research_test.cpp)
+  target_link_libraries(apsis-drift-flight-endurance-research-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-flight-endurance-research-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME flight-endurance-research-contract COMMAND apsis-drift-flight-endurance-research-tests)
+  set_tests_properties(flight-endurance-research-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-vacuum-dynamics-tests test/vacuum_dynamics_test.cpp)
   target_link_libraries(apsis-drift-vacuum-dynamics-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-vacuum-dynamics-tests PRIVATE

@@ -1,3 +1,4 @@
+#include "../flight_endurance_meter.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
 
 #include <algorithm>
@@ -114,9 +115,13 @@ struct Trace {
   TerrainTileCache cache;
   Json checkpoints = Json::array();
   Commands* commands{};
+  std::optional<research::FlightEnduranceMeter> endurance{};
+  Json endurance_checkpoints = Json::array();
   auto flight(const NativeFlightControls& c)
       -> std::expected<NativeFlightStep, std::string> {
     auto result = session.advance(c);
+    if (result && endurance)
+      endurance->sample(result->actuation.central.propulsion);
     if (result && commands)
       commands->step(
           "flight",
@@ -203,6 +208,15 @@ struct Trace {
          {"terrain_elevation_metres", terrain_elevation()},
          {"attached", session.docking()->attached},
          {"walking", session.walker().has_value()}});
+    if (endurance)
+      endurance_checkpoints.push_back(
+          {{"label", label},
+           {"tick", body.tick},
+           {"checksum", checksum},
+           {"flight_ticks", endurance->ticks},
+           {"firing_ticks", endurance->firing_ticks},
+           {"effort_quanta", endurance->effort_quanta},
+           {"channel_milliunit_ticks", endurance->channel_milliunit_ticks}});
     std::cout << label << " tick=" << body.tick << " checksum=" << checksum
               << '\n'
               << std::flush;
@@ -257,12 +271,14 @@ auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
   return result;
 }
 
-auto run(const std::filesystem::path& output, bool record_commands) -> void {
+auto run(const std::filesystem::path& output, bool record_commands,
+         bool measure_endurance) -> void {
   Trace trace{need(NativeFreedomFlightSession::open(
                        need(native_new_game(Seed{42}), "New Game refused")),
                    "New session refused"),
               output,
               need(TerrainTileCache::create(), "Terrain cache refused")};
+  if (measure_endurance) trace.endurance.emplace();
   std::optional<Commands> commands;
   if (record_commands) {
     commands.emplace(output);
@@ -509,6 +525,22 @@ auto run(const std::filesystem::path& output, bool record_commands) -> void {
   std::ofstream stream{output / "trace.json"};
   stream << report.dump(2) << '\n';
   check(static_cast<bool>(stream), "Trace report write failed");
+  if (trace.endurance) {
+    const Json measured{
+        {"schema_version", 1},
+        {"accounting_proposal_version", 1},
+        {"scope", "Test-only gross propulsion observation; no fuel state"},
+        {"quanta_per_equivalent_newton_second",
+         research::kEffortQuantaPerNewtonSecond},
+        {"flight_ticks", trace.endurance->ticks},
+        {"firing_ticks", trace.endurance->firing_ticks},
+        {"effort_quanta", trace.endurance->effort_quanta},
+        {"channel_milliunit_ticks", trace.endurance->channel_milliunit_ticks},
+        {"checkpoints", trace.endurance_checkpoints}};
+    std::ofstream accounting{output / "endurance.json"};
+    accounting << measured.dump(2) << '\n';
+    check(static_cast<bool>(accounting), "Endurance report write failed");
+  }
   std::cout << "Planetary voyage: " << trace.checkpoints.size()
             << " exact checkpoints, surface cruise " << cruise_distance
             << " m, 0 failures\n";
@@ -516,17 +548,27 @@ auto run(const std::filesystem::path& output, bool record_commands) -> void {
 } // namespace
 int main(int argc, char** argv) {
   try {
-    if ((argc != 2 && argc != 3) ||
-        (argc == 3 && std::string_view{argv[2]} != "--commands"))
-      throw std::invalid_argument("Expected one absolute empty output "
-                                  "directory and optional --commands");
+    if (argc < 2 || argc > 4)
+      throw std::invalid_argument(
+          "Expected one absolute empty output "
+          "directory and optional --commands/--endurance");
+    bool commands{}, endurance{};
+    for (int i = 2; i < argc; ++i) {
+      const std::string_view option{argv[i]};
+      if (option == "--commands" && !commands)
+        commands = true;
+      else if (option == "--endurance" && !endurance)
+        endurance = true;
+      else
+        throw std::invalid_argument("Unknown or repeated fixture option");
+    }
     const std::filesystem::path output{argv[1]};
     if (!output.is_absolute() || output.native().size() > 4000 ||
         !std::filesystem::is_directory(output) ||
         !std::filesystem::is_empty(output))
       throw std::invalid_argument(
           "Expected one bounded absolute empty output directory");
-    run(output, argc == 3);
+    run(output, commands, endurance);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

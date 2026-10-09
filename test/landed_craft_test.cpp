@@ -4,6 +4,7 @@
 #include "apsis_drift/terrain_hull_clearance.hpp"
 #include "apsis_drift/terrain_touchdown.hpp"
 #include "contact_geometry_internal.hpp"
+#include "flight_endurance_meter.hpp"
 #include <chrono>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -264,8 +265,8 @@ auto hull_and_idle(const Fixture& f) -> void {
   std::cout << std::setprecision(17) << "hull triangles " << hull.triangle_count
             << " lower clearance " << hull.lower_clearance_metres << '\n';
 }
-auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f)
-    -> void {
+auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f,
+                      research::FlightEnduranceMeter* meter = nullptr) -> void {
   required(session.set_landing_gear(false));
   const auto initial_history = session.document().origin.state;
   const auto initial_tick = session.document().flight.tick;
@@ -328,7 +329,8 @@ auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f)
         fraction(-demand.x, properties.negative_force_newtons[0]),
         fraction(-demand.y, properties.negative_force_newtons[1]),
         fraction(-demand.z, properties.negative_force_newtons[2])};
-    required(session.advance(controls));
+    const auto step = required(session.advance(controls));
+    if (meter) meter->sample(step.actuation.central.propulsion);
     if (ticks % 120 == 0) {
       const auto observed = required(session.observe());
       if (!space && observed.atmosphere.altitude_metres >= edge) {
@@ -385,7 +387,9 @@ auto ascent_and_orbit(NativeFreedomFlightSession session, const Fixture& f)
   check(static_cast<bool>(validate_rigid_body_state(f.context, system_pose)),
         "orbital state continues through the existing physical system frame");
 }
-auto assisted_commands(const Fixture& f) -> void {
+auto assisted_commands(const Fixture& f,
+                       research::FlightEnduranceMeter* meter = nullptr)
+    -> void {
   auto fixed = f.fixed;
   fixed.position_metres =
       add(fixed.position_metres, rotate(fixed.orientation, {0, .7, 0}));
@@ -436,7 +440,8 @@ auto assisted_commands(const Fixture& f) -> void {
       "saved gear survives while pending assisted maneuver is not serialized");
   unsigned ticks = 0;
   while (!session.surface()->landed && ticks < 1200) {
-    required(session.advance({}));
+    const auto step = required(session.advance({}));
+    if (meter) meter->sample(step.actuation.central.propulsion);
     ++ticks;
   }
   std::cout << "assisted landing ticks " << ticks << " note "
@@ -454,6 +459,7 @@ auto assisted_commands(const Fixture& f) -> void {
                NativeSurfaceManeuverKind::liftoff &&
            ascent < 1200) {
       const auto step = required(session.advance({}));
+      if (meter) meter->sample(step.actuation.central.propulsion);
       propulsion =
           propulsion ||
           step.actuation.central.propulsion.positive_force_newtons.y > 0;
@@ -464,7 +470,7 @@ auto assisted_commands(const Fixture& f) -> void {
           "rated vertical thrust lifts pads clear and returns control");
     std::cout << "initial liftoff ticks " << ascent << " note "
               << session.surface_maneuver().note << '\n';
-    ascent_and_orbit(session, f);
+    ascent_and_orbit(session, f, meter);
   }
   auto pilot = open();
   required(pilot.set_assistance(false));
@@ -697,9 +703,34 @@ auto main(int argc, char** argv) -> int {
       hull_and_idle(f);
       persistence_and_session(f);
       assisted_commands(f);
+    } else if (argc == 3 && std::string_view{argv[1]} == "--endurance") {
+      const std::filesystem::path path{argv[2]};
+      if (!path.is_absolute() || path.native().size() > 4000 ||
+          !std::filesystem::is_directory(path.parent_path()) ||
+          std::filesystem::exists(path))
+        throw std::runtime_error(
+            "expected bounded fresh absolute endurance file");
+      research::FlightEnduranceMeter meter;
+      hull_and_idle(f);
+      persistence_and_session(f);
+      assisted_commands(f, &meter);
+      const nlohmann::ordered_json report{
+          {"schema_version", 1},
+          {"accounting_proposal_version", 1},
+          {"scope", "Explicit near-ground landing/liftoff/ascent test pilot; "
+                    "no fuel state"},
+          {"quanta_per_equivalent_newton_second",
+           research::kEffortQuantaPerNewtonSecond},
+          {"flight_ticks", meter.ticks},
+          {"firing_ticks", meter.firing_ticks},
+          {"effort_quanta", meter.effort_quanta},
+          {"channel_milliunit_ticks", meter.channel_milliunit_ticks}};
+      std::ofstream out{path};
+      out << report.dump(2) << '\n';
+      if (!out) throw std::runtime_error("endurance write failed");
     } else
-      throw std::runtime_error(
-          "usage: landed-craft-tests [--fixtures DIRECTORY]");
+      throw std::runtime_error("usage: landed-craft-tests [--fixtures "
+                               "DIRECTORY | --endurance FILE]");
   } catch (const std::exception& e) {
     ++failures;
     std::cerr << e.what() << '\n';
