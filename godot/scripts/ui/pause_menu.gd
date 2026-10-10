@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## Native focus-navigation controls. Menu input never advances flight.
 signal save_requested
+signal load_requested
 signal assistance_requested(enabled: bool)
 signal port_requested(command: String, ordinal: int)
 signal resumed
@@ -18,6 +19,7 @@ var saved_assist_button: CheckButton
 var saved_port_buttons: Dictionary = {}
 var saved_note: Label
 var save_button: Button
+var load_button: Button
 var ship_audio_available := false
 var audio_preferences: RefCounted
 var audio_sliders: Dictionary = {}
@@ -84,6 +86,7 @@ func _ready() -> void:
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
 	if saved_flight:
 		save_button = add_button(left, "Save As…", func(): save_requested.emit())
+		load_button = add_button(left, "Load…", func(): load_requested.emit())
 		saved_assist_button = CheckButton.new()
 		saved_assist_button.text = "Assisted piloting"
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))

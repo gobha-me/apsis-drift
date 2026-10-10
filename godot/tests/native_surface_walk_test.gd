@@ -107,7 +107,10 @@ func run() -> void:
 	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
 	check(view.paused and view.state.tick == paused_tick, "Focus loss advanced ground time or resumed silently")
 	# Continue re-stages the actual actor, craft and terrain in the same root.
-	check(shell.select_start(owner, {"mode": "continue", "value": args[2].path_join("halfway.json"), "assets": args[1]}), "Outside Continue did not stage: " + shell.error)
+	view.controls_menu.load_button.pressed.emit()
+	shell.load_dialog.file_selected.emit(args[2].path_join("halfway.json"))
+	shell.confirm_load()
+	check(shell.load_origin == null and shell.current_view != view and shell.error.is_empty(), "Outside in-game Load did not stage")
 	view = shell.current_view
 	check(view.paused and view.surface_walking() and shell.audio_session.get_instance_id() == audio_id, "Outside Continue lost paused actor or duplicated audio owner")
 	walk(view, KEY_S, 600)

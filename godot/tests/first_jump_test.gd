@@ -88,6 +88,17 @@ func run() -> void:
 			neighbor_shell.presentation_only = true
 			root.add_child(neighbor_shell)
 			check(neighbor_shell.select_start(ClassDB.instantiate("FreedomBridge"), {"mode": "continue", "value": directory.path_join("phase.json"), "assets": directory.path_join("native-assets")}), "Neighbor Continue failed asset staging")
+			var neighbor_view: Control = neighbor_shell.current_view
+			neighbor_view.controls_menu.load_button.pressed.emit()
+			neighbor_shell.load_dialog.file_selected.emit(trace + ".leg0.360.json")
+			neighbor_shell.confirm_load()
+			neighbor_view = neighbor_shell.current_view
+			var loaded_owner: Variant = neighbor_shell.bridge
+			check(neighbor_shell.load_origin == null and neighbor_view.paused and neighbor_view.state.jump.phase == "transit", "In-game Load lost committed jump phase/pause")
+			checkpoint(loaded_owner, directory.path_join("loaded-jump.json"), trace + ".leg0.360.json")
+			var loaded_state: Dictionary = loaded_owner.get_freedom_flight_state()
+			neighbor_view._process(0.125)
+			check(loaded_owner.get_freedom_flight_state() == loaded_state, "Paused loaded jump advanced under reference UI")
 			neighbor_shell.free()
 		await process_frame
 	shell.free()

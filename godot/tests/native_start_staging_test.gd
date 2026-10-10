@@ -34,6 +34,7 @@ func run() -> void:
 	var shell := LateDamagedShell.new()
 	shell.presentation_only = true
 	root.add_child(shell)
+	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	check(shell.select_start(bridge, {"mode": "continue", "value": args[1], "assets": args[0]}), "Selected journey could not stage through the ready-view seam")
 	var old: Dictionary = bridge.get_freedom_walk_state()
 	var old_flight: Dictionary = bridge.get_freedom_flight_state()
@@ -63,6 +64,7 @@ func run() -> void:
 		check(shell.staged_reference.get_ref() == null, "Refused detached candidate leaked")
 	shell.damage = ""
 	check_boarding(shell, bridge)
+	await check_load(shell, bridge, args)
 	shell.free()
 	print("Native start staging checks: %d failures" % failures)
 	quit(0 if failures == 0 else 1)
@@ -211,3 +213,90 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(bridge.get_freedom_boarding_state().state == "station" and model.valid_current_pose(), "Unboard lost completed station/hardware state")
 	var before: PackedFloat64Array = restored.eye_position_metres
 	check(walk.advance_requested(0.1, PackedFloat64Array([0.0, 1.0, 0.0])) and bridge.get_freedom_walk_state().eye_position_metres != before, "Completed unboard pinned the ordinary walking eye")
+
+
+func check_load(shell: Control, bridge: Variant, args: PackedStringArray) -> void:
+	var directory := args[1].get_base_dir()
+	var before_save := directory.path_join("before-load.json")
+	var after_save := directory.path_join("after-load.json")
+	var view: Control = shell.current_view
+	view.pause_controls("Load regression paused.")
+	check(bridge.save_freedom_as(before_save), "Pre-load save refused")
+	var original_hash := FileAccess.get_sha256(before_save)
+	var source_hash := FileAccess.get_sha256(args[1])
+	var current: Dictionary = bridge.get_freedom_flight_state()
+	# Refusal/cancel never stages a replacement or bypasses pause/neutral input.
+	view.focused = false
+	view.load_button.pressed.emit()
+	check(shell.load_origin == null, "Unfocused Load acquired authority")
+	view.focused = true
+	view.load_button.pressed.emit()
+	check(shell.load_origin == view and view.journey_dialog_open and view.process_mode == Node.PROCESS_MODE_DISABLED, "Station Load did not suspend its view")
+	view.resume_requested()
+	view._process(0.125)
+	check(view.paused and bridge.get_freedom_flight_state() == current, "Modal Load resumed/advanced current journey")
+	shell.load_dialog.get_cancel_button().pressed.emit()
+	check(shell.load_origin == null and not view.journey_dialog_open and view.paused and root.gui_get_focus_owner() == view.load_button, "File cancel lost paused invoking selection")
+	view.load_button.pressed.emit()
+	shell.load_dialog.file_selected.emit(args[1])
+	check(shell.load_confirmation.visible and shell.current_view == view and bridge.get_freedom_flight_state() == current, "File selection replaced journey before confirmation")
+	var previous_window: Vector2i = root.size
+	for pixels in [Vector2i(1280, 720), Vector2i(800, 450)]:
+		root.size = pixels
+		for frame in 2: await process_frame
+		shell.layout_load_dialogs()
+		for frame in 2: await process_frame
+		var font_pixels: float = shell.load_confirmation.get_label().get_theme_font_size("font_size") * float(pixels.x) / view.size.x
+		print("Load layout: pixels=%s logical=%s font=%s wrapped=%s dialog=%s" % [pixels, view.size, font_pixels, shell.load_confirmation.get_label().autowrap_mode, shell.load_confirmation.size])
+		check(font_pixels >= 17.5 and font_pixels <= 20.5 and shell.load_confirmation.dialog_autowrap and shell.load_confirmation.get_label().autowrap_mode != TextServer.AUTOWRAP_OFF, "Load confirmation lost readable wrapped text")
+		check(shell.load_confirmation.size.x <= view.size.x and shell.load_confirmation.size.y <= view.size.y, "Load confirmation escaped logical viewport")
+	root.size = previous_window
+	shell.layout_load_dialogs()
+	for frame in 2: await process_frame
+	shell.load_confirmation.get_cancel_button().pressed.emit()
+	check(shell.current_view == view and view.paused, "Discard cancel lost journey")
+	for path in ["relative.json", directory.path_join("missing.json"), args[2], directory.path_join("career.json")]:
+		view.load_button.pressed.emit()
+		shell.load_dialog.file_selected.emit(path)
+		if shell.load_origin != null: shell.confirm_load()
+		check(shell.load_origin == null and shell.current_view == view and view.paused and view.error.is_empty() and bridge.get_pending_freedom_start().is_empty(), "Failed load replaced/poisoned view")
+		check(bridge.save_freedom_as(after_save) and FileAccess.get_sha256(after_save) == original_hash, "Refused load changed complete save bytes")
+	view.load_button.pressed.emit()
+	shell.load_dialog.file_selected.emit(args[1])
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	shell.confirm_load()
+	check(shell.load_origin == null and shell.current_view == view and view.paused and bridge.save_freedom_as(after_save) and FileAccess.get_sha256(after_save) == original_hash, "Focus loss authorized replacement")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	# A valid source still cannot commit an incomplete native scene.
+	shell.damage = "atlas"
+	view.load_button.pressed.emit()
+	shell.load_dialog.file_selected.emit(args[1])
+	shell.confirm_load()
+	check(shell.current_view == view and shell.load_origin == null and bridge.save_freedom_as(after_save) and FileAccess.get_sha256(after_save) == original_hash and bridge.get_pending_freedom_start().is_empty(), "Late asset refusal changed active journey")
+	shell.damage = ""
+	# Repeated successful path-based loads use the same bridge, complete target
+	# saves, paused Continue and existing neutral rearming; no source rewriting.
+	for target in [directory.path_join("flight-trace.json"), args[1], directory.path_join("wayfarer-flight.json")]:
+		check(FileAccess.file_exists(target), "Load fixture is missing")
+		view = shell.current_view
+		view.pause_controls("Paused before replacement.")
+		if view is WalkView: view.load_button.pressed.emit()
+		else: view.controls_menu.load_button.pressed.emit()
+		check(shell.load_origin == view, "Paused Load entry unavailable")
+		shell.load_dialog.file_selected.emit(target)
+		shell.confirm_load()
+		view = shell.current_view
+		view.set_process(false)
+		check(shell.bridge == bridge and view.paused and not view.journey_dialog_open and shell.load_origin == null and shell.error.is_empty(), "Successful load lost bridge, pause or modal cleanup")
+		check(bridge.save_freedom_as(after_save) and JSON.parse_string(FileAccess.get_file_as_string(after_save)) == JSON.parse_string(FileAccess.get_file_as_string(target)), "Loaded target differs from complete source save")
+		if view is FlightView:
+			view.controls_menu.load_button.pressed.emit()
+			shell.load_dialog.file_selected.emit(args[2])
+			shell.confirm_load()
+			view.controls_menu._process(0.0)
+			check("Load refused:" in view.controls_menu.message.text and "Load refused:" in view.primary_status.tooltip_text, "Load refusal vanished on menu refresh")
+		var frozen: Dictionary = bridge.get_freedom_flight_state()
+		view._process(0.125)
+		check(bridge.get_freedom_flight_state() == frozen, "Continue replacement advanced before explicit Resume")
+	check(FileAccess.get_sha256(args[1]) == source_hash, "Load rewrote source bytes")
+	for frame in 2: await process_frame

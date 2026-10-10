@@ -212,3 +212,7 @@ actuator signs, fractional/opposed triggers, remapping/persistence, current
 neutral resume, focus/hotplug and exact fixed-schedule saved-owner parity. Those
 software checks are distinct from hardware qualification and visible GPU evidence and from the
 still-open composed station/surface journey.
+
+In-game [Load…](NATIVE_LOAD.md) now reaches the same transactional Continue
+seam from paused station, saved flight and suited views. Cancel/refusal keeps
+the current journey; confirmed successful replacement remains paused.
