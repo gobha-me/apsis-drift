@@ -10,6 +10,12 @@ const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const Status = preload("res://scripts/native/native_status.gd")
+var primary_status: RichTextLabel
+var context_action: Button
+var instruments_button: Button
+var instruments_open := false
+var context_source: Button
 var bridge: Variant
 var camera: Camera3D
 var terrain_camera: Camera3D
@@ -455,6 +461,27 @@ func build_ui() -> void:
 	quit_button.text = "Quit"
 	quit_button.pressed.connect(func(): get_tree().quit())
 	column.add_child(quit_button)
+	primary_status = hud_text()
+	primary_status.fit_content = false
+	primary_status.mouse_filter = Control.MOUSE_FILTER_PASS
+	primary_status.add_theme_stylebox_override("normal", backing)
+	add_child(primary_status)
+	context_action = Button.new()
+	context_action.clip_text = true
+	context_action.focus_mode = Control.FOCUS_NONE
+	context_action.pressed.connect(func():
+		if context_source != null and not context_source.disabled:
+			context_source.pressed.emit()
+			update_compact_hud())
+	add_child(context_action)
+	instruments_button = Button.new()
+	instruments_button.clip_text = true
+	instruments_button.text = "Esc / Start · Controls"
+	instruments_button.focus_mode = Control.FOCUS_NONE
+	instruments_button.pressed.connect(func():
+		instruments_open = false
+		pause_controls("Controls and instruments. Release controls before resuming."))
+	add_child(instruments_button)
 	resized.connect(layout_hud)
 
 
@@ -474,7 +501,7 @@ func layout_hud() -> void:
 	if not pixels.is_finite() or pixels.x <= 0 or pixels.y <= 0 or not size.is_finite() or size.x <= 0 or size.y <= 0:
 		return
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
-	var margin := 16 * scale
+	var margin := minf(16 * scale, minf(size.x, size.y) * 0.1)
 	var usable := size - Vector2.ONE * (2 * margin)
 	if usable.x <= 0 or usable.y <= 0:
 		return
@@ -486,6 +513,7 @@ func layout_hud() -> void:
 	for child in hud_column.get_children():
 		if child is Button:
 			child.custom_minimum_size.y = 40 * scale
+			child.focus_mode = Control.FOCUS_ALL
 	for button in port_buttons:
 		button.custom_minimum_size.y = 40 * scale
 	orbital_forecast.add_theme_font_size_override("normal_font_size", roundi(20 * scale))
@@ -504,6 +532,66 @@ func layout_hud() -> void:
 		orbital_forecast.position = Vector2(size.x - orbital_forecast.size.x - margin, margin)
 		hud_scroll.size = Vector2(minf(480 * scale, usable.x - orbital_forecast.size.x - margin), minf(usable.y, maxf(260 * scale, hud_column.get_combined_minimum_size().y)))
 	hud_scroll.position = Vector2.ONE * margin
+	var compact := Status.layout_bounds(size, pixels)
+	primary_status.position = compact.position
+	primary_status.size = compact.size
+	primary_status.add_theme_font_size_override("normal_font_size", roundi(18 * scale))
+	for button in [context_action, instruments_button]:
+		button.add_theme_font_size_override("font_size", roundi(18 * scale))
+	var action_height := minf(40 * scale, usable.y * 0.4)
+	var gap := minf(8 * scale, usable.y * 0.05)
+	context_action.position = Vector2(margin, size.y - margin - 2.0 * action_height - gap)
+	context_action.size = Vector2(compact.size.x, action_height)
+	instruments_button.position = Vector2(margin, size.y - margin - action_height)
+	instruments_button.size = Vector2(compact.size.x, action_height)
+	primary_status.size.y = minf(primary_status.size.y, maxf(0.0, usable.y - 2.0 * action_height - 2.0 * gap))
+	if hud_stacked and instruments_open and paused:
+		hud_scroll.size.y = maxf(0.0, usable.y - action_height - gap)
+	update_compact_hud()
+
+
+func show_instruments() -> void:
+	pause_controls("Flight instruments and navigation.", false)
+	update_view(0.0)
+	if controls_menu != null: controls_menu.hide_menu()
+	instruments_open = true
+	layout_hud()
+	instruments_button.grab_focus()
+
+
+func update_compact_hud() -> void:
+	if primary_status == null: return
+	var detailed := instruments_open and paused
+	hud_scroll.visible = detailed
+	orbital_forecast.visible = detailed and not surface_walking()
+	primary_status.visible = not detailed
+	context_action.visible = not detailed
+	instruments_button.visible = true
+	instruments_button.text = "Back to controls" if detailed else "Esc / Start · Controls"
+	instruments_button.focus_mode = Control.FOCUS_ALL if detailed else Control.FOCUS_NONE
+	var margin := Status.layout_bounds(size, Vector2(get_window().size)).position.x
+	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
+	primary_status.text = Status.summary(state) if error.is_empty() else "Flight paused\n" + error
+	primary_status.tooltip_text = primary_status.text
+	if save_status != null and not save_status.text.is_empty() and error.is_empty():
+		primary_status.tooltip_text += "\n" + save_status.text
+		var lines := primary_status.text.split("\n")
+		lines.insert(1, save_status.text.left(180) + ("…" if save_status.text.length() > 180 else ""))
+		primary_status.text = "\n".join(lines)
+	context_source = null
+	if surface_walking(): context_source = surface_walk_button
+	elif state.get("surface", {}).get("landed", false): context_source = liftoff_button
+	elif state.get("attached", false): context_source = release_button
+	elif capture_button != null and not capture_button.disabled and capture_button.visible: context_source = capture_button
+	elif approach_button != null and not approach_button.disabled and approach_button.visible: context_source = approach_button
+	elif state.get("surface", {}).get("maneuver", "off") != "off": context_source = null
+	elif landing_button != null and not landing_button.disabled and state.get("surface", {}).get("gear_deployed", false): context_source = landing_button
+	elif jump_button != null and not jump_button.disabled and jump_button.visible: context_source = jump_button
+	context_action.visible = not detailed and context_source != null
+	if context_source != null:
+		context_action.text = context_source.text
+		context_action.tooltip_text = context_source.tooltip_text
+		context_action.disabled = context_source.disabled or paused or not focused or not error.is_empty()
 
 
 func setup_controls() -> void:
@@ -529,6 +617,7 @@ func setup_controls() -> void:
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
 	controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
+	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
@@ -614,6 +703,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 		bridge.cancel_freedom_port_approach()
 		state = bridge.get_freedom_flight_state()
 	paused = true
+	instruments_open = false
 	controls_armed = false
 	if player_input != null:
 		player_input.set_enabled(false)
@@ -629,6 +719,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 			controls_menu.show_menu(reason)
 	if save_status != null and error.is_empty():
 		save_status.text = reason
+	update_compact_hud()
 
 
 func change_camera() -> void:
@@ -736,12 +827,14 @@ func toggle_pause() -> void:
 		player_input.status = save_status.text
 		return
 	paused = false
+	instruments_open = false
 	# The already-observed neutral latch owns resume; do not reset it again.
 	player_input.enabled = true
 	player_input.look_axes_needs_neutral = false
 	controls_menu.hide_menu()
 	pause_button.text = "Pause walking" if surface_walking() else "Pause flight"
 	save_status.text = "Walking. Save As pauses the session." if surface_walking() else "Flight running. Save As pauses the session."
+	update_compact_hud()
 
 
 func observe_neutral_controls() -> void:
@@ -941,7 +1034,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		light.look_at(-state.star_direction, Vector3.UP if absf(state.star_direction.y) < 0.99 else Vector3.RIGHT)
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
-	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
+	telemetry.text = "APSIS DRIFT · %s\nReference altitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
 	if surface_walking(): telemetry.text = "On foot · suit equipped\nWayfarer remains landed · %.1f m to craft centre\nTick %s%s" % [state.surface_walk.eye_position.length(), state.tick, " · PAUSED" if paused else ""]
 	var resources: Dictionary = state.get("resources", {})
 	if resources.get("selected", false):
@@ -1038,3 +1131,4 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
 			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nRight-drag / right stick: look\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
+	update_compact_hud()

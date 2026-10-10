@@ -151,6 +151,34 @@ func check_orbit_fixtures(directory: String) -> void:
 	owner = null
 
 
+func check_compact_hud(view: Control, owner: Variant, directory: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var save := directory.path_join("compact-hud.json")
+	check(owner.save_freedom_as(save), "Compact HUD baseline save failed")
+	var original := FileAccess.get_file_as_bytes(save)
+	view.toggle_pause()
+	check(not view.paused and not view.hud_scroll.visible and not view.orbital_forecast.visible and view.primary_status.visible, "Resuming retained the permanent instrument wall")
+	check("Reference altitude" in view.primary_status.text and "Surface speed" in view.primary_status.text and not "Coasting" in view.primary_status.text, "Compact motion lost its reference or invented coasting")
+	for pixels in [Vector2i(1280, 720), Vector2i(960, 540), Vector2i(640, 450), Vector2i(160, 100)]:
+		root.size = pixels
+		for frame in 3: await process_frame
+		var bounds := Rect2(Vector2.ZERO, view.size)
+		for item in [view.primary_status, view.context_action, view.instruments_button]:
+			check(bounds.encloses(item.get_rect()), "Compact control escaped " + str(pixels))
+		check(not view.primary_status.get_rect().intersects(view.instruments_button.get_rect()), "Compact text covered the controls button")
+		check(not view.hud_scroll.visible and not view.paused, "Compact resize reopened instruments or paused")
+	root.size = Vector2i(1280, 720)
+	await process_frame
+	view.instruments_button.pressed.emit()
+	check(view.paused and view.controls_menu.panel.visible and not view.hud_scroll.visible, "Actual compact controls button failed to pause and open controls")
+	view.show_instruments()
+	check(view.paused and view.hud_scroll.visible and not view.primary_status.visible and root.gui_get_focus_owner() == view.instruments_button, "Instrument review lost pause, visibility or keyboard/controller focus")
+	view.instruments_button.pressed.emit()
+	check(not view.instruments_open and not view.hud_scroll.visible and view.controls_menu.panel.visible and view.paused, "Back to controls retained the detail wall or resumed")
+	check(owner.get_freedom_flight_state() == before and owner.save_freedom_as(save) and FileAccess.get_file_as_bytes(save) == original, "Compact review, resize or focus changed full saved state")
+	view.update_view(0.0)
+
+
 func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
 	for style in [view.hud_scroll.get_theme_stylebox("panel"), view.orbital_forecast.get_theme_stylebox("normal")]:
@@ -160,7 +188,7 @@ func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 	var save := directory.path_join("hud-before.json")
 	check(owner.save_freedom_as(save), "HUD baseline save failed")
 	var original := FileAccess.get_file_as_bytes(save)
-	view.controls_menu.hide_menu()
+	view.show_instruments()
 	for pixels in [Vector2i(1280, 720), Vector2i(960, 540), Vector2i(800, 450), Vector2i(640, 450)]:
 		root.size = pixels
 		for frame in 3:
@@ -178,6 +206,8 @@ func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 		check(view.hud_stacked == (pixels.x < 800), "Narrow HUD did not use local stacked fallback")
 		if not view.hud_stacked:
 			check(bounds.encloses(view.orbital_forecast.get_rect()) and not view.hud_scroll.get_rect().intersects(view.orbital_forecast.get_rect()), "HUD overlaps forecast")
+		else:
+			check(not view.hud_scroll.get_rect().intersects(view.instruments_button.get_rect()), "Back to controls covers a scrolling instrument or action")
 		check(view.hud_scroll.get_v_scroll_bar().visible, "HUD scroll affordance hidden")
 		for label in [view.telemetry, view.home_cue, view.hint, view.save_status]:
 			check(label.get_content_height() > 0 and label.size.y >= label.get_content_height(), "HUD text collapsed or clipped")
@@ -213,7 +243,7 @@ func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 	await process_frame
 	view.hud_scroll.scroll_vertical = 0
 	view.update_view(0.0)
-	view.controls_menu.show_menu()
+	view.pause_controls("HUD review complete")
 
 
 func check_hud_profiles(directory: String, assets: String) -> void:
@@ -227,6 +257,7 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 		root.add_child(view)
 		view.set_process(false)
 		check(view.initialize(owner, assets), "HUD profile view refused: " + view.error)
+		view.show_instruments()
 		view.show_surface_conditions()
 		check("no selected environmental survey" in view.surface_conditions_text() and owner.get_freedom_flight_state() == before and view.paused, "Historical survey invented an owner, changed state or resumed")
 		for frame in 3:
@@ -621,6 +652,7 @@ func run() -> void:
 		mesh_record.close()
 	var glass: MeshInstance3D = view.ship.find_child("HopperGlass", true, false)
 	check(glass != null and glass.material_override != null and glass.material_override.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.material_override.albedo_color.a < 0.1, "Selected cockpit glass blocks native flight visibility")
+	await check_compact_hud(view, owner, args[0].get_base_dir())
 	await check_hud_layout(view, owner, args[0].get_base_dir())
 	await check_saved_reference(view, owner, args[0].get_base_dir())
 	await check_saved_controller(view, owner, args[0])

@@ -33,6 +33,8 @@ helps an aligned craft return using thrusters; **Capture port** remains your
 action. The cyan [HOME marker](docs/HOME_NAVIGATION.md) shows the station bearing
 and range during flight. **Leave seat** returns you to the station while attached at D1.
 The open docking well still stops ordinary unsupported walking.
+A [compact HUD](docs/NATIVE_HUD.md) leaves the scene visible; **Esc / Start · Controls**
+and **Flight instruments & navigation** provide the detailed readouts and actions.
 
 Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with
 animation and body-clearance refinements deferred. The [planetary voyage check](docs/PLANETARY_VOYAGE_PROTOTYPE.md) covers

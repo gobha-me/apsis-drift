@@ -51,6 +51,7 @@ func run() -> void:
 		view.jump_requested()
 		var state: Dictionary = owner.get_freedom_flight_state()
 		check(state.jump.phase == "spool" and state.jump.remaining_seconds == 3.0, "Production UI did not start real spool")
+		check("Spooling" in view.primary_status.text and not view.hud_scroll.visible, "Compact HUD lost the actual spool phase")
 		check(not state.jump.has("point") and not state.jump.has("nominal_arrival") and not state.jump.has("reference_planet"), "Native preview leaked unresolved target/hidden sample")
 		checkpoint(owner, directory.path_join("phase.json"), trace + ".leg%d.0.json" % leg)
 		var old_node := MeshInstance3D.new()
@@ -66,6 +67,7 @@ func run() -> void:
 				check(owner.get_freedom_boarding_state().state == "seated" and owner.get_freedom_boarding_state().seated, "Jump lost actual seated pilot presentation")
 				view.state = state
 				view.update_view(0.0)
+				check(("In transit" in view.primary_status.text) == (state.jump.phase == "transit"), "Compact HUD disagrees with committed transit")
 				checkpoint(owner, directory.path_join("phase.json"), trace + ".leg%d.%d.json" % [leg, t])
 				var restored: Variant = ClassDB.instantiate("FreedomBridge")
 				check(restored.stage_freedom_continue(directory.path_join("phase.json")), "Native phase Continue could not stage")
