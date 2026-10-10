@@ -436,6 +436,22 @@ def main(argv=None):
             report["setup"][-1]["save_sha256"] = sha256(path)
             save()
         (work / "corrupt.json").write_text("{broken json\n")
+    if "native_environment" in selected:
+        for filename, tick in (("shadow-day.json", "100000"),
+                               ("shadow-night.json", "400000"),
+                               ("shadow-limb.json", "600000")):
+            path = work / filename
+            code, timed_out, elapsed = run_logged(
+                [str(start_fixture), str(path), "42", tick, "port-docked"],
+                work / f"{filename}.log", env, args.timeout)
+            report["setup"].append({"save": filename, "returncode": code,
+                                    "timed_out": timed_out, "seconds": elapsed})
+            save()
+            if code != 0 or timed_out:
+                print(f"FAIL C++ shadow fixture {filename}", flush=True)
+                return 1
+            report["setup"][-1]["save_sha256"] = sha256(path)
+            save()
     if any(name in selected for name in ("native_planetary", "native_voyage")):
         phases = work / "planetary"
         phases.mkdir()
@@ -795,7 +811,7 @@ def main(argv=None):
         if name == "freedom_start":
             arguments.append(str(work / "flight-18.json"))
         if name == "native_environment":
-            arguments = [str(work / path) for path in ("wayfarer-flight.json", "environment-world.json")]
+            arguments = [str(work / path) for path in ("wayfarer-flight.json", "environment-world.json", "shadow-day.json", "shadow-night.json", "shadow-limb.json")]
         if name == "saved_flight":
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "flight-trace.json", "corrupt.json", "freedom-0.json", "native-assets", "flight-overflow.json")]
         if name == "native_audio":

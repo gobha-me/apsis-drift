@@ -9,6 +9,7 @@ uniform vec3 atmosphere_tint : source_color;
 uniform vec3 sun_direction;
 uniform vec3 sun_color : source_color;
 uniform float sun_angular_radius;
+uniform float sun_visibility;
 void sky() {
 	vec3 d = normalize(EYEDIR);
 	vec3 eye = vec3(0.0, radius + altitude, 0.0);
@@ -46,10 +47,8 @@ void sky() {
 	vec3 scatter = atmosphere_tint * (0.35 + 0.65 * max(0.0, d.y)) * illumination;
 	scatter += vec3(0.55, 0.19, 0.065) * warm * pow(toward_sun, 4.0);
 	COLOR = scatter * sun_color * haze;
-	float horizon = -acos(clamp(radius / (radius + max(0.0, altitude)), 0.0, 1.0));
-	float visibility = smoothstep(horizon - sun_angular_radius, horizon + sun_angular_radius, asin(clamp(sun_direction.y, -1.0, 1.0)));
 	float sun_angle = acos(clamp(dot(d, sun_direction), -1.0, 1.0));
 	float antialias = max(0.00001, fwidth(sun_angle));
 	float sun_disc = 1.0 - smoothstep(max(0.0, sun_angular_radius - antialias), sun_angular_radius + antialias, sun_angle);
-	if (!ground) COLOR += sun_color * sun_disc * visibility * 6.0 * exp(-optical * 0.15);
+	if (!ground) COLOR += sun_color * sun_disc * sun_visibility * 6.0 * exp(-optical * 0.15);
 }

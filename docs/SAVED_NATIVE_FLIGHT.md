@@ -93,6 +93,13 @@ planet's atmosphere palette and version-one density/scale-height/boundary.
 Flight and suited surface walking share this presenter. Both camera depth ranges
 receive the same ambient lighting; the background sky is drawn once. Station
 walking retains its authored interior fill and uses the actual star color.
+Local craft/station sunlight and the sky's star disk share an angular
+spherical-planet shadow test at the craft's position. A separate terrain light
+keeps distant sunlit terrain illuminated when the observer is in shadow.
+Surface walking uses the same local light; station walking keeps its interior
+fill. Partial stellar-disk coverage is smoothed for presentation. This does not
+provide terrain/cabin shadow casting, other-body eclipses or per-pixel planetary
+occlusion.
 These are read-only presentation values. Pausing, looking around, and rebuilding
 the material do not advance time or change saves. Unsupported identities,
 versions and malformed coefficients refuse before presentation.
