@@ -1,6 +1,7 @@
 extends Control
 signal journey_mode_changed
 signal load_requested
+signal title_requested
 var journey_dialog_open := false
 ## First-person station presentation. C++ resolves support, motion and shared time.
 const StationPresentation = preload("res://scripts/native/native_station_view.gd")
@@ -18,6 +19,7 @@ var pause_button: Button
 var board_button: Button
 var save_button: Button
 var load_button: Button
+var title_button: Button
 var save_dialog: FileDialog
 var save_status: Label
 var hud_scroll: ScrollContainer
@@ -215,6 +217,13 @@ func build_ui() -> void:
 			pause_controls("Load replaces the journey only after confirmation.")
 			load_requested.emit())
 	column.add_child(load_button)
+	title_button = Button.new()
+	title_button.text = "Title…"
+	title_button.pressed.connect(func():
+		if focused and not journey_dialog_open and not save_dialog.visible:
+			pause_controls("Return to title only after discarding unsaved progress.")
+			title_requested.emit())
+	column.add_child(title_button)
 	save_status = hud_text()
 	save_status.text = "Approach the D1 ladder to board."
 	column.add_child(save_status)
@@ -255,7 +264,7 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [board_button, pause_button, save_button, load_button]:
+	for button in [board_button, pause_button, save_button, load_button, title_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
 	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y)
@@ -482,7 +491,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
 		var current := get_viewport().gui_get_focus_owner()
-		var buttons := [pause_button, save_button, load_button]
+		var buttons := [pause_button, save_button, load_button, title_button]
 		var direction := -1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1
 		var index := buttons.find(current)
 		for offset in range(1, buttons.size() + 1):
@@ -494,7 +503,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif paused and pressed and (key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE] or button == JOY_BUTTON_A):
 		var current := get_viewport().gui_get_focus_owner()
-		if current == load_button:
+		if current == title_button:
+			title_button.pressed.emit()
+		elif current == load_button:
 			load_button.pressed.emit()
 		elif current == save_button:
 			open_save_dialog()

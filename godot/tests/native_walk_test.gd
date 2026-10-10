@@ -106,7 +106,7 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Station HUD has horizontal overflow")
 		var font_pixels: float = view.telemetry.get_theme_font_size("font_size") * pixels.x / view.size.x
 		check(font_pixels >= 17.5 and font_pixels <= 20.5, "Station HUD font shrank in small window")
-		for button in [view.pause_button, view.save_button, view.load_button]:
+		for button in [view.pause_button, view.save_button, view.load_button, view.title_button]:
 			check(button.size.y * pixels.y / view.size.y >= 39.5, "Station action height shrank")
 		for label in [view.telemetry, view.hud_hint, view.save_status]:
 			check(label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and label.size.y >= label.get_minimum_size().y, "Station text clipped or lost wrapping")
@@ -156,6 +156,11 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
 		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
 		check(root.gui_get_focus_owner() == view.load_button and view.hud_scroll.get_global_rect().encloses(view.load_button.get_global_rect()), "Selected D-pad did not reveal Load")
+		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
+		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
+		check(root.gui_get_focus_owner() == view.title_button and view.hud_scroll.get_global_rect().encloses(view.title_button.get_global_rect()), "Selected D-pad did not reveal Title")
+		joy_button(JOY_BUTTON_DPAD_UP, true, device)
+		joy_button(JOY_BUTTON_DPAD_UP, false, device)
 		joy_button(JOY_BUTTON_DPAD_UP, true, device)
 		joy_button(JOY_BUTTON_DPAD_UP, false, device)
 		joy_button(JOY_BUTTON_A, true, device)

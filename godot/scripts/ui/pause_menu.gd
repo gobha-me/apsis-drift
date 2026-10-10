@@ -2,6 +2,7 @@ extends CanvasLayer
 ## Native focus-navigation controls. Menu input never advances flight.
 signal save_requested
 signal load_requested
+signal title_requested
 signal assistance_requested(enabled: bool)
 signal port_requested(command: String, ordinal: int)
 signal resumed
@@ -20,6 +21,7 @@ var saved_port_buttons: Dictionary = {}
 var saved_note: Label
 var save_button: Button
 var load_button: Button
+var title_button: Button
 var ship_audio_available := false
 var audio_preferences: RefCounted
 var audio_sliders: Dictionary = {}
@@ -38,6 +40,7 @@ var left_scroll: ScrollContainer
 var menu_margin: MarginContainer
 var basics: Control
 var basics_button: Button
+var entry_focus_frames := 0
 
 func _ready() -> void:
 	layer = 20
@@ -87,6 +90,7 @@ func _ready() -> void:
 	if saved_flight:
 		save_button = add_button(left, "Save As…", func(): save_requested.emit())
 		load_button = add_button(left, "Load…", func(): load_requested.emit())
+		title_button = add_button(left, "Title…", func(): title_requested.emit())
 		saved_assist_button = CheckButton.new()
 		saved_assist_button.text = "Assisted piloting"
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
@@ -349,12 +353,12 @@ func show_menu(reason := "") -> void:
 func ensure_entry_focus_visible() -> void:
 	# First show can precede container layout. follow_focus alone scrolls using
 	# the old geometry, leaving the controller's focused Resume button offscreen.
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if panel.visible and resume_button.has_focus():
-		left_scroll.ensure_control_visible(resume_button)
+	# Count owned process frames instead of leaving a coroutine alive when a
+	# rapid Title/Continue transition frees this menu before layout finishes.
+	entry_focus_frames = 2
 
 func hide_menu() -> void:
+	entry_focus_frames = 0
 	controls.waiting_action = ""
 	panel.hide()
 	get_viewport().gui_release_focus()
@@ -364,6 +368,10 @@ func sync_view_controls(debug: bool, distance: float) -> void:
 	camera_slider.set_value_no_signal(distance)
 
 func _process(_delta: float) -> void:
+	if entry_focus_frames > 0:
+		entry_focus_frames -= 1
+		if entry_focus_frames == 0 and panel.visible and resume_button.has_focus():
+			left_scroll.ensure_control_visible(resume_button)
 	if panel.visible:
 		var device_name := Input.get_joy_name(controls.device) if controls.device >= 0 else ""
 		message.text = ("No controller detected. " if controls.device < 0 else "Controller: %s. " % (device_name if not device_name.is_empty() else "mapped test device")) + controls.status

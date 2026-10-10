@@ -32,6 +32,7 @@ func run() -> void:
 	var shell := Shell.new()
 	shell.presentation_only = true
 	root.add_child(shell)
+	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	check(shell.select_start(owner, {"mode": "continue", "value": trace, "assets": directory.path_join("native-assets")}), "Travel Continue cannot stage native model: " + shell.error)
 	if shell.current_view == null: shell.free(); quit(1); return
 	var view: Control = shell.current_view
@@ -87,6 +88,7 @@ func run() -> void:
 			var neighbor_shell := Shell.new()
 			neighbor_shell.presentation_only = true
 			root.add_child(neighbor_shell)
+			neighbor_shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			check(neighbor_shell.select_start(ClassDB.instantiate("FreedomBridge"), {"mode": "continue", "value": directory.path_join("phase.json"), "assets": directory.path_join("native-assets")}), "Neighbor Continue failed asset staging")
 			var neighbor_view: Control = neighbor_shell.current_view
 			neighbor_view.controls_menu.load_button.pressed.emit()
@@ -99,6 +101,20 @@ func run() -> void:
 			var loaded_state: Dictionary = loaded_owner.get_freedom_flight_state()
 			neighbor_view._process(0.125)
 			check(loaded_owner.get_freedom_flight_state() == loaded_state, "Paused loaded jump advanced under reference UI")
+			neighbor_view.controls_menu.title_button.pressed.emit()
+			neighbor_view.toggle_pause()
+			neighbor_view._process(0.125)
+			checkpoint(loaded_owner, directory.path_join("title-jump.json"), trace + ".leg0.360.json")
+			check(neighbor_shell.title_origin == neighbor_view and neighbor_view.paused, "Committed jump escaped Title pause")
+			neighbor_shell.title_confirmation.get_cancel_button().pressed.emit()
+			check(neighbor_shell.current_view == neighbor_view and neighbor_view.paused, "Committed Title cancel lost current journey")
+			neighbor_view.controls_menu.title_button.pressed.emit()
+			neighbor_shell.confirm_title()
+			check(neighbor_shell.current_view == null and neighbor_shell.bridge.get_freedom_start().is_empty(), "Committed Title did not discard only after confirmation")
+			neighbor_shell.title_view.choose_continue(trace + ".leg0.360.json")
+			await process_frame
+			check(neighbor_shell.current_view != null and neighbor_shell.current_view.paused, "Committed Continue after Title failed")
+			checkpoint(neighbor_shell.bridge, directory.path_join("title-continued-jump.json"), trace + ".leg0.360.json")
 			neighbor_shell.free()
 		await process_frame
 	shell.free()

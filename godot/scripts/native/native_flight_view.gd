@@ -1,6 +1,7 @@
 extends Control
 signal journey_mode_changed
 signal load_requested
+signal title_requested
 var journey_dialog_open := false
 ## Ordinary saved-flight consumer. C++ owns time, state, terrain and propulsion.
 const PlanetStreamView = preload("res://scripts/world/planet_stream.gd")
@@ -636,6 +637,8 @@ func setup_controls() -> void:
 	controls_menu.save_requested.connect(open_save_dialog)
 	controls_menu.load_requested.connect(func():
 		if paused and focused and not journey_dialog_open and not save_dialog.visible: load_requested.emit())
+	controls_menu.title_requested.connect(func():
+		if paused and focused and not journey_dialog_open and not save_dialog.visible: title_requested.emit())
 	controls_menu.assistance_requested.connect(request_assistance)
 	controls_menu.port_requested.connect(port_command)
 	controls_menu.quit_requested.connect(func():

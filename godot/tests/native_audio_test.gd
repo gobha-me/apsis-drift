@@ -2,6 +2,7 @@ extends SceneTree
 ## Generated WAVs and Dummy playback only; no subjective/device qualification.
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 const SessionAudio = preload("res://scripts/audio/native_ship_audio.gd")
+const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const Fixtures = preload("res://tests/recorded_ship_audio_test.gd")
 var failures := 0
 
@@ -129,6 +130,20 @@ func run() -> void:
 	check(not shell.select_start(owner, {"mode": "continue", "value": args[1], "assets": args[2]}), "Corrupt Continue accepted")
 	check(owner.get_freedom_walk_state() == before and session.view == shell.current_view, "Failed staging changed active owner")
 	check(FileAccess.get_sha256(args[0]) == source_hash, "Audio rewrote source save")
+	shell.current_view.pause_controls("Paused before title audio check")
+	shell.current_view.title_button.pressed.emit()
+	shell.title_confirmation.get_cancel_button().pressed.emit()
+	check(shell.current_view.paused and session.view == shell.current_view and session.audio.get_instance_id() == playback_id, "Title Cancel changed optional playback owner")
+	shell.current_view.title_button.pressed.emit()
+	shell.confirm_title()
+	settle(session)
+	check(shell.current_view == null and session.view == null and audio.diagnostics().gains == Vector3.ZERO and session.audio.get_instance_id() == playback_id, "Title retained craft playback or duplicated its owner")
+	shell.title_view.choose_continue(args[0])
+	for frame in 4: await process_frame
+	check(shell.current_view is FlightView and shell.current_view.paused and session.view == shell.current_view and session.audio.get_instance_id() == playback_id and session.preferences.muted and session.preferences.levels.master == 0.5, "Continue after Title lost shared playback/mix settings")
+	owner = shell.bridge
+	check(shell.select_start(owner, {"mode": "new_game", "value": "42", "assets": args[2]}), "Station selection after Title refused")
+	before = owner.get_freedom_walk_state()
 	# The actual close path drains reused, stopped players while preserving state.
 	shell._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
 	var deadline := Time.get_ticks_msec() + 750

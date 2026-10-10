@@ -216,3 +216,7 @@ still-open composed station/surface journey.
 In-game [Load…](NATIVE_LOAD.md) now reaches the same transactional Continue
 seam from paused station, saved flight and suited views. Cancel/refusal keeps
 the current journey; confirmed successful replacement remains paused.
+
+**Title…** in paused controls returns to the [native start screen](NATIVE_TITLE.md)
+only after explicit discard confirmation. Cancel and focus loss keep the journey
+paused; neither path autosaves or resumes it.
