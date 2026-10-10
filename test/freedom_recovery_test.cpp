@@ -124,7 +124,7 @@ auto session_contract(const std::filesystem::path& path) -> void {
         "bypass recovery authority");
   need(live.save_as(path));
   auto invalid = moved;
-  invalid.recovery.latest->source_checksum ^= 1;
+  invalid.recovery.latest->source_checksum = checksum ^ 1;
   check(
       !write_freedom_recovery_file_atomically(path, invalid) &&
           need(NativeFreedomFlightSession::open(need(native_continue(path))))
@@ -298,7 +298,7 @@ auto provider(Seed seed, FreedomLossCause cause, bool stale_checkpoint)
                                craft, tick, checksum),
       "Unknown cause and stale identity/clock/source fail without mutation");
   auto corrupt = pending;
-  corrupt.recovery.latest->source_checksum ^= 1;
+  corrupt.recovery.latest->source_checksum = checksum ^ 1;
   check(!validate_freedom_recovery_document(corrupt),
         "Corrupt loss checksum refused");
   corrupt = pending;
