@@ -1,4 +1,5 @@
 extends "res://studies/captures/native_voyage_capture.gd"
+const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 ## Actual native root, input, C++ terrain and complete Save comparisons.
 ## The source is explicitly a near-ground test setup, not a flight acceptance.
 
@@ -56,6 +57,7 @@ func run() -> void:
 	check(not view.hud_scroll.visible and "Landed" in view.primary_status.text and view.context_action.disabled, "Landed compact HUD lost actual mode or allowed a paused maneuver")
 	view.surface_walk_button.pressed.emit()
 	check(view.paused and view.surface_walking() and view.liftoff_button.disabled and view.assist_button.disabled, "Actual exit button did not transfer input and pause")
+	check(view.light.light_cull_mask == 1 and view.local_light.light_cull_mask == 2 and view.light.light_energy == 1.0 and is_equal_approx(view.local_light.light_energy, NativeEnvironment.sun_visibility(view.state)), "Suited view lost separate terrain/local sunlight")
 	check(view.surface_walk_menu_button.focus_mode == Control.FOCUS_ALL and not view.surface_walk_menu_button.disabled and view.controls_menu.saved_assist_button.disabled, "Surface menu lost controller focus or assistance guard")
 	var hold_before: Dictionary = owner.get_freedom_flight_state()
 	check(view.controls_menu.saved_hold_button.disabled and not hold_before.orbit_hold.available and not owner.set_freedom_hold(true) and owner.get_freedom_flight_state() == hold_before, "Outside pilot gained ship orbit hold")

@@ -30,6 +30,7 @@ var ship: Node3D
 var terrain: Node3D
 var exhaust: Node3D
 var light: DirectionalLight3D
+var local_light: DirectionalLight3D
 var planet_environment: Environment
 var near_environment: Environment
 var sky_material: ShaderMaterial
@@ -299,7 +300,15 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	terrain_camera.fov = camera.fov
 	scene.add_child(terrain_camera)
 	light = DirectionalLight3D.new()
+	# Terrain retains global sunlight; the local craft/station can be inside
+	# the planet's shadow while a distant sunlit hemisphere remains visible.
+	light.light_cull_mask = 1
+	light.basis = star_light_basis(state.star_direction)
 	scene.add_child(light)
+	local_light = DirectionalLight3D.new()
+	local_light.light_cull_mask = 2
+	local_light.basis = light.basis
+	scene.add_child(local_light)
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
 	planet_environment = environment
@@ -323,7 +332,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		set_ship_layer(station)
 	terrain = PlanetStreamView.new()
 	terrain.bridge = bridge
-	if not NativeEnvironment.apply(state, planet_environment, light, sky_material):
+	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		error = "Canonical native environment is unavailable"
 		return false
 	near_environment.ambient_light_color = planet_environment.ambient_light_color
@@ -1102,7 +1111,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		controls_menu.sync_saved_state(state, false)
 		refresh_control_hint()
 	light.basis = star_light_basis(state.star_direction)
-	if not NativeEnvironment.apply(state, planet_environment, light, sky_material):
+	local_light.basis = light.basis
+	if not NativeEnvironment.apply(state, planet_environment, light, sky_material, local_light):
 		pause_on_error("Canonical native environment changed unexpectedly")
 		return
 	near_environment.ambient_light_color = planet_environment.ambient_light_color

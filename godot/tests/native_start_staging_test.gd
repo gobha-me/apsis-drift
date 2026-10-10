@@ -1,6 +1,7 @@
 extends SceneTree
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
+const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
 class LateDamagedShell extends Shell:
 	var damage := ""
@@ -19,6 +20,15 @@ func check(value: bool, message: String) -> void:
 	if not value:
 		push_error(message)
 		failures += 1
+func check_sunlight(view: Control) -> void:
+	var projection: Dictionary = view.bridge.get_freedom_flight_state()
+	var visibility := NativeEnvironment.sun_visibility(projection)
+	check(visibility >= 0.0, "Actual view lost canonical shadow observation")
+	if view is FlightView:
+		check(view.light != view.local_light and view.light.light_cull_mask == 1 and view.local_light.light_cull_mask == 2, "Terrain/local sunlight layers overlap")
+		check(view.light.light_energy == 1.0 and is_equal_approx(view.local_light.light_energy, visibility) and view.local_light.basis.is_equal_approx(view.light.basis) and view.local_light.light_color == projection.lighting.star_color, "Flight sunlight disagrees with current C++ projection")
+	elif view is WalkView:
+		check(is_equal_approx(view.light.light_energy, 1.5 * visibility) and view.light.light_color == projection.lighting.star_color, "Station sunlight disagrees with current C++ projection")
 func _initialize() -> void:
 	call_deferred("run")
 func run() -> void:
@@ -47,6 +57,7 @@ func run() -> void:
 	check(bridge.get_freedom_walk_state() == old and bridge.get_freedom_flight_state() == old_flight, "Source-only validation committed")
 	check(shell.select_start(bridge, {"mode": "new_game", "value": "42", "assets": args[0]}), "Ready model/session transaction refused: " + shell.error)
 	check(shell.current_view != null and shell.current_view.activated and shell.current_view.staged_model.valid_installed(), "Committed view was not complete")
+	check_sunlight(shell.current_view)
 	var initial_resources: Dictionary = bridge.get_freedom_flight_state().resources
 	check(initial_resources.selected and initial_resources.quantity_quanta == "3032640000000000" and initial_resources.jump_charges == 3, "Staged New Game lost finite C++ resources")
 	var initial_chart: Dictionary = bridge.get_freedom_flight_state().chart
@@ -122,6 +133,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	var flight: Control = shell.current_view
 	check(flight is FlightView and flight.staged_model == model and flight.cockpit, "Seat did not hand the same model to cockpit flight")
 	if not flight is FlightView: return
+	check_sunlight(flight)
 	flight.set_process(false)
 	check(flight.player_input.device == 19, "Boarding replaced the station-selected controller")
 	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.8, 19)
@@ -234,6 +246,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	walk = shell.current_view
 	check(walk is WalkView and walk.staged_model == model, "Unboard did not restore walking on the same model")
 	if not walk is WalkView: return
+	check_sunlight(walk)
 	check(walk.selected_pad == 19 and walk.available_pads.get(19, false), "Unboarding forgot the selected controller")
 	check(walk.paused and not walk.controls_armed, "Held selected walking stick bypassed the unboarding neutral gate")
 	joy_axis(JOY_AXIS_LEFT_X, 0.0, 19)
