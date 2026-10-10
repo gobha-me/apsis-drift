@@ -24,7 +24,7 @@ player's station-to-flight journey.
 
 - [Playable boarding prototype and deferred refinements](PLAYABLE_BOARDING_PROTOTYPE.md)
 - [Saved station walking](SAVED_STATION_WALK.md)
-- [Saved flight](SAVED_NATIVE_FLIGHT.md) and [port lifecycle](NATIVE_PORT_LIFECYCLE.md)
+- [Saved flight](SAVED_NATIVE_FLIGHT.md), [in-game Load](NATIVE_LOAD.md) and [port lifecycle](NATIVE_PORT_LIFECYCLE.md)
 - [Starting assembly](NATIVE_STARTING_ASSEMBLY.md) and [station view](NATIVE_STATION_VIEW.md)
 - [Flight controls/reference](NATIVE_FLIGHT_REFERENCE.md)
 - [Terrain pad assessment](TERRAIN_TOUCHDOWN.md), [landed craft lifecycle](LANDED_CRAFT.md) and [surface walking](FREEDOM_SURFACE_WALK.md)

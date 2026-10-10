@@ -25,6 +25,12 @@ var audio_session: Node
 var closing := false
 var previous_auto_quit := true
 var quit_handler: Callable
+var load_dialog: FileDialog
+var load_confirmation: ConfirmationDialog
+var load_theme: Theme
+var load_origin: Control
+var load_previous_mode: int
+var load_path := ""
 
 
 func configure_audio(options: Dictionary) -> void:
@@ -373,8 +379,115 @@ func continue_recovery() -> void:
 
 
 func connect_journey_view(view: Control) -> void:
+	if view.has_signal("load_requested"):
+		view.load_requested.connect(request_load)
 	if view.has_signal("journey_mode_changed"):
 		view.journey_mode_changed.connect(switch_journey_view, CONNECT_DEFERRED)
+
+
+# Root owns replacement dialogs; the current view cannot resume beneath them.
+func request_load() -> void:
+	if closing or load_origin != null or current_view == null or recovery_overlay != null: return
+	if not (current_view is WalkView or current_view is FlightView) or not current_view.focused or not current_view.paused or current_view.save_dialog.visible or current_view.mode_change_pending: return
+	if load_dialog == null:
+		load_dialog = FileDialog.new()
+		load_dialog.title = "Load a saved journey"
+		load_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		load_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		load_dialog.filters = PackedStringArray(["*.json ; Apsis Drift save"])
+		load_dialog.exclusive = true
+		load_theme = Theme.new()
+		load_dialog.theme = load_theme
+		add_child(load_dialog)
+		load_dialog.file_selected.connect(choose_load)
+		load_dialog.canceled.connect(func(): finish_load("Load canceled. Resume explicitly after neutral."))
+		load_confirmation = ConfirmationDialog.new()
+		load_confirmation.title = "Replace the current journey?"
+		load_confirmation.dialog_text = "Loading replaces the current journey. Unsaved progress will be lost.\nNo automatic save is made."
+		load_confirmation.ok_button_text = "Load journey"
+		load_confirmation.exclusive = true
+		load_confirmation.theme = load_theme
+		load_confirmation.dialog_autowrap = true
+		add_child(load_confirmation)
+		load_confirmation.confirmed.connect(confirm_load, CONNECT_DEFERRED)
+		load_confirmation.canceled.connect(func(): finish_load("Load canceled. Current journey retained."))
+		get_window().size_changed.connect(layout_load_dialogs)
+	load_origin = current_view
+	load_previous_mode = load_origin.process_mode
+	load_origin.journey_dialog_open = true
+	load_origin.process_mode = Node.PROCESS_MODE_DISABLED
+	load_path = ""
+	layout_load_dialogs()
+	load_dialog.popup_centered_ratio(0.75)
+
+
+func layout_load_dialogs() -> void:
+	if load_theme == null or current_view == null: return
+	var pixels := Vector2(get_window().size)
+	var logical: Vector2 = current_view.size
+	if not pixels.is_finite() or not logical.is_finite() or pixels.x <= 0 or pixels.y <= 0 or logical.x <= 0 or logical.y <= 0: return
+	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))
+	load_theme.default_font_size = roundi(18 * scale)
+	for kind in ["Label", "Button", "LineEdit", "ItemList", "Tree", "PopupMenu"]:
+		load_theme.set_font_size("font_size", kind, roundi(18 * scale))
+	load_theme.set_font_size("title_font_size", "Window", roundi(18 * scale))
+	# Embedded dialog text shares the logical canvas scaling of the native UI.
+	# Wrap the warning before requesting a bounded, physically readable width.
+	load_confirmation.get_label().custom_minimum_size.x = minf(580 * scale, logical.x * 0.8)
+	load_confirmation.size = Vector2i(roundi(minf(620 * scale, logical.x * 0.9)), roundi(minf(180 * scale, logical.y * 0.8)))
+	if load_confirmation.visible:
+		load_confirmation.popup_centered(load_confirmation.size)
+	elif load_dialog.visible:
+		load_dialog.popup_centered_ratio(0.75)
+
+
+func choose_load(path: String) -> void:
+	if load_origin == null: return
+	load_dialog.hide()
+	if not path.is_absolute_path() or path.is_empty() or path.length() > 4096:
+		finish_load("Load refused: choose a bounded absolute save path.")
+		return
+	load_path = path
+	layout_load_dialogs()
+	load_confirmation.popup_centered(load_confirmation.size)
+	load_confirmation.get_cancel_button().grab_focus()
+
+
+func finish_load(message: String) -> void:
+	if load_dialog != null: load_dialog.hide()
+	if load_confirmation != null: load_confirmation.hide()
+	load_path = ""
+	if is_instance_valid(load_origin) and current_view == load_origin:
+		load_origin.process_mode = load_previous_mode
+		load_origin.journey_dialog_open = false
+		load_origin.save_status.text = message
+		var button: Button
+		if load_origin is FlightView:
+			load_origin.controls_menu.controls.status = message
+			load_origin.controls_menu.message.text = message
+			load_origin.update_compact_hud()
+			button = load_origin.controls_menu.load_button
+		else:
+			button = load_origin.load_button
+		if load_origin.focused: button.grab_focus()
+	load_origin = null
+
+
+func confirm_load() -> void:
+	if load_origin == null or load_path.is_empty(): return
+	if current_view != load_origin or not load_origin.focused or closing:
+		finish_load("Load canceled. Restore focus before trying again.")
+		return
+	load_confirmation.hide()
+	# select_start validates/stages everything before the C++ commit and view swap.
+	if not select_start(bridge, {"mode": "continue", "value": load_path, "assets": assets_root}):
+		var refusal := error
+		error = ""
+		finish_load("Load refused: " + refusal)
+		return
+	load_origin = null  # The successfully replaced view was freed by select_start.
+	load_path = ""
+	load_dialog.hide()
 
 
 func switch_journey_view() -> void:
