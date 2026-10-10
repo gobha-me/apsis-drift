@@ -249,14 +249,15 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		return
 	saved_assist_button.set_pressed_no_signal(state.get("assistance", false))
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
-	saved_assist_button.disabled = failed or jumping
+	var walking: bool = not state.get("surface_walk", {}).is_empty()
+	saved_assist_button.disabled = failed or jumping or walking
 	resume_button.disabled = failed
 	var attached: bool = state.get("attached", false)
 	var assessment: Dictionary = state.get("docking", {})
 	for name in saved_port_buttons:
 		var button: Button = saved_port_buttons[name]
 		button.disabled = failed
-		if jumping:
+		if jumping or walking:
 			button.disabled = true
 			continue
 		var surface: Dictionary = state.get("surface", {})

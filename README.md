@@ -45,7 +45,9 @@ fuel and three jump charges](docs/FREEDOM_RESOURCES.md), with free replenishment
 while attached to a supported station port. Historical saves keep their explicit
 resource-unselected behavior. The [neighboring-system trip](docs/FREEDOM_NATIVE_TRAVEL.md)
 supports chart selection, jumps, physical home return and station replenishment.
-Suited surface walking and wider manual/controller qualification remain unfinished.
+The [surface walking prototype](docs/FREEDOM_SURFACE_WALK.md) adds suited ground
+movement, outside Save/Continue and nearby return; hatch transfer animation,
+exposure policy and wider manual/controller qualification remain unfinished.
 
 **Save As** writes the actor, craft, history and clock through C++. Continue
 starts paused; quitting does not autosave. Missing, corrupt or unsupported saves

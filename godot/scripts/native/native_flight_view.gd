@@ -75,6 +75,12 @@ var mode_change_pending := false
 var ship_audio: Node
 var audio_preferences: RefCounted
 var quit_handler: Callable
+var surface_walk_button: Button
+var surface_walk_menu_button: Button
+
+
+func surface_walking() -> bool:
+	return not state.get("surface_walk", {}).is_empty()
 
 
 static func actuator_fractions(axes: PackedFloat64Array) -> PackedFloat64Array:
@@ -104,6 +110,12 @@ static func valid_state(value: Dictionary) -> bool:
 	for key in ["latitude", "longitude", "altitude", "planet_radius", "atmosphere_edge", "air_density", "surface_speed", "radial_rate"]:
 		if not value.get(key) is float or not is_finite(value[key]):
 			return false
+	var walking: Variant = value.get("surface_walk", {})
+	if not walking is Dictionary: return false
+	if not walking.is_empty():
+		if walking.get("version") != 1 or not walking.get("eye_position") is Vector3 or not walking.eye_position.is_finite(): return false
+		if not walking.get("basis") is Basis or not walking.basis.is_finite() or absf(walking.basis.determinant() - 1.0) > 0.00001: return false
+		if not walking.get("heading") is float or not is_finite(walking.heading) or absf(walking.heading) > PI: return false
 	return value.planet_radius > 0.0 and valid_orbit(value)
 
 
@@ -272,6 +284,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 func activate() -> void:
 	# Pending C++ owns preallocated streaming; this hook performs no asset reads.
 	activated = true
+	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
 	near_viewport.world_3d = far_viewport.find_world_3d()
 	get_window().size_changed.connect(layout_hud)
 	layout_hud()
@@ -354,7 +367,7 @@ func build_ui() -> void:
 	hint = hud_text()
 	column.add_child(hint)
 	pause_button = Button.new()
-	pause_button.text = "Resume flight"
+	pause_button.text = "Resume walking" if surface_walking() else "Resume flight"
 	pause_button.focus_mode = Control.FOCUS_NONE
 	pause_button.pressed.connect(toggle_pause)
 	column.add_child(pause_button)
@@ -413,6 +426,10 @@ func build_ui() -> void:
 		liftoff_button.focus_mode = Control.FOCUS_NONE
 		liftoff_button.pressed.connect(func(): port_command("liftoff_freedom_surface"))
 		column.add_child(liftoff_button)
+		surface_walk_button = Button.new()
+		surface_walk_button.focus_mode = Control.FOCUS_NONE
+		surface_walk_button.pressed.connect(func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
+		column.add_child(surface_walk_button)
 	var save_button := Button.new()
 	save_button.text = "Save As…"
 	save_button.focus_mode = Control.FOCUS_NONE
@@ -516,6 +533,7 @@ func setup_controls() -> void:
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
 		menu_column.move_child(unboard_menu_button, controls_menu.save_button.get_index() + 1)
+		surface_walk_menu_button = controls_menu.add_button(menu_column, "Leave Wayfarer · suit", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func():
@@ -531,7 +549,7 @@ func setup_controls() -> void:
 		if quit_handler.is_valid(): quit_handler.call()
 		else: get_tree().quit())
 	controls_menu.sync_saved_state(state, false)
-	controls_menu.show_menu("Seated in Wayfarer. Release controls, then resume to fly." if state.get("boarding", {}).get("state") == "seated" else "Paused after Continue. Release controls, then resume explicitly.")
+	controls_menu.show_menu("On the surface. Release controls, then resume to walk." if surface_walking() else "Seated in Wayfarer. Release controls, then resume to fly." if state.get("boarding", {}).get("state") == "seated" else "Paused after Continue. Release controls, then resume explicitly.")
 	refresh_control_hint()
 
 
@@ -556,11 +574,18 @@ func show_surface_conditions() -> void:
 func refresh_control_hint() -> void:
 	if player_input == null:
 		return
+	if surface_walking():
+		hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start controls · Return near the aft ground access to reboard"
+		return
 	var family := "pad" if player_input.last_device == "pad" else "key"
 	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nF3: legacy camera alias. Flight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family)]
 
 
 func request_assistance(enabled: bool) -> void:
+	if surface_walking():
+		assist_button.set_pressed_no_signal(state.assistance)
+		save_status.text = "Return to the pilot seat to change flight assistance."
+		return
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		assist_button.set_pressed_no_signal(state.get("assistance", false))
@@ -607,7 +632,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 
 
 func change_camera() -> void:
-	if error.is_empty() and focused and not paused and not save_dialog.visible and state.frame_id == "2":
+	if error.is_empty() and focused and not paused and not save_dialog.visible and state.frame_id == "2" and not surface_walking():
 		cockpit = not cockpit
 		look_offset = Vector2.ZERO
 		update_view(0.0)
@@ -615,7 +640,7 @@ func change_camera() -> void:
 
 func recenter_camera() -> void:
 	if error.is_empty() and focused and not paused and not save_dialog.visible:
-		look_offset = Vector2.ZERO
+		look_offset = Vector2(-float(state.surface_walk.heading), 0.0) if surface_walking() else Vector2.ZERO
 		update_view(0.0)
 
 
@@ -664,16 +689,21 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if not error.is_empty() or not focused or save_dialog.visible:
 		hide_exhaust()
 		return
-	if command in ["begin_freedom_port_approach", "request_freedom_landing", "liftoff_freedom_surface"]:
+	if command in ["begin_freedom_port_approach", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		observe_neutral_controls()
 		if not controls_armed:
-			save_status.text = "Release flight controls before starting a thruster maneuver."
+			save_status.text = "Release movement controls before changing modes or starting a maneuver."
 			return
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
 		save_status.text = str(bridge.get_last_error())
 		return
 	state = bridge.get_freedom_flight_state()
+	if command in ["begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
+		look_offset = Vector2.ZERO
+		pause_controls("On the surface. Release controls, then resume to walk." if surface_walking() else "Back in the seat. Release controls, then resume to fly.")
+		update_view(0.0)
+		return
 	update_view(0.0)
 	if command == "replenish_freedom_resources":
 		save_status.text = "Flight reserve and three jump charges replenished · free station service"
@@ -695,7 +725,7 @@ func toggle_pause() -> void:
 		hide_exhaust()
 		return
 	if not paused:
-		pause_controls("Flight paused. Release controls before resuming.")
+		pause_controls("Walking paused. Release controls before resuming." if surface_walking() else "Flight paused. Release controls before resuming.")
 		return
 	if not focused or save_dialog.visible:
 		hide_exhaust()
@@ -710,15 +740,48 @@ func toggle_pause() -> void:
 	player_input.enabled = true
 	player_input.look_axes_needs_neutral = false
 	controls_menu.hide_menu()
-	pause_button.text = "Pause flight"
-	save_status.text = "Flight running. Save As pauses the session."
+	pause_button.text = "Pause walking" if surface_walking() else "Pause flight"
+	save_status.text = "Walking. Save As pauses the session." if surface_walking() else "Flight running. Save As pauses the session."
 
 
 func observe_neutral_controls() -> void:
 	if not focused or player_input == null:
 		return
 	var neutral: bool = player_input.observe_neutral()
+	if surface_walking():
+		for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
+			if Input.is_physical_key_pressed(key): neutral = false
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT): neutral = false
+		if player_input.device >= 0:
+			for axis in [JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_X, JOY_AXIS_RIGHT_Y]:
+				if absf(Input.get_joy_axis(player_input.device, axis)) > float(player_input.settings.deadzone): neutral = false
 	controls_armed = neutral and not player_input.needs_neutral
+	if not neutral: player_input.needs_neutral = true
+
+
+func surface_controls(delta: float) -> PackedFloat64Array:
+	if paused or not focused or not controls_armed or save_dialog.visible:
+		return PackedFloat64Array([0.0, 0.0, float(state.surface_walk.heading)])
+	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
+	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
+	if player_input.device >= 0:
+		var deadzone: float = player_input.settings.deadzone
+		var curve: float = player_input.settings.curve
+		forward -= player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_LEFT_Y), deadzone, curve)
+		right += player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_LEFT_X), deadzone, curve)
+		look_offset.x += player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_RIGHT_X), deadzone, curve) * delta * 1.8
+		look_offset.y += player_input.shape(Input.get_joy_axis(player_input.device, JOY_AXIS_RIGHT_Y), deadzone, curve) * delta * 1.8
+	look_offset.x = wrapf(look_offset.x, -PI, PI)
+	look_offset.y = clampf(look_offset.y, -1.3, 1.3)
+	var heading := wrapf(-look_offset.x, -PI, PI)
+	# Recentered yaw has one canonical save representation, including signed zero.
+	if heading == 0.0: heading = 0.0
+	return PackedFloat64Array([clampf(forward, -1.0, 1.0), clampf(right, -1.0, 1.0), heading])
+
+
+func _input(event: InputEvent) -> void:
+	if surface_walking() and focused and not paused and not save_dialog.visible and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		look_offset += event.relative * 0.003
 
 
 func _notification(what: int) -> void:
@@ -737,7 +800,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo or save_dialog == null or save_dialog.visible:
 		return
 	# Esc/Start and remapped camera input belong to PlayerInput only.
-	if event.physical_keycode == KEY_F3 and error.is_empty() and focused and state.frame_id == "2":
+	if event.physical_keycode == KEY_F3 and error.is_empty() and focused and state.frame_id == "2" and not surface_walking():
 		# Historical alias may inspect the camera while paused; no world action.
 		cockpit = not cockpit
 		look_offset = Vector2.ZERO
@@ -775,14 +838,15 @@ func _process(delta: float) -> void:
 	var demand := actuator_fractions(resolved.thrust_axes)
 	if state.get("attached", false) or state.get("surface", {}).get("landed", false):
 		demand.fill(0.0)
-	if not bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible):
+	var accepted: bool = bridge.advance_freedom_surface_walk(delta, surface_controls(minf(delta, 0.1)), paused or save_dialog.visible) if surface_walking() else bridge.advance_freedom_flight(delta, demand, paused or save_dialog.visible)
+	if not accepted:
 		pause_on_error(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
 	if not valid_state(state):
 		pause_on_error("C++ flight view became unavailable: " + str(bridge.get_last_error()))
 		return
-	if not paused and not save_dialog.visible:
+	if not paused and not save_dialog.visible and not surface_walking():
 		if resolved.recenter:
 			look_offset = Vector2.ZERO
 		look_offset += resolved.look * delta
@@ -832,7 +896,15 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		landing_button.text = "Land with thrusters" if state.assistance else "Deploy gear · manual landing"
 		landing_button.disabled = state.attached or landed or state.get("jump", {}).get("phase", "idle") != "idle"
 		stow_gear_button.disabled = state.attached or landed or not surface.get("gear_deployed", false) or state.get("jump", {}).get("phase", "idle") != "idle"
-		liftoff_button.disabled = not landed
+		liftoff_button.disabled = not landed or surface_walking()
+		if surface_walk_button != null:
+			surface_walk_button.visible = landed and state.frame_id == "2"
+			surface_walk_button.text = "Return through hatch" if surface_walking() else "Leave Wayfarer · suit"
+			if surface_walk_menu_button != null:
+				surface_walk_menu_button.disabled = surface_walk_button.disabled
+				surface_walk_menu_button.text = surface_walk_button.text
+			landing_button.disabled = landing_button.disabled or surface_walking()
+			stow_gear_button.disabled = stow_gear_button.disabled or surface_walking()
 		surface_status.text = ("Landed" if landed else "Airborne") + " · Gear " + ("deployed" if surface.get("gear_deployed", false) else "stowed") + "\n" + str(surface.get("note", "Surface aid off"))
 	ship.basis = state.body_basis
 	if station == null and state.get("station_available", true) and state.station_position.length() < 1000.0:
@@ -848,7 +920,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	terrain_camera.far = minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
 	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
 	var look_basis := Basis(Vector3.UP, -look_offset.x) * Basis(Vector3.RIGHT, -look_offset.y)
-	if cockpit:
+	if surface_walking():
+		var walking: Dictionary = state.surface_walk
+		camera.transform = Transform3D(walking.basis * Basis(Vector3.UP, walking.heading) * Basis(Vector3.RIGHT, -look_offset.y), walking.eye_position)
+	elif cockpit:
 		camera.transform = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
 	else:
 		# The overhead dock occupies the usual elevated chase viewpoint. Keep
@@ -867,6 +942,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nAltitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
+	if surface_walking(): telemetry.text = "On foot · suit equipped\nWayfarer remains landed · %.1f m to craft centre\nTick %s%s" % [state.surface_walk.eye_position.length(), state.tick, " · PAUSED" if paused else ""]
 	var resources: Dictionary = state.get("resources", {})
 	if resources.get("selected", false):
 		var burn := "No applied propulsion burn" if resources.equivalent_newtons == 0.0 else "Last applied burn %.1f kN equivalent" % (resources.equivalent_newtons / 1000.0)
@@ -894,7 +970,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		chart_status.visible = false
 	var jump: Dictionary = state.get("jump", {})
 	var phase: String = jump.get("phase", "idle")
-	assist_button.disabled = phase != "idle"
+	assist_button.disabled = phase != "idle" or surface_walking()
 	var rows: Array = chart.get("rows", [])
 	for i in jump_destinations.size():
 		var button: Button = jump_destinations[i]
@@ -950,3 +1026,15 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			unboard_menu_button.visible = unboard_button.visible
 		for button in port_buttons:
 			button.disabled = state.attached or not state.get("station_available", true) or phase != "idle"
+	# Ground exploration keeps the return/suit controls clear of flight telemetry.
+	var outside := surface_walking()
+	orbital_forecast.visible = not outside
+	resource_status.visible = not outside
+	assist_button.visible = not outside
+	for item in [landing_button, stow_gear_button, liftoff_button, surface_status]:
+		if item != null: item.visible = not outside
+	if outside:
+		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
+		for button in jump_destinations: button.visible = false
+		if controls_menu.saved_note != null:
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nRight-drag / right stick: look\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."

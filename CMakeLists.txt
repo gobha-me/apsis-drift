@@ -447,7 +447,10 @@ add_library(apsis_drift_core STATIC
   src/terrain_touchdown.cpp
   src/terrain_hull_clearance.cpp
   src/landed_craft.cpp
+  src/planet_surface_walker.cpp
+  src/freedom_surface_walk_save.cpp
   src/native_surface_maneuver.cpp
+  src/native_surface_walk.cpp
   src/freedom_resources.cpp
   src/freedom_resource_save.cpp
   src/freedom_surface_save.cpp
@@ -1540,6 +1543,7 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-landed-craft-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME landed-craft-contract COMMAND apsis-drift-landed-craft-tests)
+  add_test(NAME planet-surface-walk-contract COMMAND apsis-drift-landed-craft-tests --walk)
   set_tests_properties(landed-craft-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-terrain-touchdown-tests test/terrain_touchdown_test.cpp)
   target_include_directories(apsis-drift-terrain-touchdown-tests PRIVATE src src/godot)

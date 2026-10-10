@@ -207,7 +207,10 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomKnowledgeSaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomTravelSaveDocument>(selected.document) ||
-        std::holds_alternative<FreedomRecoverySaveDocument>(selected.document))
+        std::holds_alternative<FreedomRecoverySaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
+            selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -307,6 +310,15 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::stow_freedom_landing_gear);
     godot::ClassDB::bind_method(godot::D_METHOD("liftoff_freedom_surface"),
                                 &FreedomBridge::liftoff_freedom_surface);
+    godot::ClassDB::bind_method(godot::D_METHOD("begin_freedom_surface_walk"),
+                                &FreedomBridge::begin_freedom_surface_walk);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("return_from_freedom_surface_walk"),
+        &FreedomBridge::return_from_freedom_surface_walk);
+    godot::ClassDB::bind_method(godot::D_METHOD("advance_freedom_surface_walk",
+                                                "elapsed", "controls",
+                                                "paused"),
+                                &FreedomBridge::advance_freedom_surface_walk);
     godot::ClassDB::bind_method(
         godot::D_METHOD("cancel_freedom_surface_maneuver"),
         &FreedomBridge::cancel_freedom_surface_maneuver);
@@ -557,6 +569,8 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomTravelSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomRecoverySaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
             selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
@@ -664,9 +678,14 @@ class FreedomBridge : public godot::RefCounted {
       auto replacement = candidate.recovery_document();
       if (!replacement) throw std::runtime_error(replacement.error());
       const auto planet = project_saved_flight(candidate).planet;
-      if (!stage_selected({NativeStartup::Mode::freedom,
-                           std::move(*replacement), planet,
-                           candidate.source_save()}))
+      NativeSaveDocument document = std::move(*replacement);
+      if (candidate.surface_walk_selected()) {
+        auto walking = candidate.surface_walk_document();
+        if (!walking) throw std::runtime_error(walking.error());
+        document = std::move(*walking);
+      }
+      if (!stage_selected({NativeStartup::Mode::freedom, std::move(document),
+                           planet, candidate.source_save()}))
         return false;
       pending->recovery_source = std::move(*source);
       return true;
@@ -956,6 +975,121 @@ class FreedomBridge : public godot::RefCounted {
         },
         true);
   }
+  auto begin_freedom_surface_walk() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.begin_surface_walk();
+        },
+        true);
+  }
+  auto return_from_freedom_surface_walk() -> bool {
+    return change_freedom_port(
+        [](NativeFreedomFlightSession& session) {
+          return session.return_from_surface_walk();
+        },
+        true);
+  }
+  auto advance_freedom_surface_walk(double elapsed,
+                                    const godot::PackedFloat64Array& controls,
+                                    bool paused) -> bool {
+    try {
+      if (!saved_flight || !saved_flight->session.surface_walker())
+        throw std::invalid_argument("Select a surface walking journey first");
+      if (!std::isfinite(elapsed) || elapsed < 0 || elapsed > 60 ||
+          controls.size() != 3)
+        throw std::invalid_argument(
+            "Invalid surface walking time/control buffer");
+      for (std::int64_t i = 0; i < 3; ++i)
+        if (!std::isfinite(controls[i]))
+          throw std::invalid_argument("Surface controls must be finite");
+      if (std::abs(controls[0]) > 1 || std::abs(controls[1]) > 1 ||
+          std::abs(controls[2]) > std::numbers::pi)
+        throw std::invalid_argument("Surface walking controls exceed bounds");
+      auto candidate = saved_flight->session;
+      auto clock = saved_flight->clock;
+      auto actuation = saved_flight->last_step;
+      const auto scheduled =
+          require(clock.advance(SimulationSeconds{paused ? 0.0 : elapsed}));
+      const OriginWalkControls demand{controls[0], controls[1], controls[2]};
+      for (int i = 0; i < scheduled.steps; ++i)
+        actuation = require(candidate.advance_surface_walk(demand));
+      (void)project_saved_flight(candidate);
+      saved_flight->session = std::move(candidate);
+      saved_flight->clock = clock;
+      saved_flight->last_step = std::move(actuation);
+      saved_flight->dropped_seconds += scheduled.dropped.count();
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& error) {
+      last_error = godot::String{error.what()};
+      return false;
+    }
+  }
+
+  static auto project_surface_walk_actor(const SavedFlightWorld& selected)
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto& session = selected.session;
+    if (!session.surface_walker() || !session.surface() ||
+        !session.surface()->landed)
+      return result;
+    const auto rotate = [](RigidOrientation q, RigidVector3 v) {
+      const double n = ((q.w * q.w + q.x * q.x) + q.y * q.y) + q.z * q.z;
+      const double k = 2 * (q.x * v.x + q.y * v.y + q.z * v.z) / n;
+      const double s = (q.w * q.w - q.x * q.x - q.y * q.y - q.z * q.z) / n;
+      return RigidVector3{
+          s * v.x + k * q.x + 2 * q.w * (q.y * v.z - q.z * v.y) / n,
+          s * v.y + k * q.y + 2 * q.w * (q.z * v.x - q.x * v.z) / n,
+          s * v.z + k * q.z + 2 * q.w * (q.x * v.y - q.y * v.x) / n};
+    };
+    const auto& actor = *session.surface_walker();
+    const auto& body = session.document().flight;
+    const auto foot = actor.foot_position_metres;
+    const auto radius = std::hypot(foot.x, foot.y, foot.z);
+    const RigidVector3 up{foot.x / radius, foot.y / radius, foot.z / radius};
+    auto right =
+        rotate(session.surface()->landed->fixed.orientation, {1, 0, 0});
+    const auto vertical = (right.x * up.x + right.y * up.y) + right.z * up.z;
+    right = {right.x - up.x * vertical, right.y - up.y * vertical,
+             right.z - up.z * vertical};
+    const auto magnitude = std::hypot(right.x, right.y, right.z);
+    if (!std::isfinite(magnitude) || magnitude < 1e-8)
+      throw std::invalid_argument("Surface heading basis is unavailable");
+    right = {right.x / magnitude, right.y / magnitude, right.z / magnitude};
+    const RigidVector3 back{right.y * up.z - right.z * up.y,
+                            right.z * up.x - right.x * up.z,
+                            right.x * up.y - right.y * up.x};
+    const auto rotation =
+        require(resolve_planet_rotation(session.system(), session.rotation(),
+                                        body.tick))
+            .geometry.fixed_to_system;
+    const auto view = project_saved_flight(session);
+    const auto local = [&](RigidVector3 v) {
+      const auto& a = view.system_axes;
+      return godot::Vector3{
+          static_cast<godot::real_t>(a[0].east * v.x + a[1].east * v.y +
+                                     a[2].east * v.z),
+          static_cast<godot::real_t>(a[0].up * v.x + a[1].up * v.y +
+                                     a[2].up * v.z),
+          static_cast<godot::real_t>(
+              -(a[0].north * v.x + a[1].north * v.y + a[2].north * v.z))};
+    };
+    const auto eye =
+        rotate(rotation, {foot.x + up.x * kOriginWalkerEyeHeightMetres,
+                          foot.y + up.y * kOriginWalkerEyeHeightMetres,
+                          foot.z + up.z * kOriginWalkerEyeHeightMetres});
+    result["eye_position"] =
+        local({eye.x - body.position_metres.x, eye.y - body.position_metres.y,
+               eye.z - body.position_metres.z});
+    godot::Basis basis;
+    basis.set_column(0, local(rotate(rotation, right)));
+    basis.set_column(1, local(rotate(rotation, up)));
+    basis.set_column(2, local(rotate(rotation, back)));
+    result["basis"] = basis;
+    result["heading"] = actor.heading_radians;
+    result["version"] = static_cast<std::int64_t>(actor.version);
+    return result;
+  }
   auto cancel_freedom_surface_maneuver() -> bool {
     return change_freedom_port(
         [](NativeFreedomFlightSession& session)
@@ -1201,6 +1335,7 @@ class FreedomBridge : public godot::RefCounted {
           decimal(document.origin.recipe.universe_seed.value);
       result["system_id"] = decimal(session.system().catalog.id.value);
       result["planet_id"] = decimal(body.frame.planet->value);
+      result["surface_walk"] = project_surface_walk_actor(selected);
       result["station_available"] = view.station_available;
       result["station_id"] = view.station_available
                                  ? decimal(view.station.id.value)

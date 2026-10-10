@@ -1,5 +1,6 @@
 #include "apsis_drift/landed_craft.hpp"
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/planet_surface_walker.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/terrain_hull_clearance.hpp"
 #include "apsis_drift/terrain_touchdown.hpp"
@@ -780,6 +781,263 @@ auto native_fixtures(const Fixture& f, const std::filesystem::path& directory)
   output << manifest.dump(2) << '\n';
   if (!output) throw std::runtime_error("native manifest write failed");
 }
+auto surface_walk_session(const Fixture& f,
+                          const std::filesystem::path& directory = {}) -> void {
+  auto station = required(
+      NativeFreedomFlightSession::open(required(native_new_game(Seed{42}))));
+  for (unsigned tick = 0; tick < 2960; ++tick)
+    required(station.advance_walk({0, -1, 0}));
+  required(station.begin_boarding());
+  for (unsigned tick = 0; tick < kGameplayBoardingTicks; ++tick)
+    required(station.advance_walk({}));
+  auto base =
+      std::get<FreedomBoardingSaveDocument>(station.surface_document().base);
+  auto fixed = f.fixed;
+  fixed.tick = base.voyage.flight.flight.tick;
+  base.voyage.flight.flight = f.source(fixed);
+  base.voyage.docking.attached = false;
+  // Explicit near-ground fixture, never an uninterrupted station-to-site claim.
+  FreedomKnowledgeSaveDocument selected{};
+  selected.voyage.voyage.base = base;
+  selected.voyage.voyage.surface.gear_deployed = true;
+  selected.voyage.resources = *station.resources();
+  selected.knowledge = *station.knowledge();
+  auto session = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, selected, f.planet, {}}));
+  required(session.commit_touchdown(required(
+      rigid_body_state_checksum(f.context, session.document().flight))));
+  const auto anchor = session.surface()->landed;
+  const auto resources = session.resources();
+  const auto initial_tick = session.document().flight.tick;
+  const auto checkpoint = [&](std::string_view name) {
+    if (!directory.empty())
+      required(session.save_as(directory / (std::string{name} + ".json")));
+  };
+  checkpoint("source");
+  required(session.begin_surface_walk());
+  checkpoint("exited");
+  check(session.surface_walker() && !session.walker() &&
+            session.document().flight.tick == initial_tick,
+        "Explicit surface exit transfers actor ownership without changing the "
+        "craft or clock");
+  const auto snapshot = [&] {
+    return required(encode_freedom_surface_walk_document_json(
+        required(session.surface_walk_document())));
+  };
+  const auto before = snapshot();
+  const auto temporary =
+      std::filesystem::temp_directory_path() /
+      ("apsis-surface-walk-" +
+       std::to_string(
+           std::chrono::steady_clock::now().time_since_epoch().count()) +
+       ".json");
+  required(session.save_as(temporary));
+  auto disk = required(
+      NativeFreedomFlightSession::open(required(native_continue(temporary))));
+  check(required(encode_freedom_surface_walk_document_json(
+            required(disk.surface_walk_document()))) == before,
+        "Actual atomic Save As and native Continue retain the complete outside "
+        "actor and voyage");
+  std::filesystem::remove(temporary);
+  auto loss = disk;
+  const auto loss_tick = loss.document().flight.tick;
+  required(loss.record_loss(
+      FreedomLossCause::recoverable_destruction,
+      loss.document().origin.state.craft, loss_tick,
+      required(rigid_body_state_checksum(f.context, loss.document().flight))));
+  const auto pending = required(encode_freedom_surface_walk_document_json(
+      required(loss.surface_walk_document())));
+  if (!directory.empty())
+    required(loss.save_as(directory / "pending-loss.json"));
+  check(!loss.advance_surface_walk({}) && !loss.return_from_surface_walk() &&
+            pending == required(encode_freedom_surface_walk_document_json(
+                           required(loss.surface_walk_document()))),
+        "Declared loss stops outside commands without inventing an automatic "
+        "surface fatality");
+  auto lost_resume = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       required(decode_freedom_surface_walk_document_json(pending)),
+       f.planet,
+       {}}));
+  required(loss.complete_recovery());
+  required(lost_resume.complete_recovery());
+  if (!directory.empty()) required(loss.save_as(directory / "recovered.json"));
+  check(loss.surface_walk_selected() && !loss.surface_walker() &&
+            loss.walker() &&
+            required(encode_freedom_surface_walk_document_json(
+                required(loss.surface_walk_document()))) ==
+                required(encode_freedom_surface_walk_document_json(
+                    required(lost_resume.surface_walk_document()))),
+        "Outside recovery restores one station actor and preserves suit "
+        "selection, retired craft history and exact resumed replacement");
+  check(!session.begin_surface_walk() && !session.advance({}) &&
+            !session.advance_walk({}) && !session.release_surface() &&
+            !session.set_assistance(false) && !session.begin_disembarking() &&
+            snapshot() == before,
+        "Outside actor cannot control or launch the craft; refused commands "
+        "preserve the whole voyage");
+  for (unsigned tick = 0; tick < 600; ++tick)
+    required(session.advance_surface_walk({-1, 0, 0}));
+  check(!session.return_from_surface_walk(),
+        "Distant actor cannot reboard by clicking a button");
+  checkpoint("halfway");
+  const auto halfway = snapshot();
+  auto resumed = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       required(decode_freedom_surface_walk_document_json(halfway)),
+       f.planet,
+       {}}));
+  for (unsigned tick = 0; tick < 600; ++tick) {
+    required(session.advance_surface_walk({-1, 0, 0}));
+    required(resumed.advance_surface_walk({-1, 0, 0}));
+  }
+  check(
+      required(encode_freedom_surface_walk_document_json(
+          required(resumed.surface_walk_document()))) == snapshot(),
+      "Continued surface walking reproduces the complete uninterrupted voyage");
+  check(session.document().flight.tick == initial_tick + 1200 &&
+            session.surface()->landed == anchor &&
+            session.resources()->flight_quanta == resources->flight_quanta &&
+            session.resources()->jump_charges == resources->jump_charges,
+        "Ground walking shares the ship clock without fuel or anchor edits");
+  checkpoint("far");
+  auto malformed = nlohmann::ordered_json::parse(snapshot());
+  malformed["actor"]["planet"] = 0U;
+  check(!decode_freedom_surface_walk_document_json(malformed.dump()),
+        "Wrong actor body refuses Continue");
+  malformed = nlohmann::ordered_json::parse(snapshot());
+  malformed["actor"]["foot_position_metres"] =
+      nlohmann::ordered_json::array({1, 2});
+  check(!decode_freedom_surface_walk_document_json(malformed.dump()),
+        "Short surface position refuses Continue");
+  check(!decode_freedom_surface_walk_document_json(
+            "{\"format_version\":30,\"format_version\":30}") &&
+            !decode_freedom_surface_walk_document_json(std::string(65, '[') +
+                                                       std::string(65, ']')),
+        "Duplicate keys and excessive nesting refuse surface saves");
+  for (unsigned tick = 0; tick < 1200; ++tick)
+    required(session.advance_surface_walk({1, 0, 0}));
+  checkpoint("returned");
+  required(session.return_from_surface_walk());
+  checkpoint("seated");
+  check(!session.surface_walker() && session.surface()->landed == anchor,
+        "Nearby return restores the retained seated craft without moving it");
+  const auto inside = snapshot();
+  auto inside_resume = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       required(decode_freedom_surface_walk_document_json(inside)),
+       f.planet,
+       {}}));
+  required(session.release_surface());
+  required(inside_resume.release_surface());
+  for (unsigned tick = 0; tick < 120; ++tick) {
+    required(session.advance({}));
+    required(inside_resume.advance({}));
+  }
+  checkpoint("lifted");
+  check(required(encode_freedom_surface_walk_document_json(
+            required(inside_resume.surface_walk_document()))) == snapshot(),
+        "Reboarded Continue retains exact real-thrust liftoff");
+  std::cout << "Surface voyage checksum: "
+            << required(rigid_body_state_checksum(f.context,
+                                                  session.document().flight))
+            << '\n';
+}
+auto surface_walking(const Fixture& f) -> void {
+  const auto source = f.source(f.fixed);
+  const auto checksum = required(rigid_body_state_checksum(f.context, source));
+  const auto anchor = required(
+      prepare_landed_craft(f.owner, f.rotation, source, true, checksum));
+  auto terrain = required(PlanetSurfaceWalkTerrain::create(
+      f.owner, f.rotation, anchor, source.tick));
+  const auto start = required(terrain.entry());
+  check(terrain.validate(start).has_value() &&
+            required(terrain.near_entry(start)),
+        "Actual landed Wayfarer has supported nearby hatch ground access");
+  auto independent_cache = required(TerrainTileCache::create(1));
+  const auto foot = start.foot_position_metres;
+  const auto id =
+      required(godot_spike::detail::locate_selected_contact_triangle(
+          f.planet, {foot.x, foot.y, foot.z}));
+  const auto triangle =
+      required(godot_spike::detail::build_selected_contact_triangle(
+          f.planet, godot_spike::kExperimentalSavedContactSurface, id,
+          independent_cache));
+  const auto radial = mul(foot, 1 / norm(foot));
+  const auto hit =
+      ray_hit(add(foot, mul(radial, 2)), mul(radial, -1), triangle);
+  check(hit && std::abs(*hit - 2.0L) < 1e-8L,
+        "Independent long-double ray agrees with the actual rendered top "
+        "triangle at the foot");
+  auto actor = start;
+  for (int i = 0; i < 1200; ++i) {
+    const auto step = required(terrain.advance(actor, {-1, 0, 0}));
+    check(step.status == PlanetSurfaceWalkStatus::supported,
+          "Walking away remains supported without an invented area wall");
+    actor = step.actor;
+  }
+  check(norm(sub(actor.foot_position_metres, start.foot_position_metres)) >
+                19 &&
+            !required(terrain.near_entry(actor)) && terrain.cache_size() <= 4,
+        "Ground travel leaves interaction range with bounded terrain cache");
+  for (int i = 0; i < 1200; ++i)
+    actor = required(terrain.advance(actor, {1, 0, 0})).actor;
+  check(norm(sub(actor.foot_position_metres, start.foot_position_metres)) <
+                .001 &&
+            required(terrain.near_entry(actor)),
+        "Walking back reacquires the unchanged physical craft");
+  bool obstruction = false;
+  for (int i = 0; i < 120; ++i) {
+    const auto step = required(terrain.advance(actor, {1, 0, 0}));
+    obstruction |= step.status == PlanetSurfaceWalkStatus::craft_obstruction;
+    actor = step.actor;
+  }
+  check(obstruction && terrain.validate(actor).has_value(),
+        "Ordinary ground walking stops at the craft rather than entering its "
+        "hull");
+  const auto cached = terrain.cache_size();
+  for (double value : {std::numeric_limits<double>::quiet_NaN(),
+                       std::numeric_limits<double>::infinity(),
+                       -std::numeric_limits<double>::infinity(), 2.0}) {
+    for (int axis = 0; axis < 3; ++axis) {
+      auto controls = OriginWalkControls{};
+      if (axis == 0) controls.forward = value;
+      if (axis == 1) controls.right = value;
+      if (axis == 2) controls.heading_radians = value == 2.0 ? 4.0 : value;
+      check(!terrain.advance(actor, controls), "Invalid walking axes refuse");
+    }
+  }
+  auto invalid = actor;
+  invalid.foot_position_metres.x = std::numeric_limits<double>::quiet_NaN();
+  check(!terrain.advance(invalid, {}) && terrain.cache_size() == cached,
+        "Malformed position refuses before terrain cache access");
+  invalid = actor;
+  invalid.version = 2;
+  check(!terrain.advance(invalid, {}), "Unsupported walker policy refuses");
+  invalid = actor;
+  invalid.frame.planet = PlanetId{0};
+  check(!terrain.advance(invalid, {}) && terrain.cache_size() == cached,
+        "Wrong actor body refuses before querying terrain");
+  check(!terrain.advance(actor, {}, SimulationSeconds{0}) &&
+            !terrain.advance(actor, {}, SimulationSeconds{1}),
+        "Only the existing simulation tick advances ground kinematics");
+  auto stale = anchor;
+  stale.fixed.frame.planet = PlanetId{0};
+  check(!PlanetSurfaceWalkTerrain::create(f.owner, f.rotation, stale,
+                                          source.tick),
+        "Wrong landed body cannot populate a walking terrain owner");
+  stale = anchor;
+  stale.fixed.position_metres.x += 100;
+  check(!PlanetSurfaceWalkTerrain::create(f.owner, f.rotation, stale,
+                                          source.tick),
+        "Unsupported craft anchor cannot start surface walking");
+  check(terrain.anchor() == anchor,
+        "Walking and refusals never move the retained craft anchor");
+  std::cout << std::setprecision(17)
+            << "Surface walker checkpoint: " << actor.foot_position_metres.x
+            << ',' << actor.foot_position_metres.y << ','
+            << actor.foot_position_metres.z << '\n';
+}
 } // namespace
 auto main(int argc, char** argv) -> int {
   try {
@@ -788,6 +1046,10 @@ auto main(int argc, char** argv) -> int {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
       native_fixtures(f, directory);
+    } else if (argc == 3 && std::string_view{argv[1]} == "--walk-fixtures") {
+      const auto directory = std::filesystem::absolute(argv[2]);
+      std::filesystem::create_directories(directory);
+      surface_walk_session(f, directory);
     } else if (argc == 2 && std::string_view{argv[1]} == "--resources") {
       research::FlightEnduranceMeter meter;
       assisted_commands(f, &meter, true);
@@ -796,6 +1058,9 @@ auto main(int argc, char** argv) -> int {
           "Resource-enabled surface trace retains the selected research total");
     } else if (argc == 2 && std::string_view{argv[1]} == "--observations") {
       observed_lifecycle(f);
+    } else if (argc == 2 && std::string_view{argv[1]} == "--walk") {
+      surface_walking(f);
+      surface_walk_session(f);
     } else if (argc == 1) {
       hull_and_idle(f);
       persistence_and_session(f);

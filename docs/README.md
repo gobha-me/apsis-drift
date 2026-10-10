@@ -27,7 +27,7 @@ player's station-to-flight journey.
 - [Saved flight](SAVED_NATIVE_FLIGHT.md) and [port lifecycle](NATIVE_PORT_LIFECYCLE.md)
 - [Starting assembly](NATIVE_STARTING_ASSEMBLY.md) and [station view](NATIVE_STATION_VIEW.md)
 - [Flight controls/reference](NATIVE_FLIGHT_REFERENCE.md)
-- [Terrain pad assessment](TERRAIN_TOUCHDOWN.md) and [landed craft lifecycle](LANDED_CRAFT.md)
+- [Terrain pad assessment](TERRAIN_TOUCHDOWN.md), [landed craft lifecycle](LANDED_CRAFT.md) and [surface walking](FREEDOM_SURFACE_WALK.md)
 - [Starter assets](NATIVE_STARTER_ASSETS.md), [operating assets](WAYFARER_OPERATING_ASSETS.md)
   and [static stowed assets](WAYFARER_STOWED_ASSETS.md)
 

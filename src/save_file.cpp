@@ -374,6 +374,12 @@ auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError> {
   auto contents = read_save_bytes(path);
   if (!contents) return std::unexpected{contents.error()};
+  auto walking = decode_freedom_surface_walk_document_json(*contents);
+  if (walking) return NativeSaveDocument{std::move(*walking)};
+  if (walking.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "save file is malformed or incompatible", walking.error()}};
   auto recovery = decode_freedom_recovery_document_json(*contents);
   if (recovery) return NativeSaveDocument{std::move(*recovery)};
   if (recovery.error().code != SaveSchemaErrorCode::unsupported_format_version)
@@ -460,6 +466,22 @@ auto write_freedom_recovery_file_atomically(
     return std::unexpected{
         SaveFileError{SaveFileErrorCode::invalid_document, path,
                       "recovery state cannot be encoded", encoded.error()}};
+  return write_atomically(path, *encoded,
+                          detail::AtomicSaveTestInterruption::none);
+}
+auto write_freedom_surface_walk_file_atomically(
+    const std::filesystem::path& path,
+    const FreedomSurfaceWalkSaveDocument& document)
+    -> std::expected<void, SaveFileError> {
+  if (!valid_destination(path))
+    return std::unexpected{file_failure(
+        SaveFileErrorCode::invalid_path, path,
+        "save path must name a file inside an existing directory")};
+  const auto encoded = encode_freedom_surface_walk_document_json(document);
+  if (!encoded)
+    return std::unexpected{SaveFileError{
+        SaveFileErrorCode::invalid_document, path,
+        "surface walking state cannot be encoded", encoded.error()}};
   return write_atomically(path, *encoded,
                           detail::AtomicSaveTestInterruption::none);
 }
