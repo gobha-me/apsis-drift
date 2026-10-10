@@ -1,0 +1,173 @@
+{
+  "contract_version": 1,
+  "scope": "Analytic calibration and existing-provider fixture specification; not a saved world or GPU acceptance result",
+  "ownership": "Complete C++ selected world/terrain owner and saved versions; no generator changes",
+  "acceptance_targets": {
+    "frozen_projection_error_output_pixels": 1,
+    "chosen_local_feature_min_samples_across_width": 4,
+    "chosen_local_feature_min_output_pixels_across_width": 4
+  },
+  "vertical_fov_degrees": 75,
+  "analytic_cases": [
+    {
+      "radius_metres": 1000000.0,
+      "reference_altitude_metres": 2.0,
+      "angular_radius_degrees": 89.8854085364659,
+      "horizon_tangent_metres": 2000.00099999975,
+      "horizon_surface_arc_metres": 1999.9983333489715
+    },
+    {
+      "radius_metres": 1000000.0,
+      "reference_altitude_metres": 50.0,
+      "angular_radius_degrees": 89.42705414110482,
+      "horizon_tangent_metres": 10000.12499921876,
+      "horizon_surface_arc_metres": 9999.791673387874
+    },
+    {
+      "radius_metres": 1000000.0,
+      "reference_altitude_metres": 30000.0,
+      "angular_radius_degrees": 76.13756788356616,
+      "horizon_tangent_metres": 246779.25358506132,
+      "horizon_surface_arc_metres": 241945.08276597655
+    },
+    {
+      "radius_metres": 1000000.0,
+      "reference_altitude_metres": 100000.0,
+      "angular_radius_degrees": 65.3800226713429,
+      "horizon_tangent_metres": 458257.569495584,
+      "horizon_surface_arc_metres": 429699.6661514246
+    },
+    {
+      "radius_metres": 1000000.0,
+      "reference_altitude_metres": 3000000.0,
+      "angular_radius_degrees": 14.477512185929925,
+      "horizon_tangent_metres": 3872983.346207417,
+      "horizon_surface_arc_metres": 1318116.071652818
+    },
+    {
+      "radius_metres": 6000000.0,
+      "reference_altitude_metres": 2.0,
+      "angular_radius_degrees": 89.95321819842175,
+      "horizon_tangent_metres": 4898.97989381463,
+      "horizon_surface_arc_metres": 4898.9788053315615
+    },
+    {
+      "radius_metres": 6000000.0,
+      "reference_altitude_metres": 50.0,
+      "angular_radius_degrees": 89.76609177180934,
+      "horizon_tangent_metres": 24494.94845881493,
+      "horizon_surface_arc_metres": 24494.81237659888
+    },
+    {
+      "radius_metres": 6000000.0,
+      "reference_altitude_metres": 30000.0,
+      "angular_radius_degrees": 84.28232031474802,
+      "horizon_tangent_metres": 600749.5318350235,
+      "horizon_surface_arc_metres": 598754.0164922408
+    },
+    {
+      "radius_metres": 6000000.0,
+      "reference_altitude_metres": 600000.0,
+      "angular_radius_degrees": 65.3800226713429,
+      "horizon_tangent_metres": 2749545.416973504,
+      "horizon_surface_arc_metres": 2578197.9969085474
+    },
+    {
+      "radius_metres": 6000000.0,
+      "reference_altitude_metres": 18000000.0,
+      "angular_radius_degrees": 14.477512185929925,
+      "horizon_tangent_metres": 23237900.0772445,
+      "horizon_surface_arc_metres": 7908696.429916908
+    },
+    {
+      "radius_metres": 100000000.0,
+      "reference_altitude_metres": 2.0,
+      "angular_radius_degrees": 89.98854084420853,
+      "horizon_tangent_metres": 20000.0001,
+      "horizon_surface_arc_metres": 19999.999806025167
+    },
+    {
+      "radius_metres": 100000000.0,
+      "reference_altitude_metres": 50.0,
+      "angular_radius_degrees": 89.94270423242081,
+      "horizon_tangent_metres": 100000.01249999923,
+      "horizon_surface_arc_metres": 99999.97917142729
+    },
+    {
+      "radius_metres": 100000000.0,
+      "reference_altitude_metres": 30000.0,
+      "angular_radius_degrees": 88.59672115562105,
+      "horizon_tangent_metres": 2449673.447625214,
+      "horizon_surface_arc_metres": 2449183.6157993856
+    },
+    {
+      "radius_metres": 100000000.0,
+      "reference_altitude_metres": 10000000.0,
+      "angular_radius_degrees": 65.3800226713429,
+      "horizon_tangent_metres": 45825756.9495584,
+      "horizon_surface_arc_metres": 42969966.61514246
+    },
+    {
+      "radius_metres": 100000000.0,
+      "reference_altitude_metres": 300000000.0,
+      "angular_radius_degrees": 14.477512185929925,
+      "horizon_tangent_metres": 387298334.62074167,
+      "horizon_surface_arc_metres": 131811607.1652818
+    }
+  ],
+  "output_dimensions": [
+    [
+      800,
+      450
+    ],
+    [
+      1920,
+      1080
+    ],
+    [
+      3840,
+      2160
+    ]
+  ],
+  "internal_resolution_ratios": [
+    1.0,
+    0.5
+  ],
+  "camera_attitudes": [
+    "nadir",
+    "tangent_horizon",
+    "oblique"
+  ],
+  "lighting": [
+    "day",
+    "terminator",
+    "night"
+  ],
+  "existing_providers": [
+    {
+      "name": "native_home_surface_journey",
+      "universe_seed": "42",
+      "entrypoint": "apsis-drift-freedom-planetary-fixture DIRECTORY --surface-loop --commands",
+      "record": "Actual command-produced phase saves and manifest; no assigned pose"
+    },
+    {
+      "name": "alternate_native_owner",
+      "universe_seed": "43",
+      "entrypoint": "apsis-drift-freedom-start-fixture FILE 43 0 journey",
+      "record": "Actual startup owner/radius; no flown surface claim"
+    },
+    {
+      "name": "neighbor_round_trip",
+      "universe_seed": "42",
+      "entrypoint": "apsis-drift-freedom-planetary-fixture DIRECTORY --neighbor --commands",
+      "record": "Actual changed-world and returned-world saves; existing normal recipe"
+    },
+    {
+      "name": "legacy_airless",
+      "planet_seed": "4",
+      "entrypoint": "apsis-drift-godot-snapshot FILE 4 3 32000 1",
+      "record": "Legacy snapshot family only; not native seed4 travel"
+    }
+  ],
+  "status": "Acceptance definitions; each consumer must separately record pass/fail/unavailable"
+}
