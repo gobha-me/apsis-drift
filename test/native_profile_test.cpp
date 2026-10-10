@@ -321,12 +321,13 @@ auto jump_phases(Seed seed) -> void {
   flight.world = FreedomActiveWorldSelection{1, system.catalog.id, body.id};
   const FreedomResources resources{1, flight.origin.state.craft,
                                    flight.flight.craft, 240};
-  const auto knowledge = need(
+  auto knowledge = need(
       make_freedom_starting_knowledge(seed, kFreedomTravelKnowledgeVersion));
-  const FreedomKnowledgeSaveDocument mapped{{{flight, {}}, resources},
-                                            knowledge};
+  FreedomSurfaceSaveDocument surface{std::move(flight), {}};
+  FreedomResourceSaveDocument fueled{std::move(surface), resources};
+  FreedomKnowledgeSaveDocument mapped{std::move(fueled), std::move(knowledge)};
   const FreedomTravelSaveDocument travel{
-      mapped, {}, NativeStartingAssemblySelection{}, std::nullopt};
+      std::move(mapped), {}, NativeStartingAssemblySelection{}, std::nullopt};
   round_trip(travel, NativeProfileLocation::flight);
   auto live = need(NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, travel, body, {}}));
