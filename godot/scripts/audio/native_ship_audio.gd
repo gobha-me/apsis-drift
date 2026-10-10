@@ -54,7 +54,7 @@ static func telemetry(state: Dictionary) -> Dictionary:
 
 func refresh() -> void:
 	if audio == null or closing: return
-	if not is_instance_valid(view) or not view is FlightView or not view.activated or not view.error.is_empty():
+	if not is_instance_valid(view) or not view is FlightView or not view.activated or not view.error.is_empty() or view.surface_walking():
 		audio.update_telemetry({}, false, false)
 		return
 	var active: bool = not view.paused and view.focused and not view.save_dialog.visible

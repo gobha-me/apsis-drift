@@ -239,8 +239,10 @@ surface survey redacted through actual knowledge. Saved commitment policy and
 the composed operation acceptance remain #102.
 It preserves existing worlds and saves and introduces no weather clock, force,
 damage or raw cockpit disclosure. Local/neighboring observations, resource state,
-bounded jump integration and explicit standard recovery are implemented. Suited
-planetary walking (#199), saved environmental commitment policy (#102), automatic
+bounded jump integration and explicit standard recovery are implemented. The
+[surface walking prototype](FREEDOM_SURFACE_WALK.md) adds ground movement and outside
+save/resume; authored hatch transfer and exposure policy remain #199 work. Saved
+environmental commitment policy (#102), automatic
 loss consequences and wider manual/controller/hardware acceptance remain work.
 
 ## Resource implementation checkpoint — 2026-10-09

@@ -25,6 +25,19 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  bool surface_walk_selected{};
+  std::optional<PlanetSurfaceWalkerState> surface_actor;
+  if (auto* walking =
+          std::get_if<FreedomSurfaceWalkSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Surface walking requires Freedom"};
+    if (auto valid = validate_freedom_surface_walk_document(*walking); !valid)
+      return std::unexpected{valid.error().detail};
+    surface_walk_selected = true;
+    surface_actor = walking->actor;
+    auto inner = std::move(walking->voyage);
+    selected.document = std::move(inner);
+  }
   std::optional<FreedomRecoveryState> recovery;
   if (auto* d = std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
     if (selected.mode != NativeStartup::Mode::freedom)
@@ -163,6 +176,16 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   result.knowledge_ = std::move(knowledge);
   result.travel_ = std::move(travel);
   result.recovery_ = std::move(recovery);
+  result.surface_walk_selected_ = surface_walk_selected;
+  result.surface_walker_ = surface_actor;
+  if (surface_actor) {
+    auto terrain = PlanetSurfaceWalkTerrain::create(
+        result.system_, result.rotation_, *result.surface_->landed,
+        result.document_.flight.tick);
+    if (!terrain) return std::unexpected{terrain.error()};
+    result.surface_walk_terrain_ =
+        std::make_shared<PlanetSurfaceWalkTerrain>(std::move(*terrain));
+  }
   if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
                    boarding->phase == FreedomBoardingPhase::disembarking)) {
     auto view = result.boarding_view();
@@ -194,6 +217,9 @@ auto NativeFreedomFlightSession::begin_boarding()
 }
 auto NativeFreedomFlightSession::begin_disembarking()
     -> std::expected<void, std::string> {
+  if (surface_walker_)
+    return std::unexpected{
+        "Return from the surface before using station boarding"};
   if (actor_ || !boarding_ || boarding_->phase != FreedomBoardingPhase::seated)
     return std::unexpected{"Disembarking requires a seated pilot"};
   return begin_boarding_route(GameplayBoardingDirection::disembark);
@@ -249,7 +275,7 @@ auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before port actions"};
-  if (actor_)
+  if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (docking_ && docking_->attached)
     return std::unexpected{"Release the current port before changing target"};
@@ -283,7 +309,7 @@ auto NativeFreedomFlightSession::capture_port()
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before capture"};
-  if (actor_)
+  if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (surface_ && (surface_->gear_deployed || surface_->landed))
     return std::unexpected{"Stow landing gear before station capture"};
@@ -330,7 +356,7 @@ auto NativeFreedomFlightSession::release_port()
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
-  if (actor_)
+  if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (!docking_ || !docking_->attached)
     return std::unexpected{"The craft is not attached to an Origin port"};
@@ -366,7 +392,7 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before changing hold"};
-  if (actor_)
+  if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (surface_ && surface_->landed && request.target)
     return std::unexpected{"Lift off before requesting orbit hold"};
@@ -395,7 +421,7 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return advance_jump(controls, step);
-  if (actor_)
+  if (actor_ || surface_walker_)
     return std::unexpected{
         "Walking owns the shared tick while outside the craft"};
   if (surface_ && (surface_->gear_deployed || surface_->landed ||
@@ -619,6 +645,8 @@ auto NativeFreedomFlightSession::advance_craft_tick(
 auto NativeFreedomFlightSession::advance_walk(
     const OriginWalkControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (surface_walker_)
+    return std::unexpected{"Use surface walking controls outside the craft"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -687,6 +715,14 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
       bytes.find('\0') != std::string::npos || !path.is_absolute())
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
+  if (surface_walk_selected_) {
+    auto document = surface_walk_document();
+    if (!document) return std::unexpected{document.error()};
+    auto written = write_freedom_surface_walk_file_atomically(path, *document);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (recovery_) {
     auto document = recovery_document();
     if (!document) return std::unexpected{document.error()};
@@ -790,7 +826,7 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before changing gear"};
-  if (actor_ || (docking_ && docking_->attached))
+  if (actor_ || surface_walker_ || (docking_ && docking_->attached))
     return std::unexpected{
         "Release the station port and sit before changing gear"};
   if (surface_ && surface_->landed && !deployed)
@@ -807,8 +843,8 @@ auto NativeFreedomFlightSession::commit_touchdown(
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
-  if (actor_ || (docking_ && docking_->attached) || !surface_ ||
-      !surface_->gear_deployed || surface_->landed)
+  if (actor_ || surface_walker_ || (docking_ && docking_->attached) ||
+      !surface_ || !surface_->gear_deployed || surface_->landed)
     return std::unexpected{
         "Touchdown requires deployed gear and a free airborne craft"};
   const auto anchor =
@@ -843,7 +879,7 @@ auto NativeFreedomFlightSession::release_surface()
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
-  if (!surface_ || !surface_->landed || actor_ ||
+  if (!surface_ || !surface_->landed || actor_ || surface_walker_ ||
       (docking_ && docking_->attached))
     return std::unexpected{"Liftoff requires a landed craft"};
   const auto pose = release_landed_craft(system_, rotation_, *surface_->landed,

@@ -65,6 +65,7 @@ TESTS = {
     "native_roundtrip_pilot_aligned": "roundtrip_saves",
     "native_roundtrip_pilot_offset": "roundtrip_saves",
     "native_surface": "surface_saves",
+    "native_surface_walk": "surface_walk_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
     "physical_lighting_integration": "physical_snapshots",
@@ -168,7 +169,7 @@ def main(argv=None):
     if any(name in selected for name in ("native_planetary", "native_voyage", *ROUNDTRIP_TESTS)):
         if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
             parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
-    if "native_surface" in selected:
+    if any(name in selected for name in ("native_surface", "native_surface_walk")):
         if not surface_fixture.is_file() or not os.access(surface_fixture, os.X_OK):
             parser.error(f"missing C++ surface fixture: {surface_fixture}")
     def prepare_physical_fixtures():
@@ -241,7 +242,7 @@ def main(argv=None):
     if any(name in selected for name in ("native_planetary", "native_voyage", *ROUNDTRIP_TESTS)):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
-    if "native_surface" in selected:
+    if any(name in selected for name in ("native_surface", "native_surface_walk")):
         shutil.copy2(surface_fixture, work / surface_fixture.name)
         surface_fixture = work / surface_fixture.name
     env = os.environ.copy()
@@ -263,7 +264,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", *ROUNDTRIP_TESTS, "native_surface") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", *ROUNDTRIP_TESTS, "native_surface", "native_surface_walk") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -450,6 +451,21 @@ def main(argv=None):
         save()
         if code != 0 or timed_out:
             print(f"FAIL surface fixture: {log}", flush=True)
+            return 1
+        report["setup"][-1]["files_sha256"] = {
+            path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
+        save()
+    if "native_surface_walk" in selected:
+        phases = work / "surface-walk"
+        log = work / "surface-walk-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(surface_fixture), "--walk-fixtures", str(phases)], log, env, args.timeout)
+        report["setup"].append({"family": "surface_walk_saves", "returncode": code,
+            "timed_out": timed_out, "seconds": elapsed,
+            "fixture_sha256": sha256(surface_fixture)})
+        save()
+        if code != 0 or timed_out:
+            print(f"FAIL surface walk fixture: {log}", flush=True)
             return 1
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
@@ -641,6 +657,8 @@ def main(argv=None):
             arguments = [str(work / path) for path in
                          ("freedom-0.json", "freedom-25.json", "career.json",
                           "corrupt.json", "snapshot-42.json")]
+        elif TESTS[name] == "surface_walk_saves":
+            arguments = [str(work / path) for path in ("surface-walk", "native-assets", "surface-walk-native")]
         elif TESTS[name] == "surface_saves":
             arguments = [str(work / path) for path in ("surface", "native-assets", "surface-native")]
         elif TESTS[name] in ("planetary_saves", "voyage_saves"):

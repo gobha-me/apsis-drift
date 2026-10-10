@@ -78,8 +78,9 @@ The existing main and station-withdrawal exhaust remain animated from applied
 thrust. Dedicated downward liftoff/upward-force exhaust is still a visual gap.
 Gear presentation currently selects the authored stowed/deployed calibration
 endpoints immediately. It adds no new asset or mechanism study. Compression
-animation, swept impact response, EVA/hatch exit, taxiing, terrain detail and
-manual pilot acceptance remain separate work.
+animation, swept impact response, authored hatch transfer, taxiing, terrain detail and
+manual pilot acceptance remain separate work. The [surface walking prototype](FREEDOM_SURFACE_WALK.md)
+uses the retained landed anchor for exit, ground movement and nearby reboarding.
 
 The paused **Surface conditions** action exposes the shared
 [starter environmental reference](CRAFT_ENVIRONMENT_ASSESSMENT.md) through

@@ -99,7 +99,7 @@ auto NativeFreedomFlightSession::jump_available() const
         "Continue the recorded loss before controlling the replacement"};
   if (!travel_ || travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Select an idle native jump first"};
-  if (actor_ || (docking_ && docking_->attached) ||
+  if (actor_ || surface_walker_ || (docking_ && docking_->attached) ||
       (surface_ && surface_->landed))
     return std::unexpected{"Jump requires a seated pilot in free flight"};
   if (!resources_ || !resources_->jump_charges)

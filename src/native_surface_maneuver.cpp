@@ -49,7 +49,7 @@ auto NativeFreedomFlightSession::request_landing()
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before landing aid"};
-  if (actor_ || (docking_ && docking_->attached) ||
+  if (actor_ || surface_walker_ || (docking_ && docking_->attached) ||
       (surface_ && surface_->landed))
     return std::unexpected{
         "Landing requires a seated pilot in a free airborne craft"};
@@ -74,7 +74,8 @@ auto NativeFreedomFlightSession::request_landing()
 auto NativeFreedomFlightSession::surface_maneuver_controls() const
     -> std::expected<NativeFlightControls, std::string> {
   if (!surface_ || !surface_->gear_deployed || surface_->landed || actor_ ||
-      (docking_ && docking_->attached) || document_.model.hold.target)
+      surface_walker_ || (docking_ && docking_->attached) ||
+      document_.model.hold.target)
     return std::unexpected{
         "Surface maneuver requires deployed gear and free flight"};
   auto snapshot = TerrainTouchdownSnapshot::create(*this, true);
@@ -184,7 +185,7 @@ auto NativeFreedomFlightSession::surface_maneuver_controls() const
 auto NativeFreedomFlightSession::try_surface_contact() -> void {
   if (!surface_ || !surface_->gear_deployed || surface_->landed ||
       surface_maneuver_.kind == NativeSurfaceManeuverKind::liftoff ||
-      (docking_ && docking_->attached) || actor_)
+      (docking_ && docking_->attached) || actor_ || surface_walker_)
     return;
   const auto checksum = rigid_body_state_checksum({system_}, document_.flight);
   if (checksum) (void)commit_touchdown(*checksum);

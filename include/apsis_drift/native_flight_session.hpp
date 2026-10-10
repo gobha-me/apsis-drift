@@ -104,7 +104,7 @@ class NativeFreedomFlightSession {
     if (travel_ && travel_->phase != FreedomJumpPhase::idle)
       return std::unexpected{
           "Cancel the active jump before changing assistance"};
-    if (actor_)
+    if (actor_ || surface_walker_)
       return std::unexpected{"Board and sit before controlling the craft"};
     document_.model.assistance = enabled;
     if (!enabled) cancel_surface_maneuver();
@@ -160,6 +160,21 @@ class NativeFreedomFlightSession {
       -> const std::optional<FreedomSurfaceState>& {
     return surface_;
   }
+  [[nodiscard]] auto surface_walker() const
+      -> const std::optional<PlanetSurfaceWalkerState>& {
+    return surface_walker_;
+  }
+  [[nodiscard]] auto surface_walk_selected() const -> bool {
+    return surface_walk_selected_;
+  }
+  [[nodiscard]] auto begin_surface_walk() -> std::expected<void, std::string>;
+  [[nodiscard]] auto return_from_surface_walk()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto advance_surface_walk(const OriginWalkControls&,
+                                          SimulationSeconds = kSimulationStep)
+      -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto surface_walk_document() const
+      -> std::expected<FreedomSurfaceWalkSaveDocument, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
   [[nodiscard]] auto set_landing_gear(bool deployed)
       -> std::expected<void, std::string>;
@@ -211,5 +226,8 @@ class NativeFreedomFlightSession {
   NativePortApproach port_approach_;
   std::optional<FreedomSurfaceState> surface_;
   NativeSurfaceManeuver surface_maneuver_;
+  bool surface_walk_selected_{};
+  std::optional<PlanetSurfaceWalkerState> surface_walker_;
+  std::shared_ptr<PlanetSurfaceWalkTerrain> surface_walk_terrain_;
 };
 } // namespace apsis_drift

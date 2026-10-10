@@ -11,7 +11,8 @@ auto missing_recovery_owner(const NativeSaveDocument& document) -> bool {
       [](const auto& d) -> bool {
         using T = std::decay_t<decltype(d)>;
         if constexpr (std::is_same_v<T, SaveDocument> ||
-                      std::is_same_v<T, FreedomRecoverySaveDocument>)
+                      std::is_same_v<T, FreedomRecoverySaveDocument> ||
+                      std::is_same_v<T, FreedomSurfaceWalkSaveDocument>)
           return false;
         else if constexpr (std::is_same_v<T, FreedomSaveDocument>)
           return d.lineage.has_value();
@@ -222,6 +223,18 @@ auto select_document(FreedomRecoverySaveDocument d,
   return selected;
 }
 } // namespace
+namespace {
+auto select_document(FreedomSurfaceWalkSaveDocument d,
+                     std::optional<std::filesystem::path> source)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto valid = validate_freedom_surface_walk_document(d); !valid)
+    return std::unexpected{valid.error().detail};
+  auto selected = select_document(d.voyage, source);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(d);
+  return selected;
+}
+} // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   auto document =
@@ -267,6 +280,18 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
                            "flight save yet"};
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
+  if (const auto* walking =
+          std::get_if<FreedomSurfaceWalkSaveDocument>(&selected.document)) {
+    if (walking->actor)
+      return std::unexpected{
+          "Surface walking requires its planetary presenter"};
+    auto inner = selected;
+    inner.document = walking->voyage;
+    auto prepared = prepare_native_freedom_station_start(std::move(inner));
+    if (!prepared) return std::unexpected{prepared.error()};
+    prepared->selected.document = std::move(selected.document);
+    return prepared;
+  }
   if (const auto* r =
           std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
     if (auto v = validate_freedom_recovery_document(*r); !v)
@@ -384,6 +409,18 @@ auto native_save_freedom(const NativeStartup& selected,
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
 
+  if (const auto* walking =
+          std::get_if<FreedomSurfaceWalkSaveDocument>(&selected.document)) {
+    const auto canonical = select_document(*walking, selected.source_save);
+    if (!canonical || canonical->home_planet != selected.home_planet)
+      return std::unexpected{
+          "Surface walking Save As requires its actual selected planet"};
+    auto written =
+        write_freedom_surface_walk_file_atomically(destination, *walking);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (const auto* r =
           std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
     auto canonical = select_document(*r, selected.source_save);

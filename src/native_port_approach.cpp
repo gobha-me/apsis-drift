@@ -25,7 +25,8 @@ auto length(V v) -> double {
 
 auto NativeFreedomFlightSession::port_approach_available() const
     -> std::expected<void, std::string> {
-  if (actor_) return std::unexpected{"Board and sit before approaching a port"};
+  if (actor_ || surface_walker_)
+    return std::unexpected{"Board and sit before approaching a port"};
   if (surface_ && (surface_->landed || surface_->gear_deployed))
     return std::unexpected{"Lift off and stow gear before port approach"};
   if (!docking_ || docking_->attached)
