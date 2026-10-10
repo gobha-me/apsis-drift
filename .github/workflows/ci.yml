@@ -256,6 +256,7 @@ jobs:
           --test native_roundtrip --test native_roundtrip_pilot
           --test native_roundtrip_pilot_aligned --test native_roundtrip_pilot_offset
           --test home_navigation --test native_surface --test native_surface_walk
+          --test native_surface_loop
           --test wayfarer_operating
           --test recorded_audio_shutdown
 
@@ -273,5 +274,7 @@ jobs:
             build-native-contracts/native-contracts-*/surface-native/*.json
             build-native-contracts/native-contracts-*/surface-walk/*.json
             build-native-contracts/native-contracts-*/surface-walk-native/*.json
+            build-native-contracts/native-contracts-*/surface-loop/*.json
+            build-native-contracts/native-contracts-*/surface-loop-native/*.json
           if-no-files-found: warn
           retention-days: 7
