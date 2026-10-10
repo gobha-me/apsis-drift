@@ -7,6 +7,7 @@ const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const NativeAudio = preload("res://scripts/audio/native_ship_audio.gd")
+const NativeTitle = preload("res://scripts/native/native_title.gd")
 
 var bridge: Variant = null
 var selected: Dictionary = {}
@@ -31,6 +32,8 @@ var load_theme: Theme
 var load_origin: Control
 var load_previous_mode: int
 var load_path := ""
+var title_view: Control
+var title_options: Dictionary = {}
 
 
 func configure_audio(options: Dictionary) -> void:
@@ -157,7 +160,10 @@ func parse_selection(arguments: PackedStringArray) -> Dictionary:
 			selection["audio_persist"] = value == "true"
 		else:
 			return {}
-	if not selection.has("mode") or selection.value.is_empty():
+	if not selection.has("mode"):
+		if selection.get("validate_only", false): return {}
+		selection["mode"] = "title"
+	elif selection.value.is_empty():
 		return {}
 	if selection.has("audio_hum") != selection.has("audio_propulsion") or (selection.has("audio_persist") and not selection.has("audio_hum")): return {}
 	return selection
@@ -529,7 +535,7 @@ func _ready() -> void:
 	if presentation_only: return
 	var options := parse_selection(OS.get_cmdline_user_args())
 	if options.is_empty():
-		fail("supply exactly one --new-game=SEED or --continue=ABSOLUTE_PATH")
+		fail("use the title, or supply one --new-game=SEED or --continue=ABSOLUTE_PATH; validation requires a selection")
 		return
 	if not ClassDB.class_exists("FreedomBridge"):
 		GDExtensionManager.load_extension("res://bin/freedom.gdextension")
@@ -537,10 +543,43 @@ func _ready() -> void:
 		fail("native C++ bridge is unavailable")
 		return
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	if options.mode == "title":
+		open_title(owner, options)
+		return
 	if not select_start(owner, options):
 		fail(error)
 		return
 	if options.get("validate_only", false): get_tree().quit(0)
+
+
+func open_title(owner: Variant, options: Dictionary) -> void:
+	bridge = owner
+	title_options = options.duplicate(true)
+	title_view = NativeTitle.new()
+	title_view.persist_controls = options.get("persist_controls", true)
+	add_child(title_view)
+	title_view.start_requested.connect(start_from_title, CONNECT_DEFERRED)
+	title_view.quit_requested.connect(request_native_quit)
+	print("Freedom native title opened: no journey selected")
+
+
+func start_from_title(selection: Dictionary) -> void:
+	if closing or title_view == null: return
+	if not title_view.focused:
+		title_view.refuse("Restore application focus before opening a journey.")
+		return
+	var options := title_options.duplicate(true)
+	options.merge(selection, true)
+	if not select_start(bridge, options):
+		title_view.refuse(error)
+		error = ""
+		return
+	# The existing complete C++/view transaction succeeded; retire only the title.
+	var previous := title_view
+	title_view = null
+	remove_child(previous)
+	previous.free()
+	title_options.clear()
 
 func ready_to_commit() -> bool:
 	return presentation_only and error.is_empty() and station_view != null

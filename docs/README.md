@@ -7,6 +7,7 @@ player's station-to-flight journey.
 ## Run and develop
 
 - [Native project setup](../godot/README.md)
+- [Native start screen](NATIVE_TITLE.md): seed-based New Game, file Continue and the read-only flight reference.
 - [Development, headless tests and quality checks](DEVELOPMENT.md)
 - [Retained terminal build and run](TERMINAL.md)
 - [Godot editor import limitation](GODOT_EDITOR_IMPORT.md)

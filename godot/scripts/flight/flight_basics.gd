@@ -6,6 +6,7 @@ const TITLES := ["Thrust and momentum", "Space is not orbit", "Flight assistance
 const SAVED_TITLES := ["Physical thrust and momentum", "Air and orbital observations", "Physical assistance", "Look without steering", "Origin ports", "Committed saves", "Fuel and station service", "Chart and jumps", "Landing and liftoff", "Suited ground walking", "Recorded loss and recovery"]
 const NativeStatus = preload("res://scripts/native/native_status.gd")
 var saved_flight := false
+var title_reference := false
 var saved_wayfarer := false
 var saved_context: Dictionary = {}
 var controls: Node
@@ -157,6 +158,10 @@ func refresh() -> void:
 		return
 	heading.text = "FLIGHT BASICS  %d / %d  —  %s" % [page+1, titles().size(), titles()[page]]
 	_paused.text = "FLIGHT PAUSED  /  READ-ONLY REFERENCE"
+	if title_reference:
+		_paused.text = "READ-ONLY REFERENCE / NO JOURNEY RUNNING"
+		back_button.text = "Back to title"
+		_hint.text = "Left / right or Tab: select · Up / down: scroll text\nA / Cross / Enter: open · Esc / Start: back to title"
 	body.text = saved_page_text(page, controls, saved_wayfarer) if saved_flight else page_text(page, controls, rotational_coasting, orbit_preserving_assist)
 	if saved_flight and not saved_context.is_empty():
 		var current := NativeStatus.summary(saved_context)

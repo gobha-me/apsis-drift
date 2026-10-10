@@ -12,19 +12,21 @@ an installed executable if `godot` is not on PATH. The launcher fetches pinned
 C++ dependencies on its first build; it does not download Godot.
 
 ```sh
+tools/run_godot_native.sh
 tools/run_godot_native.sh --new-game=42
 tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
-Select exactly one mode. Add `--headless-validate` to check saved-start selection
-without opening a window. The Godot project’s default scene is
-`scenes/native_start_shell.tscn`; the launcher supplies its explicit seed or save
-selection and prepares the source-verified asset packages.
+No selection opens the [native title](../docs/NATIVE_TITLE.md). For direct startup,
+select exactly one mode. Add `--headless-validate` with a selection to check
+saved-start validation without opening a window. The Godot project’s default
+scene is `scenes/native_start_shell.tscn`; the launcher prepares the
+source-verified asset packages.
 
 New Game starts on Origin Station. WASD or the left stick walks; right-drag or
 the right stick looks. Escape opens pause controls. Save As persists through
 C++; Quit does not autosave. Continue starts paused. Boarding, sitting and
-leaving the station remain integration work. See [current scope](../docs/ROADMAP.md)
+leaving the station are playable prototypes with refinements still deferred. See [current scope](../docs/ROADMAP.md)
 and [saved station walking](../docs/SAVED_STATION_WALK.md).
 
 ## Build and headless contracts
