@@ -108,8 +108,10 @@ not terrain clearance. Assistance is actual bounded torque, without automatic
 hover or neutral translation braking; a persisted orbit-hold request is separate.
 Viewing help does not select or change it. Back returns to controls while paused;
 resume still requires current individual neutrality. Focus return and Save As
-cancellation never resume automatically. Fuel, jump travel, planetary touchdown
-and the composed boarding/seating journey remain unqualified by this reference.
+cancellation never resume automatically. The current saved profile also teaches fuel/jump separation, chart travel,
+landing/liftoff, suited return and recorded-loss replacement. The historical
+thrust lab keeps its separate limitations; manual/controller and wider journey
+qualification remain in their existing work items.
 
 B/Circle or Resume requests explicit resumption after current
 mapped inputs are neutral. Closing a chooser never resumes automatically.

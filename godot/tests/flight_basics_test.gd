@@ -51,6 +51,12 @@ func run() -> void:
 		quit(1)
 		return
 	root.size = Vector2i(1280, 720)
+	# Validate absent/broken readouts before the context is shown in a real menu.
+	var snapshot := {"altitude": 900.0, "surface_speed": 0.0, "radial_rate": 0.0, "air_density": 1.0, "attached": false, "surface": {"landed": true}, "surface_walk": {}, "resources": {"selected": true, "fraction": 0.25, "jump_charges": 1}, "jump": {"phase": "idle"}, "chart": {"rows": []}}
+	var original := snapshot.duplicate(true)
+	for damaged in [{}, {"altitude": NAN}, {"altitude": 900.0, "surface": []}]:
+		check("unavailable" in Basics.NativeStatus.summary(damaged), "Malformed help context manufactured current observations")
+	check(snapshot == original, "Help observations mutated the context")
 	controls = Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true
@@ -161,10 +167,13 @@ func run() -> void:
 		pause()
 		await layout_settle()
 		check(is_instance_valid(menu.basics_button) and menu.basics.saved_flight, "Saved reference entry/profile missing")
+		menu.sync_saved_state(snapshot, false)
+		check(menu.basics.saved_context == snapshot, "Saved reference did not consume the menu's projected observations")
 		menu.basics_button.grab_focus()
 		await key(KEY_ENTER, true)
 		await key(KEY_ENTER, false)
 		check(menu.basics.visible and not controls.enabled, "Saved reference entry resumed controls")
+		check("Landed" in menu.basics._paused.text and not "Current observations" in menu.basics.body.text, "Context banner hid instructions below repeated telemetry")
 		check(controls.rebind("forward", "key", {"kind": "key", "code": KEY_T}), "Saved reference remap fixture failed")
 		menu.refresh_bindings()
 		check(Basics.binding(controls, "forward") in menu.basics.body.text and "R2" in menu.basics.body.text and controls.binding_label("forward", "key") == "T", "Saved reference failed current remapped/PlayStation labels")
@@ -181,6 +190,9 @@ func run() -> void:
 		check("flight saves are not implemented" not in complete and "practice relocates" not in complete and "16 m" not in complete and "NAV" not in complete, "Saved reference inherited lab capabilities")
 		check("actual atmosphere boundary" in complete and "20 km" not in complete and "physical torque fractions" in complete and "automatic hover" in complete, "Saved reference misstated orbit/actuator model")
 		check("Quit does not autosave" in complete and "last committed" in complete, "Saved reference lost committed save policy")
+		check("Fuel accounting and jump travel are not implemented" not in complete and "three separate jump charges" in complete and "committed transit cannot be canceled" in complete and "Standard replacement" in complete, "Reference denies or misstates shipped Freedom operations")
+		check("Current observations" in complete and "Fuel 25.0%" in complete and "Jumps 1/3" in complete and snapshot == original, "Current reference invented resources or edited observations")
+		check(("Return through hatch" in complete) == wayfarer and ("This historical craft has no supported Wayfarer landing" in complete) == not wayfarer, "Reference manufactured supported surface actions for the historical craft")
 		var ports := Basics.saved_page_text(4, controls, wayfarer)
 		check(("Target D1 / D2" in ports) == wayfarer and ("no supported Wayfarer" in ports) == not wayfarer, "Historical profile manufactured port support")
 		controls.waiting_action = "forward"

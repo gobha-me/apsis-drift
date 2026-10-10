@@ -247,6 +247,9 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 func sync_saved_state(state: Dictionary, failed: bool) -> void:
 	if not saved_flight:
 		return
+	if is_instance_valid(basics):
+		basics.saved_context = state.duplicate(true)
+		if basics.visible: basics.refresh()
 	saved_assist_button.set_pressed_no_signal(state.get("assistance", false))
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	var walking: bool = not state.get("surface_walk", {}).is_empty()

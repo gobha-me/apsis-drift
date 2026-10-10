@@ -292,6 +292,7 @@ func check_saved_reference(view: Node, owner: Variant, directory: String) -> voi
 	await process_frame
 	physical_key(KEY_ENTER, false)
 	check(menu.basics.visible and view.paused and not view.player_input.enabled, "Real saved reference entry resumed flight")
+	check(menu.basics.saved_context == before and "PAUSED / READ-ONLY" in menu.basics._paused.text, "Real saved reference lost same-tick C++ observations")
 	joy_button(JOY_BUTTON_A, true)
 	await process_frame
 	joy_button(JOY_BUTTON_A, false)
