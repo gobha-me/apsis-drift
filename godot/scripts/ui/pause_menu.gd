@@ -45,6 +45,20 @@ var menu_margin: MarginContainer
 var basics: Control
 var basics_button: Button
 var entry_focus_frames := 0
+var menu_theme: Theme
+var menu_heading: Label
+var binding_heading: Label
+var menu_layout: VBoxContainer
+var content_columns: BoxContainer
+var settings_scroll: ScrollContainer
+var sized_controls: Array[Control] = []
+var readable_scale := -1.0
+
+static func saved_layout_scale(logical: Vector2, pixels: Vector2) -> float:
+	if not logical.is_finite() or not pixels.is_finite() or minf(logical.x, logical.y) < 1.0 or minf(pixels.x, pixels.y) < 1.0:
+		return -1.0
+	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))
+	return scale if is_finite(scale) and scale <= 64.0 else -1.0
 
 func _ready() -> void:
 	layer = 20
@@ -59,19 +73,24 @@ func _ready() -> void:
 		margin.add_theme_constant_override("margin_" + side, 48)
 	panel.add_child(margin)
 	var layout := VBoxContainer.new()
+	menu_layout = layout
 	layout.add_theme_constant_override("separation", 24)
 	margin.add_child(layout)
 	var heading := Label.new()
+	menu_heading = heading
 	heading.text = "APSIS DRIFT / FLIGHT CONTROLS"
 	heading.add_theme_font_size_override("font_size", 34)
 	layout.add_child(heading)
-	var columns := HBoxContainer.new()
+	var columns: BoxContainer = BoxContainer.new() if saved_flight else HBoxContainer.new()
+	content_columns = columns
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	columns.add_theme_constant_override("separation", 40)
 	layout.add_child(columns)
 	left_scroll = ScrollContainer.new()
 	left_scroll.custom_minimum_size.x = 600
 	left_scroll.follow_focus = true
+	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL if saved_flight else Control.SIZE_FILL
+	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	columns.add_child(left_scroll)
 	var left := VBoxContainer.new()
@@ -79,11 +98,13 @@ func _ready() -> void:
 	left.add_theme_constant_override("separation", 12)
 	left_scroll.add_child(left)
 	var theme := Theme.new()
+	menu_theme = theme
 	theme.default_font_size = 26
 	margin.theme = theme
 	var note := Label.new()
 	if saved_flight:
 		saved_note = note
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	elif controls.thrust_mode:
 		note.text = "THRUST LAB / CURRENT BINDINGS ON THE RIGHT\nFlight basics explains movement, orbit and limits.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: resume"
 	else:
@@ -99,6 +120,7 @@ func _ready() -> void:
 		saved_assist_button.text = "Assisted piloting"
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
 		left.add_child(saved_assist_button)
+		sized_controls.append(saved_assist_button)
 		saved_hold_button = add_button(left, "Hold current orbit\nradius and plane", func(): hold_requested.emit(true))
 		saved_hold_off_button = add_button(left, "Disable orbit-hold\nrequest", func(): hold_requested.emit(false))
 		saved_hold_note = Label.new()
@@ -124,6 +146,7 @@ func _ready() -> void:
 				audio_preferences.save_settings()
 			ship_audio_muted.emit(value))
 		left.add_child(audio_toggle)
+		sized_controls.append(audio_toggle)
 		if audio_preferences != null:
 			for item in [["master", "Ship audio master"], ["machinery", "Background machinery"],
 				["propulsion", "Propulsion"], ["atmosphere", "Atmospheric airflow"]]:
@@ -175,6 +198,7 @@ func _ready() -> void:
 		controls.settings.invert_look = value
 		controls.save_settings())
 	left.add_child(invert)
+	sized_controls.append(invert)
 	var prompts := OptionButton.new()
 	for option in ["Prompts: automatic", "Prompts: Xbox", "Prompts: PlayStation"]:
 		prompts.add_item(option)
@@ -184,6 +208,7 @@ func _ready() -> void:
 		controls.save_settings()
 		refresh_bindings())
 	left.add_child(prompts)
+	sized_controls.append(prompts)
 	add_button(left, "Restore default bindings", func():
 		controls.defaults()
 		controls.install()
@@ -198,7 +223,9 @@ func _ready() -> void:
 	# settings column scrolls; capture deliberately consumes navigation input.
 	layout.add_child(message)
 	var scroll := ScrollContainer.new()
+	settings_scroll = scroll
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.follow_focus = true
 	columns.add_child(scroll)
 	var rows := VBoxContainer.new()
@@ -206,7 +233,9 @@ func _ready() -> void:
 	rows.add_theme_constant_override("separation", 10)
 	scroll.add_child(rows)
 	var title := Label.new()
+	binding_heading = title
 	title.text = "REMAP  /  choose a binding, then press its replacement"
+	if saved_flight: title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.add_theme_font_size_override("font_size", 22)
 	rows.add_child(title)
 	for i in controls.ACTIONS.size():
@@ -235,6 +264,9 @@ func _ready() -> void:
 		panel.add_child(basics)
 		basics.back_requested.connect(close_basics)
 	refresh_bindings()
+	if saved_flight:
+		get_window().size_changed.connect(layout_saved_menu)
+		layout_saved_menu()
 	panel.hide()
 
 func add_button(parent: Node, text: String, action: Callable) -> Button:
@@ -243,6 +275,9 @@ func add_button(parent: Node, text: String, action: Callable) -> Button:
 	button.custom_minimum_size.y = 42
 	button.pressed.connect(action)
 	parent.add_child(button)
+	sized_controls.append(button)
+	if saved_flight and readable_scale > 0:
+		button.custom_minimum_size.y = ceili(44 * readable_scale)
 	return button
 
 func add_slider(parent: Node, title: String, key: String, low: float, high: float, step: float) -> void:
@@ -262,6 +297,32 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 		controls.install()
 		controls.save_settings())
 	parent.add_child(slider)
+	sized_controls.append(slider)
+
+func layout_saved_menu() -> void:
+	if not saved_flight or menu_theme == null: return
+	var pixels := Vector2(get_window().size)
+	var scale := saved_layout_scale(get_viewport().get_visible_rect().size, pixels)
+	if scale <= 0: return
+	var stacked := pixels.x < 1000.0
+	if is_equal_approx(scale, readable_scale) and content_columns.vertical == stacked: return
+	readable_scale = scale
+	menu_theme.default_font_size = ceili(18 * scale)
+	menu_heading.add_theme_font_size_override("font_size", ceili(26 * scale))
+	binding_heading.add_theme_font_size_override("font_size", ceili(18 * scale))
+	saved_note.add_theme_font_size_override("font_size", ceili(18 * scale))
+	message.add_theme_font_size_override("font_size", ceili(18 * scale))
+	message.custom_minimum_size.y = ceili(44 * scale)
+	for side in ["left", "right", "top", "bottom"]:
+		menu_margin.add_theme_constant_override("margin_" + side, ceili(24 * scale))
+	menu_layout.add_theme_constant_override("separation", ceili(12 * scale))
+	content_columns.add_theme_constant_override("separation", ceili(20 * scale))
+	content_columns.vertical = stacked
+	left_scroll.custom_minimum_size.x = minf(320.0, maxf(1.0, pixels.x - 48.0)) * scale
+	for item in sized_controls:
+		item.custom_minimum_size.y = ceili(44 * scale)
+	layout_saved_hold()
+
 
 func layout_saved_hold() -> void:
 	if saved_hold_note == null or get_window().size.y <= 0: return
@@ -281,6 +342,7 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		basics.saved_context = state.duplicate(true)
 		if basics.visible: basics.refresh()
 	saved_assist_button.set_pressed_no_signal(state.get("assistance", false))
+	saved_assist_button.text = "Assisted piloting · ON" if state.get("assistance", false) else "Assisted piloting · OFF"
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	var walking: bool = not state.get("surface_walk", {}).is_empty()
 	saved_assist_button.disabled = failed or jumping or walking
@@ -330,7 +392,7 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 func refresh_bindings() -> void:
 	if saved_flight and saved_note != null:
 		var family := "pad" if controls.last_device == "pad" else "key"
-		saved_note.text = "SAVED FLIGHT / CURRENT BINDINGS ON THE RIGHT\n%s main · %s weaker retro\n%s look hold · %s view · %s assist\nRelease look to recenter; center shared yaw/heave before reuse.\nSticks/keys request physical actuator torque, not target turn rate.\nAssistance supports piloting; it is not autopilot.\nSave As preserves committed flight. Quit does not autosave.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: explicit resume after neutral." % [controls.binding_label("forward", family), controls.binding_label("backward", family), controls.binding_label("look_hold", family), controls.binding_label("camera", family), controls.binding_label("assist", family)]
+		saved_note.text = "SAVED FLIGHT / BINDINGS IN THE REMAP LIST\n%s main · %s weaker retro\n%s look hold · %s view · %s assist\nRelease look to recenter; center shared yaw/heave before reuse.\nSticks/keys request physical actuator torque, not target turn rate.\nAssistance supports piloting; it is not autopilot.\nSave As preserves committed flight. Quit does not autosave.\n\nD-pad: navigate · A / Cross: select\nB / Circle or Esc / Start: explicit resume after neutral." % [controls.binding_label("forward", family), controls.binding_label("backward", family), controls.binding_label("look_hold", family), controls.binding_label("camera", family), controls.binding_label("assist", family)]
 	for item in binding_buttons:
 		item.button.text = ("Key: " if item.family == "key" else "Pad: ") + controls.binding_label(item.action, item.family)
 	if is_instance_valid(basics):
@@ -362,6 +424,7 @@ func add_audio_slider(parent: Node, title: String, key: String) -> void:
 	slider.value = audio_preferences.levels[key]
 	slider.custom_minimum_size.y = 34
 	parent.add_child(slider)
+	sized_controls.append(slider)
 	audio_sliders[key] = {"slider": slider, "label": label, "title": title}
 	slider.value_changed.connect(func(value: float):
 		if audio_preferences.set_level(key, value):
@@ -370,6 +433,7 @@ func add_audio_slider(parent: Node, title: String, key: String) -> void:
 			audio_mix_changed.emit())
 
 func show_menu(reason := "") -> void:
+	layout_saved_menu()
 	if is_instance_valid(basics):
 		basics.hide()
 	menu_margin.show()
@@ -397,6 +461,7 @@ func sync_view_controls(debug: bool, distance: float) -> void:
 	camera_slider.set_value_no_signal(distance)
 
 func _process(_delta: float) -> void:
+	if saved_flight: layout_saved_menu()
 	if entry_focus_frames > 0:
 		entry_focus_frames -= 1
 		if entry_focus_frames == 0 and panel.visible and resume_button.has_focus():

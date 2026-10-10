@@ -190,6 +190,8 @@ func run() -> void:
 		check("flight saves are not implemented" not in complete and "practice relocates" not in complete and "16 m" not in complete and "NAV" not in complete, "Saved reference inherited lab capabilities")
 		check("actual atmosphere boundary" in complete and "20 km" not in complete and "physical torque fractions" in complete and "automatic hover" in complete, "Saved reference misstated orbit/actuator model")
 		check("Quit does not autosave" in complete and "last committed" in complete, "Saved reference lost committed save policy")
+		check("Load opens a save chooser" in complete and "Title asks before discarding" in complete and "Neither action saves automatically" in complete, "Reference lost transactional Load/Title instructions")
+		check("New Game starts on Origin Station" in complete and "Board Wayfarer" in complete and "Unboard to station" in complete and "historical flight save does not gain station walking" in complete, "Reference omitted or overclaimed station boarding")
 		check("Fuel accounting and jump travel are not implemented" not in complete and "three separate jump charges" in complete and "committed transit cannot be canceled" in complete and "Standard replacement" in complete, "Reference denies or misstates shipped Freedom operations")
 		check("Current observations" in complete and "Fuel 25.0%" in complete and "Jumps 1/3" in complete and snapshot == original, "Current reference invented resources or edited observations")
 		check(("Return through hatch" in complete) == wayfarer and ("This historical craft has no supported Wayfarer landing" in complete) == not wayfarer, "Reference manufactured supported surface actions for the historical craft")

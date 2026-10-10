@@ -35,7 +35,7 @@ flight controls. Withdraw with **Fall** and brake with **Rise**; clear the port
 column before forward thrust. An optional [approach aid](docs/PORT_APPROACH_AID.md)
 helps an aligned craft return using thrusters; **Capture port** remains your
 action. The cyan [HOME marker](docs/HOME_NAVIGATION.md) shows the station bearing
-and range during flight. **Leave seat** returns you to the station while attached at D1.
+and range during flight. **Unboard to station** returns you to the station while attached at D1.
 The open docking well still stops ordinary unsupported walking.
 A [compact HUD](docs/NATIVE_HUD.md) leaves the scene visible; **Esc / Start · Controls**
 and **Flight instruments & navigation** provide the detailed readouts and actions.

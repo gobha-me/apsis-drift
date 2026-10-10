@@ -57,6 +57,11 @@ scrolling. Existing detail layout stacks its forecast and scrolls at narrow
 widths. The terminal path is retained independently; native pixel layout is
 not an ANSI/Kitty parity requirement.
 
+Saved pause controls use the same physical readability floor: 18-pixel body
+text and 44-pixel interactive heights at the checked window sizes. The action
+and remapping lists stack below 1000 physical pixels wide; each scrolls to the
+focused control while the persistent status/refusal message stays visible.
+
 Opening controls follows the existing pause behavior: it cancels active port
 approach or surface assistance before review, leaves jump commitment unchanged,
 and never advances simulation time. Reviewing, resizing and scrolling issue
