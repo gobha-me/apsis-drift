@@ -102,3 +102,8 @@ simulation frozen, and writes `voyage.json` with source/input/image hashes,
 engine/renderer information and the existing asset license location. Preserve
 those compact records and selected licensed captures, then remove temporary
 copied asset packages and projects.
+
+The opt-in [surface walking loop](FREEDOM_SURFACE_WALK.md#checks) adds a physical
+landing, ground excursion and thruster liftoff to a station-to-station voyage.
+It uses a distinct schema and `native_surface_loop` runner contract; the original
+eleven-phase high-altitude voyage remains available unchanged.

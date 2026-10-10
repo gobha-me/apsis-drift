@@ -76,3 +76,33 @@ route checks malformed buffers first, pause/focus, outside Continue, transaction
 corrupt selection, camera frames and complete Save parity through real-thrust
 liftoff. This initialized fixture does not claim a flown station-to-site journey.
 Headless results do not establish GPU quality, listening or hardware controls.
+
+The separate `native_surface_loop` contract starts at the ordinary seed-42
+station. Its recorded public commands walk to the craft, board, undock, descend
+through atmosphere, cruise across generated terrain, land, walk away and return,
+lift off, ascend and dock back home. It requests the existing landing and port
+approach aids from their actual local envelopes; it does not assign the craft
+pose or initialize a landed start. A bounded test pilot inspects nearby actual
+dry contact geometry to select a site, without granting player survey knowledge.
+The ground stop changes the flight plane, so the return pilot follows the current
+great-circle arc toward the moving station rather than the departure orbit plane.
+
+```sh
+python3 tools/test_godot_native.py --godot /absolute/path/to/godot \
+  --build-dir build --timeout 600 --test native_surface_loop
+```
+
+The C++ exporter selects this distinct schema with `--surface-loop --commands`.
+An uninterrupted C++ copy and checkpoint-resumed session must produce identical
+complete saves. The native root replays flight through its actual view/actuator
+path and ground walking through physical W/S key events, retaining the same ship
+model throughout. Every phase also independently continues for one neutral tick
+and compares its full save with C++. Invalid command buffers, nonfinite values,
+ownership, paths, phase order and tick totals refuse before playback.
+The original planetary and neighboring-system traces retain their modes.
+This is accelerated integration playback, not a gameplay autopilot, a suggested
+journey duration, manual acceptance or continuous terrain collision proof.
+The conservative test pilot has a 9,000-second simulation window; this is a test
+bound, not a travel timer imposed on the player.
+The neighboring jump route remains a separate contract; #245 retains broader
+playable-handoff and hardware/controller qualification.

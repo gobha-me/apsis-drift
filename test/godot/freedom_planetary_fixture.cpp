@@ -1,5 +1,7 @@
+#include "../../src/godot/contact_geometry_internal.hpp"
 #include "../flight_endurance_meter.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
+#include "apsis_drift/terrain_touchdown.hpp"
 
 #include <algorithm>
 #include <array>
@@ -8,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <nlohmann/json.hpp>
 #include <numbers>
 #include <optional>
@@ -119,6 +122,7 @@ struct Trace {
   std::optional<research::FlightEnduranceMeter> endurance{};
   Json endurance_checkpoints = Json::array();
   std::optional<NativeFreedomFlightSession> uninterrupted{};
+  bool ground_route{};
   auto flight(const NativeFlightControls& c)
       -> std::expected<NativeFlightStep, std::string> {
     auto result = session.advance(c);
@@ -152,6 +156,17 @@ struct Trace {
                      Json::array({c.forward, c.right, c.heading_radians}));
     return result;
   }
+  auto surface_walk(const OriginWalkControls& c)
+      -> decltype(session.advance_surface_walk(c)) {
+    auto result = session.advance_surface_walk(c);
+    if (result && uninterrupted)
+      (void)need(uninterrupted->advance_surface_walk(c),
+                 "Uninterrupted ground walk refused");
+    if (result && commands)
+      commands->step("surface_walk",
+                     Json::array({c.forward, c.right, c.heading_radians}));
+    return result;
+  }
   auto action(std::string_view op, const Json& args = Json::array()) -> void {
     if (uninterrupted) {
       auto& live = *uninterrupted;
@@ -161,6 +176,18 @@ struct Trace {
         need(live.begin_disembarking());
       else if (op == "assistance_off")
         need(live.set_assistance(false));
+      else if (op == "assistance_on")
+        need(live.set_assistance(true));
+      else if (op == "land")
+        need(live.request_landing());
+      else if (op == "surface_exit")
+        need(live.begin_surface_walk());
+      else if (op == "surface_return")
+        need(live.return_from_surface_walk());
+      else if (op == "liftoff")
+        need(live.release_surface());
+      else if (op == "gear_stow")
+        need(live.set_landing_gear(false));
       else if (op == "release")
         need(live.release_port());
       else if (op == "approach")
@@ -213,6 +240,9 @@ struct Trace {
     check(continued.document() == session.document() &&
               continued.boarding() == session.boarding() &&
               continued.walker() == session.walker() &&
+              continued.surface_walker() == session.surface_walker() &&
+              continued.surface_walk_selected() ==
+                  session.surface_walk_selected() &&
               continued.docking() == session.docking() &&
               continued.starting_assembly() == session.starting_assembly() &&
               continued.resources() == session.resources() &&
@@ -226,6 +256,9 @@ struct Trace {
                     session.surface_document() &&
                 uninterrupted->boarding() == session.boarding() &&
                 uninterrupted->walker() == session.walker() &&
+                uninterrupted->surface_walker() == session.surface_walker() &&
+                uninterrupted->surface_walk_selected() ==
+                    session.surface_walk_selected() &&
                 uninterrupted->docking() == session.docking() &&
                 uninterrupted->starting_assembly() ==
                     session.starting_assembly() &&
@@ -233,10 +266,25 @@ struct Trace {
                 uninterrupted->knowledge() == session.knowledge() &&
                 uninterrupted->travel() == session.travel(),
             "Checkpoint-resumed route diverged from uninterrupted actual trip");
+      if (ground_route) {
+        const auto original_path =
+            output / (std::string{label} + "-uninterrupted.json");
+        need(uninterrupted->save_as(original_path));
+        std::ifstream original{original_path}, restored{path};
+        const std::string original_bytes{
+            std::istreambuf_iterator<char>{original}, {}};
+        const std::string restored_bytes{
+            std::istreambuf_iterator<char>{restored}, {}};
+        check(!original_bytes.empty() && original_bytes == restored_bytes,
+              "Complete uninterrupted ground voyage Save differs");
+      }
     }
     session = std::move(continued);
     auto next = session;
-    if (next.walker())
+    if (next.surface_walker())
+      (void)need(next.advance_surface_walk({}),
+                 "Expected neutral ground walk refused");
+    else if (next.walker())
       (void)need(next.advance_walk({}), "Expected neutral walking refused");
     else
       (void)need(next.advance({}), "Expected neutral flight refused");
@@ -284,6 +332,10 @@ struct Trace {
       row["flight_quanta"] = std::to_string(session.resources()->flight_quanta);
       row["seated"] = session.boarding() &&
                       session.boarding()->phase == FreedomBoardingPhase::seated;
+      if (ground_route) {
+        row["surface_walking"] = session.surface_walker().has_value();
+        row["landed"] = session.surface() && session.surface()->landed;
+      }
     }
     if (endurance)
       endurance_checkpoints.push_back(
@@ -348,14 +400,92 @@ auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
   return result;
 }
 
+// A test pilot prospectively inspects actual nearby top geometry. This never
+// assigns the live craft's pose or grants player knowledge of the chosen site.
+auto landing_goal(Trace& trace) -> LandedCraftAnchor {
+  const auto view = godot_spike::project_saved_flight(trace.session);
+  const auto position = trace.fixed_position();
+  const auto radial = unit(position);
+  const auto right =
+      unit(cross(radial, std::abs(radial.y) < .9 ? V{0, 1, 0} : V{1, 0, 0}));
+  const auto back = unit(cross(right, radial));
+  const auto radius = static_cast<double>(view.planet.radius.value) * 1000;
+  for (int ring = 0; ring <= 4; ++ring) {
+    for (int x = -ring; x <= ring; ++x) {
+      for (int z = -ring; z <= ring; ++z) {
+        if (std::max(std::abs(x), std::abs(z)) != ring) continue;
+        const auto aim = add(
+            position, add(scale(right, x * 4000.0), scale(back, z * 4000.0)));
+        const auto id = godot_spike::detail::locate_selected_contact_triangle(
+            view.planet, {aim.x, aim.y, aim.z});
+        if (!id) continue;
+        const auto triangle =
+            godot_spike::detail::build_selected_contact_triangle(
+                view.planet, godot_spike::kExperimentalSavedContactSurface, *id,
+                trace.cache);
+        if (!triangle) continue;
+        const auto a = triangle->vertices[0], b = triangle->vertices[1],
+                   c = triangle->vertices[2];
+        const V centre{a.x + .3 * ((b.x - a.x) + (c.x - a.x)),
+                       a.y + .3 * ((b.y - a.y) + (c.y - a.y)),
+                       a.z + .3 * ((b.z - a.z) + (c.z - a.z))};
+        const V n{triangle->outward_normal.x, triangle->outward_normal.y,
+                  triangle->outward_normal.z};
+        if (length(centre) < radius + 5 || dot(unit(centre), n) < .995)
+          continue;
+        const auto w = 1 + n.y, magnitude = std::hypot(w, n.z, n.x);
+        if (magnitude < 1e-8) continue;
+        auto fixed =
+            need(reframe_rigid_body({trace.session.system()},
+                                    trace.session.document().flight,
+                                    {{RigidFrameKind::planet_fixed,
+                                      trace.session.system().catalog.id,
+                                      view.planet.id,
+                                      {}},
+                                     trace.session.document().flight.tick},
+                                    trace.session.rotation()),
+                 "Prospective fixed frame refused");
+        fixed.orientation = {w / magnitude, n.z / magnitude, 0,
+                             -n.x / magnitude};
+        fixed.position_metres = sub(add(centre, scale(n, -.05)),
+                                    rotate(fixed.orientation, {0, -2.08, -.7}));
+        fixed.linear_velocity_metres_per_second = {};
+        fixed.angular_velocity_radians_per_second = {};
+        const auto source =
+            need(reframe_rigid_body(
+                     {trace.session.system()}, fixed,
+                     {trace.session.document().flight.frame, fixed.tick},
+                     trace.session.rotation()),
+                 "Prospective inertial frame refused");
+        const auto checksum =
+            need(rigid_body_state_checksum({trace.session.system()}, source),
+                 "Prospective checksum refused");
+        const auto anchor = prepare_landed_craft(trace.session.system(),
+                                                 trace.session.rotation(),
+                                                 source, true, checksum);
+        if (!anchor) continue;
+        auto ground = PlanetSurfaceWalkTerrain::create(trace.session.system(),
+                                                       trace.session.rotation(),
+                                                       *anchor, fixed.tick);
+        if (!ground || !ground->entry()) continue;
+        return *anchor;
+      }
+    }
+  }
+  throw std::runtime_error(
+      "No supported dry ground access in bounded nearby site inspection");
+}
+
 auto run(const std::filesystem::path& output, bool record_commands,
-         bool measure_endurance) -> void {
+         bool measure_endurance, bool surface_loop = false) -> void {
   Trace trace{need(NativeFreedomFlightSession::open(
                        need(native_new_game(Seed{42}), "New Game refused")),
                    "New session refused"),
               output,
               need(TerrainTileCache::create(), "Terrain cache refused")};
-  if (measure_endurance) trace.endurance.emplace();
+  if (measure_endurance || surface_loop) trace.endurance.emplace();
+  if (surface_loop) trace.uninterrupted.emplace(trace.session);
+  trace.ground_route = surface_loop;
   std::optional<Commands> commands;
   if (record_commands) {
     commands.emplace(output);
@@ -399,7 +529,9 @@ auto run(const std::filesystem::path& output, bool record_commands,
   double minimum_terrain_clearance = start_altitude;
   SimulationTick approach_tick{};
   NativeFlightControls held;
-  for (int tick = 0; tick < 120 * 6000; ++tick) {
+  std::optional<LandedCraftAnchor> ground_goal;
+  const int pilot_seconds = surface_loop ? 9000 : 6000;
+  for (int tick = 0; tick < 120 * pilot_seconds; ++tick) {
     // Value copy stays valid when a checkpoint reloads the identical session.
     const auto body = session.document().flight;
     const auto observed = need(session.observe(), "Observation refused");
@@ -461,18 +593,35 @@ auto run(const std::filesystem::path& output, bool record_commands,
         const auto omega = dot(dock.linear_velocity_metres_per_second,
                                unit(cross(plane, goal_radial))) /
                            length(goal_position);
-        const auto goal_velocity = add(
+        auto goal_velocity = add(
             scale(forward,
                   r * (omega + std::clamp(angle * .008, -.0005, .0005))),
             scale(plane, dot(dock.linear_velocity_metres_per_second, plane)));
+        if (surface_loop) {
+          // A ground stop changes the departure orbit plane. Follow the
+          // shortest current great-circle arc rather than the old plane.
+          const auto arc = cross(radial, goal_radial);
+          const auto separation =
+              std::atan2(length(arc), dot(radial, goal_radial));
+          const auto station_spin =
+              scale(cross(goal_radial, dock.linear_velocity_metres_per_second),
+                    1 / length(goal_position));
+          goal_velocity = cross(station_spin, p);
+          if (length(arc) > 1e-10)
+            goal_velocity = add(goal_velocity,
+                                scale(cross(unit(arc), radial),
+                                      std::min(3000.0, r * separation * .008)));
+        }
         const auto radial_goal =
             std::clamp((length(goal_position) - r) * .03, -1200.0, 1200.0);
-        acceleration =
-            sub(add(add(scale(radial, (radial_goal - radial_speed) * .1 -
-                                          dot(tangential, tangential) / r),
-                        scale(sub(goal_velocity, tangential), .05)),
-                    scale(plane, dot(sub(goal_position, p), plane) * .0002)),
-                gravity.acceleration_metres_per_second_squared);
+        acceleration = sub(
+            add(add(scale(radial, (radial_goal - radial_speed) * .1 -
+                                      dot(tangential, tangential) / r),
+                    scale(sub(goal_velocity, tangential), .05)),
+                surface_loop
+                    ? V{}
+                    : scale(plane, dot(sub(goal_position, p), plane) * .0002)),
+            gravity.acceleration_metres_per_second_squared);
       } else {
         const auto next =
             need(resolve_origin_port_pose(session.system(), station, geometry,
@@ -493,13 +642,98 @@ auto run(const std::filesystem::path& output, bool record_commands,
         back = rotate(original_q, {0, 0, 1});
       }
     }
-    check(altitude >= 10000 && (phase != 3 || altitude <= start_altitude * 1.5),
+    if (phase == 4) {
+      const auto normal =
+          rotate(rotation.fixed_to_system,
+                 rotate(ground_goal->fixed.orientation, {0, 1, 0}));
+      const auto target = rotate(
+          rotation.fixed_to_system,
+          add(ground_goal->fixed.position_metres,
+              scale(rotate(ground_goal->fixed.orientation, {0, 1, 0}), 12)));
+      const auto target_velocity = cross(spin, target);
+      const auto error = sub(target, p);
+      const auto desired_velocity = add(
+          target_velocity,
+          scale(error, std::min(.03, 200.0 / std::max(1.0, length(error)))));
+      acceleration = sub(add(scale(sub(desired_velocity, v), .1),
+                             cross(spin, cross(spin, target))),
+                         gravity.acceleration_metres_per_second_squared);
+      up = normal;
+      right = rotate(rotation.fixed_to_system,
+                     rotate(ground_goal->fixed.orientation, {1, 0, 0}));
+      back = rotate(rotation.fixed_to_system,
+                    rotate(ground_goal->fixed.orientation, {0, 0, 1}));
+      if (length(error) < .5 && length(sub(v, cross(spin, p))) < .3 &&
+          dot(rotate(body.orientation, {0, 1, 0}), up) > .999 &&
+          length(sub(body.angular_velocity_radians_per_second,
+                     rotate(godot_spike::inverse_saved(body.orientation),
+                            spin))) < .002) {
+        trace.checkpoint("landing-ready");
+        need(session.set_assistance(true));
+        trace.action("assistance_on");
+        need(session.request_landing());
+        trace.action("land");
+        for (unsigned step = 0; step < 7200 && !session.surface()->landed;
+             ++step)
+          (void)need(trace.flight({}), "Actual landing aid refused");
+        check(session.surface()->landed.has_value(),
+              "Actual landing did not finish");
+        trace.checkpoint("landed");
+        const auto landed_anchor = session.surface()->landed;
+        const auto fuel = session.resources()->flight_quanta;
+        need(session.begin_surface_walk());
+        trace.action("surface_exit");
+        trace.checkpoint("surface-exited");
+        for (unsigned step = 0; step < 600; ++step)
+          (void)need(trace.surface_walk({-1, 0, 0}),
+                     "Actual ground walk refused");
+        trace.checkpoint("surface-halfway");
+        for (unsigned step = 0; step < 600; ++step)
+          (void)need(trace.surface_walk({-1, 0, 0}),
+                     "Continued ground walk refused");
+        check(!session.return_from_surface_walk(),
+              "Distant return unexpectedly accepted");
+        trace.checkpoint("surface-away");
+        for (unsigned step = 0; step < 1200; ++step)
+          (void)need(trace.surface_walk({1, 0, 0}),
+                     "Actual ground return refused");
+        check(session.surface()->landed == landed_anchor &&
+                  session.resources()->flight_quanta == fuel,
+              "Walking changed anchor or flight quantity");
+        trace.checkpoint("surface-back");
+        need(session.return_from_surface_walk());
+        trace.action("surface_return");
+        trace.checkpoint("surface-seated");
+        need(session.release_surface());
+        trace.action("liftoff");
+        for (unsigned step = 0;
+             step < 1200 &&
+             session.surface_maneuver().kind != NativeSurfaceManeuverKind::off;
+             ++step)
+          (void)need(trace.flight({}), "Actual thruster liftoff refused");
+        check(!session.surface()->landed && session.surface_maneuver().kind ==
+                                                NativeSurfaceManeuverKind::off,
+              "Actual liftoff did not finish");
+        need(session.set_landing_gear(false));
+        trace.action("gear_stow");
+        need(session.set_assistance(false));
+        trace.action("assistance_off");
+        trace.checkpoint("surface-airborne");
+        phase = 2;
+        continue;
+      }
+    }
+    const bool near_surface =
+        surface_loop && (phase == 4 || (phase == 2 && ground_goal));
+    check((near_surface ? altitude >= 0 : altitude >= 10000) &&
+              (phase != 3 || altitude <= start_altitude * 1.5),
           "Pilot left the bounded flight envelope");
-    if (tick % 7200 == 0) {
+    if (phase != 4 && tick % 7200 == 0) {
       const auto clearance = altitude - trace.terrain_elevation();
       minimum_terrain_clearance =
           std::min(minimum_terrain_clearance, clearance);
-      check(clearance > 1000, "Sampled terrain clearance lost");
+      check(clearance > (near_surface ? 0 : 1000),
+            "Sampled terrain clearance lost");
     }
     if (!entered &&
         altitude < observed.atmosphere.space_boundary_altitude_metres) {
@@ -519,8 +753,9 @@ auto run(const std::filesystem::path& output, bool record_commands,
     }
     if (phase == 1 && ++cruise_ticks == 120 * 30) {
       cruise_end = unit(trace.fixed_position());
-      phase = 2;
+      phase = surface_loop ? 4 : 2;
       trace.checkpoint("cruise-end");
+      if (surface_loop) ground_goal = landing_goal(trace);
     }
     if (phase == 2 && !exited &&
         altitude >= observed.atmosphere.space_boundary_altitude_metres) {
@@ -556,7 +791,18 @@ auto run(const std::filesystem::path& output, bool record_commands,
                       {right, up, back});
     (void)need(trace.flight(held), "Flight step refused");
   }
-  check(captured, "Planetary trace exceeded 6000 game seconds");
+  if (!captured) {
+    const auto available = session.port_approach_available();
+    const auto observed = need(session.observe(), "Return observation refused");
+    const auto port = need(session.assess_port(), "Return assessment refused");
+    std::cerr << "Return status: tick=" << session.document().flight.tick
+              << " altitude=" << observed.atmosphere.altitude_metres
+              << " collar=" << port.separation_metres
+              << " fuel=" << session.resources()->flight_quanta
+              << " approach=" << (available ? "ready" : available.error())
+              << '\n';
+  }
+  check(captured, "Planetary trace exceeded its bounded pilot duration");
   trace.checkpoint("captured");
   need(session.begin_disembarking());
   trace.action("unboard");
@@ -577,12 +823,16 @@ auto run(const std::filesystem::path& output, bool record_commands,
                           dot(cruise_start, cruise_end));
   check(cruise_distance > 5000, "Cruise did not cross five surface kilometres");
   if (commands) commands->flush();
-  Json report{{"schema_version", 1},
+  Json report{{"schema_version", surface_loop ? 4 : 1},
               {"seed", "42"},
               {"scope",
-               "Public-command planetary voyage with exact phase Save "
-               "As/Continue; test pilot only, no pose writes, landing, "
-               "continuous collision or native/manual acceptance"},
+               surface_loop
+                   ? "Public-command station/landing/walking/liftoff/return "
+                     "voyage with exact Save/Continue; instant hatch transfer, "
+                     "test pilot only; no manual/controller qualification"
+                   : "Public-command planetary voyage with exact phase Save "
+                     "As/Continue; test pilot only, no pose writes, landing, "
+                     "continuous collision or native/manual acceptance"},
               {"physical_catalog", session.system().generator_version},
               {"physical_ephemeris", session.system().ephemeris_version},
               {"terrain_source_lod", 8},
@@ -593,6 +843,10 @@ auto run(const std::filesystem::path& output, bool record_commands,
               {"final_tick", std::to_string(session.document().flight.tick)},
               {"compiler", __VERSION__},
               {"checkpoints", trace.checkpoints}};
+  if (surface_loop) {
+    report["route"] = "surface-loop";
+    report["uninterrupted_match"] = true;
+  }
   if (commands)
     report["command_stream"] = {{"file", "commands.jsonl"},
                                 {"rows", commands->rows},
@@ -1002,8 +1256,8 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "Expected one absolute empty output "
           "directory and optional --commands/--endurance/--neighbor/--pilot/"
-          "--aligned/--offset");
-    bool commands{}, endurance{}, neighbor{}, pilot{};
+          "--aligned/--offset/--surface-loop");
+    bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{};
     std::optional<IntersystemArrivalQuality> grade;
     for (int i = 2; i < argc; ++i) {
       const std::string_view option{argv[i]};
@@ -1011,6 +1265,8 @@ int main(int argc, char** argv) {
         commands = true;
       else if (option == "--endurance" && !endurance)
         endurance = true;
+      else if (option == "--surface-loop" && !surface_loop)
+        surface_loop = true;
       else if (option == "--neighbor" && !neighbor)
         neighbor = true;
       else if (option == "--pilot" && !pilot)
@@ -1028,6 +1284,9 @@ int main(int argc, char** argv) {
         !std::filesystem::is_empty(output))
       throw std::invalid_argument(
           "Expected one bounded absolute empty output directory");
+    if (surface_loop && (neighbor || pilot || grade))
+      throw std::invalid_argument(
+          "--surface-loop is a distinct planetary fixture mode");
     if (pilot && !neighbor)
       throw std::invalid_argument("--pilot requires --neighbor");
     if (grade && (!neighbor || !pilot))
@@ -1036,7 +1295,7 @@ int main(int argc, char** argv) {
     if (neighbor)
       run_neighbor(output, commands, pilot, grade);
     else
-      run(output, commands, endurance);
+      run(output, commands, endurance, surface_loop);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

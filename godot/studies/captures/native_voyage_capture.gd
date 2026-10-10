@@ -33,22 +33,23 @@ static func decoded_values(args: Array) -> PackedFloat64Array:
 		result.append(value.hex_decode().decode_double(0))
 	return result
 
-static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, travel: bool = false) -> bool:
+static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false) -> bool:
 	if not value is Array or value.size() != 3 or not value[0] is String or not Checkpoints.finite_number(value[1]) or value[1] != int(value[1]) or not value[2] is Array: return false
 	var op: String = value[0]
 	var count: int = int(value[1])
 	var args: Array = value[2]
-	if op in ["walk", "flight"]:
-		if count < 1 or count > 15 or args.size() != (3 if op == "walk" else 12): return false
+	if op in ["walk", "flight"] or surface and op == "surface_walk":
+		if count < 1 or count > 15 or args.size() != (12 if op == "flight" else 3): return false
 		var values := decoded_values(args)
 		if values.size() != args.size(): return false
 		for i in values.size():
 			if not is_finite(values[i]): return false
 			if op == "flight" and (values[i] < 0 or values[i] > 1): return false
-			if op == "walk" and absf(values[i]) > (PI if i == 2 else 1.0): return false
+			if op != "flight" and absf(values[i]) > (PI if i == 2 else 1.0): return false
 		return true
 	if count != 0: return false
 	if op == "checkpoint": return args.size() == 1 and args[0] is String and args[0] in labels
+	if surface and op in ["assistance_on", "land", "surface_exit", "surface_return", "liftoff", "gear_stow"]: return args.is_empty()
 	if travel:
 		if op == "jump_select":
 			if args.size() != 1 or not args[0] is String or args[0].length() != 23 or not args[0].begins_with("system-"): return false
@@ -59,7 +60,7 @@ static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, tra
 		if op in ["jump_begin", "replenish"]: return args.is_empty()
 	return op in ["board", "unboard", "assistance_off", "release", "approach", "capture"] and args.is_empty()
 
-static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkpoints.LABELS, travel: bool = false) -> bool:
+static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false) -> bool:
 	var metadata: Variant = trace.get("command_stream")
 	if not metadata is Dictionary or metadata.get("file") != "commands.jsonl" or metadata.get("cadence_ticks") != 15 or metadata.get("float_encoding") != "ieee754-le-hex": return false
 	for pair in [["bytes", MAX_BYTES], ["rows", MAX_ROWS]]:
@@ -74,12 +75,12 @@ static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkp
 		var line := stream.get_line()
 		if line.to_utf8_buffer().size() > 4096 or rows >= MAX_ROWS: return false
 		var record: Variant = JSON.parse_string(line)
-		if not valid_record(record, labels, travel): return false
+		if not valid_record(record, labels, travel, surface): return false
 		if travel and record[0] == "jump_select" and record[2][0] not in [trace.origin_system, trace.neighbor_system]: return false
 		rows += 1
-		if record[0] in ["walk", "flight"]:
+		if record[0] in ["walk", "flight", "surface_walk"]:
 			tick += int(record[1])
-			if tick > 750000: return false
+			if tick > (1200000 if surface else 750000): return false
 		elif record[0] == "checkpoint":
 			if phase >= labels.size() or record[2][0] != labels[phase] or str(tick) != trace.checkpoints[phase].tick: return false
 			phase += 1
@@ -117,6 +118,15 @@ func valid_manifest(value: Variant) -> bool:
 func travel_commands() -> bool:
 	return false
 
+func surface_commands() -> bool:
+	return false
+
+func surface_step(_view: Control, _demand: PackedFloat64Array, _count: int) -> bool:
+	return false
+
+func surface_action(_view: Control, _op: String) -> bool:
+	return false
+
 func manifest_refusals(_trace: Dictionary) -> bool:
 	return true
 
@@ -150,7 +160,8 @@ func run() -> void:
 	source.close()
 	var labels := checkpoint_labels()
 	var travel := travel_commands()
-	if not check(valid_manifest(trace), "Malformed voyage manifest") or not check(valid_stream(args[0].path_join("commands.jsonl"), trace, labels, travel), "Malformed bounded voyage stream"): quit(1); return
+	var surface := surface_commands()
+	if not check(valid_manifest(trace), "Malformed voyage manifest") or not check(valid_stream(args[0].path_join("commands.jsonl"), trace, labels, travel, surface), "Malformed bounded voyage stream"): quit(1); return
 	var zero := "0000000000000000"
 	check(valid_record(["walk", 15, [zero, zero, zero]]) and decoded_values(["000000000000f03f"])[0] == 1.0, "Valid exact control buffer refused")
 	for bad in [["flight", 0, []], ["walk", 16, [zero, zero, zero]], ["walk", 1.5, [zero, zero, zero]], ["flight", 1, [zero, zero, zero]], ["walk", 1, ["000000000000f87f", zero, zero]], ["walk", 1, ["000000000000f07f", zero, zero]], ["walk", 1, ["0000000000000040", zero, zero]], ["walk", 1, ["z000000000000000", zero, zero]], ["walk", 1, [zero + "00", zero, zero]], ["checkpoint", 0, ["../other"]], ["release", 0, [1]], ["teleport", 0, []]]:
@@ -192,11 +203,13 @@ func run() -> void:
 			if rendered and not failed: await capture_phase(view, owner, args[2], row, captures)
 			print("Continuous phase: %s tick=%s" % [row.label, row.tick])
 			phase += 1
-		elif op in ["walk", "flight"]:
+		elif op in ["walk", "flight", "surface_walk"]:
 			if not resume(view): break
 			var demand := decoded_values(record[2])
 			if op == "walk":
 				if not check(view is WalkView and view.advance_requested(float(count) / 120.0, demand), "Continuous walk refused"): break
+			elif op == "surface_walk":
+				if not surface_step(view, demand, count): break
 			else:
 				if not check(view is FlightView, "Flight demand reached walking view"): break
 				# Replay semantic controller output through the real _process path,
@@ -214,6 +227,8 @@ func run() -> void:
 				check(owner.get_freedom_flight_state() == after, "Handoff frame wait advanced authoritative time")
 		elif op in ["jump_select", "jump_begin", "port_select", "replenish"]:
 			if not travel_action(view, owner, op, record[2]): break
+		elif op in ["assistance_on", "land", "surface_exit", "surface_return", "liftoff", "gear_stow"]:
+			if not surface_action(view, op): break
 		elif op in ["board", "unboard"]:
 			if view is FlightView: view.player_input.axes.fill(0.0)
 			if not resume(view): break
@@ -244,8 +259,10 @@ func run() -> void:
 	var report := FileAccess.open(args[2].path_join("voyage.json"), FileAccess.WRITE)
 	if report != null:
 		var hashes := {}
-		for name in ["studies/captures/native_voyage_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_main_exhaust.gd", "scripts/native/home_navigation.gd", "scripts/ui/player_input.gd", "scripts/world/planet_stream.gd", "studies/captures/native_planetary_capture.gd", "shaders/native_main_exhaust.gdshader", "shaders/native_close_composite.gdshader", "shaders/terrain.gdshader", "bin/libapsis_freedom_bridge.so"]: hashes[name] = FileAccess.get_sha256("res://" + name)
-		report.store_string(JSON.stringify({"scope": "One accelerated native session from New Game, semantic input replay; not manual/controller or performance acceptance", "route": "native-neighbor" if travel else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "assets/native/freedom-starter-01/licenses", "captures": captures}, "\t") + "\n")
+		for name in ["studies/captures/native_voyage_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_main_exhaust.gd", "scripts/native/home_navigation.gd", "scripts/ui/player_input.gd", "scripts/world/planet_stream.gd", "studies/captures/native_planetary_capture.gd", "shaders/native_main_exhaust.gdshader", "shaders/native_close_composite.gdshader", "shaders/terrain.gdshader", "bin/libapsis_freedom_bridge.so", get_script().resource_path.trim_prefix("res://")]: hashes[name] = FileAccess.get_sha256("res://" + name)
+		var scope := "One accelerated native session from New Game, semantic input replay; not manual/controller or performance acceptance"
+		if surface: scope = "One accelerated native session from New Game, semantic flight replay and physical ground keys; not manual/controller or performance acceptance"
+		report.store_string(JSON.stringify({"scope": scope, "route": "native-neighbor" if travel else "surface-loop" if surface else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "native-assets/stowed/licenses", "captures": captures}, "\t") + "\n")
 		report.close()
 	else: check(false, "Could not write continuous voyage report")
 	shell.free()
