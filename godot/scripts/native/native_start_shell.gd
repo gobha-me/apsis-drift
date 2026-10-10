@@ -6,6 +6,7 @@ const HostSky = preload("res://shaders/native_host_sky.gdshader")
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
+const NativeAudio = preload("res://scripts/audio/native_ship_audio.gd")
 
 var bridge: Variant = null
 var selected: Dictionary = {}
@@ -20,6 +21,67 @@ var presentation_only := false
 var error := ""
 var recovery_overlay: Control
 var recovery_status: Label
+var audio_session: Node
+var closing := false
+var previous_auto_quit := true
+var quit_handler: Callable
+
+
+func configure_audio(options: Dictionary) -> void:
+	if audio_session != null or not options.has("audio_hum"): return
+	var candidate := NativeAudio.new()
+	if not candidate.configure(options.audio_hum, options.audio_propulsion, options.get("audio_persist", true)):
+		candidate.free()
+		push_warning("Recorded ship audio disabled: invalid or missing loop WAVs.")
+		return
+	audio_session = candidate
+	add_child(audio_session)
+	previous_auto_quit = get_tree().auto_accept_quit
+	get_tree().auto_accept_quit = false
+
+
+func prepare_view_audio(view: Control) -> void:
+	if view is FlightView and audio_session != null:
+		view.ship_audio = audio_session.audio
+		view.audio_preferences = audio_session.preferences
+		view.quit_handler = request_native_quit
+	elif audio_session != null and view.has_method("finish_native_quit"):
+		view.quit_handler = request_native_quit
+
+
+func bind_view_audio() -> void:
+	if audio_session == null: return
+	audio_session.view = current_view
+	# Observe the view's committed C++ batch before updating playback targets.
+	move_child(audio_session, get_child_count() - 1)
+	audio_session.refresh()
+
+
+func request_native_quit() -> void:
+	if closing: return
+	closing = true
+	if audio_session != null:
+		if current_view != null and current_view.has_method("pause_controls"):
+			current_view.pause_controls("Closing the game.")
+		var drain: float = audio_session.begin_shutdown()
+		var deadline := Time.get_ticks_msec() + ceili(drain * 1000.0)
+		while not audio_session.shutdown_drained() and Time.get_ticks_msec() < deadline:
+			await get_tree().process_frame
+	finish_native_quit()
+
+
+func finish_native_quit() -> void:
+	get_tree().quit()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and audio_session != null:
+		request_native_quit()
+
+
+func _exit_tree() -> void:
+	if audio_session != null:
+		get_tree().auto_accept_quit = previous_auto_quit
 
 
 func _process(_delta: float) -> void:
@@ -77,10 +139,21 @@ func parse_selection(arguments: PackedStringArray) -> Dictionary:
 				return {}
 			selection["mode"] = "continue"
 			selection["value"] = argument.trim_prefix("--continue=")
+		elif argument.begins_with("--audio-hum=") or argument.begins_with("--audio-propulsion="):
+			var hum := argument.begins_with("--audio-hum=")
+			var key := "audio_hum" if hum else "audio_propulsion"
+			var path := argument.trim_prefix("--audio-hum=" if hum else "--audio-propulsion=")
+			if selection.has(key) or not path.is_absolute_path() or path.length() > 4096: return {}
+			selection[key] = path
+		elif argument.begins_with("--audio-persist="):
+			var value := argument.trim_prefix("--audio-persist=")
+			if selection.has("audio_persist") or value not in ["true", "false"]: return {}
+			selection["audio_persist"] = value == "true"
 		else:
 			return {}
 	if not selection.has("mode") or selection.value.is_empty():
 		return {}
+	if selection.has("audio_hum") != selection.has("audio_propulsion") or (selection.has("audio_persist") and not selection.has("audio_hum")): return {}
 	return selection
 
 
@@ -216,6 +289,7 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 		owner.discard_pending_freedom_start(pending.candidate_id)
 		log_selection(pending, "validated")
 		return true
+	configure_audio(options)
 	var assets: String = options.get("assets", "")
 	var candidate := stage_view(owner, assets, pending)
 	if candidate == null:
@@ -240,7 +314,9 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 	bridge = owner
 	assets_root = assets
 	connect_journey_view(candidate)
+	prepare_view_audio(candidate)
 	candidate.activate()
+	bind_view_audio()
 	refresh_recovery()
 	log_selection(pending, "opened", candidate)
 	if previous != null: previous.free()
@@ -329,7 +405,9 @@ func switch_journey_view() -> void:
 	add_child(candidate)
 	current_view = candidate
 	connect_journey_view(candidate)
+	prepare_view_audio(candidate)
 	candidate.activate()
+	bind_view_audio()
 	previous.free()
 	error = ""
 
@@ -450,7 +528,9 @@ func build_view(geometry: Dictionary, station_geometry: Dictionary) -> bool:
 	add_child(save_dialog)
 	var quit_button := Button.new()
 	quit_button.text = "Quit"
-	quit_button.pressed.connect(func() -> void: get_tree().quit(0))
+	quit_button.pressed.connect(func() -> void:
+		if quit_handler.is_valid(): quit_handler.call()
+		else: request_native_quit())
 	column.add_child(quit_button)
 	port_status = Label.new()
 	port_status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)

@@ -52,6 +52,9 @@ starts paused; quitting does not autosave. Missing, corrupt or unsupported saves
 refuse without rewriting the file. Historical saves keep their explicit format
 and presentation rather than receiving invented actor or hardware state.
 
+[Recorded ship audio](docs/NATIVE_SHIP_AUDIO.md) is optional with a pair of
+prepared user-provided WAV loops and the existing saved mix controls.
+
 For a selection check without a window:
 
 ```sh
