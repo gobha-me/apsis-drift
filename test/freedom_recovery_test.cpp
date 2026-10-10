@@ -71,7 +71,8 @@ auto session_contract(const std::filesystem::path& path) -> void {
   bad.positive_translation.x = std::numeric_limits<double>::quiet_NaN();
   check(live.recovery_pending() && !live.advance({}) && !live.advance(bad) &&
             !live.advance_walk({}) && !live.set_assistance(false) &&
-            !live.set_hold({}) && !live.begin_boarding() &&
+            !live.set_hold({}) && !live.current_orbit_hold_target() &&
+            !live.hold_current_orbit() && !live.begin_boarding() &&
             !live.begin_disembarking() && !live.release_port() &&
             !live.capture_port() && !live.select_port(1) &&
             !live.begin_port_approach() && !live.set_landing_gear(true) &&

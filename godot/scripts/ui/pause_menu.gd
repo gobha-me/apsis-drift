@@ -4,6 +4,7 @@ signal save_requested
 signal load_requested
 signal title_requested
 signal assistance_requested(enabled: bool)
+signal hold_requested(enabled: bool)
 signal port_requested(command: String, ordinal: int)
 signal resumed
 signal quit_requested
@@ -17,6 +18,9 @@ signal audio_mix_changed
 var saved_flight := false
 var saved_wayfarer := false
 var saved_assist_button: CheckButton
+var saved_hold_button: Button
+var saved_hold_off_button: Button
+var saved_hold_note: Label
 var saved_port_buttons: Dictionary = {}
 var saved_note: Label
 var save_button: Button
@@ -95,6 +99,14 @@ func _ready() -> void:
 		saved_assist_button.text = "Assisted piloting"
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
 		left.add_child(saved_assist_button)
+		saved_hold_button = add_button(left, "Hold current orbit\nradius and plane", func(): hold_requested.emit(true))
+		saved_hold_off_button = add_button(left, "Disable orbit-hold\nrequest", func(): hold_requested.emit(false))
+		saved_hold_note = Label.new()
+		saved_hold_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		saved_hold_note.custom_minimum_size.x = 560
+		left.add_child(saved_hold_note)
+		get_window().size_changed.connect(layout_saved_hold)
+		layout_saved_hold()
 		if saved_wayfarer:
 			for item in [["Target D1", "select_freedom_port", 1], ["Target D2", "select_freedom_port", 2], ["Approach port with thrusters", "begin_freedom_port_approach", 0], ["Cancel approach aid", "cancel_freedom_port_approach", 0], ["Capture selected port", "capture_freedom_port", 0], ["Release attached port", "release_freedom_port", 0], ["Land / deploy gear", "request_freedom_landing", 0], ["Stow landing gear", "stow_freedom_landing_gear", 0], ["Liftoff with thrusters", "liftoff_freedom_surface", 0], ["Cancel surface aid", "cancel_freedom_surface_maneuver", 0]]:
 				var button := add_button(left, item[0], func(): port_requested.emit(item[1], item[2]))
@@ -251,6 +263,17 @@ func add_slider(parent: Node, title: String, key: String, low: float, high: floa
 		controls.save_settings())
 	parent.add_child(slider)
 
+func layout_saved_hold() -> void:
+	if saved_hold_note == null or get_window().size.y <= 0: return
+	var logical_height: float = get_viewport().get_visible_rect().size.y
+	if not is_finite(logical_height) or logical_height <= 0.0: return
+	var scale := logical_height / float(get_window().size.y)
+	for item in [saved_hold_button, saved_hold_off_button, saved_hold_note]:
+		item.add_theme_font_size_override("font_size", ceili(18.0 * scale))
+	for button in [saved_hold_button, saved_hold_off_button]:
+		button.custom_minimum_size.y = ceili(44.0 * scale)
+
+
 func sync_saved_state(state: Dictionary, failed: bool) -> void:
 	if not saved_flight:
 		return
@@ -261,6 +284,12 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	var walking: bool = not state.get("surface_walk", {}).is_empty()
 	saved_assist_button.disabled = failed or jumping or walking
+	var hold: Dictionary = state.get("orbit_hold", {})
+	var requested: bool = state.get("hold_enabled", false)
+	saved_hold_button.disabled = failed or jumping or walking or not hold.get("available", false)
+	saved_hold_off_button.disabled = failed or jumping or walking or not requested
+	saved_hold_button.tooltip_text = "Select the current radius and angular-momentum plane; correction uses real thrusters." if hold.get("available", false) else str(hold.get("refusal", "Orbit-hold selection unavailable."))
+	saved_hold_note.text = "Hold request: %.1f km radius.\nCorrection seeks a circular orbit in the selected plane.\nUses fuel; manual translation pauses correction.\n%s" % [float(hold.get("radius_metres", 0.0)) / 1000.0, "Assistance OFF: request retained, correction paused." if not state.get("assistance", false) else "Assistance ON: correction remains subject to flight conditions and available thrust."] if requested else "No hold requested. Assisted spaceflight still coasts.\n" + ("Select a radius and plane from a stable orbit above the air boundary." if hold.get("available", false) else str(hold.get("refusal", "Orbit-hold selection unavailable.")))
 	resume_button.disabled = failed
 	var attached: bool = state.get("attached", false)
 	var assessment: Dictionary = state.get("docking", {})

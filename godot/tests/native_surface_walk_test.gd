@@ -57,6 +57,8 @@ func run() -> void:
 	view.surface_walk_button.pressed.emit()
 	check(view.paused and view.surface_walking() and view.liftoff_button.disabled and view.assist_button.disabled, "Actual exit button did not transfer input and pause")
 	check(view.surface_walk_menu_button.focus_mode == Control.FOCUS_ALL and not view.surface_walk_menu_button.disabled and view.controls_menu.saved_assist_button.disabled, "Surface menu lost controller focus or assistance guard")
+	var hold_before: Dictionary = owner.get_freedom_flight_state()
+	check(view.controls_menu.saved_hold_button.disabled and not hold_before.orbit_hold.available and not owner.set_freedom_hold(true) and owner.get_freedom_flight_state() == hold_before, "Outside pilot gained ship orbit hold")
 	check(not view.orbital_forecast.visible and not view.jump_button.visible and not view.assist_button.visible, "Outside HUD retained unrelated flight actions")
 	check("On foot" in view.primary_status.text and "Suit equipped" in view.primary_status.text and not "Reference altitude" in view.primary_status.text, "Suited compact HUD retained ship motion")
 	var help_before: Dictionary = owner.get_freedom_flight_state()

@@ -125,7 +125,27 @@ static func valid_state(value: Dictionary) -> bool:
 		if walking.get("version") != 1 or not walking.get("eye_position") is Vector3 or not walking.eye_position.is_finite(): return false
 		if not walking.get("basis") is Basis or not walking.basis.is_finite() or absf(walking.basis.determinant() - 1.0) > 0.00001: return false
 		if not walking.get("heading") is float or not is_finite(walking.heading) or absf(walking.heading) > PI: return false
-	return value.planet_radius > 0.0 and valid_orbit(value)
+	return value.planet_radius > 0.0 and valid_orbit(value) and valid_hold(value)
+
+
+static func valid_hold(value: Dictionary) -> bool:
+	if not value.get("hold_enabled") is bool or not value.get("orbit_hold") is Dictionary:
+		return false
+	var hold: Dictionary = value.orbit_hold
+	if not hold.get("available") is bool or not hold.get("refusal") is String:
+		return false
+	if not value.hold_enabled:
+		return not hold.has("radius_metres") and not hold.has("plane_normal") and not hold.has("planet_id")
+	if hold.get("planet_id") != value.get("planet_id") or not hold.get("radius_metres") is float or not is_finite(hold.radius_metres) or hold.radius_metres <= value.planet_radius + value.atmosphere_edge or hold.radius_metres > 1.0e15:
+		return false
+	var plane: Variant = hold.get("plane_normal")
+	if not plane is PackedFloat64Array or plane.size() != 3:
+		return false
+	var norm := 0.0
+	for component in plane:
+		if not is_finite(component): return false
+		norm += component * component
+	return absf(norm - 1.0) <= 1.0e-12
 
 
 static func valid_orbit(value: Dictionary) -> bool:
@@ -640,6 +660,7 @@ func setup_controls() -> void:
 	controls_menu.title_requested.connect(func():
 		if paused and focused and not journey_dialog_open and not save_dialog.visible: title_requested.emit())
 	controls_menu.assistance_requested.connect(request_assistance)
+	controls_menu.hold_requested.connect(request_hold)
 	controls_menu.port_requested.connect(port_command)
 	controls_menu.quit_requested.connect(func():
 		if quit_handler.is_valid(): quit_handler.call()
@@ -694,6 +715,17 @@ func request_assistance(enabled: bool) -> void:
 	player_input.assist = state.assistance
 	assist_button.set_pressed_no_signal(state.assistance)
 	controls_menu.sync_saved_state(state, false)
+
+
+func request_hold(enabled: bool) -> void:
+	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible or mode_change_pending:
+		return
+	if not bridge.set_freedom_hold(enabled):
+		controls_menu.message.text = str(bridge.get_last_error())
+		return
+	state = bridge.get_freedom_flight_state()
+	controls_menu.sync_saved_state(state, false)
+	controls_menu.message.text = "Orbit-hold request selected. Resume explicitly to apply correction." if enabled else "Orbit-hold request disabled. Resume explicitly to coast."
 
 
 func open_save_dialog() -> void:

@@ -112,6 +112,11 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto set_hold(OrbitHoldRequest)
       -> std::expected<void, std::string>;
+  // Explicit player selection from the authoritative current orbit. Assessing
+  // availability and selecting the target never advance or reposition the body.
+  [[nodiscard]] auto current_orbit_hold_target() const
+      -> std::expected<OrbitHoldTarget, std::string>;
+  [[nodiscard]] auto hold_current_orbit() -> std::expected<void, std::string>;
   [[nodiscard]] auto advance(const NativeFlightControls&,
                              SimulationSeconds = kSimulationStep)
       -> std::expected<NativeFlightStep, std::string>;

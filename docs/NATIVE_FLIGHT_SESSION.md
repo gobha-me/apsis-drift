@@ -2,10 +2,12 @@
 
 2026-09-30, #330. `NativeFreedomFlightSession` owns a mutable C++ flight
 document, its qualified physical system and generated rotation recipe. It opens
-only an explicitly selected [format18 flight save](FREEDOM_FLIGHT_SAVE.md);
+only an explicitly selected [physical flight save](FREEDOM_FLIGHT_SAVE.md) or
+supported versioned journey wrapper;
 docked/career selections and mismatched home identity refuse activation.
-Godot still needs its live consumer and the physical station transitions. This
-session alone is not the playable handoff specified in #245.
+The [saved native consumer](SAVED_NATIVE_FLIGHT.md) uses this owner for ordinary
+flight and physical station/surface transitions; presentation does not advance
+a second body or universe.
 
 ## One clock and one force owner
 
@@ -13,6 +15,16 @@ Presentation submits positive/negative translation and rotation fractions.
 Each finite fraction must be in [0,1]. Saved assistance and an optional saved
 hold request govern allocation; input does not carry a second assistance flag.
 Selection changes do not move the ship or advance its clock.
+
+`current_orbit_hold_target()` is a pure availability query for the explicit
+player selector. It requires a stable bound trajectory above the actual air
+boundary and no conflicting pilot, attachment, surface, travel or loss state.
+The target radius comes from the qualified gravity query; its signed plane comes
+from normalized C++ specific angular momentum with canonical zero components.
+`hold_current_orbit()` validates that target through the existing provider and
+commits the saved request without changing pose, time, resources or history.
+`set_hold({})` clears it. This application selection does not change the pure
+controller's target contract or create an automatic orbit-insertion mode.
 
 Every accepted advance is exactly one 120 Hz simulation tick. First the pure
 `evaluate_orbit_hold_correction` query validates and allocates the existing
@@ -25,8 +37,9 @@ when an active hold tick crosses inward through the atmosphere boundary.
 Disabled, Advanced, manual-priority and unavailable hold states retain ordinary
 flight through the same kernel. Air does not disappear because hold is paused.
 Requested hold force is diagnostic; the applied channels and their propulsive
-impulses contain the correction once. Future fuel accounting must consume the
-actual gross channels, not bill the diagnostic again.
+impulses contain the correction once. The selected resource ledger bills actual
+gross firing once; insufficient fuel falls back to passive motion without
+discarding the request or pretending that a dry thruster fired.
 
 Integration, post-step observation and save qualification operate on a candidate.
 Only a complete persistable candidate replaces the entire document, advancing
@@ -42,7 +55,7 @@ or copying a session does not retain a pointer into the old owner.
 ## Explicit persistence
 
 `save_as` requires a bounded absolute path and uses the existing atomic C++
-format18 writer. It neither changes the selected source identity nor autosaves
+writer for the selected flight/journey format. It neither changes the selected source identity nor autosaves
 simulation. Reopening that destination explicitly selects its new source path.
 All recipe/model/history/state selections survive reopening; derived observations
 are recomputed by the same owners.

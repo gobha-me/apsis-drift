@@ -40,6 +40,8 @@ The open docking well still stops ordinary unsupported walking.
 A [compact HUD](docs/NATIVE_HUD.md) leaves the scene visible; **Esc / Start · Controls**
 and **Flight instruments & navigation** provide the detailed readouts and actions.
 **Flight basics (paused)** explains the current controls, fuel, jumps, landing and return.
+Paused flight controls also offer an explicit [orbit-hold request](docs/SAVED_NATIVE_FLIGHT.md):
+select the current radius and plane from a stable orbit, then resume to use real thrusters and fuel.
 
 Boarding is a [playable prototype](docs/PLAYABLE_BOARDING_PROTOTYPE.md), with
 animation and body-clearance refinements deferred. The [planetary voyage check](docs/PLANETARY_VOYAGE_PROTOTYPE.md) covers
