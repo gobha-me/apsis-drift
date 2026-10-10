@@ -53,6 +53,7 @@ TESTS = {
     "native_station_view": "native_assets",
     "wayfarer_frame": "native_assets",
     "saved_flight": "freedom_saves",
+    "native_environment": "freedom_saves",
     "native_audio": "freedom_saves",
     "first_jump": "freedom_saves",
     "native_recovery": "freedom_saves",
@@ -793,6 +794,8 @@ def main(argv=None):
             arguments.append(str(work / "native-assets"))
         if name == "freedom_start":
             arguments.append(str(work / "flight-18.json"))
+        if name == "native_environment":
+            arguments = [str(work / path) for path in ("wayfarer-flight.json", "environment-world.json")]
         if name == "saved_flight":
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "flight-trace.json", "corrupt.json", "freedom-0.json", "native-assets", "flight-overflow.json")]
         if name == "native_audio":

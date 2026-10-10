@@ -157,6 +157,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	scene.add_child(world)
 	light = DirectionalLight3D.new()
 	light.basis = FlightView.star_light_basis(flight.star_direction)
+	light.light_color = flight.lighting.star_color
 	light.light_energy = 1.5
 	scene.add_child(light)
 	requested_heading = state.heading_radians
@@ -499,6 +500,7 @@ func update_view() -> void:
 			return
 		station.transform = Transform3D(flight.station_basis, flight.station_position)
 		light.basis = FlightView.star_light_basis(flight.star_direction)
+		light.light_color = flight.lighting.star_color
 		ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 		camera.transform = Transform3D(flight.body_basis, flight.body_basis * Vector3(seated.eye_craft[0], seated.eye_craft[1], seated.eye_craft[2]))
 		if not mode_change_pending:
@@ -524,6 +526,7 @@ func update_view() -> void:
 		pitch = 0.0
 	station.transform = Transform3D(state.station_basis, state.station_position)
 	light.basis = FlightView.star_light_basis(flight.star_direction)
+	light.light_color = flight.lighting.star_color
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians) * Basis(Vector3.RIGHT, pitch), state.actor_eye_position)
 	board_button.visible = not boarding_transition()

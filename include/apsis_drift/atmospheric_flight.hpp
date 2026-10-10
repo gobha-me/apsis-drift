@@ -25,6 +25,18 @@ struct AtmosphericFlightError {
   std::optional<PlanetRotationError> rotation;
   std::optional<VacuumDynamicsError> dynamics;
 };
+// Immutable version-one coefficients shared by force sampling and presentation.
+// Resolving these values does not advance time or generate any world state.
+struct AtmosphericFlightProfile {
+  double sea_level_pressure_millibars{}, sea_level_density_kg_per_cubic_metre{};
+  double scale_height_metres{}, space_boundary_altitude_metres{};
+  friend auto operator==(const AtmosphericFlightProfile&,
+                         const AtmosphericFlightProfile&) -> bool = default;
+};
+[[nodiscard]] auto resolve_atmospheric_flight_profile(
+    const PlanetDescriptor&, AtmosphericFlightRecipe = {})
+    -> std::expected<AtmosphericFlightProfile, AtmosphericFlightError>;
+
 struct AtmosphericFlightSample {
   PlanetId planet;
   AtmosphereClass atmosphere_class{};

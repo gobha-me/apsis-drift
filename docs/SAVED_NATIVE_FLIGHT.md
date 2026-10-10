@@ -86,6 +86,22 @@ with source LOD 8 and relief 0; this consumer does not introduce the study's
 experimental relief into saved worlds. A failed projection/import refuses
 actionably rather than generating a substitute universe.
 
+The planetary sky now consumes a versioned, body-qualified observation from the
+same C++ flight projection: current tick and system/body identities, canonical
+star direction, actual generated star color/angular size, and the selected
+planet's atmosphere palette and version-one density/scale-height/boundary.
+Flight and suited surface walking share this presenter. Both camera depth ranges
+receive the same ambient lighting; the background sky is drawn once. Station
+walking retains its authored interior fill and uses the actual star color.
+These are read-only presentation values. Pausing, looking around, and rebuilding
+the material do not advance time or change saves. Unsupported identities,
+versions and malformed coefficients refuse before presentation.
+
+The atmospheric material uses a bounded eight-sample appearance approximation,
+not weather or a radiative-transfer simulation. Background stars, distant-body
+phase and full planet-shadow qualification remain work under #213. The existing
+physics, terrain heights and atmosphere recipe are unchanged.
+
 ## Presentation and controls
 
 `tools/run_godot_native.sh --continue=/absolute/path/to/flight-save.json` opens

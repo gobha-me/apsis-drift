@@ -13,6 +13,7 @@ const WAYFARER_HASH = "12db339e004fcfa6586f745597108a69009b6b8ebc088b5e4ff373dec
 const WAYFARER_DESCRIPTOR_HASH = "17c2bc23d4f43602f85a7951dd7c8a3aaceed691e1a1b8a2ef823df703c446b7"
 const HomeNavigation = preload("res://scripts/native/home_navigation.gd")
 const PlayerInput = preload("res://scripts/ui/player_input.gd")
+const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
 var primary_status: RichTextLabel
@@ -29,6 +30,9 @@ var ship: Node3D
 var terrain: Node3D
 var exhaust: Node3D
 var light: DirectionalLight3D
+var planet_environment: Environment
+var near_environment: Environment
+var sky_material: ShaderMaterial
 var hud_scroll: ScrollContainer
 var hud_column: VBoxContainer
 var hud_theme: Theme
@@ -115,7 +119,7 @@ static func star_light_basis(direction: Vector3) -> Basis:
 
 
 static func valid_state(value: Dictionary) -> bool:
-	if not valid_star_direction(value.get("star_direction")): return false
+	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
@@ -298,14 +302,15 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	scene.add_child(light)
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.004, 0.009, 0.02)
+	planet_environment = environment
+	sky_material = NativeEnvironment.install(environment)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.35, 0.45, 0.7)
 	environment.ambient_light_energy = 0.6
 	world.environment = environment
 	scene.add_child(world)
 	var close_environment: Environment = environment.duplicate()
+	near_environment = close_environment
 	close_environment.background_mode = Environment.BG_CLEAR_COLOR
 	camera.environment = close_environment
 	set_ship_layer(ship)
@@ -318,6 +323,11 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		set_ship_layer(station)
 	terrain = PlanetStreamView.new()
 	terrain.bridge = bridge
+	if not NativeEnvironment.apply(state, planet_environment, light, sky_material):
+		error = "Canonical native environment is unavailable"
+		return false
+	near_environment.ambient_light_color = planet_environment.ambient_light_color
+	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
 	scene.add_child(terrain)
 	rendered_world = str(state.system_id) + ":" + str(state.planet_id)
 	build_ui()
@@ -1092,6 +1102,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		controls_menu.sync_saved_state(state, false)
 		refresh_control_hint()
 	light.basis = star_light_basis(state.star_direction)
+	if not NativeEnvironment.apply(state, planet_environment, light, sky_material):
+		pause_on_error("Canonical native environment changed unexpectedly")
+		return
+	near_environment.ambient_light_color = planet_environment.ambient_light_color
+	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nReference altitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
