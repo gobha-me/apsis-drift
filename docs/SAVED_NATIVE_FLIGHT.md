@@ -48,15 +48,16 @@ periapsis; the display retains C++ escape classification rather than inventing
 an impending impact from that number. No lab NAV widget, additional 20 km orbit
 threshold, hold command or save field is introduced.
 
-Saved-flight telemetry and actions use physical-size-aware type and button
-heights. The left panel wraps long station, port and save-status text; its
-visible scrollbar keeps all actions reachable in short windows. Dark panel
-backings keep text legible over bright terrain and station geometry. The orbital
-forecast stays alongside the panel when width permits and joins the scrolling
-stack in narrower windows. Layout and scrolling issue no flight, pause or save
-commands; simulation follows the existing pause state. Keyboard/controller
-actions remain available through the Esc/Start controls menu and its existing
-neutral-resume gate.
+The [native information hierarchy](NATIVE_HUD.md) keeps a compact mode, motion,
+fuel/jump and contextual-action card visible during ordinary flight or ground
+walking. **Esc / Start · Controls** opens the existing paused menu; choose
+**Flight instruments & navigation** for complete telemetry and every existing
+command. **Back to controls** stays paused. The detailed panel wraps long
+station, port and save-status text; its visible scrollbar keeps actions reachable
+in short windows. The orbital forecast stays alongside it when width permits
+and joins the scrolling stack at narrower widths. Type and actions compensate
+for physical canvas scale. Read-only layout/scrolling does not advance simulation;
+opening controls retains the existing pause/cancel-aid and neutral-resume rules.
 
 The displayed full body attitude and home-station vector are projected in C++
 from the saved nonrotating planet frame into the generated rotating planet's

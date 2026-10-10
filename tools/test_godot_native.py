@@ -22,6 +22,7 @@ import time
 # Explicit opt-in list: GPU reviews, private assets, audible captures and cadence
 # diagnostics are deliberately not mistaken for headless acceptance tests.
 TESTS = {
+    "native_status": "none",
     "validate": "snapshot",
     "input": "none",
     "chase_camera": "none",

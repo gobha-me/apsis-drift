@@ -53,10 +53,12 @@ func run() -> void:
 	var captures: Array = []
 	var rendered := DisplayServer.get_name() != "headless"
 	check(view.paused and not view.surface_walking() and view.state.surface.landed, "Continue lost landed seated readiness")
+	check(not view.hud_scroll.visible and "Landed" in view.primary_status.text and view.context_action.disabled, "Landed compact HUD lost actual mode or allowed a paused maneuver")
 	view.surface_walk_button.pressed.emit()
 	check(view.paused and view.surface_walking() and view.liftoff_button.disabled and view.assist_button.disabled, "Actual exit button did not transfer input and pause")
 	check(view.surface_walk_menu_button.focus_mode == Control.FOCUS_ALL and not view.surface_walk_menu_button.disabled and view.controls_menu.saved_assist_button.disabled, "Surface menu lost controller focus or assistance guard")
 	check(not view.orbital_forecast.visible and not view.jump_button.visible and not view.assist_button.visible, "Outside HUD retained unrelated flight actions")
+	check("On foot" in view.primary_status.text and "Suit equipped" in view.primary_status.text and not "Reference altitude" in view.primary_status.text, "Suited compact HUD retained ship motion")
 	for button in view.controls_menu.saved_port_buttons.values():
 		check(button.disabled, "Outside controls menu retained a flight action")
 	checkpoint(owner, args[0], args[2], "exited")
@@ -87,8 +89,10 @@ func run() -> void:
 	walk(view, KEY_S, 600)
 	checkpoint(owner, args[0], args[2], "halfway")
 	if failed: shell.free(); quit(1); return
-	view.surface_walk_menu_button.pressed.emit()
+	check(view.context_source == view.surface_walk_button and not view.context_action.disabled, "Actual ground return action is inaccessible")
+	view.context_action.pressed.emit()
 	check(view.surface_walking() and not view.paused and view.error.is_empty(), "Distant return changed input ownership")
+	check(not view.save_status.text.is_empty() and view.save_status.text.left(180) in view.primary_status.text, "Actual return refusal disappeared behind the hidden detail wall")
 	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 	var paused_tick: String = view.state.tick
 	view._process(0.125)
@@ -114,7 +118,7 @@ func run() -> void:
 	checkpoint(owner, args[0], args[2], "returned")
 	if rendered: await capture_phase(view, owner, args[2], {"label": "returned"}, captures)
 	var retained_model: int = view.staged_model.get_instance_id()
-	view.surface_walk_button.pressed.emit()
+	view.context_action.pressed.emit()
 	check(view.paused and not view.surface_walking() and view.staged_model.get_instance_id() == retained_model and retained_model != model_id, "Nearby return failed or replaced the continued ship")
 	checkpoint(owner, args[0], args[2], "seated")
 	check(shell.select_start(owner, {"mode": "continue", "value": args[2].path_join("seated.json"), "assets": args[1]}), "Returned seated Continue did not stage")

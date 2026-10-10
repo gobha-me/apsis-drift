@@ -255,7 +255,7 @@ jobs:
           --test native_assembly --test native_start_staging --test native_planetary --test native_voyage
           --test native_roundtrip --test native_roundtrip_pilot
           --test native_roundtrip_pilot_aligned --test native_roundtrip_pilot_offset
-          --test home_navigation --test native_surface --test native_surface_walk
+          --test home_navigation --test native_status --test native_surface --test native_surface_walk
           --test native_surface_loop
           --test wayfarer_operating
           --test recorded_audio_shutdown
