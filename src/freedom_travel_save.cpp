@@ -1,6 +1,7 @@
 #include "apsis_drift/freedom_travel_save.hpp"
 
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <limits>
 #include <nlohmann/json.hpp>
@@ -130,7 +131,7 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
   const auto body =
       encode_rigid_body_state_json(RigidBodyWorldContext{*system}, r.source);
   if (!body) return std::unexpected{failure("frozen source cannot encode")};
-  return Json{
+  Json result{
       {"request",
        {{"version", r.version},
         {"universe_seed", r.universe_seed.value},
@@ -144,6 +145,11 @@ auto frozen_json(const FrozenFreedomJumpArrival& f)
       {"point", {f.point.x, f.point.y, f.point.z}},
       {"arrival_tick", f.preview.arrival_tick},
       {"envelope_radius_metres", *f.preview.distance.envelope_radius_metres}};
+  if (r.lineage)
+    result["request"]["craft_lineage"] = {
+        {"version", r.lineage->version},
+        {"generation", std::to_string(r.lineage->generation)}};
+  return result;
 }
 auto frozen_value(const Json& f)
     -> std::expected<FrozenFreedomJumpArrival, SaveSchemaError> {
@@ -152,8 +158,10 @@ auto frozen_value(const Json& f)
       !uints(f, {"sample_seed", "arrival_tick", "envelope_radius_metres"}))
     return std::unexpected{failure("invalid frozen shape")};
   const auto& r = f["request"];
-  if (!fields(r, {"version", "universe_seed", "craft", "source_system",
-                  "source", "destination", "profile", "attempt"}) ||
+  auto shape = r;
+  shape.erase("craft_lineage");
+  if (!fields(shape, {"version", "universe_seed", "craft", "source_system",
+                      "source", "destination", "profile", "attempt"}) ||
       !uints(r, {"version", "universe_seed", "craft", "source_system",
                  "destination", "profile", "attempt"}) ||
       r["version"] != kFreedomJumpTargetingVersion ||
@@ -163,6 +171,22 @@ auto frozen_value(const Json& f)
   request.universe_seed = {r["universe_seed"].get<std::uint64_t>()};
   request.craft = {r["craft"].get<std::uint64_t>()};
   request.destination = {r["destination"].get<std::uint64_t>()};
+  if (r.contains("craft_lineage")) {
+    const auto& l = r["craft_lineage"];
+    if (!fields(l, {"version", "generation"}) || !uints(l, {"version"}) ||
+        l["version"] != kFreedomCraftLineageVersion ||
+        !l["generation"].is_string())
+      return std::unexpected{failure("invalid frozen craft lineage")};
+    const auto& digits = l["generation"].get_ref<const std::string&>();
+    std::uint64_t generation{};
+    const auto parsed = std::from_chars(
+        digits.data(), digits.data() + digits.size(), generation);
+    if (digits.empty() || digits.size() > 20 || digits.front() == '0' ||
+        parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size())
+      return std::unexpected{failure("invalid frozen craft generation")};
+    request.lineage = FreedomCraftLineage{1, generation};
+  }
+
   request.profile =
       static_cast<IntersystemRuleProfile>(r["profile"].get<unsigned>());
   request.attempt = r["attempt"].get<std::uint64_t>();
@@ -281,7 +305,7 @@ auto validate_freedom_travel_document(const FreedomTravelSaveDocument& d)
         f.preview.arrival_tick >=
             std::numeric_limits<SimulationTick>::max() - 2 ||
         r.universe_seed != flight.origin.recipe.universe_seed ||
-        r.craft != ledger.craft ||
+        r.craft != ledger.craft || r.lineage != flight.origin.lineage ||
         r.attempt == std::numeric_limits<std::uint64_t>::max() ||
         s.next_attempt != r.attempt + 1 ||
         !validate_freedom_resources(before) || before.craft != r.craft ||

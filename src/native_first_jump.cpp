@@ -19,6 +19,9 @@ auto NativeFreedomFlightSession::travel_document() const
 }
 auto NativeFreedomFlightSession::select_jump(SystemId destination)
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{
         "Cancel the active spool before changing destination"};
@@ -76,6 +79,7 @@ auto NativeFreedomFlightSession::jump_preview() const
   FreedomJumpRequest request;
   request.universe_seed = document_.origin.recipe.universe_seed;
   request.craft = document_.origin.state.craft;
+  request.lineage = document_.origin.lineage;
   request.source = document_.flight;
   request.destination = *travel_->selected;
   request.attempt = travel_->next_attempt;
@@ -90,6 +94,9 @@ auto NativeFreedomFlightSession::jump_preview() const
 }
 auto NativeFreedomFlightSession::jump_available() const
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!travel_ || travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Select an idle native jump first"};
   if (actor_ || (docking_ && docking_->attached) ||
@@ -118,6 +125,9 @@ auto NativeFreedomFlightSession::jump_available() const
 }
 auto NativeFreedomFlightSession::begin_jump()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (auto available = jump_available(); !available) return available;
   auto candidate = *this;
   candidate.travel_->phase = FreedomJumpPhase::spool;
@@ -131,6 +141,9 @@ auto NativeFreedomFlightSession::begin_jump()
 }
 auto NativeFreedomFlightSession::cancel_jump()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!travel_ || travel_->phase != FreedomJumpPhase::spool)
     return std::unexpected{"Only an uncommitted spool can be canceled"};
   auto candidate = *this;

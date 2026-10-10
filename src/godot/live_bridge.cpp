@@ -190,6 +190,7 @@ class FreedomBridge : public godot::RefCounted {
     std::unique_ptr<SavedFlightWorld> flight;
     std::unique_ptr<NativeFreedomStationStart> station;
     std::unique_ptr<PlanetStream> stream;
+    std::optional<FreedomRecoverySaveDocument> recovery_source;
   };
   std::unique_ptr<PendingFreedomStart> pending;
   std::uint64_t next_candidate_id{1};
@@ -204,7 +205,8 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomKnowledgeSaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomTravelSaveDocument>(selected.document))
+        std::holds_alternative<FreedomTravelSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomRecoverySaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -254,6 +256,10 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("stage_freedom_continue", "save_path"),
         &FreedomBridge::stage_freedom_continue);
+    godot::ClassDB::bind_method(godot::D_METHOD("stage_freedom_recovery"),
+                                &FreedomBridge::stage_freedom_recovery);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_recovery_state"),
+                                &FreedomBridge::get_freedom_recovery_state);
     godot::ClassDB::bind_method(godot::D_METHOD("get_pending_freedom_start"),
                                 &FreedomBridge::get_pending_freedom_start);
     godot::ClassDB::bind_method(
@@ -545,7 +551,9 @@ class FreedomBridge : public godot::RefCounted {
             selected.document) ||
         std::holds_alternative<FreedomKnowledgeSaveDocument>(
             selected.document) ||
-        std::holds_alternative<FreedomTravelSaveDocument>(selected.document)) {
+        std::holds_alternative<FreedomTravelSaveDocument>(selected.document) ||
+        std::holds_alternative<FreedomRecoverySaveDocument>(
+            selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
       const auto view = project_saved_flight(*opened);
@@ -614,6 +622,55 @@ class FreedomBridge : public godot::RefCounted {
       return false;
     }
   }
+  auto get_freedom_recovery_state() const -> godot::Dictionary {
+    if (!saved_flight) return {};
+    auto document = saved_flight->session.recovery_document();
+    if (!document) return {};
+    auto explanation = freedom_recovery_explanation(*document);
+    if (!explanation) return {};
+    godot::Dictionary result;
+    result["pending"] = document->recovery.pending;
+    result["recorded"] = document->recovery.latest.has_value();
+    result["explanation"] = godot::String{explanation->c_str()};
+    result["craft_id"] = godot::String{
+        std::to_string(
+            recovery_flight(document->voyage).origin.state.craft.value)
+            .c_str()};
+    if (document->recovery.latest) {
+      result["retired_craft_id"] = godot::String{
+          std::to_string(recovery_flight(document->recovery.latest->retired)
+                             .origin.state.craft.value)
+              .c_str()};
+      result["cause"] = document->recovery.latest->cause ==
+                                FreedomLossCause::irrecoverable_destruction
+                            ? "irrecoverable_destruction"
+                            : "recoverable_destruction";
+    }
+    return result;
+  }
+  auto stage_freedom_recovery() -> bool {
+    try {
+      if (pending || !saved_flight || !saved_flight->session.recovery_pending())
+        throw std::invalid_argument("Continue an actual pending loss first");
+      auto source = saved_flight->session.recovery_document();
+      if (!source) throw std::runtime_error(source.error());
+      auto candidate = saved_flight->session;
+      auto completed = candidate.complete_recovery();
+      if (!completed) throw std::runtime_error(completed.error());
+      auto replacement = candidate.recovery_document();
+      if (!replacement) throw std::runtime_error(replacement.error());
+      const auto planet = project_saved_flight(candidate).planet;
+      if (!stage_selected({NativeStartup::Mode::freedom,
+                           std::move(*replacement), planet,
+                           candidate.source_save()}))
+        return false;
+      pending->recovery_source = std::move(*source);
+      return true;
+    } catch (const std::exception& e) {
+      last_error = e.what();
+      return false;
+    }
+  }
   auto get_pending_freedom_start() const -> godot::Dictionary {
     if (!pending) return {};
     godot::Dictionary result;
@@ -655,6 +712,17 @@ class FreedomBridge : public godot::RefCounted {
     if (!matching_candidate(id)) {
       last_error = "Pending candidate identifier differs";
       return false;
+    }
+    if (pending->recovery_source) {
+      if (!saved_flight) {
+        last_error = "Recovery source is no longer active";
+        return false;
+      }
+      auto source = saved_flight->session.recovery_document();
+      if (!source || *source != *pending->recovery_source) {
+        last_error = "Recovery source changed before replacement commit";
+        return false;
+      }
     }
     stream = std::move(pending->stream);
     exported.clear();
@@ -1285,7 +1353,8 @@ class FreedomBridge : public godot::RefCounted {
         const auto view = require(resolve_freedom_knowledge_chart(
             ledger, session.system().catalog.id, *session.resources(),
             !session.travel() ||
-                session.travel()->phase == FreedomJumpPhase::idle));
+                session.travel()->phase == FreedomJumpPhase::idle,
+            &document.origin));
         godot::Array rows;
         for (const auto& row : view.destinations) {
           godot::Dictionary item;

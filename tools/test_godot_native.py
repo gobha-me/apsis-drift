@@ -52,6 +52,7 @@ TESTS = {
     "wayfarer_frame": "native_assets",
     "saved_flight": "freedom_saves",
     "first_jump": "freedom_saves",
+    "native_recovery": "freedom_saves",
     "native_port": "freedom_saves",
     "native_walk": "freedom_saves",
     "native_assembly": "native_assets",
@@ -258,7 +259,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot", "native_surface") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot", "native_surface") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",

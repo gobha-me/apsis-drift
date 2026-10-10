@@ -210,6 +210,85 @@ auto travel_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
 }
 } // namespace
 
+namespace {
+auto recovery_trace(const std::filesystem::path& path, apsis_drift::Seed seed,
+                    apsis_drift::SimulationTick tick) -> bool {
+  using namespace apsis_drift;
+  if (!travel_trace(path, seed, tick)) return false;
+  auto selected = native_continue(path.string() + ".leg0.600.json");
+  if (!selected) return false;
+  auto neighbor = NativeFreedomFlightSession::open(std::move(*selected));
+  if (!neighbor) return false;
+  NativeFlightControls demand;
+  demand.positive_translation.y = 1;
+  for (unsigned t = 0; t < 120; ++t)
+    if (!neighbor->advance(demand)) return false;
+  auto before = neighbor->recovery_document();
+  if (!before || !neighbor->save_as(path.string() + ".before.json"))
+    return false;
+  const auto& source = recovery_flight(before->voyage);
+  auto checksum = freedom_recovery_source_checksum(before->voyage);
+  if (!checksum) return false;
+  for (unsigned cause = 0; cause < 2; ++cause) {
+    for (unsigned fallback = 0; fallback < 2; ++fallback) {
+      auto checkpoint = *before;
+      if (fallback) checkpoint.recovery.checkpoint->port.station.value ^= 1;
+      auto pending = record_freedom_loss(
+          checkpoint, static_cast<FreedomLossCause>(cause),
+          source.origin.state.craft, source.flight.tick, *checksum);
+      if (!pending) return false;
+      const auto prefix = path.string() + "." + std::to_string(cause) + "." +
+                          std::to_string(fallback);
+      if (!write_freedom_recovery_file_atomically(prefix + ".pending.json",
+                                                  *pending))
+        return false;
+      auto complete = complete_freedom_recovery(*pending);
+      if (!complete || !write_freedom_recovery_file_atomically(
+                           prefix + ".complete.json", *complete))
+        return false;
+      auto startup = native_continue(prefix + ".complete.json");
+      if (!startup) return false;
+      auto walking = NativeFreedomFlightSession::open(std::move(*startup));
+      if (!walking) return false;
+      for (unsigned t = 0; t < 20; ++t)
+        if (!walking->advance_walk({1, 0, 0})) return false;
+      if (!walking->save_as(prefix + ".walk.json")) return false;
+      // A selected ordinary new jump remains inside the completed recovery
+      // wrapper; the retired commitment cannot be replayed on this instance.
+      if (!walking->select_jump(
+              generate_first_intersystem_identities(seed).target_system) ||
+          !walking->save_as(prefix + ".selected.json"))
+        return false;
+      if (cause == 0 && fallback == 0) {
+        for (unsigned t = 0; t < 2960; ++t)
+          if (!walking->advance_walk({0, -1, 0})) return false;
+        if (!walking->begin_boarding()) return false;
+        for (unsigned t = 0; t < kGameplayBoardingTicks; ++t)
+          if (!walking->advance_walk({})) return false;
+        if (!walking->release_port()) return false;
+        NativeFlightControls withdrawal;
+        withdrawal.negative_translation.y = 1;
+        for (unsigned t = 0; t < 720; ++t)
+          if (!walking->advance(withdrawal)) return false;
+        if (!walking->begin_jump() ||
+            !walking->save_as(prefix + ".next-spool.json"))
+          return false;
+        for (unsigned t = 1; t <= kJumpSpoolTicks + kJumpTransitTicks; ++t) {
+          if (!walking->advance({})) return false;
+          if ((t == kJumpSpoolTicks ||
+               t == kJumpSpoolTicks + kJumpTransitTicks) &&
+              !walking->save_as(prefix + (t == kJumpSpoolTicks
+                                              ? ".next-commit.json"
+                                              : ".next-arrival.json")))
+            return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+} // namespace
+
 auto main(int argc, char** argv) -> int {
   using namespace apsis_drift;
   if (argc != 5) {
@@ -351,6 +430,8 @@ auto main(int argc, char** argv) -> int {
       std::cerr << saved.error() << '\n';
       return 1;
     }
+  } else if (mode == "recovery-trace") {
+    return recovery_trace(path, Seed{*seed}, *tick) ? 0 : 1;
   } else if (mode == "career" && *tick == 0) {
     const auto written =
         write_save_file_atomically(path, make_new_game_document(Seed{*seed}));

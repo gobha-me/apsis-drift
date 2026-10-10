@@ -18,6 +18,8 @@ var port_status: Label
 var current_view: Control
 var presentation_only := false
 var error := ""
+var recovery_overlay: Control
+var recovery_status: Label
 
 
 func _process(_delta: float) -> void:
@@ -201,7 +203,7 @@ func stage_view(owner: Variant, assets: String, pending: Dictionary) -> Control:
 	return candidate
 
 func select_start(owner: Variant, options: Dictionary) -> bool:
-	var staged: bool = owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_continue(options.value)
+	var staged: bool = owner.stage_freedom_recovery() if options.mode == "recovery" else owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_continue(options.value)
 	if not staged:
 		error = str(owner.get_last_error())
 		return false
@@ -239,10 +241,60 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 	assets_root = assets
 	connect_journey_view(candidate)
 	candidate.activate()
+	refresh_recovery()
 	log_selection(pending, "opened", candidate)
 	if previous != null: previous.free()
 	error = ""
 	return true
+
+func refresh_recovery() -> void:
+	if recovery_overlay != null:
+		remove_child(recovery_overlay)
+		recovery_overlay.free()
+		recovery_overlay = null
+	var recovery: Dictionary = bridge.get_freedom_recovery_state()
+	if not recovery.get("pending", false): return
+	current_view.pause_controls("Recorded craft loss. Continue with a replacement when ready.")
+	current_view.set_process(false)
+	current_view.set_process_input(false)
+	recovery_overlay = ColorRect.new()
+	recovery_overlay.color = Color(0.02, 0.025, 0.04, 0.94)
+	recovery_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	recovery_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(recovery_overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	recovery_overlay.add_child(center)
+	var column := VBoxContainer.new()
+	column.custom_minimum_size = Vector2(520, 0)
+	column.add_theme_constant_override("separation", 16)
+	center.add_child(column)
+	var title := Label.new()
+	title.text = "CRAFT LOSS · STANDARD RECOVERY"
+	column.add_child(title)
+	var explanation := Label.new()
+	explanation.text = recovery.explanation
+	explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(explanation)
+	var resume := Button.new()
+	resume.text = "Continue at Origin Station"
+	resume.pressed.connect(continue_recovery)
+	column.add_child(resume)
+	var save := Button.new()
+	save.text = "Save As…"
+	save.pressed.connect(func() -> void: current_view.save_dialog.popup_centered_ratio(0.75))
+	column.add_child(save)
+	recovery_status = Label.new()
+	recovery_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(recovery_status)
+	resume.grab_focus()
+
+
+func continue_recovery() -> void:
+	if not select_start(bridge, {"mode": "recovery", "assets": assets_root}):
+		recovery_status.text = error
+		recovery_status.modulate = Color(1.0, 0.75, 0.65)
+
 
 func connect_journey_view(view: Control) -> void:
 	if view.has_signal("journey_mode_changed"):

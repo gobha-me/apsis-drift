@@ -80,6 +80,9 @@ auto NativeFreedomFlightSession::port_approach_available() const
 
 auto NativeFreedomFlightSession::begin_port_approach()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before approach"};
   if (auto valid = port_approach_available(); !valid) return valid;

@@ -133,6 +133,10 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
     -> std::expected<FreedomFlightHydration, SaveSchemaError> {
   if (auto valid = validate_freedom_save_document(document.origin); !valid)
     return std::unexpected{valid.error()};
+  if (document.origin.lineage && !document.world)
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.world_owner",
+                "replacement lineage requires explicit world ownership")};
   if (document.origin.state.tick != document.flight.tick ||
       document.flight.tick >= std::numeric_limits<SimulationTick>::max() - 1)
     return std::unexpected{
@@ -277,8 +281,10 @@ auto decode_freedom_flight_document_json(std::string_view text)
     return std::unexpected{
         failure(SaveSchemaErrorCode::unsupported_format_version,
                 "$.format_version", "unsupported Freedom flight save version")};
+  auto shape_root = root;
+  if (active) shape_root.erase("craft_lineage");
   auto shape =
-      active ? fields(root,
+      active ? fields(shape_root,
                       {"application", "application_version", "format_version",
                        "mode", "recipe", "state", "flight", "flight_model",
                        "world_owner"},
@@ -316,7 +322,9 @@ auto decode_freedom_flight_document_json(std::string_view text)
   origin.erase("flight");
   origin.erase("flight_model");
   origin.erase("world_owner");
-  origin["format_version"] = kFreedomSaveFormatVersion;
+  origin["format_version"] = origin.contains("craft_lineage")
+                                 ? kFreedomCraftLineageSaveFormatVersion
+                                 : kFreedomSaveFormatVersion;
   origin["state"]["location"] = "docked_at_origin";
   // Shared identity/history validation only; original format18 location was
   // already checked, and a flight projection is mandatory below.

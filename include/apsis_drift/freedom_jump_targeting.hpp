@@ -44,6 +44,7 @@ struct FreedomJumpRequest {
   SystemId destination;
   IntersystemRuleProfile profile{IntersystemRuleProfile::assisted};
   std::uint64_t attempt{1};
+  std::optional<FreedomCraftLineage> lineage{};
   friend auto operator==(const FreedomJumpRequest&, const FreedomJumpRequest&)
       -> bool = default;
 };

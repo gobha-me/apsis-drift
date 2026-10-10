@@ -11,6 +11,7 @@
 #include "apsis_drift/freedom_flight_save.hpp"
 #include "apsis_drift/freedom_journey_save.hpp"
 #include "apsis_drift/freedom_knowledge_save.hpp"
+#include "apsis_drift/freedom_recovery_save.hpp"
 #include "apsis_drift/freedom_resource_save.hpp"
 #include "apsis_drift/freedom_save.hpp"
 #include "apsis_drift/freedom_starting_assembly_save.hpp"
@@ -59,7 +60,7 @@ using NativeSaveDocument =
                  FreedomStartingAssemblySaveDocument,
                  FreedomBoardingSaveDocument, FreedomSurfaceSaveDocument,
                  FreedomResourceSaveDocument, FreedomKnowledgeSaveDocument,
-                 FreedomTravelSaveDocument>;
+                 FreedomTravelSaveDocument, FreedomRecoverySaveDocument>;
 
 [[nodiscard]] auto make_new_game_document(
     Seed universe_seed,
@@ -80,6 +81,9 @@ using NativeSaveDocument =
     -> std::expected<void, SaveFileError>;
 [[nodiscard]] auto write_freedom_travel_file_atomically(
     const std::filesystem::path&, const FreedomTravelSaveDocument&)
+    -> std::expected<void, SaveFileError>;
+[[nodiscard]] auto write_freedom_recovery_file_atomically(
+    const std::filesystem::path&, const FreedomRecoverySaveDocument&)
     -> std::expected<void, SaveFileError>;
 
 [[nodiscard]] auto write_save_file_atomically(const std::filesystem::path& path,

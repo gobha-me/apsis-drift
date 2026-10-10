@@ -19,8 +19,7 @@ auto validate_freedom_resources(const FreedomResources& s,
     -> std::expected<void, FreedomResourceError> {
   if (auto valid = validate_freedom_resources(s); !valid) return valid;
   if (s.craft != d.origin.state.craft || s.frame != d.flight.craft ||
-      s.craft != make_freedom_new_game_document(d.origin.recipe.universe_seed)
-                     .state.craft)
+      !validate_freedom_save_document(d.origin))
     return std::unexpected{FreedomResourceError::wrong_owner};
   if (s.tick != d.flight.tick || s.tick != d.origin.state.tick)
     return std::unexpected{FreedomResourceError::wrong_tick};
