@@ -43,7 +43,9 @@ adds deployed gear, certified touchdown, saved surface idle and thruster liftoff
 the wider Freedom journey remains separate work. New Game selects [finite flight
 fuel and three jump charges](docs/FREEDOM_RESOURCES.md), with free replenishment
 while attached to a supported station port. Historical saves keep their explicit
-resource-unselected behavior; native neighboring travel remains in development.
+resource-unselected behavior. The [neighboring-system trip](docs/FREEDOM_NATIVE_TRAVEL.md)
+supports chart selection, jumps, physical home return and station replenishment.
+Suited surface walking and wider manual/controller qualification remain unfinished.
 
 **Save As** writes the actor, craft, history and clock through C++. Continue
 starts paused; quitting does not autosave. Missing, corrupt or unsupported saves

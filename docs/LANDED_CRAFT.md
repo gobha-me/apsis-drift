@@ -87,7 +87,10 @@ observed knowledge. Unknown conditions remain UNKNOWN. This reference query
 does not replace the actual terrain/motion/hull qualification above; saved
 environmental commitment policy remains part of #102.
 
-The software Compatibility captures currently expose close-ground depth artifacts.
-These images establish composed state/gear integration, not finished terrain
-materials, contact shadows or manual landing acceptance. Keep this visual
-limitation separate from the exact C++ lifecycle and save comparisons.
+The original software Compatibility captures exposed close-ground speckles.
+Frozen-state shader comparisons isolated the defect to synthetic derivative
+bump normals; the presenter now uses actual terrain slopes while retaining
+mineral colour and roughness. These images establish composed state/gear
+integration, not finished terrain materials, contact shadows or manual landing
+acceptance. Keep these limits separate from the exact C++ lifecycle and save
+comparisons.

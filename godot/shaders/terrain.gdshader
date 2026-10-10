@@ -75,15 +75,8 @@ void fragment() {
 	vec3 muted_palette = mix(vec3(dot(COLOR.rgb, vec3(0.2126, 0.7152, 0.0722))), COLOR.rgb, 0.2);
 	ALBEDO = mix(ALBEDO, mix(bedrock, muted_palette, 0.10) * 0.45, orbital);
 	ROUGHNESS = clamp(0.92 - exposed * 0.20 + grit * 0.05, 0.6, 1.0);
-	// Screen derivatives give a small normal-only relief, not invented hills.
-	float detail_height = chips * 0.65 + grit * 0.045 + strata * 0.035;
-	vec3 dpdx = dFdx(surface_position);
-	vec3 dpdy = dFdy(surface_position);
-	vec3 n = terrain_normal;
-	vec3 r1 = cross(dpdy, n);
-	vec3 r2 = cross(n, dpdx);
-	float det = dot(dpdx, r1);
-	vec3 gradient = (r1 * dFdx(detail_height) + r2 * dFdy(detail_height)) / max(abs(det), 0.000001);
-	n = normalize(n - sign(det) * gradient * 0.65);
-	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+	// Use actual terrain slopes. Derivative bump normals from planet-scale
+	// mineral coordinates amplify float quantization into near-ground speckles.
+	// Mineral detail remains in colour/roughness, without a synthetic slope.
+	NORMAL = normalize((VIEW_MATRIX * vec4(terrain_normal, 0.0)).xyz);
 }

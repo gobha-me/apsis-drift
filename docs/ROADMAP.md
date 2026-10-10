@@ -238,9 +238,10 @@ shielding/thermal, structural and propulsion margins, with a read-only native
 surface survey redacted through actual knowledge. Saved commitment policy and
 the composed operation acceptance remain #102.
 It preserves existing worlds and saves and introduces no weather clock, force,
-damage or raw cockpit disclosure. Suited planetary walking (#199), knowledge
-and observations (#175/#189), resource state (#133/#251), jump integration and
-standard recovery remain necessary parts of the wider Freedom loop.
+damage or raw cockpit disclosure. Local/neighboring observations, resource state,
+bounded jump integration and explicit standard recovery are implemented. Suited
+planetary walking (#199), saved environmental commitment policy (#102), automatic
+loss consequences and wider manual/controller/hardware acceptance remain work.
 
 ## Resource implementation checkpoint — 2026-10-09
 
@@ -252,11 +253,16 @@ saves retain their resource-unselected behavior. The recorded home voyage and
 separate initialized near-ground reserve-funded ascent qualify this starter
 budget without introducing an economy or new assets.
 
-The retained historical jump adapter demonstrates atomic charge accounting;
-mission-free native neighboring travel and its persisted committed arrival
-remain #176/#194. Standard replacement/recovery #247 and full integrated #245
-acceptance remain open. This checkpoint advances #251 and the initial service
-seam, without marking those unavailable consumers complete.
+The retained historical jump adapter preserves its atomic charge accounting.
+[Mission-free native neighboring travel](FREEDOM_NATIVE_TRAVEL.md) now persists
+actual spool, commitment, transit and arrival. The
+[continuous round trip](FREEDOM_NATIVE_ROUNDTRIP.md) qualifies normal station
+departure, actual ALIGNED/OFFSET Pilot arrival, neighboring observation, physical
+return docking, replenishment and disembarking with both compilers and native
+replays. [Explicit standard recovery](FREEDOM_RECOVERY.md) preserves the world and
+knowledge while replacing a declared lost craft. These selected consumers
+complete #193/#194/#189/#251/#246/#247. Full integrated #245 acceptance remains
+open; recovery does not yet detect every loss automatically.
 
 ## Starting chart and knowledge checkpoint — 2026-10-09
 

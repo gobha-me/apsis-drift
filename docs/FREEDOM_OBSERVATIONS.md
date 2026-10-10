@@ -80,8 +80,10 @@ on the same ledger and source ticks.
 ## Scope and verification
 
 The local provider covers the implemented origin bodies and actual starter
-flight/landing/attachment. Native neighboring arrival waits for #193/#176.
-Signals, probes, delayed relays, replacement-craft lineage and recovery stay
+flight/landing/attachment. [Native neighboring arrival](FREEDOM_NATIVE_TRAVEL.md)
+records presence and samples the actual selected world through sensor policy 1.
+[Standard recovery](FREEDOM_RECOVERY.md) preserves observations and binds old/new
+craft evidence through explicit lineage. Signals, probes and delayed relays stay
 with their owners. Full knowledge-filtered body rendering remains deferred
 #215; this change does not certify every existing telemetry/render consumer.
 
