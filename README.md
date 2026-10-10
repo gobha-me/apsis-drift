@@ -16,11 +16,15 @@ and prepares the fixed asset packages; the first build fetches pinned dependenci
 See [native setup](godot/README.md) and [development/testing](docs/DEVELOPMENT.md).
 
 ```sh
+tools/run_godot_native.sh
+# Or select a journey directly:
 tools/run_godot_native.sh --new-game=42
 tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
-Choose exactly one mode. New Game accepts unsigned 64-bit seeds, including zero.
+The [start screen](docs/NATIVE_TITLE.md) offers New Game, Continue, Flight basics
+and Quit. Direct command-line selection accepts one mode. New Game accepts
+unsigned 64-bit seeds, including zero.
 It starts a first-person actor on Origin Station's hub floor. WASD or the left
 stick walks; right-drag or the right stick looks. Escape pauses.
 

@@ -252,7 +252,7 @@ jobs:
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight --test native_audio --test first_jump --test native_recovery
           --test native_port --test native_walk
-          --test native_assembly --test native_start_staging --test native_planetary --test native_voyage
+          --test native_assembly --test native_start_staging --test native_title --test native_planetary --test native_voyage
           --test native_roundtrip --test native_roundtrip_pilot
           --test native_roundtrip_pilot_aligned --test native_roundtrip_pilot_offset
           --test home_navigation --test native_status --test native_surface --test native_surface_walk

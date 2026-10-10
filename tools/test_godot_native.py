@@ -59,6 +59,7 @@ TESTS = {
     "native_walk": "freedom_saves",
     "native_assembly": "native_assets",
     "native_start_staging": "freedom_saves",
+    "native_title": "freedom_saves",
     "native_planetary": "planetary_saves",
     "native_voyage": "voyage_saves",
     "native_roundtrip": "roundtrip_saves",
@@ -266,7 +267,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS, "native_surface", "native_surface_walk") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS, "native_surface", "native_surface_walk") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -501,6 +502,28 @@ def main(argv=None):
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
     for name in selected:
+        if name == "native_title":
+            cases = []
+            for label, extra in (("title_without_selection", []),
+                                 ("title_with_assets", [f"--assets={work / 'native-assets'}"])):
+                log = work / f"{label}.log"
+                command = [str(engine), "--headless", "--audio-driver", "Dummy",
+                           "--path", str(project), "--scene", "res://scenes/native_start_shell.tscn",
+                           "--quit-after", "3", "--", *extra]
+                code, timed_out, elapsed = run_logged(command, log, env, args.timeout)
+                output = log.read_text(errors="replace")
+                good = (not timed_out and code == 0 and not ERROR.search(output) and
+                        "Freedom native title opened: no journey selected" in output and
+                        "shell opened: seed=" not in output)
+                cases.append({"case": label, "pass": good, "returncode": code,
+                              "seconds": elapsed, "log": log.name})
+            report["setup"].append({"family": "native_title_launch", "cases": cases})
+            save()
+            if not all(case["pass"] for case in cases):
+                report["tests"].append({"name": name, "status": "launch_failed", "cases": cases})
+                save()
+                print(f"FAIL {name} launch cases", flush=True)
+                continue
         if name == "native_shell":
             cases = (
                 ("new", [f"--continue={work / 'freedom-0.json'}", "--validate-only"],
@@ -710,6 +733,9 @@ def main(argv=None):
         if name == "native_assembly":
             arguments = [str(work / "native-assets")]
         if name == "native_start_staging":
+            arguments = [str(work / path) for path in
+                         ("native-assets", "journey-20.json", "corrupt.json")]
+        if name == "native_title":
             arguments = [str(work / path) for path in
                          ("native-assets", "journey-20.json", "corrupt.json")]
         if name == "native_save":

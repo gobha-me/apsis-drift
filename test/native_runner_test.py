@@ -15,9 +15,40 @@ spec.loader.exec_module(runner)
 
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_native_launcher_passes_title_without_an_empty_selection(self):
+        source = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
+        with tempfile.TemporaryDirectory(prefix="native-title-launch-") as directory:
+            root = Path(directory)
+            tools = root / "tools"
+            tools.mkdir()
+            launcher = tools / source.name
+            launcher.write_bytes(source.read_bytes())
+            (tools / "prepare_freedom_native_assets.py").write_text("pass\n")
+            build = root / "build-native"
+            build.mkdir()
+            (build / "CMakeCache.txt").write_text(
+                "APSIS_DRIFT_TERMINAL:BOOL=OFF\nAPSIS_DRIFT_GODOT_SPIKE:BOOL=ON\n"
+                "APSIS_DRIFT_GODOT_LIVE:BOOL=ON\n")
+            cmake = tools / "cmake"
+            cmake.write_text("#!/bin/sh\nexit 0\n")
+            cmake.chmod(0o755)
+            engine = tools / "capture-engine"
+            engine.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
+            engine.chmod(0o755)
+            env = os.environ.copy()
+            env["GODOT_BIN"] = str(engine)
+            env["PATH"] = str(tools) + os.pathsep + env["PATH"]
+            result = subprocess.run(["bash", str(launcher)], env=env,
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            arguments = result.stdout.splitlines()
+            self.assertEqual(arguments, ["--path", str(root / "godot"), "--scene",
+                             "res://scenes/native_start_shell.tscn", "--",
+                             "--assets=" + str(build / "native-freedom-assets")])
+
     def test_native_launcher_rejects_ambiguous_or_relative_selection(self):
         launcher = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
-        for arguments in ((), ("--headless-validate",), ("--new-game=",),
+        for arguments in (("--headless-validate",), ("--new-game=",),
                           ("--continue=relative.json",),
                           ("--new-game=42", "--continue=/tmp/freedom.json"),
                           ("--new-game=42", "--headless-validate", "--headless-validate")):

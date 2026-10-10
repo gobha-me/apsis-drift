@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Explicit Freedom station/flight selection. Studies use run_godot_study.sh.
+# Native title or explicit Freedom selection. Studies use run_godot_study.sh.
 set -euo pipefail
 
 usage() {
-    echo 'usage: tools/run_godot_native.sh (--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH) [--headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
+    echo 'usage: tools/run_godot_native.sh [--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH] [--headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
 }
 
 selection=''
@@ -56,7 +56,7 @@ for argument in "$@"; do
             ;;
     esac
 done
-if [[ -z "$selection" ]]; then
+if [[ -z "$selection" && "$headless_validate" == true ]]; then
     usage
     exit 2
 fi
@@ -99,7 +99,8 @@ cmake --build "$native_build" --target apsis_freedom_bridge --parallel 4
 
 engine_args=(--path "${repo_dir}/godot" \
     --scene res://scenes/native_start_shell.tscn)
-script_args=("$selection" "${audio_arguments[@]}")
+script_args=("${audio_arguments[@]}")
+if [[ -n "$selection" ]]; then script_args+=("$selection"); fi
 if [[ "$headless_validate" == true ]]; then
     engine_args+=(--headless --audio-driver Dummy)
     script_args+=(--validate-only)
