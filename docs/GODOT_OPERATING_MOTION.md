@@ -128,6 +128,7 @@ python3 test/operating_motion_package_test.py
 ```
 
 The native runner stages an isolated project and all three prepared directories.
+Add `--keep-work` to retain a successful stage for the optional capture below.
 Its test uses exactly those three absolute arguments. For optional real-display
 proof, choose a new empty capture directory and invoke its staged project:
 

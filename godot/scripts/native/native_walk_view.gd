@@ -7,11 +7,16 @@ var journey_dialog_open := false
 const StationPresentation = preload("res://scripts/native/native_station_view.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
+const Controls = preload("res://scripts/ui/player_input.gd")
+var stick_settings_path := Controls.SETTINGS_PATH
+var stick_preferences: Dictionary = {}
+var stick_preferences_status := ""
 var bridge: Variant
 var state: Dictionary = {}
 var station: Node3D
 var ship: Node3D
 var camera: Camera3D
+var light: DirectionalLight3D
 var scene: Node3D
 var viewport: SubViewport
 var telemetry: Label
@@ -99,6 +104,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	if not FlightView.valid_state(flight) or not flight.attached or flight.target_port != 1:
 		error = "The walking journey has no attached D1 Wayfarer"
 		return false
+	load_stick_preferences()
 	staged_model = model
 	var boarding: Dictionary = state.get("boarding", {})
 	if not boarding.is_empty() and not model.set_pose(boarding.pose):
@@ -140,12 +146,13 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	environment.ambient_light_energy = 0.7
 	world.environment = environment
 	scene.add_child(world)
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-40, -30, 0)
+	light = DirectionalLight3D.new()
+	light.basis = FlightView.star_light_basis(flight.star_direction)
 	light.light_energy = 1.5
 	scene.add_child(light)
 	requested_heading = state.heading_radians
 	build_ui()
+	if not stick_preferences_status.is_empty(): save_status.text += "\n" + stick_preferences_status
 	station.transform = Transform3D(state.station_basis, state.station_position)
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians), state.actor_eye_position)
@@ -356,8 +363,19 @@ func save_canceled() -> void:
 	pause_controls("Save canceled. Resume explicitly after neutral.")
 
 
-static func stick(value: float) -> float:
-	return 0.0 if abs(value) < 0.15 else sign(value) * (abs(value) - 0.15) / 0.85
+func load_stick_preferences() -> void:
+	# Read the existing provider without entering the tree or installing a
+	# second global InputMap. Station keys and device selection stay explicit.
+	var reader := Controls.new()
+	reader.load_settings(stick_settings_path)
+	stick_preferences = {"deadzone": reader.settings.deadzone, "curve": reader.settings.curve}
+	stick_preferences_status = reader.status
+	reader.free()
+
+
+func stick(value: float) -> float:
+	if stick_preferences.is_empty(): return 0.0
+	return Controls.shape(value, float(stick_preferences.deadzone), float(stick_preferences.curve))
 
 
 func input_controls(delta: float) -> PackedFloat64Array:
@@ -414,6 +432,7 @@ func update_view() -> void:
 			set_paused(true)
 			return
 		station.transform = Transform3D(flight.station_basis, flight.station_position)
+		light.basis = FlightView.star_light_basis(flight.star_direction)
 		ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 		camera.transform = Transform3D(flight.body_basis, flight.body_basis * Vector3(seated.eye_craft[0], seated.eye_craft[1], seated.eye_craft[2]))
 		if not mode_change_pending:
@@ -424,6 +443,11 @@ func update_view() -> void:
 		error = "C++ returned an invalid station actor pose"
 		set_paused(true)
 		return
+	var flight: Dictionary = bridge.get_freedom_flight_state()
+	if not FlightView.valid_state(flight):
+		error = "C++ returned an invalid station flight projection"
+		set_paused(true)
+		return
 	var boarding: Dictionary = state.get("boarding", {})
 	if not boarding.is_empty() and not staged_model.set_pose(boarding.pose):
 		error = "The Wayfarer boarding pose changed unexpectedly"
@@ -432,8 +456,8 @@ func update_view() -> void:
 	if boarding_transition():
 		requested_heading = state.heading_radians
 		pitch = 0.0
-	var flight: Dictionary = bridge.get_freedom_flight_state()
 	station.transform = Transform3D(state.station_basis, state.station_position)
+	light.basis = FlightView.star_light_basis(flight.star_direction)
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians) * Basis(Vector3.RIGHT, pitch), state.actor_eye_position)
 	board_button.visible = not boarding_transition()

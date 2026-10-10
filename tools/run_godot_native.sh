@@ -3,10 +3,11 @@
 set -euo pipefail
 
 usage() {
-    echo 'usage: tools/run_godot_native.sh [--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH] [--headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
+    echo 'usage: tools/run_godot_native.sh [--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH] [--build-dir=DIR] [--headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
 }
 
 selection=''
+requested_native_build=''
 headless_validate=false
 audio_arguments=()
 audio_hum=''
@@ -14,6 +15,13 @@ audio_propulsion=''
 audio_persist=''
 for argument in "$@"; do
     case "$argument" in
+        --build-dir=*)
+            if [[ -n "$requested_native_build" || "$argument" == *= ]]; then
+                usage
+                exit 2
+            fi
+            requested_native_build="${argument#*=}"
+            ;;
         --new-game=*|--continue=*)
             if [[ -n "$selection" || "$argument" == *= ]]; then
                 usage
@@ -68,8 +76,31 @@ if [[ "$selection" == --continue=* && "${selection#--continue=}" != /* ]]; then
     exit 2
 fi
 
-repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-native_build="${repo_dir}/build-native"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+if ! native_build="$(python3 - "$repo_dir" "$requested_native_build" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+value = sys.argv[2] or 'build-native'
+if any(ord(character) < 32 or ord(character) == 127 for character in value):
+    raise SystemExit('Build directory contains a control character.')
+path = Path(value)
+try:
+    path = (path if path.is_absolute() else root / path).resolve()
+except (OSError, RuntimeError):
+    raise SystemExit('Cannot resolve the build directory.')
+reserved = [root / name for name in
+            ('godot', 'src', 'include', 'test', 'tools', 'docs', 'assets', '.git')]
+if path == root or path == Path(path.anchor) or any(
+        path == directory or directory in path.parents for directory in reserved):
+    raise SystemExit('Choose a build directory outside the repository source directories.')
+print(path)
+PY
+)"; then
+    usage
+    exit 2
+fi
 engine="${GODOT_BIN:-}"
 if [[ -z "$engine" ]]; then
     if command -v godot >/dev/null 2>&1; then
@@ -87,6 +118,11 @@ if [[ ! -x "$engine" ]]; then
 fi
 
 cache_file="${native_build}/CMakeCache.txt"
+if [[ -f "$cache_file" ]] && \
+   ! grep -Fqx "CMAKE_HOME_DIRECTORY:INTERNAL=${repo_dir}" "$cache_file"; then
+    echo 'Selected build cache does not belong to this checkout.' >&2
+    exit 2
+fi
 if [[ ! -f "$cache_file" ]] || \
    ! grep -Fqx 'APSIS_DRIFT_TERMINAL:BOOL=OFF' "$cache_file" || \
    ! grep -Fqx 'APSIS_DRIFT_GODOT_SPIKE:BOOL=ON' "$cache_file" || \
@@ -96,6 +132,16 @@ if [[ ! -f "$cache_file" ]] || \
         -DAPSIS_DRIFT_GODOT_SPIKE=ON -DAPSIS_DRIFT_GODOT_LIVE=ON
 fi
 cmake --build "$native_build" --target apsis_freedom_bridge --parallel 4
+# POST_BUILD does not run for an unchanged target. Install the explicitly
+# selected artifact even when a previous launcher used another build.
+mkdir -p -- "${repo_dir}/godot/bin"
+bridge_stage="${repo_dir}/godot/bin/libapsis_freedom_bridge.so.launch.$$.new"
+trap 'rm -f -- "$bridge_stage"' EXIT
+cp -- "${native_build}/src/godot/bin/libapsis_freedom_bridge.so" \
+    "$bridge_stage"
+mv -f -- "$bridge_stage" \
+    "${repo_dir}/godot/bin/libapsis_freedom_bridge.so"
+trap - EXIT
 
 engine_args=(--path "${repo_dir}/godot" \
     --scene res://scenes/native_start_shell.tscn)

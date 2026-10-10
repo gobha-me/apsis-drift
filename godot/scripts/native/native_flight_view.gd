@@ -102,7 +102,18 @@ static func actuator_fractions(axes: PackedFloat64Array) -> PackedFloat64Array:
 	return PackedFloat64Array([maxf(axes[5], 0), maxf(axes[6], 0), axes[1], maxf(-axes[5], 0), maxf(-axes[6], 0), axes[0], maxf(axes[2], 0), maxf(-axes[3], 0), maxf(-axes[4], 0), maxf(-axes[2], 0), maxf(axes[3], 0), maxf(axes[4], 0)])
 
 
+static func valid_star_direction(value: Variant) -> bool:
+	return value is Vector3 and value.is_finite() and absf(value.length_squared() - 1.0) <= 0.00001
+
+
+static func star_light_basis(direction: Vector3) -> Basis:
+	# Both station walking and flight use this C++ direction in their shared
+	# tangent presentation frame. The alternate up axis handles either pole.
+	return Basis.looking_at(-direction, Vector3.UP if absf(direction.y) < 0.99 else Vector3.RIGHT)
+
+
 static func valid_state(value: Dictionary) -> bool:
+	if not valid_star_direction(value.get("star_direction")): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
 		return false
 	if not value.body_basis.is_finite() or not value.station_basis.is_finite() or not value.station_position.is_finite():
@@ -1070,8 +1081,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		assist_button.set_pressed_no_signal(state.assistance)
 		controls_menu.sync_saved_state(state, false)
 		refresh_control_hint()
-	if state.star_direction.length_squared() > 0.5:
-		light.look_at(-state.star_direction, Vector3.UP if absf(state.star_direction.y) < 0.99 else Vector3.RIGHT)
+	light.basis = star_light_basis(state.star_direction)
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nReference altitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]

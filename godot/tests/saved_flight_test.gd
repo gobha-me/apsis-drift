@@ -89,6 +89,16 @@ func joy_button(button: int, pressed: bool, device := 0) -> void:
 
 
 func check_orbit_fields(start: Dictionary) -> void:
+	for direction in [null, "star", PackedFloat64Array([1.0, 0.0, 0.0]), Vector3.ZERO, Vector3(NAN, 0, 0), Vector3(0, INF, 0), Vector3(0, 0, -INF), Vector3(2, 0, 0), Vector3(0.1, 0, 0)]:
+		var malformed := start.duplicate(true)
+		malformed.star_direction = direction
+		check(not FlightView.valid_state(malformed), "Invalid stellar direction accepted by flight/station projection")
+	var missing_star := start.duplicate(true)
+	missing_star.erase("star_direction")
+	check(not FlightView.valid_state(missing_star), "Missing stellar direction accepted")
+	for direction in [Vector3.UP, Vector3.DOWN, Vector3.LEFT, Vector3.FORWARD, Vector3(1, 1, 1).normalized()]:
+		var light_basis := FlightView.star_light_basis(direction)
+		check(FlightView.valid_star_direction(direction) and light_basis.is_finite() and absf(light_basis.determinant() - 1.0) < 0.00001 and light_basis.z.is_equal_approx(direction), "Canonical stellar light basis failed at pole or oblique direction")
 	for field in ["orbit_classification", "orbit_bound", "orbit_near_parabolic", "periapsis_radius", "apoapsis_radius"]:
 		var malformed := start.duplicate(true)
 		malformed.erase(field)

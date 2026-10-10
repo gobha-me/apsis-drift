@@ -27,6 +27,18 @@ tools/run_godot_native.sh --new-game=42
 tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
+Reuse an existing native compiler build to avoid another dependency/build copy:
+
+```sh
+tools/run_godot_native.sh --build-dir=build-native-gcc --new-game=42
+```
+
+Build directories are relative to the repository root, or absolute. The default
+is `build-native`. Existing caches must belong to this checkout; source
+directories are refused. Assets are prepared beneath the selected build. The
+launcher atomically installs its selected bridge even when no relink is needed,
+so a previous compiler/build cannot leave a stale library in the native project.
+
 For an explicit native build, including the exporter and contract fixtures:
 
 ```sh
@@ -75,8 +87,14 @@ python3 test/native_runner_test.py
 
 Set `GODOT_BIN` to the actual executable for these explicit commands. `--test`
 is repeatable and selects a subset. The runner stages an isolated project and
-retains logs/reports under `build-godot`; it does not build or synchronize with
-concurrent builds. A crash, timeout, script error or missing completion marker
+retains logs, reports, fixture/save outputs and copied source under `build-godot`.
+After success it removes that run's generated asset/import/cache copies and
+staged binaries, recording removed paths/bytes and the original binary hashes.
+Use `--keep-work` when the successful stage is needed for another replay or
+rendered capture. Failed or interrupted runs retain their complete stage for
+diagnosis. This never cleans earlier runs, source studies or compiler caches.
+The runner does not build or synchronize with concurrent builds.
+A crash, timeout, script error or missing completion marker
 fails even when other output looks successful.
 
 These headless contracts exercise real C++/GDScript integration and fixtures.

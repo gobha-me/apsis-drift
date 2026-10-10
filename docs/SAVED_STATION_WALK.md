@@ -5,12 +5,29 @@ Station's hub floor. Walking reaches the workshop and D1 vestibule while the
 actual Wayfarer stays at its qualified roof port. C++ owns the actor, craft,
 station recipe, shared clock and save; Godot presents those same results.
 
+The walking/boarding solar light consumes the same current C++ star direction
+and tangent presentation frame as saved flight. It is set during detached
+staging and refreshed from accepted walking/boarding state, including the final
+seated pose before view handoff. Continue preserves its authoritative tick;
+pause and focus loss introduce no separate light clock. Missing, non-finite or
+non-unit directions refuse scene acceptance. Ambient fill, light intensity,
+materials and shadow refinements remain separate presentation choices.
+
 ## Movement and contact
 
 `OriginWalkerState` stores actor identity 1, contact-geometry version 1, a
 station-relative foot position and velocity, and heading. Heading zero faces
 station -Z; positive yaw rotates about +Y. The owning flight/history clock
 advances at 120 Hz. There is no separate actor tick, world or random stream.
+
+Station stick movement/look and neutral rearming use the existing saved v4
+dead zone and response curve, matching the flight/suited-ground provider.
+WASD and E/A remain fixed station actions. Reading these preferences installs
+no additional input mapping and writes neither preferences nor world state.
+Missing files use defaults; malformed, oversized or unsupported files retain
+their bytes and use defaults with the provider's diagnostic.
+Station look rates and inversion still use the prototype's fixed behavior;
+broader remapping/sensitivity integration remains with #50/#135.
 
 This normal supported-interior slice is kinematic: requested speed is 2 m/s,
 diagonal intent is normalized, neutral input stops, and blocked travel stops

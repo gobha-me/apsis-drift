@@ -44,7 +44,7 @@ contract using the qualified Godot 4.7.2 executable:
 
 ```sh
 python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
-  --build-dir build-native --test wayfarer_operating
+  --build-dir build-native --test wayfarer_operating --keep-work
 ```
 
 The runner creates an isolated project and prepares both packages. Its printed
@@ -60,7 +60,7 @@ directory and `CAPTURE_DIR` to an existing, disposable absolute directory:
 "$GODOT_BIN" --rendering-method gl_compatibility \
   --path "$CONTRACT_DIR/project" --audio-driver Dummy \
   --script res://studies/captures/wayfarer_operating_capture.gd -- \
-  "$CONTRACT_DIR/native-assets" "$CONTRACT_DIR/operating-assets" "$CAPTURE_DIR"
+"$CONTRACT_DIR/native-assets" "$CONTRACT_DIR/native-assets/operating" "$CAPTURE_DIR"
 ```
 
 This opt-in script requires a rendering display and records ten 1280×720

@@ -73,6 +73,7 @@ func run() -> void:
 func check_boarding(shell: Control, bridge: Variant) -> void:
 	var walk: Control = shell.current_view
 	walk.set_process(false)
+	check(walk.light.basis.z.is_equal_approx(bridge.get_freedom_flight_state().star_direction), "Staged station light diverged from authoritative star")
 	var original: Dictionary = bridge.get_freedom_walk_state()
 	check(not bridge.begin_freedom_boarding() and bridge.get_freedom_walk_state() == original, "Distant boarding changed the walker")
 	for tick in 2960:
@@ -102,11 +103,13 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 			check(false, "Boarding advance refused")
 			return
 	var seat_camera: Transform3D = walk.camera.transform
+	var seat_light: Basis = walk.light.basis
 	shell.switch_journey_view()
 	var flight: Control = shell.current_view
 	check(flight is FlightView and flight.staged_model == model and flight.cockpit, "Seat did not hand the same model to cockpit flight")
 	if not flight is FlightView: return
 	flight.set_process(false)
+	check(flight.light.basis.is_equal_approx(seat_light) and flight.light.basis.z.is_equal_approx(flight.state.star_direction), "Boarding changed stellar direction at the view handoff")
 	check(flight.camera.transform.origin.distance_to(seat_camera.origin) < 0.002 and flight.camera.transform.basis.is_equal_approx(seat_camera.basis), "Seated camera jumped at view handoff")
 	check(model.valid_current_pose() and model.replacement_nodes == roots and model.get_child_count() == 1, "Boarding replaced or reparented the hardware roster")
 	check(flight.state.resources.quantity_quanta == "3032640000000000" and "90.0 min at full main" in flight.resource_status.text and flight.service_button.focus_mode == Control.FOCUS_ALL and flight.service_button.visible, "Walking/boarding burned fuel or cockpit lost accessible resource service")
@@ -198,10 +201,12 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	flight.service_button.pressed.emit()
 	check(flight.state.resources.quantity_quanta == "3032640000000000" and flight.state.resources.jump_charges == 3 and flight.state.tick == service_tick and "free station service" in flight.save_status.text, "Attached cockpit action failed exact free replenishment")
 	flight.unboard_menu_button.pressed.emit()
+	var return_light: Basis = flight.light.basis
 	shell.switch_journey_view()
 	walk = shell.current_view
 	check(walk is WalkView and walk.staged_model == model, "Unboard did not restore walking on the same model")
 	if not walk is WalkView: return
+	check(walk.light.basis.is_equal_approx(return_light) and walk.light.basis.z.is_equal_approx(bridge.get_freedom_flight_state().star_direction), "Disembarking changed stellar direction at the view handoff")
 	walk.set_process(false)
 	if walk.paused: walk.resume_requested()
 	for frame in 360:
