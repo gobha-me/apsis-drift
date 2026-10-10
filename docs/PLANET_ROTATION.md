@@ -6,6 +6,15 @@ Whole-simulation time acceleration is deferred. This implementation does not
 switch native gameplay, alter existing saves, or complete #213's presentation
 integration. It supplies the missing rotation geometry for future #200 work.
 
+2026-10-10 native consumer checkpoint: selected Freedom flight and planetary
+walking already use the saved C++ rotation/star geometry. Station walking and
+boarding now point their solar light from that same validated projection,
+replacing the fixed presentation angle. Both views share the pole-safe light
+basis and retain the same direction through seating/disembarking. This changes
+no rotation recipe, save, material or ambient-fill policy; wider day/terminator/
+night presentation qualification remains #213/#244 work. The standalone legacy
+lab described below retains its original compatibility boundary.
+
 ## Ownership and compatibility
 
 `generate_planet_rotation_recipe(system, planet, version)` resolves the planet

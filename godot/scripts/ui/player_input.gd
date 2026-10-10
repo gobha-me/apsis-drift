@@ -116,10 +116,11 @@ func load_settings(path: String = "") -> void:
 	if file == null or file.get_length() > 65536:
 		status = "Controls file unreadable / too large; using defaults."
 		return
-	var value: Variant = JSON.parse_string(file.get_as_text())
-	if not valid_document(value):
+	var document := JSON.new()
+	if document.parse(file.get_as_text()) != OK or not valid_document(document.data):
 		status = "Invalid controls file; using defaults."
 		return
+	var value: Variant = document.data
 	settings = value.settings
 	bindings = value.bindings
 

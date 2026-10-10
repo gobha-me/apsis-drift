@@ -69,6 +69,7 @@ func paused_checkpoint(view: Control, owner: Variant, path: String, walk: Dictio
 	view.input_controls(60.0)
 	check(view.paused and owner.get_freedom_walk_state() == walk and owner.get_freedom_flight_state() == flight, label + ": actor/craft/clock advanced")
 	check(view.camera.transform == pose and view.requested_heading == heading and view.pitch == pitch, label + ": paused inspection changed")
+	check(view.light.basis.z.is_equal_approx(flight.star_direction), label + ": station light diverged from frozen C++ direction")
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, label + ": exact C++ save bytes changed")
 
 
@@ -345,6 +346,69 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	check(view.paused and not message.is_empty() and view.error == message and view.pause_button.disabled and owner.get_freedom_walk_state() == start, "Terminal error recovered through Resume/focus/process")
 
 
+func input_map_snapshot() -> Dictionary:
+	var result := {}
+	for action in InputMap.get_actions():
+		var events := []
+		for event in InputMap.action_get_events(action): events.append([event.as_text(), event.device])
+		result[action] = [InputMap.action_get_deadzone(action), events]
+	return result
+
+
+func check_stick_preferences(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	var controls = preload("res://scripts/ui/player_input.gd").new()
+	controls.defaults()
+	controls.settings.deadzone = 0.35
+	controls.settings.curve = 2.0
+	var document := {"version": 4, "settings": controls.settings, "bindings": controls.bindings, "extension": [null, true, {"fraction": 1.25}]}
+	var config_path := path + ".controls.json"
+	var config := FileAccess.open(config_path, FileAccess.WRITE)
+	check(config != null, "Station response fixture could not open")
+	if config == null: controls.free(); return
+	config.store_string(JSON.stringify(document))
+	config.close()
+	controls.free()
+	var config_bytes := FileAccess.get_file_as_bytes(config_path)
+	var mapping := input_map_snapshot()
+	var old_path: String = view.stick_settings_path
+	var old_device: int = view.selected_pad
+	var old_devices: Dictionary = view.available_pads.duplicate()
+	view.stick_settings_path = config_path
+	view.load_stick_preferences()
+	check(view.stick_preferences == {"deadzone": 0.35, "curve": 2.0} and input_map_snapshot() == mapping, "Station response failed to read the provider or installed another InputMap")
+	view.selected_pad = 11
+	view.available_pads = {11: true, 12: true}
+	view.set_paused(true)
+	joy_axis(JOY_AXIS_LEFT_X, 0.2, 11)
+	check(view.current_controls_neutral(), "Configured station dead zone disagreed with neutral gate")
+	view.resume_requested()
+	check(not view.paused and view.input_controls(0.0)[1] == 0.0, "Below-dead-zone input prevented Resume or requested walking")
+	joy_axis(JOY_AXIS_LEFT_X, 0.5, 11)
+	check(is_equal_approx(view.input_controls(0.0)[1], 9.0 / 169.0), "Station axis ignored the saved quadratic response")
+	joy_axis(JOY_AXIS_LEFT_Y, -0.5, 12)
+	check(view.input_controls(0.0)[0] == 0.0, "Foreign pad leaked into configured station shaping")
+	view.set_paused(true)
+	view.resume_requested()
+	check(view.paused and not view.current_controls_neutral(), "Above-dead-zone station input bypassed neutral Resume")
+	joy_axis(JOY_AXIS_LEFT_X, 0.0, 11)
+	joy_axis(JOY_AXIS_LEFT_Y, 0.0, 12)
+	check(FileAccess.get_file_as_bytes(config_path) == config_bytes, "Reading station response rewrote extension fields")
+	for invalid in ["{", JSON.stringify({"version": 5}), JSON.stringify({"version": 4, "settings": {"deadzone": -1}, "bindings": {}})]:
+		config = FileAccess.open(config_path, FileAccess.WRITE)
+		config.store_string(invalid)
+		config.close()
+		view.load_stick_preferences()
+		check(view.stick_preferences == {"deadzone": 0.18, "curve": 1.4} and not view.stick_preferences_status.is_empty() and FileAccess.get_file_as_string(config_path) == invalid, "Rejected station preferences lost defaults, diagnostic or source bytes")
+	view.stick_settings_path = config_path + ".missing"
+	view.load_stick_preferences()
+	check(view.stick_preferences == {"deadzone": 0.18, "curve": 1.4} and view.stick_preferences_status.is_empty(), "Missing station preferences did not use ordinary defaults")
+	view.stick_settings_path = old_path
+	view.load_stick_preferences()
+	view.selected_pad = old_device
+	view.available_pads = old_devices
+	check(input_map_snapshot() == mapping and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Station preference reads changed mappings or complete C++ save")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3:
@@ -405,8 +469,11 @@ func run() -> void:
 	root.add_child(view)
 	view.set_process(false)
 	check(view.initialize(owner, args[2]) and not view.paused, "Fresh already-neutral view did not retain running startup")
+	check(view.light.basis.z.is_equal_approx(flight.star_direction), "Fresh station light substituted a fixed sun")
+	var initial_light: Basis = view.light.basis
 	view.set_paused(true)
 	await check_hud_layout(view, owner, path, originals[0])
+	check_stick_preferences(view, owner, path, originals[0])
 	check(view.advance_requested(60.0, neutral) and owner.get_freedom_walk_state() == start, "Paused view advanced shared time")
 	view.set_paused(false)
 	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
@@ -419,6 +486,7 @@ func run() -> void:
 			check(owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, axis, 0.0])), "Supported walking trace refused")
 	view.update_view()
 	var final: Dictionary = owner.get_freedom_walk_state()
+	check(view.light.basis.z.is_equal_approx(owner.get_freedom_flight_state().star_direction) and not view.light.basis.is_equal_approx(initial_light), "Advanced station light failed to follow the actual C++ clock")
 	check(final.tick == "1920" and owner.get_freedom_flight_state().tick == final.tick, "Walk/ship shared clock diverged")
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == originals[1], "Native route bytes differ from independent C++ collision/motion trace")
 	check(commit_fixture_continue(owner, path), "Walking Continue refused")
@@ -430,6 +498,7 @@ func run() -> void:
 	root.add_child(view)
 	view.set_process(false)
 	check(view.initialize(owner, args[2]) and view.paused, "Continued walking view resumed without player action")
+	check(view.light.basis.z.is_equal_approx(owner.get_freedom_flight_state().star_direction), "Continued station light lost its saved direction")
 	check(view.advance_requested(1.0, neutral) and owner.get_freedom_walk_state() == continued, "Continued view advanced while initially paused")
 	var other: Variant = ClassDB.instantiate("FreedomBridge")
 	check(commit_fixture_new_game(other, "42"), "Cadence walking New Game refused")
