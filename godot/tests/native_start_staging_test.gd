@@ -70,9 +70,21 @@ func run() -> void:
 	quit(0 if failures == 0 else 1)
 
 
+func joy_axis(axis: int, value: float, device: int) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = device
+	event.axis = axis
+	event.axis_value = value
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
 func check_boarding(shell: Control, bridge: Variant) -> void:
 	var walk: Control = shell.current_view
 	walk.set_process(false)
+	# Software-selected second pad; physical hardware remains a separate check.
+	walk.available_pads = {9: true, 19: true}
+	walk.selected_pad = 19
 	check(walk.light.basis.z.is_equal_approx(bridge.get_freedom_flight_state().star_direction), "Staged station light diverged from authoritative star")
 	var original: Dictionary = bridge.get_freedom_walk_state()
 	check(not bridge.begin_freedom_boarding() and bridge.get_freedom_walk_state() == original, "Distant boarding changed the walker")
@@ -104,11 +116,23 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 			return
 	var seat_camera: Transform3D = walk.camera.transform
 	var seat_light: Basis = walk.light.basis
+	check(bridge.save_freedom_as(ProjectSettings.globalize_path("user://controller-before.json")), "Controller pre-board export failed")
+	var before_board: PackedByteArray = FileAccess.get_file_as_bytes("user://controller-before.json")
 	shell.switch_journey_view()
 	var flight: Control = shell.current_view
 	check(flight is FlightView and flight.staged_model == model and flight.cockpit, "Seat did not hand the same model to cockpit flight")
 	if not flight is FlightView: return
 	flight.set_process(false)
+	check(flight.player_input.device == 19, "Boarding replaced the station-selected controller")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.8, 19)
+	flight.toggle_pause()
+	check(flight.paused and not flight.controls_armed, "Held selected trigger bypassed the boarding neutral gate")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0, 19)
+	for action in flight.player_input.ACTIONS:
+		for event in InputMap.action_get_events("pilot_" + action):
+			if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+				check(event.device == 19, "Boarding installed another controller in the flight action map")
+	check(bridge.save_freedom_as(ProjectSettings.globalize_path("user://controller-after.json")) and FileAccess.get_file_as_bytes("user://controller-after.json") == before_board, "Controller boarding handoff changed exact world bytes")
 	check(flight.light.basis.is_equal_approx(seat_light) and flight.light.basis.z.is_equal_approx(flight.state.star_direction), "Boarding changed stellar direction at the view handoff")
 	check(flight.camera.transform.origin.distance_to(seat_camera.origin) < 0.002 and flight.camera.transform.basis.is_equal_approx(seat_camera.basis), "Seated camera jumped at view handoff")
 	check(model.valid_current_pose() and model.replacement_nodes == roots and model.get_child_count() == 1, "Boarding replaced or reparented the hardware roster")
@@ -202,10 +226,20 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(flight.state.resources.quantity_quanta == "3032640000000000" and flight.state.resources.jump_charges == 3 and flight.state.tick == service_tick and "free station service" in flight.save_status.text, "Attached cockpit action failed exact free replenishment")
 	flight.unboard_menu_button.pressed.emit()
 	var return_light: Basis = flight.light.basis
+	joy_axis(JOY_AXIS_LEFT_X, 0.8, 19)
+	joy_axis(JOY_AXIS_LEFT_X, 0.8, 9)
+	check(bridge.save_freedom_as(ProjectSettings.globalize_path("user://controller-before.json")), "Controller pre-unboard export failed")
+	var before_unboard: PackedByteArray = FileAccess.get_file_as_bytes("user://controller-before.json")
 	shell.switch_journey_view()
 	walk = shell.current_view
 	check(walk is WalkView and walk.staged_model == model, "Unboard did not restore walking on the same model")
 	if not walk is WalkView: return
+	check(walk.selected_pad == 19 and walk.available_pads.get(19, false), "Unboarding forgot the selected controller")
+	check(walk.paused and not walk.controls_armed, "Held selected walking stick bypassed the unboarding neutral gate")
+	joy_axis(JOY_AXIS_LEFT_X, 0.0, 19)
+	check(walk.current_controls_neutral(), "Foreign stick prevented the selected controller from neutral rearming")
+	joy_axis(JOY_AXIS_LEFT_X, 0.0, 9)
+	check(bridge.save_freedom_as(ProjectSettings.globalize_path("user://controller-after.json")) and FileAccess.get_file_as_bytes("user://controller-after.json") == before_unboard, "Controller unboarding handoff changed exact world bytes")
 	check(walk.light.basis.is_equal_approx(return_light) and walk.light.basis.z.is_equal_approx(bridge.get_freedom_flight_state().star_direction), "Disembarking changed stellar direction at the view handoff")
 	walk.set_process(false)
 	if walk.paused: walk.resume_requested()
@@ -231,6 +265,7 @@ func check_load(shell: Control, bridge: Variant, args: PackedStringArray) -> voi
 	# own real-provider contract and does not open a filesystem chooser.
 	check(shell.select_start(bridge, {"mode": "continue", "value": before_save, "assets": args[0]}), "Explicit file workflow could not stage")
 	view = shell.current_view
+	check(view is WalkView and view.selected_pad == 19 and view.available_pads.get(19, false), "Explicit source replacement forgot the selected walking controller")
 	view.pause_controls("Explicit file Load regression paused.")
 	var original_hash := FileAccess.get_sha256(before_save)
 	var source_hash := FileAccess.get_sha256(args[1])
@@ -297,6 +332,7 @@ func check_load(shell: Control, bridge: Variant, args: PackedStringArray) -> voi
 		shell.confirm_load()
 		view = shell.current_view
 		view.set_process(false)
+		check((view.selected_pad if view is WalkView else view.player_input.device) == 19, "Confirmed Load changed the selected controller")
 		check(shell.bridge == bridge and view.paused and not view.journey_dialog_open and shell.load_origin == null and shell.error.is_empty(), "Successful load lost bridge, pause or modal cleanup")
 		check(bridge.save_freedom_as(after_save) and JSON.parse_string(FileAccess.get_file_as_string(after_save)) == JSON.parse_string(FileAccess.get_file_as_string(target)), "Loaded target differs from complete source save")
 		if view is FlightView:

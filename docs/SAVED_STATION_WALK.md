@@ -20,6 +20,12 @@ station-relative foot position and velocity, and heading. Heading zero faces
 station -Z; positive yaw rotates about +Y. The owning flight/history clock
 advances at 120 Hz. There is no separate actor tick, world or random stream.
 
+The controller selected on the station remains selected through boarding and
+returning to walking. These view changes start with fresh neutral gates; held
+controls never transfer as active input. A disconnected selection returns to
+keyboard controls rather than assigning another connected pad during handoff.
+Controller identity is presentation state, not part of the saved world.
+
 Station stick movement/look and neutral rearming use the existing saved v4
 dead zone and response curve, matching the flight/suited-ground provider.
 WASD and E/A remain fixed station actions. Reading these preferences installs
