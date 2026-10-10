@@ -74,6 +74,9 @@ func paused_checkpoint(view: Control, owner: Variant, path: String, walk: Dictio
 
 
 func check_hud_layout(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	var catalog_requests := [0]
+	view.catalog_save_requested.connect(func(save_as: bool):
+		if save_as: catalog_requests[0] += 1)
 	var walk: Dictionary = owner.get_freedom_walk_state()
 	var flight: Dictionary = owner.get_freedom_flight_state()
 	var pose: Transform3D = view.camera.transform
@@ -144,9 +147,10 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		physical_key(KEY_DOWN, false)
 		await process_frame
 		check(root.gui_get_focus_owner() == view.save_button and view.hud_scroll.get_global_rect().encloses(view.save_button.get_global_rect()), "Keyboard focus did not reveal Save As")
+		var requests_before: int = catalog_requests[0]
 		physical_key(KEY_ENTER, true)
 		physical_key(KEY_ENTER, false)
-		check(view.save_dialog.visible, "Readable station Save As did not invoke real chooser")
+		check(catalog_requests[0] == requests_before + 1 and view.paused, "Readable station Save As did not request catalog persistence")
 		view.save_dialog.hide()
 		view.save_dialog.canceled.emit()
 		await process_frame
@@ -169,9 +173,10 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		joy_button(JOY_BUTTON_DPAD_UP, false, device)
 		joy_button(JOY_BUTTON_DPAD_UP, true, device)
 		joy_button(JOY_BUTTON_DPAD_UP, false, device)
+		requests_before = catalog_requests[0]
 		joy_button(JOY_BUTTON_A, true, device)
 		joy_button(JOY_BUTTON_A, false, device)
-		check(view.save_dialog.visible, "Selected pad did not invoke readable station Save As")
+		check(catalog_requests[0] == requests_before + 1 and view.paused, "Selected pad did not request readable catalog Save As")
 		view.save_dialog.hide()
 		view.save_dialog.canceled.emit()
 		paused_checkpoint(view, owner, path, walk, flight, bytes, pose, heading, pitch, "HUD resize/scroll/navigation")
@@ -235,10 +240,8 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	view.set_paused(false)
 	check(not view.paused, "Explicit neutral focus rearm refused")
 	view.set_paused(true)
-	# Real menu key events select the actual Save As callback, without a tick.
-	view.pause_button.grab_focus()
-	physical_key(KEY_DOWN, true)
-	physical_key(KEY_DOWN, false)
+	# File export remains keyboard-complete independently of catalog slots.
+	view.export_save_button.grab_focus()
 	physical_key(KEY_ENTER, true)
 	physical_key(KEY_ENTER, false)
 	check(view.save_dialog.visible and view.paused, "Keyboard navigation did not open real Save As")
@@ -275,9 +278,7 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	joy_button(JOY_BUTTON_START, true, 7)
 	joy_button(JOY_BUTTON_START, false, 7)
 	check(view.selected_pad == 0 and view.current_controls_neutral(), "Foreign pad stole selection or neutral authority")
-	view.pause_button.grab_focus()
-	joy_button(JOY_BUTTON_DPAD_DOWN, true)
-	joy_button(JOY_BUTTON_DPAD_DOWN, false)
+	view.export_save_button.grab_focus()
 	joy_button(JOY_BUTTON_A, true)
 	joy_button(JOY_BUTTON_A, false)
 	check(view.save_dialog.visible and view.paused, "Selected pad navigation did not open real Save As")

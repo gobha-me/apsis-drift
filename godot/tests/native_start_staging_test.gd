@@ -227,6 +227,11 @@ func check_load(shell: Control, bridge: Variant, args: PackedStringArray) -> voi
 	var view: Control = shell.current_view
 	view.pause_controls("Load regression paused.")
 	check(bridge.save_freedom_as(before_save), "Pre-load save refused")
+	# This regression exercises explicit file loading; catalog loading has its
+	# own real-provider contract and does not open a filesystem chooser.
+	check(shell.select_start(bridge, {"mode": "continue", "value": before_save, "assets": args[0]}), "Explicit file workflow could not stage")
+	view = shell.current_view
+	view.pause_controls("Explicit file Load regression paused.")
 	var original_hash := FileAccess.get_sha256(before_save)
 	var source_hash := FileAccess.get_sha256(args[1])
 	var current: Dictionary = bridge.get_freedom_flight_state()

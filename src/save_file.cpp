@@ -1,5 +1,7 @@
 #include "apsis_drift/save_file.hpp"
 
+#include <type_traits>
+
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -370,87 +372,144 @@ auto load_save_file(const std::filesystem::path& path)
   return *decoded;
 }
 
+auto decode_native_save_document_json(std::string_view contents)
+    -> std::expected<NativeSaveDocument, SaveSchemaError> {
+  auto walking = decode_freedom_surface_walk_document_json(contents);
+  if (walking) return NativeSaveDocument{std::move(*walking)};
+  if (walking.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{walking.error()};
+  auto recovery = decode_freedom_recovery_document_json(contents);
+  if (recovery) return NativeSaveDocument{std::move(*recovery)};
+  if (recovery.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{recovery.error()};
+  auto travel = decode_freedom_travel_document_json(contents);
+  if (travel) return NativeSaveDocument{std::move(*travel)};
+  if (travel.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{travel.error()};
+  auto knowledge = decode_freedom_knowledge_document_json(contents);
+  if (knowledge) return NativeSaveDocument{std::move(*knowledge)};
+  if (knowledge.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{knowledge.error()};
+  auto resource = decode_freedom_resource_document_json(contents);
+  if (resource) return NativeSaveDocument{std::move(*resource)};
+  if (resource.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{resource.error()};
+  auto surface = decode_freedom_surface_document_json(contents);
+  if (surface) return NativeSaveDocument{std::move(*surface)};
+  if (surface.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{surface.error()};
+  auto boarding = decode_freedom_boarding_document_json(contents);
+  if (boarding) return NativeSaveDocument{std::move(*boarding)};
+  if (boarding.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{boarding.error()};
+  auto assembly = decode_freedom_starting_assembly_document_json(contents);
+  if (assembly) return NativeSaveDocument{std::move(*assembly)};
+  if (assembly.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{assembly.error()};
+  auto journey = decode_freedom_journey_document_json(contents);
+  if (journey) return NativeSaveDocument{std::move(*journey)};
+  if (journey.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{journey.error()};
+  auto docking = decode_freedom_docking_document_json(contents);
+  if (docking) return NativeSaveDocument{std::move(*docking)};
+  if (docking.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{docking.error()};
+  auto flight = decode_freedom_flight_document_json(contents);
+  if (flight) return NativeSaveDocument{std::move(*flight)};
+  if (flight.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{flight.error()};
+  auto legacy = decode_save_document_json(contents);
+  if (legacy) return NativeSaveDocument{std::move(*legacy)};
+  if (legacy.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{legacy.error()};
+  auto freedom = decode_freedom_save_document_json(contents);
+  if (freedom) return NativeSaveDocument{std::move(*freedom)};
+  return std::unexpected{freedom.error()};
+}
+
 auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError> {
   auto contents = read_save_bytes(path);
   if (!contents) return std::unexpected{contents.error()};
-  auto walking = decode_freedom_surface_walk_document_json(*contents);
-  if (walking) return NativeSaveDocument{std::move(*walking)};
-  if (walking.error().code != SaveSchemaErrorCode::unsupported_format_version)
+  auto decoded = decode_native_save_document_json(*contents);
+  if (!decoded)
     return std::unexpected{SaveFileError{
         SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", walking.error()}};
-  auto recovery = decode_freedom_recovery_document_json(*contents);
-  if (recovery) return NativeSaveDocument{std::move(*recovery)};
-  if (recovery.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", recovery.error()}};
-  auto travel = decode_freedom_travel_document_json(*contents);
-  if (travel) return NativeSaveDocument{std::move(*travel)};
-  if (travel.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", travel.error()}};
-  auto knowledge = decode_freedom_knowledge_document_json(*contents);
-  if (knowledge) return NativeSaveDocument{std::move(*knowledge)};
-  if (knowledge.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", knowledge.error()}};
-  auto resource = decode_freedom_resource_document_json(*contents);
-  if (resource) return NativeSaveDocument{std::move(*resource)};
-  if (resource.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", resource.error()}};
-  auto surface = decode_freedom_surface_document_json(*contents);
-  if (surface) return NativeSaveDocument{std::move(*surface)};
-  if (surface.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", surface.error()}};
-  auto boarding = decode_freedom_boarding_document_json(*contents);
-  if (boarding) return NativeSaveDocument{std::move(*boarding)};
-  if (boarding.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", boarding.error()}};
-  auto assembly = decode_freedom_starting_assembly_document_json(*contents);
-  if (assembly) return NativeSaveDocument{std::move(*assembly)};
-  if (assembly.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", assembly.error()}};
-  auto journey = decode_freedom_journey_document_json(*contents);
-  if (journey) return NativeSaveDocument{std::move(*journey)};
-  if (journey.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", journey.error()}};
-  auto docking = decode_freedom_docking_document_json(*contents);
-  if (docking) return NativeSaveDocument{std::move(*docking)};
-  if (docking.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", docking.error()}};
-  auto flight = decode_freedom_flight_document_json(*contents);
-  if (flight) return NativeSaveDocument{std::move(*flight)};
-  if (flight.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", flight.error()}};
-  auto legacy = decode_save_document_json(*contents);
-  if (legacy) return NativeSaveDocument{std::move(*legacy)};
-  if (legacy.error().code != SaveSchemaErrorCode::unsupported_format_version)
-    return std::unexpected{SaveFileError{
-        SaveFileErrorCode::invalid_document, path,
-        "save file is malformed or incompatible", legacy.error()}};
-  auto freedom = decode_freedom_save_document_json(*contents);
-  if (freedom) return NativeSaveDocument{std::move(*freedom)};
-  return std::unexpected{
-      SaveFileError{SaveFileErrorCode::invalid_document, path,
-                    "save file is malformed or incompatible", freedom.error()}};
+        "save file is malformed or incompatible", decoded.error()}};
+  return std::move(*decoded);
+}
+
+auto encode_native_save_document_json(const NativeSaveDocument& document)
+    -> std::expected<std::string, SaveSchemaError> {
+  return std::visit(
+      [](const auto& value) -> std::expected<std::string, SaveSchemaError> {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, FreedomSaveDocument>)
+          return encode_freedom_save_document_json(value);
+        else if constexpr (std::is_same_v<T, SaveDocument>)
+          return encode_save_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomFlightSaveDocument>)
+          return encode_freedom_flight_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomDockingSaveDocument>)
+          return encode_freedom_docking_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomJourneySaveDocument>)
+          return encode_freedom_journey_document_json(value);
+        else if constexpr (std::is_same_v<T,
+                                          FreedomStartingAssemblySaveDocument>)
+          return encode_freedom_starting_assembly_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomBoardingSaveDocument>)
+          return encode_freedom_boarding_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomSurfaceSaveDocument>)
+          return encode_freedom_surface_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomResourceSaveDocument>)
+          return encode_freedom_resource_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+          return encode_freedom_knowledge_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomTravelSaveDocument>)
+          return encode_freedom_travel_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomRecoverySaveDocument>)
+          return encode_freedom_recovery_document_json(value);
+        else if constexpr (std::is_same_v<T, FreedomSurfaceWalkSaveDocument>)
+          return encode_freedom_surface_walk_document_json(value);
+      },
+      document);
+}
+
+auto write_native_save_file_atomically(const std::filesystem::path& path,
+                                       const NativeSaveDocument& document)
+    -> std::expected<void, SaveFileError> {
+  return std::visit(
+      [&path](const auto& value) -> std::expected<void, SaveFileError> {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, FreedomSaveDocument>)
+          return write_freedom_save_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, SaveDocument>)
+          return write_save_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomFlightSaveDocument>)
+          return write_freedom_flight_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomDockingSaveDocument>)
+          return write_freedom_docking_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomJourneySaveDocument>)
+          return write_freedom_journey_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T,
+                                          FreedomStartingAssemblySaveDocument>)
+          return write_freedom_starting_assembly_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomBoardingSaveDocument>)
+          return write_freedom_boarding_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomSurfaceSaveDocument>)
+          return write_freedom_surface_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomResourceSaveDocument>)
+          return write_freedom_resource_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+          return write_freedom_knowledge_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomTravelSaveDocument>)
+          return write_freedom_travel_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomRecoverySaveDocument>)
+          return write_freedom_recovery_file_atomically(path, value);
+        else if constexpr (std::is_same_v<T, FreedomSurfaceWalkSaveDocument>)
+          return write_freedom_surface_walk_file_atomically(path, value);
+      },
+      document);
 }
 
 auto write_freedom_recovery_file_atomically(
@@ -678,6 +737,17 @@ auto save_file_error_message(const SaveFileError& error) -> std::string {
 }
 
 namespace detail {
+
+auto write_encoded_save_atomically(const std::filesystem::path& path,
+                                   std::string_view encoded)
+    -> std::expected<void, SaveFileError> {
+  if (encoded.empty() || encoded.size() > kMaximumSaveDocumentBytes) {
+    return std::unexpected{file_failure(SaveFileErrorCode::invalid_document,
+                                        path,
+                                        "encoded save exceeds the byte bound")};
+  }
+  return write_atomically(path, encoded, AtomicSaveTestInterruption::none);
+}
 
 auto write_save_file_atomically_for_test(
     const std::filesystem::path& path, const SaveDocument& document,

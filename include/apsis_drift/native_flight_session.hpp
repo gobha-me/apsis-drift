@@ -120,6 +120,10 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance(const NativeFlightControls&,
                              SimulationSeconds = kSimulationStep)
       -> std::expected<NativeFlightStep, std::string>;
+  // Project the currently supported mode through the same typed save owner.
+  // Profile metadata and filesystem identity remain outside world state.
+  [[nodiscard]] auto save_document() const
+      -> std::expected<NativeSaveDocument, std::string>;
   [[nodiscard]] auto save_as(const std::filesystem::path&) const
       -> std::expected<void, std::string>;
   [[nodiscard]] auto docking() const

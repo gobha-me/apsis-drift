@@ -1,5 +1,6 @@
 extends Control
 signal journey_mode_changed
+signal catalog_save_requested(save_as: bool)
 signal load_requested
 signal title_requested
 var journey_dialog_open := false
@@ -23,6 +24,8 @@ var viewport: SubViewport
 var telemetry: Label
 var pause_button: Button
 var board_button: Button
+var export_save_button: Button
+var replace_save_button: Button
 var save_button: Button
 var load_button: Button
 var title_button: Button
@@ -218,6 +221,10 @@ func build_ui() -> void:
 	pause_button.text = "Resume" if paused else "Pause"
 	pause_button.pressed.connect(toggle_pause)
 	column.add_child(pause_button)
+	replace_save_button = Button.new()
+	replace_save_button.text = "Save"
+	replace_save_button.pressed.connect(func(): request_catalog_save(false))
+	column.add_child(replace_save_button)
 	save_button = Button.new()
 	save_button.text = "Save As…"
 	save_button.focus_mode = Control.FOCUS_ALL
@@ -240,6 +247,10 @@ func build_ui() -> void:
 			pause_controls("Return to title only after discarding unsaved progress.")
 			title_requested.emit())
 	column.add_child(title_button)
+	export_save_button = Button.new()
+	export_save_button.text = "Export save file…"
+	export_save_button.pressed.connect(open_save_dialog)
+	column.add_child(export_save_button)
 	save_status = hud_text()
 	save_status.text = "Approach the D1 ladder to board."
 	column.add_child(save_status)
@@ -250,7 +261,8 @@ func build_ui() -> void:
 	save_dialog.filters = PackedStringArray(["*.json ; Apsis Drift save"])
 	save_dialog.current_file = "apsis-drift.json"
 	add_child(save_dialog)
-	save_button.pressed.connect(open_save_dialog)
+	save_button.pressed.connect(func(): request_catalog_save(true))
+	refresh_profile_actions()
 	save_dialog.file_selected.connect(save_selected)
 	# The existing preference provider is disabled as a gameplay input source.
 	# Station movement and controller selection stay explicitly owned here.
@@ -291,7 +303,7 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [board_button, pause_button, save_button, load_button, settings_button, title_button]:
+	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
 	# ScrollContainer lays out integer-sized children; keep its viewport integral
@@ -309,6 +321,7 @@ func set_paused(value: bool) -> void:
 func pause_controls(reason: String) -> void:
 	paused = true
 	controls_armed = false
+	refresh_profile_actions()
 	if board_button != null: board_button.disabled = true
 	if pause_button != null:
 		pause_button.text = "Resume"
@@ -317,6 +330,9 @@ func pause_controls(reason: String) -> void:
 			(save_button if pause_button.disabled else pause_button).grab_focus()
 	if save_status != null:
 		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
+		if bridge.has_method("get_freedom_profile_state"):
+			var profile: Dictionary = bridge.get_freedom_profile_state()
+			if profile.get("explicit_path", false): save_status.text += "\n" + str(profile.reason)
 
 
 func toggle_pause() -> void:
@@ -572,7 +588,7 @@ func _input(event: InputEvent) -> void:
 		return
 	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
 		var current := get_viewport().gui_get_focus_owner()
-		var buttons := [pause_button, save_button, load_button, settings_button, title_button]
+		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button]
 		var direction := -1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1
 		var index := buttons.find(current)
 		for offset in range(1, buttons.size() + 1):
@@ -590,8 +606,10 @@ func _input(event: InputEvent) -> void:
 			title_button.pressed.emit()
 		elif current == load_button:
 			load_button.pressed.emit()
-		elif current == save_button:
+		elif current == export_save_button:
 			open_save_dialog()
+		elif current == save_button or current == replace_save_button:
+			current.pressed.emit()
 		else:
 			resume_requested()
 		get_viewport().set_input_as_handled()
@@ -601,3 +619,16 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and not boarding_transition() and not paused and error.is_empty() and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		requested_heading = wrapf(requested_heading - event.relative.x * 0.003, -PI, PI)
 		pitch = clampf(pitch - event.relative.y * 0.003, -1.3, 1.3)
+
+func refresh_profile_actions() -> void:
+	if replace_save_button == null or bridge == null or not bridge.has_method("get_freedom_profile_state"): return
+	var profile: Dictionary = bridge.get_freedom_profile_state()
+	replace_save_button.disabled = not profile.get("can_save", false)
+	save_button.disabled = not profile.get("can_save_as", false)
+	replace_save_button.tooltip_text = str(profile.get("reason", ""))
+	save_button.tooltip_text = replace_save_button.tooltip_text
+
+func request_catalog_save(save_as: bool) -> void:
+	if not focused or journey_dialog_open or settings_open() or save_dialog.visible: return
+	pause_controls("Save uses the last committed journey state.")
+	catalog_save_requested.emit(save_as)

@@ -59,9 +59,8 @@ movement, outside Save/Continue, nearby return and a station-to-site regression;
 hatch transfer animation,
 exposure policy and wider manual/controller qualification remain unfinished.
 
-**Save As** writes the actor, craft, history and clock through C++. Continue
-starts paused; [Load…](docs/NATIVE_LOAD.md) replaces the journey only after confirmation.
-**Title…** returns to the start screen only after a discard confirmation.
+[**Save / Save As**](docs/NATIVE_PROFILES.md) persist the actor, craft, history and clock through C++.
+Continue starts paused; [Load…](docs/NATIVE_LOAD.md) and **Title…** ask before discarding dirty progress.
 Quitting does not autosave. Missing, corrupt or unsupported saves
 refuse without rewriting the file. Historical saves keep their explicit format
 and presentation rather than receiving invented actor or hardware state.

@@ -5,6 +5,13 @@ signal quit_requested
 const Controls = preload("res://scripts/ui/player_input.gd")
 const Basics = preload("res://scripts/flight/flight_basics.gd")
 const Settings = preload("res://scripts/ui/control_settings.gd")
+const ProfileBrowser = preload("res://scripts/ui/profile_browser.gd")
+var catalog_owner: Variant
+var catalog_continue_button: Button
+var catalog_load_button: Button
+var catalog_browser: Control
+var catalog_snapshot: Dictionary = {}
+var catalog_invoker: Button
 var persist_controls := true
 var controls: Node
 var panel: MarginContainer
@@ -76,7 +83,9 @@ func _ready() -> void:
 	column.add_child(seed)
 	seed.text_submitted.connect(func(_value: String): begin_new())
 	new_button = add_button("New Game", begin_new)
-	continue_button = add_button("Continue…", open_continue)
+	catalog_continue_button = add_button("Continue", continue_catalog)
+	continue_button = add_button("Open save file…", open_continue)
+	catalog_load_button = add_button("Load saved journey…", open_catalog)
 	reference_button = add_button("Flight basics", open_reference)
 	settings_button = add_button("Settings", open_settings)
 	quit_button = add_button("Quit", func(): quit_requested.emit())
@@ -108,6 +117,12 @@ func _ready() -> void:
 	settings_view.controls = controls
 	add_child(settings_view)
 	settings_view.back_requested.connect(back_to_title)
+	catalog_browser = ProfileBrowser.new()
+	catalog_browser.provider = catalog_owner
+	add_child(catalog_browser)
+	catalog_browser.selected.connect(choose_catalog)
+	catalog_browser.canceled.connect(back_from_catalog)
+	refresh_catalog()
 	layout_title()
 	new_button.grab_focus()
 
@@ -146,7 +161,10 @@ func choose_continue(path: String) -> void:
 func refuse(message: String) -> void:
 	busy = false
 	status.text = "Journey could not open: " + message
-	if focused: continue_button.grab_focus()
+	if catalog_browser != null and catalog_browser.visible:
+		catalog_browser.status.text = status.text
+		if focused: catalog_browser.back.grab_focus()
+	elif focused: continue_button.grab_focus()
 
 func open_reference() -> void:
 	if busy or not focused or chooser.visible or settings_view.visible: return
@@ -154,6 +172,9 @@ func open_reference() -> void:
 	reference.open()
 
 func back_to_title() -> void:
+	if catalog_browser != null and catalog_browser.visible:
+		back_from_catalog()
+		return
 	if settings_view.visible:
 		settings_view.cancel()
 		return
@@ -185,7 +206,7 @@ func layout_title() -> void:
 		panel.add_theme_constant_override("margin_" + side, roundi(32 * scale))
 	column.add_theme_constant_override("separation", roundi(12 * scale))
 	heading.add_theme_font_size_override("font_size", roundi(36 * scale))
-	for button in [seed, new_button, continue_button, reference_button, settings_button, quit_button]:
+	for button in [seed, new_button, catalog_continue_button, continue_button, catalog_load_button, reference_button, settings_button, quit_button]:
 		button.custom_minimum_size.y = 44 * scale
 	if chooser.visible: chooser.popup_centered_ratio(0.75)
 
@@ -197,3 +218,42 @@ func _notification(what: int) -> void:
 		focused = false
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
+
+func refresh_catalog() -> void:
+	if catalog_owner == null or not catalog_owner.has_method("list_freedom_profiles"):
+		catalog_continue_button.disabled = true
+		catalog_continue_button.focus_mode = Control.FOCUS_NONE
+		catalog_load_button.disabled = true
+		return
+	catalog_snapshot = catalog_owner.list_freedom_profiles()
+	catalog_continue_button.disabled = int(catalog_snapshot.get("continue_index", -1)) < 0
+	catalog_continue_button.focus_mode = Control.FOCUS_NONE if catalog_continue_button.disabled else Control.FOCUS_ALL
+	catalog_continue_button.tooltip_text = str(catalog_snapshot.get("diagnostic", ""))
+
+func continue_catalog() -> void:
+	if busy or not focused or not panel.visible: return
+	refresh_catalog()
+	var index := int(catalog_snapshot.get("continue_index", -1))
+	if index < 0: return
+	busy = true
+	start_requested.emit({"mode": "profile", "value": index})
+
+func open_catalog() -> void:
+	if busy or not focused or not panel.visible or chooser.visible: return
+	catalog_invoker = catalog_load_button
+	panel.hide()
+	controls.set_process_input(false)
+	catalog_browser.device = controls.device
+	catalog_browser.open()
+
+func choose_catalog(index: int) -> void:
+	if busy or not focused: return
+	busy = true
+	start_requested.emit({"mode": "profile", "value": index})
+
+func back_from_catalog() -> void:
+	catalog_browser.hide()
+	panel.show()
+	controls.set_process_input(true)
+	refresh_catalog()
+	if focused: catalog_load_button.grab_focus()

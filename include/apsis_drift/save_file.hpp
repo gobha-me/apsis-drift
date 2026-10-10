@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 
 #include "apsis_drift/freedom_boarding_save.hpp"
@@ -75,6 +76,16 @@ using NativeSaveDocument =
 
 [[nodiscard]] auto load_save_file(const std::filesystem::path& path)
     -> std::expected<SaveDocument, SaveFileError>;
+// Typed native projections shared by explicit-path and local-profile flows.
+// These preserve each format's existing validation and canonical encoding.
+[[nodiscard]] auto decode_native_save_document_json(std::string_view)
+    -> std::expected<NativeSaveDocument, SaveSchemaError>;
+[[nodiscard]] auto encode_native_save_document_json(const NativeSaveDocument&)
+    -> std::expected<std::string, SaveSchemaError>;
+[[nodiscard]] auto write_native_save_file_atomically(
+    const std::filesystem::path&, const NativeSaveDocument&)
+    -> std::expected<void, SaveFileError>;
+
 [[nodiscard]] auto load_native_save_file(const std::filesystem::path& path)
     -> std::expected<NativeSaveDocument, SaveFileError>;
 

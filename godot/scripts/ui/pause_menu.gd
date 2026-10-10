@@ -1,5 +1,6 @@
 extends CanvasLayer
 ## Native focus-navigation controls. Menu input never advances flight.
+signal catalog_save_requested(save_as: bool)
 signal save_requested
 signal load_requested
 signal title_requested
@@ -23,6 +24,8 @@ var saved_hold_off_button: Button
 var saved_hold_note: Label
 var saved_port_buttons: Dictionary = {}
 var saved_note: Label
+var export_save_button: Button
+var replace_save_button: Button
 var save_button: Button
 var load_button: Button
 var title_button: Button
@@ -115,10 +118,12 @@ func _ready() -> void:
 	left.add_child(note)
 	resume_button = add_button(left, "Resume flight", func(): resumed.emit())
 	if saved_flight:
-		save_button = add_button(left, "Save As…", func(): save_requested.emit())
+		replace_save_button = add_button(left, "Save", func(): catalog_save_requested.emit(false))
+		save_button = add_button(left, "Save As…", func(): catalog_save_requested.emit(true))
 		load_button = add_button(left, "Load…", func(): load_requested.emit())
 		settings_button = add_button(left, "Settings (paused)", show_settings)
 		title_button = add_button(left, "Title…", func(): title_requested.emit())
+		export_save_button = add_button(left, "Export save file…", func(): save_requested.emit())
 		saved_assist_button = CheckButton.new()
 		saved_assist_button.text = "Assisted piloting"
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
@@ -529,3 +534,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if panel.visible and controls.waiting_action.is_empty() and event.is_action_pressed("ui_cancel"):
 		if not back_from_nested(): resumed.emit()
 		get_viewport().set_input_as_handled()
+
+func sync_profile_state(state: Dictionary) -> void:
+	if not saved_flight: return
+	replace_save_button.disabled = not state.get("can_save", false)
+	save_button.disabled = not state.get("can_save_as", false)
+	replace_save_button.tooltip_text = str(state.get("reason", ""))
+	save_button.tooltip_text = replace_save_button.tooltip_text

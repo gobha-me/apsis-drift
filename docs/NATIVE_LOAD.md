@@ -1,13 +1,13 @@
 # Load a saved Freedom journey
 
 Choose **Load…** on the station or inside **Esc / Start · Controls** during
-saved flight or suited ground walking. Select a JSON save, then confirm
-**Load journey**. Replacement discards unsaved progress; it makes no automatic
-save. Cancel returns to the paused invoking action. Resume remains explicit and
-requires focused, neutral movement controls.
+saved flight or suited ground walking. Native sessions browse the
+[local Freedom catalog](NATIVE_PROFILES.md); explicit file-path sessions retain
+the JSON chooser. Loading dirty progress asks for confirmation. Cancel returns
+to the paused invoking action. Resume remains explicit and requires focused,
+neutral movement controls.
 
-The root presents a filesystem chooser, not a profile catalog. It uses the same
-C++ Continue validation and detached, complete model staging as command-line
+It uses the same C++ Continue validation and detached, complete model staging as command-line
 startup. A corrupt, incompatible or missing file, or a refused asset, leaves
 the current journey, complete save bytes and source file intact. Refusal text
 appears in the current paused interface. A successful load commits its C++
@@ -22,8 +22,7 @@ Closing/canceling a nested dialog never resumes movement. The chooser and warnin
 keep readable text as the window changes size; the confirmation starts with
 Cancel focused.
 
-This is a bounded #136 increment for the station, saved-flight and suited views.
 Recorded-loss recovery retains its own explicit overlay. The historical frozen
-docked shell, profile catalog browsing, active-slot Save semantics and general
-settings integration remain separate work. Existing **Save As** and explicit
-command-line New Game/Continue remain available; quitting does not autosave.
+docked shell keeps its explicit file workflow. Catalog Save/Save As, nested
+[Settings](NATIVE_SETTINGS.md) and dirty-progress transitions are described in
+[Native save catalog](NATIVE_PROFILES.md). Quitting does not autosave.
