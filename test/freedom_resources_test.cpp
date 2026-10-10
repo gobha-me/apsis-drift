@@ -3,6 +3,7 @@
 #include "flight_endurance_meter.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -213,6 +214,54 @@ auto flight_and_save(const std::filesystem::path& directory) -> void {
             neutral.document().flight.tick == 1,
         "Coast advances without burn");
 }
+auto current_hold_fuel(const std::filesystem::path& directory) -> void {
+  for (const auto quantity : {kFreedomFlightCapacityQuanta, std::uint64_t{0}}) {
+    auto selected = document(quantity, true);
+    auto& flight = std::get<FreedomFlightSaveDocument>(selected.voyage.base);
+    auto provisional = open(selected);
+    const auto gravity = need(
+        evaluate_central_body_gravity({provisional.system()}, flight.flight));
+    flight.flight.linear_velocity_metres_per_second = {
+        1, 0,
+        -std::sqrt(
+            gravity.gravitational_parameter_metres_cubed_per_second_squared /
+            gravity.distance_metres)};
+    auto session = open(selected);
+    const auto before = session.document();
+    const auto ledger = session.resources();
+    check(
+        session.hold_current_orbit().has_value() &&
+            session.document().flight == before.flight &&
+            session.document().origin == before.origin &&
+            session.resources() == ledger,
+        "Current hold selection spends no fuel and changes no physical clock");
+    const auto path =
+        directory / ("hold-fuel-" + std::to_string(quantity) + ".json");
+    check(session.save_as(path).has_value(),
+          "Current hold resource save writes");
+    auto continued =
+        need(NativeFreedomFlightSession::open(need(native_continue(path))));
+    const auto step = need(session.advance({}));
+    const auto replay = need(continued.advance({}));
+    check(session.document() == continued.document() &&
+              session.resources() == continued.resources() &&
+              step.fuel_debit_quanta == replay.fuel_debit_quanta,
+          "Selected hold next-tick body and fuel reproduce after Continue");
+    const bool actual_firing =
+        quantity == 0
+            ? step.fuel_debit_quanta == 0 &&
+                  step.applied_hold_force_body_newtons == RigidVector3{}
+            : step.fuel_debit_quanta > 0 &&
+                  step.fuel_debit_quanta ==
+                      need(freedom_propulsion_tick_quanta(
+                          step.actuation.central.propulsion));
+    check(step.propulsion_refused == (quantity == 0) && actual_firing &&
+              session.resources()->flight_quanta ==
+                  quantity - step.fuel_debit_quanta,
+          "Selected hold bills actual gross firing once and cannot fire dry");
+  }
+}
+
 auto render_batches() -> void {
   using godot_spike::SavedFlightWorld;
   SavedFlightWorld single{open(document()), {}, {}, 0};
@@ -404,6 +453,7 @@ auto main() -> int {
   try {
     arithmetic();
     flight_and_save(directory);
+    current_hold_fuel(directory);
     schema(directory);
     render_batches();
     service();

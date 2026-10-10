@@ -24,6 +24,6 @@ Cancel focused.
 
 This is a bounded #136 increment for the station, saved-flight and suited views.
 Recorded-loss recovery retains its own explicit overlay. The historical frozen
-docked shell, title/catalog browsing, active-slot Save semantics and general
+docked shell, profile catalog browsing, active-slot Save semantics and general
 settings integration remain separate work. Existing **Save As** and explicit
 command-line New Game/Continue remain available; quitting does not autosave.

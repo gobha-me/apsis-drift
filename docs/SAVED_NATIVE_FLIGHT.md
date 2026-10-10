@@ -33,8 +33,20 @@ current individual neutrality before explicit resume; opposed inputs cannot
 cancel through that gate. Removed held mappings remain release barriers. That
 history is bounded to 128 events; overflow conservatively requires complete
 physical input release before rearming.
-Assistance changes explicitly through C++; the persisted orbit-hold request
-continues to use the existing owner and its normal manual-input/environment gates.
+Assistance changes explicitly through C++. In paused controls, **Hold current
+orbit radius and plane** selects a circular-orbit target from the current C++
+radius and angular-momentum plane. Selection requires a stable bound orbit above
+the actual air boundary, a seated pilot, and no attachment, landing constraint,
+surface maneuver, active jump or pending loss. It changes only the saved request;
+position, momentum, clock and fuel remain unchanged until explicit resume.
+
+Correction uses the existing bounded thrusters and consumes actual gross flight
+fuel. It cannot insert, freeze or guarantee an orbit. Manual translation or
+assistance OFF pauses correction while retaining the target; insufficient fuel
+retains passive motion. **Disable orbit-hold request** clears the target. The
+menu labels the saved request separately from active correction, including its
+radius and limitations. Save As / Continue retain its exact planet, radius and
+signed plane without a new save version. Ordinary assistance still coasts.
 
 The saved HUD now shows the same-tick C++ **orbital forecast**: stable orbit,
 atmosphere entry, reference-surface intersection or escape, with periapsis and
@@ -46,7 +58,7 @@ Unavailable apoapsis is shown as unavailable even for a bound trajectory beyond
 the reporting domain. An outbound escape can have a below-surface *past*
 periapsis; the display retains C++ escape classification rather than inventing
 an impending impact from that number. No lab NAV widget, additional 20 km orbit
-threshold, hold command or save field is introduced.
+threshold or additional save field is introduced by the forecast.
 
 The [native information hierarchy](NATIVE_HUD.md) keeps a compact mode, motion,
 fuel/jump and contextual-action card visible during ordinary flight or ground
@@ -216,3 +228,7 @@ still-open composed station/surface journey.
 In-game [Load…](NATIVE_LOAD.md) now reaches the same transactional Continue
 seam from paused station, saved flight and suited views. Cancel/refusal keeps
 the current journey; confirmed successful replacement remains paused.
+
+**Title…** in paused controls returns to the [native start screen](NATIVE_TITLE.md)
+only after explicit discard confirmation. Cancel and focus loss keep the journey
+paused; neither path autosaves or resumes it.

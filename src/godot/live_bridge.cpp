@@ -337,6 +337,8 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_freedom_assistance", "enabled"),
         &FreedomBridge::set_freedom_assistance);
+    godot::ClassDB::bind_method(godot::D_METHOD("set_freedom_hold", "enabled"),
+                                &FreedomBridge::set_freedom_hold);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_geometry"),
                                 &FreedomBridge::get_freedom_station_geometry);
     godot::ClassDB::bind_method(godot::D_METHOD("get_wayfarer_frame"),
@@ -882,6 +884,21 @@ class FreedomBridge : public godot::RefCounted {
     return true;
   }
 
+  auto set_freedom_hold(bool enabled) -> bool {
+    if (!saved_flight) {
+      last_error = "Continue a physical flight save first";
+      return false;
+    }
+    const auto accepted = enabled ? saved_flight->session.hold_current_orbit()
+                                  : saved_flight->session.set_hold({});
+    if (!accepted) {
+      last_error = godot::String{accepted.error().c_str()};
+      return false;
+    }
+    last_error = godot::String{};
+    return true;
+  }
+
   template <class Command>
   auto change_freedom_port(Command command, bool reset_actuation = false)
       -> bool {
@@ -1396,6 +1413,19 @@ class FreedomBridge : public godot::RefCounted {
               : godot::Variant{};
       result["assistance"] = document.model.assistance;
       result["hold_enabled"] = document.model.hold.target.has_value();
+      godot::Dictionary hold;
+      const auto current_hold = session.current_orbit_hold_target();
+      hold["available"] = current_hold.has_value();
+      hold["refusal"] = current_hold
+                            ? godot::String{}
+                            : godot::String{current_hold.error().c_str()};
+      if (document.model.hold.target) {
+        const auto& target = *document.model.hold.target;
+        hold["planet_id"] = decimal(target.planet.value);
+        hold["radius_metres"] = target.radius_metres;
+        hold["plane_normal"] = coordinates(target.plane_normal);
+      }
+      result["orbit_hold"] = hold;
       result["dropped_seconds"] = selected.dropped_seconds;
       result["attached"] = session.docking() && session.docking()->attached;
       result["target_port"] =

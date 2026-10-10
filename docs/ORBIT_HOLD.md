@@ -4,7 +4,9 @@
 over [canonical central-body dynamics](CENTRAL_BODY_DYNAMICS.md) and the shared
 [orbital observation](ORBITAL_TELEMETRY.md). The
 [saved C++ flight session](NATIVE_FLIGHT_SESSION.md) consumes its pure correction
-plan; live Godot controls remain separate work. Ordinary assisted neutral
+plan. The [saved native controls](SAVED_NATIVE_FLIGHT.md) now expose an explicit
+current-radius/current-angular-momentum-plane selector through that session;
+the pure provider still requires a caller-selected target. Ordinary assisted neutral
 spaceflight continues to coast;
 hold acts only when the caller supplies an explicit target.
 

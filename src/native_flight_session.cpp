@@ -394,6 +394,8 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     return std::unexpected{"Cancel the active jump before changing hold"};
   if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before controlling the craft"};
+  if (request.target && docking_ && docking_->attached)
+    return std::unexpected{"Release the attached port before requesting hold"};
   if (surface_ && surface_->landed && request.target)
     return std::unexpected{"Lift off before requesting orbit hold"};
   if (request.target &&
@@ -411,6 +413,56 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
   document_.model.hold = request;
   cancel_port_approach();
   return {};
+}
+
+auto NativeFreedomFlightSession::current_orbit_hold_target() const
+    -> std::expected<OrbitHoldTarget, std::string> {
+  if (recovery_pending())
+    return std::unexpected{"Continue the recorded loss before requesting hold"};
+  if (travel_ && travel_->phase != FreedomJumpPhase::idle)
+    return std::unexpected{"Cancel the active jump before requesting hold"};
+  if (actor_ || surface_walker_)
+    return std::unexpected{"Board and sit before requesting hold"};
+  if (docking_ && docking_->attached)
+    return std::unexpected{"Release the attached port before requesting hold"};
+  if (surface_ && surface_->landed)
+    return std::unexpected{"Lift off before requesting orbit hold"};
+  if (surface_maneuver_.kind != NativeSurfaceManeuverKind::off)
+    return std::unexpected{"Cancel surface maneuver before requesting hold"};
+  const auto observed = observe();
+  if (!observed) return std::unexpected{observed.error()};
+  if (observed->orbit.classification != OrbitClassification::stable)
+    return std::unexpected{"Reach a bound orbit above the air boundary first"};
+  const RigidBodyWorldContext context{system_};
+  const auto gravity = evaluate_central_body_gravity(context, document_.flight,
+                                                     document_.model.central);
+  if (!gravity) return std::unexpected{"Current hold radius unavailable"};
+  const auto momentum =
+      observed->orbit.specific_angular_momentum_metres_squared_per_second;
+  const auto magnitude = std::hypot(momentum.x, momentum.y, momentum.z);
+  if (!std::isfinite(magnitude) || magnitude <= 0.0)
+    return std::unexpected{"Current orbit has no usable hold plane"};
+  const auto component = [magnitude](double v) {
+    const auto unit = v / magnitude;
+    return unit == 0.0 ? 0.0 : unit;
+  };
+  OrbitHoldTarget target{
+      observed->orbit.planet,
+      gravity->distance_metres,
+      {component(momentum.x), component(momentum.y), component(momentum.z)}};
+  if (!validate_orbit_hold_request(
+          context, document_.flight, rotation_,
+          {1, observed->atmosphere.space_boundary_altitude_metres},
+          {kOrbitHoldVersion, target}, document_.model.central))
+    return std::unexpected{"Current radius and plane refused for orbit hold"};
+  return target;
+}
+
+auto NativeFreedomFlightSession::hold_current_orbit()
+    -> std::expected<void, std::string> {
+  const auto target = current_orbit_hold_target();
+  if (!target) return std::unexpected{target.error()};
+  return set_hold({kOrbitHoldVersion, *target});
 }
 
 auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,

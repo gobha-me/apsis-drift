@@ -91,7 +91,9 @@ struct Fixture {
     return {NativeStartup::Mode::freedom, std::move(d), planet, {}};
   }
   auto open(FreedomFlightSaveDocument d) const -> NativeFreedomFlightSession {
-    return required(NativeFreedomFlightSession::open(selected(std::move(d))));
+    auto session = NativeFreedomFlightSession::open(selected(std::move(d)));
+    if (!session) throw std::runtime_error(session.error());
+    return *session;
   }
   auto held(double altitude = 500000) const -> FreedomFlightSaveDocument {
     auto d = document(altitude);
@@ -301,6 +303,62 @@ auto boundary_composition(const Fixture& f) -> void {
           "and shared edge");
   }
 }
+auto current_hold_selection(const Fixture& f,
+                            const std::filesystem::path& directory) -> void {
+  auto initial = f.held();
+  initial.model.hold = {};
+  const auto speed = initial.flight.linear_velocity_metres_per_second.y;
+  initial.flight.linear_velocity_metres_per_second = {0, speed * .6,
+                                                      speed * .8};
+  auto session = f.open(initial);
+  const auto target = required(session.current_orbit_hold_target());
+  check(session.document() == initial && target.planet == f.planet.id &&
+            target.radius_metres == initial.flight.position_metres.x &&
+            std::abs(target.plane_normal.y + .8) < 1.0e-12 &&
+            std::abs(target.plane_normal.z - .6) < 1.0e-12 &&
+            target.plane_normal.x == 0 && !std::signbit(target.plane_normal.x),
+        "pure current hold assessment retains body/history and captures "
+        "physical radius and signed angular-momentum plane");
+  auto expected = initial;
+  expected.model.hold = {kOrbitHoldVersion, target};
+  check(session.hold_current_orbit().has_value() &&
+            session.document() == expected,
+        "explicit current hold selection changes only persisted target");
+  const auto path = directory / "current-hold.json";
+  check(session.save_as(path).has_value(), "selected hold saves");
+  auto continued = required(
+      NativeFreedomFlightSession::open(required(native_continue(path))));
+  check(continued.document() == session.document(),
+        "Continue retains exact selected radius, plane, body and history");
+  const auto a = required(session.advance({}));
+  const auto b = required(continued.advance({}));
+  check(
+      session.document() == continued.document() &&
+          a.hold.status == b.hold.status &&
+          a.applied_hold_force_body_newtons ==
+              b.applied_hold_force_body_newtons,
+      "selected hold reproduces the next physical thrust step after Continue");
+  const auto before_disable = session.document();
+  check(session.set_hold({}).has_value() &&
+            session.document().flight == before_disable.flight &&
+            session.document().origin == before_disable.origin &&
+            !session.document().model.hold.target,
+        "disable clears request without changing pose, tick or history");
+  for (const auto& unsafe : {f.document(), f.document(500000)}) {
+    auto refused = f.open(unsafe);
+    check(!refused.current_orbit_hold_target() &&
+              !refused.hold_current_orbit() && refused.document() == unsafe,
+          "unbound or air-intersecting current orbit refuses without mutation");
+  }
+  auto reverse = initial;
+  reverse.flight.linear_velocity_metres_per_second = {0, -speed, 0};
+  auto reversed = f.open(reverse);
+  const auto plane =
+      required(reversed.current_orbit_hold_target()).plane_normal;
+  check(plane.z < 0 && !std::signbit(plane.x) && !std::signbit(plane.y),
+        "retrograde selection preserves direction and canonical zero plane");
+}
+
 auto continuation(const Fixture& f, const std::filesystem::path& directory)
     -> void {
   const auto source =
@@ -387,6 +445,7 @@ int main() {
     for (Seed seed :
          {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}}) {
       Fixture ref{seed};
+      current_hold_selection(ref, directory);
       continuation(ref, directory);
     }
     std::filesystem::remove_all(directory);

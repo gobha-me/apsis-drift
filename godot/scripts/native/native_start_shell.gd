@@ -34,6 +34,9 @@ var load_previous_mode: int
 var load_path := ""
 var title_view: Control
 var title_options: Dictionary = {}
+var title_confirmation: ConfirmationDialog
+var title_origin: Control
+var title_previous_mode: int
 
 
 func configure_audio(options: Dictionary) -> void:
@@ -387,13 +390,15 @@ func continue_recovery() -> void:
 func connect_journey_view(view: Control) -> void:
 	if view.has_signal("load_requested"):
 		view.load_requested.connect(request_load)
+	if view.has_signal("title_requested"):
+		view.title_requested.connect(request_title)
 	if view.has_signal("journey_mode_changed"):
 		view.journey_mode_changed.connect(switch_journey_view, CONNECT_DEFERRED)
 
 
 # Root owns replacement dialogs; the current view cannot resume beneath them.
 func request_load() -> void:
-	if closing or load_origin != null or current_view == null or recovery_overlay != null: return
+	if closing or load_origin != null or title_origin != null or current_view == null or recovery_overlay != null: return
 	if not (current_view is WalkView or current_view is FlightView) or not current_view.focused or not current_view.paused or current_view.save_dialog.visible or current_view.mode_change_pending: return
 	if load_dialog == null:
 		load_dialog = FileDialog.new()
@@ -494,6 +499,81 @@ func confirm_load() -> void:
 	load_origin = null  # The successfully replaced view was freed by select_start.
 	load_path = ""
 	load_dialog.hide()
+
+
+func request_title() -> void:
+	if closing or title_origin != null or load_origin != null or current_view == null or recovery_overlay != null: return
+	if not (current_view is WalkView or current_view is FlightView) or not current_view.focused or not current_view.paused or current_view.save_dialog.visible or current_view.mode_change_pending: return
+	if title_confirmation == null:
+		title_confirmation = ConfirmationDialog.new()
+		title_confirmation.title = "Return to title?"
+		title_confirmation.dialog_text = "Returning to title discards unsaved progress.\nNo automatic save is made."
+		title_confirmation.ok_button_text = "Discard and return"
+		title_confirmation.exclusive = true
+		title_confirmation.dialog_autowrap = true
+		title_confirmation.theme = Theme.new()
+		add_child(title_confirmation)
+		title_confirmation.confirmed.connect(confirm_title, CONNECT_DEFERRED)
+		title_confirmation.canceled.connect(cancel_title)
+		get_window().size_changed.connect(layout_title_confirmation)
+	title_origin = current_view
+	title_previous_mode = title_origin.process_mode
+	title_origin.journey_dialog_open = true
+	title_origin.process_mode = Node.PROCESS_MODE_DISABLED
+	layout_title_confirmation()
+	title_confirmation.popup_centered(title_confirmation.size)
+	title_confirmation.get_cancel_button().grab_focus()
+
+
+func layout_title_confirmation() -> void:
+	if title_confirmation == null or title_origin == null: return
+	var pixels := Vector2(get_window().size)
+	var logical: Vector2 = title_origin.size
+	if not pixels.is_finite() or not logical.is_finite() or minf(pixels.x, pixels.y) <= 0 or minf(logical.x, logical.y) <= 0: return
+	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))
+	for kind in ["Label", "Button"]:
+		title_confirmation.theme.set_font_size("font_size", kind, roundi(18 * scale))
+	title_confirmation.theme.set_font_size("title_font_size", "Window", roundi(18 * scale))
+	title_confirmation.get_label().custom_minimum_size.x = minf(580 * scale, logical.x * 0.8)
+	title_confirmation.size = Vector2i(roundi(minf(620 * scale, logical.x * 0.9)), roundi(minf(180 * scale, logical.y * 0.8)))
+	if title_confirmation.visible: title_confirmation.popup_centered(title_confirmation.size)
+
+
+func cancel_title() -> void:
+	if title_confirmation != null: title_confirmation.hide()
+	if is_instance_valid(title_origin) and current_view == title_origin:
+		title_origin.process_mode = title_previous_mode
+		title_origin.journey_dialog_open = false
+		var message := "Title canceled. Current journey retained; resume explicitly after neutral."
+		title_origin.save_status.text = message
+		var button: Button
+		if title_origin is FlightView:
+			title_origin.controls_menu.controls.status = message
+			title_origin.controls_menu.message.text = message
+			title_origin.update_compact_hud()
+			button = title_origin.controls_menu.title_button
+		else: button = title_origin.title_button
+		if title_origin.focused: button.grab_focus()
+	title_origin = null
+
+
+func confirm_title() -> void:
+	if title_origin == null: return
+	if closing or current_view != title_origin or not title_origin.focused:
+		cancel_title()
+		return
+	title_confirmation.hide()
+	var previous := current_view
+	current_view = null
+	title_origin = null
+	if audio_session != null:
+		audio_session.view = null
+		audio_session.refresh()
+	remove_child(previous)
+	previous.free()
+	# Acceptance releases the old view/bridge; an empty owner has no new universe.
+	error = ""
+	open_title(ClassDB.instantiate("FreedomBridge"), {"mode": "title", "assets": assets_root})
 
 
 func switch_journey_view() -> void:

@@ -193,6 +193,14 @@ auto lifecycle(const std::filesystem::path& dir) -> void {
       check(session.capture_port().has_value() && session.docking()->attached,
             "public capture succeeds");
       const auto captured = session.document();
+      check(!session.current_orbit_hold_target() &&
+                !session.hold_current_orbit() &&
+                !session.set_hold(
+                    {1, OrbitHoldTarget{f.planet.id,
+                                        captured.flight.position_metres.x,
+                                        {0, 0, 1}}}) &&
+                session.document() == captured,
+            "attached hold selection refuses before any saved state mutation");
       const auto pose = require(release_origin_port(
           f.system, f.station, f.geometry,
           {1, {f.station.id, ordinal}, wayfarer_frame().recipe, 25}));

@@ -100,7 +100,8 @@ auto leg(NativeFreedomFlightSession& live, const std::filesystem::path& path)
             "Committed transit cannot cancel or change preview sampling");
       check(!live.select_port(1) && !live.capture_port() &&
                 !live.set_assistance(false) && !live.set_hold({}) &&
-                !live.set_landing_gear(true),
+                !live.current_orbit_hold_target() &&
+                !live.hold_current_orbit() && !live.set_landing_gear(true),
             "Transit refuses conflicting control/constraint mutations");
     }
     if (t > kJumpSpoolTicks)

@@ -26,6 +26,17 @@ open the title, but playable selections require prepared assets; the repository
 launcher prepares them. Optional recorded-audio arguments are retained for the
 accepted journey; the title does not start playback.
 
-This is startup work under #136. In-game Title/discard confirmation, profile
-catalog browsing, active-slot Save/metadata and broader Settings remain separate
-work. The title makes no automatic save and Quit never autosaves.
+Choose **Title…** on the station or in paused saved-flight/suited controls to
+return. Its exclusive confirmation defaults to Cancel and warns that unsaved
+progress will be discarded. The current view and children remain suspended;
+Resume, Load and mode handoffs cannot run beneath it. Cancel or focus loss
+retains the same paused journey and returns focus to Title. Confirmed acceptance
+retires the old active view/bridge and opens a title with no generated world.
+A later New Game or Continue still uses complete C++ staging. Optional ship audio
+stops for the title, retains its single playback owner and mix preferences, and
+rebinds to the accepted next journey. Recorded-loss recovery and the historical
+frozen docked shell keep their existing workflows.
+
+This is title work under #136. Profile catalog browsing, active-slot
+Save/metadata and broader Settings remain separate work. The title makes no
+automatic save and Quit never autosaves.

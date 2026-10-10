@@ -118,6 +118,83 @@ func check_orbit_fields(start: Dictionary) -> void:
 	check(not FlightView.valid_state(malformed), "Bound escape classification accepted")
 
 
+func check_hold_fields(start: Dictionary) -> void:
+	for field in ["hold_enabled", "orbit_hold"]:
+		var malformed := start.duplicate(true)
+		malformed.erase(field)
+		check(not FlightView.valid_state(malformed), "Missing hold field accepted: " + field)
+	var selected := start.duplicate(true)
+	selected.hold_enabled = true
+	selected.orbit_hold = {"available": true, "refusal": "", "planet_id": start.planet_id, "radius_metres": start.planet_radius + start.altitude, "plane_normal": PackedFloat64Array([0, 0, 1])}
+	check(FlightView.valid_state(selected), "Qualified target projection refused")
+	for field in ["available", "refusal", "planet_id", "radius_metres", "plane_normal"]:
+		var malformed := selected.duplicate(true)
+		malformed.orbit_hold.erase(field)
+		check(not FlightView.valid_state(malformed), "Missing selected hold field accepted: " + field)
+	for radius in [NAN, INF, -INF, 0.0, -1.0, 1.1e15, "1", 1, start.planet_radius + start.atmosphere_edge]:
+		var malformed := selected.duplicate(true)
+		malformed.orbit_hold.radius_metres = radius
+		check(not FlightView.valid_state(malformed), "Malformed hold radius accepted")
+	for plane in [[], null, Vector3.UP, PackedFloat64Array(), PackedFloat64Array([0, 1]), PackedFloat64Array([0, 0, 1, 0]), PackedFloat64Array([0, 0, 0]), PackedFloat64Array([0, NAN, 1]), PackedFloat64Array([INF, 0, 1]), PackedFloat64Array([0, 0, 2])]:
+		var malformed := selected.duplicate(true)
+		malformed.orbit_hold.plane_normal = plane
+		check(not FlightView.valid_state(malformed), "Malformed hold plane accepted")
+	var malformed := selected.duplicate(true)
+	malformed.orbit_hold.planet_id = "unrelated"
+	check(not FlightView.valid_state(malformed), "Hold projection changed physical owner")
+	malformed = selected.duplicate(true)
+	malformed.hold_enabled = false
+	check(not FlightView.valid_state(malformed), "Disabled hold retained a projected target")
+
+
+func check_hold_controls(view: Control, owner: Variant, directory: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var baseline := directory.path_join("hold-baseline.json")
+	var selected_path := directory.path_join("hold-selected.json")
+	check(owner.save_freedom_as(baseline), "Hold baseline save failed")
+	var original := FileAccess.get_file_as_bytes(baseline)
+	check(not before.hold_enabled and before.orbit_hold.available and not view.controls_menu.saved_hold_button.disabled and view.controls_menu.saved_hold_off_button.disabled, "Stable saved orbit lost explicit hold controls")
+	for pixels in [Vector2i(1280, 720), Vector2i(800, 450)]:
+		root.size = pixels
+		view.controls_menu.layout_saved_hold()
+		var scale := float(pixels.y) / root.get_visible_rect().size.y
+		check(view.controls_menu.saved_hold_note.get_theme_font_size("font_size") * scale >= 18.0 and view.controls_menu.saved_hold_button.custom_minimum_size.y * scale >= 44.0, "Hold controls lost physical readability at " + str(pixels))
+	root.size = Vector2i(1280, 720)
+	view.controls_menu.layout_saved_hold()
+	for guard in ["focus", "dialog", "save", "mode", "running"]:
+		view.focused = guard != "focus"
+		view.journey_dialog_open = guard == "dialog"
+		view.mode_change_pending = guard == "mode"
+		view.paused = guard != "running"
+		view.save_dialog.visible = guard == "save"
+		view.controls_menu.saved_hold_button.pressed.emit()
+		check(owner.get_freedom_flight_state() == before, "Hold command escaped view guard: " + guard)
+	view.focused = true
+	view.journey_dialog_open = false
+	view.mode_change_pending = false
+	view.paused = true
+	view.save_dialog.hide()
+	view.controls_menu.saved_hold_button.pressed.emit()
+	var selected: Dictionary = owner.get_freedom_flight_state()
+	check(view.paused and selected.hold_enabled and selected.tick == before.tick and selected.checksum == before.checksum, "Actual hold button advanced or replaced the physical orbit")
+	check(absf(selected.orbit_hold.radius_metres - before.planet_radius - before.altitude) < 1.0e-8 and selected.orbit_hold.plane_normal == PackedFloat64Array([0, 0, 1]), "Actual hold button selected the wrong physical radius or plane")
+	check(not view.controls_menu.saved_hold_off_button.disabled and "Uses fuel" in view.controls_menu.saved_hold_note.text and "circular orbit" in view.controls_menu.saved_hold_note.text, "Requested hold lost its fuel and target limits")
+	check(owner.save_freedom_as(selected_path), "Selected hold save failed")
+	var before_json: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(baseline))
+	var selected_json: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(selected_path))
+	before_json.flight_model.orbit_hold = selected_json.flight_model.orbit_hold
+	check(before_json == selected_json, "Hold selection changed more than the saved request")
+	var continued: Variant = ClassDB.instantiate("FreedomBridge")
+	check(continued.initialize_freedom_continue(selected_path) and continued.get_freedom_flight_state() == selected, "Continue lost selected hold projection")
+	view.request_assistance(false)
+	check("correction paused" in view.controls_menu.saved_hold_note.text and owner.get_freedom_flight_state().hold_enabled and view.paused, "Advanced mode lost retained hold or invented active correction")
+	view.request_assistance(true)
+	view.controls_menu.saved_hold_off_button.pressed.emit()
+	check(owner.get_freedom_flight_state() == before and view.paused and view.controls_menu.saved_hold_off_button.disabled, "Disable failed to restore original no-hold selection")
+	check(owner.save_freedom_as(baseline) and FileAccess.get_file_as_bytes(baseline) == original, "Hold selection/disable changed full original save")
+	continued = null
+
+
 func check_orbit_fixtures(directory: String) -> void:
 	var output: Array = []
 	var oracle_path := directory.path_join("orbital-readout.json")
@@ -148,6 +225,8 @@ func check_orbit_fixtures(directory: String) -> void:
 		if row.file == "orbit-bound-no-apo.json":
 			check(state.orbit_bound and "Stable orbit" in text, "Missing apoapsis became unbound")
 		check(owner.get_freedom_flight_state() == state and FileAccess.get_file_as_bytes(path) == original, "Readout query mutated fixture/flight")
+		if state.orbit_classification != "stable":
+			check(not state.orbit_hold.available and not owner.set_freedom_hold(true) and owner.get_freedom_flight_state() == state, "Unsafe trajectory accepted current hold selection")
 	owner = null
 
 
@@ -271,6 +350,8 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 		else:
 			check(view.port_buttons.is_empty() and view.capture_button == null and view.dock_status == null, "Legacy HUD invented docking controls")
 		check(owner.get_freedom_flight_state() == before and view.paused, "HUD profile changed owner")
+		if before.attached:
+			check(not before.orbit_hold.available and view.controls_menu.saved_hold_button.disabled and not owner.set_freedom_hold(true) and owner.get_freedom_flight_state() == before, "Attached craft accepted orbit hold")
 		view.free()
 		owner = null
 		await process_frame
@@ -582,6 +663,7 @@ func run() -> void:
 	neutral.resize(12)
 	refused(owner, 0.0, neutral, false)
 	check(not owner.set_freedom_assistance(false), "Uninitialized owner accepted assistance")
+	check(not owner.set_freedom_hold(true) and not owner.set_freedom_hold(false), "Uninitialized owner accepted hold")
 	check(owner.initialize_freedom_continue(args[0]), "Selected flight refused: " + str(owner.get_last_error()))
 	var start: Dictionary = owner.get_freedom_flight_state()
 	check(FlightView.valid_state(start) and start.tick == "25" and start.frame_id == "2" and start.assistance, "Selected state was not the saved Wayfarer")
@@ -589,6 +671,7 @@ func run() -> void:
 	check(absf(start.altitude - 500000.0) < 0.001, "Rotation projection changed saved radial altitude")
 	check_controller_domains()
 	check_orbit_fields(start)
+	check_hold_fields(start)
 	check_orbit_fixtures(args[0].get_base_dir())
 	check_exhaust_inputs(start)
 	await check_hud_profiles(args[0].get_base_dir(), args[4])
@@ -615,6 +698,7 @@ func run() -> void:
 	root.add_child(view)
 	check(view.initialize(owner, args[4]), "Production flight view failed: " + view.error)
 	view.set_process(false)
+	check_hold_controls(view, owner, args[0].get_base_dir())
 	check(view.paused and not view.cockpit and view.ship.get_child_count() == 2 and view.exhaust != null, "Continue did not start safely paused with the actual model")
 	check(view.terrain.bridge == owner and owner.get_freedom_flight_state() == start, "Terrain/view invented or advanced saved state")
 	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far == 200.0 and view.terrain_camera.far / view.terrain_camera.near <= 500001.0, "Native camera depth ranges are unsafe")
