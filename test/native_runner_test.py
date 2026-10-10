@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location(
     "native_runner", Path(__file__).resolve().parents[1] / "tools/test_godot_native.py")
@@ -100,6 +101,19 @@ class NativeRunnerTests(unittest.TestCase):
     def test_runner_wires_retention_after_process_completion(self):
         with tempfile.TemporaryDirectory(prefix="native-retention-cli-") as directory:
             root = Path(directory)
+            checkout = root / "checkout"
+            source = checkout / "godot"
+            for name, contents in (("project.godot", "config_version=5\n"),
+                                   ("tests/input_test.gd", "extends SceneTree\n"),
+                                   ("bin/freedom.gdextension", "fixture descriptor\n")):
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(contents)
+            # This control test must also work before CMake generates the
+            # real checkout's extension descriptor in the quality CI job.
+            runner_file = checkout / "tools/test_godot_native.py"
+            runner_file.parent.mkdir()
+            runner_file.write_bytes(Path(runner.__file__).read_bytes())
             build = root / "build"
             binary = build / "src/godot/bin/libapsis_freedom_bridge.so"
             binary.parent.mkdir(parents=True)
@@ -114,7 +128,8 @@ class NativeRunnerTests(unittest.TestCase):
                 engine.write_text(f"#!/bin/sh\necho '0 failures'\nexit {code}\n")
                 engine.chmod(0o755)
                 output = root / f"output-{index}"
-                with contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(runner, "__file__", str(runner_file)), \
+                        contextlib.redirect_stdout(io.StringIO()):
                     result = runner.main(["--godot", str(engine), "--build-dir", str(build),
                                           "--output-parent", str(output), "--test", "input", *extra])
                 self.assertEqual(result, code)
