@@ -250,7 +250,7 @@ jobs:
           --timeout 600
           --test input --test control_settings --test freedom_start --test native_shell --test native_save
           --test native_asset_import --test native_station_view --test wayfarer_frame
-          --test saved_flight --test native_audio --test first_jump --test native_recovery
+          --test saved_flight --test native_environment --test native_audio --test first_jump --test native_recovery
           --test native_port --test native_walk
           --test native_assembly --test native_start_staging --test native_title --test native_profile --test native_planetary --test native_voyage
           --test native_roundtrip --test native_roundtrip_pilot

@@ -123,6 +123,24 @@ struct Fixture {
     return required(advance_atmospheric_flight(context, s, i, rotation));
   }
 };
+auto profile_contract(const Fixture& f) -> void {
+  const auto profile = required(resolve_atmospheric_flight_profile(f.planet));
+  const auto sea = f.sample(f.state(0));
+  check(profile.sea_level_density_kg_per_cubic_metre ==
+                sea.density_kg_per_cubic_metre &&
+            profile.sea_level_pressure_millibars == sea.pressure_millibars &&
+            profile.space_boundary_altitude_metres ==
+                sea.space_boundary_altitude_metres,
+        "read-only profile matches actual atmospheric force sampling");
+  for (const auto version :
+       {0U, 2U, std::numeric_limits<std::uint32_t>::max()}) {
+    const auto invalid =
+        resolve_atmospheric_flight_profile(f.planet, {version});
+    check(!invalid && invalid.error().code ==
+                          AtmosphericFlightErrorCode::unsupported_version,
+          "profile refuses unsupported recipes");
+  }
+}
 auto invalid(const Fixture& f) -> void {
   const auto refuses = [&](RigidBodyState s, VacuumIntent intent = {},
                            PhysicalPlanetRotationRecipe rotation = {},
@@ -547,6 +565,7 @@ int main() {
     constexpr std::array seeds{Seed{12}, Seed{4}, Seed{0}, Seed{3}};
     for (const auto seed : seeds) {
       Fixture f{seed};
+      profile_contract(f);
       invalid(f);
       environment(f);
       vacuum_parity(f);

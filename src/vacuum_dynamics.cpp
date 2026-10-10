@@ -270,27 +270,12 @@ auto atmosphere_parameters(const RigidBodyWorldContext& context,
       !supports_operation(craft->properties, CraftOperation::atmosphere))
     return std::unexpected{
         AtmosphericFlightError{Code::unsupported_craft, {}, {}, {}}};
-  double height{};
-  const double pressure = descriptor.atmosphere_pressure.value;
-  switch (descriptor.atmosphere_class) {
-    case AtmosphereClass::airless:
-      if (pressure != 0)
-        return std::unexpected{
-            AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
-      break;
-    case AtmosphereClass::tenuous: height = 6000; break;
-    case AtmosphereClass::temperate: height = 8500; break;
-    case AtmosphereClass::dense: height = 11000; break;
-    default:
-      return std::unexpected{
-          AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
-  }
-  if (height != 0 &&
-      (pressure <= 0 || pressure > AtmospherePressureMillibars::max))
-    return std::unexpected{
-        AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
-  const double rho = 1.225 * (pressure / 1013.25);
-  const double edge = height == 0 ? 0 : height * std::log(rho / 1e-6);
+  const auto profile = resolve_atmospheric_flight_profile(descriptor, recipe);
+  if (!profile) return std::unexpected{profile.error()};
+  const double pressure = profile->sea_level_pressure_millibars;
+  const double rho = profile->sea_level_density_kg_per_cubic_metre;
+  const double height = profile->scale_height_metres;
+  const double edge = profile->space_boundary_altitude_metres;
   const auto& omega = geometry->geometry.angular_velocity_radians_per_second;
   return AtmosphereParameters{
       gravity->planet,
@@ -583,6 +568,37 @@ auto integrate(const Integrated& initial, V inertia, double mass, V force,
       aerodynamic_angular_impulse};
 }
 } // namespace
+
+auto resolve_atmospheric_flight_profile(const PlanetDescriptor& descriptor,
+                                        AtmosphericFlightRecipe recipe)
+    -> std::expected<AtmosphericFlightProfile, AtmosphericFlightError> {
+  using Code = AtmosphericFlightErrorCode;
+  if (recipe.version != kAtmosphericFlightVersion)
+    return std::unexpected{
+        AtmosphericFlightError{Code::unsupported_version, {}, {}, {}}};
+  double height{};
+  const double pressure = descriptor.atmosphere_pressure.value;
+  switch (descriptor.atmosphere_class) {
+    case AtmosphereClass::airless:
+      if (pressure != 0)
+        return std::unexpected{
+            AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+      break;
+    case AtmosphereClass::tenuous: height = 6000; break;
+    case AtmosphereClass::temperate: height = 8500; break;
+    case AtmosphereClass::dense: height = 11000; break;
+    default:
+      return std::unexpected{
+          AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+  }
+  if (height != 0 &&
+      (pressure <= 0 || pressure > AtmospherePressureMillibars::max))
+    return std::unexpected{
+        AtmosphericFlightError{Code::invalid_atmosphere, {}, {}, {}}};
+  const double rho = 1.225 * (pressure / 1013.25);
+  const double edge = height == 0 ? 0 : height * std::log(rho / 1e-6);
+  return AtmosphericFlightProfile{pressure, rho, height, edge};
+}
 
 auto advance_vacuum_attitude(CraftFrameRecipe craft,
                              RigidOrientation orientation,

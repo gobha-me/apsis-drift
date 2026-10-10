@@ -5,6 +5,7 @@
 #include "apsis_drift/godot/surface_start.hpp"
 #include "apsis_drift/godot/thrust_flight.hpp"
 
+#include "apsis_drift/body_ephemeris.hpp"
 #include "apsis_drift/craft_environment_assessment.hpp"
 #include "apsis_drift/native_profile.hpp"
 #include "apsis_drift/native_startup.hpp"
@@ -1775,6 +1776,36 @@ class FreedomBridge : public godot::RefCounted {
           star.x * tangent.up.x + star.y * tangent.up.y + star.z * tangent.up.z,
           -(star.x * tangent.north.x + star.y * tangent.north.y +
             star.z * tangent.north.z));
+      const auto profile =
+          require(resolve_atmospheric_flight_profile(view.planet));
+      const auto& source_star = session.system().catalog.star;
+      const auto& atmosphere = view.planet.palette.atmosphere;
+      godot::Dictionary lighting;
+      lighting["version"] = static_cast<std::int64_t>(1);
+      lighting["probe_frame"] = "native_tangent_metres";
+      lighting["system_id"] = result["system_id"];
+      const auto target = body_id(view.planet.id);
+      lighting["body_version"] = static_cast<std::int64_t>(target.version);
+      lighting["body_kind"] = "planet";
+      lighting["body_id"] = decimal(target.value);
+      lighting["tick"] = result["tick"];
+      lighting["catalog_generator"] = static_cast<std::int64_t>(
+          view.rotation.recipe.physical_catalog_generator);
+      lighting["star_id"] = decimal(source_star.id.value);
+      lighting["direction"] = result["star_direction"];
+      lighting["star_color"] = godot::Color(source_star.color.red / 255.0f,
+                                            source_star.color.green / 255.0f,
+                                            source_star.color.blue / 255.0f, 1);
+      lighting["star_angular_radius"] = std::asin(std::min(
+          1.0, static_cast<double>(source_star.radius_kilometres) * 1000.0 /
+                   view.rotation.geometry.observer_star_distance_metres));
+      lighting["atmosphere_tint"] =
+          godot::Color(atmosphere.red / 255.0f, atmosphere.green / 255.0f,
+                       atmosphere.blue / 255.0f, 1);
+      lighting["scale_height"] = profile.scale_height_metres;
+      lighting["sea_density"] = profile.sea_level_density_kg_per_cubic_metre;
+      lighting["atmosphere_edge"] = profile.space_boundary_altitude_metres;
+      result["lighting"] = lighting;
     } catch (const std::exception&) {
       result.clear();
     }
