@@ -448,6 +448,85 @@ func check_saved_reference(view: Node, owner: Variant, directory: String) -> voi
 	menu.show_menu()
 
 
+func check_saved_settings(view: Node, owner: Variant, directory: String) -> void:
+	view.pause_controls("Settings contract")
+	var menu: CanvasLayer = view.controls_menu
+	var controls: Node = view.player_input
+	var initial: Dictionary = controls.settings.duplicate(true)
+	var initial_persist: bool = controls.persist
+	var initial_path: String = controls.settings_path
+	var path := "user://saved-settings-contract.json"
+	check(not FileAccess.file_exists(path), "Settings test destination already exists")
+	controls.persist = true
+	controls.settings_path = path
+	var state: Dictionary = owner.get_freedom_flight_state()
+	var before_path := directory.path_join("before-settings.json")
+	var after_path := directory.path_join("after-settings.json")
+	check(owner.save_freedom_as(before_path), "Settings baseline save failed")
+	var frozen := FileAccess.get_file_as_bytes(before_path)
+	menu.settings_button.grab_focus()
+	physical_key(KEY_ENTER, true)
+	await process_frame
+	physical_key(KEY_ENTER, false)
+	var settings: Control = menu.settings_view
+	check(settings.visible and not menu.menu_margin.visible and view.paused and not controls.enabled, "Settings did not open in the paused owner")
+	settings.fields.deadzone.control.value = 0.35
+	view._process(0.25)
+	check(controls.settings == initial and not FileAccess.file_exists(path) and owner.get_freedom_flight_state() == state, "Editing preferences changed live controls or C++ state")
+	physical_key(KEY_ESCAPE, true)
+	await process_frame
+	physical_key(KEY_ESCAPE, false)
+	check(not settings.visible and menu.settings_button.has_focus() and view.paused and controls.settings == initial and not FileAccess.file_exists(path), "Escape resumed or adopted canceled preferences")
+	controls.device = 0
+	controls.install()
+	for back_button in [JOY_BUTTON_B, JOY_BUTTON_START]:
+		menu.show_settings()
+		settings.fields.curve.control.value = 2.0
+		joy_button(back_button, true)
+		await process_frame
+		joy_button(back_button, false)
+		check(not settings.visible and menu.settings_button.has_focus() and view.paused and controls.settings == initial, "Controller nested Back resumed or applied")
+	menu.show_settings()
+	settings.fields.deadzone.control.value = 0.35
+	settings.apply_pending()
+	check(settings.visible and is_equal_approx(controls.settings.deadzone, 0.35) and controls.needs_neutral and not controls.enabled, "Apply did not remain paused with neutral gate")
+	var applied := FileAccess.get_file_as_bytes(path)
+	check(not applied.is_empty(), "Applied controls were not persisted")
+	controls.settings_path = "user://missing-settings-parent/preferences.json"
+	settings.fields.curve.control.value = 2.0
+	var adopted: Dictionary = controls.settings.duplicate(true)
+	settings.apply_pending()
+	check(controls.settings == adopted and FileAccess.get_file_as_bytes(path) == applied and settings.pending.curve == 2.0, "Failed Apply changed live controls/file or lost pending edits")
+	controls.settings_path = path
+	controls.focused = false
+	settings.refresh_status()
+	settings.apply_pending()
+	settings.cancel()
+	check(settings.visible and settings.apply_button.disabled and controls.settings == adopted and FileAccess.get_file_as_bytes(path) == applied, "Unfocused provider accepted Settings input")
+	controls.focused = true
+	settings.refresh_status()
+	for pixels in [Vector2i(640, 450), Vector2i(800, 450), Vector2i(1280, 720)]:
+		root.size = pixels
+		settings.cancel_button.grab_focus()
+		for i in 4: await process_frame
+		check(settings.scroll.get_global_rect().encloses(settings.cancel_button.get_global_rect()) and root.get_visible_rect().encloses(settings.status.get_global_rect()), "Nested Settings layout clipped at %s: action=%s scroll=%s status=%s viewport=%s" % [pixels, settings.cancel_button.get_global_rect(), settings.scroll.get_global_rect(), settings.status.get_global_rect(), root.get_visible_rect()])
+		view._process(0.1)
+		check(view.paused and owner.get_freedom_flight_state() == state, "Settings resize advanced owner")
+	settings.restore_defaults()
+	settings.apply_pending()
+	check(view.paused and not controls.enabled, "Applied defaults armed/resumed flight")
+	settings.cancel()
+	for i in 4: await process_frame
+	check(menu.settings_button.has_focus() and view.paused and menu.left_scroll.get_global_rect().encloses(menu.settings_button.get_global_rect()), "Settings return focus/visibility lost")
+	check(owner.save_freedom_as(after_path) and FileAccess.get_file_as_bytes(after_path) == frozen and owner.get_freedom_flight_state() == state, "Settings changed the complete committed C++ save")
+	check(controls.apply_preferences(initial), "Settings test could not restore original preferences")
+	DirAccess.remove_absolute(path)
+	controls.persist = initial_persist
+	controls.settings_path = initial_path
+	root.size = Vector2i(1280, 720)
+	menu.show_menu()
+
+
 func check_controller_domains() -> void:
 	for size in [0, 6, 8, 1000]:
 		var bad := PackedFloat64Array()
@@ -786,6 +865,7 @@ func run() -> void:
 	await check_compact_hud(view, owner, args[0].get_base_dir())
 	await check_hud_layout(view, owner, args[0].get_base_dir())
 	await check_saved_reference(view, owner, args[0].get_base_dir())
+	await check_saved_settings(view, owner, args[0].get_base_dir())
 	await check_saved_controller(view, owner, args[0])
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
 	view.state = owner.get_freedom_flight_state()

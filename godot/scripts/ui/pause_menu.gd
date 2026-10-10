@@ -44,6 +44,8 @@ var left_scroll: ScrollContainer
 var menu_margin: MarginContainer
 var basics: Control
 var basics_button: Button
+var settings_view: Control
+var settings_button: Button
 var entry_focus_frames := 0
 var menu_theme: Theme
 var menu_heading: Label
@@ -115,6 +117,7 @@ func _ready() -> void:
 	if saved_flight:
 		save_button = add_button(left, "Save As…", func(): save_requested.emit())
 		load_button = add_button(left, "Load…", func(): load_requested.emit())
+		settings_button = add_button(left, "Settings (paused)", show_settings)
 		title_button = add_button(left, "Title…", func(): title_requested.emit())
 		saved_assist_button = CheckButton.new()
 		saved_assist_button.text = "Assisted piloting"
@@ -170,9 +173,10 @@ func _ready() -> void:
 	add_button(left, "Toggle fullscreen", func():
 		var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN))
-	add_slider(left, "Stick / trigger dead zone", "deadzone", 0.05, 0.45, 0.01)
-	add_slider(left, "Response curve", "curve", 1.0, 3.0, 0.1)
-	add_slider(left, "Head-look speed", "look_speed", 0.3, 4.0, 0.1)
+	if not saved_flight:
+		add_slider(left, "Stick / trigger dead zone", "deadzone", 0.05, 0.45, 0.01)
+		add_slider(left, "Response curve", "curve", 1.0, 3.0, 0.1)
+		add_slider(left, "Head-look speed", "look_speed", 0.3, 4.0, 0.1)
 	if not saved_flight:
 		var debug := CheckButton.new()
 		diagnostic_toggle = debug
@@ -191,24 +195,25 @@ func _ready() -> void:
 		zoom.custom_minimum_size.y = 30
 		zoom.value_changed.connect(func(value: float): camera_distance_changed.emit(value))
 		left.add_child(zoom)
-	var invert := CheckButton.new()
-	invert.text = "Invert vertical head-look"
-	invert.button_pressed = controls.settings.invert_look
-	invert.toggled.connect(func(value: bool):
-		controls.settings.invert_look = value
-		controls.save_settings())
-	left.add_child(invert)
-	sized_controls.append(invert)
-	var prompts := OptionButton.new()
-	for option in ["Prompts: automatic", "Prompts: Xbox", "Prompts: PlayStation"]:
-		prompts.add_item(option)
-	prompts.selected = int(controls.settings.prompts)
-	prompts.item_selected.connect(func(index: int):
-		controls.settings.prompts = index
-		controls.save_settings()
-		refresh_bindings())
-	left.add_child(prompts)
-	sized_controls.append(prompts)
+	if not saved_flight:
+		var invert := CheckButton.new()
+		invert.text = "Invert vertical head-look"
+		invert.button_pressed = controls.settings.invert_look
+		invert.toggled.connect(func(value: bool):
+			controls.settings.invert_look = value
+			controls.save_settings())
+		left.add_child(invert)
+		sized_controls.append(invert)
+		var prompts := OptionButton.new()
+		for option in ["Prompts: automatic", "Prompts: Xbox", "Prompts: PlayStation"]:
+			prompts.add_item(option)
+		prompts.selected = int(controls.settings.prompts)
+		prompts.item_selected.connect(func(index: int):
+			controls.settings.prompts = index
+			controls.save_settings()
+			refresh_bindings())
+		left.add_child(prompts)
+		sized_controls.append(prompts)
 	add_button(left, "Restore default bindings", func():
 		controls.defaults()
 		controls.install()
@@ -263,6 +268,11 @@ func _ready() -> void:
 		basics.orbit_preserving_assist = orbit_preserving_assist
 		panel.add_child(basics)
 		basics.back_requested.connect(close_basics)
+	if saved_flight:
+		settings_view = preload("res://scripts/ui/control_settings.gd").new()
+		settings_view.controls = controls
+		panel.add_child(settings_view)
+		settings_view.back_requested.connect(close_settings)
 	refresh_bindings()
 	if saved_flight:
 		get_window().size_changed.connect(layout_saved_menu)
@@ -398,6 +408,33 @@ func refresh_bindings() -> void:
 	if is_instance_valid(basics):
 		basics.refresh()
 
+func show_settings() -> void:
+	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(settings_view): return
+	entry_focus_frames = 0
+	menu_margin.hide()
+	settings_view.open()
+
+func close_settings() -> void:
+	if not is_instance_valid(settings_view): return
+	settings_view.pending.clear()
+	settings_view.hide()
+	menu_margin.show()
+	refresh_bindings()
+	if panel.visible:
+		settings_button.grab_focus()
+		left_scroll.ensure_control_visible(settings_button)
+		ensure_entry_focus_visible()
+
+func back_from_nested() -> bool:
+	if not saved_flight or not panel.visible or not controls.focused: return false
+	if is_instance_valid(settings_view) and settings_view.visible:
+		settings_view.cancel()
+		return true
+	if is_instance_valid(basics) and basics.visible:
+		close_basics()
+		return true
+	return false
+
 func show_basics() -> void:
 	if not panel.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(basics):
 		return
@@ -434,6 +471,11 @@ func add_audio_slider(parent: Node, title: String, key: String) -> void:
 
 func show_menu(reason := "") -> void:
 	layout_saved_menu()
+	# A safety pause retains pending preferences; it never resumes or writes.
+	if is_instance_valid(settings_view) and settings_view.visible:
+		if not reason.is_empty(): controls.status = reason
+		settings_view.refresh_status()
+		return
 	if is_instance_valid(basics):
 		basics.hide()
 	menu_margin.show()
@@ -452,6 +494,9 @@ func ensure_entry_focus_visible() -> void:
 
 func hide_menu() -> void:
 	entry_focus_frames = 0
+	if is_instance_valid(settings_view):
+		settings_view.pending.clear()
+		settings_view.hide()
 	controls.waiting_action = ""
 	panel.hide()
 	get_viewport().gui_release_focus()
@@ -464,8 +509,10 @@ func _process(_delta: float) -> void:
 	if saved_flight: layout_saved_menu()
 	if entry_focus_frames > 0:
 		entry_focus_frames -= 1
-		if entry_focus_frames == 0 and panel.visible and resume_button.has_focus():
-			left_scroll.ensure_control_visible(resume_button)
+		if entry_focus_frames == 0 and panel.visible and menu_margin.visible:
+			var target := get_viewport().gui_get_focus_owner()
+			if is_instance_valid(target) and left_scroll.is_ancestor_of(target):
+				left_scroll.ensure_control_visible(target)
 	if panel.visible:
 		var device_name := Input.get_joy_name(controls.device) if controls.device >= 0 else ""
 		message.text = ("No controller detected. " if controls.device < 0 else "Controller: %s. " % (device_name if not device_name.is_empty() else "mapped test device")) + controls.status
@@ -480,5 +527,5 @@ func _input(_event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if panel.visible and controls.waiting_action.is_empty() and event.is_action_pressed("ui_cancel"):
-		resumed.emit()
+		if not back_from_nested(): resumed.emit()
 		get_viewport().set_input_as_handled()

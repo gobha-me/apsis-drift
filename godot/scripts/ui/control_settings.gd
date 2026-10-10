@@ -15,6 +15,7 @@ var cancel_button: Button
 var defaults_button: Button
 var focused := true
 var readable_scale := -1.0
+var focus_scroll_frames := 0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -78,6 +79,7 @@ func _ready() -> void:
 	status = Label.new()
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(status)
+	get_window().size_changed.connect(func(): focus_scroll_frames = 2)
 	hide()
 
 func add_button(text: String, action: Callable) -> Button:
@@ -94,6 +96,7 @@ func open() -> void:
 	refresh_status()
 	layout_settings()
 	fields.deadzone.control.grab_focus()
+	focus_scroll_frames = 2
 
 func refresh_fields() -> void:
 	for key in ["deadzone", "curve", "look_speed"]:
@@ -107,20 +110,20 @@ func refresh_status() -> void:
 	for key in Controls.DEFAULT_SETTINGS:
 		if pending[key] != controls.settings[key]: dirty = true
 	status.text = "Pending changes. Apply to keep them." if dirty else "No pending changes."
-	apply_button.disabled = not focused or (controls.persist and not controls.preferences_writable)
+	apply_button.disabled = not focused or not controls.focused or (controls.persist and not controls.preferences_writable)
 	if controls.persist and not controls.preferences_writable:
 		status.text += "\nExisting controls file could not be read safely; Apply is disabled. " + controls.status
 	elif not controls.persist:
 		status.text += "\nPersistence is disabled for this run. Apply affects this session only."
 
 func restore_defaults() -> void:
-	if not focused: return
+	if not focused or not controls.focused: return
 	for key in Controls.DEFAULT_SETTINGS: pending[key] = Controls.DEFAULT_SETTINGS[key]
 	refresh_fields()
 	refresh_status()
 
 func apply_pending() -> void:
-	if not focused: return
+	if not focused or not controls.focused: return
 	if not controls.apply_preferences(pending):
 		status.text = controls.status + " Pending changes retained."
 		return
@@ -131,7 +134,7 @@ func apply_pending() -> void:
 	status.text = controls.status
 
 func cancel() -> void:
-	if not focused: return
+	if not focused or not controls.focused: return
 	pending.clear()
 	hide()
 	back_requested.emit()
@@ -142,6 +145,7 @@ func layout_settings() -> void:
 	var scale := maxf(1.0, maxf(size.x / pixels.x, size.y / pixels.y))
 	if is_equal_approx(scale, readable_scale): return
 	readable_scale = scale
+	focus_scroll_frames = 2
 	theme_owner.default_font_size = ceili(20 * scale)
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, roundi(32 * scale))
@@ -150,10 +154,18 @@ func layout_settings() -> void:
 	for button in [defaults_button, apply_button, cancel_button]: button.custom_minimum_size.y = ceili(44 * scale)
 
 func _process(_delta: float) -> void:
-	if visible: layout_settings()
+	if not visible: return
+	layout_settings()
+	if focus_scroll_frames > 0:
+		focus_scroll_frames -= 1
+		if focus_scroll_frames == 0:
+			# Resize/theme layout completes after the original focus event.
+			var target := get_viewport().gui_get_focus_owner()
+			if is_instance_valid(target) and column.is_ancestor_of(target):
+				scroll.ensure_control_visible(target)
 
 func _input(_event: InputEvent) -> void:
-	if visible and not focused: get_viewport().set_input_as_handled()
+	if visible and (not focused or not controls.focused): get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("ui_cancel"):
