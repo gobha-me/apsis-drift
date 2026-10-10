@@ -22,6 +22,31 @@ using Json = nlohmann::ordered_json;
   return {code, std::move(path), std::move(detail)};
 }
 
+auto bounded_nesting(std::string_view text) -> bool {
+  std::array<char, 64> stack{};
+  std::size_t depth{};
+  bool quoted{}, escaped{};
+  for (char c : text) {
+    if (quoted) {
+      if (escaped)
+        escaped = false;
+      else if (c == '\\')
+        escaped = true;
+      else if (c == '"')
+        quoted = false;
+    } else if (c == '"')
+      quoted = true;
+    else if (c == '{' || c == '[') {
+      if (depth == stack.size()) return false;
+      stack[depth++] = c;
+    } else if (c == '}' || c == ']') {
+      if (!depth || stack[depth - 1] != (c == '}' ? '{' : '[')) return false;
+      --depth;
+    }
+  }
+  return !depth && !quoted;
+}
+
 [[nodiscard]] auto versions_array(const SaveGeneratorVersions& v)
     -> std::array<std::uint32_t, 15> {
   return {v.seed_derivation,       v.planet_descriptor,
@@ -112,6 +137,24 @@ using Json = nlohmann::ordered_json;
 
 } // namespace
 
+auto derive_freedom_craft_identity(Seed seed, std::uint64_t generation)
+    -> std::expected<StarterCraftId, SaveSchemaError> {
+  const auto starter = derive_seed(seed, SeedDomain::starter_craft).value;
+  if (!generation) return StarterCraftId{starter};
+  constexpr auto span = std::numeric_limits<std::uint64_t>::max();
+  if (!starter || generation == span)
+    return std::unexpected{error(SaveSchemaErrorCode::invalid_state,
+                                 "$.craft_lineage.generation",
+                                 "identity ring cannot advance")};
+  // Addition modulo UINT64_MAX on [0, UINT64_MAX-1], then shift to the
+  // nonzero ID set. The subtraction branch prevents unsigned overflow.
+  const auto base = starter - 1;
+  const auto remaining = span - base;
+  const auto index =
+      generation < remaining ? base + generation : generation - remaining;
+  return StarterCraftId{index + 1};
+}
+
 auto make_freedom_new_game_document(Seed universe_seed) -> FreedomSaveDocument {
   auto recipe = make_save_recipe(universe_seed);
   return {
@@ -137,9 +180,18 @@ auto validate_freedom_save_document(const FreedomSaveDocument& document)
   if (recipe != make_save_recipe(recipe.universe_seed))
     return std::unexpected{error(SaveSchemaErrorCode::identity_mismatch,
                                  "$.recipe", "recipe does not match its seed")};
+  if (document.lineage &&
+      (document.lineage->version != kFreedomCraftLineageVersion ||
+       !document.lineage->generation))
+    return std::unexpected{error(SaveSchemaErrorCode::invalid_state,
+                                 "$.craft_lineage",
+                                 "unsupported or initial lineage selection")};
+  const auto craft = derive_freedom_craft_identity(
+      recipe.universe_seed,
+      document.lineage ? document.lineage->generation : 0);
+  if (!craft) return std::unexpected{craft.error()};
   if (document.state.station != recipe.origin_station ||
-      document.state.craft.value !=
-          derive_seed(recipe.universe_seed, SeedDomain::starter_craft).value)
+      document.state.craft != *craft)
     return std::unexpected{
         error(SaveSchemaErrorCode::identity_mismatch, "$.state",
               "station or craft identity does not match its seed")};
@@ -186,7 +238,9 @@ auto encode_freedom_save_document_json(const FreedomSaveDocument& document)
   Json root = {
       {"application", kSaveApplication},
       {"application_version", kApplicationVersion},
-      {"format_version", kFreedomSaveFormatVersion},
+      {"format_version", document.lineage
+                             ? kFreedomCraftLineageSaveFormatVersion
+                             : kFreedomSaveFormatVersion},
       {"mode", "freedom"},
       {"recipe",
        {{"universe_seed", std::to_string(recipe.universe_seed.value)},
@@ -203,6 +257,10 @@ auto encode_freedom_save_document_json(const FreedomSaveDocument& document)
         {"tick", std::to_string(document.state.tick)},
         {"discoveries", std::move(discoveries)},
         {"world_deltas", std::move(deltas)}}}};
+  if (document.lineage)
+    root["craft_lineage"] = {
+        {"version", document.lineage->version},
+        {"generation", std::to_string(document.lineage->generation)}};
   auto encoded = root.dump(2);
   encoded.push_back('\n');
   if (encoded.size() > kMaximumSaveDocumentBytes)
@@ -216,6 +274,10 @@ auto decode_freedom_save_document_json(std::string_view json_text)
   if (json_text.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{error(SaveSchemaErrorCode::document_too_large, "$",
                                  "save exceeds the byte bound")};
+  if (!bounded_nesting(json_text))
+    return std::unexpected{
+        error(SaveSchemaErrorCode::malformed_json, "$",
+              "unbalanced or excessive origin JSON nesting")};
   bool duplicate{};
   std::vector<std::unordered_set<std::string>> keys;
   const Json::parser_callback_t callback = [&](int, Json::parse_event_t event,
@@ -239,19 +301,29 @@ auto decode_freedom_save_document_json(std::string_view json_text)
   if (duplicate)
     return std::unexpected{error(SaveSchemaErrorCode::duplicate_key, "$",
                                  "JSON objects cannot repeat a key")};
-  if (auto fields = exact_fields(root,
-                                 {"application", "application_version",
-                                  "format_version", "mode", "recipe", "state"},
-                                 "$");
-      !fields)
-    return std::unexpected{fields.error()};
+  const bool lineage =
+      root.is_object() && root.contains("format_version") &&
+      root["format_version"].is_number_unsigned() &&
+      root["format_version"] == kFreedomCraftLineageSaveFormatVersion;
+  const auto fields =
+      lineage ? exact_fields(root,
+                             {"application", "application_version",
+                              "format_version", "mode", "recipe", "state",
+                              "craft_lineage"},
+                             "$")
+              : exact_fields(root,
+                             {"application", "application_version",
+                              "format_version", "mode", "recipe", "state"},
+                             "$");
+  if (!fields) return std::unexpected{fields.error()};
   if (!root.at("application").is_string() ||
       root.at("application") != kSaveApplication ||
       !root.at("mode").is_string() || root.at("mode") != "freedom")
     return std::unexpected{error(SaveSchemaErrorCode::invalid_value, "$",
                                  "application or mode is not Freedom")};
   if (!root.at("format_version").is_number_unsigned() ||
-      root.at("format_version") != kFreedomSaveFormatVersion)
+      (root.at("format_version") != kFreedomSaveFormatVersion &&
+       root.at("format_version") != kFreedomCraftLineageSaveFormatVersion))
     return std::unexpected{
         error(SaveSchemaErrorCode::unsupported_format_version,
               "$.format_version", "unsupported Freedom save version")};
@@ -317,6 +389,22 @@ auto decode_freedom_save_document_json(std::string_view json_text)
     return std::unexpected{error(SaveSchemaErrorCode::invalid_value, "$.recipe",
                                  "Freedom station ordinals are invalid")};
   auto document = make_freedom_new_game_document(Seed{*seed});
+  if (lineage) {
+    const auto& selected = root.at("craft_lineage");
+    if (auto shape = exact_fields(selected, {"version", "generation"},
+                                  "$.craft_lineage");
+        !shape)
+      return std::unexpected{shape.error()};
+    if (!selected.at("version").is_number_unsigned() ||
+        selected.at("version") != kFreedomCraftLineageVersion)
+      return std::unexpected{
+          error(SaveSchemaErrorCode::unsupported_format_version,
+                "$.craft_lineage.version", "unsupported lineage rule")};
+    auto generation = read_decimal(selected, "generation", "$.craft_lineage");
+    if (!generation) return std::unexpected{generation.error()};
+    document.lineage = FreedomCraftLineage{1, *generation};
+  }
+
   if (*station != document.recipe.origin_station.value ||
       *planet != document.recipe.home_planet.value)
     return std::unexpected{error(SaveSchemaErrorCode::identity_mismatch,

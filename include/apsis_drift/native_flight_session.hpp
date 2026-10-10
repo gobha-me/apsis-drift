@@ -61,6 +61,15 @@ class NativeFreedomFlightSession {
       -> const std::optional<FreedomKnowledge>& {
     return knowledge_;
   }
+  [[nodiscard]] auto recovery_pending() const -> bool {
+    return recovery_ && recovery_->pending;
+  }
+  [[nodiscard]] auto recovery_document() const
+      -> std::expected<FreedomRecoverySaveDocument, std::string>;
+  [[nodiscard]] auto record_loss(FreedomLossCause, StarterCraftId,
+                                 SimulationTick, std::uint64_t source_checksum)
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto complete_recovery() -> std::expected<void, std::string>;
   [[nodiscard]] auto travel() const
       -> const std::optional<FreedomTravelState>& {
     return travel_;
@@ -89,6 +98,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto observe() const
       -> std::expected<NativeFlightObservation, std::string>;
   auto set_assistance(bool enabled) -> std::expected<void, std::string> {
+    if (recovery_pending())
+      return std::unexpected{
+          "Continue the recorded loss before controlling the replacement"};
     if (travel_ && travel_->phase != FreedomJumpPhase::idle)
       return std::unexpected{
           "Cancel the active jump before changing assistance"};
@@ -187,6 +199,7 @@ class NativeFreedomFlightSession {
   std::optional<FreedomResources> resources_;
   std::optional<FreedomKnowledge> knowledge_;
   std::optional<FreedomTravelState> travel_;
+  std::optional<FreedomRecoveryState> recovery_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;

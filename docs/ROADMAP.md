@@ -294,3 +294,14 @@ beside each checkpoint-resumed session, meter actual thrust, and leave one jump
 charge before service. Native replay consumes the same controls and checks full
 C++ saves, current-world cues and pilot continuity. This advances #194; standard
 replacement recovery #247 and final visual/manual qualification remain open.
+
+## Standard recovery checkpoint — 2026-10-09
+
+[Standard recovery](FREEDOM_RECOVERY.md) now provides an explicit pending loss,
+validated station/fallback, retired individual craft and one fresh starter with
+baseline resources. Before/pending/completed Save/Continue and duplicate events
+preserve the universe, chart and clock. Native replacement stages its assets and
+terrain before committing a new station/walker view. The declared loss fixtures
+follow actual neighboring-system travel; collision fatality detection, living-
+pilot rescue, costs and hazardous-jump laws are separate or unselected. Wider
+#194 visual/manual and intentional Pilot-grade qualification remain open.

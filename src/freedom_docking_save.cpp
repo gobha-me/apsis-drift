@@ -130,6 +130,7 @@ auto decode_freedom_docking_document_json(std::string_view text)
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom docking save version"}};
   auto shape = root;
+  if (root.contains("world_owner")) shape.erase("craft_lineage");
   shape.erase("world_owner");
   if (!exact_fields(shape, {"application", "application_version",
                             "format_version", "mode", "recipe", "state",

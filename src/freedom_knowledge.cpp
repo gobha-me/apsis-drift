@@ -15,6 +15,7 @@ struct KnowledgeWorld {
   PhysicalLocalSystem origin;
   OriginStationDescriptor station;
   std::optional<PhysicalLocalSystem> neighbor;
+  std::optional<FreedomCraftLineage> craft_lineage;
 };
 auto world(const FreedomKnowledgeRecipe& r)
     -> std::expected<KnowledgeWorld, Error> {
@@ -23,6 +24,15 @@ auto world(const FreedomKnowledgeRecipe& r)
       r.version == kFreedomTravelKnowledgeVersion)
     expected.observation_policy = 1;
   if (r.version == kFreedomTravelKnowledgeVersion) expected.world_domain = 1;
+  if (r.craft_lineage) {
+    if (r.version != kFreedomTravelKnowledgeVersion ||
+        r.craft_lineage->version != kFreedomCraftLineageVersion ||
+        !r.craft_lineage->generation ||
+        !derive_freedom_craft_identity(r.universe_seed,
+                                       r.craft_lineage->generation))
+      return std::unexpected{Error::unsupported_recipe};
+    expected.craft_lineage = r.craft_lineage;
+  }
   if ((r.version != kFreedomKnowledgeVersion &&
        r.version != kFreedomObservedKnowledgeVersion &&
        r.version != kFreedomTravelKnowledgeVersion) ||
@@ -39,9 +49,10 @@ auto world(const FreedomKnowledgeRecipe& r)
     if (!system) return std::unexpected{Error::unsupported_recipe};
     neighbor = std::move(*system);
   }
-  return KnowledgeWorld{
-      generate_first_universe_route(r.universe_seed), std::move(*origin),
-      generate_origin_station(r.universe_seed), std::move(neighbor)};
+  return KnowledgeWorld{generate_first_universe_route(r.universe_seed),
+                        std::move(*origin),
+                        generate_origin_station(r.universe_seed),
+                        std::move(neighbor), r.craft_lineage};
 }
 auto key(KnowledgeSubject s, KnowledgeFact f) {
   return std::tuple{s.kind, s.system.value, s.identity, f};
@@ -158,7 +169,18 @@ auto validate_evidence(const KnowledgeWorld& w, const KnowledgeEvidence& e,
     return std::unexpected{Error::invalid_source};
   const auto craft =
       make_freedom_new_game_document(w.route.universe_seed).state.craft;
-  if (t.source_id != craft.value || t.flight != craft)
+  if (t.source_id != t.flight.value)
+    return std::unexpected{Error::invalid_source};
+  if (w.craft_lineage) {
+    if (!t.flight.value || !craft.value)
+      return std::unexpected{Error::invalid_source};
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    const auto generation = t.flight.value >= craft.value
+                                ? t.flight.value - craft.value
+                                : maximum - craft.value + t.flight.value;
+    if (generation > w.craft_lineage->generation)
+      return std::unexpected{Error::invalid_source};
+  } else if (t.flight != craft)
     return std::unexpected{Error::invalid_source};
   const bool presence = e.fact == KnowledgeFact::presence;
   if (presence != (t.source == KnowledgeSource::physical_arrival) ||
@@ -336,13 +358,14 @@ auto known_freedom_subjects(const FreedomKnowledge& k, SimulationTick now)
 auto resolve_freedom_knowledge_chart(const FreedomKnowledge& k,
                                      SystemId current,
                                      const FreedomResources& resources,
-                                     bool selection_open)
+                                     bool selection_open,
+                                     const FreedomSaveDocument* instance_owner)
     -> std::expected<UniverseNavigationView, FreedomKnowledgeError> {
   if (auto v = validate_freedom_knowledge(k, resources.tick); !v)
     return std::unexpected{v.error()};
   auto view = resolve_freedom_starting_chart(
       generate_first_universe_route(k.recipe.universe_seed), current, resources,
-      selection_open);
+      selection_open, instance_owner);
   if (!view) return std::unexpected{Error::invalid_ledger};
   for (auto& row : view->destinations) {
     const auto presence =

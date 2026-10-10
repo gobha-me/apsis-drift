@@ -147,7 +147,12 @@ auto preview_freedom_jump(const FreedomJumpRequest& r)
   if (r.profile != IntersystemRuleProfile::assisted &&
       r.profile != IntersystemRuleProfile::pilot)
     return std::unexpected{Error::invalid_profile};
-  if (r.craft != make_freedom_new_game_document(r.universe_seed).state.craft)
+  if (r.lineage && (r.lineage->version != kFreedomCraftLineageVersion ||
+                    !r.lineage->generation))
+    return std::unexpected{Error::invalid_owner};
+  const auto identity = derive_freedom_craft_identity(
+      r.universe_seed, r.lineage ? r.lineage->generation : 0);
+  if (!identity || r.craft != *identity)
     return std::unexpected{Error::invalid_owner};
   const auto route = generate_first_universe_route(r.universe_seed);
   const auto current = r.source.frame.system;

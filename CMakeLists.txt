@@ -461,6 +461,7 @@ add_library(apsis_drift_core STATIC
   src/native_startup.cpp
   src/native_flight_session.cpp
   src/native_first_jump.cpp
+  src/native_recovery.cpp
   src/native_port_approach.cpp
   src/onboarding.cpp
   src/origin_station.cpp
@@ -489,6 +490,7 @@ add_library(apsis_drift_core STATIC
   src/freedom_local_observations.cpp
   src/freedom_jump_targeting.cpp
   src/freedom_travel_save.cpp
+  src/freedom_recovery_save.cpp
   src/universe_navigation_acceptance.cpp
   src/world_delta_journal.cpp
 )
@@ -1359,6 +1361,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-native-startup-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME native-startup-contract COMMAND apsis-drift-native-startup-tests)
+  add_executable(apsis-drift-freedom-recovery-tests test/freedom_recovery_test.cpp)
+  target_link_libraries(apsis-drift-freedom-recovery-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-recovery-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Werror -ffp-contract=off)
+  add_test(NAME freedom-recovery-contract COMMAND apsis-drift-freedom-recovery-tests)
+
   add_executable(apsis-drift-freedom-flight-save-tests test/freedom_flight_save_test.cpp)
   target_link_libraries(apsis-drift-freedom-flight-save-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-flight-save-tests PRIVATE

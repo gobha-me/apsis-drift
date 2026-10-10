@@ -25,6 +25,18 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<FreedomRecoveryState> recovery;
+  if (auto* d = std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Recovery requires Freedom"};
+    if (auto v = validate_freedom_recovery_document(*d); !v)
+      return std::unexpected{v.error().detail};
+    recovery = std::move(d->recovery);
+    auto voyage = std::move(d->voyage);
+    selected.document = std::visit(
+        [](auto& value) -> NativeSaveDocument { return std::move(value); },
+        voyage);
+  }
   std::optional<FreedomTravelState> travel;
   std::optional<NativeStartingAssemblySelection> travel_binding;
   std::optional<FreedomBoardingState> travel_pilot;
@@ -122,6 +134,8 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
         "Flight session requires a selected Freedom flight save"};
   auto document =
       std::get<FreedomFlightSaveDocument>(std::move(selected.document));
+  if (document.origin.lineage && !recovery)
+    return std::unexpected{"Replacement lineage requires its recovery owner"};
   auto hydrated = hydrate_freedom_flight_document(document);
   if (!hydrated)
     return std::unexpected{"Flight session rejected: " + hydrated.error().path +
@@ -148,6 +162,7 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   result.resources_ = resources;
   result.knowledge_ = std::move(knowledge);
   result.travel_ = std::move(travel);
+  result.recovery_ = std::move(recovery);
   if (boarding && (boarding->phase == FreedomBoardingPhase::boarding ||
                    boarding->phase == FreedomBoardingPhase::disembarking)) {
     auto view = result.boarding_view();
@@ -185,6 +200,9 @@ auto NativeFreedomFlightSession::begin_disembarking()
 }
 auto NativeFreedomFlightSession::begin_boarding_route(
     GameplayBoardingDirection direction) -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before boarding actions"};
   if (!starting_assembly_ || !docking_ || !docking_->attached ||
@@ -226,6 +244,9 @@ auto NativeFreedomFlightSession::begin_boarding_route(
 
 auto NativeFreedomFlightSession::select_port(std::uint32_t ordinal)
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before port actions"};
   if (actor_)
@@ -257,6 +278,9 @@ auto NativeFreedomFlightSession::assess_port() const
 
 auto NativeFreedomFlightSession::capture_port()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before capture"};
   if (actor_)
@@ -303,6 +327,9 @@ auto NativeFreedomFlightSession::capture_port()
 
 auto NativeFreedomFlightSession::release_port()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (actor_)
     return std::unexpected{"Board and sit before controlling the craft"};
   if (!docking_ || !docking_->attached)
@@ -334,6 +361,9 @@ auto NativeFreedomFlightSession::observe() const
 
 auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before changing hold"};
   if (actor_)
@@ -360,6 +390,9 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
 auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
                                          SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return advance_jump(controls, step);
   if (actor_)
@@ -416,6 +449,9 @@ auto NativeFreedomFlightSession::advance(const NativeFlightControls& controls,
 auto NativeFreedomFlightSession::advance_craft_tick(
     const NativeFlightControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!std::isfinite(step.count()) || step != kSimulationStep)
     return std::unexpected{"Flight step requires one fixed 120 Hz tick"};
   if (document_.flight.tick >= std::numeric_limits<SimulationTick>::max() - 2)
@@ -583,6 +619,9 @@ auto NativeFreedomFlightSession::advance_craft_tick(
 auto NativeFreedomFlightSession::advance_walk(
     const OriginWalkControls& controls, SimulationSeconds step)
     -> std::expected<NativeFlightStep, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!std::isfinite(controls.forward) || !std::isfinite(controls.right) ||
       !std::isfinite(controls.heading_radians) ||
       std::abs(controls.forward) > 1 || std::abs(controls.right) > 1 ||
@@ -648,6 +687,14 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
       bytes.find('\0') != std::string::npos || !path.is_absolute())
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
+  if (recovery_) {
+    auto document = recovery_document();
+    if (!document) return std::unexpected{document.error()};
+    auto written = write_freedom_recovery_file_atomically(path, *document);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   const auto written =
       travel_ ? write_freedom_travel_file_atomically(
                     path, {{{surface_document(), *resources_}, *knowledge_},
@@ -677,6 +724,9 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
 
 auto NativeFreedomFlightSession::replenish_resources()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!docking_)
     return std::unexpected{"Replenishment requires an attached service port"};
   if (!resources_)
@@ -690,8 +740,15 @@ auto NativeFreedomFlightSession::replenish_resources()
 
 auto NativeFreedomFlightSession::record_observation(const KnowledgeEvidence& e)
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!knowledge_)
     return std::unexpected{"This save has no selected knowledge ledger"};
+  if (e.transition.source != KnowledgeSource::starting_chart &&
+      e.transition.flight != document_.origin.state.craft)
+    return std::unexpected{
+        "New observation requires the active craft provenance"};
   auto next = apply_freedom_knowledge(*knowledge_, e, document_.flight.tick);
   if (!next) return std::unexpected{"Observation provenance refused"};
   knowledge_ = std::move(*next);
@@ -728,6 +785,9 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before changing gear"};
   if (actor_ || (docking_ && docking_->attached))
@@ -744,6 +804,9 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
 auto NativeFreedomFlightSession::commit_touchdown(
     std::uint64_t expected_source_checksum)
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (actor_ || (docking_ && docking_->attached) || !surface_ ||
       !surface_->gear_deployed || surface_->landed)
     return std::unexpected{
@@ -777,6 +840,9 @@ auto NativeFreedomFlightSession::commit_touchdown(
 }
 auto NativeFreedomFlightSession::release_surface()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (!surface_ || !surface_->landed || actor_ ||
       (docking_ && docking_->attached))
     return std::unexpected{"Liftoff requires a landed craft"};

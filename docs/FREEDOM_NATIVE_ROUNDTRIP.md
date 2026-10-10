@@ -49,7 +49,8 @@ python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
 
 These are accelerated semantic-input and headless integration checks. They do
 not qualify manual controller handling, GPU appearance, performance or fun. The
-approved standard loss/replacement cases still need #247; hazardous and extended
-jump consequences remain the unselected #248/#253 policies. Those boundaries
-keep #194 open beyond the normal trip. Planetary surface flight remains covered
-by the existing separate voyage, rather than being invented as a neighbor mission.
+approved [standard recovery provider](FREEDOM_RECOVERY.md) separately checks
+declared losses after actual neighboring travel. Hazardous and extended-jump
+consequences remain the unselected #248/#253 policies; visual/manual and further
+intentional Pilot-grade qualification keep #194 open beyond the normal trip.
+Planetary surface flight remains covered by the existing separate voyage.

@@ -1,6 +1,7 @@
 #include "apsis_drift/freedom_knowledge_save.hpp"
 
 #include <array>
+#include <charconv>
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <unordered_set>
@@ -121,6 +122,10 @@ auto encode_freedom_knowledge_json(const FreedomKnowledge& k,
     root["recipe"]["observation_policy"] = r.observation_policy;
   if (r.version == kFreedomTravelKnowledgeVersion)
     root["recipe"]["world_domain"] = r.world_domain;
+  if (r.craft_lineage)
+    root["recipe"]["craft_lineage"] = {
+        {"version", r.craft_lineage->version},
+        {"generation", std::to_string(r.craft_lineage->generation)}};
   auto text = root.dump(2) + '\n';
   if (text.size() > kMaximumFreedomKnowledgeBytes)
     return std::unexpected{failure("knowledge encoding exceeds bounded size")};
@@ -139,7 +144,9 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
   const bool observed =
       r.contains("version") && r["version"].is_number_unsigned() &&
       (r["version"] == kFreedomObservedKnowledgeVersion || travel);
-  if (!(travel     ? fields(r, {"version", "universe_seed", "chart", "topology",
+  auto shape = r;
+  if (travel) shape.erase("craft_lineage");
+  if (!(travel ? fields(shape, {"version", "universe_seed", "chart", "topology",
                                 "physical_catalog", "ephemeris", "ambient",
                                 "observation_policy", "world_domain"})
         : observed ? fields(r, {"version", "universe_seed", "chart", "topology",
@@ -171,6 +178,22 @@ auto decode_freedom_knowledge_json(std::string_view text, SimulationTick now)
     if (!r["world_domain"].is_number_unsigned() || r["world_domain"] != 1)
       return std::unexpected{failure("unsupported travel knowledge domain")};
     k.recipe.world_domain = 1;
+  }
+  if (r.contains("craft_lineage")) {
+    const auto& l = r["craft_lineage"];
+    if (!travel || !fields(l, {"version", "generation"}) ||
+        !unsigned_fields(l, {"version"}) ||
+        l["version"] != kFreedomCraftLineageVersion ||
+        !l["generation"].is_string())
+      return std::unexpected{failure("invalid selected craft lineage shape")};
+    const auto& digits = l["generation"].get_ref<const std::string&>();
+    std::uint64_t generation{};
+    const auto parsed = std::from_chars(
+        digits.data(), digits.data() + digits.size(), generation);
+    if (digits.empty() || digits.size() > 20 || digits.front() == '0' ||
+        parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size())
+      return std::unexpected{failure("invalid selected craft generation")};
+    k.recipe.craft_lineage = FreedomCraftLineage{1, generation};
   }
   const auto& entries = (*root)["entries"];
   if (!entries.is_array() || entries.size() > kMaximumFreedomKnowledgeFacts)
@@ -222,6 +245,7 @@ auto validate_freedom_knowledge_document(const FreedomKnowledgeSaveDocument& d)
   if (r.universe_seed != flight.origin.recipe.universe_seed ||
       r.physical_catalog != flight.model.physical_catalog ||
       r.ephemeris != flight.model.physical_ephemeris ||
+      r.craft_lineage != flight.origin.lineage ||
       !validate_freedom_knowledge(d.knowledge, flight.flight.tick) ||
       (r.version == kFreedomTravelKnowledgeVersion) != flight.world.has_value())
     return std::unexpected{

@@ -69,6 +69,9 @@ struct FreedomKnowledgeRecipe {
   // Version 3 registers the same seeded neighbor's planets. Earlier domains
   // stay origin-only; registration itself grants no observations.
   std::uint32_t world_domain{};
+  // Explicit recovery selection bounds historical craft provenance to the
+  // admitted generations. Absence retains the exact starter-only contract.
+  std::optional<FreedomCraftLineage> craft_lineage{};
   friend auto operator==(const FreedomKnowledgeRecipe&,
                          const FreedomKnowledgeRecipe&) -> bool = default;
 };
@@ -181,9 +184,9 @@ struct KnowledgeReading {
 [[nodiscard]] auto known_freedom_subjects(const FreedomKnowledge&,
                                           SimulationTick now)
     -> std::expected<std::vector<KnowledgeSubject>, FreedomKnowledgeError>;
-[[nodiscard]] auto resolve_freedom_knowledge_chart(const FreedomKnowledge&,
-                                                   SystemId current,
-                                                   const FreedomResources&,
-                                                   bool selection_open = true)
+[[nodiscard]] auto resolve_freedom_knowledge_chart(
+    const FreedomKnowledge&, SystemId current, const FreedomResources&,
+    bool selection_open = true,
+    const FreedomSaveDocument* instance_owner = nullptr)
     -> std::expected<UniverseNavigationView, FreedomKnowledgeError>;
 } // namespace apsis_drift

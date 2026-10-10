@@ -1,9 +1,43 @@
 #include "apsis_drift/native_startup.hpp"
 
+#include <type_traits>
 #include <utility>
 
 namespace apsis_drift {
 namespace {
+
+auto missing_recovery_owner(const NativeSaveDocument& document) -> bool {
+  return std::visit(
+      [](const auto& d) -> bool {
+        using T = std::decay_t<decltype(d)>;
+        if constexpr (std::is_same_v<T, SaveDocument> ||
+                      std::is_same_v<T, FreedomRecoverySaveDocument>)
+          return false;
+        else if constexpr (std::is_same_v<T, FreedomSaveDocument>)
+          return d.lineage.has_value();
+        else if constexpr (std::is_same_v<T, FreedomFlightSaveDocument>)
+          return d.origin.lineage.has_value();
+        else if constexpr (std::is_same_v<T, FreedomDockingSaveDocument>)
+          return d.flight.origin.lineage.has_value();
+        else if constexpr (std::is_same_v<T, FreedomJourneySaveDocument> ||
+                           std::is_same_v<T, FreedomBoardingSaveDocument>)
+          return d.voyage.flight.origin.lineage.has_value();
+        else if constexpr (std::is_same_v<T,
+                                          FreedomStartingAssemblySaveDocument>)
+          return d.journey.voyage.flight.origin.lineage.has_value();
+        else if constexpr (std::is_same_v<T, FreedomSurfaceSaveDocument>)
+          return surface_base_flight(d.base).origin.lineage.has_value();
+        else if constexpr (std::is_same_v<T, FreedomResourceSaveDocument>)
+          return surface_base_flight(d.voyage.base).origin.lineage.has_value();
+        else if constexpr (std::is_same_v<T, FreedomKnowledgeSaveDocument>)
+          return surface_base_flight(d.voyage.voyage.base)
+              .origin.lineage.has_value();
+        else
+          return surface_base_flight(d.voyage.voyage.voyage.base)
+              .origin.lineage.has_value();
+      },
+      document);
+}
 
 [[nodiscard]] auto select_document(
     SaveDocument document, std::optional<std::filesystem::path> source_save)
@@ -174,6 +208,20 @@ auto select_document(FreedomTravelSaveDocument d,
   return selected;
 }
 } // namespace
+namespace {
+auto select_document(FreedomRecoverySaveDocument d,
+                     std::optional<std::filesystem::path> source)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto v = validate_freedom_recovery_document(d); !v)
+    return std::unexpected{v.error().detail};
+  auto selected = std::visit(
+      [&](const auto& voyage) { return select_document(voyage, source); },
+      d.voyage);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(d);
+  return selected;
+}
+} // namespace
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   auto document =
@@ -203,6 +251,8 @@ auto native_continue(const std::filesystem::path& save_path)
     return std::unexpected{"Continue requires a selected save path"};
   auto loaded = load_native_save_file(save_path);
   if (!loaded) return std::unexpected{save_file_error_message(loaded.error())};
+  if (missing_recovery_owner(*loaded))
+    return std::unexpected{"Replacement lineage requires its recovery owner"};
   return std::visit(
       [&](auto& document) {
         return select_document(std::move(document), save_path);
@@ -217,6 +267,22 @@ auto prepare_native_freedom_station_start(NativeStartup selected)
                            "flight save yet"};
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Station bootstrap requires a Freedom save"};
+  if (const auto* r =
+          std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
+    if (auto v = validate_freedom_recovery_document(*r); !v)
+      return std::unexpected{v.error().detail};
+    if (r->recovery.pending)
+      return std::unexpected{
+          "Pending loss requires explicit recovery continuation"};
+    auto inner = selected;
+    inner.document = std::visit(
+        [](const auto& v) -> NativeSaveDocument { return v; }, r->voyage);
+    auto prepared = prepare_native_freedom_station_start(std::move(inner));
+    if (!prepared) return std::unexpected{prepared.error()};
+    prepared->selected.document = std::move(selected.document);
+    return prepared;
+  }
+
   if (const auto* t =
           std::get_if<FreedomTravelSaveDocument>(&selected.document)) {
     auto inner = selected;
@@ -310,10 +376,25 @@ auto native_save_freedom(const NativeStartup& selected,
     -> std::expected<void, std::string> {
   if (selected.mode != NativeStartup::Mode::freedom)
     return std::unexpected{"Freedom Save As requires Freedom mode"};
+  if (missing_recovery_owner(selected.document))
+    return std::unexpected{"Replacement lineage requires its recovery owner"};
+
   const auto& bytes = destination.native();
   if (bytes.empty() || bytes.size() > 4'096 ||
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
+
+  if (const auto* r =
+          std::get_if<FreedomRecoverySaveDocument>(&selected.document)) {
+    auto canonical = select_document(*r, selected.source_save);
+    if (!canonical || canonical->home_planet != selected.home_planet)
+      return std::unexpected{
+          "Recovery Save As requires its actual selected planet"};
+    auto written = write_freedom_recovery_file_atomically(destination, *r);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (const auto* t =
           std::get_if<FreedomTravelSaveDocument>(&selected.document)) {
     const auto canonical = select_document(*t, selected.source_save);

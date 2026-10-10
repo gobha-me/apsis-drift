@@ -44,6 +44,9 @@ auto NativeFreedomFlightSession::cancel_surface_maneuver() -> void {
 }
 auto NativeFreedomFlightSession::request_landing()
     -> std::expected<void, std::string> {
+  if (recovery_pending())
+    return std::unexpected{
+        "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before landing aid"};
   if (actor_ || (docking_ && docking_->attached) ||
