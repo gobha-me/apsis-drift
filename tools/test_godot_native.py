@@ -61,6 +61,8 @@ TESTS = {
     "native_voyage": "voyage_saves",
     "native_roundtrip": "roundtrip_saves",
     "native_roundtrip_pilot": "roundtrip_saves",
+    "native_roundtrip_pilot_aligned": "roundtrip_saves",
+    "native_roundtrip_pilot_offset": "roundtrip_saves",
     "native_surface": "surface_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
@@ -76,6 +78,7 @@ TESTS = {
     "recorded_audio_integration": "named_snapshot",
     "recorded_audio_shutdown": "named_snapshot",
 }
+ROUNDTRIP_TESTS = tuple(name for name, family in TESTS.items() if family == "roundtrip_saves")
 ERROR = re.compile(
     r"^(?:SCRIPT ERROR|ERROR|USER ERROR|USER SCRIPT ERROR):|"
     r"ObjectDB.*instances.*leak|resources still in use at exit",
@@ -161,7 +164,7 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
             parser.error(f"missing C++ save fixture: {start_fixture}")
-    if any(name in selected for name in ("native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot")):
+    if any(name in selected for name in ("native_planetary", "native_voyage", *ROUNDTRIP_TESTS)):
         if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
             parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
     if "native_surface" in selected:
@@ -234,7 +237,7 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         shutil.copy2(start_fixture, work / start_fixture.name)
         start_fixture = work / start_fixture.name
-    if any(name in selected for name in ("native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot")):
+    if any(name in selected for name in ("native_planetary", "native_voyage", *ROUNDTRIP_TESTS)):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
     if "native_surface" in selected:
@@ -259,7 +262,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot", "native_surface") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", *ROUNDTRIP_TESTS, "native_surface") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -402,7 +405,7 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
-    for name in ("native_roundtrip", "native_roundtrip_pilot"):
+    for name in ROUNDTRIP_TESTS:
         if name not in selected:
             continue
         phases = work / name
@@ -410,7 +413,9 @@ def main(argv=None):
         # CLI refusals precede constructing any actual world or artifacts.
         for index, invalid in enumerate(([str(phases), "--pilot"],
                 [str(phases), "--neighbor", "--neighbor"],
-                [str(phases), "--neighbor", "--commands", "--commands"])):
+                [str(phases), "--neighbor", "--commands", "--commands"],
+                [str(phases), "--neighbor", "--aligned"],
+                [str(phases), "--neighbor", "--pilot", "--aligned", "--offset"])):
             refusal_log = work / f"{name}-refusal-{index}.log"
             code, timed_out, _ = run_logged(
                 [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
@@ -420,7 +425,9 @@ def main(argv=None):
         log = work / f"{name}-fixture.log"
         code, timed_out, elapsed = run_logged(
             [str(planetary_fixture), str(phases), "--neighbor", "--commands",
-             *(["--pilot"] if name.endswith("_pilot") else [])], log, env, args.timeout)
+             *(["--pilot"] if name != "native_roundtrip" else []),
+             *(["--aligned"] if name.endswith("_aligned") else []),
+             *(["--offset"] if name.endswith("_offset") else [])], log, env, args.timeout)
         report["setup"].append({"family": name, "returncode": code,
             "timed_out": timed_out, "seconds": elapsed,
             "fixture_sha256": sha256(planetary_fixture)})

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <optional>
 #include <stdexcept>
 
@@ -625,7 +626,8 @@ auto run(const std::filesystem::path& output, bool record_commands,
 } // namespace
 namespace {
 auto run_neighbor(const std::filesystem::path& output, bool record_commands,
-                  bool pilot) -> void {
+                  bool pilot, std::optional<IntersystemArrivalQuality> grade)
+    -> void {
   Trace trace{need(NativeFreedomFlightSession::open(
                        need(native_new_game(Seed{42}), "New Game refused")),
                    "New session refused"),
@@ -704,9 +706,78 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
   }
   check(settled == 240, "Source braking exceeded bounded time");
   trace.checkpoint("source-ready");
+  Json targeting = Json::array();
+  auto steer_grade = [&](SystemId destination) {
+    if (!grade) return;
+    const auto route = generate_first_universe_route(Seed{42});
+    const auto from = session.system().catalog.id == route.origin
+                          ? route.origin_position
+                          : route.destination_position;
+    const auto to = destination == route.origin ? route.origin_position
+                                                : route.destination_position;
+    const auto heading =
+        *grade == IntersystemArrivalQuality::aligned ? 0 : 20'000;
+    bool intermediate{};
+    unsigned stable{};
+    NativeFlightControls correction;
+    for (unsigned tick = 0; tick < 120 * 1200; ++tick) {
+      const auto body = session.document().flight;
+      const auto preview =
+          need(session.jump_preview(), "Grade preview refused");
+      const auto forward =
+          unit({static_cast<double>(to.x - from.x) +
+                    (preview.nominal_arrival.x - preview.source_position.x),
+                static_cast<double>(to.y - from.y) +
+                    (preview.nominal_arrival.y - preview.source_position.y),
+                static_cast<double>(to.z - from.z) +
+                    (preview.nominal_arrival.z - preview.source_position.z)});
+      const V reference = std::abs(forward.y) < .9 ? V{0, 1, 0} : V{1, 0, 0};
+      const auto side = unit(cross(forward, reference));
+      const auto up = unit(cross(side, forward));
+      const auto angle = heading * std::numbers::pi_v<double> / 180000.0;
+      const auto target =
+          add(scale(forward, std::cos(angle)), scale(side, std::sin(angle)));
+      const auto facing = rotate(body.orientation, {0, 0, -1});
+      // A real quarter-turn avoids the torque controller's antipodal zero.
+      // This is still actuator input, never an orientation assignment.
+      if (tick == 0) intermediate = dot(facing, target) < -.8;
+      if (intermediate && dot(facing, side) > .95 &&
+          length(body.angular_velocity_radians_per_second) < .01)
+        intermediate = false;
+      if (!intermediate && preview.alignment.quality == *grade &&
+          std::abs(preview.alignment.heading_error_millidegrees - heading) <
+              1000 &&
+          length(body.linear_velocity_metres_per_second) < 5 &&
+          length(body.angular_velocity_radians_per_second) < .001) {
+        if (++stable == 240) break;
+      } else
+        stable = 0;
+      if (tick % kMaxCatchUpSteps == 0) {
+        const auto observed =
+            need(session.observe(), "Grade observation refused");
+        check(observed.atmosphere.altitude_metres >
+                  observed.atmosphere.space_boundary_altitude_metres,
+              "Grade correction entered atmosphere");
+        const auto gravity =
+            need(evaluate_central_body_gravity(
+                     RigidBodyWorldContext{session.system()}, body),
+                 "Grade gravity refused");
+        const auto acceleration =
+            sub(scale(body.linear_velocity_metres_per_second, -.1),
+                gravity.acceleration_metres_per_second_squared);
+        const auto back = scale(intermediate ? side : target, -1);
+        const auto right = unit(cross(up, back));
+        correction = controls(body, frame, observed.atmosphere, acceleration,
+                              {right, unit(cross(back, right)), back});
+      }
+      (void)need(trace.flight(correction), "Physical grade correction refused");
+    }
+    check(stable == 240, "Physical grade correction exceeded bounded time");
+  };
   auto jump = [&](SystemId destination, std::string_view prefix) {
     need(session.select_jump(destination));
     trace.action("jump_select", Json::array({system_id_string(destination)}));
+    steer_grade(destination);
     trace.checkpoint(std::string{prefix} + "-selection");
     const auto charge = session.resources()->jump_charges;
     need(session.begin_jump());
@@ -718,6 +789,32 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
         check(step.jump_committed &&
                   session.resources()->jump_charges == charge - 1,
               "Actual commitment did not bill exactly one charge");
+        if (grade) {
+          const auto& frozen = *session.travel()->committed;
+          const auto& preview = frozen.preview;
+          check(preview.request.profile == IntersystemRuleProfile::pilot &&
+                    preview.alignment.quality == *grade && preview.volume &&
+                    preview.volume->clear() && frozen.point_assessment.clear(),
+                "Actual Pilot commitment lost the intended safe grade");
+          const auto aligned = need(
+              assess_freedom_jump_distance(preview.distance_metres,
+                                           IntersystemArrivalQuality::aligned),
+              "Aligned reference refused");
+          check(preview.distance.envelope_radius_metres ==
+                    *aligned.envelope_radius_metres *
+                        (*grade == IntersystemArrivalQuality::aligned ? 1 : 10),
+                "Offset commitment did not retain its larger envelope");
+          targeting.push_back(
+              {{"leg", prefix},
+               {"quality", intersystem_arrival_quality_name(*grade)},
+               {"heading_millidegrees",
+                preview.alignment.heading_error_millidegrees},
+               {"drift_basis_points",
+                preview.alignment.velocity_error_basis_points},
+               {"aligned_radius_metres", *aligned.envelope_radius_metres},
+               {"envelope_radius_metres",
+                *preview.distance.envelope_radius_metres}});
+        }
         trace.checkpoint(std::string{prefix} + "-commit");
       }
       if (t == kJumpSpoolTicks + 1)
@@ -881,6 +978,10 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
               {"final_tick", std::to_string(session.document().flight.tick)},
               {"effort_quanta", trace.endurance->effort_quanta},
               {"flight_quanta_before_service", fuel_before_service}};
+  if (grade) {
+    report["targeting_grade"] = intersystem_arrival_quality_name(*grade);
+    report["targeting"] = std::move(targeting);
+  }
   if (commands)
     report["command_stream"] = {{"file", "commands.jsonl"},
                                 {"rows", commands->rows},
@@ -897,11 +998,13 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 2 || argc > 6)
+    if (argc < 2 || argc > 7)
       throw std::invalid_argument(
           "Expected one absolute empty output "
-          "directory and optional --commands/--endurance/--neighbor/--pilot");
+          "directory and optional --commands/--endurance/--neighbor/--pilot/"
+          "--aligned/--offset");
     bool commands{}, endurance{}, neighbor{}, pilot{};
+    std::optional<IntersystemArrivalQuality> grade;
     for (int i = 2; i < argc; ++i) {
       const std::string_view option{argv[i]};
       if (option == "--commands" && !commands)
@@ -912,6 +1015,10 @@ int main(int argc, char** argv) {
         neighbor = true;
       else if (option == "--pilot" && !pilot)
         pilot = true;
+      else if (option == "--aligned" && !grade)
+        grade = IntersystemArrivalQuality::aligned;
+      else if (option == "--offset" && !grade)
+        grade = IntersystemArrivalQuality::offset;
       else
         throw std::invalid_argument("Unknown or repeated fixture option");
     }
@@ -923,8 +1030,11 @@ int main(int argc, char** argv) {
           "Expected one bounded absolute empty output directory");
     if (pilot && !neighbor)
       throw std::invalid_argument("--pilot requires --neighbor");
+    if (grade && (!neighbor || !pilot))
+      throw std::invalid_argument(
+          "A selected grade requires --neighbor --pilot");
     if (neighbor)
-      run_neighbor(output, commands, pilot);
+      run_neighbor(output, commands, pilot, grade);
     else
       run(output, commands, endurance);
     return 0;

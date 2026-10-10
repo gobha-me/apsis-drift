@@ -292,8 +292,12 @@ station walking/boarding and returns through physical moving-station capture,
 service and disembarking. Assisted/Pilot traces retain an uninterrupted session
 beside each checkpoint-resumed session, meter actual thrust, and leave one jump
 charge before service. Native replay consumes the same controls and checks full
-C++ saves, current-world cues and pilot continuity. This advances #194; standard
-replacement recovery #247 and final visual/manual qualification remain open.
+C++ saves, current-world cues and pilot continuity. Deliberate Pilot traces align
+both departures or hold a twenty-degree offset with real actuators, retaining
+the offset's larger arrival envelope through the actual return. Both also complete
+a separate Compatibility/llvmpipe graphical replay with matching saves at nineteen
+checkpoints each. This covers the bounded #194 trip; broader hardware and manual
+First Flight qualification remain #244/#245. Standard replacement is recorded below.
 
 ## Standard recovery checkpoint — 2026-10-09
 
@@ -304,4 +308,4 @@ preserve the universe, chart and clock. Native replacement stages its assets and
 terrain before committing a new station/walker view. The declared loss fixtures
 follow actual neighboring-system travel; collision fatality detection, living-
 pilot rescue, costs and hazardous-jump laws are separate or unselected. Wider
-#194 visual/manual and intentional Pilot-grade qualification remain open.
+Broader native hardware and manual First Flight qualification remain #244/#245.

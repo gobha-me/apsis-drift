@@ -8,11 +8,33 @@ func checkpoint_labels() -> Array:
 func travel_commands() -> bool:
 	return true
 
+func targeting_grade() -> String:
+	return ""
+
+func valid_targeting(value: Dictionary) -> bool:
+	var grade := targeting_grade()
+	if grade.is_empty(): return not value.has("targeting_grade") and not value.has("targeting")
+	if value.get("profile") != "pilot" or value.get("targeting_grade") != grade: return false
+	var legs: Variant = value.get("targeting")
+	if not legs is Array or legs.size() != 2: return false
+	for i in 2:
+		var leg: Variant = legs[i]
+		if not leg is Dictionary or leg.get("leg") != ("outbound" if i == 0 else "return") or leg.get("quality") != grade: return false
+		for field in ["heading_millidegrees", "drift_basis_points", "aligned_radius_metres", "envelope_radius_metres"]:
+			var number: Variant = leg.get(field)
+			if not Checkpoints.finite_number(number) or number < 0 or number > 45000 or number != int(number): return false
+		if leg.drift_basis_points > 200 or leg.aligned_radius_metres < 1001 or leg.aligned_radius_metres > 2000: return false
+		if leg.envelope_radius_metres != leg.aligned_radius_metres * (1 if grade == "ALIGNED" else 10): return false
+		if grade == "ALIGNED" and leg.heading_millidegrees > 3000: return false
+		if grade == "OFFSET" and (leg.heading_millidegrees < 18000 or leg.heading_millidegrees > 22000): return false
+	return true
+
 static func bounded_decimal(value: Variant) -> bool:
 	return Checkpoints.decimal(value) and (value.length() == 1 or not value.begins_with("0")) and (value.length() < 20 or value <= "18446744073709551615")
 
 func valid_manifest(value: Variant) -> bool:
 	if not value is Dictionary or value.get("schema_version") != 2 or value.get("route") != "native-neighbor" or value.get("seed") != "42" or value.get("physical_catalog") != 2 or value.get("physical_ephemeris") != 2 or value.get("terrain_source_lod") != 8 or value.get("terrain_relief_version") != 0 or value.get("uninterrupted_match") != true or value.get("profile") not in ["assisted", "pilot"]: return false
+	if not valid_targeting(value): return false
 	if not bounded_decimal(value.get("final_tick")) or value.final_tick.length() > 6 or int(value.final_tick) > 750000: return false
 	for field in ["origin_system", "neighbor_system"]:
 		if not valid_record(["jump_select", 0, [value.get(field)]], LABELS, true): return false
@@ -53,6 +75,17 @@ func manifest_refusals(trace: Dictionary) -> bool:
 		elif damage == "terrain": bad.terrain_relief_version = 1
 		else: bad.profile = "invented"
 		if not check(not valid_manifest(bad), "Invalid round-trip manifest accepted: " + damage): return false
+	if not targeting_grade().is_empty():
+		for damage in ["quality", "leg", "shape", "radius", "nonfinite", "heading", "drift"]:
+			var bad: Dictionary = trace.duplicate(true)
+			if damage == "quality": bad.targeting_grade = "invented"
+			elif damage == "leg": bad.targeting[0].leg = "return"
+			elif damage == "shape": bad.targeting.pop_back()
+			elif damage == "radius": bad.targeting[0].envelope_radius_metres += 1
+			elif damage == "nonfinite": bad.targeting[0].heading_millidegrees = NAN
+			elif damage == "heading": bad.targeting[0].heading_millidegrees = 46000
+			else: bad.targeting[0].drift_basis_points = 201
+			if not check(not valid_manifest(bad), "Invalid Pilot targeting manifest accepted: " + damage): return false
 	for record in [["jump_select", 0, ["SYSTEM-0000000000000001"]], ["jump_select", 0, ["system-00000000000000001"]], ["jump_begin", 1, []], ["port_select", 0, [0]], ["port_select", 0, [1.5]], ["replenish", 0, [1]]]:
 		if not check(not valid_record(record, LABELS, true), "Invalid travel command accepted"): return false
 	return true
@@ -61,6 +94,10 @@ func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	var boarding: Dictionary = owner.get_freedom_boarding_state()
 	if not check(state.system_id == row.system_id and state.station_available == row.station_available and state.jump.phase == row.jump_phase and state.resources.jump_charges == row.jump_charges and state.resources.quantity_quanta == row.flight_quanta and boarding.get("seated", false) == row.seated, "Current world, crew or bill differs: " + row.label): return false
+	if not targeting_grade().is_empty() and row.label in ["outbound-commit", "return-commit"]:
+		var trace: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(OS.get_cmdline_user_args()[0].path_join("trace.json")))
+		var leg: Dictionary = trace.targeting[0 if row.label == "outbound-commit" else 1]
+		if not check(state.jump.quality == leg.quality and state.jump.heading_error_degrees == leg.heading_millidegrees / 1000.0 and state.jump.drift_percent == leg.drift_basis_points / 100.0 and state.jump.envelope_radius_metres == leg.envelope_radius_metres, "Committed Pilot grade or displayed consequences differ: " + row.label): return false
 	if view is FlightView:
 		if not check(view.home_marker.visible == row.station_available, "Home cues do not follow the actual world"): return false
 	if not row.station_available:
