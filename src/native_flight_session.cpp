@@ -760,6 +760,43 @@ auto NativeFreedomFlightSession::advance_walk(
   return *flight;
 }
 
+auto NativeFreedomFlightSession::save_document() const
+    -> std::expected<NativeSaveDocument, std::string> {
+  if (surface_walk_selected_) {
+    auto selected = surface_walk_document();
+    if (!selected) return std::unexpected{selected.error()};
+    return NativeSaveDocument{std::move(*selected)};
+  }
+  if (recovery_) {
+    auto selected = recovery_document();
+    if (!selected) return std::unexpected{selected.error()};
+    return NativeSaveDocument{std::move(*selected)};
+  }
+  if (travel_)
+    return NativeSaveDocument{FreedomTravelSaveDocument{
+        {{surface_document(), *resources_}, *knowledge_},
+        *travel_,
+        starting_assembly_,
+        boarding_ && !docking_ ? boarding_ : std::nullopt}};
+  if (knowledge_)
+    return NativeSaveDocument{FreedomKnowledgeSaveDocument{
+        {surface_document(), *resources_}, *knowledge_}};
+  if (resources_)
+    return NativeSaveDocument{
+        FreedomResourceSaveDocument{surface_document(), *resources_}};
+  if (surface_) return NativeSaveDocument{surface_document()};
+  if (boarding_) return NativeSaveDocument{boarding_document()};
+  if (starting_assembly_ && actor_ && docking_)
+    return NativeSaveDocument{FreedomStartingAssemblySaveDocument{
+        {{document_, *docking_}, *actor_}, *starting_assembly_}};
+  if (actor_)
+    return NativeSaveDocument{
+        FreedomJourneySaveDocument{{document_, *docking_}, *actor_}};
+  if (docking_)
+    return NativeSaveDocument{FreedomDockingSaveDocument{document_, *docking_}};
+  return NativeSaveDocument{document_};
+}
+
 auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
     const -> std::expected<void, std::string> {
   const auto& bytes = path.native();
@@ -767,44 +804,9 @@ auto NativeFreedomFlightSession::save_as(const std::filesystem::path& path)
       bytes.find('\0') != std::string::npos || !path.is_absolute())
     return std::unexpected{
         "Flight Save As requires a bounded absolute save path"};
-  if (surface_walk_selected_) {
-    auto document = surface_walk_document();
-    if (!document) return std::unexpected{document.error()};
-    auto written = write_freedom_surface_walk_file_atomically(path, *document);
-    if (!written)
-      return std::unexpected{save_file_error_message(written.error())};
-    return {};
-  }
-  if (recovery_) {
-    auto document = recovery_document();
-    if (!document) return std::unexpected{document.error()};
-    auto written = write_freedom_recovery_file_atomically(path, *document);
-    if (!written)
-      return std::unexpected{save_file_error_message(written.error())};
-    return {};
-  }
-  const auto written =
-      travel_ ? write_freedom_travel_file_atomically(
-                    path, {{{surface_document(), *resources_}, *knowledge_},
-                           *travel_,
-                           starting_assembly_,
-                           boarding_ && !docking_ ? boarding_ : std::nullopt})
-      : knowledge_ ? write_freedom_knowledge_file_atomically(
-                         path, {{surface_document(), *resources_}, *knowledge_})
-      : resources_ ? write_freedom_resource_file_atomically(
-                         path, {surface_document(), *resources_})
-      : surface_
-          ? write_freedom_surface_file_atomically(path, surface_document())
-      : boarding_
-          ? write_freedom_boarding_file_atomically(path, boarding_document())
-      : starting_assembly_ && actor_ && docking_
-          ? write_freedom_starting_assembly_file_atomically(
-                path, {{{document_, *docking_}, *actor_}, *starting_assembly_})
-      : actor_ ? write_freedom_journey_file_atomically(
-                     path, {{document_, *docking_}, *actor_})
-      : docking_
-          ? write_freedom_docking_file_atomically(path, {document_, *docking_})
-          : write_freedom_flight_file_atomically(path, document_);
+  auto projected = save_document();
+  if (!projected) return std::unexpected{projected.error()};
+  const auto written = write_native_save_file_atomically(path, *projected);
   if (!written)
     return std::unexpected{save_file_error_message(written.error())};
   return {};

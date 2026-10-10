@@ -477,6 +477,7 @@ add_library(apsis_drift_core STATIC
   src/planet.cpp
   src/planetary_flight.cpp
   src/profile_catalog.cpp
+  src/native_profile.cpp
   src/render_profile.cpp
   src/save_file.cpp
   src/save_schema.cpp
@@ -1452,6 +1453,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME body-ephemeris-contract COMMAND apsis-drift-body-ephemeris-tests)
   set_tests_properties(body-ephemeris-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-native-profile-tests test/native_profile_test.cpp)
+  target_link_libraries(apsis-drift-native-profile-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-native-profile-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME native-profile-contract COMMAND apsis-drift-native-profile-tests)
+  set_tests_properties(native-profile-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-planet-ambient-tests test/planet_ambient_test.cpp)
   target_link_libraries(apsis-drift-planet-ambient-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-planet-ambient-tests PRIVATE

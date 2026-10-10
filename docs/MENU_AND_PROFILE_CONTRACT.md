@@ -1,5 +1,12 @@
 # Menu and Local Profile Contract
 
+The native Freedom application of this contract is documented in
+[NATIVE_PROFILES.md](NATIVE_PROFILES.md). Its tagged header preserves the
+legacy career format and shares storage bounds and sequence allocation. Native
+Freedom New Game starts unsaved; Save As creates its first slot. The historical
+Guided/Skip New Game confirmation below continues to describe the retained
+terminal career flow.
+
 Version 1 defines how Apsis Drift owns local careers and destructive session
 transitions. The v0.4.36 title flow implements the bounded local catalog,
 New/Continue/Load, random or edited seeds, New Game penalty mode, and

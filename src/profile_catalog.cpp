@@ -17,8 +17,10 @@
 #include <unordered_set>
 #include <utility>
 
+#include "apsis_drift/native_profile.hpp"
 #include "apsis_drift/save_file.hpp"
 #include "apsis_drift/version.hpp"
+#include "save_file_internal.hpp"
 
 namespace apsis_drift {
 namespace {
@@ -389,11 +391,56 @@ class FileDescriptor {
   return result;
 }
 
+[[nodiscard]] auto safe_directory_path(const std::filesystem::path& directory)
+    -> bool {
+  if (directory.empty() || !directory.is_absolute() ||
+      directory == directory.root_path() ||
+      directory.string().size() > kMaximumProfilePathBytes)
+    return false;
+  return std::ranges::all_of(
+      directory.relative_path(), [](const auto& component) {
+        return !component.empty() && component != "." && component != "..";
+      });
+}
+
+// Reads do not create directories or follow links in any path component.
+[[nodiscard]] auto inspect_directory(const std::filesystem::path& directory)
+    -> std::expected<bool, ProfileCatalogError> {
+  if (!safe_directory_path(directory)) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_path,
+                                   directory,
+                                   "profile directory is unavailable")};
+  }
+  FileDescriptor current{
+      ::open(directory.root_path().c_str(),
+             O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)};
+  if (!current.valid()) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
+                                   directory, "cannot open profile root")};
+  }
+  for (const auto& component : directory.relative_path()) {
+    if (component.empty() || component == "." || component == "..") {
+      return std::unexpected{failure(ProfileCatalogErrorCode::invalid_path,
+                                     directory,
+                                     "unsafe profile directory component")};
+    }
+    FileDescriptor next{
+        ::openat(current.get(), component.c_str(),
+                 O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)};
+    if (!next.valid()) {
+      if (errno == ENOENT) return false;
+      return std::unexpected{
+          failure(ProfileCatalogErrorCode::storage_unavailable, directory,
+                  "profile path is not a readable real directory")};
+    }
+    current = std::move(next);
+  }
+  return true;
+}
+
 [[nodiscard]] auto ensure_directory(const std::filesystem::path& directory)
     -> std::expected<void, ProfileCatalogError> {
-  if (directory.empty() ||
-      directory.string().size() > kMaximumProfilePathBytes ||
-      !directory.is_absolute() || directory == directory.root_path()) {
+  if (!safe_directory_path(directory)) {
     return std::unexpected{
         failure(ProfileCatalogErrorCode::invalid_path, directory,
                 "profile directory must be a bounded absolute path")};
@@ -554,23 +601,17 @@ auto resolve_profile_directory(std::optional<std::string> xdg_data_home,
 auto scan_profile_catalog(const std::filesystem::path& directory)
     -> ProfileCatalogSnapshot {
   ProfileCatalogSnapshot result{.directory = directory};
-  if (directory.empty() || !directory.is_absolute() ||
-      directory.string().size() > kMaximumProfilePathBytes) {
-    result.diagnostic = "profile directory is unavailable";
+  const auto inspected = inspect_directory(directory);
+  if (!inspected) {
+    result.diagnostic = inspected.error().detail;
     return result;
   }
-  std::error_code error;
-  const auto status = std::filesystem::symlink_status(directory, error);
-  if (error || !std::filesystem::exists(status)) {
+  if (!*inspected) {
     result.writable = true;
     result.diagnostic = "no local profiles yet";
     return result;
   }
-  if (!std::filesystem::is_directory(status) ||
-      std::filesystem::is_symlink(status)) {
-    result.diagnostic = "profile path is not a real directory";
-    return result;
-  }
+  std::error_code error;
   result.writable = true;
   std::vector<std::pair<std::filesystem::path, ProfileId>> candidates;
   for (std::filesystem::directory_iterator it{directory, error}, end;
@@ -584,6 +625,12 @@ auto scan_profile_catalog(const std::filesystem::path& directory)
       continue;
     }
     candidates.emplace_back(it->path(), *id);
+    if (candidates.size() > kMaximumLocalProfiles) {
+      result.overflow = true;
+      result.writable = false;
+      result.diagnostic = "more than 64 canonical profiles exist";
+      return result;
+    }
   }
   if (error) {
     result.writable = false;
@@ -688,6 +735,32 @@ auto load_catalog_profile(const ProfileCatalogEntry& entry)
   return LoadedProfile{*metadata, *document, entry.path, *contents};
 }
 
+namespace {
+[[nodiscard]] auto next_catalog_sequence(const ProfileCatalogSnapshot& catalog)
+    -> std::expected<std::uint64_t, ProfileCatalogError> {
+  std::uint64_t maximum{};
+  for (const auto& entry : catalog.entries) {
+    const auto bytes = read_regular_file(entry.path);
+    if (!bytes) return std::unexpected{bytes.error()};
+    const auto id = canonical_profile_id(entry.path.filename().string());
+    if (const auto native = decode_native_profile_document_json(*bytes);
+        native && native->header.id == id) {
+      maximum = std::max(maximum, native->header.save_sequence);
+    } else if (const auto legacy = decode_save_document_json(*bytes); legacy) {
+      const auto metadata = decode_metadata(*bytes, *id, *legacy);
+      if (metadata) maximum = std::max(maximum, metadata->save_sequence);
+    }
+  }
+  if (maximum == std::numeric_limits<std::uint64_t>::max()) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::sequence_overflow,
+                                   catalog.directory,
+                                   "profile save sequence is exhausted")};
+  }
+  return maximum + 1U;
+}
+
+} // namespace
+
 auto create_catalog_profile(const std::filesystem::path& directory,
                             const SaveDocument& document)
     -> std::expected<LoadedProfile, ProfileCatalogError> {
@@ -714,15 +787,9 @@ auto create_catalog_profile(const std::filesystem::path& directory,
                                    "the 64-profile catalog is full")};
   }
   std::unordered_set<std::uint64_t> ids;
-  std::uint64_t maximum_sequence{};
   for (const auto& entry : catalog.entries) {
-    if (const auto id = canonical_profile_id(entry.path.filename().string())) {
+    if (const auto id = canonical_profile_id(entry.path.filename().string()))
       ids.insert(id->value);
-    }
-    if (entry.metadata) {
-      maximum_sequence =
-          std::max(maximum_sequence, entry.metadata->save_sequence);
-    }
   }
   ProfileId id{1};
   while (ids.contains(id.value) &&
@@ -734,12 +801,9 @@ auto create_catalog_profile(const std::filesystem::path& directory,
                                    directory,
                                    "no profile identity is available")};
   }
-  if (maximum_sequence == std::numeric_limits<std::uint64_t>::max()) {
-    return std::unexpected{failure(ProfileCatalogErrorCode::sequence_overflow,
-                                   directory,
-                                   "profile save sequence is exhausted")};
-  }
-  const auto metadata = metadata_for(id, maximum_sequence + 1U, document);
+  const auto sequence = next_catalog_sequence(catalog);
+  if (!sequence) return std::unexpected{sequence.error()};
+  const auto metadata = metadata_for(id, *sequence, document);
   if (!metadata) {
     return std::unexpected{
         failure(ProfileCatalogErrorCode::invalid_profile, directory,
@@ -752,6 +816,191 @@ auto create_catalog_profile(const std::filesystem::path& directory,
     return std::unexpected{written.error()};
   }
   return LoadedProfile{*metadata, document, path, *encoded};
+}
+
+auto scan_native_profile_catalog(const std::filesystem::path& directory)
+    -> NativeProfileCatalog {
+  const auto legacy = scan_profile_catalog(directory);
+  NativeProfileCatalog result{.directory = directory,
+                              .writable = legacy.writable,
+                              .overflow = legacy.overflow,
+                              .diagnostic = legacy.diagnostic};
+  std::unordered_set<std::uint64_t> sequences;
+  std::unordered_set<std::uint64_t> duplicate_sequences;
+  for (const auto& item : legacy.entries) {
+    NativeProfileEntry entry{.path = item.path};
+    const auto bytes = read_regular_file(item.path);
+    if (!bytes) {
+      entry.status = ProfileCatalogStatus::unreadable;
+      entry.diagnostic = bytes.error().detail;
+    } else {
+      entry.source_bytes = *bytes;
+      const auto profile = decode_native_profile_document_json(*bytes);
+      if (profile && canonical_profile_id(item.path.filename().string()) ==
+                         profile->header.id) {
+        entry.header = profile->header;
+        entry.status = ProfileCatalogStatus::available;
+        if (!sequences.insert(profile->header.save_sequence).second)
+          duplicate_sequences.insert(profile->header.save_sequence);
+      } else {
+        entry.status = ProfileCatalogStatus::invalid_document;
+        entry.diagnostic =
+            item.activatable()
+                ? "Legacy Guided/Skip career; unavailable in Freedom"
+                : "Invalid or incompatible native profile";
+        if (const auto legacy_document = decode_save_document_json(*bytes);
+            legacy_document) {
+          const auto id = canonical_profile_id(item.path.filename().string());
+          const auto metadata = decode_metadata(*bytes, *id, *legacy_document);
+          if (metadata && !sequences.insert(metadata->save_sequence).second)
+            duplicate_sequences.insert(metadata->save_sequence);
+        }
+      }
+    }
+    result.entries.push_back(std::move(entry));
+  }
+  for (auto& entry : result.entries) {
+    if (entry.header &&
+        duplicate_sequences.contains(entry.header->save_sequence)) {
+      entry.status = ProfileCatalogStatus::invalid_header;
+      entry.diagnostic = "duplicate catalog save sequence";
+    }
+  }
+  std::ranges::sort(result.entries, [](const auto& left, const auto& right) {
+    if (left.activatable() != right.activatable()) return left.activatable();
+    if (left.activatable()) {
+      if (left.header->save_sequence != right.header->save_sequence)
+        return left.header->save_sequence > right.header->save_sequence;
+      return left.header->id < right.header->id;
+    }
+    return left.path.filename().string() < right.path.filename().string();
+  });
+  for (std::size_t i = 0; i < result.entries.size(); ++i) {
+    if (result.entries[i].activatable()) {
+      result.continue_index = i;
+      break;
+    }
+  }
+  if (!result.entries.empty())
+    result.diagnostic =
+        result.continue_index ? "" : "no usable Freedom profile";
+  return result;
+}
+
+auto load_native_catalog_profile(const NativeProfileEntry& entry)
+    -> std::expected<LoadedNativeProfile, ProfileCatalogError> {
+  if (!entry.activatable() ||
+      canonical_profile_id(entry.path.filename().string()) !=
+          entry.header->id) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile,
+                                   entry.path,
+                                   "selected native profile is unavailable")};
+  }
+  if (const auto inspected = inspect_directory(entry.path.parent_path());
+      !inspected || !*inspected) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::storage_unavailable,
+                                   entry.path,
+                                   "profile directory is unavailable")};
+  }
+  const auto bytes = read_regular_file(entry.path);
+  if (!bytes) return std::unexpected{bytes.error()};
+  if (*bytes != entry.source_bytes) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::stale_entry,
+                                   entry.path,
+                                   "profile changed after the catalog scan")};
+  }
+  auto profile = decode_native_profile_document_json(*bytes);
+  if (!profile || profile->header != *entry.header) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::invalid_profile,
+                                   entry.path, "profile validation failed")};
+  }
+  return LoadedNativeProfile{std::move(*profile), entry.path, *bytes};
+}
+
+namespace {
+[[nodiscard]] auto write_native_catalog(const std::filesystem::path& directory,
+                                        NativeSaveDocument document,
+                                        const LoadedNativeProfile* active)
+    -> std::expected<LoadedNativeProfile, ProfileCatalogError> {
+  // Validate before any storage creation or active-slot change.
+  const auto summary = project_native_profile_summary(document);
+  if (!summary) return std::unexpected{summary.error()};
+  if (auto ensured = ensure_directory(directory); !ensured)
+    return std::unexpected{ensured.error()};
+  FileDescriptor lock{::open((directory / ".profiles.lock").c_str(),
+                             O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW,
+                             S_IRUSR | S_IWUSR)};
+  if (!lock.valid() || ::flock(lock.get(), LOCK_EX | LOCK_NB) < 0) {
+    return std::unexpected{failure(ProfileCatalogErrorCode::lock_unavailable,
+                                   directory,
+                                   "another profile write is in progress")};
+  }
+  const auto catalog = scan_profile_catalog(directory);
+  if (!catalog.writable || catalog.overflow) {
+    return std::unexpected{
+        failure(catalog.overflow ? ProfileCatalogErrorCode::catalog_overflow
+                                 : ProfileCatalogErrorCode::storage_unavailable,
+                directory, catalog.diagnostic)};
+  }
+  ProfileId id{1};
+  if (active) {
+    id = active->profile.header.id;
+    if (id.value == 0 || active->path != directory / profile_filename(id)) {
+      return std::unexpected{
+          failure(ProfileCatalogErrorCode::invalid_profile, active->path,
+                  "active profile identity does not match its slot")};
+    }
+    NativeProfileEntry selected{.path = active->path,
+                                .header = active->profile.header,
+                                .status = ProfileCatalogStatus::available,
+                                .source_bytes = active->source_bytes};
+    if (const auto current = load_native_catalog_profile(selected); !current)
+      return std::unexpected{current.error()};
+  } else {
+    if (catalog.entries.size() >= kMaximumLocalProfiles) {
+      return std::unexpected{failure(ProfileCatalogErrorCode::catalog_full,
+                                     directory,
+                                     "the 64-profile catalog is full")};
+    }
+    std::unordered_set<std::uint64_t> ids;
+    for (const auto& entry : catalog.entries)
+      ids.insert(canonical_profile_id(entry.path.filename().string())->value);
+    while (ids.contains(id.value))
+      ++id.value;
+  }
+  const auto sequence = next_catalog_sequence(catalog);
+  if (!sequence) return std::unexpected{sequence.error()};
+  NativeProfileDocument profile{
+      {kNativeProfileHeaderVersion, id, *sequence, *summary},
+      std::move(document)};
+  const auto bytes = encode_native_profile_document_json(profile);
+  if (!bytes) return std::unexpected{bytes.error()};
+  const auto path = directory / profile_filename(id);
+  if (active) {
+    if (const auto written =
+            detail::write_encoded_save_atomically(path, *bytes);
+        !written)
+      return std::unexpected{failure(ProfileCatalogErrorCode::write_failure,
+                                     path,
+                                     save_file_error_message(written.error()))};
+  } else if (const auto written = write_new_profile(path, *bytes); !written) {
+    return std::unexpected{written.error()};
+  }
+  return LoadedNativeProfile{std::move(profile), path, *bytes};
+}
+} // namespace
+
+auto create_native_catalog_profile(const std::filesystem::path& directory,
+                                   NativeSaveDocument document)
+    -> std::expected<LoadedNativeProfile, ProfileCatalogError> {
+  return write_native_catalog(directory, std::move(document), nullptr);
+}
+
+auto replace_native_catalog_profile(const LoadedNativeProfile& active,
+                                    NativeSaveDocument document)
+    -> std::expected<LoadedNativeProfile, ProfileCatalogError> {
+  return write_native_catalog(active.path.parent_path(), std::move(document),
+                              &active);
 }
 
 auto profile_catalog_error_message(const ProfileCatalogError& error)

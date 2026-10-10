@@ -25,6 +25,12 @@ struct NativeStartup {
 [[nodiscard]] auto native_legacy_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string>;
 
+// Admit an already decoded document through the same authoritative selection
+// policy used by explicit-path Continue. Catalog headers do not select worlds.
+[[nodiscard]] auto native_select_save_document(
+    NativeSaveDocument, std::optional<std::filesystem::path> source_save = {})
+    -> std::expected<NativeStartup, std::string>;
+
 [[nodiscard]] auto native_continue(const std::filesystem::path& save_path)
     -> std::expected<NativeStartup, std::string>;
 

@@ -264,13 +264,20 @@ auto native_continue(const std::filesystem::path& save_path)
     return std::unexpected{"Continue requires a selected save path"};
   auto loaded = load_native_save_file(save_path);
   if (!loaded) return std::unexpected{save_file_error_message(loaded.error())};
-  if (missing_recovery_owner(*loaded))
+  return native_select_save_document(std::move(*loaded), save_path);
+}
+
+auto native_select_save_document(
+    NativeSaveDocument document,
+    std::optional<std::filesystem::path> source_save)
+    -> std::expected<NativeStartup, std::string> {
+  if (missing_recovery_owner(document))
     return std::unexpected{"Replacement lineage requires its recovery owner"};
   return std::visit(
-      [&](auto& document) {
-        return select_document(std::move(document), save_path);
+      [&](auto& selected) {
+        return select_document(std::move(selected), source_save);
       },
-      *loaded);
+      document);
 }
 
 auto prepare_native_freedom_station_start(NativeStartup selected)

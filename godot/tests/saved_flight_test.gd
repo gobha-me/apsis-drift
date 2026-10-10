@@ -175,7 +175,7 @@ func check_saved_menu_layout(view: Control, owner: Variant, directory: String) -
 		check(menu.content_columns.vertical == (pixels.x < 1000) and menu.saved_note.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and menu.binding_heading.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Saved menu lost responsive columns or wrapped instructions")
 		for item in menu.sized_controls:
 			check(item.custom_minimum_size.y * scale >= 44.0, "Saved interactive control shrank at " + str(pixels))
-		for button in [menu.resume_button, menu.save_button, menu.load_button, menu.title_button, menu.saved_hold_button, menu.binding_buttons[0].button, menu.binding_buttons[1].button]:
+		for button in [menu.resume_button, menu.export_save_button, menu.load_button, menu.title_button, menu.saved_hold_button, menu.binding_buttons[0].button, menu.binding_buttons[1].button]:
 			button.grab_focus()
 			var scroll: ScrollContainer = menu.settings_scroll if button in [menu.binding_buttons[0].button, menu.binding_buttons[1].button] else menu.left_scroll
 			# Let the real focus-following path scroll once. Calling ensure here
@@ -663,7 +663,7 @@ func check_saved_controller(view: Control, owner: Variant, save: String) -> void
 	view.toggle_pause()
 	check(view.paused and not view.controls_armed, "Delayed held input bypassed current-neutral resume check")
 	physical_key(KEY_I, false)
-	view.controls_menu.save_button.grab_focus()
+	view.controls_menu.export_save_button.grab_focus()
 	joy_button(JOY_BUTTON_A, true)
 	await process_frame
 	joy_button(JOY_BUTTON_A, false)

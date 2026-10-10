@@ -6,6 +6,7 @@
 #include "apsis_drift/godot/thrust_flight.hpp"
 
 #include "apsis_drift/craft_environment_assessment.hpp"
+#include "apsis_drift/native_profile.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/operating_motion.hpp"
 #include "apsis_drift/station_geometry.hpp"
@@ -183,11 +184,14 @@ class FreedomBridge : public godot::RefCounted {
   std::optional<OperatingMotionRecipe> operating_motion_recipe;
   std::unique_ptr<NativeFreedomStationStart> native_start;
   std::unique_ptr<SavedFlightWorld> saved_flight;
+  NativeProfileSession profile_session;
+  std::optional<NativeProfileCatalog> profile_catalog;
   godot::String last_error;
   std::unique_ptr<PlanetStream> stream;
   std::set<StreamKey> exported;
   struct PendingFreedomStart {
     std::string id;
+    NativeProfileSession profile_session;
     std::unique_ptr<SavedFlightWorld> flight;
     std::unique_ptr<NativeFreedomStationStart> station;
     std::unique_ptr<PlanetStream> stream;
@@ -197,6 +201,14 @@ class FreedomBridge : public godot::RefCounted {
   std::uint64_t next_candidate_id{1};
 
   auto commit_freedom_start(NativeStartup selected) -> bool {
+    NativeProfileSession source_metadata;
+    if (selected.source_save) {
+      auto explicit_source =
+          NativeProfileSession::from_explicit_path(selected.document);
+      if (!explicit_source)
+        throw std::runtime_error(explicit_source.error().detail);
+      source_metadata = std::move(*explicit_source);
+    }
     if (std::holds_alternative<FreedomStartingAssemblySaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomBoardingSaveDocument>(
@@ -226,6 +238,7 @@ class FreedomBridge : public godot::RefCounted {
       world.reset();
       native_start.reset();
       saved_flight = std::move(candidate);
+      profile_session = std::move(source_metadata);
       pending.reset();
       last_error = godot::String{};
       return true;
@@ -239,6 +252,7 @@ class FreedomBridge : public godot::RefCounted {
     world.reset();
     saved_flight.reset();
     native_start = std::move(candidate);
+    profile_session = std::move(source_metadata);
     pending.reset();
     last_error = godot::String{};
     return true;
@@ -264,6 +278,16 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::stage_freedom_recovery);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_recovery_state"),
                                 &FreedomBridge::get_freedom_recovery_state);
+    godot::ClassDB::bind_method(godot::D_METHOD("list_freedom_profiles"),
+                                &FreedomBridge::list_freedom_profiles);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("stage_freedom_profile", "index"),
+        &FreedomBridge::stage_freedom_profile);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_profile_state"),
+                                &FreedomBridge::get_freedom_profile_state);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("save_freedom_profile", "save_as"),
+        &FreedomBridge::save_freedom_profile);
     godot::ClassDB::bind_method(godot::D_METHOD("get_pending_freedom_start"),
                                 &FreedomBridge::get_pending_freedom_start);
     godot::ClassDB::bind_method(
@@ -550,13 +574,24 @@ class FreedomBridge : public godot::RefCounted {
     if (native_start) return project_craft_binding(NativeCraftBinding{});
     return {};
   }
-  auto stage_selected(NativeStartup selected) -> bool {
+  auto stage_selected(
+      NativeStartup selected,
+      std::optional<NativeProfileSession> metadata = std::nullopt) -> bool {
     if (pending)
       throw std::invalid_argument("A Freedom start is already pending");
     if (next_candidate_id == std::numeric_limits<std::uint64_t>::max())
       throw std::overflow_error("Freedom candidate identifiers exhausted");
     auto candidate = std::make_unique<PendingFreedomStart>();
     candidate->id = std::to_string(next_candidate_id);
+    if (metadata)
+      candidate->profile_session = std::move(*metadata);
+    else if (selected.source_save) {
+      auto explicit_source =
+          NativeProfileSession::from_explicit_path(selected.document);
+      if (!explicit_source)
+        throw std::runtime_error(explicit_source.error().detail);
+      candidate->profile_session = std::move(*explicit_source);
+    }
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomDockingSaveDocument>(selected.document) ||
         std::holds_alternative<FreedomJourneySaveDocument>(selected.document) ||
@@ -687,7 +722,8 @@ class FreedomBridge : public godot::RefCounted {
         document = std::move(*walking);
       }
       if (!stage_selected({NativeStartup::Mode::freedom, std::move(document),
-                           planet, candidate.source_save()}))
+                           planet, candidate.source_save()},
+                          profile_session))
         return false;
       pending->recovery_source = std::move(*source);
       return true;
@@ -754,6 +790,7 @@ class FreedomBridge : public godot::RefCounted {
     world.reset();
     saved_flight = std::move(pending->flight);
     native_start = std::move(pending->station);
+    profile_session = std::move(pending->profile_session);
     pending.reset();
     last_error = godot::String{};
     return true;
@@ -766,6 +803,124 @@ class FreedomBridge : public godot::RefCounted {
     pending.reset();
     last_error = godot::String{};
     return true;
+  }
+
+  auto current_save_document() const
+      -> std::expected<NativeSaveDocument, std::string> {
+    if (saved_flight) return saved_flight->session.save_document();
+    if (native_start) return native_start->selected.document;
+    return std::unexpected{"No Freedom journey is selected"};
+  }
+
+  auto list_freedom_profiles() -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto directory = resolve_profile_directory();
+    if (!directory) {
+      profile_catalog.reset();
+      result["writable"] = false;
+      result["diagnostic"] = godot::String{directory.error().detail.c_str()};
+      result["entries"] = godot::Array{};
+      return result;
+    }
+    profile_catalog = scan_native_profile_catalog(*directory);
+    result["writable"] = profile_catalog->writable;
+    result["overflow"] = profile_catalog->overflow;
+    result["diagnostic"] = godot::String{profile_catalog->diagnostic.c_str()};
+    result["continue_index"] =
+        profile_catalog->continue_index
+            ? static_cast<std::int64_t>(*profile_catalog->continue_index)
+            : -1;
+    godot::Array entries;
+    for (const auto& entry : profile_catalog->entries) {
+      godot::Dictionary row;
+      row["available"] = entry.activatable();
+      row["diagnostic"] = godot::String{entry.diagnostic.c_str()};
+      row["filename"] = godot::String{entry.path.filename().string().c_str()};
+      if (entry.header) {
+        row["id"] =
+            godot::String{std::to_string(entry.header->id.value).c_str()};
+        row["sequence"] =
+            godot::String{std::to_string(entry.header->save_sequence).c_str()};
+        row["seed"] = godot::String{
+            std::to_string(entry.header->summary.universe_seed.value).c_str()};
+        row["tick"] =
+            godot::String{std::to_string(entry.header->summary.tick).c_str()};
+        row["location"] = godot::String{std::string{
+            native_profile_location_name(entry.header->summary.location)}
+                                            .c_str()};
+      }
+      entries.append(row);
+    }
+    result["entries"] = entries;
+    return result;
+  }
+
+  auto stage_freedom_profile(std::int64_t index) -> bool {
+    try {
+      if (pending || !profile_catalog || index < 0 ||
+          static_cast<std::uint64_t>(index) >= profile_catalog->entries.size())
+        throw std::invalid_argument("Select an available catalog entry");
+      auto loaded = load_native_catalog_profile(
+          profile_catalog->entries[static_cast<std::size_t>(index)]);
+      if (!loaded) throw std::runtime_error(loaded.error().detail);
+      auto metadata = NativeProfileSession::from_catalog(*loaded);
+      if (!metadata) throw std::runtime_error(metadata.error().detail);
+      auto selected = native_select_save_document(
+          std::move(loaded->profile.document), loaded->path);
+      if (!selected) throw std::runtime_error(selected.error());
+      return stage_selected(std::move(*selected), std::move(*metadata));
+    } catch (const std::exception& e) {
+      last_error = e.what();
+      return false;
+    }
+  }
+
+  auto get_freedom_profile_state() const -> godot::Dictionary {
+    godot::Dictionary result;
+    const auto document = current_save_document();
+    if (!document) return result;
+    const auto dirty = profile_session.dirty(*document);
+    result["dirty"] = !dirty || *dirty;
+    result["explicit_path"] = profile_session.explicit_path();
+    result["can_save_as"] = !profile_session.explicit_path();
+    result["can_save"] = !profile_session.explicit_path() &&
+                         profile_session.active().has_value();
+    result["reason"] =
+        profile_session.explicit_path()
+            ? "Explicit-path session: use the existing file workflow"
+        : !profile_session.active() ? "Save As creates your first catalog slot"
+                                    : "";
+    if (profile_session.active()) {
+      result["id"] = godot::String{
+          std::to_string(profile_session.active()->profile.header.id.value)
+              .c_str()};
+      result["sequence"] = godot::String{
+          std::to_string(profile_session.active()->profile.header.save_sequence)
+              .c_str()};
+    }
+    return result;
+  }
+
+  auto save_freedom_profile(bool save_as) -> bool {
+    try {
+      auto document = current_save_document();
+      if (!document) throw std::runtime_error(document.error());
+      const auto directory =
+          !save_as && profile_session.active()
+              ? std::expected<std::filesystem::path,
+                              ProfileCatalogError>{profile_session.active()
+                                                       ->path.parent_path()}
+              : resolve_profile_directory();
+      if (!directory) throw std::runtime_error(directory.error().detail);
+      const auto saved =
+          profile_session.save(*directory, std::move(*document), save_as);
+      if (!saved) throw std::runtime_error(saved.error().detail);
+      last_error = godot::String{};
+      return true;
+    } catch (const std::exception& e) {
+      last_error = e.what();
+      return false;
+    }
   }
 
   auto save_freedom_as(const godot::String& save_path) -> bool {

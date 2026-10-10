@@ -7,6 +7,7 @@ const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const NativeAudio = preload("res://scripts/audio/native_ship_audio.gd")
+const ProfileBrowser = preload("res://scripts/ui/profile_browser.gd")
 const NativeTitle = preload("res://scripts/native/native_title.gd")
 
 var bridge: Variant = null
@@ -32,6 +33,12 @@ var load_theme: Theme
 var load_origin: Control
 var load_previous_mode: int
 var load_path := ""
+var load_profile_index := -1
+var load_browser: Control
+var save_confirmation: ConfirmationDialog
+var save_origin: Control
+var save_previous_mode: int
+var save_as_pending := false
 var title_view: Control
 var title_options: Dictionary = {}
 var title_confirmation: ConfirmationDialog
@@ -291,7 +298,7 @@ func stage_view(owner: Variant, assets: String, pending: Dictionary) -> Control:
 	return candidate
 
 func select_start(owner: Variant, options: Dictionary) -> bool:
-	var staged: bool = owner.stage_freedom_recovery() if options.mode == "recovery" else owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_continue(options.value)
+	var staged: bool = owner.stage_freedom_recovery() if options.mode == "recovery" else owner.stage_freedom_new_game(options.value) if options.mode == "new_game" else owner.stage_freedom_profile(options.value) if options.mode == "profile" else owner.stage_freedom_continue(options.value)
 	if not staged:
 		error = str(owner.get_last_error())
 		return false
@@ -364,7 +371,7 @@ func refresh_recovery() -> void:
 	title.text = "CRAFT LOSS · STANDARD RECOVERY"
 	column.add_child(title)
 	var explanation := Label.new()
-	explanation.text = recovery.explanation
+	explanation.text = recovery.explanation + "\nCatalog actions are unavailable during pending recovery. The current slot is preserved. Continue recovery to return to paused controls."
 	explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(explanation)
 	var resume := Button.new()
@@ -388,6 +395,8 @@ func continue_recovery() -> void:
 
 
 func connect_journey_view(view: Control) -> void:
+	if view.has_signal("catalog_save_requested"):
+		view.catalog_save_requested.connect(request_catalog_save)
 	if view.has_signal("load_requested"):
 		view.load_requested.connect(request_load)
 	if view.has_signal("title_requested"):
@@ -398,7 +407,7 @@ func connect_journey_view(view: Control) -> void:
 
 # Root owns replacement dialogs; the current view cannot resume beneath them.
 func request_load() -> void:
-	if closing or load_origin != null or title_origin != null or current_view == null or recovery_overlay != null: return
+	if closing or save_origin != null or load_origin != null or title_origin != null or current_view == null or recovery_overlay != null: return
 	if not (current_view is WalkView or current_view is FlightView) or not current_view.focused or not current_view.paused or current_view.save_dialog.visible or current_view.mode_change_pending: return
 	if load_dialog == null:
 		load_dialog = FileDialog.new()
@@ -420,6 +429,7 @@ func request_load() -> void:
 		load_confirmation.theme = load_theme
 		load_confirmation.dialog_autowrap = true
 		add_child(load_confirmation)
+		load_confirmation.window_input.connect(func(event: InputEvent): nested_dialog_input(load_confirmation, load_origin, event))
 		load_confirmation.confirmed.connect(confirm_load, CONNECT_DEFERRED)
 		load_confirmation.canceled.connect(func(): finish_load("Load canceled. Current journey retained."))
 		get_window().size_changed.connect(layout_load_dialogs)
@@ -428,8 +438,20 @@ func request_load() -> void:
 	load_origin.journey_dialog_open = true
 	load_origin.process_mode = Node.PROCESS_MODE_DISABLED
 	load_path = ""
+	load_profile_index = -1
 	layout_load_dialogs()
-	load_dialog.popup_centered_ratio(0.75)
+	var profile: Dictionary = bridge.get_freedom_profile_state()
+	if not profile.get("explicit_path", false):
+		if load_browser == null:
+			load_browser = ProfileBrowser.new()
+			load_browser.provider = bridge
+			add_child(load_browser)
+			load_browser.selected.connect(choose_load_profile)
+			load_browser.canceled.connect(func(): finish_load("Load canceled. Current journey retained."))
+		load_browser.device = load_origin.selected_pad if load_origin is WalkView else load_origin.player_input.device
+		load_browser.open()
+	else:
+		load_dialog.popup_centered_ratio(0.75)
 
 
 func layout_load_dialogs() -> void:
@@ -459,12 +481,30 @@ func choose_load(path: String) -> void:
 		finish_load("Load refused: choose a bounded absolute save path.")
 		return
 	load_path = path
+	var profile_state: Dictionary = bridge.get_freedom_profile_state()
+	if not profile_state.get("dirty", true) and not profile_state.get("explicit_path", false):
+		confirm_load()
+		return
 	layout_load_dialogs()
 	load_confirmation.popup_centered(load_confirmation.size)
 	load_confirmation.get_cancel_button().grab_focus()
 
 
+func choose_load_profile(index: int) -> void:
+	if load_origin == null: return
+	load_browser.hide()
+	load_profile_index = index
+	var profile_state: Dictionary = bridge.get_freedom_profile_state()
+	if not profile_state.get("dirty", true) and not profile_state.get("explicit_path", false):
+		confirm_load()
+		return
+	layout_load_dialogs()
+	load_confirmation.popup_centered(load_confirmation.size)
+	load_confirmation.get_cancel_button().grab_focus()
+
 func finish_load(message: String) -> void:
+	if load_browser != null: load_browser.hide()
+	load_profile_index = -1
 	if load_dialog != null: load_dialog.hide()
 	if load_confirmation != null: load_confirmation.hide()
 	load_path = ""
@@ -485,24 +525,26 @@ func finish_load(message: String) -> void:
 
 
 func confirm_load() -> void:
-	if load_origin == null or load_path.is_empty(): return
+	if load_origin == null or (load_path.is_empty() and load_profile_index < 0): return
 	if current_view != load_origin or not load_origin.focused or closing:
 		finish_load("Load canceled. Restore focus before trying again.")
 		return
 	load_confirmation.hide()
 	# select_start validates/stages everything before the C++ commit and view swap.
-	if not select_start(bridge, {"mode": "continue", "value": load_path, "assets": assets_root}):
+	var selection := {"mode": "profile", "value": load_profile_index, "assets": assets_root} if load_profile_index >= 0 else {"mode": "continue", "value": load_path, "assets": assets_root}
+	if not select_start(bridge, selection):
 		var refusal := error
 		error = ""
 		finish_load("Load refused: " + refusal)
 		return
 	load_origin = null  # The successfully replaced view was freed by select_start.
+	load_profile_index = -1
 	load_path = ""
 	load_dialog.hide()
 
 
 func request_title() -> void:
-	if closing or title_origin != null or load_origin != null or current_view == null or recovery_overlay != null: return
+	if closing or save_origin != null or title_origin != null or load_origin != null or current_view == null or recovery_overlay != null: return
 	if not (current_view is WalkView or current_view is FlightView) or not current_view.focused or not current_view.paused or current_view.save_dialog.visible or current_view.mode_change_pending: return
 	if title_confirmation == null:
 		title_confirmation = ConfirmationDialog.new()
@@ -513,6 +555,7 @@ func request_title() -> void:
 		title_confirmation.dialog_autowrap = true
 		title_confirmation.theme = Theme.new()
 		add_child(title_confirmation)
+		title_confirmation.window_input.connect(func(event: InputEvent): nested_dialog_input(title_confirmation, title_origin, event))
 		title_confirmation.confirmed.connect(confirm_title, CONNECT_DEFERRED)
 		title_confirmation.canceled.connect(cancel_title)
 		get_window().size_changed.connect(layout_title_confirmation)
@@ -520,6 +563,10 @@ func request_title() -> void:
 	title_previous_mode = title_origin.process_mode
 	title_origin.journey_dialog_open = true
 	title_origin.process_mode = Node.PROCESS_MODE_DISABLED
+	var profile_state: Dictionary = bridge.get_freedom_profile_state()
+	if not profile_state.get("dirty", true) and not profile_state.get("explicit_path", false):
+		confirm_title()
+		return
 	layout_title_confirmation()
 	title_confirmation.popup_centered(title_confirmation.size)
 	title_confirmation.get_cancel_button().grab_focus()
@@ -636,6 +683,7 @@ func open_title(owner: Variant, options: Dictionary) -> void:
 	bridge = owner
 	title_options = options.duplicate(true)
 	title_view = NativeTitle.new()
+	title_view.catalog_owner = owner
 	title_view.persist_controls = options.get("persist_controls", true)
 	add_child(title_view)
 	title_view.start_requested.connect(start_from_title, CONNECT_DEFERRED)
@@ -741,11 +789,11 @@ func build_view(geometry: Dictionary, station_geometry: Dictionary) -> bool:
 	note.text = "Right-drag to orbit; scroll to inspect.\nFlight from this save is still in development."
 	column.add_child(note)
 	save_button = Button.new()
-	save_button.text = "Save As…"
+	save_button.text = "Export save file…"
 	save_button.pressed.connect(open_save_as)
 	column.add_child(save_button)
 	save_status = Label.new()
-	save_status.text = "Choose Save As to keep this session."
+	save_status.text = "Historical docked shell: catalog actions are unavailable. Export a save file to keep this session."
 	save_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(save_status)
 	save_dialog = FileDialog.new()
@@ -776,3 +824,95 @@ func build_view(geometry: Dictionary, station_geometry: Dictionary) -> bool:
 
 
 	return true
+
+func request_catalog_save(save_as: bool) -> void:
+	if closing or save_origin != null or load_origin != null or title_origin != null or current_view == null: return
+	if not current_view.focused or not current_view.paused or current_view.journey_dialog_open or current_view.save_dialog.visible: return
+	var profile: Dictionary = bridge.get_freedom_profile_state()
+	if not profile.get("can_save_as" if save_as else "can_save", false):
+		current_view.save_status.text = str(profile.get("reason", "Save is unavailable"))
+		return
+	save_origin = current_view
+	save_previous_mode = save_origin.process_mode
+	save_origin.journey_dialog_open = true
+	save_origin.process_mode = Node.PROCESS_MODE_DISABLED
+	save_as_pending = save_as
+	if not save_as:
+		confirm_catalog_save()
+		return
+	if save_confirmation == null:
+		save_confirmation = ConfirmationDialog.new()
+		save_confirmation.title = "Create a new save slot?"
+		save_confirmation.dialog_text = "Save As creates a new catalog slot. Your previous slot stays unchanged.
+The catalog holds up to 64 journeys."
+		save_confirmation.ok_button_text = "Save As"
+		save_confirmation.dialog_autowrap = true
+		save_confirmation.exclusive = true
+		add_child(save_confirmation)
+		save_confirmation.window_input.connect(func(event: InputEvent): nested_dialog_input(save_confirmation, save_origin, event))
+		save_confirmation.theme = Theme.new()
+		get_window().size_changed.connect(layout_catalog_save)
+		save_confirmation.confirmed.connect(confirm_catalog_save, CONNECT_DEFERRED)
+		save_confirmation.canceled.connect(func(): finish_catalog_save("Save As canceled. Current journey retained."))
+	layout_catalog_save()
+	save_confirmation.popup_centered(save_confirmation.size)
+	save_confirmation.get_cancel_button().grab_focus()
+
+func confirm_catalog_save() -> void:
+	if save_origin == null: return
+	if closing or current_view != save_origin or not save_origin.focused:
+		finish_catalog_save("Save canceled. Restore focus before trying again.")
+		return
+	var saved: bool = bridge.save_freedom_profile(save_as_pending)
+	finish_catalog_save("Saved. Resume explicitly after neutral." if saved else "Save failed: " + str(bridge.get_last_error()))
+
+func finish_catalog_save(message: String) -> void:
+	if save_confirmation != null: save_confirmation.hide()
+	if is_instance_valid(save_origin) and current_view == save_origin:
+		save_origin.process_mode = save_previous_mode
+		save_origin.journey_dialog_open = false
+		save_origin.save_status.text = message
+		var button: Button
+		if save_origin is FlightView:
+			save_origin.controls_menu.sync_profile_state(bridge.get_freedom_profile_state())
+			save_origin.controls_menu.message.text = message
+			button = save_origin.controls_menu.save_button if save_as_pending else save_origin.controls_menu.replace_save_button
+		else:
+			save_origin.refresh_profile_actions()
+			button = save_origin.save_button if save_as_pending else save_origin.replace_save_button
+		if save_origin.focused: button.grab_focus()
+	save_origin = null
+
+func layout_catalog_save() -> void:
+	if save_confirmation == null or save_origin == null: return
+	var pixels := Vector2(get_window().size)
+	var logical: Vector2 = save_origin.size
+	if not logical.is_finite() or not pixels.is_finite() or minf(logical.x, logical.y) < 1.0 or minf(pixels.x, pixels.y) < 1.0: return
+	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))
+	save_confirmation.theme.default_font_size = roundi(20 * scale)
+	save_confirmation.get_label().custom_minimum_size.x = minf(580 * scale, logical.x * 0.8)
+	save_confirmation.size = Vector2i(roundi(minf(620 * scale, logical.x * 0.9)), roundi(minf(220 * scale, logical.y * 0.8)))
+	if save_confirmation.visible: save_confirmation.popup_centered(save_confirmation.size)
+
+func _input(event: InputEvent) -> void:
+	if save_origin != null: nested_dialog_input(save_confirmation, save_origin, event)
+	elif load_origin != null: nested_dialog_input(load_confirmation, load_origin, event)
+	elif title_origin != null: nested_dialog_input(title_confirmation, title_origin, event)
+
+func nested_dialog_input(dialog: ConfirmationDialog, origin: Control, event: InputEvent) -> void:
+	if dialog == null or origin == null or not dialog.visible or not (event is InputEventJoypadButton or event is InputEventJoypadMotion): return
+	# Station movement does not install a second InputMap. These bounded modal
+	# actions use its selected controller directly, just like its paused root.
+	dialog.set_input_as_handled()
+	get_viewport().set_input_as_handled()
+	var device: int = origin.selected_pad if origin is WalkView else origin.player_input.device
+	if not origin.focused or not (event is InputEventJoypadButton) or not event.pressed or event.device != device: return
+	if event.button_index in [JOY_BUTTON_B, JOY_BUTTON_START]:
+		dialog.get_cancel_button().pressed.emit()
+	elif event.button_index in [JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_UP]:
+		dialog.get_cancel_button().grab_focus()
+	elif event.button_index in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN]:
+		dialog.get_ok_button().grab_focus()
+	elif event.button_index == JOY_BUTTON_A:
+		var button := dialog.gui_get_focus_owner() as Button
+		if button != null and not button.disabled: button.pressed.emit()

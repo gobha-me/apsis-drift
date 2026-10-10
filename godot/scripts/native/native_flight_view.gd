@@ -1,5 +1,6 @@
 extends Control
 signal journey_mode_changed
+signal catalog_save_requested(save_as: bool)
 signal load_requested
 signal title_requested
 var journey_dialog_open := false
@@ -471,7 +472,7 @@ func build_ui() -> void:
 		surface_walk_button.pressed.connect(func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
 		column.add_child(surface_walk_button)
 	var save_button := Button.new()
-	save_button.text = "Save As…"
+	save_button.text = "Export save file…"
 	save_button.focus_mode = Control.FOCUS_NONE
 	column.add_child(save_button)
 	save_status = hud_text()
@@ -655,7 +656,7 @@ func setup_controls() -> void:
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
-		menu_column.move_child(unboard_menu_button, controls_menu.save_button.get_index() + 1)
+		menu_column.move_child(unboard_menu_button, controls_menu.title_button.get_index() + 1)
 		surface_walk_menu_button = controls_menu.add_button(menu_column, "Leave Wayfarer · suit", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
@@ -666,6 +667,8 @@ func setup_controls() -> void:
 	player_input.recenter_requested.connect(recenter_camera)
 	controls_menu.resumed.connect(toggle_pause)
 	controls_menu.save_requested.connect(open_save_dialog)
+	controls_menu.catalog_save_requested.connect(func(save_as: bool):
+		if paused and focused and not journey_dialog_open and not save_dialog.visible: catalog_save_requested.emit(save_as))
 	controls_menu.load_requested.connect(func():
 		if paused and focused and not journey_dialog_open and not save_dialog.visible: load_requested.emit())
 	controls_menu.title_requested.connect(func():
@@ -764,6 +767,10 @@ func pause_controls(reason: String, show_menu := true) -> void:
 	if pause_button != null:
 		pause_button.text = "Resume flight"
 	if controls_menu != null:
+		if bridge.has_method("get_freedom_profile_state"):
+			var profile: Dictionary = bridge.get_freedom_profile_state()
+			controls_menu.sync_profile_state(profile)
+			if profile.get("explicit_path", false): reason += "\n" + str(profile.reason)
 		controls_menu.sync_saved_state(state, not error.is_empty())
 		if show_menu:
 			controls_menu.show_menu(reason)
