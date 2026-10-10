@@ -58,6 +58,8 @@ TESTS = {
     "native_start_staging": "freedom_saves",
     "native_planetary": "planetary_saves",
     "native_voyage": "voyage_saves",
+    "native_roundtrip": "roundtrip_saves",
+    "native_roundtrip_pilot": "roundtrip_saves",
     "native_surface": "surface_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
@@ -158,7 +160,7 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         if not start_fixture.is_file() or not os.access(start_fixture, os.X_OK):
             parser.error(f"missing C++ save fixture: {start_fixture}")
-    if any(name in selected for name in ("native_planetary", "native_voyage")):
+    if any(name in selected for name in ("native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot")):
         if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
             parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
     if "native_surface" in selected:
@@ -231,7 +233,7 @@ def main(argv=None):
     if any(TESTS[name] == "freedom_saves" for name in selected):
         shutil.copy2(start_fixture, work / start_fixture.name)
         start_fixture = work / start_fixture.name
-    if any(name in selected for name in ("native_planetary", "native_voyage")):
+    if any(name in selected for name in ("native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot")):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
     if "native_surface" in selected:
@@ -256,7 +258,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", "native_surface") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", "native_roundtrip", "native_roundtrip_pilot", "native_surface") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -395,6 +397,35 @@ def main(argv=None):
         save()
         if code != 0 or timed_out:
             print(f"FAIL planetary fixture: {log}", flush=True)
+            return 1
+        report["setup"][-1]["files_sha256"] = {
+            path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
+        save()
+    for name in ("native_roundtrip", "native_roundtrip_pilot"):
+        if name not in selected:
+            continue
+        phases = work / name
+        phases.mkdir()
+        # CLI refusals precede constructing any actual world or artifacts.
+        for index, invalid in enumerate(([str(phases), "--pilot"],
+                [str(phases), "--neighbor", "--neighbor"],
+                [str(phases), "--neighbor", "--commands", "--commands"])):
+            refusal_log = work / f"{name}-refusal-{index}.log"
+            code, timed_out, _ = run_logged(
+                [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
+            if code == 0 or timed_out or any(phases.iterdir()):
+                print(f"FAIL round-trip argument refusal: {refusal_log}", flush=True)
+                return 1
+        log = work / f"{name}-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(planetary_fixture), str(phases), "--neighbor", "--commands",
+             *(["--pilot"] if name.endswith("_pilot") else [])], log, env, args.timeout)
+        report["setup"].append({"family": name, "returncode": code,
+            "timed_out": timed_out, "seconds": elapsed,
+            "fixture_sha256": sha256(planetary_fixture)})
+        save()
+        if code != 0 or timed_out:
+            print(f"FAIL actual round-trip fixture: {log}", flush=True)
             return 1
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
@@ -606,6 +637,9 @@ def main(argv=None):
         elif TESTS[name] in ("planetary_saves", "voyage_saves"):
             arguments = [str(work / path) for path in
                          ("planetary", "native-assets", "voyage-native" if name == "native_voyage" else "planetary-native")]
+        elif TESTS[name] == "roundtrip_saves":
+            arguments = [str(work / path) for path in
+                         (name, "native-assets", name + "-native")]
         elif TESTS[name] == "native_assets":
             arguments = [str(work / "native-assets"), str(work / "native-asset-import.json")]
         elif TESTS[name] == "operating_assets":

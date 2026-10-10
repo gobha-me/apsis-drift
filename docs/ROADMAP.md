@@ -284,3 +284,13 @@ older Save/Continue remains unchanged. Neighbor observations use the actual worl
 and the authored craft survives without a phantom home station or resource service.
 The composed surface/return-docking proof #194, wider consequences #248/#253,
 replacement recovery #247 and final native visual qualification remain open.
+
+## Neighboring round-trip checkpoint — 2026-10-09
+
+[The bounded normal trip](FREEDOM_NATIVE_ROUNDTRIP.md) now starts with actual
+station walking/boarding and returns through physical moving-station capture,
+service and disembarking. Assisted/Pilot traces retain an uninterrupted session
+beside each checkpoint-resumed session, meter actual thrust, and leave one jump
+charge before service. Native replay consumes the same controls and checks full
+C++ saves, current-world cues and pilot continuity. This advances #194; standard
+replacement recovery #247 and final visual/manual qualification remain open.
