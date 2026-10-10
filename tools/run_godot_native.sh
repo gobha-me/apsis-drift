@@ -3,11 +3,15 @@
 set -euo pipefail
 
 usage() {
-    echo 'usage: tools/run_godot_native.sh (--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH) [--headless-validate]' >&2
+    echo 'usage: tools/run_godot_native.sh (--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH) [--headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
 }
 
 selection=''
 headless_validate=false
+audio_arguments=()
+audio_hum=''
+audio_propulsion=''
+audio_persist=''
 for argument in "$@"; do
     case "$argument" in
         --new-game=*|--continue=*)
@@ -24,6 +28,24 @@ for argument in "$@"; do
             fi
             headless_validate=true
             ;;
+        --audio-hum=*|--audio-propulsion=*)
+            value="${argument#*=}"
+            if [[ "$value" != /* ]]; then usage; exit 2; fi
+            if [[ "$argument" == --audio-hum=* ]]; then
+                if [[ -n "$audio_hum" ]]; then usage; exit 2; fi
+                audio_hum="$value"
+            else
+                if [[ -n "$audio_propulsion" ]]; then usage; exit 2; fi
+                audio_propulsion="$value"
+            fi
+            audio_arguments+=("$argument")
+            ;;
+        --audio-persist=*)
+            value="${argument#*=}"
+            if [[ -n "$audio_persist" || ( "$value" != true && "$value" != false ) ]]; then usage; exit 2; fi
+            audio_persist="$value"
+            audio_arguments+=("$argument")
+            ;;
         --help|-h)
             usage
             exit 0
@@ -38,6 +60,9 @@ if [[ -z "$selection" ]]; then
     usage
     exit 2
 fi
+if [[ ( -n "$audio_hum" && -z "$audio_propulsion" ) || \
+      ( -z "$audio_hum" && -n "$audio_propulsion" ) || \
+      ( -n "$audio_persist" && -z "$audio_hum" ) ]]; then usage; exit 2; fi
 if [[ "$selection" == --continue=* && "${selection#--continue=}" != /* ]]; then
     echo 'Continue requires an absolute save path.' >&2
     exit 2
@@ -73,10 +98,10 @@ fi
 cmake --build "$native_build" --target apsis_freedom_bridge --parallel 4
 
 engine_args=(--path "${repo_dir}/godot" \
-    --scene res://scenes/native_start_shell.tscn --audio-driver Dummy)
-script_args=("$selection")
+    --scene res://scenes/native_start_shell.tscn)
+script_args=("$selection" "${audio_arguments[@]}")
 if [[ "$headless_validate" == true ]]; then
-    engine_args+=(--headless)
+    engine_args+=(--headless --audio-driver Dummy)
     script_args+=(--validate-only)
 else
     python3 "${repo_dir}/tools/prepare_freedom_native_assets.py" \

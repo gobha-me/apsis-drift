@@ -72,6 +72,9 @@ var error := ""
 var activated := false
 var staged_model: Node3D
 var mode_change_pending := false
+var ship_audio: Node
+var audio_preferences: RefCounted
+var quit_handler: Callable
 
 
 static func actuator_fractions(axes: PackedFloat64Array) -> PackedFloat64Array:
@@ -499,6 +502,13 @@ func setup_controls() -> void:
 	controls_menu.controls = player_input
 	controls_menu.saved_flight = true
 	controls_menu.saved_wayfarer = state.frame_id == "2"
+	controls_menu.ship_audio_available = ship_audio != null
+	controls_menu.audio_preferences = audio_preferences
+	if ship_audio != null:
+		controls_menu.ship_audio_muted.connect(ship_audio.set_muted)
+		controls_menu.audio_mix_changed.connect(func():
+			var levels: Dictionary = audio_preferences.levels
+			ship_audio.set_mix_levels(levels.master, levels.machinery, levels.propulsion, levels.atmosphere))
 	add_child(controls_menu)
 	var survey_column: Node = controls_menu.save_button.get_parent()
 	controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
@@ -517,7 +527,9 @@ func setup_controls() -> void:
 	controls_menu.save_requested.connect(open_save_dialog)
 	controls_menu.assistance_requested.connect(request_assistance)
 	controls_menu.port_requested.connect(port_command)
-	controls_menu.quit_requested.connect(func(): get_tree().quit())
+	controls_menu.quit_requested.connect(func():
+		if quit_handler.is_valid(): quit_handler.call()
+		else: get_tree().quit())
 	controls_menu.sync_saved_state(state, false)
 	controls_menu.show_menu("Seated in Wayfarer. Release controls, then resume to fly." if state.get("boarding", {}).get("state") == "seated" else "Paused after Continue. Release controls, then resume explicitly.")
 	refresh_control_hint()

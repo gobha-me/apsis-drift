@@ -77,12 +77,14 @@ This starter implementation commits in-range, free-space departures with arrival
 volumes clear of the tested star/planet spheres. That is not a general safety
 certificate. Atmospheric jumps, extended reach, wrong-system arrivals, condition
 stress and early repeat consequences require the unselected policies in #248/#253.
-Standard replacement-craft recovery remains unimplemented in #247. No hard
+Explicit [standard replacement-craft recovery](FREEDOM_RECOVERY.md) is implemented;
+automatic loss detection remains separate. No hard
 cooldown or invented damage/death law is added here. Full body-render redaction remains #215.
 The [bounded normal-trip trace](FREEDOM_NATIVE_ROUNDTRIP.md) composes real station
 departure, neighboring observation, physical return docking/service and
-disembarking. Wider recovery acceptance remains #194/#247; the separate planetary
-voyage retains surface-flight coverage.
+disembarking, including real ALIGNED/OFFSET Pilot consequences. The separate
+planetary voyage retains surface-flight coverage; manual/controller/hardware
+acceptance remains #244/#245.
 
 `native-first-jump-contract` tests actual C++ round trips for three seeds in both
 piloting profiles, cancellation, every saved boundary, malformed saves and station

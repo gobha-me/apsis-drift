@@ -51,6 +51,7 @@ TESTS = {
     "native_station_view": "native_assets",
     "wayfarer_frame": "native_assets",
     "saved_flight": "freedom_saves",
+    "native_audio": "freedom_saves",
     "first_jump": "freedom_saves",
     "native_recovery": "freedom_saves",
     "native_port": "freedom_saves",
@@ -262,7 +263,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", *ROUNDTRIP_TESTS, "native_surface") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_planetary", "native_voyage", *ROUNDTRIP_TESTS, "native_surface") for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -666,6 +667,8 @@ def main(argv=None):
             arguments.append(str(work / "flight-18.json"))
         if name == "saved_flight":
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "flight-trace.json", "corrupt.json", "freedom-0.json", "native-assets", "flight-overflow.json")]
+        if name == "native_audio":
+            arguments = [str(work / path) for path in ("wayfarer-flight.json", "corrupt.json", "native-assets")]
         if name == "native_walk":
             arguments = [str(work / path) for path in ("journey.json", "journey-trace.json", "native-assets")]
         if name == "native_port":

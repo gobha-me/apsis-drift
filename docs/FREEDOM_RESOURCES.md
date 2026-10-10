@@ -57,20 +57,24 @@ by this cut. There is no hidden mid-flight migration.
 The cockpit's free replenishment action validates the actual attached supported
 station port and matching craft/tick, then fills both pools exactly without
 advancing time. A nearby free craft, elapsed wall time, pause or reload cannot
-refill. Repeating service is idempotent. The provider is available to station
-service #246; no market or generic inventory is involved. Standard replacement
-recovery and its player-facing flow remain #247; depletion does not invent an
-automatic rescue.
+refill. Repeating service is idempotent. The provider supplies station service
+#246; no market or generic inventory is involved.
+[Explicit standard replacement recovery](FREEDOM_RECOVERY.md) uses the same
+baseline reserves for a distinct replacement craft; depletion does not invent
+an automatic rescue.
 
 The resource adapter composes with the **retained historical** intersystem jump
 owner: charge availability before spool, candidate arrival binding plus one
 charge at actual commit, no charge for cancellation, no second debit on arrival
 or repeated completion. Its historical mission transitions remain compatibility
 behavior and are not a new Freedom movement gate. Native mission-free neighboring
-travel (#176/#194) must consume this provider when its own owner is implemented.
-This adapter and persisted native charge reserve do not claim that native
-outbound/return travel, committed native jump-save continuation or the full #251
-integration acceptance already work.
+travel now consumes this provider through its own
+[saved travel owner](FREEDOM_NATIVE_TRAVEL.md). The
+[continuous round trip](FREEDOM_NATIVE_ROUNDTRIP.md) spends two of three charges,
+physically captures the home station and replenishes both pools. Complete saves
+and independent continuation agree under both compilers, including commitment
+and transit. This qualifies the selected #251/#246 consumers; wider manual,
+controller and hardware acceptance remains #244/#245.
 
 ## Validation boundary
 
