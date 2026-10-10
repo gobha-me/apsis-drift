@@ -78,13 +78,12 @@ no new action bindings were added. Restraint refinements remain a separate study
 
 The [physical orbital catalog](PHYSICAL_LOCAL_SYSTEM.md),
 [rotation/star geometry provider](PLANET_ROTATION.md) and
-[rigid-frame handoffs](RIGID_FRAME_HANDOFF.md) are tested C++ foundations, not
-yet replacement gameplay physics. The opt-in
-[physical-home native study](NATIVE_PHYSICAL_HOME.md) adds catalog-owned startup
-and same-tick star lighting while retaining nonrotating flight. Persistent saved
-recipe selection, coherent rotating terrain/ship/light presentation and the
-remaining physical landing loop are still required. Do not relabel this lab
-or its preserved standalone seed-42 fixture as a completed persistent universe.
+[rigid-frame handoffs](RIGID_FRAME_HANDOFF.md) supply the C++ foundations now
+consumed by [saved native flight](SAVED_NATIVE_FLIGHT.md) and landing. The opt-in
+[physical-home native study](NATIVE_PHYSICAL_HOME.md) remains its earlier,
+separate checkpoint; its standalone fixture is not the persistent game.
+Current saved journeys select their actual recipes, shared rotation/star clock
+and terrain owner. Broader visual/hardware acceptance remains #244/#245.
 
 [Freedom milestone](https://github.com/gobha-me/apsis-drift/milestone/10) and
 [tracking epic #243](https://github.com/gobha-me/apsis-drift/issues/243) replace
@@ -148,8 +147,10 @@ constrained station co-motion, same-tick release and explicit format19 persisten
 Fresh New Game now starts a format21 saved starting assembly around the supported
 format20 station walk described below. The selected stowed Wayfarer presentation
 and C++ contact share that assembly; historical saves retain their original model.
-Boarding, seating, departure and surface contact are still being integrated;
-the complete owner handoff remains open.
+Boarding, seating, departure, surface walking and physical home return are now
+integrated in the [station-to-surface journey](FREEDOM_SURFACE_WALK.md).
+The complete owner handoff remains open for manual/controller and hardware
+qualification; integration evidence does not claim that acceptance.
 
 Missions, economy, carriers, shipbuilder UI, populated stations and full
 large-ship interiors remain outside this first path. Existing mission/career
@@ -321,3 +322,14 @@ terrain before committing a new station/walker view. The declared loss fixtures
 follow actual neighboring-system travel; collision fatality detection, living-
 pilot rescue, costs and hazardous-jump laws are separate or unselected. Wider
 Broader native hardware and manual First Flight qualification remain #244/#245.
+
+## Planetary scale contract — 2026-10-10
+
+The [physical/visual contract](PLANETARY_SCALE_CONTRACT.md) records metre scale,
+reference altitude versus generated clearance, exact selected-world ownership,
+frozen-camera projection targets and measurable feature/sample criteria.
+Its fixture matrix covers approach, entry, landed and actual suited eyes at
+compact/1080p/4K outputs with explicit internal resolution. This is the #208
+research definition, not new terrain, a renderer implementation, a dynamic
+resolution setting or proof that every target view has passed. Preserve the
+working prototype and record missing consumer/hardware evidence separately.

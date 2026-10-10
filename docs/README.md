@@ -36,6 +36,8 @@ player's station-to-flight journey.
 ## Simulation, assets and bounded contracts
 
 - [Seed derivation](SEED_DERIVATION.md) and [planet generation](PLANET_GENERATION.md)
+- [Body identity and circular hierarchy](BODY_EPHEMERIS.md): compatible catalog projections, parent transforms and full-width target serialization.
+- [Planetary scale and surface-fidelity contract](PLANETARY_SCALE_CONTRACT.md): physical units, handoffs and capture/fixture targets.
 - [Immutable planetary ambient environment](PLANET_AMBIENT.md)
 - [Live Freedom resources](FREEDOM_RESOURCES.md)
 - [Freedom starting chart and nearby topology](FREEDOM_TOPOLOGY.md)

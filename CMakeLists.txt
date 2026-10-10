@@ -440,6 +440,7 @@ add_library(apsis_drift_core STATIC
   src/planet_ambient.cpp
   src/craft_environment_assessment.cpp
   src/physical_local_system.cpp
+  src/body_ephemeris.cpp
   src/orbital_telemetry.cpp
   src/orbit_hold.cpp
   src/vacuum_dynamics.cpp
@@ -1444,6 +1445,13 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME physical-local-system-contract COMMAND apsis-drift-physical-local-system-tests)
   set_tests_properties(physical-local-system-contract PROPERTIES TIMEOUT 90)
+
+  add_executable(apsis-drift-body-ephemeris-tests test/body_ephemeris_test.cpp)
+  target_link_libraries(apsis-drift-body-ephemeris-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-body-ephemeris-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME body-ephemeris-contract COMMAND apsis-drift-body-ephemeris-tests)
+  set_tests_properties(body-ephemeris-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-planet-ambient-tests test/planet_ambient_test.cpp)
   target_link_libraries(apsis-drift-planet-ambient-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-planet-ambient-tests PRIVATE
