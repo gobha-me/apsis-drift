@@ -7,6 +7,13 @@ drive. After arrival and a bounded ship observation, the pilot jumps home,
 intercepts the moving station, docks, replenishes and disembarks through the
 original entry. No mission, earned capability, money or upgrade is required.
 
+Two opt-in Pilot traces deliberately align both departures or hold a twenty-degree
+heading offset. The test pilot brakes drift and rotates with real actuators before
+each spool, including a physical quarter-turn for the return reversal. Commitment
+must retain the selected grade, a clear actual arrival and its documented envelope:
+the offset radius is ten times the aligned radius. Both traces still return to the
+moving station, pay two charges, replenish and disembark.
+
 Every move uses the public C++ session commands. A test controller supplies
 signed actuator demands, not pose or velocity writes. Godot replays their exact
 double values through the production walking/flight views, chart selection,
@@ -47,10 +54,24 @@ python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
   --test native_roundtrip --test native_roundtrip_pilot
 ```
 
+For the deliberate Pilot grades, select `--test native_roundtrip_pilot_aligned`
+and `--test native_roundtrip_pilot_offset`. Their committed heading, drift and
+uncertainty display are checked against C++ evidence as well as complete saves.
+
 These are accelerated semantic-input and headless integration checks. They do
-not qualify manual controller handling, GPU appearance, performance or fun. The
-approved [standard recovery provider](FREEDOM_RECOVERY.md) separately checks
-declared losses after actual neighboring travel. Hazardous and extended-jump
-consequences remain the unselected #248/#253 policies; visual/manual and further
-intentional Pilot-grade qualification keep #194 open beyond the normal trip.
-Planetary surface flight remains covered by the existing separate voyage.
+not qualify manual controller handling, performance or fun. A separate graphical
+review replays both deliberate Pilot trips with the Compatibility/llvmpipe software
+renderer, captures all nineteen checkpoints per trip, and preserves the same full
+saves during frame waits. The neighboring body, home direction, actual station and
+displayed commitment consequences follow the authoritative world. Source, command,
+save and image hashes accompany the retained evidence. This is rendered correctness
+on one backend; broader hardware and manual/controller qualification remain
+[#244](https://github.com/gobha-me/apsis-drift/issues/244) and
+[#245](https://github.com/gobha-me/apsis-drift/issues/245).
+
+The dense scrolling HUD and plain planetary materials remain refinements under
+the existing cockpit/terrain owners. The approved
+[standard recovery provider](FREEDOM_RECOVERY.md) separately checks declared losses
+after actual neighboring travel. Hazardous and extended-jump consequences remain
+the unselected #248/#253 policies. Planetary surface flight remains covered by the
+existing separate voyage.
