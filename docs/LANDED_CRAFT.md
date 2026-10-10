@@ -42,8 +42,9 @@ velocity, including planet rotation once. The transient aid uses rated thrust
 until every pad is at least 3 m clear, then returns control with gear deployed.
 Its deadline is 10 simulation seconds. The pilot can interrupt it. Stow gear
 before approaching or capturing a station port. The existing atmospheric and
-orbital dynamics continue to own flight. Current flight dynamics do not yet
-consume fuel; resource accounting remains a separate work item.
+orbital dynamics continue to own flight. Actual gross propulsion consumes the
+shared [Freedom flight quantity](FREEDOM_RESOURCES.md); atmospheric drag and
+rotating-ground constraints do not become fuel channels.
 
 ## Save compatibility
 
@@ -79,6 +80,12 @@ Gear presentation currently selects the authored stowed/deployed calibration
 endpoints immediately. It adds no new asset or mechanism study. Compression
 animation, swept impact response, EVA/hatch exit, taxiing, terrain detail and
 manual pilot acceptance remain separate work.
+
+The paused **Surface conditions** action exposes the shared
+[starter environmental reference](CRAFT_ENVIRONMENT_ASSESSMENT.md) through
+observed knowledge. Unknown conditions remain UNKNOWN. This reference query
+does not replace the actual terrain/motion/hull qualification above; saved
+environmental commitment policy remains part of #102.
 
 The software Compatibility captures currently expose close-ground depth artifacts.
 These images establish composed state/gear integration, not finished terrain

@@ -227,6 +227,8 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 		root.add_child(view)
 		view.set_process(false)
 		check(view.initialize(owner, assets), "HUD profile view refused: " + view.error)
+		view.show_surface_conditions()
+		check("no selected environmental survey" in view.surface_conditions_text() and owner.get_freedom_flight_state() == before and view.paused, "Historical survey invented an owner, changed state or resumed")
 		for frame in 3:
 			await process_frame
 		if before.frame_id == "2":

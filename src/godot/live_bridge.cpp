@@ -5,6 +5,7 @@
 #include "apsis_drift/godot/surface_start.hpp"
 #include "apsis_drift/godot/thrust_flight.hpp"
 
+#include "apsis_drift/craft_environment_assessment.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/operating_motion.hpp"
 #include "apsis_drift/station_geometry.hpp"
@@ -272,6 +273,9 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_freedom_craft_binding);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_start"),
                                 &FreedomBridge::get_freedom_start);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("get_freedom_environment_assessment", "operation"),
+        &FreedomBridge::get_freedom_environment_assessment);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_walk_state"),
                                 &FreedomBridge::get_freedom_walk_state);
     godot::ClassDB::bind_method(
@@ -1460,6 +1464,46 @@ class FreedomBridge : public godot::RefCounted {
   auto get_freedom_flight_state() const -> godot::Dictionary {
     return saved_flight ? project_flight_state(*saved_flight)
                         : godot::Dictionary{};
+  }
+
+  auto get_freedom_environment_assessment(std::int64_t operation) const
+      -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!saved_flight || operation < 0 || operation > 4) {
+      result["error"] = "Select a flight and supported surface operation";
+      return result;
+    }
+    const auto& session = saved_flight->session;
+    if (!session.knowledge()) {
+      result["error"] = "This save has no selected environmental survey";
+      return result;
+    }
+    const auto& flight = session.document().flight;
+    const auto recipe =
+        generate_planet_ambient_recipe(session.system(), *flight.frame.planet,
+                                       session.knowledge()->recipe.ambient);
+    if (!recipe) {
+      result["error"] = "The current body's environmental owner is unavailable";
+      return result;
+    }
+    const auto assessed = query_known_craft_environment(
+        session.system(), *recipe, flight.craft,
+        static_cast<CraftEnvironmentOperation>(operation), *session.knowledge(),
+        flight.tick);
+    if (!assessed) {
+      result["error"] =
+          "The current environmental survey could not be validated";
+      return result;
+    }
+    const auto name = [](CraftEnvironmentRating rating) {
+      return godot::String{craft_environment_rating_name(rating).data()};
+    };
+    result["rating"] = name(assessed->rating);
+    result["shielding_thermal"] = name(assessed->axes[0]);
+    result["structural"] = name(assessed->axes[1]);
+    result["propulsion"] = name(assessed->axes[2]);
+    result["operation_supported"] = assessed->operation_supported;
+    return result;
   }
 
   auto get_wayfarer_frame() const -> godot::String {
