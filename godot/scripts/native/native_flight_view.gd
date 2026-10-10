@@ -872,6 +872,7 @@ func toggle_pause() -> void:
 	if not focused or save_dialog.visible:
 		hide_exhaust()
 		return
+	if controls_menu.back_from_nested(): return
 	observe_neutral_controls()
 	if not controls_armed:
 		save_status.text = "Release all mapped flight controls before resuming."

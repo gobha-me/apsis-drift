@@ -107,7 +107,7 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Station HUD has horizontal overflow")
 		var font_pixels: float = view.telemetry.get_theme_font_size("font_size") * pixels.x / view.size.x
 		check(font_pixels >= 17.5 and font_pixels <= 20.5, "Station HUD font shrank in small window")
-		for button in [view.pause_button, view.save_button, view.load_button, view.title_button]:
+		for button in [view.pause_button, view.save_button, view.load_button, view.settings_button, view.title_button]:
 			check(button.size.y * pixels.y / view.size.y >= 39.5, "Station action height shrank")
 		for label in [view.telemetry, view.hud_hint, view.save_status]:
 			check(label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and label.size.y >= label.get_minimum_size().y, "Station text clipped or lost wrapping")
@@ -159,7 +159,12 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		check(root.gui_get_focus_owner() == view.load_button and view.hud_scroll.get_global_rect().encloses(view.load_button.get_global_rect()), "Selected D-pad did not reveal Load")
 		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
 		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
+		check(root.gui_get_focus_owner() == view.settings_button and view.hud_scroll.get_global_rect().encloses(view.settings_button.get_global_rect()), "Selected D-pad did not reveal Settings")
+		joy_button(JOY_BUTTON_DPAD_DOWN, true, device)
+		joy_button(JOY_BUTTON_DPAD_DOWN, false, device)
 		check(root.gui_get_focus_owner() == view.title_button and view.hud_scroll.get_global_rect().encloses(view.title_button.get_global_rect()), "Selected D-pad did not reveal Title")
+		joy_button(JOY_BUTTON_DPAD_UP, true, device)
+		joy_button(JOY_BUTTON_DPAD_UP, false, device)
 		joy_button(JOY_BUTTON_DPAD_UP, true, device)
 		joy_button(JOY_BUTTON_DPAD_UP, false, device)
 		joy_button(JOY_BUTTON_DPAD_UP, true, device)
@@ -409,6 +414,90 @@ func check_stick_preferences(view: Control, owner: Variant, path: String, bytes:
 	check(input_map_snapshot() == mapping and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Station preference reads changed mappings or complete C++ save")
 
 
+func check_station_settings(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	var provider: Node = view.preferences_provider
+	var original_settings: Dictionary = provider.settings.duplicate(true)
+	var original_source: Dictionary = provider.source_document.duplicate(true)
+	var original_path: String = provider.settings_path
+	var original_persist: bool = provider.persist
+	var writable: bool = provider.preferences_writable
+	var config_path := path + ".pending-controls.json"
+	provider.settings_path = config_path
+	provider.persist = true
+	provider.preferences_writable = true
+	check(not FileAccess.file_exists(config_path), "Station pending test must own a new file")
+	view.set_paused(true)
+	view.settings_button.grab_focus()
+	physical_key(KEY_ENTER, true)
+	physical_key(KEY_ENTER, false)
+	check(view.settings_open() and not view.hud_scroll.visible and view.paused and not provider.enabled, "Station Settings failed to open with gameplay provider disabled")
+	view.settings_view.pending.deadzone = 0.31
+	check(provider.settings == original_settings and not FileAccess.file_exists(config_path), "Pending station settings adopted or wrote before Apply")
+	view.resume_requested()
+	view.open_save_dialog()
+	check(view.paused and not view.save_dialog.visible, "Nested station Settings leaked Resume or Save As")
+	physical_key(KEY_ESCAPE, true)
+	physical_key(KEY_ESCAPE, false)
+	for frame in 3: await process_frame
+	check(not view.settings_open() and view.paused and root.gui_get_focus_owner() == view.settings_button and provider.settings == original_settings, "Station Cancel resumed, adopted or lost invoking focus")
+	var old_device: int = view.selected_pad
+	var old_devices: Dictionary = view.available_pads.duplicate()
+	view.selected_pad = 41
+	view.available_pads = {41: true, 42: true}
+	view.open_settings()
+	joy_button(JOY_BUTTON_B, true, 42)
+	joy_button(JOY_BUTTON_B, false, 42)
+	check(view.settings_open() and view.paused, "Foreign pad dismissed station Settings")
+	joy_button(JOY_BUTTON_B, true, 41)
+	joy_button(JOY_BUTTON_B, false, 41)
+	check(not view.settings_open() and view.paused, "Selected station B did not return one level")
+	view.open_settings()
+	joy_button(JOY_BUTTON_START, true, 41)
+	joy_button(JOY_BUTTON_START, false, 41)
+	check(not view.settings_open() and view.paused, "Selected station Start resumed from nested Settings")
+	view.selected_pad = old_device
+	view.available_pads = old_devices
+	view.open_settings()
+	view.settings_view.pending.deadzone = 0.31
+	view.settings_view.apply_pending()
+	await process_frame
+	check(view.settings_open() and view.paused and is_equal_approx(view.stick_preferences.deadzone, 0.31) and FileAccess.file_exists(config_path), "Station Apply failed to persist/adopt without resuming")
+	var persisted := FileAccess.get_file_as_bytes(config_path)
+	provider.settings_path = config_path + ".missing/controls.json"
+	view.settings_view.pending.curve = 2.1
+	var adopted: Dictionary = provider.settings.duplicate(true)
+	view.settings_view.apply_pending()
+	check(provider.settings == adopted and view.settings_view.pending.curve == 2.1 and FileAccess.get_file_as_bytes(config_path) == persisted, "Failed station Apply lost pending/live/source choices")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	view.settings_view.apply_pending()
+	view.settings_view.cancel()
+	check(view.settings_open() and provider.settings == adopted and view.paused, "Unfocused station Settings accepted Apply/Back")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	for pixels in [Vector2i(640, 450), Vector2i(800, 450), Vector2i(1280, 720)]:
+		view.settings_view.cancel_button.grab_focus()
+		root.size = pixels
+		for frame in 4: await process_frame
+		check(view.settings_view.scroll.get_global_rect().encloses(view.settings_view.cancel_button.get_global_rect()), "Station Settings Cancel clipped after resize " + str(pixels))
+	view.settings_view.cancel()
+	for frame in 4: await process_frame
+	check(root.gui_get_focus_owner() == view.settings_button and view.hud_scroll.get_global_rect().encloses(view.settings_button.get_global_rect()), "Station Settings return focus clipped")
+	view.open_settings()
+	provider.settings_path = config_path
+	view.settings_view.restore_defaults()
+	check(provider.settings == adopted, "Station Restore Defaults adopted before Apply")
+	view.settings_view.apply_pending()
+	check(provider.settings == provider.DEFAULT_SETTINGS and view.paused, "Station defaults failed or resumed")
+	view.settings_view.cancel()
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Station Settings changed complete C++ Save bytes")
+	provider.settings = original_settings
+	provider.source_document = original_source
+	provider.settings_path = original_path
+	provider.persist = original_persist
+	provider.preferences_writable = writable
+	view.stick_preferences = {"deadzone": original_settings.deadzone, "curve": original_settings.curve}
+	DirAccess.remove_absolute(config_path)
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3:
@@ -474,6 +563,7 @@ func run() -> void:
 	view.set_paused(true)
 	await check_hud_layout(view, owner, path, originals[0])
 	check_stick_preferences(view, owner, path, originals[0])
+	await check_station_settings(view, owner, path, originals[0])
 	check(view.advance_requested(60.0, neutral) and owner.get_freedom_walk_state() == start, "Paused view advanced shared time")
 	view.set_paused(false)
 	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)

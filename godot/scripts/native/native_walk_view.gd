@@ -8,6 +8,7 @@ const StationPresentation = preload("res://scripts/native/native_station_view.gd
 const HopperPresentation = preload("res://scripts/characters/hopper_presentation.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const Controls = preload("res://scripts/ui/player_input.gd")
+const ControlSettings = preload("res://scripts/ui/control_settings.gd")
 var stick_settings_path := Controls.SETTINGS_PATH
 var stick_preferences: Dictionary = {}
 var stick_preferences_status := ""
@@ -25,6 +26,10 @@ var board_button: Button
 var save_button: Button
 var load_button: Button
 var title_button: Button
+var settings_button: Button
+var settings_view: Control
+var preferences_provider: Node
+var settings_return_frames := 0
 var save_dialog: FileDialog
 var save_status: Label
 var hud_scroll: ScrollContainer
@@ -220,14 +225,18 @@ func build_ui() -> void:
 	load_button = Button.new()
 	load_button.text = "Load…"
 	load_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible:
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open():
 			pause_controls("Load replaces the journey only after confirmation.")
 			load_requested.emit())
 	column.add_child(load_button)
+	settings_button = Button.new()
+	settings_button.text = "Settings (paused)"
+	settings_button.pressed.connect(open_settings)
+	column.add_child(settings_button)
 	title_button = Button.new()
 	title_button.text = "Title…"
 	title_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible:
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open():
 			pause_controls("Return to title only after discarding unsaved progress.")
 			title_requested.emit())
 	column.add_child(title_button)
@@ -243,6 +252,17 @@ func build_ui() -> void:
 	add_child(save_dialog)
 	save_button.pressed.connect(open_save_dialog)
 	save_dialog.file_selected.connect(save_selected)
+	# The existing preference provider is disabled as a gameplay input source.
+	# Station movement and controller selection stay explicitly owned here.
+	preferences_provider = Controls.new()
+	preferences_provider.settings_path = stick_settings_path
+	preferences_provider.enabled = false
+	add_child(preferences_provider)
+	preferences_provider.set_process_input(false)
+	settings_view = ControlSettings.new()
+	settings_view.controls = preferences_provider
+	settings_view.back_requested.connect(close_settings)
+	add_child(settings_view)
 	save_dialog.canceled.connect(save_canceled)
 	resized.connect(layout_hud)
 
@@ -271,10 +291,12 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [board_button, pause_button, save_button, load_button, title_button]:
+	for button in [board_button, pause_button, save_button, load_button, settings_button, title_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
-	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y)
+	# ScrollContainer lays out integer-sized children; keep its viewport integral
+	# so follow-focus cannot round a bottom action past the clipping edge.
+	hud_scroll.size = Vector2(minf(340 * scale, usable.x), usable.y).floor()
 
 
 func set_paused(value: bool) -> void:
@@ -291,13 +313,16 @@ func pause_controls(reason: String) -> void:
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
-		if focused and save_dialog != null and not save_dialog.visible:
+		if focused and save_dialog != null and not save_dialog.visible and not settings_open():
 			(save_button if pause_button.disabled else pause_button).grab_focus()
 	if save_status != null:
 		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
 
 
 func toggle_pause() -> void:
+	if settings_open():
+		settings_view.cancel()
+		return
 	if paused:
 		resume_requested()
 	else:
@@ -305,7 +330,7 @@ func toggle_pause() -> void:
 
 
 func resume_requested() -> void:
-	if journey_dialog_open: return
+	if journey_dialog_open or settings_open(): return
 	if not error.is_empty() or not focused or save_dialog == null or save_dialog.visible:
 		return
 	# A past neutral frame cannot authorize a later held press (even W+S / A+D).
@@ -348,7 +373,7 @@ func controller_connection_changed(device: int, connected: bool) -> void:
 
 
 func open_save_dialog() -> void:
-	if not focused or save_dialog == null:
+	if not focused or save_dialog == null or settings_open():
 		return
 	pause_controls("Save As preserves the last committed journey state.")
 	save_dialog.popup_centered_ratio(0.75)
@@ -361,6 +386,27 @@ func save_selected(path: String) -> void:
 
 func save_canceled() -> void:
 	pause_controls("Save canceled. Resume explicitly after neutral.")
+
+
+func settings_open() -> bool:
+	return is_instance_valid(settings_view) and settings_view.visible
+
+
+func open_settings() -> void:
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open(): return
+	pause_controls("Control choices stay pending until Apply.")
+	preferences_provider.focused = focused
+	preferences_provider.device = selected_pad
+	hud_scroll.hide()
+	settings_view.open()
+
+
+func close_settings() -> void:
+	stick_preferences = {"deadzone": preferences_provider.settings.deadzone, "curve": preferences_provider.settings.curve}
+	controls_armed = false
+	hud_scroll.show()
+	settings_button.grab_focus()
+	settings_return_frames = 2
 
 
 func load_stick_preferences() -> void:
@@ -472,8 +518,13 @@ func update_view() -> void:
 func _process(delta: float) -> void:
 	if bridge == null or not activated:
 		return
+	if settings_open():
+		stick_preferences = {"deadzone": preferences_provider.settings.deadzone, "curve": preferences_provider.settings.curve}
+	if settings_return_frames > 0:
+		settings_return_frames -= 1
+		if settings_return_frames == 0 and not settings_open(): hud_scroll.ensure_control_visible(settings_button)
 	if paused:
-		observe_neutral_controls()
+		if not settings_open(): observe_neutral_controls()
 		return
 	if not focused or not error.is_empty() or save_dialog.visible:
 		return
@@ -483,9 +534,11 @@ func _process(delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		focused = false
+		if preferences_provider != null: preferences_provider.focused = false
 		pause_controls("Focus lost. Resume explicitly after current neutral input.")
 	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		focused = true
+		if preferences_provider != null: preferences_provider.focused = true
 		controls_armed = false
 
 
@@ -502,6 +555,7 @@ func _input(event: InputEvent) -> void:
 		# Start selects only when the current device is absent; it never resumes.
 		if focused and not save_dialog.visible and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START and available_pads.get(event.device, false) and not available_pads.get(selected_pad, false):
 			selected_pad = event.device
+			if preferences_provider != null: preferences_provider.device = selected_pad
 			pause_controls("Controller selected. Release controls, then Resume explicitly.")
 		get_viewport().set_input_as_handled()
 		return
@@ -513,9 +567,12 @@ func _input(event: InputEvent) -> void:
 	if pressed and (key == KEY_ESCAPE or button == JOY_BUTTON_START or (paused and button == JOY_BUTTON_B)):
 		toggle_pause()
 		get_viewport().set_input_as_handled()
+	elif settings_open():
+		# Let the shared screen handle ordinary selected-controller UI actions.
+		return
 	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
 		var current := get_viewport().gui_get_focus_owner()
-		var buttons := [pause_button, save_button, load_button, title_button]
+		var buttons := [pause_button, save_button, load_button, settings_button, title_button]
 		var direction := -1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1
 		var index := buttons.find(current)
 		for offset in range(1, buttons.size() + 1):
@@ -527,7 +584,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif paused and pressed and (key in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE] or button == JOY_BUTTON_A):
 		var current := get_viewport().gui_get_focus_owner()
-		if current == title_button:
+		if current == settings_button:
+			open_settings()
+		elif current == title_button:
 			title_button.pressed.emit()
 		elif current == load_button:
 			load_button.pressed.emit()

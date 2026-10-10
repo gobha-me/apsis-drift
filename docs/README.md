@@ -8,7 +8,7 @@ player's station-to-flight journey.
 
 - [Native project setup](../godot/README.md)
 - [Native start screen](NATIVE_TITLE.md): seed-based New Game, file Continue and the read-only flight reference.
-- [Native control settings](NATIVE_SETTINGS.md): pending edits, Apply, Cancel and defaults before a journey.
+- [Native control settings](NATIVE_SETTINGS.md): pending edits, Apply, Cancel and defaults at title or during paused flight.
 - [Development, headless tests and quality checks](DEVELOPMENT.md)
 - [Retained terminal build and run](TERMINAL.md)
 - [Godot editor import limitation](GODOT_EDITOR_IMPORT.md)
