@@ -59,6 +59,14 @@ func run() -> void:
 	check(view.surface_walk_menu_button.focus_mode == Control.FOCUS_ALL and not view.surface_walk_menu_button.disabled and view.controls_menu.saved_assist_button.disabled, "Surface menu lost controller focus or assistance guard")
 	check(not view.orbital_forecast.visible and not view.jump_button.visible and not view.assist_button.visible, "Outside HUD retained unrelated flight actions")
 	check("On foot" in view.primary_status.text and "Suit equipped" in view.primary_status.text and not "Reference altitude" in view.primary_status.text, "Suited compact HUD retained ship motion")
+	var help_before: Dictionary = owner.get_freedom_flight_state()
+	view.controls_menu.show_basics()
+	view.controls_menu.basics.page = 9
+	view.controls_menu.basics.refresh()
+	check(view.controls_menu.basics.visible and "On foot" in view.controls_menu.basics._paused.text and "Return through hatch" in view.controls_menu.basics.body.text and "oxygen countdown" in view.controls_menu.basics.body.text, "Actual suited help lost actor, return or endurance boundary")
+	view._process(0.125)
+	check(view.paused and owner.get_freedom_flight_state() == help_before, "Suited reference advanced or replaced the C++ actor")
+	view.controls_menu.close_basics()
 	for button in view.controls_menu.saved_port_buttons.values():
 		check(button.disabled, "Outside controls menu retained a flight action")
 	checkpoint(owner, args[0], args[2], "exited")

@@ -3,9 +3,11 @@ extends MarginContainer
 ## tutorial state machine or flight authority. Bindings come from input owner.
 signal back_requested
 const TITLES := ["Thrust and momentum", "Space is not orbit", "Flight assistance", "Look without steering", "Guidance and prototype limits"]
-const SAVED_TITLES := ["Physical thrust and momentum", "Air and orbital observations", "Physical assistance", "Look without steering", "Origin ports", "Committed saves and limits"]
+const SAVED_TITLES := ["Physical thrust and momentum", "Air and orbital observations", "Physical assistance", "Look without steering", "Origin ports", "Committed saves", "Fuel and station service", "Chart and jumps", "Landing and liftoff", "Suited ground walking", "Recorded loss and recovery"]
+const NativeStatus = preload("res://scripts/native/native_status.gd")
 var saved_flight := false
 var saved_wayfarer := false
+var saved_context: Dictionary = {}
 var controls: Node
 var rotational_coasting := false
 var orbit_preserving_assist := false
@@ -58,7 +60,19 @@ static func saved_page_text(index: int, controls_ref: Node, wayfarer: bool) -> S
 				return "This historical saved craft has no supported Wayfarer docking controls. Its placeholder presentation preserves the original craft configuration.\n\nContinue and Save As preserve that craft. This reference does not substitute a Wayfarer, relocate it or board a pilot."
 			return "Target D1 / D2 selects a port without moving the craft. Release an attachment before changing target.\n\nCapture needs the current port assessment: outward approach, collar separation at most 0.15 m, full attitude within 3°, inward closure 0–0.3 m/s, lateral motion at most 0.2 m/s and angular speed at most 0.02 rad/s. The complete stowed hull must fit the reserved column. Read the current readiness or refusal in the flight view or controls menu.\n\nCapture locks your craft to the station and matches its motion. Thrusters remain off while attached. Release unlocks the craft without changing its position or velocity. %s withdraws below the dock; %s brakes. Clear the 12 m column before forward thrust.\n\nApproach port with thrusters helps an aligned craft below the selected port within 150 m. It uses real propulsion, yields to manual input and has a 60-second limit. Capture remains your action. Pause/focus loss cancels; Continue never arms it. Docking does not board or seat the pilot." % [binding(controls_ref, "fall"), binding(controls_ref, "rise")]
 		5:
-			return "Continue opens paused. Save As records the last committed flight state, including your craft, journey and any port attachment. Held controls and camera offsets are separate from that save.\n\nCancel or failed Save As stays paused. Quit does not autosave. Release every mapped control before explicitly resuming; focus return alone never resumes. Control preferences are separate from world saves.\n\nThis saved view offers no practice relocation or reset. The current boarding route is a prototype. Planetary touchdown, recovery and the complete planetary journey remain incomplete. Fuel accounting and jump travel are not implemented here. Landing gear appearance is not a qualified landing system."
+			return "Continue opens paused. Save As records the last committed state, including your craft, journey, resources and any port attachment or suited ground position. Held controls and camera offsets are separate from that save.\n\nCancel or failed Save As stays paused. Quit does not autosave. Release every mapped control before explicitly resuming; focus return alone never resumes. Control preferences are separate from world saves.\n\nEsc / Start opens controls. Flight instruments & navigation reviews the full readouts and actions while paused; Back to controls stays paused. Opening controls cancels port approach and surface aids. It does not cancel a committed jump.\n\nThis saved view offers no practice relocation or reset. Historical saves retain their selected recipes and craft; Continue does not silently upgrade them."
+		6:
+			return "New Game starts with finite flight fuel and three separate jump charges. Main, retro, translation and attitude actuators share flight fuel; opposed engines can spend fuel even when their net force cancels. Releasing controls stops requested burn, not momentum.\n\nLOW FUEL means reserve; EMPTY or insufficient fuel means the requested propulsion cannot run. Waiting, pausing or reloading does not refill either pool. A remaining jump charge does not power your thrusters.\n\nCapture a supported station port, then choose Replenish flight fuel and jump charges in Flight instruments & navigation. Station service currently refills both pools for free without advancing time. Merely being near a station is not attachment.\n\nHistorical resource-unselected saves show tracking unavailable. Resource readouts report what your selected save actually provides."
+		7:
+			return "Open Flight instruments & navigation, show Starting chart and select a known destination. Chart positions are navigation knowledge; they do not promise a safe landing. Review the current arrival assessment and refusal before choosing Spool jump. No mission or upgrade is required for the starter drive.\n\nThe drive spools for three simulation seconds. If you started it while paused, Resume explicitly after releasing controls. Cancel spool before commitment spends no charge. Commitment spends one charge, then a two-second transit completes; committed transit cannot be canceled. Pause freezes that clock.\n\nArrival changes your location, not your need to pilot. Check motion, local conditions, fuel and remaining charges. HOME is shown only when the origin station is available in the current system; it does not point through a jump or steer you home. Historical saves without a selected chart/travel recipe do not gain one from this reference."
+		8:
+			if not wayfarer: return "This historical craft has no supported Wayfarer landing actions. Reading this reference does not replace the craft or select a landing recipe."
+			return "Find dry, supported ground, align the craft, and slow down before requesting landing. Reference altitude is not height above the generated ground. Check Surface conditions and the current landing refusal; a pretty patch of ground is not clearance.\n\nLand / deploy gear uses your current assistance mode. With assistance OFF it deploys gear for manual landing. With assistance ON it requests a local thruster aid: within 25 m, speed below 5 m/s, alignment within 2.5 degrees, very little spin and nearly level pad heights. It does not find a site, turn the ship upright or overcome inadequate thrust.\n\nManual input, pause or focus loss cancels an active surface aid. Touchdown anchors the craft only after the actual pads and hull fit. Landed thrusters stay off. Choose Liftoff with thrusters to rise clear, then Stow landing gear. These actions remain in the paused instruments/controls menu; resume explicitly to let a requested aid run."
+		9:
+			if not wayfarer: return "This historical craft has no supported Wayfarer suited exit. Its saved flight remains available; this reference creates no substitute pilot or ship."
+			return "Once the Wayfarer is landed and the surface aid has finished, choose Leave Wayfarer · suit. Release controls and Resume explicitly. Ground movement uses fixed WASD / left stick; right-drag / right stick looks around. Flight remapping does not currently change the ground keys.\n\nWalk on supported dry ground. Excessive slope, steps, water and the hull can block movement; this is not a flying camera. Your ship stays landed while you explore.\n\nReturn near the aft ground access and choose Return through hatch. Craft-centre distance helps locate the ship but is not the hatch's return radius. A refusal tells you when to move closer. Return pauses in the pilot seat; resume explicitly before liftoff.\n\nSave As / Continue retain both your ground position and the craft. Suit equipped does not imply an oxygen countdown: pack endurance and exposure damage are not active in this slice. The hatch transfer is currently instant."
+		10:
+			return "A recorded pilot loss freezes ordinary movement and commands. Continue presents the recorded cause and an explicit recovery choice. Standard replacement returns you to a supported safe station with a different individual ship and fresh starter reserves; it is not a tow or repaired original vessel.\n\nPrior observations and retired voyage history survive. Replacement happens only after its scene is ready. A failed asset load leaves the loss pending so you can retry. Save As can retain that pending state; quitting does not autosave.\n\nAn empty tank, a refused landing or an unhelpful position does not automatically declare a death or summon a rescuer. The current slice does not simulate oxygen/exposure deaths, terrain damage, pirate responders or lifeboat rescue. Check the actual refusal or recorded-loss screen rather than assuming help has been dispatched."
 	return ""
 
 func titles() -> Array:
@@ -78,6 +92,7 @@ func _ready() -> void:
 	layout.add_child(heading)
 	var paused := Label.new()
 	_paused = paused
+	paused.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	paused.text = "FLIGHT PAUSED  /  READ-ONLY REFERENCE"
 	paused.add_theme_font_size_override("font_size", 21)
 	paused.modulate = Color(0.65, 0.86, 0.9)
@@ -141,7 +156,13 @@ func refresh() -> void:
 	if not is_instance_valid(heading) or not is_instance_valid(controls):
 		return
 	heading.text = "FLIGHT BASICS  %d / %d  —  %s" % [page+1, titles().size(), titles()[page]]
+	_paused.text = "FLIGHT PAUSED  /  READ-ONLY REFERENCE"
 	body.text = saved_page_text(page, controls, saved_wayfarer) if saved_flight else page_text(page, controls, rotational_coasting, orbit_preserving_assist)
+	if saved_flight and not saved_context.is_empty():
+		var current := NativeStatus.summary(saved_context)
+		_paused.text = "PAUSED / READ-ONLY · " + current.get_slice("\n", 0)
+		# Keep instructions above the fold; full readouts belong on the fuel page.
+		if page == 6: body.text = "Current observations\n" + current + "\n\n" + body.text
 
 func _apply_readable_scale() -> void:
 	# The study normally draws a 1920 logical canvas into a 1280 window. Keep
