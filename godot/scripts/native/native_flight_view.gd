@@ -500,6 +500,8 @@ func setup_controls() -> void:
 	controls_menu.saved_flight = true
 	controls_menu.saved_wayfarer = state.frame_id == "2"
 	add_child(controls_menu)
+	var survey_column: Node = controls_menu.save_button.get_parent()
+	controls_menu.add_button(survey_column, "Surface conditions", show_surface_conditions)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
 		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
@@ -519,6 +521,24 @@ func setup_controls() -> void:
 	controls_menu.sync_saved_state(state, false)
 	controls_menu.show_menu("Seated in Wayfarer. Release controls, then resume to fly." if state.get("boarding", {}).get("state") == "seated" else "Paused after Continue. Release controls, then resume explicitly.")
 	refresh_control_hint()
+
+
+func surface_conditions_text() -> String:
+	var lines := PackedStringArray(["Surface reference envelope"])
+	for operation in [{"name": "Touchdown", "id": 3}, {"name": "Return ascent", "id": 4}]:
+		var assessment: Dictionary = bridge.get_freedom_environment_assessment(operation.id)
+		if assessment.has("error"):
+			return str(assessment.error)
+		lines.append("%s: %s" % [operation.name, assessment.rating])
+		lines.append("Shielding/thermal %s · Structure %s · Thrust %s" % [assessment.shielding_thermal, assessment.structural, assessment.propulsion])
+	lines.append("A close pass can resolve UNKNOWN conditions. Check terrain and flight conditions before landing.")
+	return "\n".join(lines)
+
+
+func show_surface_conditions() -> void:
+	# This action is only in the paused controls menu; querying cannot advance
+	# the C++ clock, cancel an aid, or implicitly resume the flight.
+	controls_menu.show_menu(surface_conditions_text())
 
 
 func refresh_control_hint() -> void:

@@ -93,6 +93,15 @@ func manifest_refusals(trace: Dictionary) -> bool:
 func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	var boarding: Dictionary = owner.get_freedom_boarding_state()
+	if view is FlightView:
+		var paused_before: bool = view.paused
+		var survey_text: String = view.surface_conditions_text()
+		for operation in [3, 4]:
+			var survey: Dictionary = owner.get_freedom_environment_assessment(operation)
+			if not check(not survey.has("error") and survey.get("rating") in ["SAFE", "MARGINAL", "INSUFFICIENT", "UNKNOWN"], "Current world lost its validated environmental survey: " + row.label): return false
+			for axis in ["shielding_thermal", "structural", "propulsion"]:
+				if not check(survey.get(axis) in ["SAFE", "MARGINAL", "INSUFFICIENT", "UNKNOWN"] and str(survey[axis]) in survey_text, "Survey text differs from the C++ knowledge projection: " + row.label): return false
+		if not check(owner.get_freedom_flight_state() == state and view.paused == paused_before, "Survey changed flight or pause at " + row.label): return false
 	if not check(state.system_id == row.system_id and state.station_available == row.station_available and state.jump.phase == row.jump_phase and state.resources.jump_charges == row.jump_charges and state.resources.quantity_quanta == row.flight_quanta and boarding.get("seated", false) == row.seated, "Current world, crew or bill differs: " + row.label): return false
 	if not targeting_grade().is_empty() and row.label in ["outbound-commit", "return-commit"]:
 		var trace: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(OS.get_cmdline_user_args()[0].path_join("trace.json")))

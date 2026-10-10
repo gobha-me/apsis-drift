@@ -54,6 +54,7 @@ func _initialize() -> void:
 	var flight_bytes := FileAccess.get_file_as_bytes(args[5])
 	var bridge: Variant = ClassDB.instantiate("FreedomBridge")
 	check(bridge.get_freedom_start().is_empty(), "Uninitialized bridge exposed a start")
+	check(bridge.get_freedom_environment_assessment(3).has("error"), "Unselected body supplied a surface rating")
 	var extreme: Variant = ClassDB.instantiate("FreedomBridge")
 	check(commit_fixture_new_game(extreme, "18446744073709551615"), "Maximum uint64 seed refused")
 	check(extreme.get_freedom_walk_state().universe_seed == "18446744073709551615", "Maximum seed lost precision through Godot")
@@ -61,6 +62,13 @@ func _initialize() -> void:
 	var new_actor: Dictionary = bridge.get_freedom_walk_state()
 	check(not new_actor.is_empty() and new_actor.universe_seed == "42" and new_actor.tick == "0" and not new_actor.continued, "Ordinary New Game lost its station actor")
 	check(bridge.get_freedom_start().is_empty() and not bridge.get_freedom_flight_state().is_empty(), "New actor was confused with the historical frozen station shell")
+	var survey_source: Dictionary = bridge.get_freedom_flight_state()
+	for operation in [3, 4]:
+		var survey: Dictionary = bridge.get_freedom_environment_assessment(operation)
+		check(survey.get("rating") == "UNKNOWN" and survey.get("shielding_thermal") == "UNKNOWN" and survey.get("structural") == "UNKNOWN" and survey.get("propulsion") == "UNKNOWN", "Starting chart disclosed private surface capability margins")
+	for operation in [-1, 5, 256, 9223372036854775807]:
+		check(bridge.get_freedom_environment_assessment(operation).has("error"), "Invalid operation narrowed into a supported query")
+	check(bridge.get_freedom_flight_state() == survey_source, "Read-only survey or refused query changed complete projected flight")
 	check(bridge.initialize_freedom_continue(args[0]), "Historical station17 Continue refused")
 	var fresh: Dictionary = bridge.get_freedom_start()
 	check(fresh.mode == "freedom" and fresh.universe_seed == "42" and fresh.tick == "0" and fresh.continued, "Historical station identity or clock changed")

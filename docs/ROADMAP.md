@@ -232,7 +232,11 @@ qualification; close-ground presentation and gear/exhaust refinements are
 documented without gating further development.
 
 [Immutable ambient environment](PLANET_AMBIENT.md) supplies separately versioned
-planetary hazard envelopes for future capability and suited walking consumers.
+planetary hazard envelopes for capability and suited walking consumers. The
+[fixed starter assessment](CRAFT_ENVIRONMENT_ASSESSMENT.md) now separates
+shielding/thermal, structural and propulsion margins, with a read-only native
+surface survey redacted through actual knowledge. Saved commitment policy and
+the composed operation acceptance remain #102.
 It preserves existing worlds and saves and introduces no weather clock, force,
 damage or raw cockpit disclosure. Suited planetary walking (#199), knowledge
 and observations (#175/#189), resource state (#133/#251), jump integration and

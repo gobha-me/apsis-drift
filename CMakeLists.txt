@@ -438,6 +438,7 @@ add_library(apsis_drift_core STATIC
   src/rigid_frame_handoff.cpp
   src/planet_rotation.cpp
   src/planet_ambient.cpp
+  src/craft_environment_assessment.cpp
   src/physical_local_system.cpp
   src/orbital_telemetry.cpp
   src/orbit_hold.cpp
@@ -1446,6 +1447,11 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME planet-ambient-contract COMMAND apsis-drift-planet-ambient-tests)
   set_tests_properties(planet-ambient-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-craft-environment-tests test/craft_environment_assessment_test.cpp)
+  target_link_libraries(apsis-drift-craft-environment-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-craft-environment-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME craft-environment-contract COMMAND apsis-drift-craft-environment-tests)
   add_executable(apsis-drift-freedom-resource-tests test/freedom_resources_test.cpp)
   target_link_libraries(apsis-drift-freedom-resource-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
   target_compile_options(apsis-drift-freedom-resource-tests PRIVATE
