@@ -138,6 +138,47 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def finish_work(work, report, keep_work):
+    """Compact only this completed run; failed runs remain replayable."""
+    passed = (len(report["tests"]) == len(report["selected"]) and
+              all(test["status"] == "pass" for test in report["tests"]))
+    if keep_work or not passed:
+        report["retention"] = {"mode": "full", "reason":
+                               "requested" if keep_work else "tests_failed"}
+        return
+    disposable = ["native-assets", "operating-motion", "project/.godot", "cache",
+                  "project/bin/libapsis_freedom_bridge.so"]
+    for name in report["staged_executable_sha256"]:
+        if Path(name).name != name or name in (".", ".."):
+            raise ValueError("staged executable must be a filename")
+        disposable.append(name)
+    for relative in disposable:
+        parent = work
+        for component in Path(relative).parts[:-1]:
+            parent /= component
+            if parent.is_symlink():
+                raise ValueError("generated artifact parent is a symlink")
+    removed = []
+    for relative in disposable:
+        path = work / relative
+        # Never follow a cache/artifact symlink out of this owned run.
+        if path.is_symlink():
+            size = 0
+            path.unlink()
+        elif path.is_dir():
+            size = sum(child.stat().st_size for child in path.rglob("*")
+                       if not child.is_symlink() and child.is_file())
+            shutil.rmtree(path)
+        elif path.is_file():
+            size = path.stat().st_size
+            path.unlink()
+        else:
+            continue
+        removed.append({"path": relative, "bytes": size})
+    report["retention"] = {"mode": "compact", "removed": removed,
+                           "removed_bytes": sum(item["bytes"] for item in removed)}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", required=True, type=Path,
@@ -148,6 +189,8 @@ def main(argv=None):
                         help="per-process deadline in seconds, default 120")
     parser.add_argument("--test", action="append", choices=TESTS,
                         help="repeat to select contracts; default is all")
+    parser.add_argument("--keep-work", action="store_true",
+                        help="retain successful asset/import/binary copies for replay; failures always retain them")
     args = parser.parse_args(argv)
     if not sys.platform.startswith("linux"):
         parser.error("this runner currently stages the Linux .so extension only")
@@ -239,15 +282,19 @@ def main(argv=None):
     # binary halfway through this run. The caller must finish building first.
     shutil.copy2(exporter, work / exporter.name)
     exporter = work / exporter.name
+    staged_executables = [exporter]
     if any(TESTS[name] == "freedom_saves" for name in selected):
         shutil.copy2(start_fixture, work / start_fixture.name)
         start_fixture = work / start_fixture.name
+        staged_executables.append(start_fixture)
     if any(name in selected for name in ("native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS)):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
+        staged_executables.append(planetary_fixture)
     if any(name in selected for name in ("native_surface", "native_surface_walk")):
         shutil.copy2(surface_fixture, work / surface_fixture.name)
         surface_fixture = work / surface_fixture.name
+        staged_executables.append(surface_fixture)
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -260,7 +307,9 @@ def main(argv=None):
                                  for path in sorted(project.rglob("*")) if path.is_file()},
               "extension_descriptor_sha256": sha256(project / "bin/freedom.gdextension"),
               "bridge_sha256": sha256(project / "bin/libapsis_freedom_bridge.so"),
-              "exporter_sha256": sha256(exporter)}
+              "exporter_sha256": sha256(exporter),
+              "staged_executable_sha256": {path.name: sha256(path) for path in staged_executables},
+              "retention": {"mode": "full", "reason": "run_not_completed"}}
 
     def save():
         (work / "report.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -762,7 +811,11 @@ def main(argv=None):
         save()
         print(f"{status.upper()} {name} ({elapsed:.2f}s)", flush=True)
     passed = sum(test["status"] == "pass" for test in report["tests"])
+    finish_work(work, report, args.keep_work)
+    save()
     print(f"{passed}/{len(selected)} native contracts passed; logs retained in {work}")
+    if report["retention"]["mode"] == "compact":
+        print(f"Removed {report['retention']['removed_bytes']} bytes of generated assets, imports and binaries; use --keep-work for replay.")
     return 0 if passed == len(selected) else 1
 
 

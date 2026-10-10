@@ -281,12 +281,18 @@ python3 tools/test_godot_native.py --godot /path/to/godot --build-dir build
 
 This Linux runner stages the selected build's exporter and bridge, copies the
 test project, generates atmospheric/airless and C++ saved-start fixtures, and
-runs 41 explicitly listed contracts headlessly with Dummy audio. Each run gets
-a fresh retained directory under `build-godot`, isolated preferences/cache,
+runs the selected explicitly listed contracts headlessly with Dummy audio. Each run gets
+a fresh directory under `build-godot`, isolated preferences/cache,
 per-test logs and a JSON report with source/binary hashes. It does not build,
 download content, import the editor, launch a visible window or use private
 recordings. Finish building before starting it; the runner does not synchronize
 with concurrent builds.
+
+Successful runs retain compact source, logs, reports and fixture/save outputs;
+generated assets, imports, caches and staged binaries are removed, with hashes
+and removed bytes recorded in the report. Add `--keep-work` to retain a successful
+stage for another replay or capture. Failures retain the full stage. Cleanup
+only affects that newly created run; source studies and earlier runs are untouched.
 
 Nonzero/crash exits, deadlines, engine/script errors, leaked resources and
 missing completion markers fail the run. A zero process exit alone is not a

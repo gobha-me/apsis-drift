@@ -1,6 +1,9 @@
 """Runner control tests; no Godot, audio device, third-party asset or network."""
 import argparse
+import contextlib
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -15,6 +18,120 @@ spec.loader.exec_module(runner)
 
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_successful_work_compacts_generated_payloads_only(self):
+        with tempfile.TemporaryDirectory(prefix="native-retention-") as directory:
+            root = Path(directory)
+            work = root / "run"
+            preserved = ("report.json", "input.log", "snapshot-42.json",
+                         "surface-native/save.json", "project/tests/input_test.gd",
+                         "project/bin/freedom.gdextension", "userdata/save.json")
+            disposable = ("native-assets/station.glb", "operating-motion/motion.glb",
+                          "project/.godot/imported/station.scn", "cache/shader.bin",
+                          "project/bin/libapsis_freedom_bridge.so", "snapshot-exporter")
+            for name in (*preserved, *disposable):
+                path = work / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(name.encode())
+            outside = root / "source-study.glb"
+            outside.write_bytes(b"original source")
+            (work / "native-assets/source-link").symlink_to(outside)
+            expected_bytes = sum((work / name).stat().st_size for name in disposable)
+            report = {"selected": ["input"], "tests": [{"status": "pass"}],
+                      "staged_executable_sha256": {"snapshot-exporter": "hash"}}
+            runner.finish_work(work, report, False)
+            self.assertEqual(report["retention"]["mode"], "compact")
+            self.assertEqual(report["retention"]["removed_bytes"], expected_bytes)
+            for name in preserved:
+                self.assertEqual((work / name).read_bytes(), name.encode())
+            for name in disposable:
+                self.assertFalse((work / name).exists())
+            self.assertEqual(outside.read_bytes(), b"original source")
+
+    def test_failures_and_explicit_replay_retain_work(self):
+        for statuses, keep, reason in ((["pass"], True, "requested"),
+                                       (["engine_diagnostic"], False, "tests_failed"),
+                                       ([], False, "tests_failed")):
+            with tempfile.TemporaryDirectory(prefix="native-retention-") as directory:
+                work = Path(directory)
+                asset = work / "native-assets/station.glb"
+                asset.parent.mkdir()
+                asset.write_bytes(b"replay source")
+                report = {"selected": ["input"],
+                          "tests": [{"status": status} for status in statuses],
+                          "staged_executable_sha256": {}}
+                runner.finish_work(work, report, keep)
+                self.assertEqual(report["retention"], {"mode": "full", "reason": reason})
+                self.assertEqual(asset.read_bytes(), b"replay source")
+
+    def test_cache_symlink_is_unlinked_without_following_it(self):
+        with tempfile.TemporaryDirectory(prefix="native-retention-") as directory:
+            root = Path(directory)
+            work = root / "run"
+            work.mkdir()
+            outside = root / "source"
+            outside.mkdir()
+            (outside / "study.bin").write_bytes(b"keep")
+            (work / "cache").symlink_to(outside, target_is_directory=True)
+            report = {"selected": ["input"], "tests": [{"status": "pass"}],
+                      "staged_executable_sha256": {}}
+            runner.finish_work(work, report, False)
+            self.assertFalse((work / "cache").is_symlink())
+            self.assertEqual((outside / "study.bin").read_bytes(), b"keep")
+
+    def test_cleanup_refuses_external_binary_and_symlinked_parent(self):
+        with tempfile.TemporaryDirectory(prefix="native-retention-") as directory:
+            root = Path(directory)
+            work = root / "run"
+            work.mkdir()
+            outside = root / "source"
+            outside.mkdir()
+            original = outside / "exporter"
+            original.write_bytes(b"keep")
+            report = {"selected": ["input"], "tests": [{"status": "pass"}],
+                      "staged_executable_sha256": {str(original): "hash"}}
+            with self.assertRaises(ValueError):
+                runner.finish_work(work, report, False)
+            report["staged_executable_sha256"] = {}
+            (work / "project").symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                runner.finish_work(work, report, False)
+            self.assertEqual(original.read_bytes(), b"keep")
+
+    def test_runner_wires_retention_after_process_completion(self):
+        with tempfile.TemporaryDirectory(prefix="native-retention-cli-") as directory:
+            root = Path(directory)
+            build = root / "build"
+            binary = build / "src/godot/bin/libapsis_freedom_bridge.so"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"prebuilt bridge")
+            exporter = build / "src/godot/apsis-drift-godot-snapshot"
+            exporter.write_text("#!/usr/bin/env python3\nfrom pathlib import Path\n"
+                                "import sys\nPath(sys.argv[1]).write_text('{}')\n")
+            exporter.chmod(0o755)
+            engine = root / "engine"
+            for index, (code, extra, expected) in enumerate(
+                    ((0, [], "compact"), (0, ["--keep-work"], "full"), (1, [], "full"))):
+                engine.write_text(f"#!/bin/sh\necho '0 failures'\nexit {code}\n")
+                engine.chmod(0o755)
+                output = root / f"output-{index}"
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = runner.main(["--godot", str(engine), "--build-dir", str(build),
+                                          "--output-parent", str(output), "--test", "input", *extra])
+                self.assertEqual(result, code)
+                work, = output.iterdir()
+                report = json.loads((work / "report.json").read_text())
+                self.assertEqual(report["retention"]["mode"], expected)
+                self.assertEqual(report["bridge_sha256"], runner.sha256(binary))
+                self.assertEqual(report["staged_executable_sha256"][exporter.name],
+                                 runner.sha256(exporter))
+                self.assertTrue((work / "input.log").exists())
+                self.assertTrue((work / "snapshot-42.json").exists())
+                self.assertTrue((work / "project/tests/input_test.gd").exists())
+                self.assertEqual((work / "project/bin/libapsis_freedom_bridge.so").exists(),
+                                 expected == "full")
+                self.assertEqual((work / exporter.name).exists(), expected == "full")
+            self.assertEqual(binary.read_bytes(), b"prebuilt bridge")
+
     def test_native_launcher_passes_title_without_an_empty_selection(self):
         source = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
         with tempfile.TemporaryDirectory(prefix="native-title-launch-") as directory:
