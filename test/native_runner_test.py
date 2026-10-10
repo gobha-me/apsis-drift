@@ -27,8 +27,12 @@ class NativeRunnerTests(unittest.TestCase):
             build = root / "build-native"
             build.mkdir()
             (build / "CMakeCache.txt").write_text(
+                "CMAKE_HOME_DIRECTORY:INTERNAL=" + str(root) + "\n"
                 "APSIS_DRIFT_TERMINAL:BOOL=OFF\nAPSIS_DRIFT_GODOT_SPIKE:BOOL=ON\n"
                 "APSIS_DRIFT_GODOT_LIVE:BOOL=ON\n")
+            library = build / "src/godot/bin/libapsis_freedom_bridge.so"
+            library.parent.mkdir(parents=True)
+            library.write_bytes(b"selected default bridge")
             cmake = tools / "cmake"
             cmake.write_text("#!/bin/sh\nexit 0\n")
             cmake.chmod(0o755)
@@ -45,16 +49,92 @@ class NativeRunnerTests(unittest.TestCase):
             self.assertEqual(arguments, ["--path", str(root / "godot"), "--scene",
                              "res://scenes/native_start_shell.tscn", "--",
                              "--assets=" + str(build / "native-freedom-assets")])
+            self.assertEqual((root / "godot/bin/libapsis_freedom_bridge.so").read_bytes(),
+                             library.read_bytes())
 
     def test_native_launcher_rejects_ambiguous_or_relative_selection(self):
         launcher = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
         for arguments in (("--headless-validate",), ("--new-game=",),
                           ("--continue=relative.json",),
                           ("--new-game=42", "--continue=/tmp/freedom.json"),
-                          ("--new-game=42", "--headless-validate", "--headless-validate")):
+                          ("--new-game=42", "--headless-validate", "--headless-validate"),
+                          ("--build-dir=",), ("--build-dir=one", "--build-dir=two"),
+                          ("--build-dir=.",), ("--build-dir=godot/build",),
+                          ("--build-dir=src/build",), ("--build-dir=.git/nope",),
+                          ("--build-dir=/",), ("--build-dir=bad\npath",)):
             result = subprocess.run(["bash", str(launcher), *arguments],
                                     capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 2, arguments)
+
+    def test_native_launcher_reuses_cache_and_replaces_stale_bridge(self):
+        source = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
+        with tempfile.TemporaryDirectory(prefix="native-build-reuse-") as directory:
+            outside = Path(directory)
+            root = outside / "checkout with spaces"
+            tools = root / "tools"
+            tools.mkdir(parents=True)
+            launcher = tools / source.name
+            launcher.write_bytes(source.read_bytes())
+            (tools / "prepare_freedom_native_assets.py").write_text("pass\n")
+            build = root / "build qualified"
+            build.mkdir()
+            cache = build / "CMakeCache.txt"
+            cache.write_text("CMAKE_HOME_DIRECTORY:INTERNAL=" + str(root) + "\n"
+                             "APSIS_DRIFT_TERMINAL:BOOL=OFF\n"
+                             "APSIS_DRIFT_GODOT_SPIKE:BOOL=ON\n"
+                             "APSIS_DRIFT_GODOT_LIVE:BOOL=ON\n")
+            library = build / "src/godot/bin/libapsis_freedom_bridge.so"
+            library.parent.mkdir(parents=True)
+            library.write_bytes(b"qualified chosen bridge")
+            installed = root / "godot/bin/libapsis_freedom_bridge.so"
+            installed.parent.mkdir(parents=True)
+            cmake = tools / "cmake"
+            cmake.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$APSIS_TEST_CMAKE_LOG"\n')
+            cmake.chmod(0o755)
+            engine = tools / "capture-engine"
+            engine.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            engine.chmod(0o755)
+            log = outside / "cmake.log"
+            env = {**os.environ, "GODOT_BIN": str(engine),
+                   "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+                   "APSIS_TEST_CMAKE_LOG": str(log)}
+            for selection in (build.name, str(build)):
+                installed.write_bytes(b"stale unrelated bridge")
+                result = subprocess.run(["bash", str(launcher), "--build-dir=" + selection],
+                                        cwd=outside, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(log.read_text().splitlines(),
+                                 ["--build", str(build), "--target", "apsis_freedom_bridge",
+                                  "--parallel", "4"])
+                self.assertIn("--assets=" + str(build / "native-freedom-assets"),
+                              result.stdout.splitlines())
+                self.assertEqual(installed.read_bytes(), library.read_bytes())
+                self.assertFalse((root / "build-native").exists())
+                self.assertEqual(list(installed.parent.glob(installed.name + ".launch.*.new")), [])
+            cmake.write_text("#!/bin/sh\nexit 27\n")
+            installed.write_bytes(b"retain on failed build")
+            result = subprocess.run(["bash", str(launcher), "--build-dir=" + str(build)],
+                                    cwd=outside, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 27, result.stderr)
+            self.assertEqual(installed.read_bytes(), b"retain on failed build")
+            cmake.write_text("#!/bin/sh\nexit 0\n")
+            copier = tools / "cp"
+            copier.write_text('#!/bin/sh\nprintf "partial" > "$3"\nexit 23\n')
+            copier.chmod(0o755)
+            result = subprocess.run(["bash", str(launcher), "--build-dir=" + str(build)],
+                                    cwd=outside, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 23, result.stderr)
+            self.assertEqual(installed.read_bytes(), b"retain on failed build")
+            self.assertEqual(list(installed.parent.glob(installed.name + ".launch.*.new")), [])
+            copier.unlink()
+            cache.write_text(cache.read_text().replace(str(root), str(outside / "other checkout")))
+            log.unlink()
+            installed.write_bytes(b"retain on refusal")
+            result = subprocess.run(["bash", str(launcher), "--build-dir=" + str(build)],
+                                    cwd=outside, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertFalse(log.exists())
+            self.assertEqual(installed.read_bytes(), b"retain on refusal")
 
     def test_exit_and_markers(self):
         self.assertEqual(runner.verdict("input", 0, False, "Player input: 0 failures"), "pass")

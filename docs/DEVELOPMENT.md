@@ -27,6 +27,18 @@ tools/run_godot_native.sh --new-game=42
 tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
+Reuse an existing native compiler build to avoid another dependency/build copy:
+
+```sh
+tools/run_godot_native.sh --build-dir=build-native-gcc --new-game=42
+```
+
+Build directories are relative to the repository root, or absolute. The default
+is `build-native`. Existing caches must belong to this checkout; source
+directories are refused. Assets are prepared beneath the selected build. The
+launcher atomically installs its selected bridge even when no relink is needed,
+so a previous compiler/build cannot leave a stale library in the native project.
+
 For an explicit native build, including the exporter and contract fixtures:
 
 ```sh
