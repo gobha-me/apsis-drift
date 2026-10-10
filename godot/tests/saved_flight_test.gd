@@ -147,6 +147,41 @@ func check_hold_fields(start: Dictionary) -> void:
 	check(not FlightView.valid_state(malformed), "Disabled hold retained a projected target")
 
 
+func check_saved_menu_layout(view: Control, owner: Variant, directory: String) -> void:
+	var menu: CanvasLayer = view.controls_menu
+	for invalid in [Vector2.ZERO, Vector2(-1, 450), Vector2(800, 0), Vector2(NAN, 450), Vector2(800, INF), Vector2(0.000001, 0.000001)]:
+		check(menu.saved_layout_scale(Vector2(1920, 1080), invalid) < 0 and menu.saved_layout_scale(invalid, Vector2(800, 450)) < 0, "Invalid saved-menu dimensions accepted")
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var source := directory.path_join("menu-layout-before.json")
+	var output := directory.path_join("menu-layout-after.json")
+	check(owner.save_freedom_as(source), "Menu layout baseline save failed")
+	var frozen := FileAccess.get_sha256(source)
+	for pixels in [Vector2i(1280, 720), Vector2i(800, 450), Vector2i(640, 450)]:
+		root.size = pixels
+		menu.layout_saved_menu()
+		for frame in 4: await process_frame
+		var scale := float(pixels.y) / root.get_visible_rect().size.y
+		check(menu.menu_theme.default_font_size * scale >= 18.0 and menu.saved_note.get_theme_font_size("font_size") * scale >= 18.0 and menu.message.get_theme_font_size("font_size") * scale >= 18.0, "Saved menu text shrank at " + str(pixels))
+		check(menu.content_columns.vertical == (pixels.x < 1000) and menu.saved_note.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and menu.binding_heading.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Saved menu lost responsive columns or wrapped instructions")
+		for item in menu.sized_controls:
+			check(item.custom_minimum_size.y * scale >= 44.0, "Saved interactive control shrank at " + str(pixels))
+		for button in [menu.resume_button, menu.save_button, menu.load_button, menu.title_button, menu.saved_hold_button, menu.binding_buttons[0].button, menu.binding_buttons[1].button]:
+			button.grab_focus()
+			var scroll: ScrollContainer = menu.settings_scroll if button in [menu.binding_buttons[0].button, menu.binding_buttons[1].button] else menu.left_scroll
+			# Let the real focus-following path scroll once. Calling ensure here
+			# as well would apply its pending offset twice before layout settles.
+			for frame in 3: await process_frame
+			# Scroll offsets snap to logical pixels; allow less than one physical
+			# pixel at the clipped focus border, never a hidden action or label.
+			check(button.has_focus() and scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect()), "Saved menu action is unreachable at %s: %s · scroll %s · button %s" % [pixels, button.text, scroll.get_global_rect(), button.get_global_rect()])
+		check(view.paused and owner.get_freedom_flight_state() == before and owner.save_freedom_as(output) and FileAccess.get_sha256(output) == frozen, "Menu resize/focus advanced or altered complete C++ save")
+	root.size = Vector2i(1280, 720)
+	menu.layout_saved_menu()
+	menu.resume_button.grab_focus()
+	menu.ensure_entry_focus_visible()
+	for frame in 3: await process_frame
+
+
 func check_hold_controls(view: Control, owner: Variant, directory: String) -> void:
 	var before: Dictionary = owner.get_freedom_flight_state()
 	var baseline := directory.path_join("hold-baseline.json")
@@ -698,6 +733,7 @@ func run() -> void:
 	root.add_child(view)
 	check(view.initialize(owner, args[4]), "Production flight view failed: " + view.error)
 	view.set_process(false)
+	await check_saved_menu_layout(view, owner, args[0].get_base_dir())
 	check_hold_controls(view, owner, args[0].get_base_dir())
 	check(view.paused and not view.cockpit and view.ship.get_child_count() == 2 and view.exhaust != null, "Continue did not start safely paused with the actual model")
 	check(view.terrain.bridge == owner and owner.get_freedom_flight_state() == start, "Terrain/view invented or advanced saved state")

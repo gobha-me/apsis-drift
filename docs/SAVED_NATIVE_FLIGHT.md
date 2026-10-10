@@ -106,6 +106,11 @@ actual current binding names, existing deadzone/response/head-look preferences,
 remapping, Resume, assistance, Save As and Quit. Wayfarer also exposes existing
 port selection/capture/release with the same physical assessment and refusal
 reasons as the HUD. The saved context has no experimental reset or relocation.
+Saved controls maintain at least 18 physical pixels for body text and 44 for
+interactive control height at the checked 1280×720, 800×450 and 640×450 sizes.
+Below 1000 physical pixels wide, action and remapping lists stack with independent
+focus-following scroll; instructions, remapping headings and refusals wrap.
+Resizing or navigating these lists stays paused and preserves the complete save.
 **Flight basics
 (paused)** reuses the existing reference panel with explicit saved-flight pages:
 physical thrust/torque and momentum, air/orbit observations, bounded rotational
@@ -121,7 +126,8 @@ hover or neutral translation braking; a persisted orbit-hold request is separate
 Viewing help does not select or change it. Back returns to controls while paused;
 resume still requires current individual neutrality. Focus return and Save As
 cancellation never resume automatically. The current saved profile also teaches fuel/jump separation, chart travel,
-landing/liftoff, suited return and recorded-loss replacement. The historical
+landing/liftoff, suited return, recorded-loss replacement, station boarding and
+explicit Load/Title confirmations. The historical
 thrust lab keeps its separate limitations; manual/controller and wider journey
 qualification remain in their existing work items.
 

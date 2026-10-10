@@ -47,12 +47,13 @@ hardware and complete First Flight remain separate qualification.
 
 ## Current Freedom reference — 2026-10-10
 
-The saved-flight profile now has eleven pages. In addition to thrust, air/orbit,
+The saved-flight profile now has twelve pages. In addition to thrust, air/orbit,
 assistance, look, Origin ports and committed saves, it explains finite flight
 fuel versus three jump charges, attached free station service, chart selection
 and spool/transit, manual/assisted landing and liftoff, suited ground exit/return,
-and explicit recorded-loss replacement. These pages supersede the earlier
-saved-profile claims that fuel, jump travel and touchdown were unimplemented.
+explicit recorded-loss replacement, and station walking/boarding. The committed
+saves page also explains Load and Title discard confirmations. These pages
+supersede the earlier saved-profile claims that fuel, jump travel and touchdown were unimplemented.
 The historical unsaved thrust lab retains its own genuine prototype limits.
 
 Open **Esc / Start · Controls**, then **Flight basics (paused)**. Examples still
@@ -77,5 +78,9 @@ returning to controls issue no world, survey, movement, fuel or save mutations.
 Keyboard/controller GUI tests retain readable scrolling, focus return, held
 input barriers and complete saved-byte identity; actual native suited help
 consumes the same outside actor before continuing the existing ground loop.
-Title/catalog reference entry and future equipment, environment hazard and
-rescue teaching remain separate work in #180/#136 and their providers.
+The title opens this same reference without creating a world; Back returns to
+title. The supported station journey is described separately from historical
+flight saves, which gain no actor or craft from reading it. Title and saved pause
+entry now cover the shipped Freedom commands under #180. Future equipment,
+environment hazards and rescue teaching belong with those providers when they
+ship; profile catalog and broader Settings remain #136/#135 work.
