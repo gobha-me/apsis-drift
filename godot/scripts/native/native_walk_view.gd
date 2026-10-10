@@ -44,6 +44,7 @@ var paused := false
 var focused := true
 var controls_armed := false
 var selected_pad := -1
+var initial_controller_device := -2
 var available_pads: Dictionary = {}
 var requested_heading := 0.0
 var pitch := 0.0
@@ -169,9 +170,12 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 func activate() -> void:
 	# Called only after the exact C++ pending token commits and view enters tree.
 	activated = true
+	if initial_controller_device != -2:
+		selected_pad = initial_controller_device
+		if selected_pad >= 0: available_pads[selected_pad] = true
 	for pad in Input.get_connected_joypads():
 		available_pads[pad] = true
-		if selected_pad == -1: selected_pad = pad
+		if initial_controller_device == -2 and selected_pad == -1: selected_pad = pad
 	Input.joy_connection_changed.connect(controller_connection_changed)
 	get_window().size_changed.connect(layout_hud)
 	layout_hud()

@@ -11,7 +11,22 @@ func check(value: bool, message: String) -> void:
 func _initialize() -> void:
 	call_deferred("run")
 
+func check_initial_controller() -> void:
+	for device in [-1, 19]:
+		var inherited := Controls.new()
+		inherited.persist = false
+		inherited.initial_device = device
+		root.add_child(inherited)
+		check(inherited.device == device and inherited.needs_neutral, "Controller initialization changed its inherited owner or neutral latch")
+		for action in inherited.ACTIONS:
+			for event in InputMap.action_get_events("pilot_" + action):
+				if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+					check(event.device == (device if device >= 0 else 9999), "Inherited controller did not own the installed action map")
+		inherited.free()
+
+
 func run() -> void:
+	check_initial_controller()
 	var controls := Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true

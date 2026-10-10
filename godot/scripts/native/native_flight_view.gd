@@ -47,6 +47,7 @@ var paused := true
 var focused := true
 var controls_armed := false
 var player_input: Node
+var initial_controller_device := -2
 var controls_menu: CanvasLayer
 var persist_controls := true
 var control_settings_path := PlayerInput.SETTINGS_PATH
@@ -631,6 +632,7 @@ func update_compact_hud() -> void:
 
 func setup_controls() -> void:
 	player_input = PlayerInput.new()
+	player_input.initial_device = initial_controller_device
 	player_input.persist = persist_controls
 	player_input.settings_path = control_settings_path
 	player_input.thrust_mode = true

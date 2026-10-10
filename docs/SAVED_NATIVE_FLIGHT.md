@@ -33,6 +33,12 @@ current individual neutrality before explicit resume; opposed inputs cannot
 cancel through that gate. Removed held mappings remain release barriers. That
 history is bounded to 128 events; overflow conservatively requires complete
 physical input release before rearming.
+
+Boarding, unboarding and in-session Load retain the current controller selection
+while creating fresh input latches. The chosen device owns both mapped flight actions and the
+next station-walking view; another connected pad cannot take over through that
+view change. Initial launch still uses the first connected controller.
+
 Assistance changes explicitly through C++. In paused controls, **Hold current
 orbit radius and plane** selects a circular-orbit target from the current C++
 radius and angular-momentum plane. Selection requires a stable bound orbit above

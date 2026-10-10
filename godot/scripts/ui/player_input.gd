@@ -18,6 +18,8 @@ var source_document: Dictionary = {}
 var preferences_writable := true
 var bindings: Dictionary = {}
 var device := -1
+# -2 retains launch-time discovery; a journey handoff supplies its existing owner.
+var initial_device := -2
 var enabled := true
 var focused := true
 var needs_neutral := true
@@ -40,7 +42,7 @@ func _ready() -> void:
 	if persist:
 		load_settings()
 	var pads := Input.get_connected_joypads()
-	device = pads[0] if not pads.is_empty() else -1
+	device = initial_device if initial_device != -2 else (pads[0] if not pads.is_empty() else -1)
 	install()
 	if device >= 0:
 		print("Controller selected: %s / mapped=%s" % [Input.get_joy_name(device), Input.is_joy_known(device)])

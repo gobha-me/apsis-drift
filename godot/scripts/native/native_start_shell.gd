@@ -329,6 +329,7 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 		return false
 	# No yield or asset operation between the C++ commit and ready-view swap.
 	var previous := current_view
+	inherit_controller(previous, candidate)
 	if previous != null:
 		remove_child(previous)
 	add_child(candidate)
@@ -623,6 +624,15 @@ func confirm_title() -> void:
 	open_title(ClassDB.instantiate("FreedomBridge"), {"mode": "title", "assets": assets_root})
 
 
+static func inherit_controller(previous: Control, candidate: Control) -> void:
+	# Transfer only live device ownership; the fresh view owns its neutral gates.
+	if not (candidate is WalkView or candidate is FlightView): return
+	if previous is WalkView:
+		candidate.initial_controller_device = previous.selected_pad if previous.available_pads.get(previous.selected_pad, false) else -1
+	elif previous is FlightView:
+		candidate.initial_controller_device = previous.player_input.device
+
+
 func switch_journey_view() -> void:
 	if bridge == null or current_view == null: return
 	var walk: Dictionary = bridge.get_freedom_walk_state()
@@ -637,6 +647,7 @@ func switch_journey_view() -> void:
 	var parent := model.get_parent()
 	parent.remove_child(model)
 	var candidate: Control = WalkView.new() if wants_walk else FlightView.new()
+	inherit_controller(previous, candidate)
 	var pending := {"walk_state": walk, "flight_state": bridge.get_freedom_flight_state(), "station_geometry": bridge.get_freedom_station_geometry()}
 	if not candidate.stage(bridge, assets_root, pending, model, true) or not candidate.ready_to_commit():
 		error = candidate.error if not candidate.error.is_empty() else "Wayfarer view handoff failed"
