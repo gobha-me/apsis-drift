@@ -248,7 +248,7 @@ jobs:
           --build-dir build-native
           --output-parent build-native-contracts
           --timeout 600
-          --test freedom_start --test native_shell --test native_save
+          --test input --test control_settings --test freedom_start --test native_shell --test native_save
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight --test native_audio --test first_jump --test native_recovery
           --test native_port --test native_walk

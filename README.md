@@ -22,8 +22,8 @@ tools/run_godot_native.sh --new-game=42
 tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 ```
 
-The [start screen](docs/NATIVE_TITLE.md) offers New Game, Continue, Flight basics
-and Quit. Direct command-line selection accepts one mode. New Game accepts
+The [start screen](docs/NATIVE_TITLE.md) offers New Game, Continue, Flight basics,
+[control Settings](docs/NATIVE_SETTINGS.md) and Quit. Direct command-line selection accepts one mode. New Game accepts
 unsigned 64-bit seeds, including zero.
 It starts a first-person actor on Origin Station's hub floor. WASD or the left
 stick walks; right-drag or the right stick looks. Escape pauses.
