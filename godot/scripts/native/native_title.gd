@@ -4,6 +4,7 @@ signal start_requested(selection: Dictionary)
 signal quit_requested
 const Controls = preload("res://scripts/ui/player_input.gd")
 const Basics = preload("res://scripts/flight/flight_basics.gd")
+const Settings = preload("res://scripts/ui/control_settings.gd")
 var persist_controls := true
 var controls: Node
 var panel: MarginContainer
@@ -15,6 +16,8 @@ var seed: LineEdit
 var new_button: Button
 var continue_button: Button
 var reference_button: Button
+var settings_button: Button
+var settings_view: Control
 var quit_button: Button
 var status: Label
 var reference: Control
@@ -75,6 +78,7 @@ func _ready() -> void:
 	new_button = add_button("New Game", begin_new)
 	continue_button = add_button("Continue…", open_continue)
 	reference_button = add_button("Flight basics", open_reference)
+	settings_button = add_button("Settings", open_settings)
 	quit_button = add_button("Quit", func(): quit_requested.emit())
 	status = Label.new()
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -100,6 +104,10 @@ func _ready() -> void:
 	reference.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(reference)
 	reference.back_requested.connect(back_to_title)
+	settings_view = Settings.new()
+	settings_view.controls = controls
+	add_child(settings_view)
+	settings_view.back_requested.connect(back_to_title)
 	layout_title()
 	new_button.grab_focus()
 
@@ -111,7 +119,7 @@ func add_button(text: String, action: Callable) -> Button:
 	return button
 
 func begin_new() -> void:
-	if busy or not focused or chooser.visible or reference.visible: return
+	if busy or not focused or chooser.visible or reference.visible or settings_view.visible: return
 	if not valid_seed(seed.text):
 		status.text = "Enter a whole unsigned seed from 0 to 18446744073709551615, without signs, spaces or leading zeros."
 		seed.grab_focus()
@@ -120,7 +128,7 @@ func begin_new() -> void:
 	start_requested.emit({"mode": "new_game", "value": seed.text})
 
 func open_continue() -> void:
-	if busy or not focused or reference.visible: return
+	if busy or not focused or reference.visible or settings_view.visible: return
 	# Let the exclusive dialog receive Escape rather than the pause binding.
 	controls.set_process_input(false)
 	chooser.popup_centered_ratio(0.75)
@@ -141,15 +149,27 @@ func refuse(message: String) -> void:
 	if focused: continue_button.grab_focus()
 
 func open_reference() -> void:
-	if busy or not focused or chooser.visible: return
+	if busy or not focused or chooser.visible or settings_view.visible: return
 	panel.hide()
 	reference.open()
 
 func back_to_title() -> void:
+	if settings_view.visible:
+		settings_view.cancel()
+		return
+	if not panel.visible and not reference.visible:
+		panel.show()
+		if focused: settings_button.grab_focus()
+		return
 	if not reference.visible: return
 	reference.hide()
 	panel.show()
 	if focused: reference_button.grab_focus()
+
+func open_settings() -> void:
+	if busy or not focused or chooser.visible or reference.visible: return
+	panel.hide()
+	settings_view.open()
 
 func layout_title() -> void:
 	var pixels := Vector2(get_window().size)
@@ -165,7 +185,7 @@ func layout_title() -> void:
 		panel.add_theme_constant_override("margin_" + side, roundi(32 * scale))
 	column.add_theme_constant_override("separation", roundi(12 * scale))
 	heading.add_theme_font_size_override("font_size", roundi(36 * scale))
-	for button in [seed, new_button, continue_button, reference_button, quit_button]:
+	for button in [seed, new_button, continue_button, reference_button, settings_button, quit_button]:
 		button.custom_minimum_size.y = 44 * scale
 	if chooser.visible: chooser.popup_centered_ratio(0.75)
 

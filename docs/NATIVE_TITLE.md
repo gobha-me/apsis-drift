@@ -1,12 +1,12 @@
 # Native start screen
 
 Run `tools/run_godot_native.sh` to open the title. Choose **New Game** with an
-unsigned 64-bit universe seed, **Continue…** with a JSON save, **Flight basics**
-or **Quit**. New Game starts the actor on Origin Station; the Wayfarer waits
+unsigned 64-bit universe seed, **Continue…** with a JSON save, **Flight basics**,
+[**Settings**](NATIVE_SETTINGS.md) or **Quit**. New Game starts the actor on Origin Station; the Wayfarer waits
 at D1. A seed is a whole decimal value from zero through 18446744073709551615,
 without signs, spaces or leading zeros. The default field contains 42.
 
-Opening the title or its read-only reference generates no C++ world. The
+Opening the title, control Settings or its read-only reference generates no C++ world. The
 reference explains the current Freedom mechanisms and control bindings without
 claiming live observations. Escape/Start or Back returns to the title. Keyboard,
 mouse and ordinary controller focus navigation select actions; the seed field
@@ -38,5 +38,5 @@ rebinds to the accepted next journey. Recorded-loss recovery and the historical
 frozen docked shell keep their existing workflows.
 
 This is title work under #136. Profile catalog browsing, active-slot
-Save/metadata and broader Settings remain separate work. The title makes no
+Save/metadata, pause Settings routing and future providers remain separate work. The title makes no
 automatic save and Quit never autosaves.

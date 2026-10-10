@@ -9,10 +9,13 @@ signal assist_requested(enabled: bool)
 
 const MAX_REMAP_NEUTRAL_EVENTS := 128
 const SETTINGS_PATH := "user://freedom-controls-v4.json"
+const DEFAULT_SETTINGS := {"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0}
 const ACTIONS := ["forward", "backward", "turn_left", "turn_right", "strafe_left", "strafe_right", "rise", "fall", "look_left", "look_right", "look_up", "look_down", "camera", "recenter", "look_hold", "pitch_up", "pitch_down", "roll_left", "roll_right", "assist"]
 const TITLES := ["Main thrust", "Retro thrust", "Yaw left", "Yaw right", "Strafe left", "Strafe right", "Rise", "Fall", "Look left (modifier)", "Look right (modifier)", "Look up (modifier)", "Look down (modifier)", "Cockpit / chase", "Recenter head", "Hold to look", "Pitch up", "Pitch down", "Roll left", "Roll right", "Toggle flight assist"]
 const KEYS := [KEY_W, KEY_S, KEY_A, KEY_D, KEY_Q, KEY_E, KEY_SPACE, KEY_CTRL, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_C, KEY_HOME, KEY_ALT, KEY_I, KEY_K, KEY_Z, KEY_X, KEY_F]
-var settings := {"deadzone": 0.18, "curve": 1.4, "look_speed": 1.6, "invert_look": false, "prompts": 0}
+var settings := DEFAULT_SETTINGS.duplicate(true)
+var source_document: Dictionary = {}
+var preferences_writable := true
 var bindings: Dictionary = {}
 var device := -1
 var enabled := true
@@ -114,33 +117,70 @@ func load_settings(path: String = "") -> void:
 		return
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null or file.get_length() > 65536:
+		preferences_writable = false
 		status = "Controls file unreadable / too large; using defaults."
 		return
 	var document := JSON.new()
 	if document.parse(file.get_as_text()) != OK or not valid_document(document.data):
+		preferences_writable = false
 		status = "Invalid controls file; using defaults."
 		return
 	var value: Variant = document.data
-	settings = value.settings
-	bindings = value.bindings
+	source_document = value.duplicate(true)
+	settings = value.settings.duplicate(true)
+	bindings = value.bindings.duplicate(true)
 
-func save_settings(path: String = "") -> void:
+func apply_preferences(candidate: Dictionary, path: String = "") -> bool:
+	# This provider owns the five scalar settings. Bindings/extensions survive.
+	var pending := settings.duplicate(true)
+	for key in DEFAULT_SETTINGS:
+		if not candidate.has(key):
+			status = "Controls settings are incomplete."
+			return false
+		pending[key] = candidate[key]
+	var document := source_document.duplicate(true)
+	document.merge({"version": 4, "settings": pending, "bindings": bindings.duplicate(true)}, true)
+	if not valid_document(document):
+		status = "Controls settings are invalid."
+		return false
+	if persist and not preferences_writable:
+		status = "Existing controls file cannot be safely replaced. Inspect or move it before applying settings."
+		return false
+	if not write_preferences(document, path): return false
+	settings = pending
+	source_document = document
+	status = "Controls saved." if persist else "Controls applied for this session only."
+	return true
+
+func save_settings(path: String = "") -> bool:
+	return apply_preferences(settings, path)
+
+func write_preferences(document: Dictionary, path: String = "") -> bool:
 	if path.is_empty():
 		path = settings_path
 	if not persist:
-		return
+		return true
+	var encoded := JSON.stringify(document, "\t")
+	if encoded.to_utf8_buffer().size() > 65536:
+		status = "Controls settings exceed the file limit."
+		return false
 	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if file == null:
 		status = "Could not save controls."
-		return
-	file.store_string(JSON.stringify({"version": 4, "settings": settings, "bindings": bindings}, "\t"))
+		return false
+	file.store_string(encoded)
 	file.flush()
 	if file.get_error() != OK:
+		file.close()
+		DirAccess.remove_absolute(path + ".tmp")
 		status = "Could not finish writing controls; previous file retained."
-		return
+		return false
 	file.close()
 	if DirAccess.rename_absolute(path + ".tmp", path) != OK:
+		DirAccess.remove_absolute(path + ".tmp")
 		status = "Could not replace controls file."
+		return false
+	return true
 
 func event_held(event: InputEvent) -> bool:
 	if event is InputEventKey:

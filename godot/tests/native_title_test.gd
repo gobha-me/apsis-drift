@@ -62,6 +62,24 @@ func run() -> void:
 	await settle()
 	check(owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty() and shell.current_view == null, "Title generated a world before selection")
 	check(root.gui_get_focus_owner() == title.new_button, "Title did not focus New Game")
+	title.open_settings()
+	var settings: Control = title.settings_view
+	title.begin_new()
+	check(settings.visible and owner.get_freedom_start().is_empty() and not title.busy, "Settings leaked a New Game selection")
+	settings.fields.deadzone.control.value = 0.35
+	settings.fields.curve.control.value = 2.0
+	settings.fields.look_speed.control.value = 2.4
+	settings.fields.invert_look.control.button_pressed = true
+	# This run owns its isolated user directory, so the next real walker can
+	# consume the same ordinary persisted provider rather than a forged copy.
+	title.controls.persist = true
+	check(not FileAccess.file_exists(title.controls.settings_path), "Isolated title preferences unexpectedly exist")
+	settings.apply_pending()
+	var preferences_path: String = title.controls.settings_path
+	var preferences_bytes := FileAccess.get_file_as_bytes(preferences_path)
+	check(not preferences_bytes.is_empty() and owner.get_freedom_start().is_empty() and owner.get_pending_freedom_start().is_empty(), "Settings Apply created a world or failed persistence")
+	settings.cancel()
+	check(title.settings_button.has_focus(), "Settings did not restore its title action")
 	title.seed.text = "-1"
 	title.new_button.pressed.emit()
 	await settle()
@@ -80,7 +98,7 @@ func run() -> void:
 	for size in [Vector2i(1280, 720), Vector2i(800, 450)]:
 		root.size = size
 		await settle()
-		for control in [title.seed, title.new_button, title.continue_button, title.reference_button, title.quit_button]:
+		for control in [title.seed, title.new_button, title.continue_button, title.reference_button, title.settings_button, title.quit_button]:
 			control.grab_focus()
 			await settle()
 			check(title.scroll.get_global_rect().encloses(control.get_global_rect()), "Title focused action cannot scroll into view: " + str(size))
@@ -126,6 +144,9 @@ func run() -> void:
 	await settle()
 	check(shell.title_view == null and shell.current_view is Walk and owner.get_freedom_walk_state().universe_seed == "0", "Actual seed-zero New Game did not start on station")
 	check(shell.current_view.state.actor_id == "1", "New Game did not create the player actor")
+	check(is_equal_approx(shell.current_view.stick_preferences.deadzone, 0.35) and shell.current_view.stick_preferences.curve == 2.0, "New Game walker did not consume saved title preferences")
+	check(FileAccess.get_file_as_bytes(preferences_path) == preferences_bytes, "Starting the journey rewrote preferences")
+	check(DirAccess.remove_absolute(preferences_path) == OK, "Could not remove title-owned preferences")
 	shell.free()
 	await settle()
 	# A fresh title selects an existing actor save through its connected dialog.

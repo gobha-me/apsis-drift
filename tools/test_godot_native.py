@@ -25,6 +25,7 @@ TESTS = {
     "native_status": "none",
     "validate": "snapshot",
     "input": "none",
+    "control_settings": "none",
     "chase_camera": "none",
     "flight_status": "none",
     "planet_lighting": "none",
