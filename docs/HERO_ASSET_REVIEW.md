@@ -1,5 +1,10 @@
 # Hero asset studies / revision 02
 
+This is retained asset history, not the current native asset selection. Ordinary
+play uses the [packaged Wayfarer and station](NATIVE_STARTER_ASSETS.md).
+References to "current" geometry below describe this study's revisions; see
+[the asset directory guide](../assets/README.md) for their present role.
+
 Historical render review. Cockpit/ship masters and exchange tiers now include
 the [revision-three native review](GODOT_STUDY_03.md); the Cycles PNGs and contact
 sheets described here remain revision-two evidence. Station geometry is unchanged.

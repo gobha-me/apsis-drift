@@ -4,6 +4,8 @@ Run commands from the repository root. Native presentation consumes authoritativ
 C++ state; see [ownership](GODOT_ADOPTION.md) and [the roadmap](ROADMAP.md).
 The [native project guide](../godot/README.md) describes scenes, bridge setup and
 study modes. The [terminal guide](TERMINAL.md) covers the retained frontend.
+See [contributing](../CONTRIBUTING.md) for issue scope, branches and PR review,
+and the [CMake map](../cmake/README.md) for build options and target registration.
 
 ## Requirements
 
@@ -12,6 +14,10 @@ study modes. The [terminal guide](TERMINAL.md) covers the retained frontend.
 - Godot 4.7.2 for the currently qualified native runtime checks; use an installed
   executable or set `GODOT_BIN` to its executable path.
 - clang-format 20, clang-tidy 20 and Clang 20 for repository quality checks.
+
+The current native extension descriptor and runtime runner support **Linux
+x86_64**. Other native platforms are not yet qualified. The C++ headless path
+does not require Godot; its portability checks are separate from native support.
 
 CMake fetches pinned dependencies when compatible installed packages are absent.
 The native/headless build can disable TermForge and RtAudio. Terminal audio adds
@@ -45,7 +51,7 @@ For an explicit native build, including the exporter and contract fixtures:
 cmake -S . -B build-native -DCMAKE_BUILD_TYPE=Release \
   -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF \
   -DAPSIS_DRIFT_GODOT_SPIKE=ON -DAPSIS_DRIFT_GODOT_LIVE=ON
-cmake --build build-native --parallel
+cmake --build build-native --parallel 4
 ctest --test-dir build-native --output-on-failure
 ```
 
@@ -60,13 +66,13 @@ C++ application tests do not require Godot or terminal protocol dependencies:
 cmake -S . -B build-core-gcc -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_COMPILER=g++ \
   -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF
-cmake --build build-core-gcc --parallel
+cmake --build build-core-gcc --parallel 4
 ctest --test-dir build-core-gcc --output-on-failure
 
 cmake -S . -B build-core-clang -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_COMPILER=clang++ \
   -DAPSIS_DRIFT_TERMINAL=OFF -DAPSIS_DRIFT_RTAUDIO=OFF
-cmake --build build-core-clang --parallel
+cmake --build build-core-clang --parallel 4
 ctest --test-dir build-core-clang --output-on-failure
 ```
 
@@ -115,6 +121,13 @@ The formatter rejects versions other than clang-format 20. Lint uses Clang and
 clang-tidy 20, configures a separate analysis build and validates suppression
 policy. Suppressions must name exact checks and include an inline justification
 accepted by `tools/check_nolint.sh`; blanket suppressions are refused.
+
+Full lint configures the retained terminal, RtAudio and MIDI targets as well as
+the native C++ adapters. Unlike the native-only/headless configurations above,
+it needs RtAudio's platform development headers (`libasound2-dev` on Linux)
+and FFmpeg for the configured MIDI audition checks. The CI quality job also
+installs Python NumPy for asset checks. A native-only build passing does not
+replace these full quality checks.
 
 Use `CLANG_FORMAT`, `CLANG_TIDY`, `RUN_CLANG_TIDY` and `CLANGXX` for explicitly
 selected executables. `APSIS_DRIFT_TIDY_BUILD_DIR` and

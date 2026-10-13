@@ -6,6 +6,9 @@ player's station-to-flight journey.
 
 ## Run and develop
 
+- [Contributing workflow](../CONTRIBUTING.md): active issue scope, branches, validation and review.
+- [First Flight instructions](FIRST_FLIGHT.md): station, boarding, departure, exploration, saves and return.
+- [Build modules](../cmake/README.md), [asset layout](../assets/README.md) and [tool entry points](../tools/README.md).
 - [Native project setup](../godot/README.md)
 - [Native start screen](NATIVE_TITLE.md): seed-based New Game, catalog Continue, explicit file opening and the read-only flight reference.
 - [Native save catalog](NATIVE_PROFILES.md): active-slot Save, new-slot Save As, catalog Load and dirty-progress transitions.
