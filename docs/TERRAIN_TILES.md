@@ -2,8 +2,10 @@
 
 Terrain tile generator version 1 turns a `PlanetDescriptor` and the existing
 cube-sphere `TerrainTileKey` into local-flight height and color samples. It is
-application-owned, performs no terminal work, and does not replace the current
-v0.2 flyover terrain until the later Planetfall presentation handoff.
+application-owned, performs no terminal work, and supplies native and headless
+terrain consumers. The [explicit physical local-detail sampler](TERRAIN_LOCAL_DETAIL.md)
+layers a separately selected recipe over these unchanged source vertices;
+ordinary saved terrain and contact retain their existing selection.
 
 ## Tile identity and samples
 
@@ -27,6 +29,10 @@ terrain-generation streams:
 | --- | ---: |
 | `shape` | 1 |
 | `detail` | 2 |
+
+The [local-detail sampler](TERRAIN_LOCAL_DETAIL.md) adds the permanent
+`local_relief = 3` child. Version1 tiles continue to consume only `shape` and
+`detail`; none of their seed vectors or generator arithmetic changes.
 
 Both children use the existing version 1 `SeedDomain::terrain` derivation.
 Generation uses fixed-width integer hashing and fixed-point interpolation; it

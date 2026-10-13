@@ -1,4 +1,12 @@
 if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
+  add_executable(apsis-drift-terrain-local-detail-tests
+    test/terrain_local_detail_test.cpp)
+  target_link_libraries(apsis-drift-terrain-local-detail-tests PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-terrain-local-detail-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
+  add_test(NAME terrain-local-detail-contract
+    COMMAND apsis-drift-terrain-local-detail-tests)
+  set_tests_properties(terrain-local-detail-contract PROPERTIES TIMEOUT 120)
   add_executable(apsis-drift-boarding-route-intermediate-support01-tests
     test/origin_boarding_route_intermediate_support01_test.cpp)
   target_link_libraries(apsis-drift-boarding-route-intermediate-support01-tests PRIVATE apsis-drift::core)
