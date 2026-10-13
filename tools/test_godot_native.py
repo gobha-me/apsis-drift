@@ -231,7 +231,7 @@ def main(argv=None):
     if any(name in selected for name in ("native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS)):
         if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
             parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
-    if any(name in selected for name in SURFACE_TESTS):
+    if "native_environment" in selected or any(name in selected for name in SURFACE_TESTS):
         if not surface_fixture.is_file() or not os.access(surface_fixture, os.X_OK):
             parser.error(f"missing C++ surface fixture: {surface_fixture}")
     if "native_impact" in selected:
@@ -313,7 +313,7 @@ def main(argv=None):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
         staged_executables.append(planetary_fixture)
-    if any(name in selected for name in SURFACE_TESTS):
+    if "native_environment" in selected or any(name in selected for name in SURFACE_TESTS):
         shutil.copy2(surface_fixture, work / surface_fixture.name)
         surface_fixture = work / surface_fixture.name
         staged_executables.append(surface_fixture)
@@ -346,7 +346,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -464,6 +464,21 @@ def main(argv=None):
             save()
         (work / "corrupt.json").write_text("{broken json\n")
     if "native_environment" in selected:
+        phases = work / "daynight"
+        log = work / "daynight-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(surface_fixture), "--daynight-fixtures", str(phases)],
+            log, env, args.timeout)
+        report["setup"].append({"family": "daynight_saves", "returncode": code,
+            "timed_out": timed_out, "seconds": elapsed,
+            "fixture_sha256": sha256(surface_fixture)})
+        save()
+        if code != 0 or timed_out:
+            print(f"FAIL authoritative day/night fixture: {log}", flush=True)
+            return 1
+        report["setup"][-1]["files_sha256"] = {
+            path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
+        save()
         for filename, tick in (("shadow-day.json", "100000"),
                                ("shadow-night.json", "400000"),
                                ("shadow-limb.json", "600000")):
@@ -864,7 +879,7 @@ def main(argv=None):
         if name == "native_selected_terrain":
             arguments = [str(work / path) for path in ("flight-18.json", "selected-terrain")]
         if name == "native_environment":
-            arguments = [str(work / path) for path in ("wayfarer-flight.json", "environment-world.json", "shadow-day.json", "shadow-night.json", "shadow-limb.json")]
+            arguments = [str(work / path) for path in ("wayfarer-flight.json", "environment-world.json", "shadow-day.json", "shadow-night.json", "shadow-limb.json", "daynight", "native-assets")]
         if name == "saved_flight":
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "flight-trace.json", "corrupt.json", "freedom-0.json", "native-assets", "flight-overflow.json")]
         if name == "native_audio":

@@ -2,6 +2,7 @@ extends SceneTree
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
+const Shell = preload("res://scripts/native/native_start_shell.gd")
 var failures := 0
 func check(ok: bool, message: String) -> void:
 	if not ok:
@@ -11,7 +12,7 @@ func _initialize() -> void:
 	call_deferred("run")
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() != 5: quit(1); return
+	if args.size() not in [5, 7]: quit(1); return
 	for path in args:
 		if not path.is_absolute_path(): quit(1); return
 	if not ClassDB.class_exists("FreedomBridge"):
@@ -140,9 +141,105 @@ func run() -> void:
 			var preserved := args[1] + ".shadow-%d.json" % index
 			check(configured.save_freedom_as(preserved) and FileAccess.get_sha256(preserved) == FileAccess.get_sha256(args[index]) and configured.get_freedom_flight_state() == observed, "Shadow presentation changed complete world bytes")
 		configured = null
+	# Real catalog2 fixed-anchor phases; only the adjacent terminator pair
+	# is continuously stepped, using the ordinary authoritative 120Hz clock.
+	if args.size() == 7:
+		daynight_phases(args[5], args[6], args[1], environment, light, material, local_light)
 	light.free()
 	local_light.free()
 	owner = null
 	await process_frame
-	print("Native environment consumer: %d failures; synthetic angular fixtures and actual saved C++ port phases, no raster/hardware claim" % failures)
+	print("Native environment consumer: %d failures; synthetic angular fixtures and actual saved C++ port phases, actual catalog2 anchored phases when supplied, no raster/hardware claim" % failures)
 	quit(0 if failures == 0 else 1)
+
+func daynight_visibility(elevation: float, horizon: float, width: float) -> float:
+	var fraction := clampf((elevation - horizon + width) / (2.0 * width), 0.0, 1.0)
+	return fraction * fraction * (3.0 - 2.0 * fraction)
+
+func daynight_phases(directory: String, assets: String, output: String, environment: Environment, light: DirectionalLight3D, material: ShaderMaterial, local_light: DirectionalLight3D) -> void:
+	var decoded: Variant = JSON.parse_string(FileAccess.get_file_as_string(directory.path_join("manifest.json")))
+	check(decoded is Dictionary, "Actual day/night manifest is unreadable")
+	if not decoded is Dictionary: return
+	var manifest: Dictionary = decoded
+	check(manifest.get("schema_version") == 1 and manifest.get("catalog_generator") == 2 and manifest.get("ephemeris_generator") == 2 and manifest.get("terrain_policy") == 2 and manifest.get("phases") is Array and manifest.phases.size() == 5, "Day/night manifest selects an unsupported owner or phase count")
+	if failures > 0: return
+	var labels := ["day", "terminator-before", "terminator", "terminator-after", "night"]
+	var neutral := PackedFloat64Array()
+	neutral.resize(12)
+	var anchored_basis: Basis
+	var previous_direction := Vector3.ZERO
+	var previous_tick := -1
+	var crossing: Variant = null
+	var crossing_shell: Control = null
+	for index in range(5):
+		var phase: Variant = manifest.phases[index]
+		check(phase is Dictionary and phase.get("name") == labels[index] and phase.get("file") == labels[index] + ".json" and NativeEnvironment.decimal(phase.get("tick")) and phase.get("star_direction_native") is Array and phase.star_direction_native.size() == 3, "Malformed day/night phase descriptor")
+		if failures > 0: return
+		var source := directory.path_join(labels[index] + ".json")
+		var source_hash := FileAccess.get_sha256(source)
+		check(not source_hash.is_empty(), "Day/night canonical source missing")
+		var configured: Variant = ClassDB.instantiate("FreedomBridge")
+		var shell := Shell.new()
+		shell.presentation_only = true
+		shell.process_mode = Node.PROCESS_MODE_DISABLED
+		root.add_child(shell)
+		shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var staged: bool = shell.select_start(configured, {"mode": "continue", "value": source, "assets": assets})
+		check(staged, "Actual day/night Continue/view refused: " + shell.error)
+		if not staged: shell.free(); configured = null; return
+		var view: Control = shell.current_view
+		check(view is FlightView and view.activated and view.paused and view.error.is_empty() and view.staged_model.valid_installed() and view.exhaust.valid_bound_skin(), "Day/night actual asset presenter is incomplete or unpaused")
+		if failures > 0: shell.free(); configured = null; return
+		view.set_process(false)
+		var state: Dictionary = configured.get_freedom_flight_state()
+		var expected_direction := Vector3(float(phase.star_direction_native[0]), float(phase.star_direction_native[1]), float(phase.star_direction_native[2]))
+		check(NativeEnvironment.valid(state) and FlightView.valid_state(state) and state.tick == phase.tick and state.system_id == manifest.system_id and state.planet_id == manifest.planet_id and state.terrain_policy == 2 and state.lighting.catalog_generator == 2, "Actual day/night owner, clock or projection mismatch")
+		check(state.star_direction.distance_to(expected_direction) < 0.000002 and absf(state.altitude - float(phase.altitude_metres)) < 0.0000002 and absf(state.lighting.star_angular_radius - float(phase.star_angular_radius_radians)) < 0.000000000001, "Native day/night inputs differ from independent matrix/ENU oracle")
+		if index == 0:
+			anchored_basis = state.body_basis
+		else:
+			check(state.body_basis.x.distance_to(anchored_basis.x) < 0.000002 and state.body_basis.y.distance_to(anchored_basis.y) < 0.000002 and state.body_basis.z.distance_to(anchored_basis.z) < 0.000002, "Body orientation jumped at the fixed surface anchor")
+		var expected_visibility := daynight_visibility(float(phase.solar_elevation_radians), float(phase.horizon_radians), float(phase.star_angular_radius_radians))
+		check(NativeEnvironment.apply(state, environment, light, material, local_light), "Actual catalog2 phase transfer refused")
+		check(absf(local_light.light_energy - expected_visibility) < 0.0002 and is_equal_approx(material.get_shader_parameter("sun_visibility"), local_light.light_energy) and material.get_shader_parameter("sun_direction") == state.star_direction and light.light_energy == 2.25 and light.light_color == state.lighting.star_color, "Sky/local sunlight/terrain direction disagree at actual phase")
+		daynight_view(view, state, expected_visibility)
+		if index == 0: check(is_equal_approx(local_light.light_energy, 1.0), "Actual day is not illuminated")
+		if index == 4: check(is_equal_approx(local_light.light_energy, 0.0), "Actual night leaks local direct sunlight")
+		if index in [1, 2, 3]:
+			check(absf(local_light.light_energy - 0.5) < 0.01, "Actual adjacent terminator is not partially illuminated")
+			if index > 1:
+				check(int(state.tick) == previous_tick + 1 and state.star_direction.distance_to(previous_direction) < 0.00001, "Actual adjacent clock/illumination crossing is discontinuous")
+		previous_direction = state.star_direction
+		previous_tick = int(state.tick)
+		var preserved: String = output + ".daynight-" + labels[index] + ".json"
+		check(configured.save_freedom_as(preserved) and FileAccess.get_sha256(preserved) == source_hash, "Day/night transfer changed complete canonical save")
+		check(configured.advance_freedom_flight(60.0, neutral, true) and configured.get_freedom_flight_state() == state and configured.save_freedom_as(preserved) and FileAccess.get_sha256(preserved) == source_hash, "Paused day/night changed full clock, state or save")
+		var restored: Variant = ClassDB.instantiate("FreedomBridge")
+		var restored_ok: bool = restored.stage_freedom_continue(preserved)
+		check(restored_ok, "Day/night saved Continue refused")
+		if restored_ok:
+			var restored_pending: Dictionary = restored.get_pending_freedom_start()
+			check(restored.commit_pending_freedom_start(restored_pending.candidate_id) and restored.get_freedom_flight_state() == state, "Day/night Continue changed full projection or orientation")
+		restored = null
+		if index == 1:
+			crossing = configured
+			crossing_shell = shell
+		if index in [2, 3]:
+			check(crossing.advance_freedom_flight(1.0 / 120.0, neutral, false), "Actual landed terminator step refused")
+			var transitioned: Dictionary = crossing.get_freedom_flight_state()
+			check(transitioned == state and NativeEnvironment.apply(transitioned, environment, light, material, local_light), "Real adjacent terminator step differs from independently initialized canonical phase")
+			crossing_shell.current_view.state = transitioned
+			daynight_view(crossing_shell.current_view, transitioned, expected_visibility)
+			var transition_save := output + ".daynight-crossing-%d.json" % index
+			check(crossing.save_freedom_as(transition_save) and FileAccess.get_sha256(transition_save) == source_hash, "Real terminator crossing changed expected complete canonical save")
+		check(FileAccess.get_sha256(source) == source_hash, "Day/night fixture source was rewritten")
+		if index != 1: shell.free()
+		configured = null
+	if crossing_shell != null: crossing_shell.free()
+	crossing = null
+
+func daynight_view(view: Control, state: Dictionary, visibility: float) -> void:
+	view.update_view(0.0)
+	check(view.error.is_empty() and view.state == state and view.paused and view.staged_model.valid_current_pose(), "Day/night native view refresh changed state or lost actual model pose")
+	check(view.sky_material.get_shader_parameter("sun_direction") == state.star_direction and absf(view.sky_material.get_shader_parameter("sun_visibility") - visibility) < 0.0002 and absf(view.local_light.light_energy - visibility) < 0.0002, "Actual native sky/close lighting differs from canonical phase")
+	check(view.light.basis.z.distance_to(state.star_direction) < 0.000002 and view.local_light.basis == view.light.basis and view.light.light_energy == 1.0 and view.light.light_color == state.lighting.star_color and view.near_environment.ambient_light_energy == view.planet_environment.ambient_light_energy, "Actual terrain/close-pass lighting or ambient direction split at phase")
