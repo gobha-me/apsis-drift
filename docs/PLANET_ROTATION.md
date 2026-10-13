@@ -1,10 +1,12 @@
 # Planet rotation and actual-star geometry
 
-Bounded standalone provider for #213, following the 2026-09-20 decision:
+Authoritative rotation provider and native consumers for #213, following the
+2026-09-20 decision:
 planet-specific physical rotation periods share authoritative simulation time.
-Whole-simulation time acceleration is deferred. This implementation does not
-switch native gameplay, alter existing saves, or complete #213's presentation
-integration. It supplies the missing rotation geometry for future #200 work.
+Whole-simulation time acceleration is deferred. Native Freedom now consumes
+this geometry through its explicitly saved world context; historical saves
+retain their selected recipes. The sections below distinguish the original
+standalone provider from later integration and acceptance evidence.
 
 2026-10-10 native consumer checkpoint: selected Freedom flight and planetary
 walking already use the saved C++ rotation/star geometry. Station walking and
@@ -189,17 +191,59 @@ Same-host GCC/Clang agreement is not universal cross-libm replay certification;
 #255 remains the owner of that limitation. Near a floating rounding boundary,
 another libm can produce different exact geometry bits.
 
-Publication checks for this increment: both complete local compiler builds,
+Publication checks for the original provider increment: both complete local
+compiler builds,
 all 18 focused C++ contracts and all 29 isolated native contracts pass. The
 native checks qualify unchanged consumers, not adoption of the rotation
 provider. Pinned format 20, focused clang-tidy 20 and independent review pass;
 complete pinned lint remains a hosted CI gate. Existing historical replay
 portability failures under #255 are not reclassified or hidden by this result.
 
-Native shaders, world/sky transforms, walkable-surface presentation and rotating
-6DOF handoffs must subsequently consume this one recipe/tick. Before persistent
-native use, the world/save context must select and retain the rotation recipe
-version explicitly. Do not silently attach version 1 to an old saved frame or
-change a planet texture's rotation without the corresponding physical frame
-and light transform. #213 remains open until those integrations and actual
-day/terminator/night views are qualified.
+Native Freedom flight, surface walking and station/boarding views now consume
+this authoritative recipe/tick through saved ownership and native projection.
+The world/save context explicitly retains rotation and physical catalog versions;
+historical saved frames keep their original selected recipes. Shader transfer
+never changes planet rotation, physical state or the source light geometry.
+The phase acceptance checkpoints below extend that integration's save/clock
+qualification. Actual day/setting-limb/night frame review remains a distinct
+qualification step; neither shader-input tests nor historical proxy rasters are
+reported as full-world visual evidence.
+
+## Physical day/night acceptance checkpoints
+
+`apsis-drift-landed-craft-tests --daynight` reuses the supported seed 42 landed
+fixture with explicit catalog 2, ephemeris 2 and local-detail terrain policy 2.
+`--daynight-fixtures DIRECTORY` additionally exports complete canonical saves
+and an independent matrix/ENU geometry manifest for day, setting limb, night,
+and the two adjacent integer ticks around the limb. The supported craft anchor,
+owner and history are retained at every initialized timestamp. Ordinary landed
+120 Hz steps must exactly reach the two adjacent canonical terminator snapshots.
+These fixtures initialize declared times; they do not claim uninterrupted
+hours-long flight, accelerated simulation or elapsed resource consumption.
+
+The native environment contract consumes those same snapshots, compares its
+star inputs with the independent oracle, checks sky/local-light agreement,
+full Save/Continue and paused save preservation, then steps the real adjacent
+terminator transition. Setting limb here means the stellar disk center crosses
+the observer altitude-dependent spherical limb. Solar elevation, terrain-normal
+illumination and the presentation's smooth partial-disk approximation remain
+separate quantities. Terrain and local close-pass lights retain their existing
+roles; there is no second clock or source of celestial geometry.
+
+Representative frame review uses the actual accepted Wayfarer and selected
+terrain at day/setting-limb/night with fixed camera framing and unchanged
+authoritative saves. Asset silhouette polish, background star-field artwork,
+other orbital-body silhouettes, mountain horizon occlusion and hardware
+performance are separate presentation limits; these contracts do not certify
+them. Local GCC and Clang each pass all 129 C++ contracts and the extended native
+environment contract. The six exported fixture files and all three 1280×720
+software Compatibility captures are byte-identical between compilers. Both
+render runs preserve complete saved state and finish without error or shutdown
+leak diagnostics. This qualifies the same-host compiler comparison; it does not
+establish cross-GPU pixels, hardware performance or universal libm replay.
+
+This acceptance addresses the active Freedom rotation/light authority and its
+physical day/night consumers. It does not independently prove distant-body
+visual phase or the orbital-to-surface visual continuum; those presentation
+checks remain with #216 and #217. A landed frame must not be presented as that
+broader orbital evidence.

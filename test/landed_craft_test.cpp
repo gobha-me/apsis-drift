@@ -1,3 +1,4 @@
+#include "apsis_drift/godot/saved_flight.hpp"
 #include "apsis_drift/landed_craft.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/planet_surface_walker.hpp"
@@ -11,10 +12,12 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
@@ -1060,6 +1063,300 @@ auto surface_walking(const Fixture& f) -> void {
             << ',' << actor.foot_position_metres.y << ','
             << actor.foot_position_metres.z << '\n';
 }
+// Explicitly initialized, real catalog2 snapshots; only the adjacent setting
+// limb samples are an uninterrupted simulation trace. No accelerated clock.
+using DaynightMatrix = std::array<std::array<double, 3>, 3>;
+auto daynight_dot(V a, V b) -> double {
+  return (a.x * b.x + a.y * b.y) + a.z * b.z;
+}
+auto daynight_apply(const DaynightMatrix& m, V v) -> V {
+  return {daynight_dot({m[0][0], m[0][1], m[0][2]}, v),
+          daynight_dot({m[1][0], m[1][1], m[1][2]}, v),
+          daynight_dot({m[2][0], m[2][1], m[2][2]}, v)};
+}
+auto daynight_transpose(const DaynightMatrix& m) -> DaynightMatrix {
+  return {{{m[0][0], m[1][0], m[2][0]},
+           {m[0][1], m[1][1], m[2][1]},
+           {m[0][2], m[1][2], m[2][2]}}};
+}
+auto daynight_product(const DaynightMatrix& a, const DaynightMatrix& b)
+    -> DaynightMatrix {
+  DaynightMatrix result{};
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = 0; j < 3; ++j)
+      for (std::size_t k = 0; k < 3; ++k)
+        result[i][j] += a[i][k] * b[k][j];
+  return result;
+}
+auto daynight_rotation(const Fixture& f, SimulationTick tick)
+    -> DaynightMatrix {
+  // Independent trigonometric matrix composition: no production quaternion
+  // multiplication, rotation resolver, frame handoff or native tangent helper.
+  const auto rx = [](double angle) -> DaynightMatrix {
+    const auto c = std::cos(angle), s = std::sin(angle);
+    return {{{1, 0, 0}, {0, c, -s}, {0, s, c}}};
+  };
+  const auto ry = [](double angle) -> DaynightMatrix {
+    const auto c = std::cos(angle), s = std::sin(angle);
+    return {{{c, 0, s}, {0, 1, 0}, {-s, 0, c}}};
+  };
+  const auto rz = [](double angle) -> DaynightMatrix {
+    const auto c = std::cos(angle), s = std::sin(angle);
+    return {{{c, -s, 0}, {s, c, 0}, {0, 0, 1}}};
+  };
+  const auto& orbit = f.owner.catalog.planets[kOriginHomePlanetOrdinal].orbit;
+  const auto& recipe = f.rotation.rotation;
+  const auto cycle = (tick % recipe.period_ticks + recipe.epoch_phase_tick) %
+                     recipe.period_ticks;
+  const auto pi = std::numbers::pi_v<double>;
+  return daynight_product(
+      daynight_product(
+          daynight_product(
+              daynight_product(
+                  rz(2 * pi * orbit.ascending_node_turns / 4294967296.0),
+                  rx(orbit.inclination_microdegrees * pi / 180000000.0)),
+              rz(2 * pi * recipe.pole_azimuth_turns / 4294967296.0)),
+          ry(recipe.tilt_microdegrees * pi / 180000000.0)),
+      rz(2 * pi * static_cast<double>(cycle) /
+         static_cast<double>(recipe.period_ticks)));
+}
+struct DaynightOracle {
+  V system, fixed, native;
+  double distance, elevation, horizon, angular_radius;
+};
+auto daynight_oracle(const Fixture& f, const LandedCraftAnchor& anchor,
+                     SimulationTick tick) -> DaynightOracle {
+  const auto matrix = daynight_rotation(f, tick);
+  const auto ephemeris =
+      required(resolve_planet_ephemeris(f.owner, f.planet.id, {tick, 0}));
+  const auto position = anchor.fixed.position_metres;
+  const auto observer = daynight_apply(matrix, position);
+  const auto toward = sub(
+      mul({ephemeris.position.x, ephemeris.position.y, ephemeris.position.z},
+          -1),
+      observer);
+  const auto distance = norm(toward);
+  const auto system = mul(toward, 1 / distance);
+  const auto fixed = daynight_apply(daynight_transpose(matrix), system);
+  const auto radial = norm(position);
+  const auto up = mul(position, 1 / radial);
+  const auto latitude = std::asin(up.z);
+  const auto longitude = std::atan2(up.y, up.x);
+  const V east{-std::sin(longitude), std::cos(longitude), 0};
+  const V north{-std::sin(latitude) * std::cos(longitude),
+                -std::sin(latitude) * std::sin(longitude), std::cos(latitude)};
+  const V native{daynight_dot(east, fixed), daynight_dot(up, fixed),
+                 -daynight_dot(north, fixed)};
+  const auto radius = f.planet.radius.value * 1000.0;
+  return {
+      system,
+      fixed,
+      native,
+      distance,
+      std::asin(std::clamp(native.y, -1.0, 1.0)),
+      -std::acos(std::clamp(radius / std::max(radius, radial), 0.0, 1.0)),
+      std::asin(f.owner.catalog.star.radius_kilometres * 1000.0 / distance)};
+}
+auto daynight_snapshots(const Fixture& f,
+                        const std::filesystem::path& directory = {}) -> void {
+  check(f.owner.generator_version == 2 && f.owner.ephemeris_version == 2 &&
+            f.terrain_policy == kFreedomLocalDetailTerrainPolicy,
+        "day/night fixtures explicitly select physical catalog2 and terrain2");
+  FreedomFlightSaveDocument flight{
+      make_freedom_new_game_document(Seed{42}), f.source(f.fixed), {}};
+  flight.origin.state.tick = flight.flight.tick;
+  flight.origin.state.discoveries.push_back({{77}, 8});
+  flight.origin.state.world_deltas.push_back(
+      {"signal:77", SaveWorldDeltaKind::discovered, 9});
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = f.terrain_policy;
+  flight.world =
+      FreedomActiveWorldSelection{1, f.owner.catalog.id, f.planet.id};
+  auto landed = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom, flight, f.planet, {}}));
+  required(landed.set_landing_gear(true));
+  required(landed.commit_touchdown(required(
+      rigid_body_state_checksum(f.context, landed.document().flight))));
+  const auto anchor = *landed.surface()->landed;
+  auto malformed = anchor;
+  malformed.fixed.position_metres.x = std::numeric_limits<double>::quiet_NaN();
+  check(
+      !resolve_landed_craft(f.owner, f.rotation, malformed, flight.flight.tick),
+      "nonfinite day/night anchor refuses before projection");
+  check(
+      !resolve_landed_craft(f.owner, f.rotation, anchor, anchor.fixed.tick - 1),
+      "day/night fixture cannot resolve before its landing tick");
+  const auto start = anchor.fixed.tick;
+  const auto period = f.rotation.rotation.period_ticks;
+  SimulationTick day = start, low = start, high = start, night = start;
+  double brightest = -2;
+  bool crossed = false;
+  for (SimulationTick i = 0; i <= 256; ++i) {
+    const auto tick = start + (2 * period * i) / 256;
+    const auto oracle = daynight_oracle(f, anchor, tick);
+    const auto limb = oracle.elevation - oracle.horizon;
+    if (!crossed) {
+      if (oracle.elevation > brightest) {
+        brightest = oracle.elevation;
+        day = tick;
+      }
+      if (i != 0 && brightest > .1 && limb <= 0) {
+        high = tick;
+        crossed = true;
+      } else {
+        low = tick;
+      }
+    } else if (limb < -std::max(.1, oracle.angular_radius)) {
+      night = tick;
+      break;
+    }
+  }
+  if (!crossed || night <= high || day >= low)
+    throw std::runtime_error("bounded catalog2 day/night sequence not found");
+  while (high - low > 1) {
+    const auto middle = low + (high - low) / 2;
+    const auto oracle = daynight_oracle(f, anchor, middle);
+    if (oracle.elevation - oracle.horizon > 0)
+      low = middle;
+    else
+      high = middle;
+  }
+  const std::array<SimulationTick, 5> ticks{day, high - 1, high, high + 1,
+                                            night};
+  const std::array<std::string_view, 5> labels{
+      "day", "terminator-before", "terminator", "terminator-after", "night"};
+  std::array<std::string, 5> encoded;
+  nlohmann::ordered_json phases = nlohmann::ordered_json::array();
+  std::optional<NativeFreedomFlightSession> crossing;
+  for (std::size_t i = 0; i < ticks.size(); ++i) {
+    auto snapshot = landed.surface_document();
+    auto& base = std::get<FreedomFlightSaveDocument>(snapshot.base);
+    base.flight =
+        required(resolve_landed_craft(f.owner, f.rotation, anchor, ticks[i]));
+    base.origin.state.tick = ticks[i];
+    const auto text = required(encode_freedom_surface_document_json(snapshot));
+    auto session = required(NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom,
+         required(decode_freedom_surface_document_json(text)),
+         f.planet,
+         {}}));
+    encoded[i] = required(
+        encode_freedom_surface_document_json(session.surface_document()));
+    check(encoded[i] == text && session.surface()->landed == anchor &&
+              session.document().origin.state.discoveries ==
+                  flight.origin.state.discoveries &&
+              session.document().origin.state.world_deltas ==
+                  flight.origin.state.world_deltas,
+          "each phase Continue preserves complete owner, history and landed "
+          "anchor");
+    const auto view = godot_spike::project_saved_flight(session);
+    const auto oracle = daynight_oracle(f, anchor, ticks[i]);
+    const auto& geometry = view.rotation.geometry;
+    check(norm(sub({geometry.observer_to_star_fixed.x,
+                    geometry.observer_to_star_fixed.y,
+                    geometry.observer_to_star_fixed.z},
+                   oracle.fixed)) < 2e-14 &&
+              norm(sub({geometry.observer_to_star_system.x,
+                        geometry.observer_to_star_system.y,
+                        geometry.observer_to_star_system.z},
+                       oracle.system)) < 2e-14,
+          "actual system/body star vectors agree with independent matrix "
+          "geometry");
+    const auto direction = geometry.observer_to_star_fixed;
+    const auto& tangent = view.tangent;
+    const V native{direction.x * tangent.east.x + direction.y * tangent.east.y +
+                       direction.z * tangent.east.z,
+                   direction.x * tangent.up.x + direction.y * tangent.up.y +
+                       direction.z * tangent.up.z,
+                   -(direction.x * tangent.north.x +
+                     direction.y * tangent.north.y +
+                     direction.z * tangent.north.z)};
+    check(norm(sub(native, oracle.native)) < 2e-14 &&
+              std::abs(geometry.observer_star_distance_metres -
+                       oracle.distance) < 2e-14 * oracle.distance,
+          "native tangent star and finite-distance limb inputs match "
+          "independent geometry");
+    const auto fixed = required(
+        reframe_rigid_body(f.context, session.document().flight,
+                           {anchor.fixed.frame, ticks[i]}, f.rotation));
+    check(norm(sub(fixed.position_metres, anchor.fixed.position_metres)) <
+                  1e-7 &&
+              norm(fixed.linear_velocity_metres_per_second) < 1e-9,
+          "all declared times retain the same physical ground anchor");
+    const auto before = encoded[i];
+    const std::array<double, 12> neutral{};
+    godot_spike::SavedFlightWorld paused{session, {}, {}, 0};
+    paused.advance(60, neutral, true);
+    check(required(encode_freedom_surface_document_json(
+              paused.session.surface_document())) == before,
+          "paused full landed save stays exact at every phase");
+    if (i == 1) crossing.emplace(session);
+    if (i == 2 || i == 3) {
+      required(crossing->advance({}));
+      check(required(encode_freedom_surface_document_json(
+                crossing->surface_document())) == encoded[i],
+            "ordinary landed 120Hz step exactly reaches the adjacent "
+            "terminator save");
+    }
+    const auto limb = oracle.elevation - oracle.horizon;
+    if (i == 0)
+      check(limb > oracle.angular_radius, "day disk is fully above real limb");
+    if (i == 4)
+      check(limb < -oracle.angular_radius,
+            "night disk is fully behind real limb");
+    if (i == 1)
+      check(limb > 0 && limb < 1e-5,
+            "last illuminated-center tick is adjacent to limb");
+    if (i == 2)
+      check(limb <= 0 && limb > -1e-5,
+            "first hidden-center tick is adjacent to limb");
+    phases.push_back({{"name", labels[i]},
+                      {"file", std::string{labels[i]} + ".json"},
+                      {"tick", std::to_string(ticks[i])},
+                      {"star_direction_native",
+                       {oracle.native.x, oracle.native.y, oracle.native.z}},
+                      {"solar_elevation_radians", oracle.elevation},
+                      {"horizon_radians", oracle.horizon},
+                      {"star_angular_radius_radians", oracle.angular_radius},
+                      {"observer_star_distance_metres", oracle.distance},
+                      {"altitude_metres", norm(anchor.fixed.position_metres) -
+                                              f.planet.radius.value * 1000.0}});
+    if (!directory.empty()) {
+      std::ofstream out{directory / (std::string{labels[i]} + ".json"),
+                        std::ios::binary};
+      out << encoded[i];
+      if (!out) throw std::runtime_error("day/night save write failed");
+    }
+  }
+  if (!directory.empty()) {
+    const nlohmann::ordered_json manifest{
+        {"schema_version", 1},
+        {"catalog_generator", 2},
+        {"ephemeris_generator", 2},
+        {"terrain_policy", 2},
+        {"system_id", std::to_string(f.owner.catalog.id.value)},
+        {"planet_id", std::to_string(f.planet.id.value)},
+        {"anchor_tick", std::to_string(anchor.fixed.tick)},
+        {"rotation_period_ticks", std::to_string(period)},
+        {"scope", "Explicit initialized real catalog2 times at one qualified "
+                  "landed anchor; only the two adjacent terminator transitions "
+                  "are continuously stepped. No accelerated clock or "
+                  "uninterrupted day-long flight."},
+        {"terminator_convention",
+         "Setting stellar disk center crosses the observer altitude-dependent "
+         "spherical limb; solar elevation and terrain normal illumination are "
+         "separate quantities."},
+        {"oracle",
+         "Independent Rx/Ry/Rz rotation matrix and ENU basis, actual catalog2 "
+         "same-tick ephemeris and finite-distance star geometry."},
+        {"phases", phases}};
+    std::ofstream out{directory / "manifest.json"};
+    out << manifest.dump(2) << '\n';
+    if (!out) throw std::runtime_error("day/night manifest write failed");
+  }
+}
+
 } // namespace
 auto main(int argc, char** argv) -> int {
   try {
@@ -1067,10 +1364,19 @@ auto main(int argc, char** argv) -> int {
         argc >= 2 &&
         (std::string_view{argv[1]} == "--local-detail" ||
          std::string_view{argv[1]} == "--local-detail-fixtures" ||
-         std::string_view{argv[1]} == "--local-detail-walk-fixtures");
+         std::string_view{argv[1]} == "--local-detail-walk-fixtures" ||
+         std::string_view{argv[1]} == "--daynight" ||
+         std::string_view{argv[1]} == "--daynight-fixtures");
     const Fixture f{local_detail ? kFreedomLocalDetailTerrainPolicy
                                  : kFreedomLegacyTerrainPolicy};
-    if (argc == 2 && std::string_view{argv[1]} == "--local-detail") {
+    if (argc == 2 && std::string_view{argv[1]} == "--daynight") {
+      daynight_snapshots(f);
+    } else if (argc == 3 &&
+               std::string_view{argv[1]} == "--daynight-fixtures") {
+      const auto directory = std::filesystem::absolute(argv[2]);
+      std::filesystem::create_directories(directory);
+      daynight_snapshots(f, directory);
+    } else if (argc == 2 && std::string_view{argv[1]} == "--local-detail") {
       hull_and_idle(f);
       persistence_and_session(f);
       surface_walking(f);
