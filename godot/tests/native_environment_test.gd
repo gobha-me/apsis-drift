@@ -63,6 +63,8 @@ func run() -> void:
 	invalid.lighting.tick = "18446744073709551615"
 	check(NativeEnvironment.sun_visibility(invalid) == -1.0, "Invalid shadow query accepted")
 	check(not NativeEnvironment.apply(invalid, environment, light, material, local_light) and environment.ambient_light_energy == old_energy and material.get_shader_parameter("sun_direction") == old_direction and local_light.light_energy == old_local_energy and light.light_energy == 2.25 and light.light_color == old_light_color, "Rejected environment changed material or sunlight")
+	check(not NativeEnvironment.apply_sky(invalid, material) and material.get_shader_parameter("sun_direction") == old_direction, "Rejected isolated sky transfer changed accepted sky")
+	check(NativeEnvironment.apply_sky(state, material) and environment.ambient_light_energy == old_energy and local_light.light_energy == old_local_energy and light.light_energy == 2.25, "Sky-only transfer changed ambient or sunlight")
 	# Synthetic direction fixtures qualify consumer behavior, not C++ day/night.
 	var energies: Array[float] = []
 	for direction in [Vector3.UP, Vector3.RIGHT, Vector3.DOWN]:

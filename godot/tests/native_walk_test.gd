@@ -1,7 +1,43 @@
 extends SceneTree
 ## Production first-person consumer against independent C++ journey save bytes.
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
+const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 var failures := 0
+
+func sky_values(view: Control) -> Array:
+	var values := []
+	for key in ["radius", "altitude", "scale_height", "sea_density", "atmosphere_edge", "atmosphere_tint", "sun_direction", "sun_color", "sun_angular_radius", "sun_visibility"]:
+		values.append(view.sky_material.get_shader_parameter(key))
+	return values
+
+func check_sky(view: Control, flight: Dictionary, label: String) -> void:
+	check(view.station_environment.background_mode == Environment.BG_SKY and view.station_environment.sky.sky_material == view.sky_material, label + ": actual sky is not installed")
+	check(view.sky_material.get_shader_parameter("sun_direction") == flight.star_direction and view.sky_material.get_shader_parameter("sun_color") == flight.lighting.star_color and view.sky_material.get_shader_parameter("radius") == flight.planet_radius and view.sky_material.get_shader_parameter("altitude") == flight.altitude, label + ": sky differs from current C++ observer")
+	check(view.sky_material.get_shader_parameter("sun_visibility") == NativeEnvironment.sun_visibility(flight) and view.sky_owner.tick == flight.tick, label + ": sky/light owner or phase is stale")
+	check(is_equal_approx(view.station_environment.ambient_light_energy, 0.7) and view.station_environment.ambient_light_color == Color(0.6, 0.75, 0.95), label + ": station interior fill changed")
+
+func sky_refusals(view: Control, actor: Dictionary, flight: Dictionary) -> void:
+	var before := sky_values(view)
+	var owner: Dictionary = view.sky_owner.duplicate()
+	var light: Transform3D = view.light.transform
+	var energy: float = view.light.light_energy
+	for key in ["universe_seed", "system_id", "planet_id", "station_id", "craft_id", "tick"]:
+		var wrong_actor := actor.duplicate(true)
+		wrong_actor[key] = "999999"
+		check(not view.refresh_environment(flight, wrong_actor), "Mismatched actor/sky owner accepted: " + key)
+		var wrong_flight := flight.duplicate(true)
+		wrong_flight[key] = "999999"
+		if key == "system_id": wrong_flight.lighting.system_id = wrong_flight[key]
+		elif key == "planet_id": wrong_flight.lighting.body_id = wrong_flight[key]
+		elif key == "tick":
+			wrong_flight.lighting.tick = wrong_flight[key]
+			wrong_actor = actor
+		check(not view.refresh_environment(wrong_flight, wrong_actor), "Foreign or stale joined sky owner accepted: " + key)
+		check(sky_values(view) == before and view.sky_owner == owner and view.light.transform == light and view.light.light_energy == energy, "Refused owner changed accepted sky/light")
+	var malformed := flight.duplicate(true)
+	malformed.star_direction = Vector3(NAN, 0, 0)
+	malformed.lighting.direction = malformed.star_direction
+	check(not view.refresh_environment(malformed, actor) and sky_values(view) == before and view.sky_owner == owner, "Malformed sky update changed accepted parameters")
 
 
 func commit_fixture_new_game(owner: Variant, seed: String) -> bool:
@@ -70,6 +106,7 @@ func paused_checkpoint(view: Control, owner: Variant, path: String, walk: Dictio
 	check(view.paused and owner.get_freedom_walk_state() == walk and owner.get_freedom_flight_state() == flight, label + ": actor/craft/clock advanced")
 	check(view.camera.transform == pose and view.requested_heading == heading and view.pitch == pitch, label + ": paused inspection changed")
 	check(view.light.basis.z.is_equal_approx(flight.star_direction), label + ": station light diverged from frozen C++ direction")
+	check_sky(view, flight, label)
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, label + ": exact C++ save bytes changed")
 
 
@@ -190,7 +227,7 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 	view.hud_scroll.scroll_vertical = 0
 
 
-func check_station_controls(view: Control, owner: Variant, path: String, start: Dictionary, bytes: PackedByteArray) -> void:
+func check_station_controls(view: Control, owner: Variant, path: String, start: Dictionary, bytes: PackedByteArray, assets: String) -> void:
 	await process_frame
 	await process_frame
 	var flight: Dictionary = owner.get_freedom_flight_state()
@@ -341,15 +378,23 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	physical_key(KEY_D, false)
 	check(owner.get_freedom_walk_state() == expected.get_freedom_walk_state() and owner.get_freedom_flight_state() == expected.get_freedom_flight_state(), "Actual accepted input diverged from C++ actor/craft tick")
 	check(commit_fixture_new_game(owner, "42"), "Could not reset owned input fixture for independent long trace")
-	view.update_view()
+	# New Game replaces the presentation lifetime. The prior accepted tick1
+	# view must not be reused to display an independent tick0 world.
+	view.set_process_input(false)
+	view.hide()
+	var refused := WalkView.new()
+	root.add_child(refused)
+	refused.set_process(false)
+	check(refused.initialize(owner, assets) and not refused.paused, "Independent reset failed to create a fresh running view")
 	# A consumer refusal is terminal; every menu/direct Resume remains paused.
-	check(not view.advance_requested(NAN, PackedFloat64Array([0.0, 0.0, heading])), "Nonfinite consumer time accepted")
-	var message: String = view.error
-	view.toggle_pause()
-	view.set_paused(false)
-	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
-	view._process(1.0)
-	check(view.paused and not message.is_empty() and view.error == message and view.pause_button.disabled and owner.get_freedom_walk_state() == start, "Terminal error recovered through Resume/focus/process")
+	check(not refused.advance_requested(NAN, PackedFloat64Array([0.0, 0.0, heading])), "Nonfinite consumer time accepted")
+	var message: String = refused.error
+	refused.toggle_pause()
+	refused.set_paused(false)
+	refused._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	refused._process(1.0)
+	check(refused.paused and not message.is_empty() and refused.error == message and refused.pause_button.disabled and owner.get_freedom_walk_state() == start, "Terminal error recovered through Resume/focus/process")
+	refused.free()
 
 
 func input_map_snapshot() -> Dictionary:
@@ -553,13 +598,15 @@ func run() -> void:
 		return
 	check(view.station != null and view.station.camera == null and view.ship != null, "Walking lost real ship/station or used an inspection camera")
 	check(view.camera.position == start.actor_eye_position and view.station.transform == Transform3D(start.station_basis, start.station_position), "Actor camera/station differs from authoritative projection")
-	await check_station_controls(view, owner, path, start, originals[0])
+	await check_station_controls(view, owner, path, start, originals[0], args[2])
 	view.free()
 	view = WalkView.new()
 	root.add_child(view)
 	view.set_process(false)
 	check(view.initialize(owner, args[2]) and not view.paused, "Fresh already-neutral view did not retain running startup")
 	check(view.light.basis.z.is_equal_approx(flight.star_direction), "Fresh station light substituted a fixed sun")
+	check_sky(view, flight, "New Game")
+	sky_refusals(view, start, flight)
 	var initial_light: Basis = view.light.basis
 	view.set_paused(true)
 	await check_hud_layout(view, owner, path, originals[0])
@@ -577,6 +624,9 @@ func run() -> void:
 			check(owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, axis, 0.0])), "Supported walking trace refused")
 	view.update_view()
 	var final: Dictionary = owner.get_freedom_walk_state()
+	check_sky(view, owner.get_freedom_flight_state(), "Advanced walking")
+	var accepted := sky_values(view)
+	check(not view.refresh_environment(flight, start) and sky_values(view) == accepted, "Old matching actor/flight pair regressed the accepted sky tick")
 	check(view.light.basis.z.is_equal_approx(owner.get_freedom_flight_state().star_direction) and not view.light.basis.is_equal_approx(initial_light), "Advanced station light failed to follow the actual C++ clock")
 	check(final.tick == "1920" and owner.get_freedom_flight_state().tick == final.tick, "Walk/ship shared clock diverged")
 	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == originals[1], "Native route bytes differ from independent C++ collision/motion trace")
@@ -590,6 +640,7 @@ func run() -> void:
 	view.set_process(false)
 	check(view.initialize(owner, args[2]) and view.paused, "Continued walking view resumed without player action")
 	check(view.light.basis.z.is_equal_approx(owner.get_freedom_flight_state().star_direction), "Continued station light lost its saved direction")
+	check_sky(view, owner.get_freedom_flight_state(), "Continue")
 	check(view.advance_requested(1.0, neutral) and owner.get_freedom_walk_state() == continued, "Continued view advanced while initially paused")
 	var other: Variant = ClassDB.instantiate("FreedomBridge")
 	check(commit_fixture_new_game(other, "42"), "Cadence walking New Game refused")

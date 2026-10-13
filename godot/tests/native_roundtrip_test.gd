@@ -92,6 +92,9 @@ func manifest_refusals(trace: Dictionary) -> bool:
 
 func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	var state: Dictionary = owner.get_freedom_flight_state()
+	if view is FlightView or view is WalkView:
+		if not check(view.sky_material != null and view.sky_material.get_shader_parameter("sun_direction") == state.star_direction and view.sky_material.get_shader_parameter("sun_color") == state.lighting.star_color and view.sky_material.get_shader_parameter("radius") == state.planet_radius and view.sky_material.get_shader_parameter("altitude") == state.altitude, "Current C++ sky diverged at real journey boundary: " + row.label): return false
+		if view is WalkView and not check(view.sky_owner.tick == state.tick and is_equal_approx(view.station_environment.ambient_light_energy, 0.7), "Station sky tick/fill changed across boarding boundary: " + row.label): return false
 	var boarding: Dictionary = owner.get_freedom_boarding_state()
 	if view is FlightView:
 		var paused_before: bool = view.paused

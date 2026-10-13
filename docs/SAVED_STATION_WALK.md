@@ -13,6 +13,19 @@ pause and focus loss introduce no separate light clock. Missing, non-finite or
 non-unit directions refuse scene acceptance. Ambient fill, light intensity,
 materials and shadow refinements remain separate presentation choices.
 
+Station walking and boarding also consume the existing saved-flight body/star
+sky, including its atmosphere palette and declared density/height coefficients.
+The sky follows accepted C++ ticks through the seated handoff and Continue;
+matching universe, system, planet, station, craft and actor/flight tick are
+required before updates. A malformed, foreign or regressed projection leaves
+the accepted sky and sunlight unchanged. Station interior ambient fill remains
+separate from flight ambient, so installing the sky does not darken the corridor.
+
+This reuses the existing appearance approximation at the craft COM observer;
+it does not yet correct sky parallax/limb placement for each actor or cockpit
+eye offset. Background stars, detailed host silhouettes, and broad native
+day/terminator/night visual qualification remain open under #213/#216/#217.
+
 ## Movement and contact
 
 `OriginWalkerState` stores actor identity 1, contact-geometry version 1, a
