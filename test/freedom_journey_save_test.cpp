@@ -32,6 +32,95 @@ auto current(const NativeFreedomFlightSession& session)
     -> FreedomJourneySaveDocument {
   return {{session.document(), *session.docking()}, *session.walker()};
 }
+auto terrain_nested_roundtrips() -> void {
+  auto old = require(make_freedom_journey_new_game_document(Seed{42}));
+  const auto old_text = require(encode_freedom_journey_document_json(old));
+  auto selected = old;
+  selected.voyage.flight.model.terrain_policy =
+      kFreedomLocalDetailTerrainPolicy;
+  selected.voyage.flight.world = FreedomActiveWorldSelection{
+      1, selected.voyage.flight.flight.frame.system,
+      selected.voyage.flight.flight.frame.planet.value()};
+  const auto encoded = require(encode_freedom_journey_document_json(selected));
+  const auto root = Json::parse(encoded);
+  check(root["format_version"] == kFreedomTerrainJourneySaveFormatVersion &&
+            require(decode_freedom_journey_document_json(encoded)) ==
+                selected &&
+            Json::parse(old_text)["format_version"] ==
+                kFreedomJourneySaveFormatVersion &&
+            require(encode_freedom_journey_document_json(require(
+                decode_freedom_journey_document_json(old_text)))) == old_text,
+        "station journey33 retains selection while old20 remains byte-stable");
+  const auto docking =
+      require(encode_freedom_docking_document_json(selected.voyage));
+  check(Json::parse(docking)["format_version"] ==
+                kFreedomTerrainDockingSaveFormatVersion &&
+            require(decode_freedom_docking_document_json(docking)) ==
+                selected.voyage,
+        "docking32 restores selected flight31 rather than legacy18");
+  auto bad = root;
+  bad["format_version"] = kFreedomJourneySaveFormatVersion;
+  check(!decode_native_save_document_json(bad.dump()),
+        "selected station model refuses under historical journey20");
+  bad = Json::parse(docking);
+  bad["format_version"] = kFreedomDockingSaveFormatVersion;
+  check(!decode_native_save_document_json(bad.dump()),
+        "selected docking model refuses under historical docking19");
+  for (const auto policy :
+       {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy}) {
+    auto flight = selected.voyage.flight;
+    flight.model.terrain_policy = policy;
+    FreedomSurfaceSaveDocument mismatch{
+        flight,
+        {true, LandedCraftAnchor{1,
+                                 policy == kFreedomLegacyTerrainPolicy
+                                     ? kFreedomLocalDetailTerrainPolicy
+                                     : kFreedomLegacyTerrainPolicy,
+                                 1, 1, flight.flight}}};
+    const auto rejected = validate_freedom_surface_document(mismatch);
+    check(!rejected &&
+              rejected.error().path == "$.surface.landed.terrain_policy",
+          "anchor and base terrain policy mismatch refuses before contact "
+          "hydration");
+  }
+
+  const auto roundtrip = [](const NativeSaveDocument& d) {
+    const auto text = require(encode_native_save_document_json(d));
+    check(
+        require(decode_native_save_document_json(text)) == d,
+        "nested native serializer preserves explicit physical terrain choice");
+  };
+  roundtrip(selected);
+  roundtrip(selected.voyage);
+  const FreedomStartingAssemblySaveDocument assembly{selected, {}};
+  roundtrip(assembly);
+  for (const FreedomSurfaceBaseSave& base :
+       {FreedomSurfaceBaseSave{selected.voyage.flight},
+        FreedomSurfaceBaseSave{selected.voyage},
+        FreedomSurfaceBaseSave{selected}, FreedomSurfaceBaseSave{assembly}}) {
+    const FreedomSurfaceSaveDocument surface{base, {}};
+    roundtrip(surface);
+    const auto flight = surface_base_flight(base);
+    const FreedomResourceSaveDocument resources{surface,
+                                                {1, flight.origin.state.craft,
+                                                 flight.flight.craft,
+                                                 flight.flight.tick}};
+    roundtrip(resources);
+    const FreedomKnowledgeSaveDocument knowledge{
+        resources, require(make_freedom_starting_knowledge(
+                       Seed{42}, kFreedomTravelKnowledgeVersion))};
+    roundtrip(knowledge);
+    if (std::holds_alternative<FreedomStartingAssemblySaveDocument>(base)) {
+      const FreedomTravelSaveDocument travel{
+          knowledge, {}, NativeStartingAssemblySelection{}, {}};
+      roundtrip(travel);
+      const FreedomRecoverySaveDocument recovery{knowledge, {}};
+      roundtrip(recovery);
+      roundtrip(FreedomSurfaceWalkSaveDocument{recovery, 1, {}});
+      roundtrip(FreedomRecoverySaveDocument{travel, {}});
+    }
+  }
+}
 auto invalid() -> void {
   const auto good = require(make_freedom_journey_new_game_document(Seed{42}));
   const auto text = require(encode_freedom_journey_document_json(good));
@@ -338,6 +427,7 @@ auto roundtrip() -> void {
 int main() {
   try {
     invalid();
+    terrain_nested_roundtrips();
     roundtrip();
     std::cout << "Freedom journey save contract passed\n";
     return 0;

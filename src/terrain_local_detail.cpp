@@ -116,32 +116,100 @@ using Error = TerrainLocalDetailError;
   return offset;
 }
 
-[[nodiscard]] auto continuous_macro(const PlanetDescriptor& planet,
-                                    PlanetFixedDirection direction,
-                                    TerrainTileCache& cache)
-    -> std::expected<double, Error> {
-  const auto address = terrain_address_from_planet_direction(
-      planet, direction, kLocalDetailMacroSourceLod);
-  if (!address) return std::unexpected{Error::invalid_direction};
-  const auto tile = cache.get(planet, address->tile);
-  if (!tile) return std::unexpected{Error::invalid_macro_source};
+struct MacroQuad {
+  std::array<TerrainSample, 4> samples;
+  double tx{}, ty{};
+};
+
+[[nodiscard]] auto macro_quad(const PlanetDescriptor& planet,
+                              const TerrainTileAddress& address,
+                              TerrainTileCache& cache, bool direct)
+    -> std::expected<MacroQuad, Error> {
   constexpr auto intervals = kTerrainTileIntervalsPerAxis;
-  const double grid_x = address->u * static_cast<double>(intervals);
-  const double grid_y = address->v * static_cast<double>(intervals);
+  const double grid_x = address.u * static_cast<double>(intervals);
+  const double grid_y = address.v * static_cast<double>(intervals);
   const auto x0 = static_cast<std::size_t>(std::floor(grid_x));
   const auto y0 = static_cast<std::size_t>(std::floor(grid_y));
   const auto x1 = std::min(x0 + 1, intervals);
   const auto y1 = std::min(y0 + 1, intervals);
-  const double tx = grid_x - static_cast<double>(x0);
-  const double ty = grid_y - static_cast<double>(y0);
-  const auto a = (*tile)->sample_at(x0, y0);
-  const auto b = (*tile)->sample_at(x1, y0);
-  const auto c = (*tile)->sample_at(x0, y1);
-  const auto d = (*tile)->sample_at(x1, y1);
-  if (!a || !b || !c || !d) return std::unexpected{Error::invalid_macro_source};
-  return lerp(lerp(a->get().elevation_metres, b->get().elevation_metres, tx),
-              lerp(c->get().elevation_metres, d->get().elevation_metres, tx),
-              ty);
+  MacroQuad result{
+      {}, grid_x - static_cast<double>(x0), grid_y - static_cast<double>(y0)};
+  const std::array<std::array<std::size_t, 2>, 4> coordinates{
+      {{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}}};
+  std::shared_ptr<const TerrainTile> tile;
+  if (!direct) {
+    const auto fetched = cache.get(planet, address.tile);
+    if (!fetched) return std::unexpected{Error::invalid_macro_source};
+    tile = *fetched;
+  }
+  for (std::size_t i = 0; i < coordinates.size(); ++i) {
+    const auto [x, y] = coordinates[i];
+    if (direct) {
+      const auto sample = generate_terrain_sample(planet, address.tile, x, y);
+      if (!sample) return std::unexpected{Error::invalid_macro_source};
+      result.samples[i] = *sample;
+    } else {
+      const auto sample = tile->sample_at(x, y);
+      if (!sample) return std::unexpected{Error::invalid_macro_source};
+      result.samples[i] = sample->get();
+    }
+  }
+  return result;
+}
+
+[[nodiscard]] auto direct_legacy_sample(const PlanetDescriptor& planet,
+                                        PlanetFixedDirection direction,
+                                        TerrainTileCache& cache)
+    -> std::expected<TerrainSurfaceSample, Error> {
+  const auto address = terrain_address_from_planet_fixed(
+      planet, {direction.x, direction.y, direction.z},
+      kLocalDetailMacroSourceLod);
+  if (!address) return std::unexpected{Error::invalid_direction};
+  const auto quad = macro_quad(planet, *address, cache, true);
+  if (!quad) return std::unexpected{quad.error()};
+  constexpr std::int64_t fixed_one = 65'536;
+  const auto fraction = [](double t) {
+    return std::clamp(static_cast<std::int64_t>(std::llround(t * 65'536.0)),
+                      std::int64_t{0}, std::int64_t{65'536});
+  };
+  const auto tx = fraction(quad->tx), ty = fraction(quad->ty);
+  const auto interpolate = [](std::int64_t a, std::int64_t b, std::int64_t t) {
+    return a + (b - a) * t / fixed_one;
+  };
+  const auto bilerp = [&](std::int64_t a, std::int64_t b, std::int64_t c,
+                          std::int64_t d) {
+    return interpolate(interpolate(a, b, tx), interpolate(c, d, tx), ty);
+  };
+  const auto& samples = quad->samples;
+  const auto height =
+      bilerp(samples[0].elevation_metres, samples[1].elevation_metres,
+             samples[2].elevation_metres, samples[3].elevation_metres);
+  const auto channel = [&](auto member) {
+    return static_cast<std::uint8_t>(std::clamp<std::int64_t>(
+        bilerp(samples[0].color.*member, samples[1].color.*member,
+               samples[2].color.*member, samples[3].color.*member),
+        0, 255));
+  };
+  return TerrainSurfaceSample{
+      *address,
+      static_cast<double>(height),
+      {channel(&Rgb8::red), channel(&Rgb8::green), channel(&Rgb8::blue)}};
+}
+
+[[nodiscard]] auto continuous_macro(const PlanetDescriptor& planet,
+                                    PlanetFixedDirection direction,
+                                    TerrainTileCache& cache, bool direct)
+    -> std::expected<double, Error> {
+  const auto address = terrain_address_from_planet_direction(
+      planet, direction, kLocalDetailMacroSourceLod);
+  if (!address) return std::unexpected{Error::invalid_direction};
+  const auto quad = macro_quad(planet, *address, cache, direct);
+  if (!quad) return std::unexpected{quad.error()};
+  const auto& samples = quad->samples;
+  return lerp(
+      lerp(samples[0].elevation_metres, samples[1].elevation_metres, quad->tx),
+      lerp(samples[2].elevation_metres, samples[3].elevation_metres, quad->tx),
+      quad->ty);
 }
 
 } // namespace
@@ -179,7 +247,8 @@ auto TerrainLocalDetailSampler::create(const PhysicalLocalSystem& owner,
 }
 
 auto TerrainLocalDetailSampler::height(PlanetFixedDirection direction,
-                                       std::uint8_t output_lod) const
+                                       std::uint8_t output_lod,
+                                       bool direct_macro) const
     -> std::expected<TerrainLocalDetailSample, TerrainLocalDetailError> {
   const auto unit = unit_direction(direction);
   if (!unit) return std::unexpected{unit.error()};
@@ -187,20 +256,28 @@ auto TerrainLocalDetailSampler::height(PlanetFixedDirection direction,
   const auto source_lod = m_recipe.version == kLegacyPhysicalTerrainRecipe
                               ? output_lod
                               : kLocalDetailMacroSourceLod;
-  const auto legacy =
-      sample_planet_surface(planet(), {direction.x, direction.y, direction.z},
-                            source_lod, *m_macro_cache);
-  if (!legacy)
-    return std::unexpected{legacy.error() ==
-                                   TerrainTileError::coordinate_failure
-                               ? Error::invalid_direction
-                               : Error::invalid_macro_source};
+  std::expected<TerrainSurfaceSample, Error> legacy;
+  if (direct_macro && m_recipe.version == kLocalDetailTerrainRecipe) {
+    legacy = direct_legacy_sample(planet(), direction, *m_macro_cache);
+  } else {
+    const auto sampled =
+        sample_planet_surface(planet(), {direction.x, direction.y, direction.z},
+                              source_lod, *m_macro_cache);
+    if (!sampled)
+      return std::unexpected{sampled.error() ==
+                                     TerrainTileError::coordinate_failure
+                                 ? Error::invalid_direction
+                                 : Error::invalid_macro_source};
+    legacy = *sampled;
+  }
+  if (!legacy) return std::unexpected{legacy.error()};
   TerrainLocalDetailSample result{.macro_elevation_metres =
                                       legacy->elevation_metres,
                                   .elevation_metres = legacy->elevation_metres,
                                   .color = legacy->color};
   if (m_recipe.version == kLegacyPhysicalTerrainRecipe) return result;
-  const auto macro = continuous_macro(planet(), direction, *m_macro_cache);
+  const auto macro =
+      continuous_macro(planet(), direction, *m_macro_cache, direct_macro);
   if (!macro) return std::unexpected{macro.error()};
   const auto detail = local_offset(*unit, planet().radius.value * 1'000.0,
                                    m_relief_seed, planet().terrain_character);
@@ -209,6 +286,12 @@ auto TerrainLocalDetailSampler::height(PlanetFixedDirection direction,
   result.local_offset_metres = *detail;
   result.elevation_metres = *macro + *detail;
   return result;
+}
+
+auto TerrainLocalDetailSampler::sample_height(PlanetFixedDirection direction,
+                                              std::uint8_t output_lod) const
+    -> std::expected<TerrainLocalDetailSample, TerrainLocalDetailError> {
+  return height(direction, output_lod, true);
 }
 
 auto TerrainLocalDetailSampler::sample(PlanetFixedDirection direction,

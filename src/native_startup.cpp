@@ -241,7 +241,8 @@ auto native_new_game(Seed universe_seed)
       make_freedom_starting_assembly_new_game_document(universe_seed);
   if (!document)
     return std::unexpected{"New Game rejected: " + document.error().detail};
-  const auto& flight = document->journey.voyage.flight;
+  auto& flight = document->journey.voyage.flight;
+  flight.model.terrain_policy = kFreedomLocalDetailTerrainPolicy;
   FreedomResources resources{1, flight.origin.state.craft, flight.flight.craft,
                              flight.flight.tick};
   auto knowledge = make_freedom_starting_knowledge(

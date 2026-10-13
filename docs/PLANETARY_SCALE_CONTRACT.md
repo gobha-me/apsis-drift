@@ -104,14 +104,18 @@ only a small-feature estimate. Report the projected crest/trough separation too.
 If geometry or height quantization erases the selected relief, fail its fidelity
 check even when colour suggests a ridge.
 
-The current support policy remains terrain generator1, source LOD8, relief0,
-mesh LOD13, 32 intervals and its existing anti-diagonal. Relief0 retains base
+Historical support policy1 remains terrain generator1, source LOD8, relief0,
+mesh LOD13, 32 intervals and its existing anti-diagonal. New native games
+[explicitly select policy2](SELECTED_NATIVE_TERRAIN.md), whose contact recipe3
+samples physical local-detail recipe2 at that same finest topology. Historical
+worlds do not migrate. Relief0 retains base
 elevation; it is not a declaration of a perfectly smooth sphere. Historical
 source tiles have 65 samples / 64 intervals. Do not confuse source samples with
 render/contact triangles or infer spacing from the LOD number alone: measure
 physical edges at the actual body/face/location. Exact shared source samples,
 seams and recipe identity retain [their contract](TERRAIN_TILES.md).
-New local detail remains #211; recognizable terrain implementation remains #212.
+The [#211 local-detail provider](TERRAIN_LOCAL_DETAIL.md) and #212 integration
+retain separate sampling and visual-fidelity evidence.
 
 The current two depth layers share camera transform, FOV and viewport. Their
 different clip planes may improve depth conditioning, but cannot change scale

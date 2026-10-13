@@ -174,20 +174,24 @@ auto fresh_starters(const std::filesystem::path& directory) -> void {
         std::get<FreedomKnowledgeSaveDocument>(selection.document)
             .voyage.voyage.base);
     const auto old = require(make_freedom_journey_new_game_document(seed));
-    check(document.journey == old &&
-              require(encode_freedom_journey_document_json(document.journey)) ==
-                  require(encode_freedom_journey_document_json(old)) &&
-              document.journey.voyage.flight.origin.recipe.universe_seed ==
-                  seed,
-          "Selected assembly changes no seed, generation, body, actor or "
-          "history");
+    auto expected = old;
+    expected.voyage.flight.model.terrain_policy =
+        kFreedomLocalDetailTerrainPolicy;
+    check(
+        old.voyage.flight.model.terrain_policy == kFreedomLegacyTerrainPolicy &&
+            document.journey == expected &&
+            require(encode_freedom_journey_document_json(document.journey)) ==
+                require(encode_freedom_journey_document_json(expected)) &&
+            document.journey.voyage.flight.origin.recipe.universe_seed == seed,
+        "Selected assembly changes only terrain policy, preserving seed, "
+        "generation, body, actor, other model fields and history");
     fixed_selection(document);
     auto session = require(NativeFreedomFlightSession::open(selection));
     const auto before = journey(session);
     const auto body_bits = state_bits(session.document().flight);
     const auto observation = require(session.observe());
     check(
-        before == old && session.starting_assembly() &&
+        before == expected && session.starting_assembly() &&
             *session.starting_assembly() == document.starting_assembly &&
             session.craft_binding().selection() != nullptr &&
             session.craft_binding().contact() != nullptr &&

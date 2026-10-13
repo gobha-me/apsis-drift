@@ -71,17 +71,20 @@ auto decode_base(const Json& j)
   const auto text = j.dump();
   const auto& version = j["format_version"];
   if (version == kFreedomFlightSaveFormatVersion ||
-      version == kFreedomActiveFlightSaveFormatVersion) {
+      version == kFreedomActiveFlightSaveFormatVersion ||
+      version == kFreedomTerrainFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
   }
-  if (version == kFreedomDockingSaveFormatVersion) {
+  if (version == kFreedomDockingSaveFormatVersion ||
+      version == kFreedomTerrainDockingSaveFormatVersion) {
     auto d = decode_freedom_docking_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
   }
-  if (version == kFreedomJourneySaveFormatVersion) {
+  if (version == kFreedomJourneySaveFormatVersion ||
+      version == kFreedomTerrainJourneySaveFormatVersion) {
     auto d = decode_freedom_journey_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
@@ -153,6 +156,10 @@ auto validate_freedom_surface_document(const FreedomSurfaceSaveDocument& d)
         failure("$.surface", "landed craft requires deployed gear, seated "
                              "pilot and no station constraint")};
   const auto& anchor = *d.surface.landed;
+  if (anchor.terrain_policy != flight.model.terrain_policy)
+    return std::unexpected{failure(
+        "$.surface.landed.terrain_policy",
+        "anchor terrain policy differs from its selected flight owner")};
   if (anchor.fixed.craft != flight.flight.craft ||
       anchor.fixed.frame.planet != flight.flight.frame.planet ||
       anchor.fixed.frame.system != flight.flight.frame.system)
@@ -259,7 +266,9 @@ auto decode_freedom_surface_document_json(std::string_view text)
     if (!fields(a, {"version", "terrain_policy", "rotation_generator",
                     "rotation_owner", "fixed"}) ||
         !a["version"].is_number_unsigned() || a["version"] != 1 ||
-        !a["terrain_policy"].is_number_unsigned() || a["terrain_policy"] != 1 ||
+        !a["terrain_policy"].is_number_unsigned() ||
+        a["terrain_policy"] !=
+            surface_base_flight(*base).model.terrain_policy ||
         !a["rotation_generator"].is_number_unsigned() ||
         a["rotation_generator"] != 1 ||
         !a["rotation_owner"].is_number_unsigned() || a["rotation_owner"] != 1)
@@ -273,7 +282,8 @@ auto decode_freedom_surface_document_json(std::string_view text)
     if (!fixed)
       return std::unexpected{
           failure("$.surface.landed.fixed", "malformed canonical anchor")};
-    surface.landed = LandedCraftAnchor{1, 1, 1, 1, *fixed};
+    surface.landed = LandedCraftAnchor{
+        1, a["terrain_policy"].get<std::uint32_t>(), 1, 1, *fixed};
   }
   FreedomSurfaceSaveDocument result{std::move(*base), surface};
   if (auto valid = validate_freedom_surface_document(result); !valid)

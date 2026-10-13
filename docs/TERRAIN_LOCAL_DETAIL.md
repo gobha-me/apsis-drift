@@ -4,6 +4,8 @@ Issue [#211](https://github.com/gobha-me/apsis-drift/issues/211) adds an explici
 selected C++ point and tile sampler. It does not select a new recipe for saved
 worlds, native streaming or landing/contact. Those consumers retain their
 existing terrain owner and policy until a separate versioned integration.
+The later [#212 native integration](SELECTED_NATIVE_TERRAIN.md) selects recipe2
+explicitly for new games while preserving historical terrain choices.
 The [planetary scale contract](PLANETARY_SCALE_CONTRACT.md) defines physical
 fidelity targets; [#212](https://github.com/gobha-me/apsis-drift/issues/212)
 owns recognizable terrain presentation.

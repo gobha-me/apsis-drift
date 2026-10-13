@@ -49,7 +49,8 @@ rotating-ground constraints do not become fuel channels.
 ## Save compatibility
 
 Format 23 is an explicit surface wrapper around a complete existing flight,
-docking, journey, starting-assembly or boarding document (formats 18–22). The
+docking, journey, starting-assembly or boarding document (historical formats
+18–22/26 or [selected terrain formats 31–33](SELECTED_NATIVE_TERRAIN.md)). The
 base remains the sole vehicle, history and clock owner. Surface state stores
 actual deployment and the optional versioned fixed anchor. No terrain catalog,
 controller command or extra vehicle is serialized. Existing saves keep their
@@ -58,8 +59,10 @@ original format until a surface action activates this layer.
 Continue validates the base, owner, terrain support, hull and exact constrained
 flight pose before opening. Version mismatches, contradictory gear/attachment,
 changed identities, corrupt/nonfinite anchors, clock overflow, duplicate keys,
-excessive nesting and document size refuse. Pending maneuvers do not resume
-from a save. Native Continue stages the selected model and gear state while
+excessive nesting and document size refuse. The anchor's terrain policy must
+match the base flight's selection; policy2 uses its explicit local-detail top
+geometry rather than historical support. Pending maneuvers do not resume from
+a save. Native Continue stages the selected model and gear state while
 paused, using the normal model-readiness transaction.
 
 ## Qualification boundaries

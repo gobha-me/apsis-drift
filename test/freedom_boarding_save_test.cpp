@@ -105,6 +105,25 @@ auto run() -> void {
       required(encode_freedom_boarding_document_json(document));
   check(required(decode_freedom_boarding_document_json(encoded)) == document,
         "22 exact roundtrip");
+  for (const auto policy :
+       {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy}) {
+    auto selected = document;
+    selected.voyage.flight.model.terrain_policy = policy;
+    const auto selected_text =
+        required(encode_freedom_boarding_document_json(selected));
+    check(required(decode_freedom_boarding_document_json(selected_text)) ==
+              selected,
+          "boarding wrapper retains explicitly selected terrain without "
+          "migration");
+    auto mismatched = nlohmann::ordered_json::parse(selected_text);
+    mismatched["voyage"]["format_version"] =
+        policy == kFreedomLocalDetailTerrainPolicy
+            ? kFreedomDockingSaveFormatVersion
+            : kFreedomTerrainDockingSaveFormatVersion;
+    check(!decode_freedom_boarding_document_json(mismatched.dump()),
+          "boarding rejects disagreement between nested version and terrain "
+          "selection");
+  }
   auto bad = document;
   bad.boarding.route.station_entry_eye.x =
       std::numeric_limits<double>::infinity();

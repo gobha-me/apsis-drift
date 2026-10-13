@@ -901,9 +901,9 @@ auto NativeFreedomFlightSession::commit_touchdown(
       !surface_ || !surface_->gear_deployed || surface_->landed)
     return std::unexpected{
         "Touchdown requires deployed gear and a free airborne craft"};
-  const auto anchor =
-      prepare_landed_craft(system_, rotation_, document_.flight,
-                           surface_->gear_deployed, expected_source_checksum);
+  const auto anchor = prepare_landed_craft(
+      system_, rotation_, document_.flight, surface_->gear_deployed,
+      expected_source_checksum, document_.model.terrain_policy);
   if (!anchor)
     return std::unexpected{
         "Touchdown refused by terrain, hull or motion checks"};

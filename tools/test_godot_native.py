@@ -70,7 +70,10 @@ TESTS = {
     "native_roundtrip_pilot_aligned": "roundtrip_saves",
     "native_roundtrip_pilot_offset": "roundtrip_saves",
     "native_surface": "surface_saves",
+    "native_surface_detail": "surface_saves",
+    "native_selected_terrain": "freedom_saves",
     "native_surface_walk": "surface_walk_saves",
+    "native_surface_walk_detail": "surface_walk_saves",
     "native_surface_loop": "surface_loop_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
@@ -85,6 +88,12 @@ TESTS = {
     "ship_audio_integration": "named_snapshot",
     "recorded_audio_integration": "named_snapshot",
     "recorded_audio_shutdown": "named_snapshot",
+}
+SURFACE_TESTS = {
+    "native_surface": ("surface", "--fixtures", 1),
+    "native_surface_detail": ("surface-detail", "--local-detail-fixtures", 2),
+    "native_surface_walk": ("surface-walk", "--walk-fixtures", 1),
+    "native_surface_walk_detail": ("surface-walk-detail", "--local-detail-walk-fixtures", 2),
 }
 ROUNDTRIP_TESTS = tuple(name for name, family in TESTS.items() if family == "roundtrip_saves")
 ERROR = re.compile(
@@ -218,7 +227,7 @@ def main(argv=None):
     if any(name in selected for name in ("native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS)):
         if not planetary_fixture.is_file() or not os.access(planetary_fixture, os.X_OK):
             parser.error(f"missing C++ planetary fixture: {planetary_fixture}")
-    if any(name in selected for name in ("native_surface", "native_surface_walk")):
+    if any(name in selected for name in SURFACE_TESTS):
         if not surface_fixture.is_file() or not os.access(surface_fixture, os.X_OK):
             parser.error(f"missing C++ surface fixture: {surface_fixture}")
     def prepare_physical_fixtures():
@@ -294,7 +303,7 @@ def main(argv=None):
         shutil.copy2(planetary_fixture, work / planetary_fixture.name)
         planetary_fixture = work / planetary_fixture.name
         staged_executables.append(planetary_fixture)
-    if any(name in selected for name in ("native_surface", "native_surface_walk")):
+    if any(name in selected for name in SURFACE_TESTS):
         shutil.copy2(surface_fixture, work / surface_fixture.name)
         surface_fixture = work / surface_fixture.name
         staged_executables.append(surface_fixture)
@@ -319,7 +328,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS, "native_surface", "native_surface_walk") for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -539,32 +548,20 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
-    if "native_surface" in selected:
-        phases = work / "surface"
-        log = work / "surface-fixture.log"
+    for name, (stem, fixture_flag, terrain_policy) in SURFACE_TESTS.items():
+        if name not in selected:
+            continue
+        phases = work / stem
+        log = work / f"{stem}-fixture.log"
         code, timed_out, elapsed = run_logged(
-            [str(surface_fixture), "--fixtures", str(phases)], log, env, args.timeout)
-        report["setup"].append({"family": "surface_saves", "returncode": code,
+            [str(surface_fixture), fixture_flag, str(phases)], log, env, args.timeout)
+        report["setup"].append({"family": TESTS[name], "test": name,
+            "terrain_policy": terrain_policy, "returncode": code,
             "timed_out": timed_out, "seconds": elapsed,
             "fixture_sha256": sha256(surface_fixture)})
         save()
         if code != 0 or timed_out:
-            print(f"FAIL surface fixture: {log}", flush=True)
-            return 1
-        report["setup"][-1]["files_sha256"] = {
-            path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
-        save()
-    if "native_surface_walk" in selected:
-        phases = work / "surface-walk"
-        log = work / "surface-walk-fixture.log"
-        code, timed_out, elapsed = run_logged(
-            [str(surface_fixture), "--walk-fixtures", str(phases)], log, env, args.timeout)
-        report["setup"].append({"family": "surface_walk_saves", "returncode": code,
-            "timed_out": timed_out, "seconds": elapsed,
-            "fixture_sha256": sha256(surface_fixture)})
-        save()
-        if code != 0 or timed_out:
-            print(f"FAIL surface walk fixture: {log}", flush=True)
+            print(f"FAIL {stem} fixture: {log}", flush=True)
             return 1
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
@@ -779,12 +776,14 @@ def main(argv=None):
                          ("freedom-0.json", "freedom-25.json", "career.json",
                           "corrupt.json", "snapshot-42.json")]
         elif TESTS[name] == "surface_walk_saves":
-            arguments = [str(work / path) for path in ("surface-walk", "native-assets", "surface-walk-native")]
+            stem = SURFACE_TESTS[name][0]
+            arguments = [str(work / path) for path in (stem, "native-assets", stem + "-native")]
         elif TESTS[name] == "surface_loop_saves":
             arguments = [str(work / path) for path in
                          ("surface-loop", "native-assets", "surface-loop-native")]
         elif TESTS[name] == "surface_saves":
-            arguments = [str(work / path) for path in ("surface", "native-assets", "surface-native")]
+            stem = SURFACE_TESTS[name][0]
+            arguments = [str(work / path) for path in (stem, "native-assets", stem + "-native")]
         elif TESTS[name] in ("planetary_saves", "voyage_saves"):
             arguments = [str(work / path) for path in
                          ("planetary", "native-assets", "voyage-native" if name == "native_voyage" else "planetary-native")]
@@ -810,6 +809,8 @@ def main(argv=None):
             arguments.append(str(work / "native-assets"))
         if name == "freedom_start":
             arguments.append(str(work / "flight-18.json"))
+        if name == "native_selected_terrain":
+            arguments = [str(work / path) for path in ("flight-18.json", "selected-terrain")]
         if name == "native_environment":
             arguments = [str(work / path) for path in ("wayfarer-flight.json", "environment-world.json", "shadow-day.json", "shadow-night.json", "shadow-limb.json")]
         if name == "saved_flight":

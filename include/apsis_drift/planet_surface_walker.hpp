@@ -56,12 +56,14 @@ class PlanetSurfaceWalkTerrain {
   }
 
  private:
-  PlanetSurfaceWalkTerrain(PlanetDescriptor planet, LandedCraftAnchor anchor,
-                           TerrainTileCache cache)
-      : planet_(std::move(planet)), anchor_(anchor), cache_(std::move(cache)) {}
+  PlanetSurfaceWalkTerrain(PhysicalLocalSystem owner, PlanetDescriptor planet,
+                           LandedCraftAnchor anchor, TerrainTileCache cache)
+      : owner_(std::move(owner)), planet_(std::move(planet)), anchor_(anchor),
+        cache_(std::move(cache)) {}
   [[nodiscard]] auto ground(RigidVector3 direction)
       -> std::expected<RigidVector3, PlanetSurfaceWalkStatus>;
   [[nodiscard]] auto blocked(RigidVector3 from, RigidVector3 to) const -> bool;
+  PhysicalLocalSystem owner_;
   PlanetDescriptor planet_;
   LandedCraftAnchor anchor_;
   TerrainTileCache cache_;

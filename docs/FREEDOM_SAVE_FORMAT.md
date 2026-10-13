@@ -1,5 +1,10 @@
 # Freedom station save, format 17
 
+This page describes the original station-only layer. Current native journeys
+compose the later flight, docking, walking and resource layers; their
+[explicit terrain selection](SELECTED_NATIVE_TERRAIN.md) uses formats 31/32/33
+for policy2 and preserves historical envelopes unchanged.
+
 The C++ save owner writes an explicit `mode: "freedom"` document for native New
 Game. `native_continue` selects the saved mode and source path. Existing
 format-16 career saves retain their objective, onboarding and Skip semantics;

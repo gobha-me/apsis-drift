@@ -8,6 +8,11 @@ namespace apsis_drift::godot_spike {
 // adoption, save data or permission to populate TouchdownObservations.
 inline constexpr ContactSurfaceRecipe kExperimentalSavedContactSurface{
     2, 1, 8, 0, 13, 32, 1};
+// Explicit physical local-detail height on the same finest top topology.
+inline constexpr ContactSurfaceRecipe kLocalDetailSavedContactSurface{
+    3, 1, 8, 0, 13, 32, 1};
+[[nodiscard]] auto saved_contact_recipe(std::uint32_t terrain_policy)
+    -> std::optional<ContactSurfaceRecipe>;
 
 struct SavedContactProvenance {
   PhysicalLocalSystem owner;

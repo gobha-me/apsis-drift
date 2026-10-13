@@ -1,3 +1,4 @@
+#include "../../src/godot/contact_geometry_internal.hpp"
 #include "apsis_drift/godot/contact_surface.hpp"
 #include "apsis_drift/godot/streaming.hpp"
 
@@ -602,11 +603,101 @@ auto owned_contract() -> void {
   check(owned_hash(plain_hit) == 13132756775747483476ULL,
         "experimental owned procedural golden changed");
 }
+auto selected_physical_contract() -> void {
+  check(!saved_contact_recipe(0) && !saved_contact_recipe(3) &&
+            !saved_contact_recipe(std::numeric_limits<std::uint32_t>::max()) &&
+            saved_contact_recipe(1) == kExperimentalSavedContactSurface &&
+            saved_contact_recipe(2) == kLocalDetailSavedContactSurface,
+        "terrain policy mapping admitted an unsupported selection");
+  const auto owner = require(generate_physical_origin_system(Seed{42}, 2));
+  const auto& planet =
+      owner.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  auto cache = require(TerrainTileCache::create(4));
+  ContactTriangleId id{planet.id, CubeFace::positive_x, 4095, 4096, 17, 21, 0};
+  error(apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+            planet, kLocalDetailSavedContactSurface, id, cache),
+        ContactSurfaceError::unsupported_recipe,
+        "descriptor-only path admitted selected local detail");
+  auto forged = owner;
+  ++forged.stellar_gm_km3_per_second2;
+  error(apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+            forged, planet, kLocalDetailSavedContactSurface, id, cache),
+        ContactSurfaceError::invalid_context, "forged physical owner accepted");
+  auto invalid_recipe = kLocalDetailSavedContactSurface;
+  invalid_recipe.diagonal = 99;
+  error(apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+            owner, planet, invalid_recipe, id, cache),
+        ContactSurfaceError::unsupported_recipe,
+        "unknown selected topology accepted");
+  auto invalid_id = id;
+  invalid_id.half = 2;
+  error(apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+            owner, planet, kLocalDetailSavedContactSurface, invalid_id, cache),
+        ContactSurfaceError::invalid_triangle, "bad selected half accepted");
+  const auto namesake = generate_planet_descriptor(planet.seed);
+  check(namesake != planet,
+        "authored owner fixture collapsed into its namesake");
+  error(apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+            owner, namesake, kLocalDetailSavedContactSurface, id, cache),
+        ContactSurfaceError::owner_mismatch,
+        "procedural namesake replaced authored home");
+  check(cache.size() == 0, "refused selected geometry accessed source cache");
+
+  constexpr unsigned n = kStreamIntervals + 1;
+  constexpr std::array<std::array<unsigned, 3>, 2> offsets{
+      {{0, 1, n}, {1, n + 1, n}}};
+  for (unsigned face = 0; face < 6; ++face) {
+    const StreamKey key{face, 13, id.tile_x, id.tile_y};
+    const auto tile =
+        build_stream_tile(owner, body_id(planet.id), key, 2, cache);
+    const auto old = build_stream_tile(planet, key, 8, 0, cache);
+    const auto owned_old =
+        build_stream_tile(owner, body_id(planet.id), key, 1, cache);
+    check(old->vertices == owned_old->vertices &&
+              old->normals == owned_old->normals &&
+              old->indices == owned_old->indices &&
+              old->elevations == owned_old->elevations,
+          "owned legacy policy changed existing stream geometry");
+    for (unsigned half = 0; half < 2; ++half) {
+      id.face = static_cast<CubeFace>(face);
+      id.half = half;
+      const auto triangle = require(
+          apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+              owner, planet, kLocalDetailSavedContactSurface, id, cache));
+      const unsigned start = id.cell_y * n + id.cell_x;
+      for (unsigned corner = 0; corner < 3; ++corner) {
+        const auto streamed =
+            add(tile->vertices[start + offsets[half][corner]], tile->anchor);
+        check(
+            length(sub(streamed, triangle.vertices[corner])) <= 2e-9,
+            "finest selected stream vertex differs from physical contact top");
+      }
+      const unsigned index_offset =
+          (id.cell_y * kStreamIntervals + id.cell_x) * 6 + half * 3;
+      const auto a =
+          tile->vertices[static_cast<std::size_t>(tile->indices[index_offset])];
+      const auto b = tile->vertices[static_cast<std::size_t>(
+          tile->indices[index_offset + 1])];
+      const auto c = tile->vertices[static_cast<std::size_t>(
+          tile->indices[index_offset + 2])];
+      check(dot(cross(sub(b, a), sub(c, a)), point(triangle.outward_normal)) <
+                0,
+            "selected stream top winding is not Godot-clockwise relative to "
+            "contact");
+      const auto legacy_triangle = require(
+          apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+              owner, planet, kExperimentalSavedContactSurface, id, cache));
+      check(triangle.vertices != legacy_triangle.vertices,
+            "new policy failed to select physical local detail");
+    }
+  }
+}
 } // namespace
 
 auto main() -> int {
   try {
     const auto planet = generate_planet_descriptor(Seed{42});
+    selected_physical_contract();
     invalid_contract(planet);
     ownership_contract(planet);
     mesh_contract(planet);

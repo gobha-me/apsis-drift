@@ -5,6 +5,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomDockingSaveFormatVersion{19};
+inline constexpr std::uint32_t kFreedomTerrainDockingSaveFormatVersion{32};
 struct FreedomDockingState {
   std::uint32_t geometry_version{1};
   OriginPortId target;

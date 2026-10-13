@@ -49,6 +49,9 @@ auto main() -> int {
                 .voyage.voyage.base)
             .journey;
     const auto freedom = journey.voyage.flight.origin;
+    check(journey.voyage.flight.model.terrain_policy ==
+              kFreedomLocalDetailTerrainPolicy,
+          "Native New Game did not explicitly select physical local detail");
     check(freedom == make_freedom_new_game_document(seed),
           "New Game changed authoritative saved state");
     check(freedom.state.craft !=

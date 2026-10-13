@@ -76,7 +76,10 @@ auto encode_freedom_docking_document_json(
   auto encoded = encode_freedom_flight_document_json(document.flight);
   if (!encoded) return std::unexpected{encoded.error()};
   Json root = Json::parse(*encoded);
-  root["format_version"] = kFreedomDockingSaveFormatVersion;
+  root["format_version"] =
+      document.flight.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
+          ? kFreedomTerrainDockingSaveFormatVersion
+          : kFreedomDockingSaveFormatVersion;
   root["state"]["location"] =
       document.docking.attached ? "docked_at_origin_port" : "planetary_flight";
   root["docking"] = {
@@ -125,7 +128,9 @@ auto decode_freedom_docking_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
-  if (root["format_version"] != kFreedomDockingSaveFormatVersion)
+  const bool selected =
+      root["format_version"] == kFreedomTerrainDockingSaveFormatVersion;
+  if (root["format_version"] != kFreedomDockingSaveFormatVersion && !selected)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom docking save version"}};
@@ -160,7 +165,8 @@ auto decode_freedom_docking_document_json(std::string_view text)
     return std::unexpected{
         failure("$.state.location", "attachment/location mismatch")};
   root.erase("docking");
-  root["format_version"] = root.contains("world_owner")
+  root["format_version"] = selected ? kFreedomTerrainFlightSaveFormatVersion
+                           : root.contains("world_owner")
                                ? kFreedomActiveFlightSaveFormatVersion
                                : kFreedomFlightSaveFormatVersion;
   root["state"]["location"] = "planetary_flight";
