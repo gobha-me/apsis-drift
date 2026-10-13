@@ -70,6 +70,13 @@ class TerrainLocalDetailSampler {
                             std::uint8_t output_lod) const
       -> std::expected<TerrainLocalDetailSample, TerrainLocalDetailError>;
 
+  // Height/color only: no stencil evaluations. Recipe2 reads the exact four
+  // source lattice samples directly, avoiding whole-tile construction for a
+  // coarse mesh. It is bit-equivalent to sample() apart from absent slope.
+  [[nodiscard]] auto sample_height(PlanetFixedDirection direction,
+                                   std::uint8_t output_lod) const
+      -> std::expected<TerrainLocalDetailSample, TerrainLocalDetailError>;
+
   // Fixed 65x65 layout. Validate all inputs before staging; any refusal leaves
   // the entire caller buffer unchanged, including an unused trailing region.
   [[nodiscard]] auto fill_tile(TerrainTileKey key, std::size_t samples_per_axis,
@@ -82,7 +89,8 @@ class TerrainLocalDetailSampler {
                             std::size_t planet_index,
                             TerrainTileCache& macro_cache);
   [[nodiscard]] auto height(PlanetFixedDirection direction,
-                            std::uint8_t output_lod) const
+                            std::uint8_t output_lod,
+                            bool direct_macro = false) const
       -> std::expected<TerrainLocalDetailSample, TerrainLocalDetailError>;
 
   PhysicalLocalSystem m_owner;

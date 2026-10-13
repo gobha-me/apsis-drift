@@ -478,6 +478,81 @@ auto files(const std::filesystem::path& directory) -> void {
                 directory / "missing" / "x.json", document(Seed{42})),
         "invalid/missing destination paths refuse");
 }
+auto terrain_selection(const std::filesystem::path& directory) -> void {
+  for (bool active : {false, true}) {
+    auto legacy = document(Seed{42});
+    if (active) {
+      const auto journey =
+          required(make_freedom_journey_new_game_document(Seed{42}));
+      legacy = journey.voyage.flight;
+      legacy.world = FreedomActiveWorldSelection{
+          1, legacy.flight.frame.system, legacy.flight.frame.planet.value()};
+    }
+    const auto old_text = required(encode_freedom_flight_document_json(legacy));
+    const auto old = Json::parse(old_text);
+    check(
+        old["flight_model"].size() == 8 &&
+            !old["flight_model"].contains("terrain_policy") &&
+            old["recipe"]["generator_versions"][3] == 1,
+        "legacy flight retains exact eight-field model and terrain generator1");
+    check(required(decode_freedom_flight_document_json(old_text)) == legacy &&
+              required(encode_freedom_flight_document_json(required(
+                  decode_freedom_flight_document_json(old_text)))) == old_text,
+          "historical flight bytes roundtrip without terrain migration");
+    auto selected = legacy;
+    selected.model.terrain_policy = kFreedomLocalDetailTerrainPolicy;
+    const auto encoded =
+        required(encode_freedom_flight_document_json(selected));
+    const auto root = Json::parse(encoded);
+    check(root["format_version"] == kFreedomTerrainFlightSaveFormatVersion &&
+              root["flight_model"].size() == 9 &&
+              root["flight_model"]["terrain_policy"] == 2 &&
+              root["recipe"] == old["recipe"] &&
+              required(decode_freedom_flight_document_json(encoded)) ==
+                  selected,
+          "selected flight31 persists policy2 independently of legacy tuple");
+    check(std::get<FreedomFlightSaveDocument>(
+              required(decode_native_save_document_json(encoded))) == selected,
+          "native decoder dispatches selected flight31 with its policy");
+    for (const auto& policy :
+         {Json(nullptr), Json(true), Json("2"), Json(2.0), Json(0), Json(1),
+          Json(3), Json(std::numeric_limits<std::uint64_t>::max())}) {
+      auto bad = root;
+      bad["flight_model"]["terrain_policy"] = policy;
+      check(!decode_native_save_document_json(bad.dump()),
+            "selected model rejects wrong type, old, unknown and wide policy");
+    }
+    auto bad = root;
+    for (const auto& malformed : {Json(nullptr), Json(true), Json::array()}) {
+      bad = root;
+      bad["flight_model"] = malformed;
+      check(!decode_native_save_document_json(bad.dump()),
+            "selected nonobject model refuses without throwing or fallback");
+    }
+    bad = root;
+    bad["flight_model"].erase("terrain_policy");
+    check(!decode_native_save_document_json(bad.dump()),
+          "selected policy cannot default from a missing field");
+    bad = root;
+    bad["format_version"] = old["format_version"];
+    check(!decode_native_save_document_json(bad.dump()),
+          "policy2 cannot be smuggled into historical flight18/26");
+    bad = old;
+    bad["format_version"] = kFreedomTerrainFlightSaveFormatVersion;
+    check(!decode_native_save_document_json(bad.dump()),
+          "relabeled old flight cannot silently select terrain2");
+    const auto path =
+        directory / (active ? "terrain-active.json" : "terrain-home.json");
+    check(write_freedom_flight_file_atomically(path, selected).has_value(),
+          "selected flight writes through native atomic save path");
+    const auto before = contents(path);
+    selected.model.terrain_policy = 99;
+    check(!hydrate_freedom_flight_document(selected) &&
+              !write_freedom_flight_file_atomically(path, selected) &&
+              contents(path) == before,
+          "unknown terrain selection refuses before replacing destination");
+  }
+}
 } // namespace
 int main() {
   try {
@@ -489,6 +564,7 @@ int main() {
              std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(directory);
     files(directory);
+    terrain_selection(directory);
     active_worlds(directory);
     for (Seed seed :
          {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}})

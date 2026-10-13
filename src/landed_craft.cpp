@@ -11,17 +11,20 @@ namespace apsis_drift {
 namespace {
 auto support_and_hull(const PhysicalLocalSystem& owner,
                       const PhysicalPlanetRotationRecipe& rotation,
-                      const RigidBodyState& source, bool gear)
+                      const RigidBodyState& source, bool gear,
+                      std::uint32_t terrain_policy)
     -> std::expected<RigidBodyState, LandedCraftError> {
-  auto snapshot =
-      TerrainTouchdownSnapshot::create(owner, rotation, source, gear);
+  auto snapshot = TerrainTouchdownSnapshot::create(owner, rotation, source,
+                                                   gear, terrain_policy);
   if (!snapshot) return std::unexpected{LandedCraftError::invalid_source};
   const auto query = snapshot->query();
   if (!query.assessment)
     return std::unexpected{LandedCraftError::contact_unknown};
   if (query.assessment->classification != TouchdownClass::pad_contact_ready)
     return std::unexpected{LandedCraftError::contact_not_ready};
-  const auto hull = assess_terrain_hull_clearance(owner, rotation, source);
+  const auto hull = assess_terrain_hull_clearance(
+      owner, rotation, source, kDefaultTerrainTileCacheCapacity,
+      terrain_policy);
   if (!hull || !hull->certified)
     return std::unexpected{LandedCraftError::hull_not_certified};
   return query.geometry.provenance.fixed_query_state;
@@ -31,21 +34,24 @@ auto support_and_hull(const PhysicalLocalSystem& owner,
 auto prepare_landed_craft(const PhysicalLocalSystem& owner,
                           const PhysicalPlanetRotationRecipe& rotation,
                           const RigidBodyState& source, bool gear_deployed,
-                          std::uint64_t expected_source_checksum)
+                          std::uint64_t expected_source_checksum,
+                          std::uint32_t terrain_policy)
     -> std::expected<LandedCraftAnchor, LandedCraftError> {
+  if (!godot_spike::saved_contact_recipe(terrain_policy))
+    return std::unexpected{LandedCraftError::unsupported_version};
   const auto checksum = rigid_body_state_checksum({owner}, source);
   if (!checksum) return std::unexpected{LandedCraftError::invalid_source};
   if (*checksum != expected_source_checksum)
     return std::unexpected{LandedCraftError::stale_source};
   if (!gear_deployed)
     return std::unexpected{LandedCraftError::gear_not_deployed};
-  auto fixed = support_and_hull(owner, rotation, source, true);
+  auto fixed = support_and_hull(owner, rotation, source, true, terrain_policy);
   if (!fixed) return std::unexpected{fixed.error()};
   fixed->linear_velocity_metres_per_second = {};
   fixed->angular_velocity_radians_per_second = {};
-  LandedCraftAnchor anchor{
-      kLandedCraftAnchorVersion, kTerrainTouchdownPolicyVersion,
-      rotation.rotation.version, rotation.owner_version, *fixed};
+  LandedCraftAnchor anchor{kLandedCraftAnchorVersion, terrain_policy,
+                           rotation.rotation.version, rotation.owner_version,
+                           *fixed};
   if (auto valid = validate_landed_craft(owner, rotation, anchor, source.tick);
       !valid)
     return std::unexpected{valid.error()};
@@ -57,7 +63,7 @@ auto resolve_landed_craft(const PhysicalLocalSystem& owner,
                           const LandedCraftAnchor& anchor, SimulationTick tick)
     -> std::expected<RigidBodyState, LandedCraftError> {
   if (anchor.version != kLandedCraftAnchorVersion ||
-      anchor.terrain_policy != kTerrainTouchdownPolicyVersion ||
+      !godot_spike::saved_contact_recipe(anchor.terrain_policy) ||
       anchor.rotation_generator != rotation.rotation.version ||
       anchor.rotation_owner != rotation.owner_version)
     return std::unexpected{LandedCraftError::unsupported_version};
@@ -92,7 +98,8 @@ auto validate_landed_craft(const PhysicalLocalSystem& owner,
     -> std::expected<void, LandedCraftError> {
   const auto source = resolve_landed_craft(owner, rotation, anchor, tick);
   if (!source) return std::unexpected{source.error()};
-  const auto geometry = support_and_hull(owner, rotation, *source, true);
+  const auto geometry =
+      support_and_hull(owner, rotation, *source, true, anchor.terrain_policy);
   if (!geometry) return std::unexpected{geometry.error()};
   return {};
 }

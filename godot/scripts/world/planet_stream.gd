@@ -17,6 +17,33 @@ var retired_total := 0
 var last_report: Dictionary = {}
 var error := ""
 var render_layer := 1
+var identity: Dictionary = {}
+
+
+static func valid_decimal(value: Variant) -> bool:
+	if typeof(value) != TYPE_STRING or value.is_empty() or value.length() > 20:
+		return false
+	if value.length() > 1 and value.begins_with("0"):
+		return false
+	for index in range(value.length()):
+		var code: int = value.unicode_at(index)
+		if code < 48 or code > 57:
+			return false
+	return value.length() < 20 or value <= "18446744073709551615"
+
+
+static func valid_identity(value: Dictionary) -> bool:
+	if typeof(value.get("schema_version")) != TYPE_INT or value.schema_version != 1:
+		return false
+	if not valid_decimal(value.get("generation")) or value.generation == "0":
+		return false
+	if typeof(value.get("terrain_policy")) != TYPE_INT:
+		return false
+	if value.get("kind") == "owned":
+		return value.size() == 9 and value.terrain_policy in [1, 2] and valid_decimal(value.get("system_id")) and valid_decimal(value.get("body_id")) and typeof(value.get("body_version")) == TYPE_INT and value.body_version == 1 and value.get("body_kind") == "planet" and typeof(value.get("physical_catalog")) == TYPE_INT and value.physical_catalog in [1, 2]
+	if value.get("kind") == "study":
+		return value.size() == 6 and value.terrain_policy == 0 and valid_decimal(value.get("planet_id")) and typeof(value.get("experimental_relief_version")) == TYPE_INT and value.experimental_relief_version in [0, 1]
+	return false
 
 
 func reset_world() -> void:
@@ -32,10 +59,20 @@ func reset_world() -> void:
 	timer = 0.0
 	is_ready = false
 	last_report.clear()
+	identity.clear()
 	error = ""
 
 
 func tick(delta: float, observer: Vector3) -> void:
+	var current: Dictionary = bridge.get_stream_identity()
+	if not valid_identity(current):
+		error = "C++ terrain stream identity is unavailable or invalid"
+		return
+	if current != identity:
+		# Retire both covers and any partially uploaded payload before keys
+		# from another owner, saved policy or stream generation can alias them.
+		reset_world()
+		identity = current.duplicate(true)
 	if not error.is_empty():
 		return
 	timer += delta
@@ -45,6 +82,9 @@ func tick(delta: float, observer: Vector3) -> void:
 			error = str(batch.error)
 			return
 		if batch.has("tiles"):
+			if typeof(batch.get("identity")) != TYPE_DICTIONARY or not valid_identity(batch.identity) or batch.identity != identity:
+				error = "C++ terrain batch differs from the selected stream"
+				return
 			pending = batch.tiles
 			wanted.clear()
 			for entry in pending:
@@ -132,4 +172,5 @@ func report() -> Dictionary:
 	result["generated_total"] = generated_total
 	result["retired_total"] = retired_total
 	result["ready"] = is_ready
+	result["identity"] = identity.duplicate(true)
 	return result

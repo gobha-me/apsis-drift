@@ -1,6 +1,8 @@
 #pragma once
 
+#include "apsis_drift/godot/saved_contact_geometry.hpp"
 #include "apsis_drift/godot/snapshot.hpp"
+#include "apsis_drift/terrain_local_detail.hpp"
 
 #include <chrono>
 #include <future>
@@ -117,6 +119,42 @@ inline auto plan_tiles(const PlanetDescriptor& planet, StreamPoint observer,
   return result;
 }
 
+// Policy2 planner distance is clearance above the selected radial height,
+// rather than altitude above the spherical datum. Only the planner observer
+// changes; physical camera/terrain points and the old planner stay untouched.
+inline auto plan_selected_tiles(const PhysicalLocalSystem& owner, BodyId body,
+                                std::uint32_t terrain_policy,
+                                StreamPoint observer,
+                                unsigned budget = kStreamMaxTiles)
+    -> std::vector<StreamKey> {
+  const double observer_radius = length(observer);
+  // Check raw dimensions/numerics before evaluating any source sample.
+  if (budget < 6 || budget > kStreamMaxTiles ||
+      !std::isfinite(observer_radius) || observer_radius < 1 ||
+      observer_radius > 1.0e10)
+    throw std::invalid_argument(
+        "invalid selected stream observer or tile budget");
+  if (!saved_contact_recipe(terrain_policy))
+    throw std::invalid_argument("unsupported selected stream terrain policy");
+  auto cache = require(TerrainTileCache::create(1));
+  const auto sampler =
+      TerrainLocalDetailSampler::create(owner, body, {terrain_policy}, cache);
+  if (!sampler)
+    throw std::invalid_argument("invalid selected stream owner/body");
+  if (terrain_policy == 1)
+    return plan_tiles(sampler->planet(), observer, budget);
+  const auto sample = sampler->sample_height(
+      {observer.x, observer.y, observer.z}, kStreamMaxLod);
+  if (!sample)
+    throw std::invalid_argument("selected stream surface is unavailable");
+  const double planner_radius = observer_radius - sample->elevation_metres;
+  if (!std::isfinite(planner_radius) || planner_radius < 1 ||
+      planner_radius > 1.0e10)
+    throw std::invalid_argument("unsafe selected stream clearance radius");
+  const auto planner_observer = mul(observer, planner_radius / observer_radius);
+  return plan_tiles(sampler->planet(), planner_observer, budget);
+}
+
 struct StreamTile {
   StreamKey key;
   StreamPoint anchor;
@@ -132,9 +170,11 @@ struct StreamTile {
   }
 };
 
-inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
-                              unsigned source_lod, unsigned relief_version,
-                              TerrainTileCache& cache)
+inline auto build_stream_tile_impl(const PlanetDescriptor& planet,
+                                   StreamKey key, unsigned source_lod,
+                                   unsigned relief_version,
+                                   TerrainTileCache& cache,
+                                   const TerrainLocalDetailSampler* selected)
     -> std::shared_ptr<const StreamTile> {
   if (source_lod > 10 || relief_version > kExperimentalReliefVersion)
     throw std::invalid_argument("invalid stream recipe");
@@ -149,14 +189,21 @@ inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
   // high-LOD tiles merely to draw a distant hemisphere. Fine meshes use exactly
   // the same source-LOD interpolation as live flight.
   std::shared_ptr<const TerrainTile> coarse;
-  if (key.lod <= source_lod) coarse = require(cache.get(planet, address_key));
+  if (!selected && key.lod <= source_lod)
+    coarse = require(cache.get(planet, address_key));
   for (unsigned row = 0; row < n; ++row)
     for (unsigned col = 0; col < n; ++col) {
       const double u = static_cast<double>(col) / kStreamIntervals;
       const double v = static_cast<double>(row) / kStreamIntervals;
       const auto reference = tile_point(planet, key, u, v);
       TerrainSurfaceSample sample;
-      if (coarse) {
+      if (selected) {
+        const auto physical = require(
+            selected->sample_height({reference.x, reference.y, reference.z},
+                                    static_cast<std::uint8_t>(key.lod)));
+        sample = {
+            {address_key, u, v}, physical.elevation_metres, physical.color};
+      } else if (coarse) {
         const auto& exact =
             require(coarse->sample_at(static_cast<std::size_t>(col) * 2,
                                       static_cast<std::size_t>(row) * 2))
@@ -167,7 +214,8 @@ inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
       } else
         sample = require(sample_planet_surface(
             planet, reference, static_cast<std::uint8_t>(source_lod), cache));
-      sample = with_relief(sample, planet, reference, relief_version);
+      if (!selected)
+        sample = with_relief(sample, planet, reference, relief_version);
       const auto position =
           tile_point(planet, key, u, v, sample.elevation_metres);
       fixed.push_back(position);
@@ -213,11 +261,20 @@ inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
   if (key.lod >= 5) {
     const double radius = planet.radius.value * 1000.0;
     auto surface_point = [&](StreamPoint probe) {
-      const auto sample = with_relief(
-          require(sample_planet_surface(
-              planet, probe, static_cast<std::uint8_t>(source_lod), cache)),
-          planet, probe, relief_version);
-      return mul(unit(probe), radius + sample.elevation_metres);
+      double elevation{};
+      if (selected) {
+        elevation = require(selected->sample_height(
+                                {probe.x, probe.y, probe.z},
+                                static_cast<std::uint8_t>(source_lod)))
+                        .elevation_metres;
+      } else {
+        const auto sample = with_relief(
+            require(sample_planet_surface(
+                planet, probe, static_cast<std::uint8_t>(source_lod), cache)),
+            planet, probe, relief_version);
+        elevation = sample.elevation_metres;
+      }
+      return mul(unit(probe), radius + elevation);
     };
     for (std::size_t i = 0; i < fixed.size(); ++i) {
       const auto radial = unit(fixed[i]);
@@ -267,6 +324,30 @@ inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
   return tile;
 }
 
+inline auto build_stream_tile(const PlanetDescriptor& planet, StreamKey key,
+                              unsigned source_lod, unsigned relief_version,
+                              TerrainTileCache& cache)
+    -> std::shared_ptr<const StreamTile> {
+  return build_stream_tile_impl(planet, key, source_lod, relief_version, cache,
+                                nullptr);
+}
+
+// Complete owner selection; the old descriptor-only study path cannot select
+// local-detail terrain. The sampler/cache live together for this tile build.
+inline auto build_stream_tile(const PhysicalLocalSystem& owner, BodyId body,
+                              StreamKey key, std::uint32_t terrain_policy,
+                              TerrainTileCache& cache)
+    -> std::shared_ptr<const StreamTile> {
+  if (!saved_contact_recipe(terrain_policy))
+    throw std::invalid_argument("unsupported selected stream terrain policy");
+  const auto sampler =
+      TerrainLocalDetailSampler::create(owner, body, {terrain_policy}, cache);
+  if (!sampler)
+    throw std::invalid_argument("invalid selected stream owner/body");
+  return build_stream_tile_impl(sampler->planet(), key, 8, 0, cache,
+                                terrain_policy == 2 ? &*sampler : nullptr);
+}
+
 using TileMap = std::map<StreamKey, std::shared_ptr<const StreamTile>>;
 struct StreamBatch {
   TileMap tiles;
@@ -288,16 +369,48 @@ struct StreamBatch {
 class PlanetStream {
   PlanetDescriptor planet;
   unsigned source_lod, relief_version;
+  std::optional<PhysicalLocalSystem> physical_owner;
+  std::optional<BodyId> physical_body;
+  std::uint32_t terrain_policy{};
   TileMap resident;
   std::vector<StreamKey> requested;
   std::future<StreamBatch> future;
   std::stop_source stop;
+
+  static auto selected_planet(const PhysicalLocalSystem& owner, BodyId body,
+                              std::uint32_t policy) -> PlanetDescriptor {
+    if (!saved_contact_recipe(policy))
+      throw std::invalid_argument("unsupported selected stream terrain policy");
+    auto cache = require(TerrainTileCache::create(1));
+    const auto sampler =
+        TerrainLocalDetailSampler::create(owner, body, {policy}, cache);
+    if (!sampler)
+      throw std::invalid_argument("invalid selected stream owner/body");
+    return sampler->planet();
+  }
 
  public:
   PlanetStream(const PlanetDescriptor& p, unsigned lod, unsigned relief)
       : planet(p), source_lod(lod), relief_version(relief) {
     if (lod > 10 || relief > kExperimentalReliefVersion)
       throw std::invalid_argument("invalid stream recipe");
+  }
+  PlanetStream(const PhysicalLocalSystem& owner, BodyId body,
+               std::uint32_t selected_policy)
+      : PlanetStream(selected_planet(owner, body, selected_policy), 8, 0) {
+    physical_owner.emplace(owner);
+    physical_body = body;
+    terrain_policy = selected_policy;
+  }
+  [[nodiscard]] auto selected_owner() const noexcept
+      -> const std::optional<PhysicalLocalSystem>& {
+    return physical_owner;
+  }
+  [[nodiscard]] auto selected_body() const noexcept -> std::optional<BodyId> {
+    return physical_body;
+  }
+  [[nodiscard]] auto selected_terrain_policy() const noexcept -> std::uint32_t {
+    return terrain_policy;
   }
   ~PlanetStream() {
     stop.request_stop();
@@ -307,32 +420,47 @@ class PlanetStream {
   auto operator=(const PlanetStream&) -> PlanetStream& = delete;
   auto busy() const -> bool { return future.valid(); }
   auto request(StreamPoint observer) -> bool {
-    const auto plan = plan_tiles(planet, observer); // Validate even while busy.
+    // Validate even while busy. Historical study/policy1 planning remains
+    // exact.
+    const auto plan = terrain_policy == 2
+                          ? plan_selected_tiles(*physical_owner, *physical_body,
+                                                terrain_policy, observer)
+                          : plan_tiles(planet, observer);
     if (busy() || plan == requested) return false;
     requested = plan;
     const auto token = stop.get_token();
-    future = std::async(std::launch::async, [p = planet, lod = source_lod,
-                                             relief = relief_version, plan,
-                                             old = resident, token]() {
-      const auto begin = std::chrono::steady_clock::now();
-      StreamBatch batch;
-      auto cache = require(TerrainTileCache::create(64));
-      for (const auto& key : plan) {
-        if (token.stop_requested()) break;
-        if (auto it = old.find(key); it != old.end()) {
-          batch.tiles.emplace(key, it->second);
-          ++batch.reused;
-        } else {
-          batch.tiles.emplace(key,
-                              build_stream_tile(p, key, lod, relief, cache));
-          ++batch.generated;
-        }
-      }
-      batch.milliseconds = std::chrono::duration<double, std::milli>(
-                               std::chrono::steady_clock::now() - begin)
-                               .count();
-      return batch;
-    });
+    future = std::async(
+        std::launch::async,
+        [p = planet, lod = source_lod, relief = relief_version, plan,
+         old = resident, token, owner = physical_owner, body = physical_body,
+         policy = terrain_policy]() {
+          const auto begin = std::chrono::steady_clock::now();
+          StreamBatch batch;
+          auto cache = require(TerrainTileCache::create(64));
+          // Created inside this job: its raw cache reference never crosses a
+          // move or outlives the job-local cache. Completed tiles own only mesh
+          // values.
+          std::optional<TerrainLocalDetailSampler> sampler;
+          if (owner && policy == 2)
+            sampler.emplace(require(TerrainLocalDetailSampler::create(
+                *owner, *body, {policy}, cache)));
+          for (const auto& key : plan) {
+            if (token.stop_requested()) break;
+            if (auto it = old.find(key); it != old.end()) {
+              batch.tiles.emplace(key, it->second);
+              ++batch.reused;
+            } else {
+              batch.tiles.emplace(
+                  key, build_stream_tile_impl(p, key, lod, relief, cache,
+                                              sampler ? &*sampler : nullptr));
+              ++batch.generated;
+            }
+          }
+          batch.milliseconds = std::chrono::duration<double, std::milli>(
+                                   std::chrono::steady_clock::now() - begin)
+                                   .count();
+          return batch;
+        });
     return true;
   }
   auto poll() -> std::optional<StreamBatch> {

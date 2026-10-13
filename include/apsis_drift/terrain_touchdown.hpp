@@ -6,8 +6,9 @@
 namespace apsis_drift {
 
 // Gameplay support policy, independent of historical experimental recipes and
-// saves: current source LOD8 / relief0 / finest top triangulation, dry bedrock,
-// no water landing. Changing any of these semantics requires a new version.
+// saves: policy1 keeps historical source LOD8 / relief0; policy2 uses the
+// selected physical local-detail field. Both use finest top triangulation,
+// rigid dry bedrock and no water landing.
 inline constexpr std::uint32_t kTerrainTouchdownPolicyVersion{1};
 
 enum class TerrainSupportError : std::uint8_t {
@@ -48,9 +49,13 @@ struct TerrainTouchdownResult {
 // removal.
 class TerrainTouchdownSnapshot {
  public:
+  [[nodiscard]] static auto create(const NativeFreedomFlightSession&,
+                                   bool gear_deployed)
+      -> std::expected<TerrainTouchdownSnapshot,
+                       godot_spike::SavedContactError>;
   [[nodiscard]] static auto create(
       const NativeFreedomFlightSession&, bool gear_deployed,
-      std::uint32_t policy_version = kTerrainTouchdownPolicyVersion,
+      std::uint32_t policy_version,
       std::size_t cache_capacity = kDefaultTerrainTileCacheCapacity)
       -> std::expected<TerrainTouchdownSnapshot,
                        godot_spike::SavedContactError>;
@@ -68,9 +73,11 @@ class TerrainTouchdownSnapshot {
 
  private:
   TerrainTouchdownSnapshot(godot_spike::SavedContactGeometry geometry,
-                           bool gear_deployed)
-      : geometry_(std::move(geometry)), gear_deployed_(gear_deployed) {}
+                           bool gear_deployed, std::uint32_t policy_version)
+      : geometry_(std::move(geometry)), gear_deployed_(gear_deployed),
+        policy_version_(policy_version) {}
   godot_spike::SavedContactGeometry geometry_;
   bool gear_deployed_{};
+  std::uint32_t policy_version_{};
 };
 } // namespace apsis_drift

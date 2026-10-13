@@ -1,3 +1,4 @@
+#include "../../src/godot/contact_geometry_internal.hpp"
 #include "apsis_drift/godot/streaming.hpp"
 
 #include <iostream>
@@ -44,8 +45,186 @@ static auto await_batch(PlanetStream& stream) -> StreamBatch {
   }
   throw std::runtime_error("stream worker timed out");
 }
+static auto selected_stream_contract() -> void {
+  const auto owner = require(generate_physical_origin_system(Seed{42}, 2));
+  const auto& planet =
+      owner.catalog.planets[kOriginHomePlanetOrdinal].descriptor;
+  const auto body = body_id(planet.id);
+  for (const auto policy : {0U, 3U, std::numeric_limits<std::uint32_t>::max()})
+    rejects([&] { PlanetStream bad(owner, body, policy); });
+  auto forged = owner;
+  ++forged.stellar_gm_km3_per_second2;
+  rejects([&] { PlanetStream bad(forged, body, 2); });
+  rejects([&] { PlanetStream bad(owner, body_id(owner.catalog.star.id), 2); });
+  auto wrong = body;
+  wrong.version = 99;
+  rejects([&] { PlanetStream bad(owner, wrong, 2); });
+  PlanetStream stream(owner, body, 2);
+  check(stream.selected_owner() == owner && stream.selected_body() == body &&
+            stream.selected_terrain_policy() == 2,
+        "owned streaming lost its authenticated selection");
+  const StreamPoint observer{planet.radius.value * 1000.0 + 1e8, 0, 0};
+  check(stream.request(observer), "owned distant cover did not schedule");
+  const auto batch = await_batch(stream);
+  complete_cover([&] {
+    std::vector<StreamKey> keys;
+    for (const auto& [key, tile] : batch.tiles) {
+      (void)tile;
+      keys.push_back(key);
+    }
+    return keys;
+  }());
+  check(batch.tiles.size() == 6,
+        "distant selected cover did not retain six faces");
+  auto cache = require(TerrainTileCache::create(2));
+  for (const auto& [key, tile] : batch.tiles) {
+    const auto regenerated = build_stream_tile(owner, body, key, 2, cache);
+    check(
+        tile->vertices == regenerated->vertices &&
+            tile->elevations == regenerated->elevations &&
+            tile->colors == regenerated->colors &&
+            tile->indices == regenerated->indices,
+        "owned async job changed selected geometry or retained dangling state");
+  }
+  check(cache.size() == 0,
+        "coarse detail stream constructed thousands of macro tiles");
+  check(!stream.request(observer),
+        "unchanged selected cover needlessly regenerated");
+  std::cout << "Selected six-face local-detail cover: worker ms="
+            << batch.milliseconds << "; bytes=" << batch.bytes() << '\n';
+}
+struct ElevatedTerrainFixture {
+  PhysicalLocalSystem owner;
+  BodyId body;
+  StreamPoint observer;
+  double elevation{};
+  unsigned legacy_lod{};
+};
+static auto containing_lod(const PlanetDescriptor& planet,
+                           const std::vector<StreamKey>& cover,
+                           StreamPoint observer) -> unsigned {
+  for (const auto& key : cover) {
+    const auto address = require(terrain_address_from_planet_direction(
+        planet, {observer.x, observer.y, observer.z},
+        static_cast<std::uint8_t>(key.lod)));
+    if (address.tile == tile_key(planet, key)) return key.lod;
+  }
+  throw std::runtime_error("complete cover omitted its observer direction");
+}
+static auto elevated_fixture() -> ElevatedTerrainFixture {
+  // Select a real admitted procedural owner, not an overridden alpine sphere.
+  // The fixed finite search also verifies that the regression trigger exists.
+  for (std::uint64_t seed = 0; seed < 128; ++seed) {
+    auto owner = require(generate_physical_local_system(Seed{seed}, 2));
+    for (const auto& entry : owner.catalog.planets) {
+      const auto& planet = entry.descriptor;
+      if (planet.radius.value < 4000 ||
+          planet.terrain_character == TerrainCharacter::plains ||
+          planet.terrain_character == TerrainCharacter::oceanic)
+        continue;
+      auto cache = require(TerrainTileCache::create(1));
+      const auto body = body_id(planet.id);
+      const auto sampler =
+          require(TerrainLocalDetailSampler::create(owner, body, {2}, cache));
+      for (unsigned face = 0; face < 6; ++face) {
+        for (const double u : {.125, .375, .625, .875}) {
+          for (const double v : {.125, .375, .625, .875}) {
+            const auto reference = tile_point(planet, {face, 0, 0, 0}, u, v);
+            const auto sampled = require(sampler.sample_height(
+                {reference.x, reference.y, reference.z}, 13));
+            if (sampled.elevation_metres <= 8000) continue;
+            const auto observer =
+                mul(unit(reference), planet.radius.value * 1000.0 +
+                                         sampled.elevation_metres + 2.0);
+            const auto old_lod =
+                containing_lod(planet, plan_tiles(planet, observer), observer);
+            if (old_lod == kStreamMaxLod) continue;
+            return {std::move(owner), body, observer, sampled.elevation_metres,
+                    old_lod};
+          }
+        }
+      }
+    }
+  }
+  throw std::runtime_error("no elevated procedural regression fixture found");
+}
+static auto selected_clearance_planning() -> void {
+  const auto fixture = elevated_fixture();
+  const auto& owner = fixture.owner;
+  const auto body = fixture.body;
+  const auto& planet =
+      require(find_local_system_planet(owner, PlanetId{body.value}))
+          ->descriptor;
+  const auto nan = std::numeric_limits<double>::quiet_NaN();
+  for (const auto bad :
+       std::array{StreamPoint{nan, 0, 0}, StreamPoint{0, INFINITY, 0},
+                  StreamPoint{}, StreamPoint{1e11, 0, 0}})
+    rejects([&] { (void)plan_selected_tiles(owner, body, 2, bad); });
+  for (const auto budget : {0U, 5U, 385U})
+    rejects([&] {
+      (void)plan_selected_tiles(owner, body, 2, fixture.observer, budget);
+    });
+  // A deep observer would produce a negative virtual datum radius. Refuse it
+  // rather than clamping/mirroring the angular point through the body center.
+  rejects([&] {
+    (void)plan_selected_tiles(owner, body, 2, unit(fixture.observer));
+  });
+  const auto cover = plan_selected_tiles(owner, body, 2, fixture.observer);
+  complete_cover(cover);
+  check(cover == plan_selected_tiles(owner, body, 2, fixture.observer),
+        "selected clearance planner changed at an identical observer");
+  check(containing_lod(planet, cover, fixture.observer) == kStreamMaxLod &&
+            fixture.legacy_lod < kStreamMaxLod,
+        "high-ground observer still uses a coarse top instead of certified "
+        "finest facets");
+  check(plan_selected_tiles(owner, body, 1, fixture.observer) ==
+            plan_tiles(planet, fixture.observer),
+        "legacy selected policy changed its datum planner");
+  const auto orbit =
+      mul(unit(fixture.observer), planet.radius.value * 1000.0 + 1e6);
+  const auto orbital_cover = plan_selected_tiles(owner, body, 2, orbit);
+  complete_cover(orbital_cover);
+  check(orbital_cover == plan_selected_tiles(owner, body, 2, orbit),
+        "selected orbital cover changed on a repeated query");
+  PlanetStream stream(owner, body, 2);
+  check(stream.request(fixture.observer),
+        "selected elevated cover did not schedule");
+  const auto batch = await_batch(stream);
+  check(batch.tiles.size() == cover.size(),
+        "selected worker ignored clearance plan");
+  const auto id = require(
+      apsis_drift::godot_spike::detail::locate_selected_contact_triangle(
+          planet,
+          {fixture.observer.x, fixture.observer.y, fixture.observer.z}));
+  const StreamKey key{static_cast<unsigned>(id.face), 13, id.tile_x, id.tile_y};
+  check(batch.tiles.contains(key),
+        "elevated worker cover omitted finest containing tile");
+  const auto& tile = batch.tiles.at(key);
+  auto cache = require(TerrainTileCache::create(1));
+  const auto triangle =
+      require(apsis_drift::godot_spike::detail::build_selected_contact_triangle(
+          owner, planet, kLocalDetailSavedContactSurface, id, cache));
+  constexpr unsigned n = kStreamIntervals + 1;
+  constexpr std::array<std::array<unsigned, 3>, 2> offsets{
+      {{0, 1, n}, {1, n + 1, n}}};
+  const auto start = id.cell_y * n + id.cell_x;
+  for (unsigned corner = 0; corner < 3; ++corner) {
+    const auto vertex =
+        add(tile->vertices[start + offsets[id.half][corner]], tile->anchor);
+    check(
+        length(sub(vertex, triangle.vertices[corner])) < 4e-9,
+        "actual high-ground worker top differs from selected contact vertices");
+  }
+  std::cout << "Selected elevated fixture: system=" << owner.catalog.id.value
+            << "; body=" << body.value << "; elevation=" << fixture.elevation
+            << "m; clearance=2m; old lod=" << fixture.legacy_lod
+            << "; selected lod=13; cover=" << batch.tiles.size()
+            << "; worker ms=" << batch.milliseconds << '\n';
+}
 auto main() -> int {
   try {
+    selected_clearance_planning();
+    selected_stream_contract();
     const auto planet = generate_planet_descriptor(Seed{42});
     const auto origin =
         require(planet_fixed_from_geodetic(planet, {.25, .4, 2500}));

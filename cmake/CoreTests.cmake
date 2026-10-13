@@ -914,6 +914,8 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
   target_compile_options(apsis-drift-landed-craft-tests PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror;-ffp-contract=off>)
   add_test(NAME landed-craft-contract COMMAND apsis-drift-landed-craft-tests)
+  add_test(NAME selected-terrain-surface-lifecycle COMMAND apsis-drift-landed-craft-tests --local-detail)
+  set_tests_properties(selected-terrain-surface-lifecycle PROPERTIES TIMEOUT 180)
   add_test(NAME planet-surface-walk-contract COMMAND apsis-drift-landed-craft-tests --walk)
   set_tests_properties(landed-craft-contract PROPERTIES TIMEOUT 90)
   add_executable(apsis-drift-terrain-touchdown-tests test/terrain_touchdown_test.cpp)

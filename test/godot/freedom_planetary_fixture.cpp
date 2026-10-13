@@ -1,6 +1,7 @@
 #include "../../src/godot/contact_geometry_internal.hpp"
 #include "../flight_endurance_meter.hpp"
 #include "apsis_drift/godot/saved_flight.hpp"
+#include "apsis_drift/terrain_local_detail.hpp"
 #include "apsis_drift/terrain_touchdown.hpp"
 
 #include <algorithm>
@@ -226,9 +227,15 @@ struct Trace {
     const auto view = godot_spike::project_saved_flight(session);
     const auto fixed = fixed_position();
     const PlanetFixedPositionMetres p{fixed.x, fixed.y, fixed.z};
-    const auto sample = need(sample_planet_surface(view.planet, p, 8, cache),
-                             "Terrain sample refused");
-    return sample.elevation_metres;
+    const auto& system = session.system();
+    const auto sampler =
+        need(TerrainLocalDetailSampler::create(
+                 system, body_id(view.planet.id),
+                 {session.document().model.terrain_policy}, cache),
+             "Selected terrain provider refused");
+    return need(sampler.sample_height({p.x, p.y, p.z}, 8),
+                "Terrain height refused")
+        .elevation_metres;
   }
   auto checkpoint(std::string_view label) -> void {
     if (commands) commands->action("checkpoint", Json::array({label}));
@@ -421,8 +428,10 @@ auto landing_goal(Trace& trace) -> LandedCraftAnchor {
         if (!id) continue;
         const auto triangle =
             godot_spike::detail::build_selected_contact_triangle(
-                view.planet, godot_spike::kExperimentalSavedContactSurface, *id,
-                trace.cache);
+                trace.session.system(), view.planet,
+                *godot_spike::saved_contact_recipe(
+                    trace.session.document().model.terrain_policy),
+                *id, trace.cache);
         if (!triangle) continue;
         const auto a = triangle->vertices[0], b = triangle->vertices[1],
                    c = triangle->vertices[2];
@@ -460,9 +469,9 @@ auto landing_goal(Trace& trace) -> LandedCraftAnchor {
         const auto checksum =
             need(rigid_body_state_checksum({trace.session.system()}, source),
                  "Prospective checksum refused");
-        const auto anchor = prepare_landed_craft(trace.session.system(),
-                                                 trace.session.rotation(),
-                                                 source, true, checksum);
+        const auto anchor = prepare_landed_craft(
+            trace.session.system(), trace.session.rotation(), source, true,
+            checksum, trace.session.document().model.terrain_policy);
         if (!anchor) continue;
         auto ground = PlanetSurfaceWalkTerrain::create(trace.session.system(),
                                                        trace.session.rotation(),
@@ -837,6 +846,7 @@ auto run(const std::filesystem::path& output, bool record_commands,
               {"physical_ephemeris", session.system().ephemeris_version},
               {"terrain_source_lod", 8},
               {"terrain_relief_version", 0},
+              {"terrain_policy", session.document().model.terrain_policy},
               {"minimum_sampled_clearance_metres", minimum_terrain_clearance},
               {"cruise_surface_distance_metres", cruise_distance},
               {"approach_tick", std::to_string(approach_tick)},
@@ -1224,6 +1234,7 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
               {"physical_ephemeris", 2},
               {"terrain_source_lod", 8},
               {"terrain_relief_version", 0},
+              {"terrain_policy", session.document().model.terrain_policy},
               {"profile", pilot ? "pilot" : "assisted"},
               {"origin_system", system_id_string(ids.origin_system)},
               {"neighbor_system", system_id_string(ids.target_system)},

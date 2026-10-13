@@ -901,6 +901,57 @@ auto frozen_goldens(bool print) -> void {
     }
   }
 }
+auto direct_samples_and_height() -> void {
+  for (const auto seed :
+       std::array{Seed{0}, Seed{42},
+                  Seed{std::numeric_limits<std::uint64_t>::max()}}) {
+    const auto planet = generate_planet_descriptor(seed);
+    for (unsigned face = 0; face < 6; ++face) {
+      for (const auto lod : std::array<std::uint8_t, 3>{0, 8, 16}) {
+        const auto last = (std::uint32_t{1} << lod) - 1;
+        const TerrainTileKey key{planet.id, static_cast<CubeFace>(face), lod,
+                                 last, last / 2};
+        const auto tile = required(generate_terrain_tile(planet, key));
+        for (const auto coordinate : std::array<std::array<std::size_t, 2>, 6>{
+                 {{0, 0}, {64, 0}, {0, 64}, {64, 64}, {17, 43}, {32, 32}}}) {
+          const auto actual = required(generate_terrain_sample(
+              planet, key, coordinate[0], coordinate[1]));
+          check(
+              actual ==
+                  required(tile.sample_at(coordinate[0], coordinate[1])).get(),
+              "direct source sample differs from frozen tile arithmetic");
+        }
+        check(!generate_terrain_sample(planet, key, 65, 0) &&
+                  !generate_terrain_sample(
+                      planet, key, 0, std::numeric_limits<std::size_t>::max()),
+              "direct source sample accepted an out-of-bounds coordinate");
+      }
+    }
+  }
+  const auto owner = required(generate_physical_origin_system(Seed{42}, 2));
+  auto cache = required(TerrainTileCache::create(2));
+  for (const auto version : {1U, 2U}) {
+    const auto selected = sampler(owner, version, cache);
+    for (const auto direction : std::array{
+             PlanetFixedDirection{1, 0, 0}, PlanetFixedDirection{1, 1, 1},
+             PlanetFixedDirection{-1, -.999999, .1},
+             PlanetFixedDirection{0, 0, -1},
+             PlanetFixedDirection{.73, -.19, .41}}) {
+      for (const auto lod : std::array<std::uint8_t, 3>{0, 8, 16}) {
+        auto expected = required(selected.sample(direction, lod));
+        expected.tangent_slope_estimate.reset();
+        const auto before = cache.size();
+        const auto actual = required(selected.sample_height(direction, lod));
+        check(
+            actual == expected,
+            "height-only direct path changed the selected scalar field/color");
+        if (version == 2)
+          check(cache.size() == before,
+                "direct local-detail height constructed whole source tiles");
+      }
+    }
+  }
+}
 } // namespace
 
 auto main(int argc, char** argv) -> int {
@@ -920,6 +971,7 @@ auto main(int argc, char** argv) -> int {
             kLocalDetailSlopeStepMetres == 32,
         "explicit physical terrain recipe constants changed");
   invalid_inputs();
+  direct_samples_and_height();
   legacy_and_ownership();
   tile_identity();
   slope_reconstruction();

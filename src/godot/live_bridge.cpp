@@ -190,6 +190,22 @@ class FreedomBridge : public godot::RefCounted {
   godot::String last_error;
   std::unique_ptr<PlanetStream> stream;
   std::set<StreamKey> exported;
+  std::uint64_t stream_generation{};
+  auto replace_stream(std::unique_ptr<PlanetStream>&& replacement) -> void {
+    if (stream_generation == std::numeric_limits<std::uint64_t>::max())
+      throw std::overflow_error("Terrain stream generations exhausted");
+    stream = std::move(replacement);
+    exported.clear();
+    ++stream_generation;
+  }
+  static auto saved_stream(const NativeFreedomFlightSession& session)
+      -> std::unique_ptr<PlanetStream> {
+    if (!session.document().flight.frame.planet)
+      throw std::invalid_argument("Saved terrain requires a selected planet");
+    return std::make_unique<PlanetStream>(
+        session.system(), body_id(*session.document().flight.frame.planet),
+        session.document().model.terrain_policy);
+  }
   struct PendingFreedomStart {
     std::string id;
     NativeProfileSession profile_session;
@@ -234,8 +250,7 @@ class FreedomBridge : public godot::RefCounted {
       (void)project_saved_flight(*opened);
       auto candidate = std::make_unique<SavedFlightWorld>(
           SavedFlightWorld{std::move(*opened), {}, {}, 0});
-      stream.reset();
-      exported.clear();
+      replace_stream(saved_stream(candidate->session));
       world.reset();
       native_start.reset();
       saved_flight = std::move(candidate);
@@ -248,8 +263,7 @@ class FreedomBridge : public godot::RefCounted {
     if (!prepared) throw std::runtime_error(prepared.error());
     auto candidate =
         std::make_unique<NativeFreedomStationStart>(std::move(*prepared));
-    stream.reset();
-    exported.clear();
+    replace_stream(nullptr);
     world.reset();
     saved_flight.reset();
     native_start = std::move(candidate);
@@ -408,6 +422,8 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_last_error);
     godot::ClassDB::bind_method(godot::D_METHOD("enable_streaming"),
                                 &FreedomBridge::enable_streaming);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_stream_identity"),
+                                &FreedomBridge::get_stream_identity);
     godot::ClassDB::bind_method(godot::D_METHOD("request_stream", "observer"),
                                 &FreedomBridge::request_stream);
     godot::ClassDB::bind_method(godot::D_METHOD("poll_stream"),
@@ -621,7 +637,7 @@ class FreedomBridge : public godot::RefCounted {
           (candidate->flight->session.walker() &&
            project_walk_state(*candidate->flight).is_empty()))
         throw std::runtime_error("Pending Freedom presentation is unavailable");
-      candidate->stream = std::make_unique<PlanetStream>(view.planet, 8, 0);
+      candidate->stream = saved_stream(candidate->flight->session);
     } else {
       auto start = prepare_native_freedom_station_start(std::move(selected));
       if (!start) throw std::runtime_error(start.error());
@@ -786,8 +802,7 @@ class FreedomBridge : public godot::RefCounted {
         return false;
       }
     }
-    stream = std::move(pending->stream);
-    exported.clear();
+    replace_stream(std::move(pending->stream));
     world.reset();
     saved_flight = std::move(pending->flight);
     native_start = std::move(pending->station);
@@ -1006,16 +1021,19 @@ class FreedomBridge : public godot::RefCounted {
       if (!saved_flight)
         throw std::invalid_argument("Continue a physical flight save first");
       const auto previous_frame = saved_flight->session.document().flight.frame;
+      const auto previous_system = saved_flight->session.system().catalog.id;
+      const auto previous_policy =
+          saved_flight->session.document().model.terrain_policy;
       auto candidate = std::make_unique<SavedFlightWorld>(*saved_flight);
       candidate->advance(
           elapsed,
           {fractions.ptr(), static_cast<std::size_t>(fractions.size())},
           paused);
-      if (previous_frame != candidate->session.document().flight.frame) {
-        auto replacement = std::make_unique<PlanetStream>(
-            project_saved_flight(candidate->session).planet, 8, 0);
-        stream = std::move(replacement);
-        exported.clear();
+      if (previous_frame != candidate->session.document().flight.frame ||
+          previous_system != candidate->session.system().catalog.id ||
+          previous_policy !=
+              candidate->session.document().model.terrain_policy) {
+        replace_stream(saved_stream(candidate->session));
       }
       saved_flight = std::move(candidate);
       last_error = godot::String{};
@@ -1508,6 +1526,8 @@ class FreedomBridge : public godot::RefCounted {
           decimal(document.origin.recipe.universe_seed.value);
       result["system_id"] = decimal(session.system().catalog.id.value);
       result["planet_id"] = decimal(body.frame.planet->value);
+      result["terrain_policy"] =
+          static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
       result["station_available"] = view.station_available;
       result["station_id"] = view.station_available
@@ -2003,8 +2023,7 @@ class FreedomBridge : public godot::RefCounted {
                   planetary_flight_state_checksum(candidate->flight)))
         throw std::invalid_argument(
             "snapshot initial state differs from live C++ state");
-      stream.reset();
-      exported.clear();
+      replace_stream(nullptr);
       native_start.reset();
       saved_flight.reset();
       world = std::move(candidate);
@@ -2431,13 +2450,10 @@ class FreedomBridge : public godot::RefCounted {
       }
       if (!world && !saved_flight)
         throw std::runtime_error("initialize C++ world first");
-      stream =
-          saved_flight
-              ? std::make_unique<PlanetStream>(
-                    project_saved_flight(saved_flight->session).planet, 8, 0)
-              : std::make_unique<PlanetStream>(world->planet, world->lod,
-                                               world->relief_version);
-      exported.clear();
+      replace_stream(
+          saved_flight ? saved_stream(saved_flight->session)
+                       : std::make_unique<PlanetStream>(
+                             world->planet, world->lod, world->relief_version));
       last_error = godot::String{};
       return true;
     } catch (const std::exception& e) {
@@ -2465,6 +2481,37 @@ class FreedomBridge : public godot::RefCounted {
   }
 
   auto is_stream_busy() const -> bool { return stream && stream->busy(); }
+
+  auto get_stream_identity() const -> godot::Dictionary {
+    godot::Dictionary result;
+    if (!stream) return result;
+    const auto decimal = [](std::uint64_t word) {
+      return godot::String{std::to_string(word).c_str()};
+    };
+    result["schema_version"] = std::int64_t{1};
+    result["generation"] = decimal(stream_generation);
+    result["terrain_policy"] =
+        static_cast<std::int64_t>(stream->selected_terrain_policy());
+    if (stream->selected_owner()) {
+      const auto& owner = *stream->selected_owner();
+      const auto body = stream->selected_body();
+      if (!body) return {};
+      result["kind"] = "owned";
+      result["system_id"] = decimal(owner.catalog.id.value);
+      result["body_version"] = static_cast<std::int64_t>(body->version);
+      result["body_kind"] = "planet";
+      result["body_id"] = decimal(body->value);
+      result["physical_catalog"] =
+          static_cast<std::int64_t>(owner.generator_version);
+    } else {
+      if (!world) return {};
+      result["kind"] = "study";
+      result["planet_id"] = decimal(world->planet.id.value);
+      result["experimental_relief_version"] =
+          static_cast<std::int64_t>(world->relief_version);
+    }
+    return result;
+  }
 
   auto poll_stream() -> godot::Dictionary {
     godot::Dictionary result;
@@ -2510,6 +2557,7 @@ class FreedomBridge : public godot::RefCounted {
         entries.push_back(entry);
       }
       exported = std::move(next);
+      result["identity"] = get_stream_identity();
       result["tiles"] = entries;
       result["generated"] = batch->generated;
       result["reused"] = batch->reused;

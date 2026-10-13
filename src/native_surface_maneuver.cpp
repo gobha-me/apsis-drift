@@ -147,7 +147,8 @@ auto NativeFreedomFlightSession::surface_maneuver_controls() const
   auto held = fixed;
   held.linear_velocity_metres_per_second = {};
   held.angular_velocity_radians_per_second = {};
-  const LandedCraftAnchor target{1, 1, rotation_.rotation.version,
+  const LandedCraftAnchor target{1, document_.model.terrain_policy,
+                                 rotation_.rotation.version,
                                  rotation_.owner_version, held};
   const auto now =
       resolve_landed_craft(system_, rotation_, target, document_.flight.tick);

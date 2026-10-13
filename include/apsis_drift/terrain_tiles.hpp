@@ -103,6 +103,13 @@ class TerrainTile {
                                          TerrainTileKey key)
     -> std::expected<TerrainTile, TerrainTileError>;
 
+// Exact generator1 lattice sample without constructing the other 4224 samples.
+// This shares the admitted tile arithmetic; it changes no recipe or cache key.
+[[nodiscard]] auto generate_terrain_sample(const PlanetDescriptor& planet,
+                                           TerrainTileKey key, std::size_t x,
+                                           std::size_t y)
+    -> std::expected<TerrainSample, TerrainTileError>;
+
 class TerrainTileCache {
  public:
   [[nodiscard]] static auto create(

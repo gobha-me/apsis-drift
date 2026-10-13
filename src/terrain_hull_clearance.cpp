@@ -49,11 +49,14 @@ auto strictly_in_face(V p, CubeFace face) -> bool {
 auto assess_terrain_hull_clearance(const PhysicalLocalSystem& owner,
                                    const PhysicalPlanetRotationRecipe& rotation,
                                    const RigidBodyState& source,
-                                   std::size_t cache_capacity)
+                                   std::size_t cache_capacity,
+                                   std::uint32_t terrain_policy)
     -> std::expected<TerrainHullClearance, TerrainHullError> {
   using namespace godot_spike;
+  const auto recipe = saved_contact_recipe(terrain_policy);
+  if (!recipe) return std::unexpected{TerrainHullError::invalid_source};
   const auto prepared = godot_spike::detail::prepare_saved_contact(
-      owner, rotation, source, kExperimentalSavedContactSurface);
+      owner, rotation, source, *recipe);
   if (!prepared) return std::unexpected{TerrainHullError::invalid_source};
   const auto& state = prepared->fixed_query_state;
   const auto craft = resolve_craft_frame(state.craft);
@@ -66,6 +69,7 @@ auto assess_terrain_hull_clearance(const PhysicalLocalSystem& owner,
     return std::unexpected{TerrainHullError::outside_query_bounds};
 
   TerrainHullClearance result;
+  result.terrain_policy = terrain_policy;
   result.source_checksum = prepared->original_state_checksum;
   result.tick = state.tick;
   result.minimum_cell = {262143, 262143};
@@ -125,7 +129,7 @@ auto assess_terrain_hull_clearance(const PhysicalLocalSystem& owner,
       for (unsigned half = 0; half < 2; ++half) {
         const auto triangle =
             godot_spike::detail::build_selected_contact_triangle(
-                prepared->planet, kExperimentalSavedContactSurface,
+                owner, prepared->planet, *recipe,
                 {prepared->planet.id, result.face, x / 32, y / 32, x % 32,
                  y % 32, half},
                 *cache);

@@ -5,13 +5,21 @@
 #include "saved_contact_geometry_internal.hpp"
 
 namespace apsis_drift::godot_spike {
+auto saved_contact_recipe(std::uint32_t terrain_policy)
+    -> std::optional<ContactSurfaceRecipe> {
+  if (terrain_policy == 1) return kExperimentalSavedContactSurface;
+  if (terrain_policy == 2) return kLocalDetailSavedContactSurface;
+  return {};
+}
+
 namespace detail {
 auto prepare_saved_contact(const PhysicalLocalSystem& owner,
                            const PhysicalPlanetRotationRecipe& rotation,
                            const RigidBodyState& source,
                            ContactSurfaceRecipe recipe)
     -> std::expected<SavedContactProvenance, SavedContactError> {
-  if (recipe != kExperimentalSavedContactSurface)
+  if (recipe != kExperimentalSavedContactSurface &&
+      recipe != kLocalDetailSavedContactSurface)
     return std::unexpected{SavedContactError::unsupported_recipe};
   if (!validate_local_system(owner))
     return std::unexpected{SavedContactError::invalid_physical_owner};
@@ -68,8 +76,13 @@ auto query_saved_contact(const SavedContactProvenance& provenance,
           std::unexpected{ContactPatchError::surface_query_failed};
       continue;
     }
-    const auto triangle = build_selected_contact_triangle(
-        provenance.planet, provenance.recipe, *id, cache);
+    const auto triangle =
+        provenance.recipe == kLocalDetailSavedContactSurface
+            ? build_selected_contact_triangle(provenance.owner,
+                                              provenance.planet,
+                                              provenance.recipe, *id, cache)
+            : build_selected_contact_triangle(provenance.planet,
+                                              provenance.recipe, *id, cache);
     if (!triangle) {
       outcome.geometry =
           std::unexpected{ContactPatchError::surface_query_failed};

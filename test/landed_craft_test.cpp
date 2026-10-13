@@ -74,11 +74,13 @@ struct Fixture {
       required(generate_planet_rotation_recipe(owner, planet.id));
   RigidBodyWorldContext context{owner};
   RigidBodyState fixed;
-  Fixture() {
+  std::uint32_t terrain_policy;
+  explicit Fixture(std::uint32_t policy = kFreedomLegacyTerrainPolicy)
+      : terrain_policy(policy) {
     auto cache = required(TerrainTileCache::create(1));
     const auto triangle =
         required(godot_spike::detail::build_selected_contact_triangle(
-            planet, godot_spike::kExperimentalSavedContactSurface,
+            owner, planet, *godot_spike::saved_contact_recipe(terrain_policy),
             {planet.id, CubeFace::positive_x, 4000, 4000, 12, 13, 0}, cache));
     const auto a = triangle.vertices[0], b = triangle.vertices[1],
                c = triangle.vertices[2];
@@ -145,17 +147,20 @@ auto ray_hit(V start, V direction, const godot_spike::ContactTriangle& triangle)
 auto hull_and_idle(const Fixture& f) -> void {
   const auto source = f.source(f.fixed);
   const auto before = required(encode_rigid_body_state_json(f.context, source));
-  const auto hull =
-      required(assess_terrain_hull_clearance(f.owner, f.rotation, source, 1));
+  const auto hull = required(assess_terrain_hull_clearance(
+      f.owner, f.rotation, source, 1, f.terrain_policy));
   check(hull.certified && hull.lower_clearance_metres > .7 &&
             hull.triangle_count <= 128,
         "actual whole hull clears generated terrain within bounded work");
-  check(hull == required(assess_terrain_hull_clearance(f.owner, f.rotation,
-                                                       source, 64)),
+  check(hull == required(assess_terrain_hull_clearance(
+                    f.owner, f.rotation, source, 64, f.terrain_policy)),
         "hull certificate is cache-independent");
   const auto checksum = required(rigid_body_state_checksum(f.context, source));
-  const auto anchor = required(
-      prepare_landed_craft(f.owner, f.rotation, source, true, checksum));
+  const auto anchor = required(prepare_landed_craft(
+      f.owner, f.rotation, source, true, checksum, f.terrain_policy));
+  check(anchor.terrain_policy == f.terrain_policy &&
+            hull.terrain_policy == f.terrain_policy,
+        "support and hull certificate retain the selected physical terrain");
   check(anchor.fixed.linear_velocity_metres_per_second == V{} &&
             anchor.fixed.angular_velocity_radians_per_second == V{},
         "safe landing stores zero ground-relative velocities");
@@ -178,15 +183,19 @@ auto hull_and_idle(const Fixture& f) -> void {
     check(released == resolved,
           "liftoff preserves pose and applies rotation velocity exactly once");
   }
-  auto false_checksum =
-      prepare_landed_craft(f.owner, f.rotation, source, true, checksum ^ 1);
+  auto false_checksum = prepare_landed_craft(f.owner, f.rotation, source, true,
+                                             checksum ^ 1, f.terrain_policy);
   check(!false_checksum &&
             false_checksum.error() == LandedCraftError::stale_source,
         "changed assessment checksum refuses before terrain commit");
-  auto stowed =
-      prepare_landed_craft(f.owner, f.rotation, source, false, checksum);
+  auto stowed = prepare_landed_craft(f.owner, f.rotation, source, false,
+                                     checksum, f.terrain_policy);
   check(!stowed && stowed.error() == LandedCraftError::gear_not_deployed,
         "actual declaration is required; prospective pads do not deploy gear");
+  check(!prepare_landed_craft(f.owner, f.rotation, source, true, checksum, 99),
+        "unknown physical terrain selection refuses before support sampling");
+  check(!assess_terrain_hull_clearance(f.owner, f.rotation, source, 64, 99),
+        "unknown physical terrain selection cannot certify hull clearance");
   auto bad = anchor;
   bad.fixed.linear_velocity_metres_per_second.x = 1;
   check(!resolve_landed_craft(f.owner, f.rotation, bad, source.tick),
@@ -232,7 +241,8 @@ auto hull_and_idle(const Fixture& f) -> void {
           for (unsigned half = 0; half < 2; ++half) {
             const auto triangle =
                 required(godot_spike::detail::build_selected_contact_triangle(
-                    f.planet, godot_spike::kExperimentalSavedContactSurface,
+                    f.owner, f.planet,
+                    *godot_spike::saved_contact_recipe(f.terrain_policy),
                     {f.planet.id, hull.face, cx / 32, cz / 32, cx % 32, cz % 32,
                      half},
                     terrain_cache));
@@ -246,15 +256,17 @@ auto hull_and_idle(const Fixture& f) -> void {
   auto seam = f.fixed;
   const auto r = static_cast<double>(f.planet.radius.value) * 1000 + 10;
   seam.position_metres = {r / std::sqrt(2.0), r / std::sqrt(2.0), 0};
-  const auto uncertain =
-      assess_terrain_hull_clearance(f.owner, f.rotation, f.source(seam));
+  const auto uncertain = assess_terrain_hull_clearance(
+      f.owner, f.rotation, f.source(seam), kDefaultTerrainTileCacheCapacity,
+      f.terrain_policy);
   check(!uncertain && uncertain.error() == TerrainHullError::face_boundary,
         "a box crossing cube-face seams refuses before terrain access");
   auto buried = f.fixed;
   buried.position_metres =
       sub(buried.position_metres, rotate(buried.orientation, {0, 1, 0}));
-  const auto blocked = required(
-      assess_terrain_hull_clearance(f.owner, f.rotation, f.source(buried)));
+  const auto blocked = required(assess_terrain_hull_clearance(
+      f.owner, f.rotation, f.source(buried), kDefaultTerrainTileCacheCapacity,
+      f.terrain_policy));
   check(!blocked.certified && blocked.lower_clearance_metres < 0,
         "terrain reaching the registered hull cannot receive clearance");
   auto invalid = source;
@@ -423,6 +435,7 @@ auto assisted_commands(const Fixture& f,
   flight.origin.state.tick = flight.flight.tick;
   flight.model.physical_catalog = 2;
   flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = f.terrain_policy;
   const auto open = [&]() {
     NativeSaveDocument selected = flight;
     if (resources)
@@ -528,6 +541,7 @@ auto persistence_and_session(const Fixture& f) -> void {
       {"signal:77", SaveWorldDeltaKind::discovered, 9});
   flight.model.physical_catalog = 2;
   flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = f.terrain_policy;
   const auto historical = required(encode_freedom_flight_document_json(flight));
   auto session = required(NativeFreedomFlightSession::open(
       {NativeStartup::Mode::freedom, flight, f.planet, {}}));
@@ -621,6 +635,10 @@ auto persistence_and_session(const Fixture& f) -> void {
   malformed["surface"]["unexpected"] = 1;
   check(!decode_freedom_surface_document_json(malformed.dump()),
         "unknown surface fields refuse");
+  auto mismatched = decoded;
+  mismatched.surface.landed->terrain_policy = f.terrain_policy == 1 ? 2 : 1;
+  check(!encode_freedom_surface_document_json(mismatched),
+        "landed anchor cannot silently switch the saved physical field");
   auto contradictory = decoded;
   std::get<FreedomFlightSaveDocument>(contradictory.base)
       .flight.position_metres.x += 1;
@@ -655,6 +673,7 @@ auto observed_lifecycle(const Fixture& f) -> void {
   flight.origin.state.tick = flight.flight.tick;
   flight.model.physical_catalog = 2;
   flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = f.terrain_policy;
   FreedomKnowledgeSaveDocument selected;
   selected.voyage.voyage.base = flight;
   selected.voyage.voyage.surface.gear_deployed = true;
@@ -727,6 +746,7 @@ auto native_fixtures(const Fixture& f, const std::filesystem::path& directory)
       add(fixed.position_metres, rotate(fixed.orientation, {0, .7, 0}));
   base.voyage.flight.flight = f.source(fixed);
   base.voyage.docking.attached = false;
+  base.voyage.flight.model.terrain_policy = f.terrain_policy;
   base.voyage.flight.model.assistance = true;
   required(
       write_freedom_boarding_file_atomically(directory / "source.json", base));
@@ -796,6 +816,7 @@ auto surface_walk_session(const Fixture& f,
   fixed.tick = base.voyage.flight.flight.tick;
   base.voyage.flight.flight = f.source(fixed);
   base.voyage.docking.attached = false;
+  base.voyage.flight.model.terrain_policy = f.terrain_policy;
   // Explicit near-ground fixture, never an uninterrupted station-to-site claim.
   FreedomKnowledgeSaveDocument selected{};
   selected.voyage.voyage.base = base;
@@ -946,8 +967,8 @@ auto surface_walk_session(const Fixture& f,
 auto surface_walking(const Fixture& f) -> void {
   const auto source = f.source(f.fixed);
   const auto checksum = required(rigid_body_state_checksum(f.context, source));
-  const auto anchor = required(
-      prepare_landed_craft(f.owner, f.rotation, source, true, checksum));
+  const auto anchor = required(prepare_landed_craft(
+      f.owner, f.rotation, source, true, checksum, f.terrain_policy));
   auto terrain = required(PlanetSurfaceWalkTerrain::create(
       f.owner, f.rotation, anchor, source.tick));
   const auto start = required(terrain.entry());
@@ -961,7 +982,8 @@ auto surface_walking(const Fixture& f) -> void {
           f.planet, {foot.x, foot.y, foot.z}));
   const auto triangle =
       required(godot_spike::detail::build_selected_contact_triangle(
-          f.planet, godot_spike::kExperimentalSavedContactSurface, id,
+          f.owner, f.planet,
+          *godot_spike::saved_contact_recipe(f.terrain_policy), id,
           independent_cache));
   const auto radial = mul(foot, 1 / norm(foot));
   const auto hit =
@@ -1041,12 +1063,28 @@ auto surface_walking(const Fixture& f) -> void {
 } // namespace
 auto main(int argc, char** argv) -> int {
   try {
-    const Fixture f;
-    if (argc == 3 && std::string_view{argv[1]} == "--fixtures") {
+    const bool local_detail =
+        argc >= 2 &&
+        (std::string_view{argv[1]} == "--local-detail" ||
+         std::string_view{argv[1]} == "--local-detail-fixtures" ||
+         std::string_view{argv[1]} == "--local-detail-walk-fixtures");
+    const Fixture f{local_detail ? kFreedomLocalDetailTerrainPolicy
+                                 : kFreedomLegacyTerrainPolicy};
+    if (argc == 2 && std::string_view{argv[1]} == "--local-detail") {
+      hull_and_idle(f);
+      persistence_and_session(f);
+      surface_walking(f);
+      surface_walk_session(f);
+      assisted_commands(f);
+    } else if (argc == 3 &&
+               (std::string_view{argv[1]} == "--fixtures" ||
+                std::string_view{argv[1]} == "--local-detail-fixtures")) {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
       native_fixtures(f, directory);
-    } else if (argc == 3 && std::string_view{argv[1]} == "--walk-fixtures") {
+    } else if (argc == 3 &&
+               (std::string_view{argv[1]} == "--walk-fixtures" ||
+                std::string_view{argv[1]} == "--local-detail-walk-fixtures")) {
       const auto directory = std::filesystem::absolute(argv[2]);
       std::filesystem::create_directories(directory);
       surface_walk_session(f, directory);

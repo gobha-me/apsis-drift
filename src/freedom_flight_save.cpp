@@ -143,6 +143,12 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
         failure(SaveSchemaErrorCode::invalid_state, "$.flight.tick",
                 "history/flight clocks differ or flight cannot advance")};
   const auto& model = document.model;
+  if (model.terrain_policy != kFreedomLegacyTerrainPolicy &&
+      model.terrain_policy != kFreedomLocalDetailTerrainPolicy)
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::incompatible_generator_version,
+                "$.flight_model.terrain_policy",
+                "unsupported physical terrain policy")};
   auto system = resolve_world(document.origin, model, document.world);
   if (!system || system->ephemeris_version != model.physical_ephemeris ||
       model.rotation_owner != kPhysicalPlanetRotationOwnerVersion)
@@ -203,9 +209,11 @@ auto encode_freedom_flight_document_json(
                                    "$.flight",
                                    "rigid state cannot be encoded")};
   Json root = Json::parse(*origin);
-  root["format_version"] = document.world
-                               ? kFreedomActiveFlightSaveFormatVersion
-                               : kFreedomFlightSaveFormatVersion;
+  root["format_version"] =
+      document.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
+          ? kFreedomTerrainFlightSaveFormatVersion
+      : document.world ? kFreedomActiveFlightSaveFormatVersion
+                       : kFreedomFlightSaveFormatVersion;
   if (document.world)
     root["world_owner"] = {
         {"version", document.world->version},
@@ -231,6 +239,8 @@ auto encode_freedom_flight_document_json(
       {"atmosphere", model.atmosphere.version},
       {"orbit_hold", {{"version", model.hold.version}, {"target", target}}},
       {"assistance", model.assistance}};
+  if (model.terrain_policy == kFreedomLocalDetailTerrainPolicy)
+    root["flight_model"]["terrain_policy"] = model.terrain_policy;
   auto encoded = root.dump(2) + '\n';
   if (encoded.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
@@ -275,9 +285,13 @@ auto decode_freedom_flight_document_json(std::string_view text)
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
                                    "$.format_version",
                                    "expected unsigned save version")};
+  const bool selected =
+      root["format_version"] == kFreedomTerrainFlightSaveFormatVersion;
   const bool active =
-      root["format_version"] == kFreedomActiveFlightSaveFormatVersion;
-  if (root["format_version"] != kFreedomFlightSaveFormatVersion && !active)
+      root["format_version"] == kFreedomActiveFlightSaveFormatVersion ||
+      (selected && root.contains("world_owner"));
+  if (root["format_version"] != kFreedomFlightSaveFormatVersion && !active &&
+      !selected)
     return std::unexpected{
         failure(SaveSchemaErrorCode::unsupported_format_version,
                 "$.format_version", "unsupported Freedom flight save version")};
@@ -331,14 +345,23 @@ auto decode_freedom_flight_document_json(std::string_view text)
   auto decoded = decode_freedom_save_document_json(origin.dump());
   if (!decoded) return std::unexpected{decoded.error()};
   const auto& m = root["flight_model"];
+  auto model_shape = m;
+  if (selected && model_shape.is_object()) model_shape.erase("terrain_policy");
   if (auto valid =
-          fields(m,
+          fields(model_shape,
                  {"physical_catalog", "physical_ephemeris", "rotation_owner",
                   "rotation_generator", "central_body", "atmosphere",
                   "orbit_hold", "assistance"},
                  "$.flight_model");
       !valid)
     return std::unexpected{valid.error()};
+  if (selected && (!m.contains("terrain_policy") ||
+                   !m["terrain_policy"].is_number_unsigned() ||
+                   m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy))
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::incompatible_generator_version,
+                "$.flight_model.terrain_policy",
+                "selected terrain save requires explicit policy2")};
   const auto catalog = version(m, "physical_catalog"),
              ephemeris = version(m, "physical_ephemeris"),
              owner = version(m, "rotation_owner"),
@@ -367,6 +390,8 @@ auto decode_freedom_flight_document_json(std::string_view text)
                            {*atmosphere},
                            {*hold_version, {}},
                            m["assistance"].get<bool>()};
+  model.terrain_policy =
+      selected ? kFreedomLocalDetailTerrainPolicy : kFreedomLegacyTerrainPolicy;
   const auto& target = hold["target"];
   if (!target.is_null()) {
     if (auto valid =

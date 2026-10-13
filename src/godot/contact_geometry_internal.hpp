@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apsis_drift/godot/contact_patch.hpp"
+#include "apsis_drift/physical_local_system.hpp"
 
 namespace apsis_drift::godot_spike::detail {
 // Selected descriptors/states are validated by each owning entry point. These
@@ -10,6 +11,15 @@ namespace apsis_drift::godot_spike::detail {
                                                     PlanetFixedDirection)
     -> std::expected<ContactTriangleId, ContactSurfaceError>;
 [[nodiscard]] auto build_selected_contact_triangle(const PlanetDescriptor&,
+                                                   ContactSurfaceRecipe,
+                                                   ContactTriangleId,
+                                                   TerrainTileCache&)
+    -> std::expected<ContactTriangle, ContactSurfaceError>;
+
+// New local-detail selection must retain and authenticate complete ownership.
+// The legacy overload cannot construct local-detail triangles.
+[[nodiscard]] auto build_selected_contact_triangle(const PhysicalLocalSystem&,
+                                                   const PlanetDescriptor&,
                                                    ContactSurfaceRecipe,
                                                    ContactTriangleId,
                                                    TerrainTileCache&)

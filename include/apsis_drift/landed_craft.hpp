@@ -37,7 +37,8 @@ enum class LandedCraftError : std::uint8_t {
                                         const PhysicalPlanetRotationRecipe&,
                                         const RigidBodyState&,
                                         bool gear_deployed,
-                                        std::uint64_t expected_source_checksum)
+                                        std::uint64_t expected_source_checksum,
+                                        std::uint32_t terrain_policy = 1)
     -> std::expected<LandedCraftAnchor, LandedCraftError>;
 
 // Pure pose/velocity resolution at an authoritative tick. No integration of

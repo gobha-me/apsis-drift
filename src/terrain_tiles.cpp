@@ -350,6 +350,24 @@ auto generate_terrain_tile(const PlanetDescriptor& planet, TerrainTileKey key)
   return TerrainTile{key, samples};
 }
 
+auto generate_terrain_sample(const PlanetDescriptor& planet, TerrainTileKey key,
+                             std::size_t x, std::size_t y)
+    -> std::expected<TerrainSample, TerrainTileError> {
+  const auto valid = validate_key(planet, key);
+  if (!valid) return std::unexpected{valid.error()};
+  if (x >= kTerrainTileSamplesPerAxis || y >= kTerrainTileSamplesPerAxis)
+    return std::unexpected{TerrainTileError::invalid_sample_coordinate};
+  const auto shape = derive_terrain_generation_seed(
+      planet.seed, TerrainGenerationStream::shape);
+  const auto detail = derive_terrain_generation_seed(
+      planet.seed, TerrainGenerationStream::detail);
+  const auto parameters = terrain_parameters(planet.terrain_character);
+  const auto field =
+      terrain_field(cube_position(key, x, y), shape, detail, parameters);
+  const auto elevation = elevation_metres(planet, parameters, field);
+  return TerrainSample{elevation, sample_color(planet, parameters, elevation)};
+}
+
 auto TerrainTile::sample_at(std::size_t x, std::size_t y) const noexcept
     -> std::expected<std::reference_wrapper<const TerrainSample>,
                      TerrainTileError> {

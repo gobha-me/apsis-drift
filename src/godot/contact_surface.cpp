@@ -2,6 +2,8 @@
 #include "contact_geometry_internal.hpp"
 
 #include "apsis_drift/godot/relief.hpp"
+#include "apsis_drift/godot/saved_contact_geometry.hpp"
+#include "apsis_drift/terrain_local_detail.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -91,7 +93,8 @@ auto locate_validated(const PlanetDescriptor& planet,
 }
 auto build_validated(const PlanetDescriptor& planet,
                      ContactSurfaceRecipe recipe, ContactTriangleId id,
-                     TerrainTileCache& cache)
+                     TerrainTileCache& cache,
+                     const TerrainLocalDetailSampler* selected = nullptr)
     -> std::expected<ContactTriangle, ContactSurfaceError> {
   ContactTriangle triangle{recipe, id, {}, {}};
   constexpr std::array<std::array<unsigned, 2>, 4> corners{
@@ -108,13 +111,23 @@ auto build_validated(const PlanetDescriptor& planet,
     const auto reference = planet_fixed_from_terrain_address(planet, address);
     if (!reference)
       return std::unexpected{ContactSurfaceError::coordinate_failure};
-    auto sample = sample_planet_surface(planet, *reference, 8, cache);
-    if (!sample) return std::unexpected{ContactSurfaceError::sampling_failure};
-    // Validated generated radii and address bound relief's coordinate/cell
-    // arithmetic. No arbitrary heights, relief versions or vector magnitudes.
-    *sample = with_relief(*sample, planet, *reference, recipe.relief);
-    const auto vertex = planet_fixed_from_terrain_address(
-        planet, address, sample->elevation_metres);
+    double elevation{};
+    if (selected) {
+      const auto sample = selected->sample_height(
+          {reference->x, reference->y, reference->z}, 13);
+      if (!sample)
+        return std::unexpected{ContactSurfaceError::sampling_failure};
+      elevation = sample->elevation_metres;
+    } else {
+      auto sample = sample_planet_surface(planet, *reference, 8, cache);
+      if (!sample)
+        return std::unexpected{ContactSurfaceError::sampling_failure};
+      // Preserve the historical recipe's actual arithmetic and relief.
+      *sample = with_relief(*sample, planet, *reference, recipe.relief);
+      elevation = sample->elevation_metres;
+    }
+    const auto vertex =
+        planet_fixed_from_terrain_address(planet, address, elevation);
     if (!vertex || !valid_point(*vertex))
       return std::unexpected{ContactSurfaceError::unsafe_geometry};
     triangle.vertices[i] = *vertex;
@@ -177,6 +190,8 @@ auto build_selected_contact_triangle(const PlanetDescriptor& planet,
                                      ContactTriangleId id,
                                      TerrainTileCache& cache)
     -> std::expected<ContactTriangle, ContactSurfaceError> {
+  if (recipe == kLocalDetailSavedContactSurface)
+    return std::unexpected{ContactSurfaceError::unsupported_recipe};
   if (id.planet != planet.id)
     return std::unexpected{ContactSurfaceError::wrong_planet};
   if (!valid_id(id))
@@ -184,6 +199,32 @@ auto build_selected_contact_triangle(const PlanetDescriptor& planet,
   if (recipe.relief > kExperimentalReliefVersion)
     return std::unexpected{ContactSurfaceError::unsupported_recipe};
   return build_validated(planet, recipe, id, cache);
+}
+auto build_selected_contact_triangle(const PhysicalLocalSystem& owner,
+                                     const PlanetDescriptor& planet,
+                                     ContactSurfaceRecipe recipe,
+                                     ContactTriangleId id,
+                                     TerrainTileCache& cache)
+    -> std::expected<ContactTriangle, ContactSurfaceError> {
+  if (recipe != kExperimentalSavedContactSurface &&
+      recipe != kLocalDetailSavedContactSurface)
+    return std::unexpected{ContactSurfaceError::unsupported_recipe};
+  const auto sampler = TerrainLocalDetailSampler::create(
+      owner, body_id(planet.id),
+      {recipe == kLocalDetailSavedContactSurface
+           ? kLocalDetailTerrainRecipe
+           : kLegacyPhysicalTerrainRecipe},
+      cache);
+  if (!sampler) return std::unexpected{ContactSurfaceError::invalid_context};
+  if (sampler->planet() != planet)
+    return std::unexpected{ContactSurfaceError::owner_mismatch};
+  if (id.planet != planet.id)
+    return std::unexpected{ContactSurfaceError::wrong_planet};
+  if (!valid_id(id))
+    return std::unexpected{ContactSurfaceError::invalid_triangle};
+  return build_validated(planet, recipe, id, cache,
+                         recipe == kLocalDetailSavedContactSurface ? &*sampler
+                                                                   : nullptr);
 }
 } // namespace detail
 

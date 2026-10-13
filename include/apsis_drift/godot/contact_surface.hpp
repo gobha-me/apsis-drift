@@ -9,8 +9,9 @@
 
 namespace apsis_drift::godot_spike {
 
-// An opt-in geometric experiment, NOT a production terrain/save recipe. This
-// freezes the native finest TOP triangulation, excluding skirts and shading.
+// Versioned finest TOP triangulation, excluding skirts and shading. Historical
+// experiment1 and saved geometry2 retain exact sampling; selected geometry3
+// requires complete physical ownership and the explicit local-detail sampler.
 struct ContactSurfaceRecipe {
   std::uint32_t version{1}, terrain_generator{1}, source_lod{8}, relief{1},
       mesh_lod{13}, intervals{32}, diagonal{1};

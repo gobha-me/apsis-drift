@@ -65,7 +65,8 @@ auto PlanetSurfaceWalkTerrain::create(
   if (!p) return std::unexpected{"Surface walking body owner is unavailable"};
   auto cache = TerrainTileCache::create(4);
   if (!cache) return std::unexpected{"Surface walking cache unavailable"};
-  return PlanetSurfaceWalkTerrain{(*p)->descriptor, anchor, std::move(*cache)};
+  return PlanetSurfaceWalkTerrain{owner, (*p)->descriptor, anchor,
+                                  std::move(*cache)};
 }
 
 auto PlanetSurfaceWalkTerrain::ground(V direction)
@@ -76,8 +77,11 @@ auto PlanetSurfaceWalkTerrain::ground(V direction)
   const auto id = detail::locate_selected_contact_triangle(
       planet_, {direction.x, direction.y, direction.z});
   if (!id) return std::unexpected{PlanetSurfaceWalkStatus::terrain_unresolved};
+  const auto recipe = saved_contact_recipe(anchor_.terrain_policy);
+  if (!recipe)
+    return std::unexpected{PlanetSurfaceWalkStatus::terrain_unresolved};
   const auto triangle = detail::build_selected_contact_triangle(
-      planet_, kExperimentalSavedContactSurface, *id, cache_);
+      owner_, planet_, *recipe, *id, cache_);
   if (!triangle)
     return std::unexpected{PlanetSurfaceWalkStatus::terrain_unresolved};
   const V n{triangle->outward_normal.x, triangle->outward_normal.y,

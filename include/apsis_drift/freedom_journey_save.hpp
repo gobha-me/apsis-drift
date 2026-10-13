@@ -5,6 +5,7 @@
 
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomJourneySaveFormatVersion{20};
+inline constexpr std::uint32_t kFreedomTerrainJourneySaveFormatVersion{33};
 // Actor coordinates belong to the Origin station. Only the nested voyage owns
 // the simulation tick, station identity and generated universe.
 struct FreedomJourneySaveDocument {

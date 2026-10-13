@@ -64,7 +64,9 @@ struct Fixture {
   PhysicalPlanetRotationRecipe rotation =
       required(generate_planet_rotation_recipe(owner, planet.id));
   RigidBodyWorldContext context{owner};
-  auto session(RigidBodyState fixed) const -> NativeFreedomFlightSession {
+  auto session(RigidBodyState fixed,
+               std::uint32_t terrain_policy = kFreedomLegacyTerrainPolicy) const
+      -> NativeFreedomFlightSession {
     auto source =
         required(reframe_rigid_body(context, fixed,
                                     {{RigidFrameKind::planet_relative_inertial,
@@ -76,6 +78,7 @@ struct Fixture {
     auto origin = make_freedom_new_game_document(seed);
     origin.state.tick = source.tick;
     FreedomFlightSaveDocument document{origin, source, {}};
+    document.model.terrain_policy = terrain_policy;
     return required(NativeFreedomFlightSession::open(
         {NativeStartup::Mode::freedom, std::move(document), planet, {}}));
   }
@@ -483,6 +486,55 @@ auto generated_terrain(const Fixture& f) -> void {
   check(found_water,
         "bounded actual generator fixtures include represented water");
 }
+auto selected_terrain(const Fixture& f) -> void {
+  auto cache = required(TerrainTileCache::create(1));
+  const ContactTriangleId id{
+      f.planet.id, CubeFace::positive_x, 4000, 4000, 12, 13, 0};
+  const auto old =
+      required(godot_spike::detail::build_selected_contact_triangle(
+          f.planet, kExperimentalSavedContactSurface, id, cache));
+  const auto selected =
+      required(godot_spike::detail::build_selected_contact_triangle(
+          f.owner, f.planet, kLocalDetailSavedContactSurface, id, cache));
+  check(selected.vertices != old.vertices &&
+            selected.recipe == kLocalDetailSavedContactSurface,
+        "selected terrain changes physical vertices with explicit provenance");
+  auto session = f.session(f.fixed(selected), kFreedomLocalDetailTerrainPolicy);
+  const auto untouched =
+      f.session(f.fixed(selected), kFreedomLocalDetailTerrainPolicy);
+  for (const auto wrong_policy : {0U, 1U, 3U, 99U}) {
+    check(!TerrainTouchdownSnapshot::create(session, true, wrong_policy) &&
+              session.document() == untouched.document(),
+          "wrong or unsupported policy cannot replace selected support");
+  }
+  auto snapshot = required(TerrainTouchdownSnapshot::create(session, true));
+  const auto result = snapshot.query();
+  check(result.policy_version == kFreedomLocalDetailTerrainPolicy &&
+            result.geometry.provenance.recipe ==
+                kLocalDetailSavedContactSurface &&
+            result.assessment &&
+            result.assessment->classification ==
+                TouchdownClass::pad_contact_ready,
+        "ordinary session support derives the selected physical terrain");
+  auto larger_cache =
+      required(TerrainTouchdownSnapshot::create(session, true, 2, 64));
+  check(result == larger_cache.query(),
+        "selected physical support remains independent of cache residency");
+  for (unsigned index = 0; index < result.geometry.support_count; ++index) {
+    const auto& patch = result.geometry.supports[index].geometry;
+    check(patch && *patch &&
+              (*patch)->triangle.recipe == kLocalDetailSavedContactSurface,
+          "each support uses selected top geometry");
+    if (!patch || !*patch) continue;
+    const auto hit =
+        ray_hit(v((*patch)->pad_center), v((*patch)->triangle.outward_normal),
+                (*patch)->triangle);
+    check(hit && *hit >= -(*patch)->maximum_gap_metres - 1e-8L &&
+              *hit <= -(*patch)->minimum_gap_metres + 1e-8L,
+          "selected support agrees with independent normal ray to the real "
+          "facet");
+  }
+}
 } // namespace
 
 auto main() -> int {
@@ -490,6 +542,7 @@ auto main() -> int {
     const Fixture fixture;
     arithmetic_and_boundaries(fixture);
     generated_terrain(fixture);
+    selected_terrain(fixture);
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     ++failures;

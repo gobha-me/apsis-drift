@@ -9,6 +9,9 @@
 namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomFlightSaveFormatVersion{18};
 inline constexpr std::uint32_t kFreedomActiveFlightSaveFormatVersion{26};
+inline constexpr std::uint32_t kFreedomTerrainFlightSaveFormatVersion{31};
+inline constexpr std::uint32_t kFreedomLegacyTerrainPolicy{1};
+inline constexpr std::uint32_t kFreedomLocalDetailTerrainPolicy{2};
 inline constexpr std::uint32_t kFreedomActiveWorldVersion{1};
 // Explicit new owner selection. Absence retains the strict historical home
 // frame contract; a foreign frame can never opt itself into another world.
@@ -28,6 +31,9 @@ struct FreedomFlightModel {
   AtmosphericFlightRecipe atmosphere;
   OrbitHoldRequest hold;
   bool assistance{true};
+  // Policy1 retains all historical source/contact arithmetic. Policy2 binds
+  // physical local-detail recipe2 to its matching versioned top triangles.
+  std::uint32_t terrain_policy{kFreedomLegacyTerrainPolicy};
   friend auto operator==(const FreedomFlightModel&, const FreedomFlightModel&)
       -> bool = default;
 };

@@ -47,7 +47,8 @@ auto terrain_pad_observation(const PlanetDescriptor& planet,
   const auto depth = vector(patch.half_length);
   const auto& id = triangle.id;
   if (patch.version != kExperimentalContactPatchVersion ||
-      triangle.recipe != kExperimentalSavedContactSurface ||
+      (triangle.recipe != kExperimentalSavedContactSurface &&
+       triangle.recipe != kLocalDetailSavedContactSurface) ||
       id.planet != planet.id || static_cast<unsigned>(id.face) > 5 ||
       id.tile_x >= 8192 || id.tile_y >= 8192 || id.cell_x >= 32 ||
       id.cell_y >= 32 || id.half >= 2 || patch.support_index >= 4 ||
@@ -131,10 +132,19 @@ auto terrain_pad_observation(const PlanetDescriptor& planet,
 } // namespace detail
 
 auto TerrainTouchdownSnapshot::create(const NativeFreedomFlightSession& session,
+                                      bool gear_deployed)
+    -> std::expected<TerrainTouchdownSnapshot, godot_spike::SavedContactError> {
+  return create(session, gear_deployed,
+                session.document().model.terrain_policy);
+}
+
+auto TerrainTouchdownSnapshot::create(const NativeFreedomFlightSession& session,
                                       bool gear_deployed,
                                       std::uint32_t policy_version,
                                       std::size_t cache_capacity)
     -> std::expected<TerrainTouchdownSnapshot, godot_spike::SavedContactError> {
+  if (policy_version != session.document().model.terrain_policy)
+    return std::unexpected{godot_spike::SavedContactError::unsupported_recipe};
   return create(session.system(), session.rotation(), session.document().flight,
                 gear_deployed, policy_version, cache_capacity);
 }
@@ -144,17 +154,17 @@ auto TerrainTouchdownSnapshot::create(
     bool gear_deployed, std::uint32_t policy_version,
     std::size_t cache_capacity)
     -> std::expected<TerrainTouchdownSnapshot, godot_spike::SavedContactError> {
-  if (policy_version != kTerrainTouchdownPolicyVersion)
+  const auto recipe = godot_spike::saved_contact_recipe(policy_version);
+  if (!recipe)
     return std::unexpected{godot_spike::SavedContactError::unsupported_recipe};
   auto geometry = godot_spike::SavedContactGeometry::create(
-      owner, rotation, source, godot_spike::kExperimentalSavedContactSurface,
-      cache_capacity);
+      owner, rotation, source, *recipe, cache_capacity);
   if (!geometry) return std::unexpected{geometry.error()};
-  return TerrainTouchdownSnapshot{std::move(*geometry), gear_deployed};
+  return TerrainTouchdownSnapshot{std::move(*geometry), gear_deployed,
+                                  policy_version};
 }
 auto TerrainTouchdownSnapshot::query() -> TerrainTouchdownResult {
-  TerrainTouchdownResult result{
-      kTerrainTouchdownPolicyVersion, geometry_.query(), {}, {}, {}};
+  TerrainTouchdownResult result{policy_version_, geometry_.query(), {}, {}, {}};
   const auto& provenance = result.geometry.provenance;
   TouchdownObservations observations{provenance.planet.id,
                                      provenance.fixed_query_state.tick,
