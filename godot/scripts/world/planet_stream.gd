@@ -71,7 +71,11 @@ func tick(delta: float, observer: Vector3) -> void:
 	if current != identity:
 		# Retire both covers and any partially uploaded payload before keys
 		# from another owner, saved policy or stream generation can alias them.
+		# An implicit retirement must not acknowledge a latched fault. The
+		# owning view still needs to pause and silence stale presentation.
+		var latched_error := error
 		reset_world()
+		error = latched_error
 		identity = current.duplicate(true)
 	if not error.is_empty():
 		return

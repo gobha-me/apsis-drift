@@ -83,6 +83,13 @@ func run() -> void:
 	var terrain := StreamView.new()
 	terrain.bridge = owner
 	root.add_child(terrain)
+	# A fault can already be latched before the first tick installs an
+	# identity. Identity initialization must not silently resume uploads.
+	terrain.error = "Latched first-tick terrain fault"
+	terrain.tick(0.01, Vector3.ZERO)
+	check(terrain.identity == first_identity and terrain.error == "Latched first-tick terrain fault" and terrain.nodes.is_empty() and not terrain.is_ready, "Initial stream identity cleared a latched fault")
+	terrain.reset_world()
+	check(terrain.error.is_empty() and terrain.identity.is_empty(), "Explicit terrain reset did not clear acknowledged fault")
 	if not await wait_ready(terrain, first_identity):
 		terrain.free()
 		quit(1)
@@ -92,6 +99,7 @@ func run() -> void:
 	# real C++ world. The next tick must retire it before any upload occurs.
 	terrain.pending = [{"id": "stale-selected-payload"}]
 	terrain.upload_index = 0
+	terrain.error = "Latched old-world terrain fault"
 	if not select_continue(owner, args[0]):
 		terrain.free()
 		quit(1)
@@ -99,9 +107,11 @@ func run() -> void:
 	var legacy_identity: Dictionary = owner.get_stream_identity()
 	check(legacy_identity.generation != first_identity.generation and legacy_identity.terrain_policy == 1 and owner.get_freedom_flight_state().terrain_policy == 1, "Legacy Continue silently migrated terrain")
 	terrain.tick(0.01, Vector3.ZERO)
-	check(terrain.identity == legacy_identity and terrain.pending.is_empty() and terrain.nodes.is_empty() and not terrain.is_ready and terrain.error.is_empty(), "World/policy transition retained an old mesh or pending payload")
+	check(terrain.identity == legacy_identity and terrain.pending.is_empty() and terrain.nodes.is_empty() and not terrain.is_ready and terrain.error == "Latched old-world terrain fault", "World/policy transition retained old geometry or cleared a latched fault")
 	for node: MeshInstance3D in old_nodes:
 		check(is_instance_valid(node) and not node.visible and node.is_queued_for_deletion(), "Retired old terrain cover remains visible")
+	terrain.reset_world()
+	check(terrain.error.is_empty() and terrain.identity.is_empty(), "Explicit selection reset did not clear acknowledged fault")
 	if not await wait_ready(terrain, legacy_identity):
 		terrain.free()
 		quit(1)
