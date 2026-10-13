@@ -5,6 +5,11 @@ new-game policy2 in formats 31/32/33. Historical flight 18/26 and its nested
 journeys retain their original policy1; terrain/contact selection follows the
 validated C++ save owner.
 
+[Format35 system-frame import](SYSTEM_FLIGHT_IMPORT.md) explicitly translates
+a complete authenticated system-state flight into this existing canonical
+planet frame at the saved tick. Ordinary Save As remains formats26/31; old
+formats and nested voyages do not acquire another frame interpretation.
+
 2026-09-30, #340; port lifecycle added 2026-10-01 in #342. The ordinary launcher
 selects format-17 station state, format-18 physical flight or explicit
 [format-19 port state](NATIVE_PORT_LIFECYCLE.md). New Game still starts at Origin Station. Continuing

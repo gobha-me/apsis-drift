@@ -55,6 +55,7 @@ var save_status: RichTextLabel
 var paused := true
 var focused := true
 var controls_armed := false
+var last_window_size := Vector2i.ZERO
 var player_input: Node
 var initial_controller_device := -2
 var controls_menu: CanvasLayer
@@ -362,7 +363,9 @@ func activate() -> void:
 	activated = true
 	if surface_walking(): look_offset.x = -float(state.surface_walk.heading)
 	near_viewport.world_3d = far_viewport.find_world_3d()
-	get_window().size_changed.connect(layout_hud)
+	# Activation establishes the baseline; initial Control layout is not a resize.
+	last_window_size = get_window().size
+	get_window().size_changed.connect(window_resized)
 	layout_hud()
 	setup_controls()
 	update_view(0.0)
@@ -565,6 +568,19 @@ func hud_text() -> RichTextLabel:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return label
+
+
+func window_resized() -> void:
+	var pixels := get_window().size
+	var changed := pixels != last_window_size
+	last_window_size = pixels
+	if changed and activated and not paused and player_input != null:
+		# Neutral, valid resizes remain cosmetic and preserve inertial flight.
+		# Held controls require the existing explicit neutral/resume gate.
+		observe_neutral_controls()
+		if not controls_armed:
+			pause_controls("Window resized. Release controls, then resume explicitly.")
+	layout_hud()
 
 
 func layout_hud() -> void:

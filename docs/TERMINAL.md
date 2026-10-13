@@ -6,6 +6,53 @@ The application continues to own simulation, world generation and saves.
 This frontend's career/menu and save contracts are distinct from native Freedom.
 See [ownership](GODOT_ADOPTION.md) and [native setup](DEVELOPMENT.md).
 
+## Retention decision — 2026-10-13
+
+[Issue #292](https://github.com/gobha-me/apsis-drift/issues/292) selects retention
+as a secondary diagnostic frontend. It preserves the historical terminal
+save/career checks, application raster benchmarks and live terminal capture.
+These remain useful comparisons while native development proceeds; terminal
+feature parity remains outside the native acceptance boundary.
+
+The ordinary [native launcher](../tools/run_godot_native.sh) builds with
+`APSIS_DRIFT_TERMINAL=OFF` and `APSIS_DRIFT_RTAUDIO=OFF`. Native New Game,
+Save/Load/Continue and the [First Flight route](FIRST_FLIGHT.md) consume the C++
+core. The [headless application checks](DEVELOPMENT.md#headless-application-checks)
+build that core with the same disabled terminal options; the `native-core` CI
+jobs exercise this dependency boundary with GCC and Clang.
+
+The retained `apsis-drift --benchmark` still requires TermForge: it runs the
+terminal framework's headless frame/driver path, including application raster
+work and submission cost. The capture commands below also require that frontend.
+A future retirement must preserve those measurement paths independently and
+provide a recoverable source/build recipe. This decision retains the current
+source, build targets and CI contracts.
+
+## Retained source checkpoint
+
+The immutable retained revision is
+[`ab2a70f8615f43313b6704bfbc7c18e25dbe2dda`](https://github.com/gobha-me/apsis-drift/tree/ab2a70f8615f43313b6704bfbc7c18e25dbe2dda).
+It contains the terminal entry point, CMake configuration, tests and the build,
+benchmark and capture instructions. Its CMake fallback pins TermForge v0.57.23;
+the revision's own dependency pins remain authoritative.
+
+To rerun that checkpoint from a repository checkout containing the revision,
+use a detached worktree and its own build directory:
+
+```sh
+git worktree add --detach ../apsis-drift-terminal ab2a70f8615f43313b6704bfbc7c18e25dbe2dda
+cd ../apsis-drift-terminal
+cmake -S . -B build-terminal -DCMAKE_BUILD_TYPE=Release \
+  -DAPSIS_DRIFT_TERMINAL=ON -DAPSIS_DRIFT_RTAUDIO=OFF
+cmake --build build-terminal --parallel 4
+ctest --test-dir build-terminal --output-on-failure
+./build-terminal/apsis-drift --benchmark 3
+```
+
+The following run/capture commands apply there with `build-terminal` in place
+of `build`. RtAudio is optional for this diagnostic recipe; it can be enabled
+with the platform headers described below.
+
 ## Build
 
 Use CMake 3.28+, Python 3.10+, Git and a C++23 compiler. The default configuration includes the

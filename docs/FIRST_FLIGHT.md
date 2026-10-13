@@ -20,6 +20,11 @@ left stick walks; right-drag or the right stick looks. **Esc / Start · Controls
 opens paused controls. The start screen also offers control Settings and
 [Flight basics](NATIVE_TITLE.md).
 
+Resizing the window while movement, flight or look controls are held pauses
+input. Release those controls, then resume explicitly; the craft retains its
+committed pose and momentum. A resize with neutral controls keeps the current
+running or paused state. Initial layout does not add a pause.
+
 Walk through the workshop to D1. Release movement controls, then use **E**,
 controller **A**, or **Board Wayfarer**. The authored boarding sequence takes
 you through the hatch to the pilot seat. The open docking well stops ordinary
