@@ -65,16 +65,55 @@ hardware performance remains a separate measurement. The native contract hashes
 the actual imported positions and complete triangle indices, allowing only
 Godot's fixed winding conversion.
 
+## Lower lift exhaust
+
+The same consumer also presents gross positive-body-Y force through the existing
+`HOPPER BELLY01 | port/starboard VTOL replaceable exit lip` mouths. Their source
+exhaust direction is -Y. Ordinary Rise, port braking, assistance and liftoff can
+all apply this channel; a maneuver name or vertical velocity does not light it.
+Main, withdrawal and lift remain independent, including opposed gross firings.
+
+The source-plane outline midpoints are X=±2.2499998807907104m,
+Y=-0.5630878806114197m, Z=3.441579222679138m. Both accepted models retain the same
+64 lip-plane vertices per mouth: legacy `HopperStructure` primitive 15 and
+operating primitive 11, material `HOPPER BELLY01 | edge`. A 0.40m procedural base
+fits within the measured 0.4742549657821655m minimum rim-edge distance. Its base
+starts 10mm below the lip, rounded outward in float32, and tapers 1m toward -Y.
+The existing mouths receive no new aperture, mesh edit, collider or force rating.
+The accepted model/source hashes and BSD-3-Clause procedural shader remain those
+recorded above; no new generated asset is introduced.
+
+This is external presentation of the existing gross force channel. It does not
+qualify internal covers/flow, temperature, per-nozzle capacity or an engineering
+allocator. Close/far mouth appearance, external plume clearance and visible
+liftoff require review with the actual asset; input/geometry tests alone do not
+prove those visual outcomes. The existing lower-mouth surfaces keep ordinary
+importer LOD behavior.
+
+Local GCC and Clang each pass the saved-flight, port and surface contracts,
+including actual Rise/braking and landing/liftoff. The external plume envelope
+clears the accepted meshes in 16 named hardware/gear endpoint combinations;
+this does not certify continuous hardware motion. A software Compatibility
+capture preserves all five canonical surface saves and shows the plumes in
+ordinary exterior and underside views. The installed model retains LOD data
+on 161 of 172 surfaces; availability does not prove every distance transition.
+
+The rendered process reports two 349,524-byte OpenGL texture leaks on exit.
+A bounded two-frame teardown wait did not resolve them and was removed. Image
+and save-parity checks pass, but a clean rendered shutdown is not claimed;
+renderer lifecycle qualification remains under #244.
+
 ## Applied force and verification
 
-Both effects validate the selected Wayfarer flight owner, attachment flag, all
+All three effects validate the selected Wayfarer flight owner, attachment flag, all
 four complete positive/negative force and rating arrays and elapsed time.
-Malformed input hides both groups without advancing phase. Pause and attachment
-also hide both groups and freeze phase. Intensity reads gross negative force
-divided by its own channel rating. Positive opposing firing, gravity, drag and
-coasting velocity cannot erase or invent a nozzle firing.
+Malformed input hides all three groups without advancing phase. Pause and attachment
+also hide all three groups and freeze phase. Intensity reads gross negative force
+divided by its own channel rating; lift reads gross positive-Y force and its
+own rating. Opposing gross channels can light both groups even when their net
+force cancels. Gravity, drag and coasting velocity do not determine firing.
 
-Terminal flight-view errors also hide both groups immediately. Exhaust refresh
+Flight-view errors also hide all three groups immediately. Exhaust refresh
 follows terrain validation, so a failed presentation frame freezes the prior
 visual phase. A valid C++ flight batch committed before a terrain error remains
 committed; the view does not roll back simulation time.

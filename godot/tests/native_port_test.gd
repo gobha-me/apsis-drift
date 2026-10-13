@@ -99,6 +99,14 @@ func run() -> void:
 	var withdrawal: Dictionary = other.get_freedom_flight_state()
 	check(not withdrawal.attached and withdrawal.negative_force_body[1] > 0.0 and withdrawal.negative_force_body[2] == 0.0, "Withdrawal tick did not preserve independent gross channels")
 	check(view.exhaust.update_applied(withdrawal, 1.0 / 120.0, false) and is_equal_approx(view.exhaust.withdrawal_intensity, 0.25) and view.exhaust.withdrawal_plumes[0].visible and view.exhaust.withdrawal_plumes[1].visible and view.exhaust.intensity == 0.0, "First withdrawal tick left the source-bound exhaust dark or lit main thrust")
+	# Ordinary Rise/withdrawal braking uses the same real positive-Y actuator.
+	check(other.set_freedom_assistance(false), "Manual Rise comparison refused")
+	commands.fill(0.0)
+	commands[1] = 0.25
+	check(other.advance_freedom_flight(1.0 / 120.0, commands, false), "Real Rise/braking tick refused")
+	var lift: Dictionary = other.get_freedom_flight_state()
+	check(lift.positive_force_body[1] > 0.0 and lift.negative_force_body[1] == 0.0, "Rise did not preserve independent positive-Y force")
+	check(view.exhaust.update_applied(lift, 1.0 / 120.0, false) and is_equal_approx(view.exhaust.lift_intensity, 0.25) and view.exhaust.lift_plumes[0].visible and view.exhaust.lift_plumes[1].visible and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.intensity == 0.0, "Real Rise/braking did not light only the existing lower outlets")
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == originals[i], "Lifecycle modified source save")
 	view.free()

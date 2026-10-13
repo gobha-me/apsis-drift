@@ -30,9 +30,101 @@ func walk(view: Control, physical: int, ticks: int) -> void:
 	key(physical, false)
 
 
+func check_depth_inputs() -> void:
+	for eye in [Vector3(NAN, 0, 0), Vector3(0, INF, 0), Vector3(0, 0, -INF), Vector3(3e38, 3e38, 3e38)]:
+		check(FlightView.surface_depth_range(eye, 100000.0) == Vector2.ZERO, "Nonfinite surface camera eye accepted")
+	for limit in [NAN, INF, -INF, -1.0, 0.0, 199.0, 1000000001.0]:
+		check(FlightView.surface_depth_range(Vector3.ZERO, limit) == Vector2.ZERO, "Invalid surface depth envelope accepted")
+	check(FlightView.surface_depth_range(Vector3.ZERO, 100000.0) == Vector2(0.05, 200.0), "Near surface depth changed ordinary close framing")
+	for distance in [250.0, 1000.0, 100000.0, 1000000.0]:
+		var depth: Vector2 = FlightView.surface_depth_range(Vector3(0, 0, distance), 100000.0)
+		check(depth.x >= 0.05 and depth.y <= 100000.0 and depth.y / depth.x <= 500001.0 and depth.y >= minf(distance + 16.0, 100000.0), "Surface depth escaped its distance/ratio/distant envelope")
+
+
+func saved_anchor(path: String) -> Dictionary:
+	var value: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	# Existing format30->29/28/27/25->23 wrappers own this unchanged anchor.
+	for level in 12:
+		if not value is Dictionary: return {}
+		if value.get("surface") is Dictionary and value.surface.get("landed") is Dictionary:
+			return value.surface.landed.duplicate(true)
+		value = value.get("voyage", value.get("base"))
+	return {}
+
+
+func check_visibility_refresh(view: Control, owner: Variant, output: String, label: String, anchor: Dictionary) -> void:
+	var path := output.path_join(label + ".json")
+	var after := output.path_join(label + "-refresh.json")
+	var state: Dictionary = owner.get_freedom_flight_state()
+	var model: int = view.staged_model.get_instance_id()
+	check(owner.save_freedom_as(path), "Visibility baseline Save failed")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	for frame in 3: view.update_view(0.0)
+	check(view.error.is_empty() and view.paused and owner.get_freedom_flight_state() == state and view.staged_model.get_instance_id() == model and view.staged_model.valid_current_pose(), "Camera refresh changed the paused actor/craft/model")
+	check(owner.save_freedom_as(after) and FileAccess.get_file_as_bytes(after) == bytes and saved_anchor(path) == anchor, "Visibility refresh changed complete save or landed anchor")
+	check(view.camera.position.is_equal_approx(state.surface_walk.eye_position) and view.camera.transform == view.terrain_camera.transform and view.camera.fov == view.terrain_camera.fov, "Surface cameras lost authoritative eye/basis/FOV")
+	check(view.camera.far >= view.camera.position.length() + 16.0 and view.camera.far <= view.terrain_camera.far and view.camera.far / view.camera.near <= 500001.0, "Landed craft remains beyond the close-pass far plane")
+	check(view.camera.cull_mask == 3 and view.terrain_camera.cull_mask == 1 and view.camera.get_world_3d() == view.terrain_camera.get_world_3d() and view.light.light_cull_mask == 1 and view.local_light.light_cull_mask == 2, "Visibility repair lost shared terrain occlusion or light/layer ownership")
+	check(-view.camera.basis.z.dot((-view.camera.position).normalized()) > 0.9, "Actual backward walking no longer looks toward the retained craft")
+
+
+func check_far_visibility(source: String, assets: String, output: String, rendered: bool, captures: Array) -> void:
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := Shell.new()
+	shell.presentation_only = true
+	shell.process_mode = Node.PROCESS_MODE_DISABLED
+	root.add_child(shell)
+	check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("exited.json"), "assets": assets}), "Far visibility source refused: " + shell.error)
+	if failed: shell.free(); return
+	var view: Control = shell.current_view
+	var model: int = view.staged_model.get_instance_id()
+	var original_near: float = view.camera.near
+	var original_far: float = view.camera.far
+	var anchor := saved_anchor(source.path_join("exited.json"))
+	check(not anchor.is_empty() and view.paused and view.surface_walking(), "Far visibility lost the actual landed surface actor")
+	# Real supported commands, not a shifted camera or fabricated actor save.
+	walk(view, KEY_S, 15000)
+	check(view.error.is_empty() and view.camera.position.length() > 250.0 and view.staged_model.get_instance_id() == model, "Actual supported walk failed to reach beyond250m; do not relocate/flatten the fixture")
+	if failed: shell.free(); return
+	view.pause_controls("Inspecting the actual distant landed craft")
+	check_visibility_refresh(view, owner, output, "visibility-far", anchor)
+	if failed: shell.free(); return
+	if rendered:
+		var prior_cockpit: bool = view.cockpit
+		await capture_phase(view, owner, output, {"label": "visibility-far"}, captures)
+		view.cockpit = prior_cockpit
+		view.update_view(0.0)
+	var far_path := output.path_join("visibility-far.json")
+	var far_bytes := FileAccess.get_file_as_bytes(far_path)
+	var far_state: Dictionary = owner.get_freedom_flight_state()
+	check(shell.select_start(owner, {"mode": "continue", "value": far_path, "assets": assets}), "Distant actor paused Continue refused: " + shell.error)
+	if failed: shell.free(); return
+	view = shell.current_view
+	model = view.staged_model.get_instance_id()
+	check(view.paused and view.surface_walking() and owner.get_freedom_flight_state() == far_state and FileAccess.get_file_as_bytes(far_path) == far_bytes, "Far Continue changed the actor, craft or source bytes")
+	check_visibility_refresh(view, owner, output, "visibility-continued", anchor)
+	walk(view, KEY_W, 6000)
+	check(view.camera.position.length() < 180.0 and view.staged_model.get_instance_id() == model, "Actual return did not cross the old200m clip boundary")
+	view.pause_controls("Inspecting the returned near view")
+	check_visibility_refresh(view, owner, output, "visibility-near", anchor)
+	check(view.camera.near == original_near and view.camera.far == original_far, "Near on-foot return retained unnecessarily distant depth")
+	if failed: shell.free(); return
+	if rendered:
+		var prior_cockpit: bool = view.cockpit
+		await capture_phase(view, owner, output, {"label": "visibility-near"}, captures)
+		view.cockpit = prior_cockpit
+		view.update_view(0.0)
+	walk(view, KEY_W, 9000)
+	view.surface_walk_button.pressed.emit()
+	check(view.error.is_empty() and view.paused and not view.surface_walking() and view.staged_model.get_instance_id() == model and view.camera.near == original_near and view.camera.far == original_far, "Far walk/reboard lost the retained craft or exact seated depth")
+	shell.free()
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
+	check_depth_inputs()
+	if failed: quit(1); return
 	if not ClassDB.class_exists("FreedomBridge"): GDExtensionManager.load_extension("res://bin/freedom.gdextension")
 	if not check(ClassDB.class_exists("FreedomBridge"), "Native bridge unavailable"): quit(1); return
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
@@ -160,6 +252,7 @@ func run() -> void:
 	check(shell.select_start(owner, {"mode": "recovery", "assets": args[1]}), "Outside replacement failed to stage")
 	check(shell.current_view is WalkView and shell.current_view.paused and shell.recovery_overlay == null, "Recovery failed to restore one paused station actor")
 	checkpoint(owner, args[0], args[2], "recovered")
+	if not failed: await check_far_visibility(args[0], args[1], args[2], rendered, captures)
 	var report := FileAccess.open(args[2].path_join("surface-walk-report.json"), FileAccess.WRITE)
 	if report != null:
 		report.store_string(JSON.stringify({"pass": not failed, "scope": "near-ground native suited walking, complete save parity; instant hatch transfer; no oxygen/environment damage policy", "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "asset_license_records": "native-assets/stowed/licenses", "operating_asset_provenance": "native-assets/operating/provenance.json", "captures": captures}, "\t") + "\n")

@@ -65,6 +65,21 @@ geometry rather than historical support. Pending maneuvers do not resume from
 a save. Native Continue stages the selected model and gear state while
 paused, using the normal model-readiness transaction.
 
+While suited walking, the existing close depth pass follows the actual
+C++ actor-eye distance to the landed craft with a 16m admitted hull/gear margin.
+It remains within the distant terrain envelope and a 500000:1 depth ratio;
+nearby terrain keeps the same camera, layers and occlusion. Returning to the
+seat restores the original 0.05m/200m near/far planes. This preserves the actual
+landed exterior beyond the former 200m clip plane without scaling, a proxy ship
+or a new movement limit. Physical terrain or the horizon can still obscure it.
+
+GCC and Clang qualify an actual walk beyond 250m, paused refresh, full
+Save/Continue, return across the former clip boundary and reboarding. Six
+complete saves agree byte-for-byte. A matched software Compatibility capture
+at 258.5m shows the real craft absent before the fix and visible afterward,
+with the same actor eye, FOV, world, scale and lighting. This is one bounded
+look-back view, not hardware or all-distance LOD qualification.
+
 ## Qualification boundaries
 
 Run `landed-craft-contract` under GCC and Clang. Its generated dry-bedrock fixture
@@ -78,7 +93,9 @@ separate regression coverage for station departure, atmosphere, terrain cruise
 and return.
 
 The existing main and station-withdrawal exhaust remain animated from applied
-thrust. Dedicated downward liftoff/upward-force exhaust is still a visual gap.
+thrust. Downward lift exhaust now follows actual gross positive-body-Y force through
+the accepted lower lift mouths; ordinary Rise/braking uses that same channel.
+See [exhaust sources and limits](WITHDRAWAL_EXHAUST.md#lower-lift-exhaust).
 Gear presentation currently selects the authored stowed/deployed calibration
 endpoints immediately. It adds no new asset or mechanism study. Compression
 animation, swept impact response, authored hatch transfer, taxiing, terrain detail and
