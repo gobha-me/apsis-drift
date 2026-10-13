@@ -29,6 +29,7 @@ inline constexpr std::size_t kDefaultTerrainTileCacheCapacity{64};
 enum class TerrainGenerationStream : std::uint64_t {
   shape = 1,
   detail = 2,
+  local_relief = 3,
 };
 
 struct TerrainSample {
