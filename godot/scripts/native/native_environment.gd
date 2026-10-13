@@ -49,13 +49,19 @@ static func sun_visibility(state: Dictionary) -> float:
 	var width: float = state.lighting.star_angular_radius
 	return smoothstep(horizon - width, horizon + width, elevation)
 
-static func apply(state: Dictionary, environment: Environment, light: DirectionalLight3D, material: ShaderMaterial, local_light: DirectionalLight3D) -> bool:
+static func apply_sky(state: Dictionary, material: ShaderMaterial) -> bool:
 	var visibility := sun_visibility(state)
-	if visibility < 0.0: return false
+	if visibility < 0.0 or material == null or material.shader != SkyShader: return false
 	var data: Dictionary = state.lighting
 	for pair in [["radius", state.planet_radius], ["altitude", state.altitude], ["scale_height", data.scale_height], ["sea_density", data.sea_density], ["atmosphere_edge", data.atmosphere_edge], ["atmosphere_tint", data.atmosphere_tint], ["sun_direction", data.direction], ["sun_color", data.star_color], ["sun_angular_radius", data.star_angular_radius]]:
 		material.set_shader_parameter(pair[0], pair[1])
 	material.set_shader_parameter("sun_visibility", visibility)
+	return true
+
+static func apply(state: Dictionary, environment: Environment, light: DirectionalLight3D, material: ShaderMaterial, local_light: DirectionalLight3D) -> bool:
+	if not apply_sky(state, material): return false
+	var visibility := sun_visibility(state)
+	var data: Dictionary = state.lighting
 	var horizon := -acos(clampf(float(state.planet_radius) / (float(state.planet_radius) + maxf(0.0, float(state.altitude))), 0.0, 1.0))
 	var elevation := asin(clampf(data.direction.y, -1.0, 1.0))
 	var daylight := smoothstep(horizon - data.star_angular_radius, horizon + data.star_angular_radius + 0.08, elevation)

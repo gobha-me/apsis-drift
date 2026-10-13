@@ -20,6 +20,9 @@ var station: Node3D
 var ship: Node3D
 var camera: Camera3D
 var light: DirectionalLight3D
+var station_environment: Environment
+var sky_material: ShaderMaterial
+var sky_owner: Dictionary = {}
 var scene: Node3D
 var viewport: SubViewport
 var telemetry: Label
@@ -87,6 +90,33 @@ static func valid_state(value: Dictionary) -> bool:
 	return true
 
 
+func valid_environment(flight: Dictionary, actor: Dictionary) -> bool:
+	if not FlightView.valid_state(flight): return false
+	for key in ["universe_seed", "system_id", "planet_id", "station_id", "craft_id", "tick"]:
+		if not NativeEnvironment.decimal(flight.get(key)): return false
+		if key != "tick" and not sky_owner.is_empty() and flight[key] != sky_owner[key]: return false
+	if not sky_owner.is_empty():
+		var tick: String = flight.tick
+		var previous: String = sky_owner.tick
+		if tick.length() < previous.length() or (tick.length() == previous.length() and tick < previous): return false
+	if actor.is_empty():
+		# The final seated projection owns its boarding pose and clock together.
+		return flight.get("boarding", {}).get("state") == "seated"
+	if not valid_state(actor): return false
+	for key in ["universe_seed", "system_id", "planet_id", "station_id", "craft_id", "tick"]:
+		if actor[key] != flight[key]: return false
+	return true
+
+func refresh_environment(flight: Dictionary, actor: Dictionary) -> bool:
+	if not valid_environment(flight, actor) or not NativeEnvironment.apply_sky(flight, sky_material): return false
+	light.basis = FlightView.star_light_basis(flight.star_direction)
+	light.light_color = flight.lighting.star_color
+	light.light_energy = 1.5 * NativeEnvironment.sun_visibility(flight)
+	for key in ["universe_seed", "system_id", "planet_id", "station_id", "craft_id", "tick"]:
+		sky_owner[key] = flight[key]
+	return true
+
+
 func initialize(owner: Variant, assets: String) -> bool:
 	var model := HopperPresentation.load_selected_asset(assets, owner.get_freedom_craft_binding())
 	if model == null:
@@ -111,7 +141,7 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 		error = "The pending station walking actor is unavailable"
 		return false
 	var flight: Dictionary = pending.flight_state
-	if not FlightView.valid_state(flight) or not flight.attached or flight.target_port != 1:
+	if not valid_environment(flight, state) or not flight.attached or flight.target_port != 1:
 		error = "The walking journey has no attached D1 Wayfarer"
 		return false
 	load_stick_preferences()
@@ -149,18 +179,18 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	camera.current = true
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.004, 0.009, 0.02)
+	station_environment = environment
+	sky_material = NativeEnvironment.install(environment)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.6, 0.75, 0.95)
 	environment.ambient_light_energy = 0.7
 	world.environment = environment
 	scene.add_child(world)
 	light = DirectionalLight3D.new()
-	light.basis = FlightView.star_light_basis(flight.star_direction)
-	light.light_color = flight.lighting.star_color
-	light.light_energy = 1.5 * NativeEnvironment.sun_visibility(flight)
 	scene.add_child(light)
+	if not refresh_environment(flight, state):
+		error = "The station sky projection is unavailable"
+		return false
 	requested_heading = state.heading_radians
 	build_ui()
 	if not stick_preferences_status.is_empty(): save_status.text += "\n" + stick_preferences_status
@@ -488,48 +518,52 @@ func board_requested() -> void:
 
 
 func update_view() -> void:
-	state = bridge.get_freedom_walk_state()
-	if state.is_empty() and bridge.get_freedom_boarding_state().get("state") == "seated":
+	var next_state: Dictionary = bridge.get_freedom_walk_state()
+	if next_state.is_empty() and bridge.get_freedom_boarding_state().get("state") == "seated":
 		# Consume the completed C++ pose before deferred view replacement. A
 		# render frame can contain several ticks; the previous walker camera is
 		# then several ticks behind the moving station and floating origin.
 		var seated: Dictionary = bridge.get_freedom_boarding_state()
 		var flight: Dictionary = bridge.get_freedom_flight_state()
-		if not FlightView.valid_state(flight) or not finite_triplet(seated.eye_craft) or not staged_model.set_pose(seated.pose):
+		if not valid_environment(flight, {}) or flight.get("boarding") != seated or not finite_triplet(seated.eye_craft) or not staged_model.set_pose(seated.pose):
 			error = "C++ returned an invalid completed boarding pose"
 			set_paused(true)
 			return
+		if not refresh_environment(flight, {}):
+			error = "The completed boarding sky projection is unavailable"
+			set_paused(true)
+			return
+		state = next_state
 		station.transform = Transform3D(flight.station_basis, flight.station_position)
-		light.basis = FlightView.star_light_basis(flight.star_direction)
-		light.light_color = flight.lighting.star_color
-		light.light_energy = 1.5 * NativeEnvironment.sun_visibility(flight)
 		ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 		camera.transform = Transform3D(flight.body_basis, flight.body_basis * Vector3(seated.eye_craft[0], seated.eye_craft[1], seated.eye_craft[2]))
 		if not mode_change_pending:
 			mode_change_pending = true
 			journey_mode_changed.emit()
 		return
-	if not valid_state(state):
+	if not valid_state(next_state):
 		error = "C++ returned an invalid station actor pose"
 		set_paused(true)
 		return
 	var flight: Dictionary = bridge.get_freedom_flight_state()
-	if not FlightView.valid_state(flight):
+	if not valid_environment(flight, next_state):
 		error = "C++ returned an invalid station flight projection"
 		set_paused(true)
 		return
-	var boarding: Dictionary = state.get("boarding", {})
+	var boarding: Dictionary = next_state.get("boarding", {})
 	if not boarding.is_empty() and not staged_model.set_pose(boarding.pose):
 		error = "The Wayfarer boarding pose changed unexpectedly"
 		set_paused(true)
 		return
+	if not refresh_environment(flight, next_state):
+		error = "The station sky projection is unavailable"
+		set_paused(true)
+		return
+	state = next_state
 	if boarding_transition():
 		requested_heading = state.heading_radians
 		pitch = 0.0
 	station.transform = Transform3D(state.station_basis, state.station_position)
-	light.basis = FlightView.star_light_basis(flight.star_direction)
-	light.light_color = flight.lighting.star_color
-	light.light_energy = 1.5 * NativeEnvironment.sun_visibility(flight)
 	ship.transform = Transform3D(flight.body_basis, Vector3.ZERO)
 	camera.transform = Transform3D(state.station_basis * Basis(Vector3.UP, state.heading_radians) * Basis(Vector3.RIGHT, pitch), state.actor_eye_position)
 	board_button.visible = not boarding_transition()
