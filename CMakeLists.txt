@@ -215,6 +215,10 @@ add_library(apsis_drift_core STATIC
   src/vacuum_dynamics.cpp
   src/touchdown.cpp
   src/terrain_touchdown.cpp
+  src/terrain_impact.cpp
+  src/craft_condition.cpp
+  src/freedom_condition_save.cpp
+  src/native_impact.cpp
   src/terrain_hull_clearance.cpp
   src/landed_craft.cpp
   src/planet_surface_walker.cpp

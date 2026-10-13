@@ -31,11 +31,24 @@ auto NativeFreedomFlightSession::record_loss(FreedomLossCause cause,
   if (!source) return std::unexpected{source.error()};
   auto result = record_freedom_loss(*source, cause, craft, tick, checksum);
   if (!result) return std::unexpected{result.error().detail};
-  recovery_ = std::move(result->recovery);
-  if (recovery_pending()) {
-    cancel_port_approach();
-    cancel_surface_maneuver();
+  auto candidate = *this;
+  candidate.recovery_ = std::move(result->recovery);
+  if (candidate.recovery_pending()) {
+    if (candidate.condition_) {
+      candidate.condition_->tick = candidate.document_.flight.tick;
+      candidate.retired_condition_ = candidate.condition_;
+    }
+    candidate.cancel_port_approach();
+    candidate.cancel_surface_maneuver();
   }
+  if (candidate.condition_) {
+    auto selected = candidate.condition_document();
+    if (!selected) return std::unexpected{selected.error()};
+    if (auto encoded = encode_freedom_condition_document_json(*selected);
+        !encoded)
+      return std::unexpected{encoded.error().detail};
+  }
+  *this = std::move(candidate);
   return {};
 }
 auto NativeFreedomFlightSession::complete_recovery()
@@ -59,6 +72,19 @@ auto NativeFreedomFlightSession::complete_recovery()
                          (*home)->descriptor, source_save_});
   if (!candidate) return std::unexpected{candidate.error()};
   candidate->surface_walk_selected_ = surface_walk_selected_;
+  if (condition_) {
+    auto pristine = make_craft_condition(candidate->document_);
+    if (!pristine) return std::unexpected{pristine.error()};
+    candidate->condition_ = *pristine;
+    auto retired = *condition_;
+    retired.tick = document_.flight.tick;
+    candidate->retired_condition_ = retired;
+    if (auto valid = candidate->condition_document(); !valid)
+      return std::unexpected{valid.error()};
+    else if (auto encoded = encode_freedom_condition_document_json(*valid);
+             !encoded)
+      return std::unexpected{encoded.error().detail};
+  }
   *this = std::move(*candidate);
   return {};
 }

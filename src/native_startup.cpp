@@ -7,12 +7,20 @@ namespace apsis_drift {
 namespace {
 
 auto missing_recovery_owner(const NativeSaveDocument& document) -> bool {
+  if (const auto* condition =
+          std::get_if<FreedomConditionSaveDocument>(&document))
+    return std::visit(
+        [](const auto& voyage) {
+          return missing_recovery_owner(NativeSaveDocument{voyage});
+        },
+        condition->voyage);
   return std::visit(
       [](const auto& d) -> bool {
         using T = std::decay_t<decltype(d)>;
         if constexpr (std::is_same_v<T, SaveDocument> ||
                       std::is_same_v<T, FreedomRecoverySaveDocument> ||
-                      std::is_same_v<T, FreedomSurfaceWalkSaveDocument>)
+                      std::is_same_v<T, FreedomSurfaceWalkSaveDocument> ||
+                      std::is_same_v<T, FreedomConditionSaveDocument>)
           return false;
         else if constexpr (std::is_same_v<T, FreedomSaveDocument>)
           return d.lineage.has_value();
@@ -235,6 +243,21 @@ auto select_document(FreedomSurfaceWalkSaveDocument d,
   return selected;
 }
 } // namespace
+namespace {
+auto select_document(FreedomConditionSaveDocument document,
+                     std::optional<std::filesystem::path> source)
+    -> std::expected<NativeStartup, std::string> {
+  if (auto valid = validate_freedom_condition_document(document); !valid)
+    return std::unexpected{valid.error().detail};
+  auto selected = std::visit(
+      [&](const auto& voyage) { return select_document(voyage, source); },
+      document.voyage);
+  if (!selected) return std::unexpected{selected.error()};
+  selected->document = std::move(document);
+  return selected;
+}
+} // namespace
+
 auto native_new_game(Seed universe_seed)
     -> std::expected<NativeStartup, std::string> {
   auto document =
@@ -283,6 +306,19 @@ auto native_select_save_document(
 
 auto prepare_native_freedom_station_start(NativeStartup selected)
     -> std::expected<NativeFreedomStationStart, std::string> {
+  if (const auto* condition =
+          std::get_if<FreedomConditionSaveDocument>(&selected.document)) {
+    if (auto valid = validate_freedom_condition_document(*condition); !valid)
+      return std::unexpected{valid.error().detail};
+    auto inner = selected;
+    inner.document = std::visit(
+        [](const auto& voyage) -> NativeSaveDocument { return voyage; },
+        condition->voyage);
+    auto prepared = prepare_native_freedom_station_start(std::move(inner));
+    if (!prepared) return std::unexpected{prepared.error()};
+    prepared->selected.document = std::move(selected.document);
+    return prepared;
+  }
   if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document))
     return std::unexpected{"The docked native shell cannot present a Freedom "
                            "flight save yet"};
@@ -417,6 +453,18 @@ auto native_save_freedom(const NativeStartup& selected,
       bytes.find('\0') != std::string::npos || !destination.is_absolute())
     return std::unexpected{"Save As requires a bounded absolute save path"};
 
+  if (const auto* condition =
+          std::get_if<FreedomConditionSaveDocument>(&selected.document)) {
+    const auto canonical = select_document(*condition, selected.source_save);
+    if (!canonical || canonical->home_planet != selected.home_planet)
+      return std::unexpected{
+          "Condition Save As requires its actual selected planet"};
+    const auto written =
+        write_freedom_condition_file_atomically(destination, *condition);
+    if (!written)
+      return std::unexpected{save_file_error_message(written.error())};
+    return {};
+  }
   if (const auto* walking =
           std::get_if<FreedomSurfaceWalkSaveDocument>(&selected.document)) {
     const auto canonical = select_document(*walking, selected.source_save);

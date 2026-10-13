@@ -212,7 +212,8 @@ class FreedomBridge : public godot::RefCounted {
     std::unique_ptr<SavedFlightWorld> flight;
     std::unique_ptr<NativeFreedomStationStart> station;
     std::unique_ptr<PlanetStream> stream;
-    std::optional<FreedomRecoverySaveDocument> recovery_source;
+    // Compare the complete selected owner, including consequence/suit wrappers.
+    std::optional<NativeSaveDocument> recovery_source;
   };
   std::unique_ptr<PendingFreedomStart> pending;
   std::uint64_t next_candidate_id{1};
@@ -239,7 +240,8 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomRecoverySaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
-            selected.document))
+            selected.document) ||
+        std::holds_alternative<FreedomConditionSaveDocument>(selected.document))
       throw std::invalid_argument(
           "Selected starting assembly requires staged model readiness");
     if (std::holds_alternative<FreedomFlightSaveDocument>(selected.document) ||
@@ -376,6 +378,9 @@ class FreedomBridge : public godot::RefCounted {
     godot::ClassDB::bind_method(
         godot::D_METHOD("set_freedom_assistance", "enabled"),
         &FreedomBridge::set_freedom_assistance);
+    godot::ClassDB::bind_method(
+        godot::D_METHOD("enable_freedom_impact_consequences"),
+        &FreedomBridge::enable_freedom_impact_consequences);
     godot::ClassDB::bind_method(godot::D_METHOD("set_freedom_hold", "enabled"),
                                 &FreedomBridge::set_freedom_hold);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_station_geometry"),
@@ -625,6 +630,8 @@ class FreedomBridge : public godot::RefCounted {
         std::holds_alternative<FreedomRecoverySaveDocument>(
             selected.document) ||
         std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
+            selected.document) ||
+        std::holds_alternative<FreedomConditionSaveDocument>(
             selected.document)) {
       auto opened = NativeFreedomFlightSession::open(std::move(selected));
       if (!opened) throw std::runtime_error(opened.error());
@@ -724,20 +731,15 @@ class FreedomBridge : public godot::RefCounted {
     try {
       if (pending || !saved_flight || !saved_flight->session.recovery_pending())
         throw std::invalid_argument("Continue an actual pending loss first");
-      auto source = saved_flight->session.recovery_document();
+      auto source = saved_flight->session.save_document();
       if (!source) throw std::runtime_error(source.error());
       auto candidate = saved_flight->session;
       auto completed = candidate.complete_recovery();
       if (!completed) throw std::runtime_error(completed.error());
-      auto replacement = candidate.recovery_document();
+      auto replacement = candidate.save_document();
       if (!replacement) throw std::runtime_error(replacement.error());
       const auto planet = project_saved_flight(candidate).planet;
       NativeSaveDocument document = std::move(*replacement);
-      if (candidate.surface_walk_selected()) {
-        auto walking = candidate.surface_walk_document();
-        if (!walking) throw std::runtime_error(walking.error());
-        document = std::move(*walking);
-      }
       if (!stage_selected({NativeStartup::Mode::freedom, std::move(document),
                            planet, candidate.source_save()},
                           profile_session))
@@ -796,7 +798,7 @@ class FreedomBridge : public godot::RefCounted {
         last_error = "Recovery source is no longer active";
         return false;
       }
-      auto source = saved_flight->session.recovery_document();
+      auto source = saved_flight->session.save_document();
       if (!source || *source != *pending->recovery_source) {
         last_error = "Recovery source changed before replacement commit";
         return false;
@@ -1050,6 +1052,20 @@ class FreedomBridge : public godot::RefCounted {
       return false;
     }
     const auto accepted = saved_flight->session.set_assistance(enabled);
+    if (!accepted) {
+      last_error = godot::String{accepted.error().c_str()};
+      return false;
+    }
+    last_error = godot::String{};
+    return true;
+  }
+
+  auto enable_freedom_impact_consequences() -> bool {
+    if (!saved_flight) {
+      last_error = "Select a saved Wayfarer voyage first";
+      return false;
+    }
+    const auto accepted = saved_flight->session.enable_impact_consequences();
     if (!accepted) {
       last_error = godot::String{accepted.error().c_str()};
       return false;
@@ -1657,6 +1673,59 @@ class FreedomBridge : public godot::RefCounted {
       surface["remaining_seconds"] = maneuver.remaining_ticks / 120.0;
       surface["note"] = godot::String{maneuver.note.c_str()};
       result["surface"] = surface;
+      godot::Dictionary impact;
+      impact["selected"] = session.condition().has_value();
+      if (session.condition()) {
+        const auto& condition = *session.condition();
+        impact["policy_version"] =
+            static_cast<std::int64_t>(kImpactConsequencesVersion);
+        impact["version"] = static_cast<std::int64_t>(condition.version);
+        impact["craft_id"] = decimal(condition.craft.value);
+        impact["frame_id"] = decimal(condition.frame.id.value);
+        impact["frame_version"] =
+            static_cast<std::int64_t>(condition.frame.version);
+        impact["tick"] = decimal(condition.tick);
+        impact["forebody"] = static_cast<std::int64_t>(condition.forebody);
+        impact["landing_structure"] =
+            static_cast<std::int64_t>(condition.landing_structure);
+        impact["cracked"] = condition_view_cracked(condition);
+        impact["visibility_degraded"] =
+            condition_visibility_degraded(condition);
+        impact["landing_available"] = condition_allows_landing(condition);
+        impact["pending_loss"] = session.recovery_pending();
+        godot::Dictionary latest;
+        if (condition.latest) {
+          const auto& receipt = *condition.latest;
+          const auto& witness = receipt.witness;
+          latest["serial"] = decimal(receipt.serial);
+          latest["tick"] = decimal(witness.tick);
+          latest["source_condition_digest"] =
+              decimal(receipt.source_condition_digest);
+          latest["source_checksum"] = decimal(witness.source_checksum);
+          latest["candidate_checksum"] = decimal(witness.candidate_checksum);
+          latest["system_id"] = decimal(witness.system.value);
+          latest["planet_id"] = decimal(witness.planet.value);
+          latest["region"] = witness.region == CraftImpactRegion::forebody
+                                 ? "forebody"
+                                 : "landing_structure";
+          latest["closing_speed"] = witness.closing_speed_metres_per_second;
+          latest["fraction"] = witness.fraction;
+          latest["contact_point_craft"] =
+              coordinates(witness.contact_point_craft_metres);
+          latest["damage_class"] =
+              static_cast<std::int64_t>(receipt.damage_class);
+          latest["catastrophic"] = receipt.catastrophic;
+        }
+        impact["latest"] = latest;
+      }
+      result["impact"] = impact;
+      const auto impact_available = session.impact_consequences_available();
+      godot::Dictionary impact_opt_in;
+      impact_opt_in["available"] = impact_available.has_value();
+      impact_opt_in["reason"] =
+          impact_available ? godot::String{}
+                           : godot::String{impact_available.error().c_str()};
+      result["impact_opt_in"] = impact_opt_in;
       godot::Dictionary resources;
       resources["selected"] = session.resources().has_value();
       if (session.resources()) {

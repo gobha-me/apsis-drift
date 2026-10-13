@@ -36,6 +36,7 @@ player's station-to-flight journey.
 - [Terrain pad assessment](TERRAIN_TOUCHDOWN.md), [landed craft lifecycle](LANDED_CRAFT.md) and [surface walking](FREEDOM_SURFACE_WALK.md)
 - [Versioned physical local-detail sampling](TERRAIN_LOCAL_DETAIL.md) over unchanged [terrain-v1 source tiles](TERRAIN_TILES.md)
 - [Selected native terrain](SELECTED_NATIVE_TERRAIN.md): saved policy compatibility, shared physical top geometry, streaming identity/residency and focused checks.
+- [Experimental terrain impacts](TERRAIN_IMPACTS.md): explicit consequence selection, localized condition, contact episodes and standard recovery.
 - [Starter assets](NATIVE_STARTER_ASSETS.md), [operating assets](WAYFARER_OPERATING_ASSETS.md)
   and [static stowed assets](WAYFARER_STOWED_ASSETS.md)
 

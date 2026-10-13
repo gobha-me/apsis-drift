@@ -222,6 +222,8 @@ auto NativeFreedomFlightSession::advance_jump(
     candidate.resources_ = *next;
     ++candidate.document_.flight.tick;
     candidate.document_.origin.state.tick = candidate.document_.flight.tick;
+    if (candidate.condition_)
+      candidate.condition_->tick = candidate.document_.flight.tick;
     if (candidate.document_.flight.tick == frozen.preview.arrival_tick) {
       const auto& request = frozen.preview.request;
       const auto ids =
