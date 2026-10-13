@@ -6,6 +6,13 @@ the New Game/Continue runtime. See [native setup](../godot/README.md) for the
 current entry point. Historical study limitations do not describe all native
 runtime capabilities.
 
+References below to current assets, incomplete boarding or unavailable landing
+describe the retained study path. For ordinary saved play, use the
+[playable boarding prototype](PLAYABLE_BOARDING_PROTOTYPE.md),
+[landed craft lifecycle](LANDED_CRAFT.md) and
+[selected native assets](NATIVE_STARTER_ASSETS.md). Study relief and film
+appearance remain separate from production generation and save contracts.
+
 # Freedom: native presentation study 01
 
 Current cockpit/ship assets use the [shared flight cell and suited fit review 05](COCKPIT_FIT_05.md).

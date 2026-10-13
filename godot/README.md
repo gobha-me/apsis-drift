@@ -7,6 +7,10 @@ that state and translates input into C++ commands. See the
 
 ## Run from the repository root
 
+The current native extension and runtime runner target **Linux x86_64**.
+Other native platforms remain unqualified; installing Godot alone does not
+provide a compatible bridge for them.
+
 Install Godot 4.7.2, CMake 3.28+, Python 3.10+, Git and a C++23 compiler. Set `GODOT_BIN` to
 an installed executable if `godot` is not on PATH. The launcher fetches pinned
 C++ dependencies on its first build; it does not download Godot.
@@ -78,5 +82,6 @@ practice and inspection data separately from player saves. Read the
 [study and preview guide](../docs/GODOT_STUDIES.md) for existing capture tools;
 a smooth offline film is not a gameplay or frame-rate qualification.
 
-See [development](../docs/DEVELOPMENT.md), [native starting assembly](../docs/NATIVE_STARTING_ASSEMBLY.md)
+See [contributing](../CONTRIBUTING.md), [development](../docs/DEVELOPMENT.md),
+[CMake options and targets](../cmake/README.md), [native starting assembly](../docs/NATIVE_STARTING_ASSEMBLY.md)
 and [native asset packages](../docs/NATIVE_STARTER_ASSETS.md) for validation and asset ownership.

@@ -2,3 +2,7 @@
 /*.json
 /*.ppm
 __pycache__/
+
+# Local journeys and Blender autosave backups are not source assets.
+/saves/
+*.blend[0-9]
