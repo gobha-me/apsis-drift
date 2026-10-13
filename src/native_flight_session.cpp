@@ -25,6 +25,21 @@ NativeFreedomFlightSession::NativeFreedomFlightSession(
 
 auto NativeFreedomFlightSession::open(NativeStartup selected)
     -> std::expected<NativeFreedomFlightSession, std::string> {
+  std::optional<CraftCondition> condition;
+  std::optional<CraftCondition> retired_condition;
+  if (auto* wrapped =
+          std::get_if<FreedomConditionSaveDocument>(&selected.document)) {
+    if (selected.mode != NativeStartup::Mode::freedom)
+      return std::unexpected{"Impact consequences require Freedom"};
+    if (auto valid = validate_freedom_condition_document(*wrapped); !valid)
+      return std::unexpected{valid.error().detail};
+    condition = wrapped->condition;
+    retired_condition = wrapped->retired_condition;
+    auto voyage = std::move(wrapped->voyage);
+    selected.document = std::visit(
+        [](auto& value) -> NativeSaveDocument { return std::move(value); },
+        voyage);
+  }
   bool surface_walk_selected{};
   std::optional<PlanetSurfaceWalkerState> surface_actor;
   if (auto* walking =
@@ -176,6 +191,8 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   result.knowledge_ = std::move(knowledge);
   result.travel_ = std::move(travel);
   result.recovery_ = std::move(recovery);
+  result.condition_ = condition;
+  result.retired_condition_ = retired_condition;
   result.surface_walk_selected_ = surface_walk_selected;
   result.surface_walker_ = surface_actor;
   if (surface_actor) {
@@ -556,6 +573,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     auto candidate = *this;
     candidate.document_.flight = *pose;
     candidate.document_.origin.state.tick = pose->tick;
+    if (candidate.condition_) candidate.condition_->tick = pose->tick;
     const auto observed = candidate.observe();
     if (!observed) return std::unexpected{observed.error()};
     NativeFlightStep result{};
@@ -594,6 +612,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     auto candidate = *this;
     candidate.document_.flight = *pose;
     candidate.document_.origin.state.tick = pose->tick;
+    if (candidate.condition_) candidate.condition_->tick = pose->tick;
     if (auto valid =
             validate_freedom_docking_document({candidate.document_, *docking_});
         !valid)
@@ -618,6 +637,7 @@ auto NativeFreedomFlightSession::advance_craft_tick(
     *this = std::move(candidate);
     return result;
   }
+  if (condition_) return advance_impact_tick(controls, step);
   const auto correction = evaluate_orbit_hold_correction(
       context, document_.flight, intent, rotation_,
       {1, air->space_boundary_altitude_metres}, document_.model.hold,
@@ -762,6 +782,11 @@ auto NativeFreedomFlightSession::advance_walk(
 
 auto NativeFreedomFlightSession::save_document() const
     -> std::expected<NativeSaveDocument, std::string> {
+  if (condition_) {
+    auto selected = condition_document();
+    if (!selected) return std::unexpected{selected.error()};
+    return NativeSaveDocument{std::move(*selected)};
+  }
   if (surface_walk_selected_) {
     auto selected = surface_walk_document();
     if (!selected) return std::unexpected{selected.error()};
@@ -894,6 +919,9 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
 auto NativeFreedomFlightSession::commit_touchdown(
     std::uint64_t expected_source_checksum)
     -> std::expected<void, std::string> {
+  if (condition_ && !condition_allows_landing(*condition_))
+    return std::unexpected{
+        "Landing structure is damaged; safe touchdown unavailable"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};

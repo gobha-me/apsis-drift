@@ -16,6 +16,10 @@ const PlayerInput = preload("res://scripts/ui/player_input.gd")
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Status = preload("res://scripts/native/native_status.gd")
+const ImpactView = preload("res://scripts/native/native_impact_view.gd")
+var impact_overlay: Control
+var impact_status: RichTextLabel
+var impact_menu_button: Button
 var primary_status: RichTextLabel
 var context_action: Button
 var instruments_button: Button
@@ -143,6 +147,14 @@ static func valid_state(value: Dictionary) -> bool:
 		if walking.get("version") != 1 or not walking.get("eye_position") is Vector3 or not walking.eye_position.is_finite(): return false
 		if not walking.get("basis") is Basis or not walking.basis.is_finite() or absf(walking.basis.determinant() - 1.0) > 0.00001: return false
 		if not walking.get("heading") is float or not is_finite(walking.heading) or absf(walking.heading) > PI: return false
+	var impact: Variant = value.get("impact", {"selected": false})
+	if not impact is Dictionary or typeof(value.get("frame_version", 0)) != TYPE_INT:
+		return false
+	if not ImpactView.valid(impact, str(value.get("craft_id", "")), str(value.get("frame_id", "")), int(value.get("frame_version", 0))):
+		return false
+	var opt_in: Variant = value.get("impact_opt_in", {"available": false, "reason": "Unavailable"})
+	if not opt_in is Dictionary or not opt_in.get("available") is bool or not opt_in.get("reason") is String:
+		return false
 	return value.planet_radius > 0.0 and valid_orbit(value) and valid_hold(value)
 
 
@@ -339,6 +351,9 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	near_environment.ambient_light_energy = planet_environment.ambient_light_energy
 	scene.add_child(terrain)
 	rendered_world = str(state.system_id) + ":" + str(state.planet_id)
+	impact_overlay = ImpactView.new()
+	add_child(impact_overlay)
+	impact_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	build_ui()
 	return true
 
@@ -398,6 +413,9 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	resource_status = hud_text()
 	column.add_child(resource_status)
+	impact_status = hud_text()
+	impact_status.visible = false
+	column.add_child(impact_status)
 	chart_button = CheckButton.new()
 	chart_button.text = "Starting chart"
 	chart_button.focus_mode = Control.FOCUS_ALL
@@ -627,6 +645,9 @@ func update_compact_hud() -> void:
 	var margin := Status.layout_bounds(size, Vector2(get_window().size)).position.x
 	instruments_button.position.x = size.x - instruments_button.size.x - margin if detailed and not hud_stacked else margin
 	primary_status.text = Status.summary(state) if error.is_empty() else "Flight paused\n" + error
+	if error.is_empty():
+		var outcome := ImpactView.feedback(state.get("impact", {"selected": false}))
+		if not outcome.is_empty(): primary_status.text += "\n" + outcome
 	primary_status.tooltip_text = primary_status.text
 	if save_status != null and not save_status.text.is_empty() and error.is_empty():
 		primary_status.tooltip_text += "\n" + save_status.text
@@ -676,6 +697,7 @@ func setup_controls() -> void:
 	controls_menu.add_button(survey_column, "Flight instruments & navigation", show_instruments)
 	if state.frame_id == "2":
 		var menu_column: Node = controls_menu.save_button.get_parent()
+		refresh_impact_action()
 		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
 		menu_column.move_child(unboard_menu_button, controls_menu.title_button.get_index() + 1)
 		surface_walk_menu_button = controls_menu.add_button(menu_column, "Leave Wayfarer · suit", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
@@ -889,6 +911,36 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		save_status.text = "Port selected. Capture requires physical alignment and low closure."
 
 
+func enable_impacts() -> void:
+	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible:
+		return
+	if not bridge.enable_freedom_impact_consequences():
+		save_status.text = str(bridge.get_last_error())
+		update_compact_hud()
+		return
+	state = bridge.get_freedom_flight_state()
+	pause_controls("Experimental terrain impacts selected · Save to retain this choice. Release controls before resuming.")
+	update_view(0.0)
+
+
+func refresh_impact_action() -> void:
+	if controls_menu == null: return
+	var selected: bool = state.get("impact", {}).get("selected", false)
+	var opt_in: Dictionary = state.get("impact_opt_in", {"available": false, "reason": "Unavailable"})
+	if state.frame_id != "2":
+		if impact_menu_button != null:
+			impact_menu_button.get_parent().remove_child(impact_menu_button)
+			impact_menu_button.queue_free()
+			impact_menu_button = null
+		return
+	if impact_menu_button == null:
+		if not (selected or opt_in.available): return
+		impact_menu_button = controls_menu.add_button(controls_menu.save_button.get_parent(), "Enable experimental terrain impacts", enable_impacts)
+	impact_menu_button.text = "Experimental terrain impacts · selected" if selected else "Enable experimental terrain impacts"
+	impact_menu_button.disabled = selected or not opt_in.available
+	impact_menu_button.tooltip_text = opt_in.reason if not opt_in.available else "Explicit choice. Save to retain it. Terrain collisions can damage the craft or cause loss; this is a bounded experimental collider."
+
+
 func toggle_pause() -> void:
 	if journey_dialog_open: return
 	if not error.is_empty():
@@ -987,6 +1039,7 @@ func hide_exhaust() -> void:
 
 func pause_on_error(message: String) -> void:
 	error = message
+	if impact_overlay != null: impact_overlay.visible = false
 	pause_controls(message)
 	if save_status != null:
 		save_status.text = "Flight paused: " + error
@@ -1042,6 +1095,13 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
+	var condition: Dictionary = state.get("impact", {"selected": false})
+	if not impact_overlay.apply(condition, state.craft_id, state.frame_id, state.frame_version, cockpit, surface_walking()):
+		pause_on_error("Saved craft condition is unavailable")
+		return
+	impact_status.visible = condition.get("selected", false) and not surface_walking()
+	impact_status.text = ImpactView.condition_text(condition)
+	refresh_impact_action()
 	var owner_key := str(state.system_id) + ":" + str(state.planet_id)
 	if owner_key != rendered_world:
 		# C++ has already installed the actual world/stream. Retire old GPU
@@ -1068,6 +1128,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		var landed: bool = surface.get("landed", false)
 		landing_button.text = "Land with thrusters" if state.assistance else "Deploy gear · manual landing"
 		landing_button.disabled = state.attached or landed or state.get("jump", {}).get("phase", "idle") != "idle"
+		if condition.get("selected", false) and not condition.landing_available:
+			landing_button.disabled = true
+			landing_button.tooltip_text = "Landing structure damaged · qualified landing unavailable"
+		else:
+			landing_button.tooltip_text = ""
 		stow_gear_button.disabled = state.attached or landed or not surface.get("gear_deployed", false) or state.get("jump", {}).get("phase", "idle") != "idle"
 		liftoff_button.disabled = not landed or surface_walking()
 		if surface_walk_button != null:

@@ -240,6 +240,7 @@ jobs:
           apsis-drift-freedom-start-fixture
           apsis-drift-freedom-planetary-fixture
           apsis-drift-landed-craft-tests
+          apsis-drift-native-impact-tests
 
       - name: Check saved-start bridge, native shell and audio shutdown in Godot
         run: >-
@@ -257,6 +258,7 @@ jobs:
           --test native_roundtrip_pilot_aligned --test native_roundtrip_pilot_offset
           --test home_navigation --test native_status --test native_surface --test native_surface_walk
           --test native_selected_terrain --test native_surface_detail --test native_surface_walk_detail
+          --test native_impact
           --test native_surface_loop
           --test wayfarer_operating
           --test recorded_audio_shutdown

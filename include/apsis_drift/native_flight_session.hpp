@@ -64,6 +64,15 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto recovery_pending() const -> bool {
     return recovery_ && recovery_->pending;
   }
+  [[nodiscard]] auto enable_impact_consequences()
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto impact_consequences_available() const
+      -> std::expected<void, std::string>;
+  [[nodiscard]] auto condition() const -> const std::optional<CraftCondition>& {
+    return condition_;
+  }
+  [[nodiscard]] auto condition_document() const
+      -> std::expected<FreedomConditionSaveDocument, std::string>;
   [[nodiscard]] auto recovery_document() const
       -> std::expected<FreedomRecoverySaveDocument, std::string>;
   [[nodiscard]] auto record_loss(FreedomLossCause, StarterCraftId,
@@ -210,6 +219,9 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto advance_craft_tick(const NativeFlightControls&,
                                         SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
+  [[nodiscard]] auto advance_impact_tick(const NativeFlightControls&,
+                                         SimulationSeconds)
+      -> std::expected<NativeFlightStep, std::string>;
   [[nodiscard]] auto surface_maneuver_controls() const
       -> std::expected<NativeFlightControls, std::string>;
   [[nodiscard]] auto advance_surface(const NativeFlightControls&,
@@ -224,6 +236,8 @@ class NativeFreedomFlightSession {
   std::optional<FreedomKnowledge> knowledge_;
   std::optional<FreedomTravelState> travel_;
   std::optional<FreedomRecoveryState> recovery_;
+  std::optional<CraftCondition> condition_;
+  std::optional<CraftCondition> retired_condition_;
   PhysicalLocalSystem system_;
   PhysicalPlanetRotationRecipe rotation_;
   std::optional<std::filesystem::path> source_save_;
