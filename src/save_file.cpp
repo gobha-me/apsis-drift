@@ -422,6 +422,12 @@ auto decode_native_save_document_json(std::string_view contents)
   if (flight) return NativeSaveDocument{std::move(*flight)};
   if (flight.error().code != SaveSchemaErrorCode::unsupported_format_version)
     return std::unexpected{flight.error()};
+  // Only this top-level dispatcher admits complete system-frame imports.
+  // Nested historical voyage codecs continue using the strict flight decoder.
+  auto imported = decode_freedom_system_flight_import_json(contents);
+  if (imported) return NativeSaveDocument{std::move(*imported)};
+  if (imported.error().code != SaveSchemaErrorCode::unsupported_format_version)
+    return std::unexpected{imported.error()};
   auto legacy = decode_save_document_json(contents);
   if (legacy) return NativeSaveDocument{std::move(*legacy)};
   if (legacy.error().code != SaveSchemaErrorCode::unsupported_format_version)

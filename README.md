@@ -38,7 +38,8 @@ open. This is a playable prototype, not the complete MVP or beta.
 C++ owns world generation, flight, contact, player state, saves and headless
 checks. Godot owns native presentation and translates input into C++ commands.
 TermForge's terminal path is retained and secondary; terminal parity does not
-gate native features. See [the ownership decision](docs/GODOT_ADOPTION.md).
+gate native features. See [the ownership decision](docs/GODOT_ADOPTION.md) and
+[terminal retention decision](docs/TERMINAL.md#retention-decision--2026-10-13).
 
 | Location | Purpose |
 | --- | --- |

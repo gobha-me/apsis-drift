@@ -735,6 +735,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME freedom-flight-save-contract COMMAND apsis-drift-freedom-flight-save-tests)
   set_tests_properties(freedom-flight-save-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-freedom-flight-import-tests test/freedom_flight_import_test.cpp)
+  target_link_libraries(apsis-drift-freedom-flight-import-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-freedom-flight-import-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Werror -Wconversion -Wsign-conversion -ffp-contract=off)
+  add_test(NAME freedom-flight-import-contract COMMAND apsis-drift-freedom-flight-import-tests)
+  set_tests_properties(freedom-flight-import-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-native-flight-session-tests test/native_flight_session_test.cpp)
   target_link_libraries(apsis-drift-native-flight-session-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-native-flight-session-tests PRIVATE

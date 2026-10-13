@@ -211,10 +211,16 @@ gravity call, implicit local tangent anchor or renderer-derived origin here.
 
 ## Remaining integration
 
+The [explicit system-frame import](SYSTEM_FLIGHT_IMPORT.md) now consumes a
+complete format35 source into ordinary saved native flight at the same tick.
+Saved docking/release, entry/ascent and tangent presentation use their existing
+application owners; they do not require a presentation-owned coordinate frame.
+Live reverse departure selection remains open under #200. This import does
+not broaden existing saved frames or change force laws.
+
 The native lab is still planet-centred **nonrotating**, not `planet_fixed`.
-It is not switched by this provider. Local-tangent anchor ownership, physical
-launch/entry/docking gates, held-intent policy and live bridge adaptation remain
-separate integration work. #213 still owns native lighting/rotation consumers;
+It is not switched by this provider. The retained lab is distinct from the
+current persistent native journey. #213 still owns native lighting/rotation consumers;
 #255 still owns cross-host math-library dependence. No renderer-derived
 transform or synthetic spin fallback is introduced here.
 

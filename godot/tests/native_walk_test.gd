@@ -227,6 +227,40 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 	view.hud_scroll.scroll_vertical = 0
 
 
+func check_held_resize(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	var start: Dictionary = owner.get_freedom_walk_state()
+	var flight: Dictionary = owner.get_freedom_flight_state()
+	var pixels := root.size
+	view.set_paused(false)
+	check(not view.paused, "Neutral station resize regression refused Resume")
+	physical_key(KEY_W, true)
+	physical_key(KEY_D, true)
+	root.size = pixels + Vector2i(17, 11)
+	root.size_changed.emit()
+	root.size_changed.emit()
+	check(view.paused and not view.controls_armed, "Held station resize did not pause input immediately")
+	view._process(60.0)
+	view.set_paused(false)
+	check(view.paused and owner.get_freedom_walk_state() == start and owner.get_freedom_flight_state() == flight, "Held station resize advanced actor/ship clock or resumed")
+	physical_key(KEY_W, false)
+	view.set_paused(false)
+	check(view.paused and not view.controls_armed, "Partial station release escaped resize gate")
+	physical_key(KEY_D, false)
+	view.observe_neutral_controls()
+	check(view.paused and view.controls_armed and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Station resize neutral observation changed save or auto-resumed")
+	root.size = pixels
+	root.size_changed.emit()
+	view.set_paused(false)
+	check(not view.paused, "Station resize neutral explicit Resume refused")
+	# Existing neutral resize behavior and initial activation stay running.
+	root.size = pixels + Vector2i(7, 5)
+	root.size_changed.emit()
+	check(not view.paused and owner.get_freedom_walk_state() == start, "Neutral station resize paused or changed actor")
+	root.size = pixels
+	root.size_changed.emit()
+	view.set_paused(true)
+
+
 func check_station_controls(view: Control, owner: Variant, path: String, start: Dictionary, bytes: PackedByteArray, assets: String) -> void:
 	await process_frame
 	await process_frame
@@ -609,6 +643,7 @@ func run() -> void:
 	sky_refusals(view, start, flight)
 	var initial_light: Basis = view.light.basis
 	view.set_paused(true)
+	check_held_resize(view, owner, path, originals[0])
 	await check_hud_layout(view, owner, path, originals[0])
 	check_stick_preferences(view, owner, path, originals[0])
 	await check_station_settings(view, owner, path, originals[0])

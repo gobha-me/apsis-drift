@@ -10,6 +10,8 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomFlightSaveFormatVersion{18};
 inline constexpr std::uint32_t kFreedomActiveFlightSaveFormatVersion{26};
 inline constexpr std::uint32_t kFreedomTerrainFlightSaveFormatVersion{31};
+// Top-level input only; ordinary and nested saves keep their existing formats.
+inline constexpr std::uint32_t kFreedomSystemFlightImportFormatVersion{35};
 inline constexpr std::uint32_t kFreedomLegacyTerrainPolicy{1};
 inline constexpr std::uint32_t kFreedomLocalDetailTerrainPolicy{2};
 inline constexpr std::uint32_t kFreedomActiveWorldVersion{1};
@@ -62,5 +64,11 @@ struct FreedomFlightHydration {
     const FreedomFlightSaveDocument&)
     -> std::expected<std::string, SaveSchemaError>;
 [[nodiscard]] auto decode_freedom_flight_document_json(std::string_view)
+    -> std::expected<FreedomFlightSaveDocument, SaveSchemaError>;
+// Complete format35 identity/model plus physical rigid-v2 system state, never
+// bare rigid JSON. Authenticate, then translate at the source tick into the
+// explicitly selected planet frame. Does not advance, write or change controls.
+// The historical decoder above and all legacy nested wrappers refuse format35.
+[[nodiscard]] auto decode_freedom_system_flight_import_json(std::string_view)
     -> std::expected<FreedomFlightSaveDocument, SaveSchemaError>;
 } // namespace apsis_drift

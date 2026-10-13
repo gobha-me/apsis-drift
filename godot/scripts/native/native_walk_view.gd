@@ -47,6 +47,7 @@ var hud_hint: Label
 var paused := false
 var focused := true
 var controls_armed := false
+var last_window_size := Vector2i.ZERO
 var selected_pad := -1
 var initial_controller_device := -2
 var available_pads: Dictionary = {}
@@ -209,7 +210,9 @@ func activate() -> void:
 		available_pads[pad] = true
 		if initial_controller_device == -2 and selected_pad == -1: selected_pad = pad
 	Input.joy_connection_changed.connect(controller_connection_changed)
-	get_window().size_changed.connect(layout_hud)
+	# Activation establishes the baseline; initial Control layout is not a resize.
+	last_window_size = get_window().size
+	get_window().size_changed.connect(window_resized)
 	layout_hud()
 	controls_armed = current_controls_neutral()
 	paused = state.continued or not controls_armed
@@ -321,6 +324,18 @@ func hud_text() -> Label:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return label
+
+
+func window_resized() -> void:
+	var pixels := get_window().size
+	var changed := pixels != last_window_size
+	last_window_size = pixels
+	if changed and activated and not paused:
+		# Neutral, valid resizes remain cosmetic and preserve running station movement.
+		# Held controls require the existing explicit neutral/resume gate.
+		if not current_controls_neutral():
+			pause_controls("Window resized. Release controls, then resume explicitly.")
+	layout_hud()
 
 
 func layout_hud() -> void:

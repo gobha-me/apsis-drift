@@ -1,5 +1,6 @@
 #include "apsis_drift/freedom_flight_save.hpp"
 
+#include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/universe_navigation.hpp"
 
 #include <array>
@@ -248,7 +249,8 @@ auto encode_freedom_flight_document_json(
   return encoded;
 }
 
-auto decode_freedom_flight_document_json(std::string_view text)
+namespace {
+auto decode_flight(std::string_view text, bool system_import)
     -> std::expected<FreedomFlightSaveDocument, SaveSchemaError> {
   if (text.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
@@ -285,9 +287,17 @@ auto decode_freedom_flight_document_json(std::string_view text)
     return std::unexpected{failure(SaveSchemaErrorCode::invalid_type,
                                    "$.format_version",
                                    "expected unsigned save version")};
-  const bool selected =
-      root["format_version"] == kFreedomTerrainFlightSaveFormatVersion;
+  const bool importing =
+      system_import &&
+      root["format_version"] == kFreedomSystemFlightImportFormatVersion;
+  if (system_import && !importing)
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
+        "unsupported system-flight import version")};
+  const bool selected = importing || root["format_version"] ==
+                                         kFreedomTerrainFlightSaveFormatVersion;
   const bool active =
+      importing ||
       root["format_version"] == kFreedomActiveFlightSaveFormatVersion ||
       (selected && root.contains("world_owner"));
   if (root["format_version"] != kFreedomFlightSaveFormatVersion && !active &&
@@ -296,7 +306,8 @@ auto decode_freedom_flight_document_json(std::string_view text)
         failure(SaveSchemaErrorCode::unsupported_format_version,
                 "$.format_version", "unsupported Freedom flight save version")};
   auto shape_root = root;
-  if (active) shape_root.erase("craft_lineage");
+  // A bare full-flight import cannot carry an unqualified recovery lineage.
+  if (active && !importing) shape_root.erase("craft_lineage");
   auto shape =
       active ? fields(shape_root,
                       {"application", "application_version", "format_version",
@@ -328,10 +339,12 @@ auto decode_freedom_flight_document_json(std::string_view text)
         kFreedomActiveWorldVersion, {*system}, {*planet}};
   }
   if (!root["state"].is_object() || !root["state"].contains("location") ||
-      root["state"]["location"] != "planetary_flight")
+      root["state"]["location"] !=
+          (importing ? "system_flight" : "planetary_flight"))
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.state.location",
-                "format18 requires explicit planetary_flight")};
+                importing ? "format35 requires explicit system_flight"
+                          : "format18 requires explicit planetary_flight")};
   Json origin = root;
   origin.erase("flight");
   origin.erase("flight_model");
@@ -355,13 +368,16 @@ auto decode_freedom_flight_document_json(std::string_view text)
                  "$.flight_model");
       !valid)
     return std::unexpected{valid.error()};
-  if (selected && (!m.contains("terrain_policy") ||
-                   !m["terrain_policy"].is_number_unsigned() ||
-                   m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy))
-    return std::unexpected{
-        failure(SaveSchemaErrorCode::incompatible_generator_version,
-                "$.flight_model.terrain_policy",
-                "selected terrain save requires explicit policy2")};
+  if (selected &&
+      (!m.contains("terrain_policy") ||
+       !m["terrain_policy"].is_number_unsigned() ||
+       (m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy &&
+        (!importing || m["terrain_policy"] != kFreedomLegacyTerrainPolicy))))
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::incompatible_generator_version,
+        "$.flight_model.terrain_policy",
+        importing ? "system import requires explicit terrain policy1 or2"
+                  : "selected terrain save requires explicit policy2")};
   const auto catalog = version(m, "physical_catalog"),
              ephemeris = version(m, "physical_ephemeris"),
              owner = version(m, "rotation_owner"),
@@ -390,8 +406,8 @@ auto decode_freedom_flight_document_json(std::string_view text)
                            {*atmosphere},
                            {*hold_version, {}},
                            m["assistance"].get<bool>()};
-  model.terrain_policy =
-      selected ? kFreedomLocalDetailTerrainPolicy : kFreedomLegacyTerrainPolicy;
+  model.terrain_policy = selected ? m["terrain_policy"].get<std::uint32_t>()
+                                  : kFreedomLegacyTerrainPolicy;
   const auto& target = hold["target"];
   if (!target.is_null()) {
     if (auto valid =
@@ -435,8 +451,82 @@ auto decode_freedom_flight_document_json(std::string_view text)
                 "rigid state/owner projection is malformed or incompatible")};
   FreedomFlightSaveDocument document{std::move(*decoded), *flight, model,
                                      selection};
+  if (importing) {
+    // All owner, model, source and clock checks precede the coordinate change.
+    if (system->ephemeris_version != model.physical_ephemeris ||
+        model.rotation_owner != kPhysicalPlanetRotationOwnerVersion ||
+        model.central.version != kCentralBodyDynamicsVersion ||
+        model.atmosphere.version != kAtmosphericFlightVersion ||
+        model.hold.version != kOrbitHoldVersion)
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::incompatible_generator_version, "$.flight_model",
+          "unsupported system import force/rotation/hold selection")};
+    if (document.origin.state.tick != flight->tick ||
+        flight->tick >= std::numeric_limits<SimulationTick>::max() - 1 ||
+        root["flight"]["version"] != 2 ||
+        flight->frame.kind != RigidFrameKind::system_inertial ||
+        flight->frame.system != selection->system ||
+        flight->craft !=
+            CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion})
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::invalid_state, "$.flight",
+                  "system import requires matching clocks and owned Wayfarer "
+                  "rigid-v2 system state")};
+    const auto planet = find_local_system_planet(*system, selection->planet);
+    if (!planet)
+      return std::unexpected{
+          failure(SaveSchemaErrorCode::invalid_state, "$.world_owner.planet_id",
+                  "system import force body is not in the selected world")};
+    const auto rotation_recipe = generate_planet_rotation_recipe(
+        *system, selection->planet, model.rotation_generator);
+    const auto profile = resolve_atmospheric_flight_profile(
+        (*planet)->descriptor, model.atmosphere);
+    if (!rotation_recipe || !profile)
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::incompatible_generator_version, "$.flight_model",
+          "system import rotation/atmosphere owner is invalid")};
+    if (model.hold.target) {
+      const auto& target = *model.hold.target;
+      const auto n = target.plane_normal;
+      if (target.planet != selection->planet ||
+          target.radius_metres <= (*planet)->descriptor.radius.value * 1000.0 +
+                                      profile->space_boundary_altitude_metres ||
+          target.radius_metres > kRigidBodyMaximumPositionMetres ||
+          std::abs(n.x) > 1 || std::abs(n.y) > 1 || std::abs(n.z) > 1 ||
+          (n.x == 0 && std::signbit(n.x)) || (n.y == 0 && std::signbit(n.y)) ||
+          (n.z == 0 && std::signbit(n.z)) ||
+          std::abs((n.x * n.x + n.y * n.y) + n.z * n.z - 1) >
+              kRigidBodyOrientationSquaredNormTolerance)
+        return std::unexpected{
+            failure(SaveSchemaErrorCode::invalid_state,
+                    "$.flight_model.orbit_hold.target",
+                    "system import hold target is invalid for its force body")};
+    }
+    const auto converted =
+        reframe_rigid_body(context, *flight,
+                           {{RigidFrameKind::planet_relative_inertial,
+                             selection->system,
+                             selection->planet,
+                             {}},
+                            flight->tick});
+    if (!converted)
+      return std::unexpected{failure(
+          SaveSchemaErrorCode::invalid_state, "$.flight",
+          "system import same-tick conversion is unsafe or unsupported")};
+    document.flight = *converted;
+  }
   if (auto valid = hydrate_freedom_flight_document(document); !valid)
     return std::unexpected{valid.error()};
   return document;
+}
+} // namespace
+
+auto decode_freedom_flight_document_json(std::string_view text)
+    -> std::expected<FreedomFlightSaveDocument, SaveSchemaError> {
+  return decode_flight(text, false);
+}
+auto decode_freedom_system_flight_import_json(std::string_view text)
+    -> std::expected<FreedomFlightSaveDocument, SaveSchemaError> {
+  return decode_flight(text, true);
 }
 } // namespace apsis_drift

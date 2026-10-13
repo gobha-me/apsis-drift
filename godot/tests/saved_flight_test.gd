@@ -767,6 +767,65 @@ func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:
 		check(view.paused and view.controls_armed and owner.get_freedom_flight_state() == before and view.exhaust.phase == phase, "Neutral key release changed flight or resumed: " + str(key))
 
 
+func check_held_resize(view: Control, owner: Variant, directory: String) -> void:
+	check(owner.enable_streaming(), "Resize regression could not reenable terrain")
+	view.state = owner.get_freedom_flight_state()
+	view.toggle_pause()
+	check(not view.paused, "Neutral resize regression did not resume")
+	physical_key(KEY_W, true)
+	physical_key(KEY_CTRL, true)
+	view._process(1.0 / 120.0)
+	check(view.error.is_empty() and view.exhaust.intensity == 1.0 and view.exhaust.withdrawal_intensity == 1.0, "Resize regression did not start with real applied thrust")
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var phase: float = view.exhaust.phase
+	var path := directory.path_join("resize-before.json")
+	var after := directory.path_join("resize-after.json")
+	check(owner.save_freedom_as(path), "Resize baseline save failed")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var pixels := root.size
+	root.size = pixels + Vector2i(17, 11)
+	# Exercise the connected Window signal; repeated delivery is idempotent.
+	root.size_changed.emit()
+	root.size_changed.emit()
+	check(view.paused and not view.controls_armed and not view.player_input.enabled and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Held resize did not immediately neutralize input/effects")
+	view._process(60.0)
+	view.toggle_pause()
+	check(view.paused and owner.get_freedom_flight_state() == before, "Held resize advanced time/momentum or resumed")
+	physical_key(KEY_W, false)
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Partial release escaped resize neutral gate")
+	physical_key(KEY_CTRL, false)
+	view._process(60.0)
+	check(view.paused and view.controls_armed and owner.save_freedom_as(after) and FileAccess.get_file_as_bytes(after) == bytes, "Resize neutral observation changed complete save or auto-resumed")
+	root.size = pixels
+	root.size_changed.emit()
+	view.toggle_pause()
+	check(not view.paused, "Neutral explicit resize Resume refused")
+	# Translation/attitude channels and the selected pad use the same barrier.
+	for key in [KEY_E, KEY_SPACE, KEY_S, KEY_Q, KEY_I, KEY_A, KEY_Z, KEY_K, KEY_D, KEY_X]:
+		physical_key(key, true)
+		root.size += Vector2i(1, 1)
+		root.size_changed.emit()
+		view.toggle_pause()
+		check(view.paused and not view.controls_armed and owner.get_freedom_flight_state() == before, "Held resize escaped a flight channel: " + str(key))
+		physical_key(key, false)
+		view.toggle_pause()
+		check(not view.paused, "Released resize channel refused explicit Resume")
+	var device: int = view.player_input.device
+	view.player_input.device = 0
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.8)
+	root.size += Vector2i(1, 1)
+	root.size_changed.emit()
+	view.toggle_pause()
+	check(view.paused and not view.controls_armed, "Selected pad escaped resize neutral gate")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	view.player_input.device = device
+	root.size = pixels
+	root.size_changed.emit()
+	view.pause_controls("Resize regression complete")
+	check(owner.save_freedom_as(after) and FileAccess.get_file_as_bytes(after) == bytes, "Repeated resize barriers changed complete flight save")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 6:
@@ -870,7 +929,8 @@ func run() -> void:
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")
 	view.state = owner.get_freedom_flight_state()
 	check_focus_loss(view, owner, args[0].get_base_dir())
-	check(owner.initialize_freedom_continue(args[0]) and owner.get_freedom_flight_state() == start, "Focus control damaged the original Continue")
+	check_held_resize(view, owner, args[0].get_base_dir())
+	check(owner.initialize_freedom_continue(args[0]) and owner.get_freedom_flight_state() == start, "Focus/resize control damaged the original Continue")
 	view.state = owner.get_freedom_flight_state()
 	var commands := neutral.duplicate()
 	commands[4] = 0.1
