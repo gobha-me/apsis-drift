@@ -21,6 +21,79 @@ func _initialize() -> void:
 func save_matches(owner: Variant, source: String, output: String) -> bool:
 	return check(owner.save_freedom_as(output) and FileAccess.get_sha256(output) == FileAccess.get_sha256(source), "Complete impact Save differs from authoritative fixture: " + source.get_file())
 
+func recovery_button(node: Node) -> Button:
+	if node is Button and node.text == "Continue at Origin Station": return node
+	for child in node.get_children():
+		var found := recovery_button(child)
+		if found != null: return found
+	return null
+
+func live_loss_case(shell: Control, owner: Variant, fixtures: String, assets: String, output: String, label: String, elapsed: float) -> void:
+	var source := fixtures.path_join("catastrophic-before.json")
+	var source_hash := FileAccess.get_sha256(source)
+	if not check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), label + ": actual pre-impact Continue refused: " + shell.error): return
+	var view: Control = shell.current_view
+	view.set_process(false)
+	view.player_input.persist = false
+	if not check(view is FlightView and view.paused and view.state.impact.selected and not view.state.impact.pending_loss and view.state.impact.latest.is_empty(), label + ": source is not the real pre-loss flight"): return
+	save_matches(owner, source, output.path_join(label + "-before.json"))
+	view.toggle_pause()
+	if not check(not view.paused, label + ": neutral explicit flight Resume refused"): return
+	for frame in 32:
+		view._process(elapsed)
+		if not view.error.is_empty() or owner.get_freedom_recovery_state().get("pending", false): break
+	if not check(view.error.is_empty() and owner.get_freedom_recovery_state().get("pending", false), label + ": live impact batch rolled back the real loss or entered a fatal presenter error: " + view.error): return
+	var loss: Dictionary = owner.get_freedom_flight_state()
+	save_matches(owner, fixtures.path_join("catastrophic-pending.json"), output.path_join(label + "-pending.json"))
+	if not check(shell.recovery_overlay != null, label + ": committed live loss did not open standard recovery"): return
+	check(shell.recovery_overlay.get_parent() == shell.recovery_layer and shell.recovery_layer.layer > view.controls_menu.layer and not view.controls_menu.panel.visible, label + ": recovery is obscured by the flight controls canvas")
+	check(view.paused and not view.player_input.enabled and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, label + ": pending recovery retained active controls or exhaust")
+	var overlay_id: int = shell.recovery_overlay.get_instance_id()
+	var phase: float = view.exhaust.phase
+	view.toggle_pause()
+	view.recovery_requested.emit()
+	var held := InputEventKey.new()
+	held.physical_keycode = KEY_W
+	held.pressed = true
+	Input.parse_input_event(held)
+	view._process(0.5)
+	var released := InputEventKey.new()
+	released.physical_keycode = KEY_W
+	released.pressed = false
+	Input.parse_input_event(released)
+	view._process(0.5)
+	check(view.error.is_empty() and view.paused and owner.get_freedom_flight_state() == loss and view.exhaust.phase == phase and shell.recovery_overlay.get_instance_id() == overlay_id, label + ": waiting for recovery advanced the loss, failed, or replaced its overlay")
+	save_matches(owner, fixtures.path_join("catastrophic-pending.json"), output.path_join(label + "-waiting.json"))
+	var resume := recovery_button(shell.recovery_overlay)
+	if not check(resume != null, label + ": standard recovery has no actual Continue action"): return
+	resume.pressed.emit()
+	resume.pressed.emit()
+	await process_frame
+	var fresh: Dictionary = owner.get_freedom_flight_state()
+	if not check(shell.current_view is WalkView and shell.current_view.paused and shell.recovery_overlay == null and fresh.craft_id != loss.craft_id and fresh.impact.selected and fresh.impact.forebody == 0 and fresh.impact.landing_structure == 0 and fresh.impact.latest.is_empty() and not fresh.impact.pending_loss, label + ": live recovery did not produce the ordinary paused fresh station actor"): return
+	check(owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0.0, 0.0, 0.0])), label + ": recovered station clock could not advance")
+	save_matches(owner, fixtures.path_join("recovered.json"), output.path_join(label + "-recovered.json"))
+	var walk: Dictionary = owner.get_freedom_walk_state()
+	check(owner.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([1.0, 0.0, 0.0])) and owner.get_freedom_walk_state().foot_position_metres != walk.foot_position_metres and owner.get_freedom_flight_state().craft_id == fresh.craft_id, label + ": replacement actor cannot actually walk")
+	check(owner.save_freedom_as(output.path_join(label + "-walking.json")), label + ": recovered walking Save As refused")
+	check(FileAccess.get_sha256(source) == source_hash, label + ": live recovery rewrote the original pre-impact source")
+
+func live_loss(fixtures: String, assets: String, output: String, label: String, elapsed: float) -> void:
+	# Isolate old-code refusals so each cadence reports its own real failure.
+	var owner: Variant = ClassDB.instantiate("FreedomBridge")
+	var shell := Shell.new()
+	shell.presentation_only = true
+	shell.process_mode = Node.PROCESS_MODE_DISABLED
+	root.add_child(shell)
+	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	await live_loss_case(shell, owner, fixtures, assets, output, label, elapsed)
+	shell.free()
+	shell = null
+	owner = null
+	for frame in 2:
+		await process_frame
+		if DisplayServer.get_name() != "headless": await RenderingServer.frame_post_draw
+
 func capture_cue(view: Control, owner: Variant, source: String, output: String, label: String) -> void:
 	if DisplayServer.get_name() == "headless": return
 	view.paused = true
@@ -56,7 +129,7 @@ func run() -> void:
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Impact output directory unavailable"):
 		quit(1)
 		return
-	for label in ["unselected", "selected-clear", "forebody1", "forebody2", "landing-damaged", "catastrophic-pending", "recovered"]:
+	for label in ["unselected", "selected-clear", "forebody1", "forebody2", "landing-damaged", "catastrophic-before", "catastrophic-pending", "recovered"]:
 		if not check(FileAccess.file_exists(args[0].path_join(label + ".json")), "Missing actual C++ impact fixture: " + label):
 			quit(1)
 			return
@@ -140,6 +213,8 @@ func run() -> void:
 		save_matches(owner, source, args[2].path_join(label + "-presentation.json"))
 		if severity >= 1:
 			await capture_cue(view, owner, source, args[2], label)
+	await live_loss(args[0], args[1], args[2], "live-single", 1.0 / 120.0)
+	await live_loss(args[0], args[1], args[2], "live-batch", 0.1)
 	var loss_source := args[0].path_join("catastrophic-pending.json")
 	if not check(shell.select_start(owner, {"mode": "continue", "value": loss_source, "assets": args[1]}), "Catastrophic condition Continue refused: " + shell.error):
 		shell.free()
@@ -149,6 +224,8 @@ func run() -> void:
 	var loss: Dictionary = owner.get_freedom_flight_state()
 	var retired_overlay: Control = view.impact_overlay
 	check(loss.impact.pending_loss and loss.impact.latest.catastrophic and shell.recovery_overlay != null and "recovery pending" in ImpactView.feedback(loss.impact), "Actual catastrophic event did not reach standard recovery feedback")
+	view.toggle_pause()
+	check(view.paused and view.recovery_notified and not view.controls_menu.panel.visible and shell.recovery_layer.layer > view.controls_menu.layer, "Loaded pending recovery resumed controls or is hidden behind the pause menu")
 	save_matches(owner, loss_source, args[2].path_join("pending-copy.json"))
 	shell.continue_recovery()
 	var fresh: Dictionary = owner.get_freedom_flight_state()
@@ -158,9 +235,9 @@ func run() -> void:
 	var output := FileAccess.open(args[2].path_join("impact-report.json"), FileAccess.WRITE)
 	if check(output != null, "Impact evidence report unavailable"):
 		var hashes := {}
-		for path in ["scripts/native/native_impact_view.gd", "scripts/native/native_flight_view.gd", "tests/native_impact_test.gd", "bin/libapsis_freedom_bridge.so"]:
+		for path in ["scripts/native/native_impact_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_start_shell.gd", "tests/native_impact_test.gd", "bin/libapsis_freedom_bridge.so"]:
 			hashes[path] = FileAccess.get_sha256("res://" + path)
-		output.store_string(JSON.stringify({"schema_version": 1, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if DisplayServer.get_name() != "headless" else "headless", "scope": "read-only authoritative impact fixture presentation; optional actual software/windowed cue captures, no FPS/pressure/oxygen claim", "sources_sha256": hashes, "license": "BSD-3-Clause for repository-authored cue/capture; embedded content retains packaged licenses", "asset_license_records": "assets/native/freedom-starter-01/licenses", "captures": captures, "pass": failures == 0}, "\t") + "\n")
+		output.store_string(JSON.stringify({"schema_version": 2, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if DisplayServer.get_name() != "headless" else "headless", "scope": "authoritative impact fixtures and live single/multi-tick recovery to a walking replacement; optional software/windowed cue captures, no FPS/pressure/oxygen claim", "sources_sha256": hashes, "license": "BSD-3-Clause for repository-authored cue/capture; embedded content retains packaged licenses", "asset_license_records": "assets/native/freedom-starter-01/licenses", "captures": captures, "pass": failures == 0}, "\t") + "\n")
 		output.close()
 	shell.free()
 	shell = null

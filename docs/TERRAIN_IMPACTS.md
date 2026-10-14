@@ -88,6 +88,13 @@ explicit standard replacement path. The replacement has a new individual
 identity and pristine condition; retired history remains bound to the lost
 craft. Repeating recovery cannot grant another replacement.
 
+A live catastrophic tick stops the native frame at that committed loss, even
+when the frame had several physics ticks scheduled. Unsimulated frame time is
+discarded; it cannot produce extra damage, fuel charges or replacement motion.
+The flight presenter pauses controls and exhaust and opens the same explicit
+standard recovery choice used by Continue. Waiting there leaves the pending
+save intact. Continuing returns to a paused replacement actor at Origin Station.
+
 Repair costs, nanites, drones, combat, per-fragment physics and jump-stress
 mechanics are outside this slice. The stable condition identities leave room
 for those future decisions without creating competing damage stores.
@@ -98,6 +105,9 @@ The provider, reducer, strict codec and native session have separate headless
 contracts for invalid/nonfinite state, actual crossings, threshold edges,
 repeat contacts, exact historical bytes, selected Continue and recovery.
 Native cue checks consume fixtures produced by authoritative contact events.
+The native impact test also flies the actual pre-impact fixture at single- and
+multi-tick cadences, compares complete pending and recovered saves with independent
+C++ results, invokes the recovery button and checks replacement walking.
 Paired compiler determinism, software visual evidence and manual hardware
 playtesting are reported separately; none substitutes for the others.
 

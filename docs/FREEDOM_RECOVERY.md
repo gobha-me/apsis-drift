@@ -33,7 +33,10 @@ constraint refuse before changing the current owner. No station is invented.
 Pending loss freezes ordinary flight, walking, boarding, port, service and jump
 commands. Save As preserves that pending state. Native Continue presents the
 cause, safe station and retained-state explanation with an explicit continuation
-button. Replacement first stages its current authored skin and terrain stream;
+button. A live catastrophic [experimental terrain impact](TERRAIN_IMPACTS.md)
+opens that same choice immediately after its committed tick. The native frame
+stops there rather than attempting more ticks on the retired craft.
+Replacement first stages its current authored skin and terrain stream;
 only a ready view can commit it. A failed asset load retains the pending loss and
 allows retry. The old scene is retired when the new walker/ship scene commits.
 The same mesh recipe is a skin for a new individual vessel, not recovered hardware.
@@ -98,5 +101,6 @@ The headless native test consumes actual C++ jump/propulsion/loss fixtures,
 compares whole Save As bytes with independent continuation oracles, exercises
 failed/ready asset staging and a fresh model scene, then walks, boards, departs and
 commits another real jump. These checks qualify the declared recovery path; live
-fatality detection, GPU appearance, manual controls, fun, equipment protection,
+fatality detection beyond the selected terrain-impact prototype, GPU appearance,
+manual controls, fun, equipment protection,
 cargo, costs and time passage remain separate work or unselected policies.

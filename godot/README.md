@@ -11,7 +11,7 @@ The current native extension and runtime runner target **Linux x86_64**.
 Other native platforms remain unqualified; installing Godot alone does not
 provide a compatible bridge for them.
 
-Install Godot 4.7.2, CMake 3.28+, Python 3.10+, Git and a C++23 compiler. Set `GODOT_BIN` to
+Install Godot 4.7.2, CMake 3.28+, Python 3.11+, Git and a C++23 compiler. Set `GODOT_BIN` to
 an installed executable if `godot` is not on PATH. The launcher fetches pinned
 C++ dependencies on its first build; it does not download Godot.
 

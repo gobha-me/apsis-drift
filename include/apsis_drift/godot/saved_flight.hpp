@@ -109,15 +109,25 @@ struct SavedFlightWorld {
     auto actuation = last_step;
     const auto scheduled =
         require(candidate_clock.advance(SimulationSeconds{elapsed}));
-    for (int i = 0; i < scheduled.steps; ++i)
+    auto dropped = scheduled.dropped;
+    for (int i = 0; i < scheduled.steps; ++i) {
       actuation = require(candidate.advance(controls));
+      if (candidate.recovery_pending()) {
+        // The actual loss owns its final tick. Retire the unsimulated frame
+        // tail, including any fractional time, before explicit recovery.
+        dropped += kSimulationStep * (scheduled.steps - i - 1) +
+                   candidate_clock.accumulator();
+        candidate_clock.reset();
+        break;
+      }
+    }
     // Qualify the projected selected owner before committing this whole batch.
     // Rendering never supplies pose, rotation or a substitute world recipe.
     (void)project_saved_flight(candidate);
     session = std::move(candidate);
     clock = candidate_clock;
     last_step = actuation;
-    dropped_seconds += scheduled.dropped.count();
+    dropped_seconds += dropped.count();
   }
 };
 } // namespace apsis_drift::godot_spike

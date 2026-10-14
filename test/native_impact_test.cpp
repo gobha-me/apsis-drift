@@ -1,9 +1,11 @@
 #include "apsis_drift/godot/saved_contact_geometry.hpp"
+#include "apsis_drift/godot/saved_flight.hpp"
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/rigid_frame_handoff.hpp"
 #include "contact_geometry_internal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -134,6 +136,112 @@ auto hit(NativeFreedomFlightSession session) -> NativeFreedomFlightSession {
         "Actual swept terrain contact produces an authoritative event");
   return session;
 }
+auto live_loss_batches(const NativeFreedomFlightSession& source) -> void {
+  using godot_spike::SavedFlightWorld;
+  const auto original = bytes(source);
+  const std::array<double, 12> neutral{};
+  auto invalid = [&](double elapsed, std::span<const double> fractions) {
+    SavedFlightWorld world{source, {}, {}, .5};
+    (void)need(world.clock.advance(kSimulationStep * .25));
+    const auto accumulator = world.clock.accumulator();
+    bool refused{};
+    try {
+      world.advance(elapsed, fractions, false);
+    } catch (const std::exception&) {
+      refused = true;
+    }
+    check(refused && bytes(world.session) == original &&
+              !world.session.recovery_pending() && !world.last_step &&
+              world.clock.accumulator() == accumulator &&
+              world.dropped_seconds == .5,
+          "Invalid native batch preserves source, scheduling and no loss");
+  };
+  for (const auto elapsed :
+       {-1.0, 61.0, std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity()})
+    invalid(elapsed, neutral);
+  invalid(kSimulationStep.count(), {});
+  invalid(kSimulationStep.count(), std::span{neutral}.first(11));
+  const std::array<double, 13> too_many{};
+  invalid(kSimulationStep.count(), too_many);
+  for (const auto value : {-0.1, 1.1, std::numeric_limits<double>::quiet_NaN(),
+                           std::numeric_limits<double>::infinity()}) {
+    auto malformed = neutral;
+    malformed[5] = value;
+    invalid(kSimulationStep.count(), malformed);
+  }
+  // Independent fixed-tick physics supplies each whole pending-save oracle;
+  // the native scheduler must stop at that same real event at every cadence.
+  struct Schedule {
+    double retained_steps, elapsed_steps;
+  };
+  constexpr std::array<Schedule, 4> schedules{
+      {{0, 1}, {0, 2}, {.25, 2.5}, {0, 7200}}};
+  for (const auto main : {0.0, .25}) {
+    auto oracle = source;
+    NativeFlightControls controls;
+    controls.negative_translation.z = main;
+    const auto last = need(oracle.advance(controls));
+    const bool pending = oracle.recovery_pending() && oracle.condition() &&
+                         oracle.condition()->latest.has_value();
+    check(pending && oracle.condition()->latest &&
+              oracle.condition()->latest->catastrophic &&
+              oracle.document().flight.tick ==
+                  source.document().flight.tick + 1,
+          "Existing airborne fixture reaches actual loss in one fixed tick");
+    if (!pending) continue;
+    const auto expected = bytes(oracle);
+    check(oracle.condition()->latest->serial ==
+                  source.condition()->next_event &&
+              oracle.condition()->next_event ==
+                  source.condition()->next_event + 1 &&
+              source.resources()->flight_quanta -
+                      oracle.resources()->flight_quanta ==
+                  last.fuel_debit_quanta &&
+              (main == 0 ? last.fuel_debit_quanta == 0
+                         : last.fuel_debit_quanta > 0),
+          "Actual loss records one event and precisely its applied fuel bill");
+    auto fractions = neutral;
+    fractions[5] = main;
+    for (const auto schedule : schedules) {
+      SavedFlightWorld world{source, {}, {}, .5};
+      (void)need(
+          world.clock.advance(kSimulationStep * schedule.retained_steps));
+      const auto elapsed = kSimulationStep * schedule.elapsed_steps;
+      world.advance(elapsed.count(), fractions, false);
+      const auto expected_drop =
+          .5 + (kSimulationStep *
+                (schedule.retained_steps + schedule.elapsed_steps - 1))
+                   .count();
+      check(bytes(world.session) == expected && world.last_step &&
+                world.last_step->fuel_debit_quanta == last.fuel_debit_quanta &&
+                world.last_step->actuation.after == last.actuation.after &&
+                world.clock.accumulator() == SimulationSeconds::zero() &&
+                std::abs(world.dropped_seconds - expected_drop) < 1e-12,
+            "One/multi-tick loss preserves exact full owner and last impact "
+            "step while dropping only the unadvanced frame tail");
+      const auto drop = world.dropped_seconds;
+      world.advance(1.0, fractions, true);
+      check(bytes(world.session) == expected && world.dropped_seconds == drop &&
+                world.clock.accumulator() == SimulationSeconds::zero(),
+            "Paused pending loss cannot consume time, fuel or another event");
+      bool refused{};
+      try {
+        world.advance(kSimulationStep.count(), fractions, false);
+      } catch (const std::exception&) {
+        refused = true;
+      }
+      check(
+          refused && bytes(world.session) == expected &&
+              world.dropped_seconds == drop && world.last_step &&
+              world.last_step->fuel_debit_quanta == last.fuel_debit_quanta &&
+              world.clock.accumulator() == SimulationSeconds::zero(),
+          "Further pending advance refuses transactionally without rebilling");
+    }
+  }
+  check(bytes(source) == original,
+        "Native scheduler qualification never mutates its initialized source");
+}
 auto run(const std::filesystem::path& output) -> void {
   const Fixtures fixtures;
   auto clear = fixtures.airborne(0, false);
@@ -209,7 +317,11 @@ auto run(const std::filesystem::path& output) -> void {
   check(!landing.commit_touchdown(checksum),
         "Damaged landing structure cannot certify safe touchdown");
 
-  auto loss = hit(fixtures.airborne(80, false));
+  auto catastrophic_before = fixtures.airborne(80, false);
+  need(catastrophic_before.enable_impact_consequences());
+  need(catastrophic_before.save_as(output / "catastrophic-before.json"));
+  live_loss_batches(catastrophic_before);
+  auto loss = hit(std::move(catastrophic_before));
   check(loss.recovery_pending() && loss.condition()->latest->catastrophic &&
             !loss.advance({}),
         "Actual catastrophic impact commits one frozen standard loss");

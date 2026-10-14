@@ -3,6 +3,7 @@ signal journey_mode_changed
 signal catalog_save_requested(save_as: bool)
 signal load_requested
 signal title_requested
+signal recovery_requested
 var journey_dialog_open := false
 ## Ordinary saved-flight consumer. C++ owns time, state, terrain and propulsion.
 const PlanetStreamView = preload("res://scripts/world/planet_stream.gd")
@@ -93,6 +94,7 @@ var error := ""
 var activated := false
 var staged_model: Node3D
 var mode_change_pending := false
+var recovery_notified := false
 var ship_audio: Node
 var audio_preferences: RefCounted
 var quit_handler: Callable
@@ -975,7 +977,7 @@ func refresh_impact_action() -> void:
 
 
 func toggle_pause() -> void:
-	if journey_dialog_open: return
+	if journey_dialog_open or recovery_notified: return
 	if not error.is_empty():
 		hide_exhaust()
 		return
@@ -1079,7 +1081,7 @@ func pause_on_error(message: String) -> void:
 
 
 func _process(delta: float) -> void:
-	if not activated: return
+	if not activated or recovery_notified: return
 	if bridge == null or camera == null or terrain == null or not error.is_empty():
 		hide_exhaust()
 		return
@@ -1104,6 +1106,14 @@ func _process(delta: float) -> void:
 	state = bridge.get_freedom_flight_state()
 	if not valid_state(state):
 		pause_on_error("C++ flight view became unavailable: " + str(bridge.get_last_error()))
+		return
+	if state.get("impact", {}).get("pending_loss", false):
+		# The successful C++ batch already committed the actual loss. Stop
+		# here before another tick can refuse or terrain can obscure recovery.
+		recovery_notified = true
+		pause_controls("Recorded craft loss. Continue recovery when ready.", false)
+		set_process(false)
+		recovery_requested.emit()
 		return
 	if not paused and not save_dialog.visible and not surface_walking():
 		if resolved.recenter:
