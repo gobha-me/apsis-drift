@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace apsis_drift {
 namespace {
@@ -25,8 +26,23 @@ auto length(V v) -> double {
 
 auto NativeFreedomFlightSession::port_approach_available() const
     -> std::expected<void, std::string> {
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
-    return std::unexpected{"System-flight approach aid is not qualified yet"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight approach selection"};
+    if (recovery_pending() ||
+        (travel_ && travel_->phase != FreedomJumpPhase::idle))
+      return std::unexpected{
+          "Approach requires an active voyage and idle jump"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Approach frame assessment refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    // Read-only qualification of the existing action; the clone never arms it.
+    return candidate.port_approach_available();
+  }
   if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before approaching a port"};
   if (surface_ && (surface_->landed || surface_->gear_deployed))
@@ -88,6 +104,25 @@ auto NativeFreedomFlightSession::begin_port_approach()
         "Continue the recorded loss before controlling the replacement"};
   if (travel_ && travel_->phase != FreedomJumpPhase::idle)
     return std::unexpected{"Cancel the active jump before approach"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight approach selection"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Approach frame handoff refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    // Dispatch once to the unchanged relative action and its physical gates.
+    if (auto armed = candidate.begin_port_approach(); !armed) return armed;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+    *this = std::move(candidate);
+    return {};
+  }
   if (auto valid = port_approach_available(); !valid) return valid;
   port_approach_ = {true, kNativePortApproachTicks,
                     "Approaching with thrusters; manual input cancels"};

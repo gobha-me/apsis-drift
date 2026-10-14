@@ -990,9 +990,13 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+  const bool selected =
+      document_.model.frame_policy == kFreedomReleaseSystemFramePolicy;
+  const bool system_frame =
+      document_.flight.frame.kind == RigidFrameKind::system_inertial;
+  if (system_frame && (!selected || !deployed))
     return std::unexpected{
-        "System-flight landing/contact is not qualified yet"};
+        "Deploy landing gear to select the saved planet's contact frame"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -1003,10 +1007,46 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
         "Release the station port and sit before changing gear"};
   if (surface_ && surface_->landed && !deployed)
     return std::unexpected{"Lift off before stowing landing gear"};
-  if (!surface_) surface_ = FreedomSurfaceState{};
-  surface_->gear_deployed = deployed;
-  if (deployed) cancel_port_approach();
-  if (!deployed) cancel_surface_maneuver();
+  if (!selected) {
+    // Historical policy retains the existing action and exact relative body.
+    if (!surface_) surface_ = FreedomSurfaceState{};
+    surface_->gear_deployed = deployed;
+    if (deployed) cancel_port_approach();
+    if (!deployed) cancel_surface_maneuver();
+    return {};
+  }
+  auto candidate = *this;
+  if (system_frame) {
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Landing frame handoff refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+  }
+  const bool stowing = surface_ && surface_->gear_deployed && !deployed;
+  if (!candidate.surface_) candidate.surface_ = FreedomSurfaceState{};
+  candidate.surface_->gear_deployed = deployed;
+  if (deployed) candidate.cancel_port_approach();
+  if (!deployed) candidate.cancel_surface_maneuver();
+  // Explicit stow is a representation event only for an airborne transition.
+  // A relative impact policy or active approach retains its supported frame;
+  // changing gear never drops those owners or disables their consequences.
+  if (stowing && !candidate.condition_ && !candidate.port_approach_.active) {
+    const auto body = reframe_rigid_body(
+        RigidBodyWorldContext{system_}, candidate.document_.flight,
+        {{RigidFrameKind::system_inertial,
+          candidate.document_.flight.frame.system,
+          {},
+          {}},
+         candidate.document_.flight.tick});
+    if (!body) return std::unexpected{"Stowed gear frame handoff refused"};
+    candidate.document_.flight = *body;
+  }
+  const auto saved = candidate.save_document();
+  if (!saved) return std::unexpected{saved.error()};
+  if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+    return std::unexpected{encoded.error().detail};
+  *this = std::move(candidate);
   return {};
 }
 auto NativeFreedomFlightSession::commit_touchdown(

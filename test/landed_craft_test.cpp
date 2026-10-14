@@ -535,6 +535,101 @@ auto assisted_commands(const Fixture& f,
   check(!refused.request_landing() && !refused.surface(),
         "assisted out-of-range refusal is transactional");
 }
+auto selected_gear_lifecycle(const Fixture& f) -> void {
+  auto fixed = f.fixed;
+  fixed.position_metres =
+      add(fixed.position_metres, rotate(fixed.orientation, {0, .7, 0}));
+  FreedomFlightSaveDocument flight{
+      make_freedom_new_game_document(Seed{42}), f.source(fixed), {}};
+  flight.origin.state.tick = flight.flight.tick;
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = f.terrain_policy;
+  flight.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+  flight.world =
+      FreedomActiveWorldSelection{1, f.owner.catalog.id, f.planet.id};
+  flight.flight = required(reframe_rigid_body(
+      f.context, flight.flight,
+      {{RigidFrameKind::system_inertial, f.owner.catalog.id, {}, {}},
+       flight.flight.tick}));
+  auto session = required(NativeFreedomFlightSession::open(
+      required(native_select_save_document(flight))));
+  const auto started = session.document().flight;
+  required(session.request_landing());
+  check(session.document().flight.tick == started.tick &&
+            session.document().flight.frame.kind ==
+                RigidFrameKind::planet_relative_inertial &&
+            session.surface()->gear_deployed,
+        "Actual landing action selects saved planet at the unchanged tick");
+  unsigned ticks{};
+  while (!session.surface()->landed && ticks < 1200) {
+    required(session.advance({}));
+    ++ticks;
+  }
+  check(session.surface()->landed.has_value(),
+        "Selected system source reaches actual certified touchdown");
+  if (!session.surface()->landed) return;
+  const auto saved = required(
+      encode_native_save_document_json(required(session.save_document())));
+  check(!session.set_landing_gear(false) &&
+            required(encode_native_save_document_json(
+                required(session.save_document()))) == saved,
+        "Selected landed stow refusal retains complete anchor and bytes");
+  session = required(
+      NativeFreedomFlightSession::open(required(native_select_save_document(
+          required(decode_native_save_document_json(saved))))));
+  check(session.surface()->landed.has_value() &&
+            required(encode_native_save_document_json(
+                required(session.save_document()))) == saved,
+        "Selected landed Save/Continue preserves actual relative anchor");
+  required(session.release_surface());
+  ticks = 0;
+  bool propulsion = false;
+  while (session.surface_maneuver().kind ==
+             NativeSurfaceManeuverKind::liftoff &&
+         ticks < 1200) {
+    const auto step = required(session.advance({}));
+    propulsion = propulsion ||
+                 step.actuation.central.propulsion.positive_force_newtons.y > 0;
+    ++ticks;
+  }
+  auto snapshot = required(TerrainTouchdownSnapshot::create(session, true));
+  const auto query = snapshot.query();
+  bool pads_clear =
+      query.assessment &&
+      query.assessment->classification == TouchdownClass::pads_clear &&
+      query.assessment->support_count > 0;
+  for (unsigned i = 0; pads_clear && i < query.assessment->support_count; ++i)
+    pads_clear = query.supports[i] && *query.supports[i] &&
+                 (**query.supports[i]).minimum_gap_metres >= 3;
+  // The aid can also stop on an error or deadline. Its existing completion
+  // reason distinguishes those paths; the independent pad query proves motion.
+  const bool lifted =
+      propulsion && pads_clear && !session.surface()->landed &&
+      session.surface_maneuver().kind == NativeSurfaceManeuverKind::off &&
+      session.surface_maneuver().note ==
+          "Airborne; manual flight resumes with gear deployed";
+  check(lifted, "Selected liftoff needs applied thrust, certified clear pads "
+                "and successful aid completion");
+  if (!lifted) return;
+  const auto airborne = session.document().flight;
+  const auto expected = required(reframe_rigid_body(
+      f.context, airborne,
+      {{RigidFrameKind::system_inertial, f.owner.catalog.id, {}, {}},
+       airborne.tick}));
+  required(session.set_landing_gear(false));
+  check(session.document().flight == expected &&
+            !session.surface()->gear_deployed && !session.surface()->landed,
+        "Actual airborne stow changes only same-tick representation and gear");
+  const auto after = required(
+      encode_native_save_document_json(required(session.save_document())));
+  const auto continued = required(
+      NativeFreedomFlightSession::open(required(native_select_save_document(
+          required(decode_native_save_document_json(after))))));
+  check(required(encode_native_save_document_json(
+            required(continued.save_document()))) == after,
+        "Actual selected liftoff/stow survives complete system Save/Continue");
+}
 auto persistence_and_session(const Fixture& f) -> void {
   FreedomFlightSaveDocument flight{
       make_freedom_new_game_document(Seed{42}), f.source(f.fixed), {}};
@@ -1382,6 +1477,7 @@ auto main(int argc, char** argv) -> int {
       surface_walking(f);
       surface_walk_session(f);
       assisted_commands(f);
+      selected_gear_lifecycle(f);
     } else if (argc == 3 &&
                (std::string_view{argv[1]} == "--fixtures" ||
                 std::string_view{argv[1]} == "--local-detail-fixtures")) {
