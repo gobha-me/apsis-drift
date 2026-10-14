@@ -56,6 +56,47 @@ func check_exhaust_inputs(state: Dictionary) -> void:
 		check(not MainExhaust.valid_applied(malformed, 0.0), "Exhaust accepted wrong physical owner")
 
 
+func check_lift_exhaust(state: Dictionary) -> void:
+	var effect := MainExhaust.new()
+	check(effect.lift_plumes.size() == 2, "Existing lower lift mouths are missing")
+	for index in 2:
+		var plume: MeshInstance3D = effect.lift_plumes[index]
+		var vertices: PackedVector3Array = plume.mesh.get_mesh_arrays()[Mesh.ARRAY_VERTEX]
+		var maximum := Vector3(-INF, -INF, -INF)
+		var minimum := Vector3(INF, INF, INF)
+		var x := -2.25 if index == 0 else 2.25
+		for vertex in vertices:
+			var actual: Vector3 = plume.transform * vertex
+			minimum = minimum.min(actual)
+			maximum = maximum.max(actual)
+			check(Vector2(actual.x - x, actual.z - 3.441579222679138).length() < 0.400001, "Lift mesh escapes the measured existing mouth opening")
+		check(maximum.y <= -0.5730878806114197 and absf(minimum.y + 1.5730879306793213) < 0.000001, "Lift base is inside the lip or tail points upward")
+	var source := state.duplicate(true)
+	source.attached = false
+	source.positive_force_body = PackedFloat64Array([0, 0, 0])
+	source.negative_force_body = PackedFloat64Array([0, 0, 0])
+	for row in [[0.0, 0.0, 0.0], [0.3, 0.0, 0.0], [0.0, 0.4, 0.0], [0.0, 0.0, 0.6], [0.3, 0.4, 0.6]]:
+		var sample := source.duplicate(true)
+		sample.negative_force_body[2] = row[0] * sample.negative_force_ratings[2]
+		sample.negative_force_body[1] = row[1] * sample.negative_force_ratings[1]
+		sample.positive_force_body[1] = row[2] * sample.positive_force_ratings[1]
+		check(effect.update_applied(sample, 0.1, false) and is_equal_approx(effect.intensity, row[0]) and is_equal_approx(effect.withdrawal_intensity, row[1]) and is_equal_approx(effect.lift_intensity, row[2]), "Gross lift/main/withdrawal channels were mixed")
+		check(effect.lift_plumes[0].visible == (row[2] > 0.0) and effect.lift_plumes[1].visible == (row[2] > 0.0), "Gross lift visibility disagrees with applied force")
+	var lit := source.duplicate(true)
+	lit.positive_force_body[1] = lit.positive_force_ratings[1] * 0.5
+	for guard in ["pause", "attached", "nonfinite", "short", "owner", "time"]:
+		check(effect.update_applied(lit, 0.1, false) and effect.lift_intensity > 0.0, "Lift safety control did not start firing")
+		var phase: float = effect.phase
+		var sample := lit.duplicate(true)
+		if guard == "attached": sample.attached = true
+		elif guard == "nonfinite": sample.positive_force_body[1] = NAN
+		elif guard == "short": sample.positive_force_ratings = PackedFloat64Array([1, 1])
+		elif guard == "owner": sample.frame_id = "1"
+		var accepted: bool = effect.update_applied(sample, NAN if guard == "time" else 60.0, guard == "pause")
+		check(accepted == (guard in ["pause", "attached"]) and effect.lift_intensity == 0.0 and not effect.lift_plumes[0].visible and not effect.lift_plumes[1].visible and effect.phase == phase, "Lift refusal/pause/attachment retained firing or advanced phase: " + guard)
+	effect.free()
+
+
 func _initialize() -> void:
 	call_deferred("run")
 
@@ -444,7 +485,7 @@ func check_saved_reference(view: Node, owner: Variant, directory: String) -> voi
 	physical_key(KEY_ENTER, false)
 	check(not menu.basics.visible and menu.menu_margin.visible and root.gui_get_focus_owner() == menu.basics_button and view.paused, "Saved reference Back lost pause/focus")
 	check(owner.save_freedom_as(after_path) and FileAccess.get_file_as_bytes(after_path) == before_bytes, "Reference changed committed C++ save bytes")
-	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0, "Reference displayed firing exhaust")
+	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, "Reference displayed firing exhaust")
 	menu.show_menu()
 
 
@@ -691,7 +732,7 @@ func check_saved_controller(view: Control, owner: Variant, save: String) -> void
 	before = owner.get_freedom_flight_state()
 	phase = view.exhaust.phase
 	controls.connection_changed(0, false)
-	check(view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase and owner.get_freedom_flight_state() == before, "Selected device loss advanced state or retained lit effects")
+	check(view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase and owner.get_freedom_flight_state() == before, "Selected device loss advanced state or retained lit effects")
 	controls.connection_changed(0, true)
 	check(view.paused, "Device reconnect automatically resumed saved flight")
 	view.toggle_pause()
@@ -721,7 +762,7 @@ func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:
 	check(owner.save_freedom_as(checkpoint), "Focus baseline save failed")
 	var saved := FileAccess.get_file_as_bytes(checkpoint)
 	view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
-	check(not view.focused and view.paused and not view.controls_armed and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.phase == phase, "Focus-out did not immediately pause and darken both effects")
+	check(not view.focused and view.paused and not view.controls_armed and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.phase == phase, "Focus-out did not immediately pause and darken both effects")
 	check(owner.get_freedom_flight_state() == before, "Focus notification changed committed C++ flight")
 	view._process(60.0)
 	view.toggle_pause()
@@ -787,7 +828,7 @@ func check_held_resize(view: Control, owner: Variant, directory: String) -> void
 	# Exercise the connected Window signal; repeated delivery is idempotent.
 	root.size_changed.emit()
 	root.size_changed.emit()
-	check(view.paused and not view.controls_armed and not view.player_input.enabled and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Held resize did not immediately neutralize input/effects")
+	check(view.paused and not view.controls_armed and not view.player_input.enabled and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Held resize did not immediately neutralize input/effects")
 	view._process(60.0)
 	view.toggle_pause()
 	check(view.paused and owner.get_freedom_flight_state() == before, "Held resize advanced time/momentum or resumed")
@@ -857,6 +898,7 @@ func run() -> void:
 	check_hold_fields(start)
 	check_orbit_fixtures(args[0].get_base_dir())
 	check_exhaust_inputs(start)
+	check_lift_exhaust(start)
 	await check_hud_profiles(args[0].get_base_dir(), args[4])
 	check(owner.get_freedom_start().is_empty() and owner.get_state().is_empty(), "Flight created a docked or study owner")
 	for size in [0, 1, 11, 13, 1000]:
@@ -888,7 +930,7 @@ func run() -> void:
 	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far == 200.0 and view.terrain_camera.far / view.terrain_camera.near <= 500001.0, "Native camera depth ranges are unsafe")
 	check(view.camera.transform == view.terrain_camera.transform and view.camera.fov == view.terrain_camera.fov and view.camera.cull_mask == 3 and view.terrain_camera.cull_mask == 1, "Close terrain occlusion/camera registration was lost")
 	check(view.camera.get_world_3d() == view.terrain_camera.get_world_3d() and view.camera.get_viewport() != view.terrain_camera.get_viewport(), "Depth passes lost the shared world or viewport isolation")
-	check(view.exhaust.plumes.size() == 2 and view.exhaust.withdrawal_plumes.size() == 2 and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0, "Neutral Continue displayed thrust or lost source outlets")
+	check(view.exhaust.plumes.size() == 2 and view.exhaust.withdrawal_plumes.size() == 2 and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, "Neutral Continue displayed thrust or lost source outlets")
 	var structural_skin: MeshInstance3D = view.ship.find_child("HopperStructure", true, false)
 	check(structural_skin != null and structural_skin.transform == Transform3D.IDENTITY, "Qualified skin lost its body-local identity")
 	var skin_arrays: Array = structural_skin.mesh.surface_get_arrays(MainExhaust.SKIN_SURFACE)
@@ -955,7 +997,7 @@ func run() -> void:
 	var phase: float = view.exhaust.phase
 	check(view.exhaust.update_applied(final, 0.1, false) and view.exhaust.phase > phase and view.exhaust.plumes[0].visible, "Applied plume did not animate")
 	phase = view.exhaust.phase
-	check(view.exhaust.update_applied(final, 60.0, true) and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.phase == phase, "Paused exhaust changed phase or kept firing")
+	check(view.exhaust.update_applied(final, 60.0, true) and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.phase == phase, "Paused exhaust changed phase or kept firing")
 	var invalid_force := final.duplicate(true)
 	invalid_force.negative_force_body = PackedFloat64Array([0.0, 0.0])
 	check(not view.exhaust.update_applied(invalid_force, 0.1, false) and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible, "Truncated force buffer lit a plume")
@@ -964,7 +1006,7 @@ func run() -> void:
 	phase = view.exhaust.phase
 	var attached_force := final.duplicate(true)
 	attached_force.attached = true
-	check(view.exhaust.update_applied(attached_force, 0.1, false) and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Attached craft displayed firing or advanced exhaust phase")
+	check(view.exhaust.update_applied(attached_force, 0.1, false) and not view.exhaust.plumes[0].visible and not view.exhaust.withdrawal_plumes[0].visible and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Attached craft displayed firing or advanced exhaust phase")
 	check(not view.exhaust.update_applied({}, 0.1, false) and not view.exhaust.plumes[0].visible and view.exhaust.phase == phase, "Missing owner retained firing or changed exhaust phase")
 	# A different presentation cadence consumes exactly the same commands/ticks.
 	var other: Variant = ClassDB.instantiate("FreedomBridge")
@@ -990,9 +1032,9 @@ func run() -> void:
 	check(other.advance_freedom_flight(1.0 / 120.0, opposed, false), "Physical opposing vertical firings refused")
 	gross = other.get_freedom_flight_state()
 	check(absf(gross.applied_force_body[1]) < 0.00001 and gross.negative_force_body[1] > 0.0, "Gross vertical opposition was erased")
-	check(view.exhaust.update_applied(gross, 0.1, false) and view.exhaust.withdrawal_intensity > 0.0 and view.exhaust.withdrawal_plumes[0].visible and view.exhaust.intensity == 0.0, "Zero net vertical force hid the firing outlet or lit main thrust")
+	check(view.exhaust.update_applied(gross, 0.1, false) and view.exhaust.withdrawal_intensity > 0.0 and view.exhaust.withdrawal_plumes[0].visible and view.exhaust.lift_intensity > 0.0 and view.exhaust.lift_plumes[0].visible and view.exhaust.lift_plumes[1].visible and view.exhaust.intensity == 0.0, "Zero net vertical force hid either gross firing outlet or lit main thrust")
 	check(other.advance_freedom_flight(1.0 / 120.0, neutral, false), "Neutral coast after opposition refused")
-	check(view.exhaust.update_applied(other.get_freedom_flight_state(), 0.1, false) and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0, "Coasting velocity or gravity was presented as exhaust")
+	check(view.exhaust.update_applied(other.get_freedom_flight_state(), 0.1, false) and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, "Coasting velocity or gravity was presented as exhaust")
 	check(other.initialize_freedom_continue(output) and other.get_freedom_flight_state().checksum == final.checksum, "Flight Save As did not resume exact state")
 	for path in ["relative.json", "", args[0].get_base_dir(), args[0].get_base_dir() + "/missing/save.json"]:
 		check(not owner.save_freedom_as(path) and owner.get_freedom_flight_state() == final, "Refused Save As changed selected flight")
@@ -1002,7 +1044,7 @@ func run() -> void:
 	check(view.exhaust.update_applied(final, 0.1, false) and view.exhaust.plumes[0].visible and view.exhaust.withdrawal_plumes[0].visible, "Consumer failure control did not start firing")
 	phase = view.exhaust.phase
 	view.toggle_pause()
-	check(view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Pause callback left exhaust firing until the next frame")
+	check(view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Pause callback left exhaust firing until the next frame")
 	view.toggle_pause()
 	check(view.exhaust.update_applied(final, 0.1, false), "Refused-batch control did not resume firing")
 	phase = view.exhaust.phase
@@ -1016,14 +1058,14 @@ func run() -> void:
 	view.assist_button.toggled.emit(not final.assistance)
 	check(view.paused and owner.get_freedom_flight_state() == final, "Terminal error UI commands changed C++ state or resumed flight")
 	view.update_view(0.1)
-	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Terminal error refresh relit stale exhaust")
+	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Terminal error refresh relit stale exhaust")
 	view.error = ""
 	view.paused = false
 	view.terrain.error = "Unavailable terrain control"
 	check(view.exhaust.update_applied(final, 0.1, false), "Terrain failure control did not start firing")
 	phase = view.exhaust.phase
 	view._process(1.0 / 120.0)
-	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Terrain failure refreshed stale firing or advanced visual phase")
+	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Terrain failure refreshed stale firing or advanced visual phase")
 	check(int(owner.get_freedom_flight_state().tick) == int(final.tick) + 1, "Terrain failure rolled back the valid C++ flight tick")
 	view.terrain.error = ""
 	view.error = ""
@@ -1032,13 +1074,13 @@ func run() -> void:
 	check(view.exhaust.update_applied(final, 0.1, false), "Lost-owner consumer control did not start firing")
 	phase = view.exhaust.phase
 	view._process(0.1)
-	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Lost flight owner retained stale firing")
+	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Lost flight owner retained stale firing")
 	view.error = ""
 	view.paused = false
 	check(view.exhaust.update_applied(final, 0.1, false), "Assistance failure control did not start firing")
 	phase = view.exhaust.phase
 	view.assist_button.toggled.emit(true)
-	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.phase == phase, "Assistance failure callback retained stale firing")
+	check(not view.error.is_empty() and view.paused and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0 and view.exhaust.phase == phase, "Assistance failure callback retained stale firing")
 	view.free()
 	for i in 4:
 		check(FileAccess.get_file_as_bytes(args[i]) == original[i], "Native flight modified a source fixture")

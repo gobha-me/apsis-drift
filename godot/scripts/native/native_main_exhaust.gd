@@ -13,14 +13,23 @@ const WITHDRAWAL_ANCHORS = [Vector3(-1.309999942779541, 2.055159091949463, -1.45
 const WITHDRAWAL_CENTRES = [Vector3(-1.309999942779541, 2.355159282684326, -1.4500000476837158), Vector3(1.309999942779541, 2.358980178833008, -1.4500000476837158)]
 const WITHDRAWAL_RADIUS := 0.018
 const WITHDRAWAL_LENGTH := 0.6
+# Existing HOPPER BELLY01 port/starboard VTOL replaceable exit lips.
+# Exact source-plane Y=-0.5630878806114197; start10mm outward, rounded
+# toward -Y in float32. The midpoint X/Z rounding stays within0.2 micrometres.
+const LIFT_ANCHORS = [Vector3(-2.25, -0.5730879306793213, 3.4415793418884277), Vector3(2.25, -0.5730879306793213, 3.4415793418884277)]
+const LIFT_RADIUS := 0.40
+const LIFT_LENGTH := 1.0
 const SKIN_SURFACE := 18
 var plumes: Array[MeshInstance3D] = []
 var withdrawal_plumes: Array[MeshInstance3D] = []
+var lift_plumes: Array[MeshInstance3D] = []
 var material: ShaderMaterial
 var withdrawal_material: ShaderMaterial
+var lift_material: ShaderMaterial
 var phase := 0.0
 var intensity := 0.0
 var withdrawal_intensity := 0.0
+var lift_intensity := 0.0
 var bound_skin: MeshInstance3D
 var bound_surface := -1
 var bound_original: StandardMaterial3D
@@ -65,6 +74,23 @@ func _init() -> void:
 		plume.visible = false
 		add_child(plume)
 		withdrawal_plumes.append(plume)
+	lift_material = ShaderMaterial.new()
+	lift_material.shader = PlumeShader
+	for anchor in LIFT_ANCHORS:
+		var plume := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = LIFT_RADIUS
+		mesh.bottom_radius = 0.04
+		mesh.height = LIFT_LENGTH
+		mesh.radial_segments = 24
+		plume.mesh = mesh
+		plume.material_override = lift_material
+		plume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# Default +Y top is the bright base; the tail points down from the lip.
+		plume.position = anchor + Vector3.DOWN * (LIFT_LENGTH / 2.0)
+		plume.visible = false
+		add_child(plume)
+		lift_plumes.append(plume)
 
 
 func bind_skin(model: Node3D, selected_surface: int = SKIN_SURFACE) -> bool:
@@ -96,7 +122,7 @@ static func coating_state(coating: StandardMaterial3D) -> Array:
 
 
 func valid_bound_skin() -> bool:
-	return is_instance_valid(bound_skin) and bound_skin.mesh != null and bound_skin.mesh.get_surface_count() > bound_surface and bound_skin.mesh.surface_get_material(bound_surface) == bound_original and bound_skin.get_surface_override_material(bound_surface) == bound_coating and bound_original.next_pass == null and bound_coating.next_pass == bound_aperture and bound_aperture.shader == ApertureShader and coating_state(bound_coating) == bound_coating_state and material.shader == PlumeShader and withdrawal_material.shader == PlumeShader
+	return is_instance_valid(bound_skin) and bound_skin.mesh != null and bound_skin.mesh.get_surface_count() > bound_surface and bound_skin.mesh.surface_get_material(bound_surface) == bound_original and bound_skin.get_surface_override_material(bound_surface) == bound_coating and bound_original.next_pass == null and bound_coating.next_pass == bound_aperture and bound_aperture.shader == ApertureShader and coating_state(bound_coating) == bound_coating_state and material.shader == PlumeShader and withdrawal_material.shader == PlumeShader and lift_material.shader == PlumeShader
 
 
 static func valid_applied(state: Dictionary, elapsed: float) -> bool:
@@ -120,12 +146,14 @@ static func valid_applied(state: Dictionary, elapsed: float) -> bool:
 func update_applied(state: Dictionary, elapsed: float, paused: bool) -> bool:
 	intensity = 0.0
 	withdrawal_intensity = 0.0
+	lift_intensity = 0.0
 	var valid := valid_applied(state, elapsed)
 	if valid and not paused and not state.attached:
 		var force: PackedFloat64Array = state.negative_force_body
 		var ratings: PackedFloat64Array = state.negative_force_ratings
 		intensity = clampf(force[2] / ratings[2], 0.0, 1.0)
 		withdrawal_intensity = clampf(force[1] / ratings[1], 0.0, 1.0)
+		lift_intensity = clampf(state.positive_force_body[1] / state.positive_force_ratings[1], 0.0, 1.0)
 		phase = fmod(phase + elapsed, 100.0)
 	material.set_shader_parameter("phase", phase)
 	material.set_shader_parameter("intensity", intensity)
@@ -135,4 +163,8 @@ func update_applied(state: Dictionary, elapsed: float, paused: bool) -> bool:
 	withdrawal_material.set_shader_parameter("intensity", withdrawal_intensity)
 	for plume in withdrawal_plumes:
 		plume.visible = withdrawal_intensity > 0.0
+	lift_material.set_shader_parameter("phase", phase)
+	lift_material.set_shader_parameter("intensity", lift_intensity)
+	for plume in lift_plumes:
+		plume.visible = lift_intensity > 0.0
 	return valid

@@ -68,6 +68,8 @@ func run() -> void:
 		check(state.checksum == row.checksum and owner.save_freedom_as(path) and FileAccess.get_sha256(path) == FileAccess.get_sha256(args[0].path_join(row.file)), "Full surface Save differs at " + row.name)
 		check(view.staged_model.get_instance_id() == model_id and view.staged_model.replacement_nodes == roots and view.staged_model.valid_current_pose(), "Surface lifecycle replaced or damaged the craft model")
 		check(view.liftoff_button.disabled == not state.surface.landed and view.stow_gear_button.disabled == (state.surface.landed or not state.surface.gear_deployed), "Surface HUD actions disagree with C++ state")
+		var lift_fraction := clampf(state.positive_force_body[1] / state.positive_force_ratings[1], 0.0, 1.0)
+		check(is_equal_approx(view.exhaust.lift_intensity, lift_fraction) and view.exhaust.lift_plumes[0].visible == (lift_fraction > 0.0) and view.exhaust.lift_plumes[1].visible == (lift_fraction > 0.0), "Real surface/liftoff exhaust differs from applied positive-Y force")
 		if state.surface.gear_deployed: check_deployed_gear(view.staged_model)
 		var menu: Button = view.controls_menu.saved_port_buttons["Liftoff with thrusters"]
 		check(menu.focus_mode == Control.FOCUS_ALL and menu.disabled == not state.surface.landed, "Controller landing action lost focus or authority")
@@ -83,11 +85,12 @@ func run() -> void:
 			second.free()
 		if rendered and not failed:
 			await capture_phase(view, owner, args[2], {"label": row.name}, captures)
+			if not captures.is_empty(): captures[-1].exhaust["lift"] = view.exhaust.lift_intensity
 		print("Surface phase: %s checksum=%s" % [row.name, state.checksum])
 	var output := FileAccess.open(args[2].path_join("surface-report.json"), FileAccess.WRITE)
 	if output != null:
 		var hashes := {}
-		for name in ["studies/captures/native_surface_capture.gd", "studies/captures/native_voyage_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_flight_view.gd", "scripts/characters/hopper_presentation.gd", "scripts/ui/pause_menu.gd", "scripts/world/planet_stream.gd", "shaders/terrain.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
+		for name in ["studies/captures/native_surface_capture.gd", "studies/captures/native_voyage_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_main_exhaust.gd", "scripts/characters/hopper_presentation.gd", "scripts/ui/pause_menu.gd", "scripts/world/planet_stream.gd", "shaders/terrain.gdshader", "shaders/native_close_composite.gdshader", "bin/libapsis_freedom_bridge.so"]:
 			hashes[name] = FileAccess.get_sha256("res://" + name)
 		output.store_string(JSON.stringify({"sources_sha256": hashes, "manifest_sha256": FileAccess.get_sha256(args[0].path_join("manifest.json")), "source_sha256": FileAccess.get_sha256(args[0].path_join("source.json")), "asset_license_records": "assets/native/freedom-starter-01/licenses", "scope": manifest.scope, "pass": not failed, "model_retained": not failed, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "captures": captures}, "\t") + "\n")
 		output.close()

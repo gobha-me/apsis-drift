@@ -124,6 +124,19 @@ static func star_light_basis(direction: Vector3) -> Basis:
 	return Basis.looking_at(-direction, Vector3.UP if absf(direction.y) < 0.99 else Vector3.RIGHT)
 
 
+# The admitted Wayfarer hull (-4.040,-1.259,-5.210)..(4.040,2.955,7.620)m
+# and deployed supports fit inside this conservative source-bound padding.
+const SURFACE_CRAFT_PADDING := 16.0
+
+static func surface_depth_range(eye: Vector3, distant_far: float) -> Vector2:
+	if not eye.is_finite() or not is_finite(distant_far) or distant_far < 200.0 or distant_far > 1000000000.0:
+		return Vector2.ZERO
+	var distance := eye.length()
+	if not is_finite(distance): return Vector2.ZERO
+	var far_clip := minf(distant_far, maxf(200.0, distance + SURFACE_CRAFT_PADDING))
+	return Vector2(maxf(0.05, far_clip / 500000.0), far_clip)
+
+
 static func valid_state(value: Dictionary) -> bool:
 	if not valid_star_direction(value.get("star_direction")) or not NativeEnvironment.valid(value): return false
 	if value.get("mode") != "freedom_flight" or not value.get("body_basis") is Basis or not value.get("station_basis") is Basis or not value.get("station_position") is Vector3:
@@ -1111,6 +1124,13 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
+	var distant_far := minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
+	var close_depth := Vector2(0.05, 200.0)
+	if surface_walking():
+		close_depth = surface_depth_range(state.surface_walk.eye_position, distant_far)
+		if close_depth == Vector2.ZERO:
+			pause_on_error("Surface camera depth is unavailable")
+			return
 	var condition: Dictionary = state.get("impact", {"selected": false})
 	if not impact_overlay.apply(condition, state.craft_id, state.frame_id, state.frame_version, cockpit, surface_walking()):
 		pause_on_error("Saved craft condition is unavailable")
@@ -1171,8 +1191,10 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if station != null:
 		station.transform = Transform3D(state.station_basis, state.station_position)
 		station.visible = state.get("station_available", true) and state.station_position.length() < 1000.0
-	terrain_camera.far = minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
+	terrain_camera.far = distant_far
 	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
+	camera.near = close_depth.x
+	camera.far = close_depth.y
 	var look_basis := Basis(Vector3.UP, -look_offset.x) * Basis(Vector3.RIGHT, -look_offset.y)
 	if surface_walking():
 		var walking: Dictionary = state.surface_walk
