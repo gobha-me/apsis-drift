@@ -151,6 +151,30 @@ func run() -> void:
 	approach_view.approach_button.pressed.emit()
 	check(not oracle.get_freedom_flight_state().port_approach.active and oracle.get_freedom_flight_state().coordinate_frame == "planet_relative_inertial", "Actual Cancel invented a system return or retained aid")
 	save_matches(oracle, approach_path, args[2].path_join("approach-canceled.json"))
+	# Restart only the oracle from the unchanged canonical system checkpoint.
+	if not check(oracle_shell.select_start(oracle, {"mode": "continue", "value": args[0].path_join("stepped.json"), "assets": args[1]}), "Jump oracle staged Continue refused: " + oracle_shell.error):
+		oracle_shell.free(); shell.free(); quit(1); return
+	var jump_view: Control = oracle_shell.current_view
+	jump_view.set_process(false)
+	var jump_source: Dictionary = oracle.get_freedom_flight_state()
+	var selected_known := false
+	for ordinal in jump_source.chart.rows.size():
+		if jump_source.chart.rows[ordinal].system_id == jump_source.jump.selected: jump_view.select_jump_destination(ordinal); selected_known = true; break
+	check(selected_known and str(oracle.get_last_error()).is_empty() and jump_source.coordinate_frame == "system_inertial" and oracle.get_freedom_flight_state() == jump_source and jump_source.jump.available and jump_view.jump_button.visible and not jump_view.jump_button.disabled, "Known selection/query moved system body or disabled available jump")
+	save_matches(oracle, args[0].path_join("stepped.json"), args[2].path_join("jump-query.json"))
+	for phase in ["spool", "idle"]:
+		var jump_model: int = jump_view.staged_model.get_instance_id()
+		jump_view.jump_button.pressed.emit()
+		var accepted_jump: Dictionary = oracle.get_freedom_flight_state()
+		check(jump_view.error.is_empty() and jump_view.paused and jump_view.staged_model.get_instance_id() == jump_model and accepted_jump.coordinate_frame == "planet_relative_inertial" and accepted_jump.jump.phase == phase and accepted_jump.resources.jump_charges == jump_source.resources.jump_charges, "Actual jump begin/cancel changed model, frame, phase, pause or charge")
+		for key in ["tick", "orientation_wxyz", "angular_velocity_body", "universe_seed", "system_id", "planet_id", "craft_id", "frame_id", "frame_version", "terrain_policy", "frame_policy"]: check(accepted_jump[key] == jump_source[key], "Jump begin/cancel changed motion or identity: " + key)
+		var jump_path: String = args[2].path_join("jump-" + phase + ".json")
+		check(oracle.save_freedom_as(jump_path), "Complete jump phase Save refused")
+		var jump_bytes := FileAccess.get_file_as_bytes(jump_path)
+		if not check(oracle_shell.select_start(oracle, {"mode": "continue", "value": jump_path, "assets": args[1]}), "Jump phase staged Continue refused: " + oracle_shell.error): oracle_shell.free(); shell.free(); quit(1); return
+		jump_view = oracle_shell.current_view
+		jump_view.set_process(false)
+		check(jump_view.paused and jump_view.activated and oracle.get_freedom_flight_state().jump.phase == phase and oracle.save_freedom_as(args[2].path_join("jump-" + phase + "-continued.json")) and FileAccess.get_file_as_bytes(args[2].path_join("jump-" + phase + "-continued.json")) == jump_bytes and FileAccess.get_file_as_bytes(jump_path) == jump_bytes, "Jump staged Continue changed complete phase/source bytes")
 	var capture_tick: String = str(owner.get_freedom_flight_state().tick)
 	view.port_command("capture_freedom_port")
 	var captured: Dictionary = owner.get_freedom_flight_state()
