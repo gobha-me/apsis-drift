@@ -14,9 +14,15 @@ The separately selected [release frame policy2](RIGID_FRAME_HANDOFF.md#explicit-
 persists actual undocked system coordinates in formats36/37/38 and retains
 complete voyage wrappers. Its temporary relative observations feed existing
 physics/terrain; canonical vectors and checksum remain explicit. This frame
-policy differs from terrain policy2. Ordinary New Game keeps relative frame
-policy1 while the selected path's landing, FTL, impact and approach consumers
-remain unfinished. Format35 imports still normalize once and do not select it.
+policy differs from terrain policy2. Explicit gear deployment selects the saved
+planet's relative contact frame at the same tick; a real airborne stow returns
+to system coordinates unless a selected condition or active approach retains
+the relative frame. These events preserve the complete voyage and use existing
+physics, without an automatic altitude boundary. Selecting the existing port
+approach aid uses the same saved relative frame; its availability check is
+read-only and cancellation retains that valid frame. Ordinary New Game keeps
+frame policy1; system-mode FTL and impact activation remain unsupported.
+Format35 imports still normalize once and do not select frame policy2.
 
 2026-09-30, #340; port lifecycle added 2026-10-01 in #342. The ordinary launcher
 selects format-17 station state, format-18 physical flight or explicit

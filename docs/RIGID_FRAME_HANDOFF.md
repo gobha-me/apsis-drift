@@ -269,10 +269,34 @@ uses the qualified relative observation; capture commits the existing relative
 port constraint and attachment together. Presentation consumes relative local
 vectors and publishes separate canonical frame/vector metadata and checksum.
 
-System-mode landing/contact, approach aid, FTL and impact activation refuse
-transactionally in this increment. A selected relative voyage with impacts or
-active jump/contact cannot detach into the unsupported mode. Ordinary gameplay
-keeps policy1 until these remaining reference-route consumers are integrated.
+For policy2, explicit gear deployment converts a system body to its saved
+planet's nonrotating relative frame at the same tick, then enables the existing
+contact path. A landing request uses this same deployment seam before its
+existing aid checks. Direct system-frame touchdown still refuses. A real
+airborne deployed-to-stowed gear transition returns the body to system
+coordinates; a selected impact condition or active port approach instead
+retains its supported relative frame. Stow preserves those owners and cancels
+the existing surface maneuver. Landed stow and already-stowed system requests
+refuse. Neither event changes world selection, attitude, body spin or time.
+
+The complete candidate must serialize before either gear handoff commits;
+refusal preserves body, gear, aid state and every voyage owner. Recovery,
+active travel, outside actors and station attachment retain their existing
+guards. This is an explicit gear event, with no automatic altitude boundary,
+new force law or new terrain/contact physics.
+
+For policy2, **Approach port with thrusters** assesses its existing physical
+bounds through a read-only relative view. Selecting it converts the whole voyage
+to the saved planet's relative frame at the unchanged tick, invokes the existing
+aid and validates the complete saved candidate before commit. Cancel retains
+that valid relative frame; Continue retains the body and starts with the
+transient aid off. Existing port capture constrains the relative body, and actual
+port release selects system coordinates again. No automatic frame boundary,
+new approach threshold or force law is introduced.
+
+System-mode FTL and impact activation still refuse transactionally. Physical
+port release still refuses a selected relative voyage with impacts or active jump/contact. Ordinary gameplay keeps policy1
+while the remaining reference-route consumers are integrated.
 The selected policy is not an extra game mode, player debug control, automatic
 migration or completion of #200's whole handoff matrix.
 

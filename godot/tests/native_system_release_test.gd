@@ -35,6 +35,27 @@ func compare_projection(actual: Dictionary, expected: Dictionary, live_step := f
 	check(actual_resources == expected_resources, "System voyage changed persistent resource readings")
 	check(NativeEnvironment.valid(actual), "System voyage lost shared environment owner/time")
 
+func check_gear_handoff(shell: Control, owner: Variant, assets: String, output: String) -> void:
+	check(owner.set_freedom_assistance(false), "Manual gear integration selection refused")
+	for stage in [{"name": "gear-deployed", "command": "request_freedom_landing", "frame": "planet_relative_inertial", "gear": true}, {"name": "gear-stowed", "command": "stow_freedom_landing_gear", "frame": "system_inertial", "gear": false}]:
+		var view: Control = shell.current_view
+		var model: int = view.staged_model.get_instance_id()
+		var before: Dictionary = owner.get_freedom_flight_state()
+		view.port_command(stage.command)
+		var accepted: Dictionary = owner.get_freedom_flight_state()
+		check(view.error.is_empty() and view.paused and view.staged_model.get_instance_id() == model and view.staged_model.valid_current_pose() and accepted.coordinate_frame == stage.frame and accepted.surface.gear_deployed == stage.gear and not accepted.surface.landed and accepted.surface.maneuver == "off", "Actual manual gear action lost frame, model, gear or pause: " + stage.name)
+		var path := output.path_join(stage.name + ".json")
+		check(owner.save_freedom_as(path), "Complete gear Save As refused: " + stage.name)
+		var encoded := FileAccess.get_file_as_bytes(path)
+		if not check(shell.select_start(owner, {"mode": "continue", "value": path, "assets": assets}), "Gear staged Continue refused: " + shell.error): return
+		view = shell.current_view
+		view.set_process(false)
+		var restored: Dictionary = owner.get_freedom_flight_state()
+		check(view is FlightView and view.paused and view.activated and view.staged_model.valid_current_pose() and restored.coordinate_frame == stage.frame and restored.surface.gear_deployed == stage.gear and not restored.surface.landed, "Gear Continue lost selected frame/readiness: " + stage.name)
+		for key in ["tick", "orientation_wxyz", "angular_velocity_body", "universe_seed", "system_id", "planet_id", "craft_id", "frame_id", "frame_version", "terrain_policy", "frame_policy", "assistance"]:
+			check(before[key] == accepted[key] and restored[key] == accepted[key], "Gear handoff/Continue changed physical identity or motion: " + key)
+		check(owner.save_freedom_as(output.path_join(stage.name + "-continued.json")) and FileAccess.get_file_as_bytes(output.path_join(stage.name + "-continued.json")) == encoded and FileAccess.get_file_as_bytes(path) == encoded, "Gear Continue changed complete save bytes/source: " + stage.name)
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -113,6 +134,23 @@ func run() -> void:
 	oracle_shell.current_view.set_process(false)
 	compare_projection(owner.get_freedom_flight_state(), oracle.get_freedom_flight_state(), true)
 	save_matches(owner, args[0].path_join("stepped.json"), args[2].path_join("stepped.json"))
+	check_gear_handoff(oracle_shell, oracle, args[1], args[2])
+	# Inspect only the oracle copy; preserve the live capture/export trace.
+	var approach_view: Control = oracle_shell.current_view
+	var approach_source: Dictionary = oracle.get_freedom_flight_state()
+	var approach_model: int = approach_view.staged_model.get_instance_id()
+	check(approach_source.coordinate_frame == "system_inertial" and approach_source.port_approach.available and approach_view.approach_button.visible and not approach_view.approach_button.disabled and oracle.get_freedom_flight_state() == approach_source, "System approach query/button unavailable or mutating")
+	save_matches(oracle, args[2].path_join("gear-stowed-continued.json"), args[2].path_join("approach-query.json"))
+	approach_view.approach_button.pressed.emit()
+	var approach_begun: Dictionary = oracle.get_freedom_flight_state()
+	check(approach_view.error.is_empty() and approach_view.paused and approach_view.staged_model.get_instance_id() == approach_model and approach_begun.coordinate_frame == "planet_relative_inertial" and approach_begun.port_approach.active and not approach_begun.attached, "Actual approach button lost relative handoff, arming, model or pause")
+	for key in ["tick", "orientation_wxyz", "angular_velocity_body", "universe_seed", "system_id", "planet_id", "craft_id", "frame_id", "frame_version", "terrain_policy", "frame_policy"]:
+		check(approach_source[key] == approach_begun[key], "Approach action changed motion or selected identity: " + key)
+	var approach_path: String = args[2].path_join("approach-begun.json")
+	check(oracle.save_freedom_as(approach_path), "Complete armed approach Save refused")
+	approach_view.approach_button.pressed.emit()
+	check(not oracle.get_freedom_flight_state().port_approach.active and oracle.get_freedom_flight_state().coordinate_frame == "planet_relative_inertial", "Actual Cancel invented a system return or retained aid")
+	save_matches(oracle, approach_path, args[2].path_join("approach-canceled.json"))
 	var capture_tick: String = str(owner.get_freedom_flight_state().tick)
 	view.port_command("capture_freedom_port")
 	var captured: Dictionary = owner.get_freedom_flight_state()

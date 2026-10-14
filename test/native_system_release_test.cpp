@@ -217,6 +217,191 @@ auto check_system_oracle(const NativeFreedomFlightSession& session,
   check(need(session.relative_state()) == independent_relative(session),
         "Shared relative adapter equals independent same-tick subtraction");
 }
+auto gear_handoff(const NativeFreedomFlightSession& source,
+                  const NativeFlightControls& held) -> void {
+  const auto unchanged = bytes(source);
+  auto deployed = source;
+  auto expected = deployed.document();
+  expected.flight = independent_relative(source);
+  need(deployed.set_landing_gear(true));
+  check(
+      deployed.document() == expected && deployed.surface()->gear_deployed &&
+          !deployed.surface()->landed &&
+          deployed.resources() == source.resources() &&
+          deployed.knowledge() == source.knowledge() &&
+          deployed.travel() == source.travel() &&
+          deployed.boarding() == source.boarding() &&
+          deployed.starting_assembly() == source.starting_assembly() &&
+          need(deployed.recovery_document()).recovery ==
+              need(source.recovery_document()).recovery,
+      "Explicit deploy selects same-tick relative body and retains all owners");
+  check(same(deployed.document().flight.orientation,
+             source.document().flight.orientation) &&
+            same(deployed.document().flight.angular_velocity_radians_per_second,
+                 source.document().flight.angular_velocity_radians_per_second),
+        "Gear handoff preserves exact attitude and body-resolved spin");
+  auto resumed = reopen(deployed);
+  need(deployed.advance(held));
+  need(resumed.advance(held));
+  check(bytes(deployed) == bytes(resumed),
+        "Held body controls continue identically after gear Save/Continue");
+  auto impacted = deployed;
+  need(impacted.enable_impact_consequences());
+  const auto condition = impacted.condition();
+  const auto relative = impacted.document().flight;
+  need(impacted.set_landing_gear(false));
+  check(impacted.document().flight == relative &&
+            impacted.condition() == condition &&
+            !impacted.surface()->gear_deployed,
+        "Stow preserves relative impact owner and never disables consequences");
+  (void)reopen(impacted);
+  const auto before_stow = deployed.document().flight;
+  need(deployed.set_landing_gear(false));
+  check_system_oracle(deployed, before_stow);
+  check(!deployed.surface()->gear_deployed && !deployed.surface()->landed,
+        "Airborne deployed-to-stowed transition selects system representation");
+  resumed = reopen(deployed);
+  need(deployed.advance(held));
+  need(resumed.advance(held));
+  check(
+      bytes(deployed) == bytes(resumed) && bytes(source) == unchanged,
+      "System continuation retains held controls and untouched source voyage");
+}
+auto port_handoff(const NativeFreedomFlightSession& source) -> void {
+  const auto original = bytes(source);
+  const auto& aid_before = source.port_approach();
+  const auto& maneuver_before = source.surface_maneuver();
+  need(source.port_approach_available());
+  check(bytes(source) == original && source.port_approach() == aid_before &&
+            source.surface_maneuver() == maneuver_before,
+        "System approach availability never changes body, owner or transient "
+        "state");
+  auto approached = source;
+  auto expected = source.document();
+  expected.flight = independent_relative(source);
+  need(approached.begin_port_approach());
+  check(approached.document() == expected &&
+            approached.port_approach().active &&
+            approached.port_approach().remaining_ticks ==
+                kNativePortApproachTicks &&
+            approached.resources() == source.resources() &&
+            approached.knowledge() == source.knowledge() &&
+            approached.travel() == source.travel() &&
+            approached.boarding() == source.boarding() &&
+            approached.docking() == source.docking() &&
+            approached.starting_assembly() == source.starting_assembly() &&
+            need(approached.recovery_document()).recovery ==
+                need(source.recovery_document()).recovery,
+        "Explicit approach arms existing relative aid at same tick with every "
+        "owner");
+  check(
+      same(approached.document().flight.orientation,
+           source.document().flight.orientation) &&
+          same(approached.document().flight.angular_velocity_radians_per_second,
+               source.document().flight.angular_velocity_radians_per_second),
+      "Approach representation preserves exact nonidentity attitude and body "
+      "spin");
+  auto resumed = reopen(approached);
+  check(!resumed.port_approach().active,
+        "Continue retains relative body but does not serialize transient "
+        "approach");
+  need(resumed.begin_port_approach());
+  auto canceled = approached;
+  canceled.cancel_port_approach();
+  check(!canceled.port_approach().active && canceled.document() == expected &&
+            bytes(canceled) == bytes(approached),
+        "Cancel keeps valid relative frame without inventing system-return "
+        "action");
+  // Active-jump refusal uses the existing real route selection, not an altered
+  // save or an invented travel owner. This clone never changes the source
+  // trace.
+  auto spooling = canceled;
+  need(spooling.begin_jump());
+  const auto spool_bytes = bytes(spooling);
+  const auto spool_aid = spooling.port_approach();
+  check(!spooling.begin_port_approach() && bytes(spooling) == spool_bytes &&
+            spooling.port_approach() == spool_aid,
+        "An actual active jump retains its owner and refuses approach");
+  auto pending = source;
+  const auto recovery = need(pending.recovery_document());
+  need(pending.record_loss(
+      FreedomLossCause::irrecoverable_destruction,
+      pending.document().origin.state.craft, pending.document().flight.tick,
+      need(freedom_recovery_source_checksum(recovery.voyage))));
+  const auto pending_bytes = bytes(pending);
+  check(!pending.port_approach_available() && !pending.begin_port_approach() &&
+            bytes(pending) == pending_bytes &&
+            pending.port_approach() == aid_before,
+        "Recorded pending recovery refuses system approach without "
+        "representation change");
+  auto gear = source;
+  need(gear.set_landing_gear(true));
+  const auto gear_bytes = bytes(gear);
+  check(!gear.port_approach_available() && !gear.begin_port_approach() &&
+            bytes(gear) == gear_bytes,
+        "Existing deployed-gear approach gate remains transactional");
+  NativeFlightControls invalid;
+  invalid.positive_translation.x = std::numeric_limits<double>::quiet_NaN();
+  const auto active_bytes = bytes(approached);
+  const auto active_aid = approached.port_approach();
+  check(!approached.advance(invalid) &&
+            !approached.advance({}, SimulationSeconds{.1}) &&
+            bytes(approached) == active_bytes &&
+            approached.port_approach() == active_aid &&
+            approached.surface_maneuver() == maneuver_before,
+        "Invalid controls or step retain active approach and whole voyage");
+  bool ready = false, propulsion = false;
+  unsigned ticks{};
+  while (approached.port_approach().active &&
+         ticks < kNativePortApproachTicks) {
+    const auto step = need(approached.advance({}));
+    const auto repeated = need(resumed.advance({}));
+    const auto& forces = step.actuation.central.propulsion;
+    const auto& repeated_forces = repeated.actuation.central.propulsion;
+    propulsion = propulsion || ((forces.positive_force_newtons != V{} ||
+                                 forces.negative_force_newtons != V{}) &&
+                                step.fuel_debit_quanta > 0);
+    check(bytes(approached) == bytes(resumed) &&
+              approached.port_approach() == resumed.port_approach() &&
+              approached.surface_maneuver() == resumed.surface_maneuver() &&
+              forces.positive_force_newtons ==
+                  repeated_forces.positive_force_newtons &&
+              forces.negative_force_newtons ==
+                  repeated_forces.negative_force_newtons &&
+              step.fuel_debit_quanta == repeated.fuel_debit_quanta &&
+              step.propulsion_refused == repeated.propulsion_refused,
+          "Every real approach tick retains complete resumed bytes, transients "
+          "and applied thrust");
+    ++ticks;
+    ready = need(approached.assess_port()).decision ==
+            OriginDockDecision::capture_ready;
+    if (ready && propulsion) break;
+  }
+  check(ready && propulsion && ticks > 0 && approached.port_approach().active &&
+            !approached.docking()->attached &&
+            bytes(approached) == bytes(resumed),
+        "Actual bounded aid uses propulsion and reaches capture gate without "
+        "auto-capture");
+  if (!ready || !propulsion || !approached.port_approach().active) return;
+  const auto capture_tick = approached.document().flight.tick;
+  need(approached.capture_port());
+  need(resumed.capture_port());
+  check(approached.docking()->attached && !approached.port_approach().active &&
+            approached.document().flight.tick == capture_tick &&
+            bytes(approached) == bytes(resumed),
+        "Explicit actual capture retains relative constraint and all resumed "
+        "owners");
+  const auto captured = bytes(approached);
+  check(!approached.port_approach_available() &&
+            !approached.begin_port_approach() && bytes(approached) == captured,
+        "Attached approach refusal leaves complete captured voyage unchanged");
+  const auto constrained = approached.document().flight;
+  need(approached.release_port());
+  check_system_oracle(approached, constrained);
+  (void)reopen(approached);
+  check(bytes(source) == original, "Rendezvous/cancel/guard/capture copies "
+                                   "never change exported source route");
+}
 auto checkpoint(const NativeFreedomFlightSession& session,
                 const std::filesystem::path& output, std::string_view name,
                 Json& manifest) -> void {
@@ -253,10 +438,8 @@ auto refused_commands(NativeFreedomFlightSession& session) -> void {
           "Nonfinite system control preserves complete voyage");
   refuses([&] { return session.advance({}, SimulationSeconds{.1}); },
           "Nonfixed system clock step preserves complete voyage");
-  refuses([&] { return session.set_landing_gear(true); },
-          "System gear command refuses transactionally");
-  refuses([&] { return session.request_landing(); },
-          "System landing aid refuses transactionally");
+  refuses([&] { return session.set_landing_gear(false); },
+          "Already stowed system gear cannot invent another handoff");
   const auto checksum = need(
       rigid_body_state_checksum({session.system()}, session.document().flight));
   refuses([&] { return session.commit_touchdown(checksum); },
@@ -267,8 +450,6 @@ auto refused_commands(NativeFreedomFlightSession& session) -> void {
           "System impact selection refuses transactionally");
   refuses([&] { return session.begin_jump(); },
           "System active FTL commitment refuses transactionally");
-  refuses([&] { return session.begin_port_approach(); },
-          "System approach aid refuses transactionally");
   FreedomSurfaceWalkSaveDocument outside{
       need(session.recovery_document()), 1, {}};
   const auto inside = need(encode_freedom_surface_walk_document_json(outside));
@@ -300,6 +481,9 @@ auto run(const std::filesystem::path& output) -> void {
   // Invalid inputs precede the real station/boarding/flight route.
   invalid_selection();
   auto station = need(NativeFreedomFlightSession::open(selected_start()));
+  const auto outside_bytes = bytes(station);
+  check(!station.begin_port_approach() && bytes(station) == outside_bytes,
+        "Existing outside/attached approach guard preserves station source");
   for (unsigned tick = 0; tick < 2960; ++tick)
     need(station.advance_walk({0, -1, 0}));
   need(station.begin_boarding());
@@ -320,6 +504,9 @@ auto run(const std::filesystem::path& output) -> void {
                 need(station.save_document())),
         "Actual selected starter retains complete recovery/travel/boarding "
         "chain");
+  const auto attached_bytes = bytes(station);
+  check(!station.set_landing_gear(true) && bytes(station) == attached_bytes,
+        "Attached selected voyage refuses gear without changing whole source");
   const auto pilot = station.boarding();
   const auto assembly = station.starting_assembly();
   const auto origin = station.document().origin;
@@ -397,9 +584,11 @@ auto run(const std::filesystem::path& output) -> void {
     const auto controls = tick < 3    ? held
                           : tick == 5 ? braking
                                       : NativeFlightControls{};
-    if (tick == 5)
+    if (tick == 5) {
       check(need(live.assess_port()).decision == OriginDockDecision::retreating,
             "Actual withdrawal must be braked before physical capture");
+      port_handoff(live);
+    }
     auto expected = independent_relative(live);
     const VacuumIntent intent{
         controls.positive_translation, controls.negative_translation,
@@ -430,6 +619,7 @@ auto run(const std::filesystem::path& output) -> void {
             live.document().flight.angular_velocity_radians_per_second != V{},
         "Held real rotation exercises nonidentity quaternion and nonzero spin");
   checkpoint(live, output, "stepped", manifest);
+  gear_handoff(live, held);
   check(
       live.boarding() == pilot && live.starting_assembly() == assembly &&
           live.craft_binding().selection() != nullptr &&
