@@ -15,6 +15,8 @@ the actual actor eye and basis after subtraction in double precision; Godot
 does not simulate another terrain or character body. Shared time continues
 planet rotation, daylight and existing observations. Pause and focus loss freeze
 that clock; focus restoration requires an explicit neutral resume.
+Pausing, focus loss, opening controls and exporting a save retain the actor's
+committed heading. The first neutral resumed tick continues facing that direction.
 
 Tangent walking speed is 2 metres/second with normalized diagonal demand. Dry
 support, a maximum 35-degree slope and a 0.30-metre step bound restrict individual

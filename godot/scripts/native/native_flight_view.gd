@@ -145,6 +145,10 @@ static func valid_state(value: Dictionary) -> bool:
 		return false
 	if not value.get("attached") is bool or not value.get("target_port") is int or value.target_port < 0 or value.target_port > 2 or not value.get("docking") is Dictionary:
 		return false
+	if not value.docking.is_empty():
+		var separation: Variant = value.docking.get("separation")
+		if not separation is float or not is_finite(separation) or separation < 0.0:
+			return false
 	for key in ["position_metres", "velocity_metres_per_second", "angular_velocity_body", "positive_force_body", "negative_force_body", "positive_force_ratings", "negative_force_ratings"]:
 		var vector: Variant = value.get(key)
 		if not vector is PackedFloat64Array or vector.size() != 3:
@@ -834,7 +838,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 		player_input.set_enabled(false)
 		player_input.looking = false
 		player_input.look_axes_needs_neutral = true
-	look_offset = Vector2.ZERO
+	look_offset = Vector2(-float(state.surface_walk.heading), 0.0) if surface_walking() else Vector2.ZERO
 	hide_exhaust()
 	if pause_button != null:
 		pause_button.text = "Resume flight"
@@ -1203,8 +1207,12 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		camera.transform = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
 	else:
 		# The overhead dock occupies the usual elevated chase viewpoint. Keep
-		# the near-port camera below the craft so it has a real exterior view.
-		var height := -7.0 if not state.docking.is_empty() and state.docking.separation < 100.0 else 9.0
+		# the close-port camera below the craft, then ease back to its normal
+		# height. Current separation alone makes approach/departure reversible
+		# and pause/cadence independent, without the old16m jump at100m.
+		var height := 9.0
+		if not state.docking.is_empty():
+			height = lerpf(-7.0, 9.0, smoothstep(100.0, 200.0, state.docking.separation))
 		camera.position = state.body_basis * (look_basis * Vector3(17.0, height, 28.0))
 		camera.look_at(Vector3.ZERO, state.body_basis.y)
 	terrain_camera.transform = camera.transform
