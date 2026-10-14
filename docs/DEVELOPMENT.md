@@ -103,6 +103,23 @@ The runner does not build or synchronize with concurrent builds.
 A crash, timeout, script error or missing completion marker
 fails even when other output looks successful.
 
+The selected-frame nineteen-phase surface route is an explicit opt-in contract:
+
+```sh
+python3 tools/test_godot_native.py \
+  --godot "$GODOT_BIN" --build-dir build-native-gcc \
+  --test native_surface_loop --selected-surface-loop --timeout 600
+```
+
+Run it separately with the configured Clang build for publication. The option
+requires exactly `--test native_surface_loop`; it reuses that fixture, bridge and
+asset preparation. Each process keeps the same 600-second deadline. Selected
+playback starts by Continue from the actual exported station starter and checks
+complete saves through the physical surface/return route. It changes neither
+ordinary New Game's frame policy1 nor the default runtime suite. See the
+[frame contract](RIGID_FRAME_HANDOFF.md#selected-surface-loop-composition-contract)
+for canonical ownership, replay checks and qualification limits.
+
 These headless contracts exercise real C++/GDScript integration and fixtures.
 They do not qualify GPU appearance, physical controllers, audio devices or
 frame-rate performance. A launch with `--headless-validate` checks start selection

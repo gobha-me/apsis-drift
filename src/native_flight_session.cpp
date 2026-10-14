@@ -436,8 +436,41 @@ auto NativeFreedomFlightSession::relative_state() const
   // Ordinary relative observations retain the existing direct-body path.
   if (document_.flight.frame.kind == RigidFrameKind::planet_relative_inertial)
     return document_.flight;
-  auto body = relative_freedom_flight_state(document_, system_);
-  if (!body) return std::unexpected{body.error().detail};
+  // The complete owner was authenticated at open or a committing command.
+  // Ordinary ticks use that owner without document-level world rederivation.
+  const auto& model = document_.model;
+  const auto& world = document_.world;
+  const auto& source = document_.flight;
+  if (model.frame_policy != kFreedomReleaseSystemFramePolicy || !world ||
+      world->version != kFreedomActiveWorldVersion ||
+      world->system != system_.catalog.id ||
+      source.frame.kind != RigidFrameKind::system_inertial ||
+      source.frame.system != world->system ||
+      source.craft !=
+          CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion} ||
+      source.tick != document_.origin.state.tick ||
+      source.tick >= std::numeric_limits<SimulationTick>::max() - 1 ||
+      model.physical_catalog != system_.generator_version ||
+      model.physical_ephemeris != system_.ephemeris_version ||
+      model.rotation_owner != rotation_.owner_version ||
+      model.rotation_generator != rotation_.rotation.version ||
+      rotation_.rotation.system != world->system ||
+      rotation_.rotation.planet != world->planet ||
+      model.central.version != kCentralBodyDynamicsVersion ||
+      model.atmosphere.version != kAtmosphericFlightVersion ||
+      model.hold.version != kOrbitHoldVersion ||
+      (model.terrain_policy != kFreedomLegacyTerrainPolicy &&
+       model.terrain_policy != kFreedomLocalDetailTerrainPolicy))
+    return std::unexpected{"Session system observation owner or model refused"};
+  const auto body =
+      reframe_rigid_body(RigidBodyWorldContext{system_}, source,
+                         {{RigidFrameKind::planet_relative_inertial,
+                           world->system,
+                           world->planet,
+                           {}},
+                          source.tick});
+  if (!body)
+    return std::unexpected{"Session system observation handoff refused"};
   return *body;
 }
 
@@ -637,10 +670,24 @@ auto NativeFreedomFlightSession::advance_craft_tick(
          candidate.document_.flight.tick});
     if (!system_body) return std::unexpected{"System tick handoff refused"};
     candidate.document_.flight = *system_body;
-    const auto saved = candidate.save_document();
-    if (!saved) return std::unexpected{saved.error()};
-    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
-      return std::unexpected{encoded.error().detail};
+    // The relative transaction above validated the flight/history, resource
+    // tick and any new knowledge. Other voyage owners cannot change here.
+    // Recheck the final canonical body's model after origin cancellation,
+    // without projecting and JSON-encoding the whole voyage every tick.
+    const auto observed_body = candidate.relative_state();
+    if (!observed_body) return std::unexpected{observed_body.error()};
+    VacuumIntent observation;
+    observation.assistance = candidate.document_.model.assistance;
+    const auto atmosphere = evaluate_atmospheric_flight(
+        RigidBodyWorldContext{system_}, *observed_body, observation,
+        candidate.rotation_, candidate.document_.model.atmosphere,
+        candidate.document_.model.central);
+    if (!atmosphere ||
+        !validate_orbit_hold_request(
+            RigidBodyWorldContext{system_}, *observed_body, candidate.rotation_,
+            {1, atmosphere->space_boundary_altitude_metres},
+            candidate.document_.model.hold, candidate.document_.model.central))
+      return std::unexpected{"System tick final model refused"};
     *this = std::move(candidate);
     return result;
   }

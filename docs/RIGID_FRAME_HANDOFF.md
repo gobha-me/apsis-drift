@@ -1,11 +1,13 @@
 # Canonical rigid-body frame handoffs
 
-These are bounded provider slices of issue #200, not completion of its
-live-regime integration. `reframe_rigid_body` changes coordinates
-of an existing validated [rigid-body state](RIGID_BODY_STATE.md) at one
-authoritative tick. It does not advance time, dock, launch, integrate forces,
-change held controls, or modify a save format. The native flight lab and its
-16-metre terrain guard are untouched.
+These contracts define issue #200's coordinate providers and their persistent
+native flight integration. `reframe_rigid_body` changes coordinates of an
+existing validated [rigid-body state](RIGID_BODY_STATE.md) at one authoritative
+tick. The provider does not advance time, dock, launch, integrate forces or
+change held controls. The saved session owns those actions and commits a
+complete voyage only after its transition validates. Native presentation
+consumes that C++ identity through relative observations; it owns no second
+world origin.
 
 ## Original three-argument station boundary
 
@@ -209,21 +211,28 @@ refuses this frame. A later central-body approximation must specify that motion
 before saved planetary flight is adopted. There is no launch/dock/contact gate,
 gravity call, implicit local tangent anchor or renderer-derived origin here.
 
-## Remaining integration
+## Persistent native integration
 
-The [explicit system-frame import](SYSTEM_FLIGHT_IMPORT.md) now consumes a
-complete format35 source into ordinary saved native flight at the same tick.
-Saved docking/release, entry/ascent and tangent presentation use their existing
-application owners; they do not require a presentation-owned coordinate frame.
-The separate explicit release-selected policy below adds live reverse departure;
-the wider insertion/ascent matrix remains open under #200. Format35 remains
-input-only and does not select that runtime policy or change force laws.
+The [explicit system-frame import](SYSTEM_FLIGHT_IMPORT.md) consumes a complete
+format35 source into ordinary saved native flight at the same tick. Format35
+remains input-only and does not select the release frame policy or change force
+laws. The separately selected policy below preserves live system departure,
+relative insertion and their valid saved reverse paths through explicit craft
+actions. Entry/ascent continue through the same authoritative atmosphere and
+rotation providers; no altitude/SOI switch resets pose or motion.
 
-The native lab is still planet-centred **nonrotating**, not `planet_fixed`.
-It is not switched by this provider. The retained lab is distinct from the
-current persistent native journey. #213 still owns native lighting/rotation consumers;
-#255 still owns cross-host math-library dependence. No renderer-derived
-transform or synthetic spin fallback is introduced here.
+Saved docking/release, surface actions and anchored tangent presentation keep
+their existing application owners. Canonical flight stays system-inertial or
+nonrotating planet-relative; fixed/tangent representations are qualified views,
+not a new unsaved canonical anchor. Body-resolved semantic controls retain their
+meaning across the aligned translation. Pause, focus and Continue retain their
+existing explicit input-neutralization rules without changing physical motion.
+
+The retained native lab is distinct from this persistent journey and remains
+planet-centred **nonrotating**. Physical rotating transforms do not authorize a
+rotating-frame force integrator. #255 owns cross-host math-library dependence;
+FTL/contact physics and camera/hardware acceptance remain separate. No
+renderer-derived transform or synthetic spin fallback is introduced here.
 
 ## Tests
 
@@ -261,8 +270,25 @@ transform their accepted result back at the final tick. This retains the same
 physical approximation; it does not switch to force-free space or add N-body
 physics. Quaternion and body-resolved spin survive the aligned translation.
 
-The entire candidate, including attachment, pilot/assembly, resources, knowledge,
-travel and recovery, must validate before commit. Save/Continue retains the
+Admission authenticates the complete saved owner and retains its physical system
+and rotation recipe in the session. Ordinary system observations use that owner
+with explicit policy/world/model/tick checks and the same validated rigid
+transform. They avoid resolving a new document-level world for every read;
+downstream providers retain their own context validation. Ordinary system ticks
+retain the relative transaction's flight/history, resource and scheduled
+knowledge checks. The final canonical body's relative atmosphere and orbit-hold
+selection are checked again after system-origin cancellation, before the whole
+candidate commits. Unchanged voyage histories travel with that candidate.
+
+These ticks do not project and JSON-encode the entire voyage solely to repeat
+those proofs. Public document helpers, untrusted Continue admission, actual
+Save As and explicit frame/owner-changing commands retain their strict complete
+validation. This reuse changes no default, arithmetic, tick, ledger or save
+format; relative policy1 follows its existing path.
+
+Explicit frame/owner-changing commands validate the entire candidate, including
+attachment, pilot/assembly, resources, knowledge, travel and recovery, before
+commit. Save/Continue retains the
 canonical system state through the existing complete voyage wrappers; it never
 reconstructs a bare flight and drops the remaining owners. Real port assessment
 uses the qualified relative observation; capture commits the existing relative
@@ -314,10 +340,10 @@ With a selected condition, physical port release keeps the validated relative
 constrained body at the same tick, preserves the condition and complete voyage,
 and validates the detached candidate before commit. Existing condition damage
 permissions are unchanged. Contact and active-jump release refusals remain.
-Ordinary gameplay keeps policy1
-while the remaining reference-route consumers are integrated.
-The selected policy is not an extra game mode, player debug control, automatic
-migration or completion of #200's whole handoff matrix.
+Ordinary New Game keeps policy1. The selected policy is an explicit persisted
+representation, not an extra game mode, player debug control or automatic
+migration. Unsupported direct frame pairs continue to refuse; no additional
+frame policy or altitude gate is implied.
 
 `native-system-release-contract` exercises real station walking/boarding,
 undock, held actuator steps, complete resume and actual capture. Its independent
@@ -326,3 +352,27 @@ oracle adds/subtracts the final C++ ephemeris once, using the existing
 craft/tick, quaternion and body spin retain exact equality. The paired native
 `native_system_release` consumer checks the actual shell/model and canonical
 saves. These automated contracts do not qualify GPU pixels or controller feel.
+
+## Selected surface-loop composition contract
+
+The existing nineteen-phase surface-loop fixture has an opt-in selected-policy
+route, invoked through the [native runtime runner](DEVELOPMENT.md#native-runtime-contracts).
+It selects the real complete station starter and existing knowledge/world owner;
+its native replay uses Continue on that actual station-start save. Ordinary
+New Game and the original policy1 route retain their existing startup.
+
+The route uses the same public commands and physical pilot for station walking,
+boarding, release, atmospheric entry/cruise, certified landing, on-foot departure
+and return, reboarding, thrust-driven liftoff, ascent and real home capture.
+Canonical checkpoint saves record the actual frame; local pilot calculations
+and prospective landing queries use the qualified relative state. A prospective
+query never replaces the live craft or supplies a fabricated travelled history.
+
+At each phase the contract checks complete uninterrupted/Continue saves and an
+independent next tick. Native playback compares full Save bytes and checksums,
+plus canonical pose/spin against the C++ Continue oracle. It does not require a
+separate Godot JSON decimal parse to reproduce binary64 bits. View refresh and
+rendering retain the authoritative save. Qualification requires both compilers'
+complete route/native receipts and unchanged ordinary regression outputs within
+the existing process deadline; a partial route or a matching screenshot is
+insufficient. Hardware/controller and GPU appearance acceptance remain separate.

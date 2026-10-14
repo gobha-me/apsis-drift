@@ -20,8 +20,11 @@
 // An opt-in integration fixture, not a gameplay autopilot. Every movement uses
 // the public session commands. Checkpoints are actual Save As/Continue results,
 // never practice starts, pose assignments or velocity injection.
-// The separate --terrain-feature mode explicitly initializes a measurement
-// viewpoint; it is neither a flown arrival nor the default voyage evidence.
+// --system-frame explicitly selects the existing station starter's frame
+// policy; it neither changes ordinary New Game nor initializes a ground
+// arrival. The separate --terrain-feature mode explicitly initializes a
+// measurement viewpoint; it is neither a flown arrival nor the default voyage
+// evidence.
 namespace {
 using namespace apsis_drift;
 using V = RigidVector3;
@@ -223,7 +226,8 @@ struct Trace {
     const auto view = godot_spike::project_saved_flight(session);
     return rotate(
         godot_spike::inverse_saved(view.rotation.geometry.fixed_to_system),
-        session.document().flight.position_metres);
+        need(session.relative_state(), "Relative position refused")
+            .position_metres);
   }
   auto terrain_elevation() -> double {
     const auto view = godot_spike::project_saved_flight(session);
@@ -305,6 +309,19 @@ struct Trace {
              "Next checksum refused");
     const auto observed = need(session.observe(), "Observation refused");
     const auto& body = session.document().flight;
+    const bool selected = session.document().model.frame_policy ==
+                          kFreedomReleaseSystemFramePolicy;
+    const bool system_phase =
+        label == "departed" || label == "atmosphere-entry" ||
+        label == "cruise-start" || label == "cruise-end" ||
+        label == "landing-ready" || label == "surface-airborne" ||
+        label == "space-exit" || label == "home-intercept" ||
+        label == "near-port";
+    if (selected)
+      check(body.frame.kind == (system_phase
+                                    ? RigidFrameKind::system_inertial
+                                    : RigidFrameKind::planet_relative_inertial),
+            "Selected surface boundary has the wrong canonical frame");
     const auto checksum =
         need(rigid_body_state_checksum(RigidBodyWorldContext{session.system()},
                                        body),
@@ -327,6 +344,11 @@ struct Trace {
          {"terrain_elevation_metres", terrain_elevation()},
          {"attached", session.docking() && session.docking()->attached},
          {"walking", session.walker().has_value()}});
+    if (selected) {
+      auto& row = checkpoints.back();
+      row["coordinate_frame"] =
+          system_phase ? "system_inertial" : "planet_relative_inertial";
+    }
     if (uninterrupted) {
       auto& row = checkpoints.back();
       row["system_id"] = std::to_string(body.frame.system.value);
@@ -414,6 +436,8 @@ auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
 auto landing_goal(Trace& trace) -> LandedCraftAnchor {
   const auto view = godot_spike::project_saved_flight(trace.session);
   const auto position = trace.fixed_position();
+  const auto relative = need(trace.session.relative_state(),
+                             "Prospective relative source refused");
   const auto radial = unit(position);
   const auto right =
       unit(cross(radial, std::abs(radial.y) < .9 ? V{0, 1, 0} : V{1, 0, 0}));
@@ -447,8 +471,7 @@ auto landing_goal(Trace& trace) -> LandedCraftAnchor {
         const auto w = 1 + n.y, magnitude = std::hypot(w, n.z, n.x);
         if (magnitude < 1e-8) continue;
         auto fixed =
-            need(reframe_rigid_body({trace.session.system()},
-                                    trace.session.document().flight,
+            need(reframe_rigid_body({trace.session.system()}, relative,
                                     {{RigidFrameKind::planet_fixed,
                                       trace.session.system().catalog.id,
                                       view.planet.id,
@@ -463,10 +486,9 @@ auto landing_goal(Trace& trace) -> LandedCraftAnchor {
         fixed.linear_velocity_metres_per_second = {};
         fixed.angular_velocity_radians_per_second = {};
         const auto source =
-            need(reframe_rigid_body(
-                     {trace.session.system()}, fixed,
-                     {trace.session.document().flight.frame, fixed.tick},
-                     trace.session.rotation()),
+            need(reframe_rigid_body({trace.session.system()}, fixed,
+                                    {relative.frame, fixed.tick},
+                                    trace.session.rotation()),
                  "Prospective inertial frame refused");
         const auto checksum =
             need(rigid_body_state_checksum({trace.session.system()}, source),
@@ -487,13 +509,33 @@ auto landing_goal(Trace& trace) -> LandedCraftAnchor {
       "No supported dry ground access in bounded nearby site inspection");
 }
 
+auto surface_start(bool system_frame) -> NativeStartup {
+  auto selected = need(native_new_game(Seed{42}), "New Game refused");
+  if (system_frame) {
+    auto& knowledge = std::get<FreedomKnowledgeSaveDocument>(selected.document);
+    auto& assembly = std::get<FreedomStartingAssemblySaveDocument>(
+        knowledge.voyage.voyage.base);
+    auto& flight = assembly.journey.voyage.flight;
+    check(flight.model.frame_policy == kFreedomRelativeFramePolicy,
+          "Ordinary New Game changed frame policy");
+    flight.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+    flight.world = FreedomActiveWorldSelection{1, flight.flight.frame.system,
+                                               *flight.flight.frame.planet};
+    // Explicit ownership selects its existing knowledge recipe/domain. Keep
+    // every granted entry, craft, actor, pose, resource and history unchanged.
+    knowledge.knowledge.recipe.version = kFreedomTravelKnowledgeVersion;
+    knowledge.knowledge.recipe.world_domain = 1;
+  }
+  return selected;
+}
+
 auto run(const std::filesystem::path& output, bool record_commands,
-         bool measure_endurance, bool surface_loop = false) -> void {
-  Trace trace{need(NativeFreedomFlightSession::open(
-                       need(native_new_game(Seed{42}), "New Game refused")),
-                   "New session refused"),
-              output,
-              need(TerrainTileCache::create(), "Terrain cache refused")};
+         bool measure_endurance, bool surface_loop = false,
+         bool system_frame = false) -> void {
+  Trace trace{
+      need(NativeFreedomFlightSession::open(surface_start(system_frame)),
+           "New session refused"),
+      output, need(TerrainTileCache::create(), "Terrain cache refused")};
   if (measure_endurance || surface_loop) trace.endurance.emplace();
   if (surface_loop) trace.uninterrupted.emplace(trace.session);
   trace.ground_route = surface_loop;
@@ -526,9 +568,10 @@ auto run(const std::filesystem::path& output, bool record_commands,
   const auto station = generate_origin_station(Seed{42});
   const auto geometry =
       need(origin_station_geometry(station), "Geometry refused");
-  const auto plane =
-      unit(cross(session.document().flight.position_metres,
-                 session.document().flight.linear_velocity_metres_per_second));
+  const auto departure =
+      need(session.relative_state(), "Departure observation refused");
+  const auto plane = unit(cross(departure.position_metres,
+                                departure.linear_velocity_metres_per_second));
   const auto frame = need(resolve_craft_frame(session.document().flight.craft),
                           "Frame refused")
                          .properties;
@@ -544,7 +587,8 @@ auto run(const std::filesystem::path& output, bool record_commands,
   const int pilot_seconds = surface_loop ? 9000 : 6000;
   for (int tick = 0; tick < 120 * pilot_seconds; ++tick) {
     // Value copy stays valid when a checkpoint reloads the identical session.
-    const auto body = session.document().flight;
+    const auto body =
+        need(session.relative_state(), "Pilot relative state refused");
     const auto observed = need(session.observe(), "Observation refused");
     const auto p = body.position_metres;
     const auto v = body.linear_velocity_metres_per_second;
@@ -858,6 +902,16 @@ auto run(const std::filesystem::path& output, bool record_commands,
   if (surface_loop) {
     report["route"] = "surface-loop";
     report["uninterrupted_match"] = true;
+  }
+  if (system_frame) {
+    report["schema_version"] = 5;
+    report["route"] = "selected-surface-loop";
+    report["frame_policy"] = kFreedomReleaseSystemFramePolicy;
+    report["scope"] =
+        "Explicit policy-2 selection of the existing full station starter; "
+        "physical landing/walking/liftoff/return with exact Save/Continue; "
+        "no ground initialization or ordinary New Game default change; "
+        "test pilot only, no manual/controller qualification";
   }
   if (commands)
     report["command_stream"] = {{"file", "commands.jsonl"},
@@ -1434,9 +1488,10 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "Expected one absolute empty output "
           "directory and optional --commands/--endurance/--neighbor/--pilot/"
-          "--aligned/--offset/--surface-loop or distinct --terrain-feature");
+          "--aligned/--offset/--surface-loop [--system-frame] or distinct "
+          "--terrain-feature");
     bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
-        feature{};
+        feature{}, system_frame{};
     std::optional<IntersystemArrivalQuality> grade;
     for (int i = 2; i < argc; ++i) {
       const std::string_view option{argv[i]};
@@ -1446,6 +1501,8 @@ int main(int argc, char** argv) {
         endurance = true;
       else if (option == "--surface-loop" && !surface_loop)
         surface_loop = true;
+      else if (option == "--system-frame" && !system_frame)
+        system_frame = true;
       else if (option == "--terrain-feature" && !feature)
         feature = true;
       else if (option == "--neighbor" && !neighbor)
@@ -1468,8 +1525,10 @@ int main(int argc, char** argv) {
     if (surface_loop && (neighbor || pilot || grade))
       throw std::invalid_argument(
           "--surface-loop is a distinct planetary fixture mode");
-    if (feature &&
-        (commands || endurance || neighbor || pilot || grade || surface_loop))
+    if (system_frame && !surface_loop)
+      throw std::invalid_argument("--system-frame requires --surface-loop");
+    if (feature && (commands || endurance || neighbor || pilot || grade ||
+                    surface_loop || system_frame))
       throw std::invalid_argument(
           "--terrain-feature is a distinct initialized measurement mode");
     if (pilot && !neighbor)
@@ -1482,7 +1541,7 @@ int main(int argc, char** argv) {
     else if (neighbor)
       run_neighbor(output, commands, pilot, grade);
     else
-      run(output, commands, endurance, surface_loop);
+      run(output, commands, endurance, surface_loop, system_frame);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
