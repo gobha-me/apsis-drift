@@ -18,6 +18,7 @@ var source_document: Dictionary = {}
 var preferences_writable := true
 var bindings: Dictionary = {}
 var device := -1
+var available_pads := {}
 # -2 retains launch-time discovery; a journey handoff supplies its existing owner.
 var initial_device := -2
 var enabled := true
@@ -42,6 +43,7 @@ func _ready() -> void:
 	if persist:
 		load_settings()
 	var pads := Input.get_connected_joypads()
+	for pad in pads: available_pads[pad] = true
 	device = initial_device if initial_device != -2 else (pads[0] if not pads.is_empty() else -1)
 	install()
 	if device >= 0:
@@ -251,6 +253,7 @@ func install() -> void:
 	bindings_changed.emit()
 
 func connection_changed(id: int, connected: bool) -> void:
+	available_pads[id] = connected
 	if id == device and not connected:
 		device = -1
 		install()
@@ -283,6 +286,13 @@ func _input(event: InputEvent) -> void:
 		return
 	var pad := event is InputEventJoypadButton or event is InputEventJoypadMotion
 	if pad and event.device != device:
+		# An already-connected replacement gets no new hotplug edge. Start
+		# may adopt it only after loss of the selected owner, never take over.
+		if device < 0 and available_pads.get(event.device, false) and event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START:
+			device = event.device
+			install()
+			safety_pause.emit("Controller selected. Release controls, then Resume explicitly.")
+			get_viewport().set_input_as_handled()
 		return
 	var pressed := event.is_pressed() and not event.is_echo()
 	var escape: bool = event is InputEventKey and event.physical_keycode == KEY_ESCAPE and pressed

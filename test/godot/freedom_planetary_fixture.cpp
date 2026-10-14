@@ -131,17 +131,32 @@ struct Trace {
   std::optional<NativeFreedomFlightSession> uninterrupted{};
   bool ground_route{};
   std::optional<PhysicalFlightProfile> profile{};
+  bool continuation_route{};
+  SimulationTick continuation_initial_tick{};
+  bool continuation_assistance{true};
+  std::uint64_t initial_flight_quanta{kFreedomFlightCapacityQuanta};
   auto flight(const NativeFlightControls& c)
       -> std::expected<NativeFlightStep, std::string> {
     auto result = session.advance(c);
+    if (!result && continuation_route)
+      throw std::runtime_error("Continuation flight refused at tick " +
+                               std::to_string(session.document().flight.tick) +
+                               ": " + result.error());
     if (result && uninterrupted)
       (void)need(uninterrupted->advance(c), "Uninterrupted flight refused");
+    if (result && continuation_route && result->propulsion_refused)
+      throw std::runtime_error(
+          "Continuation propulsion refused at tick " +
+          std::to_string(session.document().flight.tick) +
+          "; remaining fuel Q=" +
+          std::to_string(session.resources()->flight_quanta));
     if (result && endurance) {
       endurance->sample(result->actuation.central.propulsion);
       if (session.resources())
         check(!result->propulsion_refused &&
+                  endurance->effort_quanta <= initial_flight_quanta &&
                   session.resources()->flight_quanta ==
-                      kFreedomFlightCapacityQuanta - endurance->effort_quanta,
+                      initial_flight_quanta - endurance->effort_quanta,
               "Fuel-enabled voyage differs from independent actual-work meter");
     }
     if (result && commands)
@@ -315,6 +330,12 @@ struct Trace {
              "Next checksum refused");
     const auto observed = need(session.observe(), "Observation refused");
     const auto& body = session.document().flight;
+    if (continuation_route)
+      check(body.tick >= continuation_initial_tick &&
+                body.tick - continuation_initial_tick <= 750'000 &&
+                session.document().model.assistance == continuation_assistance,
+            "Continuation changed profile or exceeded its750000 elapsed-tick "
+            "budget");
     const bool selected = session.document().model.frame_policy ==
                           kFreedomReleaseSystemFramePolicy;
     const bool system_phase =
@@ -325,7 +346,7 @@ struct Trace {
         label == "near-port" || label == "orbit-before-hold" ||
         label == "orbit-hold-selected" || label == "orbit-hold-running" ||
         label == "orbit-hold-disabled";
-    if (selected)
+    if (selected && !continuation_route)
       check(body.frame.kind == (system_phase
                                     ? RigidFrameKind::system_inertial
                                     : RigidFrameKind::planet_relative_inertial),
@@ -354,8 +375,16 @@ struct Trace {
          {"walking", session.walker().has_value()}});
     if (selected) {
       auto& row = checkpoints.back();
+      if (continuation_route)
+        check(body.frame.kind == RigidFrameKind::system_inertial ||
+                  body.frame.kind == RigidFrameKind::planet_relative_inertial,
+              "Continuation checkpoint has an unsupported canonical frame");
       row["coordinate_frame"] =
-          system_phase ? "system_inertial" : "planet_relative_inertial";
+          (continuation_route
+               ? body.frame.kind == RigidFrameKind::system_inertial
+               : system_phase)
+              ? "system_inertial"
+              : "planet_relative_inertial";
     }
     if (uninterrupted) {
       auto& row = checkpoints.back();
@@ -1108,86 +1137,170 @@ auto run(const std::filesystem::path& output, bool record_commands,
 }
 } // namespace
 namespace {
+auto checkpoint_bytes(const std::filesystem::path& path) -> std::string {
+  std::ifstream input(path, std::ios::binary);
+  check(static_cast<bool>(input), "Continuation checkpoint cannot be read");
+  std::string bytes(kMaximumSaveDocumentBytes + 1, '\0');
+  input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  check(!input.bad() && input.gcount() > 0 &&
+            static_cast<std::size_t>(input.gcount()) <=
+                kMaximumSaveDocumentBytes,
+        "Continuation checkpoint is empty, unreadable or oversized");
+  bytes.resize(static_cast<std::size_t>(input.gcount()));
+  return bytes;
+}
+auto neighbor_start(const std::optional<std::filesystem::path>& source)
+    -> NativeFreedomFlightSession {
+  if (!source)
+    return need(NativeFreedomFlightSession::open(
+                    need(native_new_game(Seed{42}), "New Game refused")),
+                "New session refused");
+  auto selected = native_continue(*source);
+  if (!selected)
+    throw std::runtime_error("Continuation refused: " + selected.error());
+  check(std::holds_alternative<FreedomSurfaceWalkSaveDocument>(
+            selected->document),
+        "Continuation requires the genuine format30 surface voyage");
+  auto session = NativeFreedomFlightSession::open(std::move(*selected));
+  if (!session)
+    throw std::runtime_error("Continuation session refused: " +
+                             session.error());
+  return std::move(*session);
+}
 auto run_neighbor(const std::filesystem::path& output, bool record_commands,
-                  bool pilot, std::optional<IntersystemArrivalQuality> grade)
+                  bool pilot, std::optional<IntersystemArrivalQuality> grade,
+                  const std::optional<std::filesystem::path>& continue_from)
     -> void {
-  Trace trace{need(NativeFreedomFlightSession::open(
-                       need(native_new_game(Seed{42}), "New Game refused")),
-                   "New session refused"),
-              output,
+  const auto source_bytes =
+      continue_from ? checkpoint_bytes(*continue_from) : std::string{};
+  Trace trace{neighbor_start(continue_from), output,
               need(TerrainTileCache::create(), "Terrain cache refused")};
   trace.endurance.emplace();
   trace.uninterrupted.emplace(trace.session);
+  auto& session = trace.session;
+  const auto ids = generate_first_intersystem_identities(Seed{42});
+  const auto initial_tick = session.document().flight.tick;
+  const auto initial_model = session.document().model;
+  trace.continuation_route = continue_from.has_value();
+  trace.continuation_initial_tick = initial_tick;
+  trace.continuation_assistance = initial_model.assistance;
+  trace.ground_route = continue_from.has_value();
+  OriginWalkerState entry{};
+  RigidOrientation station_q{};
+  if (continue_from) {
+    check(initial_tick <= 1'200'000 &&
+              session.document().origin.recipe.universe_seed == Seed{42} &&
+              session.system().catalog.id == ids.origin_system &&
+              initial_model.frame_policy == kFreedomReleaseSystemFramePolicy &&
+              initial_model.terrain_policy == 2 &&
+              initial_model.physical_catalog == 2 &&
+              initial_model.physical_ephemeris == 2 &&
+              initial_model.assistance == !pilot &&
+              session.document().flight.frame.kind ==
+                  RigidFrameKind::system_inertial &&
+              session.document().flight.craft ==
+                  CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion} &&
+              session.starting_assembly() ==
+                  NativeStartingAssemblySelection{} &&
+              session.surface_walk_selected() && !session.surface_walker() &&
+              !session.walker() && session.boarding() &&
+              session.boarding()->phase == FreedomBoardingPhase::seated &&
+              session.surface() && !session.surface()->landed &&
+              !session.surface()->gear_deployed && !session.condition() &&
+              !session.recovery_pending() && !session.travel() &&
+              (!session.docking() || !session.docking()->attached) &&
+              session.resources() && session.resources()->jump_charges == 3 &&
+              session.knowledge() && !initial_model.hold.target &&
+              session.surface_maneuver().kind == NativeSurfaceManeuverKind::off,
+          "Continuation needs the supported seated home ascent, stowed gear, "
+          "no actor/contact/loss/travel, existing profile and three charges");
+    const auto observation =
+        need(session.observe(), "Ascent observation refused");
+    check(observation.atmosphere.altitude_metres >=
+              observation.atmosphere.space_boundary_altitude_metres,
+          "Continuation must already have genuinely exited the atmosphere");
+    trace.initial_flight_quanta = session.resources()->flight_quanta;
+    entry = session.boarding()->station_entry;
+    // The optional --pilot flag must match; the saved profile is never
+    // rewritten.
+  }
   std::optional<Commands> commands;
   if (record_commands) {
     commands.emplace(output);
     trace.commands = &*commands;
   }
-  auto& session = trace.session;
-  const auto ids = generate_first_intersystem_identities(Seed{42});
-  trace.checkpoint("station-start");
-  for (int i = 0; i < 2960; ++i)
-    (void)need(trace.walk({0, -1, 0}), "Walk refused");
-  const auto entry = *session.walker();
-  need(session.begin_boarding());
-  trace.action("board");
-  for (unsigned i = 0; i < kGameplayBoardingTicks; ++i)
-    (void)need(trace.walk({}), "Seat route refused");
-  trace.checkpoint("seated");
-  const auto station_q = session.document().flight.orientation;
-  if (pilot) {
-    need(session.set_assistance(false));
-    trace.action("assistance_off");
+  if (continue_from) {
+    trace.checkpoint("surface-ascent");
+    check(checkpoint_bytes(output / "surface-ascent.json") == source_bytes,
+          "Declared Continue changed the complete source checkpoint");
+  } else {
+    trace.checkpoint("station-start");
+    for (int i = 0; i < 2960; ++i)
+      (void)need(trace.walk({0, -1, 0}), "Walk refused");
+    entry = *session.walker();
+    need(session.begin_boarding());
+    trace.action("board");
+    for (unsigned i = 0; i < kGameplayBoardingTicks; ++i)
+      (void)need(trace.walk({}), "Seat route refused");
+    trace.checkpoint("seated");
+    station_q = session.document().flight.orientation;
+    if (pilot) {
+      need(session.set_assistance(false));
+      trace.action("assistance_off");
+    }
+    need(session.release_port());
+    trace.action("release");
+    NativeFlightControls withdrawal;
+    withdrawal.negative_translation.y = .25;
+    for (int i = 0; i < 720; ++i)
+      (void)need(trace.flight(withdrawal), "Withdrawal refused");
+    trace.checkpoint("departed");
   }
-  need(session.release_port());
-  trace.action("release");
-  NativeFlightControls withdrawal;
-  withdrawal.negative_translation.y = .25;
-  for (int i = 0; i < 720; ++i)
-    (void)need(trace.flight(withdrawal), "Withdrawal refused");
-  trace.checkpoint("departed");
   const auto frame = need(resolve_craft_frame(session.document().flight.craft),
                           "Frame refused")
                          .properties;
   const auto station = generate_origin_station(Seed{42});
   const auto geometry =
       need(origin_station_geometry(station), "Station geometry refused");
-  // An explicit test pilot brakes relative to the departure planet. Each
-  // correction is real thrust/torque; no momentum/pose assignment or fuel
-  // grant.
-  const auto initial = session.document().flight;
-  const auto plane = unit(cross(initial.position_metres,
-                                initial.linear_velocity_metres_per_second));
-  unsigned settled{};
   NativeFlightControls held;
-  for (unsigned tick = 0; tick < 120 * 1200; ++tick) {
-    const auto body = session.document().flight;
-    const auto observed = need(session.observe(), "Brake observation refused");
-    const auto gravity =
-        need(evaluate_central_body_gravity(
-                 RigidBodyWorldContext{session.system()}, body),
-             "Brake gravity refused");
-    check(observed.atmosphere.altitude_metres >
-              observed.atmosphere.space_boundary_altitude_metres,
-          "Physical braking entered atmosphere before departure");
-    if (length(body.linear_velocity_metres_per_second) < 5 &&
-        length(body.angular_velocity_radians_per_second) < .005) {
-      if (++settled == 240) break;
-    } else
-      settled = 0;
-    if (tick % kMaxCatchUpSteps == 0) {
-      const auto acceleration =
-          sub(scale(body.linear_velocity_metres_per_second, -.1),
-              gravity.acceleration_metres_per_second_squared);
-      const auto back = scale(unit(acceleration), -1);
-      const auto up = unit(cross(back, plane));
-      const auto right = unit(cross(up, back));
-      held = controls(body, frame, observed.atmosphere, acceleration,
-                      {right, up, back});
+  if (!continue_from) {
+    // An explicit test pilot brakes relative to the departure planet. Each
+    // correction is real thrust/torque; no momentum/pose assignment or fuel
+    // grant.
+    const auto initial = session.document().flight;
+    const auto plane = unit(cross(initial.position_metres,
+                                  initial.linear_velocity_metres_per_second));
+    unsigned settled{};
+    for (unsigned tick = 0; tick < 120 * 1200; ++tick) {
+      const auto body = session.document().flight;
+      const auto observed =
+          need(session.observe(), "Brake observation refused");
+      const auto gravity =
+          need(evaluate_central_body_gravity(
+                   RigidBodyWorldContext{session.system()}, body),
+               "Brake gravity refused");
+      check(observed.atmosphere.altitude_metres >
+                observed.atmosphere.space_boundary_altitude_metres,
+            "Physical braking entered atmosphere before departure");
+      if (length(body.linear_velocity_metres_per_second) < 5 &&
+          length(body.angular_velocity_radians_per_second) < .005) {
+        if (++settled == 240) break;
+      } else
+        settled = 0;
+      if (tick % kMaxCatchUpSteps == 0) {
+        const auto acceleration =
+            sub(scale(body.linear_velocity_metres_per_second, -.1),
+                gravity.acceleration_metres_per_second_squared);
+        const auto back = scale(unit(acceleration), -1);
+        const auto up = unit(cross(back, plane));
+        const auto right = unit(cross(up, back));
+        held = controls(body, frame, observed.atmosphere, acceleration,
+                        {right, up, back});
+      }
+      (void)need(trace.flight(held), "Physical source braking refused");
     }
-    (void)need(trace.flight(held), "Physical source braking refused");
+    check(settled == 240, "Source braking exceeded bounded time");
   }
-  check(settled == 240, "Source braking exceeded bounded time");
   trace.checkpoint("source-ready");
   Json targeting = Json::array();
   auto steer_grade = [&](SystemId destination) {
@@ -1335,7 +1448,9 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
   bool captured{};
   held = {};
   for (unsigned tick = 0; tick < 120 * 2400; ++tick) {
-    const auto body = session.document().flight;
+    const auto body = continue_from ? need(session.relative_state(),
+                                           "Relative rendezvous pose refused")
+                                    : session.document().flight;
     const auto observed =
         need(session.observe(), "Rendezvous observation refused");
     const auto gravity =
@@ -1400,8 +1515,9 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
                   scale(sub(dock.linear_velocity_metres_per_second, v), .06)),
               station_acceleration),
           gravity.acceleration_metres_per_second_squared);
-      axes = {rotate(station_q, {1, 0, 0}), rotate(station_q, {0, 1, 0}),
-              rotate(station_q, {0, 0, 1})};
+      const auto port_q = continue_from ? dock.orientation : station_q;
+      axes = {rotate(port_q, {1, 0, 0}), rotate(port_q, {0, 1, 0}),
+              rotate(port_q, {0, 0, 1})};
     }
     if (session.port_approach_available()) {
       trace.checkpoint("near-port");
@@ -1420,7 +1536,8 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
       break;
     }
     if (tick % kMaxCatchUpSteps == 0)
-      held = controls(body, frame, observed.atmosphere, acceleration, axes);
+      held = controls(body, frame, observed.atmosphere, acceleration, axes,
+                      continue_from && initial_model.assistance);
     (void)need(trace.flight(held),
                "Physical moving-station rendezvous refused");
   }
@@ -1442,6 +1559,9 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
     (void)need(trace.walk({}), "Disembarking refused");
   check(session.walker()->foot_position_metres == entry.foot_position_metres,
         "Physical return lost actual station entry");
+  if (continue_from)
+    check(*session.walker() == entry,
+          "Continuation return changed its actual saved station-entry actor");
   for (unsigned i = 0; i < 120; ++i)
     (void)need(trace.walk({0, .25, 0}), "Returned station walk refused");
   trace.checkpoint("station-return");
@@ -1462,6 +1582,23 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
               {"final_tick", std::to_string(session.document().flight.tick)},
               {"effort_quanta", trace.endurance->effort_quanta},
               {"flight_quanta_before_service", fuel_before_service}};
+  if (continue_from) {
+    report["schema_version"] = 7;
+    report["route"] = "native-neighbor-from-ascent";
+    report["start_mode"] = "continue";
+    report["initial_tick"] = std::to_string(initial_tick);
+    report["frame_policy"] = initial_model.frame_policy;
+    report["flight_profile"] =
+        initial_model.assistance ? "assisted" : "advanced";
+    report["uninterrupted_scope"] = "suffix_from_declared_continue_only";
+    report["initial_flight_quanta"] =
+        std::to_string(trace.initial_flight_quanta);
+    report["inherited_spent_quanta"] = std::to_string(
+        kFreedomFlightCapacityQuanta - trace.initial_flight_quanta);
+    report["source_file"] = "surface-ascent.json";
+    check(checkpoint_bytes(*continue_from) == source_bytes,
+          "Continuation modified the original saved source");
+  }
   if (grade) {
     report["targeting_grade"] = intersystem_arrival_quality_name(*grade);
     report["targeting"] = std::move(targeting);
@@ -1653,14 +1790,18 @@ int main(int argc, char** argv) {
           "directory and optional --commands/--endurance/--neighbor/--pilot/"
           "--aligned/--offset/--surface-loop [--system-frame] or distinct "
           "--terrain-feature; --flight-profile=assisted|advanced requires "
-          "--surface-loop --system-frame");
+          "--surface-loop --system-frame; --continue-from=/absolute/save "
+          "requires --neighbor --commands");
     bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
         feature{}, system_frame{};
     std::optional<IntersystemArrivalQuality> grade;
     std::optional<PhysicalFlightProfile> profile;
+    std::optional<std::filesystem::path> continue_from;
     for (int i = 2; i < argc; ++i) {
       const std::string_view option{argv[i]};
-      if (option == "--commands" && !commands)
+      if (option.starts_with("--continue-from=") && !continue_from)
+        continue_from = std::filesystem::path{std::string{option.substr(16)}};
+      else if (option == "--commands" && !commands)
         commands = true;
       else if (option == "--endurance" && !endurance)
         endurance = true;
@@ -1708,10 +1849,18 @@ int main(int argc, char** argv) {
     if (grade && (!neighbor || !pilot))
       throw std::invalid_argument(
           "A selected grade requires --neighbor --pilot");
+    if (continue_from &&
+        (!neighbor || !commands || endurance || grade || surface_loop ||
+         feature || system_frame || profile || !continue_from->is_absolute() ||
+         continue_from->native().size() > 4000 ||
+         !std::filesystem::is_regular_file(*continue_from)))
+      throw std::invalid_argument(
+          "--continue-from requires --neighbor --commands and one bounded "
+          "absolute source; only matching --pilot may modify this route");
     if (feature)
       terrain_feature(output);
     else if (neighbor)
-      run_neighbor(output, commands, pilot, grade);
+      run_neighbor(output, commands, pilot, grade, continue_from);
     else
       run(output, commands, endurance, surface_loop, system_frame, profile);
     return 0;

@@ -298,6 +298,39 @@ class NativeRunnerTests(unittest.TestCase):
         self.assertEqual(runner.timeout_seconds("1"), 1.0)
         self.assertEqual(runner.timeout_seconds("600"), 600.0)
 
+    def test_roundtrip_continuation_refuses_before_subprocess_or_output(self):
+        with tempfile.TemporaryDirectory(prefix="native-continuation-") as directory:
+            root = Path(directory)
+            source = root / "source.json"
+            source.write_bytes(b"{}")
+            empty = root / "empty.json"
+            empty.write_bytes(b"")
+            oversized = root / "oversized.json"
+            oversized.write_bytes(b"x" * ((1 << 20) + 1))
+            output = root / "must-not-exist"
+            original = source.read_bytes()
+            cases = [
+                ["--roundtrip-from-save", str(source)],
+                ["--roundtrip-from-save", str(source), "--test", "input"],
+                ["--roundtrip-from-save", str(source), "--test", "native_roundtrip_pilot_aligned"],
+                ["--roundtrip-from-save", str(source), "--test", "native_roundtrip", "--test", "native_roundtrip_pilot"],
+                ["--roundtrip-from-save", str(source), "--test", "native_surface_loop", "--selected-surface-loop"],
+            ]
+            for invalid in (root / "missing.json", root, empty, oversized):
+                cases.append(["--roundtrip-from-save", str(invalid), "--test", "native_roundtrip_pilot"])
+            with mock.patch.object(runner, "run_logged") as process:
+                for options in cases:
+                    with self.subTest(options=options), contextlib.redirect_stderr(io.StringIO()) as error:
+                        with self.assertRaises(SystemExit) as refused:
+                            runner.main(["--godot", str(root / "missing-godot"),
+                                         "--output-parent", str(output), *options])
+                        self.assertEqual(refused.exception.code, 2)
+                        self.assertIn("--roundtrip-from-save", error.getvalue())
+                        self.assertNotIn("missing executable", error.getvalue())
+                        self.assertFalse(output.exists())
+                        self.assertEqual(source.read_bytes(), original)
+                process.assert_not_called()
+
     def test_process_logs_and_timeout(self):
         with tempfile.TemporaryDirectory(prefix="native-runner-test-") as directory:
             log = Path(directory) / "process.log"

@@ -742,6 +742,77 @@ func check_saved_controller(view: Control, owner: Variant, save: String) -> void
 	controls.sample()
 	check(owner.get_freedom_flight_state() == before and view.exhaust.phase == phase, "Reconnect-neutral callback changed owner/phase")
 	view.pause_controls("Controller regression complete")
+	await check_replacement_controller(view, owner, directory)
+
+
+func check_replacement_controller(view: Control, owner: Variant, directory: String) -> void:
+	var controls: Node = view.player_input
+	var settings: Dictionary = controls.settings.duplicate(true)
+	var bindings: Dictionary = controls.bindings.duplicate(true)
+	Input.joy_connection_changed.emit(0, true)
+	Input.joy_connection_changed.emit(7, true)
+	view.toggle_pause()
+	var initial: Dictionary = owner.get_freedom_flight_state()
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.6, 7)
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	check(controls.device == 0 and not view.paused and owner.get_freedom_flight_state() == initial, "Available foreign Start stole the present flight owner")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	view._process(1.0 / 120.0)
+	check(view.exhaust.intensity > 0, "Replacement source did not earn applied exhaust")
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var phase: float = view.exhaust.phase
+	var before_path := directory.path_join("replacement-before.json")
+	var after_path := directory.path_join("replacement-after.json")
+	var reference_path := directory.path_join("replacement-reference.json")
+	check(owner.save_freedom_as(before_path), "Replacement source Save As failed")
+	var bytes := FileAccess.get_file_as_bytes(before_path)
+	Input.joy_connection_changed.emit(0, false)
+	check(view.paused and controls.device == -1 and view.exhaust.intensity == 0 and view.exhaust.withdrawal_intensity == 0 and view.exhaust.lift_intensity == 0 and view.exhaust.phase == phase and owner.get_freedom_flight_state() == before, "Replacement disconnect changed motion/time or retained exhaust")
+	view._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	check(controls.device == -1 and view.paused, "Unfocused replacement acquired flight")
+	view._notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	var adopted: bool = controls.device == 7
+	check(adopted, "Already-connected replacement Start did not acquire saved flight")
+	if adopted:
+		check(view.paused and not controls.enabled and owner.get_freedom_flight_state() == before, "Selecting replacement Start resumed or advanced flight")
+		view.toggle_pause()
+		check(view.paused and not view.controls_armed, "Held replacement trigger bypassed explicit Resume")
+		view.controls_menu.export_save_button.grab_focus()
+		joy_button(JOY_BUTTON_A, true, 0)
+		joy_button(JOY_BUTTON_A, false, 0)
+		joy_button(JOY_BUTTON_START, true, 0)
+		joy_button(JOY_BUTTON_START, false, 0)
+		await process_frame
+		check(view.paused and not view.save_dialog.visible and controls.device == 7 and owner.get_freedom_flight_state() == before, "Stale owner activated a menu or resumed replacement flight")
+		joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 7)
+		check(owner.save_freedom_as(after_path) and FileAccess.get_file_as_bytes(after_path) == bytes and FileAccess.get_file_as_bytes(before_path) == bytes, "Replacement selection changed complete save or its source")
+		var independent: Variant = ClassDB.instantiate("FreedomBridge")
+		var reopened: bool = independent.initialize_freedom_continue(before_path)
+		check(reopened, "Replacement independent source refused Continue")
+		if reopened:
+			view.toggle_pause()
+			check(not view.paused and controls.enabled, "Neutral replacement failed explicit Resume")
+			joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.6, 7)
+			# A's still-held trigger is absent from both pilot and menu mappings.
+			var expected := PackedFloat64Array()
+			expected.resize(12)
+			expected[5] = controls.shape(PackedFloat32Array([0.6])[0], controls.settings.deadzone, 1.0)
+			check(FlightView.actuator_fractions(controls.sample().thrust_axes) == expected, "Replacement axis or stale owner changed actual demands")
+			view._process(1.0 / 120.0)
+			check(independent.advance_freedom_flight(1.0 / 120.0, expected, false) and owner.get_freedom_flight_state() == independent.get_freedom_flight_state(), "Replacement real tick differs from independent C++ command")
+			check(owner.save_freedom_as(after_path) and independent.save_freedom_as(reference_path) and FileAccess.get_file_as_bytes(after_path) == FileAccess.get_file_as_bytes(reference_path) and FileAccess.get_file_as_bytes(before_path) == bytes, "Replacement one-tick full saves differ or source changed")
+	check(controls.settings == settings and controls.bindings == bindings, "Replacement changed saved preferences/remaps")
+	# Also runs after the old-code missing-adoption failure, avoiding dependent errors.
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 0)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 7)
+	view.pause_controls("Replacement regression complete")
+	Input.joy_connection_changed.emit(7, false)
+	Input.joy_connection_changed.emit(0, true)
 
 
 func check_focus_loss(view: Control, owner: Variant, directory: String) -> void:

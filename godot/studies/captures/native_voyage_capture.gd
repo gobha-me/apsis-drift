@@ -61,6 +61,14 @@ static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, tra
 		if op in ["jump_begin", "replenish"]: return args.is_empty()
 	return op in ["board", "unboard", "assistance_off", "release", "approach", "capture"] and args.is_empty()
 
+static func stream_start_tick(trace: Dictionary) -> int:
+	if trace.get("schema_version") != 7: return 0
+	if trace.get("route") != "native-neighbor-from-ascent": return -1
+	var value: Variant = trace.get("initial_tick")
+	if not Checkpoints.decimal(value) or value.length() > 7 or (value.length() > 1 and value.begins_with("0")): return -1
+	var tick := int(value)
+	return tick if tick <= 1200000 else -1
+
 static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false, profile: bool = false) -> bool:
 	var metadata: Variant = trace.get("command_stream")
 	if not metadata is Dictionary or metadata.get("file") != "commands.jsonl" or metadata.get("cadence_ticks") != 15 or metadata.get("float_encoding") != "ieee754-le-hex": return false
@@ -70,7 +78,9 @@ static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkp
 	var stream := FileAccess.open(path, FileAccess.READ)
 	if stream == null or stream.get_length() != int(metadata.bytes): return false
 	var rows := 0
-	var tick := 0
+	var initial_tick := stream_start_tick(trace)
+	if initial_tick < 0: return false
+	var tick := initial_tick
 	var phase := 0
 	while stream.get_position() < stream.get_length():
 		var line := stream.get_line()
@@ -81,7 +91,7 @@ static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkp
 		rows += 1
 		if record[0] in ["walk", "flight", "surface_walk"]:
 			tick += int(record[1])
-			if tick > (1200000 if surface else 750000): return false
+			if tick - initial_tick > (1200000 if surface else 750000): return false
 		elif record[0] == "checkpoint":
 			if phase >= labels.size() or record[2][0] != labels[phase] or str(tick) != trace.checkpoints[phase].tick: return false
 			phase += 1
@@ -191,7 +201,7 @@ func run() -> void:
 	var rendered := DisplayServer.get_name() != "headless"
 	var stream := FileAccess.open(args[0].path_join("commands.jsonl"), FileAccess.READ)
 	var phase := 0
-	var tick := 0
+	var tick := stream_start_tick(trace)
 	var rows := 0
 	var captures: Array = []
 	while stream.get_position() < stream.get_length() and not failed:
@@ -278,7 +288,16 @@ func run() -> void:
 		if surface: scope = "One accelerated native session from New Game, semantic flight replay and physical ground keys; not manual/controller or performance acceptance"
 		if trace.get("frame_policy", 1) == 2: scope = "One accelerated native session from explicitly selected policy-2 station Save, semantic flight replay and physical ground keys; not ordinary New Game or manual/controller/performance acceptance"
 		if profile: scope = "Explicit selected physical profile; flown orbit hold and physical final contact, existing liftoff/port aids; not fully unaided or manual hardware acceptance"
-		report.store_string(JSON.stringify({"scope": scope, "route": "native-neighbor" if travel else trace.get("route", "surface-loop") if surface else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "native-assets/stowed/licenses", "captures": captures}, "\t") + "\n")
+		if trace.get("schema_version") == 7: scope = "Accelerated native suffix from declared post-ascent Continue; prefix separately qualified, not uninterrupted across the file handoff or manual/controller/performance acceptance"
+		var result := {"scope": scope, "route": trace.get("route", "native-neighbor") if travel else trace.get("route", "surface-loop") if surface else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "native-assets/stowed/licenses", "captures": captures}
+		if trace.get("schema_version") == 7:
+			result.start_mode = trace.start_mode
+			result.initial_tick = trace.initial_tick
+			result.source_file = trace.source_file
+			result.source_save_sha256 = FileAccess.get_sha256(args[0].path_join(trace.source_file))
+			result.uninterrupted_scope = trace.uninterrupted_scope
+			hashes["tests/native_roundtrip_test.gd"] = FileAccess.get_sha256("res://tests/native_roundtrip_test.gd")
+		report.store_string(JSON.stringify(result, "\t") + "\n")
 		report.close()
 	else: check(false, "Could not write continuous voyage report")
 	shell.free()

@@ -208,6 +208,8 @@ def main(argv=None):
                         help="explicit policy-2 station starter; requires --test native_surface_loop only")
     parser.add_argument("--flight-profile", choices=("assisted", "advanced"),
                         help="explicit physical profile; requires --selected-surface-loop")
+    parser.add_argument("--roundtrip-from-save", type=Path,
+                        help="continue one actual ascent save; requires only native_roundtrip or native_roundtrip_pilot")
     parser.add_argument("--keep-work", action="store_true",
                         help="retain successful asset/import/binary copies for replay; failures always retain them")
     args = parser.parse_args(argv)
@@ -215,6 +217,22 @@ def main(argv=None):
         parser.error("--flight-profile requires --selected-surface-loop")
     if args.selected_surface_loop and args.test != ["native_surface_loop"]:
         parser.error("--selected-surface-loop requires --test native_surface_loop only")
+    continuation = None
+    continuation_bytes = None
+    if args.roundtrip_from_save is not None:
+        if args.selected_surface_loop or args.flight_profile or args.test not in (
+                ["native_roundtrip"], ["native_roundtrip_pilot"]):
+            parser.error("--roundtrip-from-save requires only native_roundtrip or native_roundtrip_pilot")
+        try:
+            continuation = args.roundtrip_from_save.resolve()
+            if len(os.fsencode(continuation)) > 4000 or not continuation.is_file():
+                parser.error("--roundtrip-from-save requires a bounded regular save file")
+            with continuation.open("rb") as stream:
+                continuation_bytes = stream.read((1 << 20) + 1)
+            if not 0 < len(continuation_bytes) <= (1 << 20):
+                parser.error("--roundtrip-from-save requires a nonempty save within the existing 1 MiB format limit")
+        except (OSError, RuntimeError) as error:
+            parser.error(f"unavailable --roundtrip-from-save: {error}")
     if not sys.platform.startswith("linux"):
         parser.error("this runner currently stages the Linux .so extension only")
     repo = Path(__file__).resolve().parent.parent
@@ -357,6 +375,15 @@ def main(argv=None):
               "exporter_sha256": sha256(exporter),
               "staged_executable_sha256": {path.name: sha256(path) for path in staged_executables},
               "retention": {"mode": "full", "reason": "run_not_completed"}}
+    continuation_copy = None
+    if continuation is not None:
+        continuation_copy = work / "continuation-source.json"
+        continuation_copy.write_bytes(continuation_bytes)
+        report["continuation_source"] = {
+            "path": str(continuation), "staged_file": continuation_copy.name,
+            "sha256": hashlib.sha256(continuation_bytes).hexdigest(),
+            "bytes": len(continuation_bytes),
+            "scope": "Explicit saved continuation; no uninterrupted native prefix claim"}
 
     def save():
         (work / "report.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -591,7 +618,11 @@ def main(argv=None):
                 [str(phases), "--neighbor", "--neighbor"],
                 [str(phases), "--neighbor", "--commands", "--commands"],
                 [str(phases), "--neighbor", "--aligned"],
-                [str(phases), "--neighbor", "--pilot", "--aligned", "--offset"])):
+                [str(phases), "--neighbor", "--pilot", "--aligned", "--offset"],
+                [str(phases), "--continue-from=" + str(work / "missing-continuation.json")],
+                [str(phases), "--neighbor", "--commands", "--continue-from=relative"],
+                [str(phases), "--neighbor", "--commands", "--continue-from="],
+                [str(phases), "--neighbor", "--commands", "--continue-from=" + str(work / "missing-continuation.json")])):
             refusal_log = work / f"{name}-refusal-{index}.log"
             code, timed_out, _ = run_logged(
                 [str(planetary_fixture), *invalid], refusal_log, env, args.timeout)
@@ -603,7 +634,8 @@ def main(argv=None):
             [str(planetary_fixture), str(phases), "--neighbor", "--commands",
              *(["--pilot"] if name != "native_roundtrip" else []),
              *(["--aligned"] if name.endswith("_aligned") else []),
-             *(["--offset"] if name.endswith("_offset") else [])], log, env, args.timeout)
+             *(["--offset"] if name.endswith("_offset") else []),
+             *(["--continue-from=" + str(continuation_copy)] if continuation_copy else [])], log, env, args.timeout)
         report["setup"].append({"family": name, "returncode": code,
             "timed_out": timed_out, "seconds": elapsed,
             "fixture_sha256": sha256(planetary_fixture)})
@@ -611,6 +643,13 @@ def main(argv=None):
         if code != 0 or timed_out:
             print(f"FAIL actual round-trip fixture: {log}", flush=True)
             return 1
+        if continuation_copy is not None:
+            source_digest = report["continuation_source"]["sha256"]
+            if (sha256(continuation_copy) != source_digest or
+                    not (phases / "surface-ascent.json").is_file() or
+                    sha256(phases / "surface-ascent.json") != source_digest):
+                print("FAIL continuation changed its complete source save", flush=True)
+                return 1
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
@@ -949,6 +988,18 @@ def main(argv=None):
                                 "seconds": elapsed, "log": log.name})
         save()
         print(f"{status.upper()} {name} ({elapsed:.2f}s)", flush=True)
+    if continuation is not None:
+        try:
+            unchanged = (continuation.stat().st_size == len(continuation_bytes) and
+                         sha256(continuation) == report["continuation_source"]["sha256"] and
+                         sha256(continuation_copy) == report["continuation_source"]["sha256"])
+        except OSError:
+            unchanged = False
+        report["continuation_source"]["unchanged"] = unchanged
+        if not unchanged:
+            print("FAIL original or staged continuation source changed; retained work", flush=True)
+            save()
+            return 1
     passed = sum(test["status"] == "pass" for test in report["tests"])
     finish_work(work, report, args.keep_work)
     save()
