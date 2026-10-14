@@ -204,9 +204,13 @@ def main(argv=None):
                         help="per-process deadline in seconds, default 120")
     parser.add_argument("--test", action="append", choices=TESTS,
                         help="repeat to select contracts; default is all")
+    parser.add_argument("--selected-surface-loop", action="store_true",
+                        help="explicit policy-2 station starter; requires --test native_surface_loop only")
     parser.add_argument("--keep-work", action="store_true",
                         help="retain successful asset/import/binary copies for replay; failures always retain them")
     args = parser.parse_args(argv)
+    if args.selected_surface_loop and args.test != ["native_surface_loop"]:
+        parser.error("--selected-surface-loop requires --test native_surface_loop only")
     if not sys.platform.startswith("linux"):
         parser.error("this runner currently stages the Linux .so extension only")
     repo = Path(__file__).resolve().parent.parent
@@ -533,6 +537,9 @@ def main(argv=None):
         phases = work / "surface-loop"
         phases.mkdir()
         for index, invalid in enumerate((
+                [str(phases), "--system-frame"],
+                [str(phases), "--surface-loop", "--system-frame", "--system-frame"],
+                [str(phases), "--terrain-feature", "--system-frame"],
                 [str(phases), "--surface-loop", "--surface-loop"],
                 [str(phases), "--surface-loop", "--neighbor"],
                 [str(phases), "--surface-loop", "--pilot"],
@@ -544,12 +551,17 @@ def main(argv=None):
                 print(f"FAIL surface-loop argument refusal: {refusal_log}", flush=True)
                 return 1
         log = work / "surface-loop-fixture.log"
+        fixture_args = [str(planetary_fixture), str(phases), "--surface-loop", "--commands"]
+        if args.selected_surface_loop:
+            fixture_args.append("--system-frame")
         code, timed_out, elapsed = run_logged(
-            [str(planetary_fixture), str(phases), "--surface-loop", "--commands"],
+            fixture_args,
             log, env, args.timeout)
         report["setup"].append({"family": "surface_loop_saves", "returncode": code,
             "timed_out": timed_out, "seconds": elapsed,
             "fixture_sha256": sha256(planetary_fixture)})
+        if args.selected_surface_loop:
+            report["setup"][-1]["frame_policy"] = 2
         save()
         if code != 0 or timed_out:
             print(f"FAIL physical surface-loop fixture: {log}", flush=True)

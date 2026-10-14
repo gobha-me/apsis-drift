@@ -109,6 +109,9 @@ func install_recorded_input(view: Control) -> void:
 
 # The original eleven-phase voyage keeps its original schema and actions.
 # A separate bounded round-trip test opts into these hooks explicitly.
+func start_options(_trace: Dictionary, args: PackedStringArray) -> Dictionary:
+	return {"mode": "new_game", "value": "42", "assets": args[1]}
+
 func checkpoint_labels() -> Array:
 	return Checkpoints.LABELS
 
@@ -178,7 +181,7 @@ func run() -> void:
 	root.add_child(shell)
 	root.size = Vector2i(1280, 720)
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Voyage output unavailable") or not check(shell.select_start(owner, {"mode": "new_game", "value": "42", "assets": args[1]}), "New Game staging refused: " + shell.error): shell.free(); quit(1); return
+	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK, "Voyage output unavailable") or not check(shell.select_start(owner, start_options(trace, args)), "Voyage start staging refused: " + shell.error): shell.free(); quit(1); return
 	var model_id: int = shell.current_view.staged_model.get_instance_id()
 	var rendered := DisplayServer.get_name() != "headless"
 	var stream := FileAccess.open(args[0].path_join("commands.jsonl"), FileAccess.READ)
@@ -262,7 +265,8 @@ func run() -> void:
 		for name in ["studies/captures/native_voyage_capture.gd", "scripts/native/native_start_shell.gd", "scripts/native/native_walk_view.gd", "scripts/native/native_flight_view.gd", "scripts/native/native_main_exhaust.gd", "scripts/native/home_navigation.gd", "scripts/ui/player_input.gd", "scripts/world/planet_stream.gd", "studies/captures/native_planetary_capture.gd", "shaders/native_main_exhaust.gdshader", "shaders/native_close_composite.gdshader", "shaders/terrain.gdshader", "bin/libapsis_freedom_bridge.so", get_script().resource_path.trim_prefix("res://")]: hashes[name] = FileAccess.get_sha256("res://" + name)
 		var scope := "One accelerated native session from New Game, semantic input replay; not manual/controller or performance acceptance"
 		if surface: scope = "One accelerated native session from New Game, semantic flight replay and physical ground keys; not manual/controller or performance acceptance"
-		report.store_string(JSON.stringify({"scope": scope, "route": "native-neighbor" if travel else "surface-loop" if surface else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "native-assets/stowed/licenses", "captures": captures}, "\t") + "\n")
+		if trace.get("frame_policy", 1) == 2: scope = "One accelerated native session from explicitly selected policy-2 station Save, semantic flight replay and physical ground keys; not ordinary New Game or manual/controller/performance acceptance"
+		report.store_string(JSON.stringify({"scope": scope, "route": "native-neighbor" if travel else trace.get("route", "surface-loop") if surface else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "native-assets/stowed/licenses", "captures": captures}, "\t") + "\n")
 		report.close()
 	else: check(false, "Could not write continuous voyage report")
 	shell.free()

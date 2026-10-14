@@ -1,7 +1,16 @@
 extends "res://studies/captures/native_voyage_capture.gd"
-## One physical route from ordinary New Game; no initialized ground start.
+## One physical route from ordinary New Game or an explicitly selected policy-2
+## station Save of that same starter; no initialized ground start.
 const Decimal = preload("res://tests/native_roundtrip_test.gd")
 const LABELS = ["station-start", "seated", "departed", "atmosphere-entry", "cruise-start", "cruise-end", "landing-ready", "landed", "surface-exited", "surface-halfway", "surface-away", "surface-back", "surface-seated", "surface-airborne", "space-exit", "home-intercept", "near-port", "captured", "station-return"]
+
+func start_options(trace: Dictionary, args: PackedStringArray) -> Dictionary:
+	if trace.get("frame_policy", 1) == 2:
+		return {"mode": "continue", "value": args[0].path_join("station-start.json"), "assets": args[1]}
+	return super.start_options(trace, args)
+
+func expected_frame(label: String) -> String:
+	return "system_inertial" if label in ["departed", "atmosphere-entry", "cruise-start", "cruise-end", "landing-ready", "surface-airborne", "space-exit", "home-intercept", "near-port"] else "planet_relative_inertial"
 
 func checkpoint_labels() -> Array:
 	return LABELS
@@ -10,7 +19,10 @@ func surface_commands() -> bool:
 	return true
 
 func valid_manifest(value: Variant) -> bool:
-	if not value is Dictionary or value.get("schema_version") != 4 or value.get("route") != "surface-loop" or value.get("seed") != "42" or value.get("physical_catalog") != 2 or value.get("physical_ephemeris") != 2 or value.get("terrain_source_lod") != 8 or value.get("terrain_relief_version") != 0 or value.get("uninterrupted_match") != true: return false
+	if not value is Dictionary: return false
+	var selected: bool = value.get("schema_version") == 5 and value.get("route") == "selected-surface-loop" and value.get("frame_policy") == 2
+	if not selected and (value.get("schema_version") != 4 or value.get("route") != "surface-loop" or value.has("frame_policy")): return false
+	if value.get("seed") != "42" or value.get("physical_catalog") != 2 or value.get("physical_ephemeris") != 2 or value.get("terrain_source_lod") != 8 or value.get("terrain_relief_version") != 0 or value.get("uninterrupted_match") != true: return false
 	if not Decimal.bounded_decimal(value.get("final_tick")) or value.final_tick.length() > 7 or int(value.final_tick) > 1200000: return false
 	var rows: Variant = value.get("checkpoints")
 	if not rows is Array or rows.size() != LABELS.size(): return false
@@ -26,6 +38,7 @@ func valid_manifest(value: Variant) -> bool:
 		previous = tick
 		for field in ["attached", "walking", "surface_walking", "landed", "station_available", "seated"]:
 			if not row.get(field) is bool: return false
+		if selected and row.get("coordinate_frame") != expected_frame(row.label): return false
 		if row.walking and row.surface_walking or row.surface_walking and (not row.landed or row.attached): return false
 		if row.get("jump_phase") != "idle" or row.get("jump_charges") != 3: return false
 		for field in ["altitude_metres", "air_speed_metres_per_second", "air_density", "atmosphere_edge_metres", "terrain_elevation_metres"]:
@@ -37,7 +50,7 @@ func valid_manifest(value: Variant) -> bool:
 	return str(previous) == value.final_tick
 
 func manifest_refusals(trace: Dictionary) -> bool:
-	for damage in ["shape", "nonfinite", "path", "version", "clock", "owner", "terrain", "actor"]:
+	for damage in ["shape", "nonfinite", "path", "version", "clock", "owner", "terrain", "actor", "frame"]:
 		var bad: Dictionary = trace.duplicate(true)
 		if damage == "shape": bad.checkpoints[0].position_metres.append(0.0)
 		elif damage == "nonfinite": bad.checkpoints[0].altitude_metres = NAN
@@ -46,8 +59,13 @@ func manifest_refusals(trace: Dictionary) -> bool:
 		elif damage == "clock": bad.checkpoints[0].next_tick = "18446744073709551615"
 		elif damage == "owner": bad.checkpoints[0].system_id = "18446744073709551616"
 		elif damage == "terrain": bad.terrain_relief_version = 1
-		else: bad.checkpoints[0].surface_walking = true
+		elif damage == "actor": bad.checkpoints[0].surface_walking = true
+		else: bad.frame_policy = 99
 		if not check(not valid_manifest(bad), "Invalid surface loop manifest accepted: " + damage): return false
+	if trace.get("frame_policy", 1) == 2:
+		var bad_frame: Dictionary = trace.duplicate(true)
+		bad_frame.checkpoints[2].coordinate_frame = "planet_relative_inertial"
+		if not check(not valid_manifest(bad_frame), "Selected departure accepted the wrong canonical frame"): return false
 	var zero := "0000000000000000"
 	for bad in [["surface_walk", 16, [zero, zero, zero]], ["surface_walk", 1, [zero, zero]], ["surface_exit", 1, []], ["land", 0, [1]], ["surface_walk", 1, ["000000000000f07f", zero, zero]]]:
 		if not check(not valid_record(bad, LABELS, false, true), "Invalid ground command accepted"): return false
@@ -85,6 +103,8 @@ func surface_action(view: Control, op: String) -> bool:
 func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	if not check(state.system_id == row.system_id and state.resources.quantity_quanta == row.flight_quanta and state.resources.jump_charges == row.jump_charges and state.surface.landed == row.landed and (view is FlightView and view.surface_walking()) == row.surface_walking, "Ground actor, anchor or resources differ: " + row.label): return false
+	if row.has("coordinate_frame"):
+		if not check(state.frame_policy == 2 and state.coordinate_frame == row.coordinate_frame and state.observation_frame == "planet_relative_inertial", "Selected canonical/observation frame differs: " + row.label): return false
 	if row.surface_walking:
 		if not check(view.camera.position.is_equal_approx(state.surface_walk.eye_position) and view.terrain_camera.transform == view.camera.transform and not view.assist_button.visible, "Ground eye or input ownership lost: " + row.label): return false
 		if row.label == "surface-away":
@@ -97,6 +117,11 @@ func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	if not check(restored.stage_freedom_continue(args[0].path_join(row.file)), "Surface loop Continue could not stage"): return false
 	var pending: Dictionary = restored.get_pending_freedom_start()
 	if not check(not pending.is_empty() and restored.commit_pending_freedom_start(pending.candidate_id), "Surface loop Continue could not commit"): return false
+	if row.has("coordinate_frame"):
+		# C++ Continue retains exact bits; Godot can round JSON trace decimals.
+		var canonical: Dictionary = restored.get_freedom_flight_state()
+		for field in ["canonical_position_metres", "canonical_velocity_metres_per_second", "orientation_wxyz", "angular_velocity_body"]:
+			if not check(state[field] == canonical[field], "Selected canonical motion differs from complete Continue: " + row.label): return false
 	var neutral := PackedFloat64Array()
 	neutral.resize(3 if row.walking or row.surface_walking else 12)
 	var advanced: bool = restored.advance_freedom_surface_walk(1.0 / 120.0, neutral, false) if row.surface_walking else restored.advance_freedom_walk(1.0 / 120.0, neutral) if row.walking else restored.advance_freedom_flight(1.0 / 120.0, neutral, false)
