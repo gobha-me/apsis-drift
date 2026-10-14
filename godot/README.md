@@ -27,6 +27,18 @@ saved-start validation without opening a window. The Godot project’s default
 scene is `scenes/native_start_shell.tscn`; the launcher prepares the
 source-verified asset packages.
 
+Godot selects the display backend automatically unless you request one:
+
+```sh
+tools/run_godot_native.sh --display-driver=wayland --new-game=42
+tools/run_godot_native.sh --display-driver=x11
+```
+
+The display choice requires an available desktop session and cannot be combined
+with `--headless-validate`. Wayland/Vulkan display support requires separate
+interactive qualification; headless correctness checks and software Xvfb
+captures do not establish it. This option does not change the project renderer.
+
 New Game starts on Origin Station. WASD or the left stick walks; arrow keys,
 right-drag or the right stick look. Escape opens pause controls. Save As persists through
 C++; Quit does not autosave. Continue starts paused. Boarding, sitting and

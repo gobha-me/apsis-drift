@@ -155,7 +155,10 @@ class NativeRunnerTests(unittest.TestCase):
             tools.mkdir()
             launcher = tools / source.name
             launcher.write_bytes(source.read_bytes())
-            (tools / "prepare_freedom_native_assets.py").write_text("pass\n")
+            prepared = tools / "assets-prepared"
+            (tools / "prepare_freedom_native_assets.py").write_text(
+                "from pathlib import Path\n"
+                "Path(__file__).with_name('assets-prepared').write_text('called')\n")
             build = root / "build-native"
             build.mkdir()
             (build / "CMakeCache.txt").write_text(
@@ -166,7 +169,7 @@ class NativeRunnerTests(unittest.TestCase):
             library.parent.mkdir(parents=True)
             library.write_bytes(b"selected default bridge")
             cmake = tools / "cmake"
-            cmake.write_text("#!/bin/sh\nexit 0\n")
+            cmake.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$APSIS_TEST_CMAKE_LOG"\n')
             cmake.chmod(0o755)
             engine = tools / "capture-engine"
             engine.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
@@ -174,15 +177,54 @@ class NativeRunnerTests(unittest.TestCase):
             env = os.environ.copy()
             env["GODOT_BIN"] = str(engine)
             env["PATH"] = str(tools) + os.pathsep + env["PATH"]
-            result = subprocess.run(["bash", str(launcher)], env=env,
-                                    capture_output=True, text=True, check=False)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            arguments = result.stdout.splitlines()
-            self.assertEqual(arguments, ["--path", str(root / "godot"), "--scene",
-                             "res://scenes/native_start_shell.tscn", "--",
-                             "--assets=" + str(build / "native-freedom-assets")])
-            self.assertEqual((root / "godot/bin/libapsis_freedom_bridge.so").read_bytes(),
-                             library.read_bytes())
+            log = root / "cmake.log"
+            env["APSIS_TEST_CMAKE_LOG"] = str(log)
+            installed = root / "godot/bin/libapsis_freedom_bridge.so"
+            base = ["--path", str(root / "godot"), "--scene",
+                    "res://scenes/native_start_shell.tscn"]
+            assets = "--assets=" + str(build / "native-freedom-assets")
+            cases = (([], base + ["--", assets]),
+                     (["--display-driver=wayland", "--new-game=42"],
+                      base + ["--display-driver", "wayland", "--", "--new-game=42", assets]),
+                     (["--display-driver=x11"],
+                      base + ["--display-driver", "x11", "--", assets]),
+                     (["--new-game=42", "--headless-validate"],
+                      base + ["--headless", "--audio-driver", "Dummy", "--",
+                              "--new-game=42", "--validate-only"]))
+            for options, expected in cases:
+                with self.subTest(options=options):
+                    prepared.unlink(missing_ok=True)
+                    log.unlink(missing_ok=True)
+                    result = subprocess.run(["bash", str(launcher), *options], env=env,
+                                            capture_output=True, text=True, check=False)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected)
+                    self.assertEqual(log.read_text().splitlines(),
+                                     ["--build", str(build), "--target",
+                                      "apsis_freedom_bridge", "--parallel", "4"])
+                    self.assertEqual(prepared.exists(), "--headless-validate" not in options)
+                    self.assertEqual(installed.read_bytes(), library.read_bytes())
+            invalid = (("--display-driver=",), ("--display-driver=unknown",),
+                       ("--display-driver=headless",),
+                       ("--display-driver=x11", "--display-driver=x11"),
+                       ("--display-driver=wayland", "--display-driver=x11"),
+                       ("--display-driver=x11", "--headless-validate"),
+                       ("--headless-validate", "--display-driver=wayland"))
+            for options in invalid:
+                with self.subTest(options=options):
+                    prepared.unlink(missing_ok=True)
+                    log.unlink(missing_ok=True)
+                    installed.write_bytes(b"retain on display refusal")
+                    result = subprocess.run(["bash", str(launcher), "--new-game=42",
+                                             "--build-dir=must-not-exist", *options], env=env,
+                                            capture_output=True, text=True, check=False)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("usage:", result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertFalse(log.exists())
+                    self.assertFalse(prepared.exists())
+                    self.assertFalse((root / "must-not-exist").exists())
+                    self.assertEqual(installed.read_bytes(), b"retain on display refusal")
 
     def test_native_launcher_rejects_ambiguous_or_relative_selection(self):
         launcher = Path(__file__).resolve().parents[1] / "tools/run_godot_native.sh"
