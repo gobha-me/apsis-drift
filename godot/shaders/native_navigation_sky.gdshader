@@ -12,7 +12,9 @@ uniform float sun_angular_radius;
 uniform float sun_visibility;
 void sky() {
 	vec3 d = normalize(EYEDIR);
-	vec3 eye = vec3(0.0, radius + altitude, 0.0);
+	// World origin is the craft's C++ tangent projection; POSITION is the
+	// actual camera offset, including chase/cockpit and suited walking eyes.
+	vec3 eye = vec3(0.0, radius + altitude, 0.0) + POSITION;
 	float b = dot(eye, d);
 	float outer = radius + atmosphere_edge;
 	float disc = b * b - dot(eye, eye) + outer * outer;

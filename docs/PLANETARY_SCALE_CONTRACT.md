@@ -86,6 +86,32 @@ not forged procedural worlds or the assertion that every home planet has R = 6 M
 The [fixture specification](../test/fixtures/planetary-scale-contract.json)
 records the cases and measurement matrix.
 
+### Camera-relative sky regression
+
+The native sky uses the craft's C++ tangent origin plus Godot's actual camera
+position ([sky shader `POSITION`](https://docs.godotengine.org/en/stable/tutorials/shaders/shader_reference/sky_shader.html)).
+Its reference-sphere horizon must respond to cockpit, chase and walking eye
+offsets. The bounded software-render check uses an airless 6,000,000 m analytic
+datum, craft altitude 2 m, camera heights 0 and 9 m, and a 3840×2160 viewport at
+75 degrees vertical FOV. A bright stellar disk straddles the horizon; its lower
+clipped edge must agree with the independent tangent projection within one
+output pixel. This catches using craft altitude for both eyes.
+
+On Linux, with Godot 4.7.2, Xvfb and Mesa installed:
+
+```sh
+LIBGL_ALWAYS_SOFTWARE=1 xvfb-run --auto-servernum \
+  --server-args="-screen 0 3840x2160x24" \
+  python3 tools/test_native_sky.py --godot /path/to/godot \
+  --output-parent build-native-sky --timeout 45
+```
+
+The check stages only the production shader and its test driver, retains two
+images and camera/projection/source metadata, and refuses malformed inputs
+before rendering. CI runs it separately from headless authoritative tests.
+It measures this analytic sky case; generated terrain, relief/LOD handoffs,
+other radii and physical GPU performance retain their broader qualification.
+
 ## Recognizable relief and sampling
 
 Measure a real feature's physical wavelength/width, crest-to-trough height,

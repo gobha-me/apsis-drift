@@ -2,6 +2,22 @@ extends SceneTree
 ## Real C++ saved selections and main-thread mesh residency. Dummy/headless
 ## rendering is not visible-feature, GPU performance or controller acceptance.
 const StreamView = preload("res://scripts/world/planet_stream.gd")
+
+class PlacementBridge extends RefCounted:
+	var owner: Variant
+	var batch: Dictionary
+	var transforms: Array
+	func get_stream_identity() -> Dictionary: return owner.get_stream_identity()
+	func poll_stream() -> Dictionary:
+		var result := batch
+		batch = {}
+		return result
+	func stream_transforms(_anchors: PackedFloat64Array) -> Array: return transforms
+	func get_last_error() -> String: return "Declared placement refusal"
+
+class EmptySurfaceStream extends StreamView:
+	func _create_mesh(_arrays: Array) -> ArrayMesh: return ArrayMesh.new()
+
 var failures := 0
 
 func check(value: bool, reason: String) -> bool:
@@ -29,6 +45,67 @@ func wait_ready(terrain: Node3D, expected: Dictionary) -> bool:
 			return check(terrain.identity == expected and terrain.nodes.size() >= 6 and terrain.nodes.size() <= 384 and terrain.pending.is_empty(), "Ready mesh cover differs from selected world/policy")
 		await create_timer(0.005).timeout
 	return check(false, "Selected terrain worker/mesh upload timeout")
+
+func check_cover_replacements(accepted: Node3D, owner: Variant) -> void:
+	# Reuse admitted C++ mesh buffers for successful and refused placement.
+	var source_ids: Array = accepted.nodes.keys()
+	var source_node: MeshInstance3D = accepted.nodes[source_ids[0]]
+	var arrays: Array = source_node.mesh.surface_get_arrays(0)
+	var incoming := {"id": "incoming", "anchor": accepted.anchors[source_ids[0]],
+		"vertices": arrays[Mesh.ARRAY_VERTEX], "normals": arrays[Mesh.ARRAY_NORMAL],
+		"colors": arrays[Mesh.ARRAY_COLOR], "uv": arrays[Mesh.ARRAY_TEX_UV],
+		"indices": arrays[Mesh.ARRAY_INDEX]}
+	for failure in ["valid", "short", "second-type", "second-basis", "second-origin", "empty-surface"]:
+		var terrain: Node3D = EmptySurfaceStream.new() if failure == "empty-surface" else StreamView.new()
+		root.add_child(terrain)
+		var fake := PlacementBridge.new()
+		fake.owner = owner
+		fake.batch = {"identity": owner.get_stream_identity(), "generated": 1,
+			"tiles": [{"id": "retained"}, incoming]}
+		fake.transforms = [Transform3D(Basis.IDENTITY, Vector3(123, 456, 789)), Transform3D.IDENTITY, Transform3D.IDENTITY]
+		match failure:
+			"short": fake.transforms.pop_back()
+			"second-type": fake.transforms[1] = "unsupported transform"
+			"second-basis": fake.transforms[1] = Transform3D(Basis(Vector3(NAN, 0, 0), Vector3.UP, Vector3.BACK), Vector3.ZERO)
+			"second-origin": fake.transforms[1] = Transform3D(Basis.IDENTITY, Vector3(0, INF, 0))
+		terrain.bridge = fake
+		terrain.identity = owner.get_stream_identity()
+		for index in 2:
+			var id := "retained" if index == 0 else "outgoing"
+			var original: MeshInstance3D = accepted.nodes[source_ids[index]]
+			var node := MeshInstance3D.new()
+			node.mesh = original.mesh
+			node.transform = original.transform
+			terrain.add_child(node)
+			terrain.nodes[id] = node
+			terrain.anchors[id] = accepted.anchors[source_ids[index]]
+		terrain.resident_ids = ["retained", "outgoing"]
+		terrain.is_ready = true
+		terrain.swaps = 3
+		terrain.generated_total = 7
+		terrain.retired_total = 2
+		terrain.last_report = {"generated": 7, "accepted": true}
+		var before: Array = [terrain.nodes.retained.transform, terrain.nodes.outgoing.transform]
+		var outgoing: MeshInstance3D = terrain.nodes.outgoing
+		terrain.tick(0.0, Vector3.ZERO)
+		if failure == "valid":
+			check(terrain.error.is_empty() and terrain.is_ready and terrain.resident_ids == ["retained", "incoming"] and terrain.pending.is_empty(), "Valid same-owner replacement did not commit")
+			check(terrain.nodes.retained.visible and terrain.nodes.incoming.visible and terrain.nodes.retained.transform == fake.transforms[0] and terrain.nodes.incoming.transform == fake.transforms[2], "Committed replacement lost its complete placement")
+			check(not terrain.nodes.has("outgoing") and not outgoing.visible and outgoing.is_queued_for_deletion() and outgoing.transform == fake.transforms[1], "Outgoing cover retired before complete placement")
+			check(terrain.swaps == 4 and terrain.generated_total == 8 and terrain.retired_total == 3 and terrain.last_report == {"identity": owner.get_stream_identity(), "generated": 1}, "Successful replacement did not commit counters/report exactly once")
+			terrain.free()
+			continue
+		check(not terrain.error.is_empty() and terrain.is_ready and terrain.resident_ids == ["retained", "outgoing"], "Refused cover changed accepted residency: " + failure)
+		check(terrain.swaps == 3 and terrain.generated_total == 7 and terrain.retired_total == 2 and terrain.last_report == {"generated": 7, "accepted": true}, "Refused cover committed counters/report: " + failure)
+		for index in 2:
+			var id := "retained" if index == 0 else "outgoing"
+			check(terrain.nodes.has(id) and terrain.nodes[id].visible and not terrain.nodes[id].is_queued_for_deletion() and terrain.nodes[id].transform == before[index], "Refused cover partially moved or retired accepted geometry: " + failure)
+		check(not terrain.nodes.has("incoming") if failure == "empty-surface" else terrain.nodes.has("incoming") and not terrain.nodes.incoming.visible, "Refused incoming geometry was admitted or exposed: " + failure)
+		var fault: String = terrain.error
+		fake.transforms = [Transform3D.IDENTITY, Transform3D.IDENTITY, Transform3D.IDENTITY]
+		terrain.tick(1.0, Vector3.ZERO)
+		check(terrain.error == fault and terrain.swaps == 3 and terrain.nodes.retained.transform == before[0], "Placement fault resumed without explicit reset: " + failure)
+		terrain.free()
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -94,6 +171,8 @@ func run() -> void:
 		terrain.free()
 		quit(1)
 		return
+	check_cover_replacements(terrain, owner)
+	check(owner.get_freedom_flight_state() == first_state and FileAccess.get_sha256(source) == source_hash, "Presentation refusals changed the admitted world or source bytes")
 	var old_nodes: Array = terrain.nodes.values().duplicate()
 	# Place an old-generation batch in the pending queue, then replace the
 	# real C++ world. The next tick must retire it before any upload occurs.

@@ -75,6 +75,12 @@ Matching cube-face tile keys cannot authorize reuse of another selection's
 geometry. Malformed or mismatched batches refuse before stale upload. Ordinary
 clock advancement within the selected world does not choose another recipe.
 
+Within one world, incoming meshes remain hidden until their complete placement
+batch validates. A failed surface upload or invalid placement preserves the
+accepted cover's visibility, transforms and committed counters, and latches a
+presentation error until explicit reset. World-owner changes still retire the
+old world's geometry rather than retaining an unrelated cover.
+
 For policy2, tile planning subtracts the selected surface elevation from the
 radial observer distance before scoring the existing datum grid. A low camera
 over elevated ground therefore requests local detail using its radial surface

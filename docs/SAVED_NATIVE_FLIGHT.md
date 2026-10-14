@@ -126,6 +126,10 @@ planet's atmosphere palette and version-one density/scale-height/boundary.
 Flight and suited surface walking share this presenter. Both camera depth ranges
 receive the same ambient lighting; the background sky is drawn once. Station
 walking retains its authored interior fill and uses the actual star color.
+The sky's spherical horizon and atmosphere rays use the actual camera position
+relative to the craft's tangent origin. Changing to chase, cockpit or a walking
+eye therefore changes the observer geometry without changing the saved craft
+altitude or introducing another simulation pose.
 Local craft/station sunlight and the sky's star disk share an angular
 spherical-planet shadow test at the craft's position. A separate terrain light
 keeps distant sunlit terrain illuminated when the observer is in shadow.

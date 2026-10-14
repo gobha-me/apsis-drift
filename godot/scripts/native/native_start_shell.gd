@@ -907,7 +907,7 @@ func finish_catalog_save(message: String) -> void:
 		var button: Button
 		if save_origin is FlightView:
 			save_origin.controls_menu.sync_profile_state(bridge.get_freedom_profile_state())
-			save_origin.controls_menu.message.text = message
+			save_origin.report_action_status(message)
 			button = save_origin.controls_menu.save_button if save_as_pending else save_origin.controls_menu.replace_save_button
 		else:
 			save_origin.refresh_profile_actions()

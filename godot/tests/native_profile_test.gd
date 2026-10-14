@@ -148,6 +148,25 @@ func run() -> void:
 	check(explicit_owner.commit_pending_freedom_start(pending.candidate_id), "Explicit source did not commit")
 	var explicit_state: Dictionary = explicit_owner.get_freedom_profile_state()
 	check(explicit_state.explicit_path and not explicit_state.can_save and not explicit_state.can_save_as and not explicit_owner.save_freedom_profile(true), "Explicit file source silently entered catalog")
+	# The catalog persistence path above uses station walking. Exercise its
+	# completion callback on a real FlightView too: the menu rebuilds its
+	# footer from controls.status on subsequent frames.
+	var flight_owner: Variant = ClassDB.instantiate("FreedomBridge")
+	check(shell.select_start(flight_owner, {"mode": "continue", "value": args[1].get_base_dir().path_join("wayfarer-flight.json"), "assets": args[0]}), "Flight save-feedback view refused")
+	view = shell.current_view
+	view.pause_controls("Flight save-feedback contract")
+	var flight_before := snapshot(flight_owner, raw)
+	for notice in ["Saved. Resume explicitly after neutral.", "Save failed: declared storage conflict"]:
+		shell.save_origin = view
+		shell.save_previous_mode = view.process_mode
+		shell.save_as_pending = true
+		view.journey_dialog_open = true
+		view.process_mode = Node.PROCESS_MODE_DISABLED
+		shell.finish_catalog_save(notice)
+		await settle()
+		check(view.controls_menu.panel.visible and view.controls_menu.message.is_visible_in_tree() and notice in view.controls_menu.message.text and view.player_input.status == notice, "Flight save result disappeared on the next menu frame")
+		check(view.paused and not view.journey_dialog_open and shell.save_origin == null and snapshot(flight_owner, raw) == flight_before, "Save feedback callback altered the flight or left its modal lock")
+	flight_owner = null
 	shell.free()
 	owner = null
 	continued = null

@@ -224,6 +224,33 @@ jobs:
           python3 -m zipfile -e godot-linux.zip build-godot-ci
           chmod +x build-godot-ci/Godot_v4.7.2-stable_linux.x86_64
 
+      - name: Install software sky-capture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+
+      - name: Check the actual sky horizon at two camera heights
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: >-
+          xvfb-run --auto-servernum --server-args="-screen 0 3840x2160x24"
+          python3 tools/test_native_sky.py
+          --godot "$PWD/build-godot-ci/Godot_v4.7.2-stable_linux.x86_64"
+          --output-parent build-native-sky
+          --timeout 45
+
+      - name: Retain the bounded sky-capture result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-sky-camera
+          path: |
+            build-native-sky/sky-camera-*/*.json
+            build-native-sky/sky-camera-*/*.log
+            build-native-sky/sky-camera-*/*.png
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Configure native bridge without TermForge
         run: >-
           cmake -S . -B build-native -DCMAKE_BUILD_TYPE=Release

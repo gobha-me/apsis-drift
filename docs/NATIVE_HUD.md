@@ -48,7 +48,10 @@ existing knowledge-limited values and equipment ratings.
 
 Command notices persist as the latest accepted/refused operation or pause/save
 message. The compact card bounds long notices to 180 characters; the complete
-message stays in instruments and its tooltip. There is no new event history,
+message stays in instruments and its tooltip. Paused operational refusals and
+orbit-hold/save results also remain in the visible controls footer across menu
+frames, retaining the invoking focus and explicit Resume requirement.
+There is no new event history,
 clock, animation requirement or color-only warning. Review replaces the card
 with the detailed panel rather than overlapping another permanent column.
 The text and button layout compensates for logical/physical canvas scaling;
