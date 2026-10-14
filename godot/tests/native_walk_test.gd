@@ -411,6 +411,7 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	view._process(1.0 / 120.0)
 	physical_key(KEY_D, false)
 	check(owner.get_freedom_walk_state() == expected.get_freedom_walk_state() and owner.get_freedom_flight_state() == expected.get_freedom_flight_state(), "Actual accepted input diverged from C++ actor/craft tick")
+	check_station_keyboard_look(view, owner, path)
 	check(commit_fixture_new_game(owner, "42"), "Could not reset owned input fixture for independent long trace")
 	# New Game replaces the presentation lifetime. The prior accepted tick1
 	# view must not be reused to display an independent tick0 world.
@@ -429,6 +430,45 @@ func check_station_controls(view: Control, owner: Variant, path: String, start: 
 	refused._process(1.0)
 	check(refused.paused and not message.is_empty() and refused.error == message and refused.pause_button.disabled and owner.get_freedom_walk_state() == start, "Terminal error recovered through Resume/focus/process")
 	refused.free()
+
+
+func check_station_keyboard_look(view: Control, owner: Variant, path: String) -> void:
+	var prefix := path + ".keyboard"
+	check(owner.save_freedom_as(prefix + "-before.json"), "Keyboard station source Save refused")
+	var source := FileAccess.get_file_as_bytes(prefix + "-before.json")
+	var reference: Variant = ClassDB.instantiate("FreedomBridge")
+	check(commit_fixture_continue(reference, prefix + "-before.json"), "Keyboard station reference Continue refused")
+	# Godot keyboard rates cross the ordinary single-precision Vector2 boundary;
+	# retain that command representation before the independent C++ tick.
+	var rate := Vector2(float(view.preferences_provider.settings.look_speed), 0)
+	var heading := wrapf(float(owner.get_freedom_walk_state().heading_radians) - float(rate.x) / 120.0, -PI, PI)
+	check(reference.advance_freedom_walk(1.0 / 120.0, PackedFloat64Array([0, 0, heading])) and reference.save_freedom_as(prefix + "-reference.json"), "Keyboard station reference tick refused")
+	physical_key(KEY_RIGHT, true)
+	view._process(1.0 / 120.0)
+	physical_key(KEY_RIGHT, false)
+	check(view.error.is_empty() and owner.save_freedom_as(prefix + "-actual.json") and FileAccess.get_file_as_bytes(prefix + "-actual.json") == FileAccess.get_file_as_bytes(prefix + "-reference.json"), "Actual station keyboard look diverged from the independent C++ walking tick")
+	check(FileAccess.get_file_as_bytes(prefix + "-before.json") == source, "Keyboard station look changed its source Save")
+	var committed := FileAccess.get_file_as_bytes(prefix + "-actual.json")
+	var heading_before: float = view.requested_heading
+	var pitch_before: float = view.pitch
+	view.set_paused(true)
+	physical_key(KEY_LEFT, true)
+	physical_key(KEY_RIGHT, true)
+	view.set_paused(false)
+	view._process(0.1)
+	check(view.paused and not view.controls_armed and view.requested_heading == heading_before and view.pitch == pitch_before, "Opposed keyboard look bypassed station Resume or moved paused view")
+	physical_key(KEY_LEFT, false)
+	physical_key(KEY_RIGHT, false)
+	view.observe_neutral_controls()
+	check(view.paused and view.controls_armed, "Released keyboard look implicitly resumed station walking")
+	check(owner.save_freedom_as(prefix + "-paused.json") and FileAccess.get_file_as_bytes(prefix + "-paused.json") == committed, "Paused keyboard look changed complete station voyage")
+	view.export_save_button.grab_focus()
+	view.set_paused(false)
+	check(not view.paused and root.gui_get_focus_owner() == null, "Station Resume left a paused HUD action owning active look keys")
+	physical_key(KEY_UP, true)
+	view.input_controls(0.1)
+	physical_key(KEY_UP, false)
+	check(is_equal_approx(view.pitch, pitch_before + float(view.preferences_provider.settings.look_speed) * 0.1) and view.requested_heading == heading_before and root.gui_get_focus_owner() == null, "Station keyboard up changed yaw, failed to look up or navigated the HUD")
 
 
 func input_map_snapshot() -> Dictionary:

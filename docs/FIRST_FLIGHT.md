@@ -16,7 +16,7 @@ tools/run_godot_native.sh --new-game=42
 
 The current native path is Linux x86_64. Connect the controller before launch.
 New Game starts a first-person actor on Origin Station's hub floor. WASD or the
-left stick walks; right-drag or the right stick looks. **Esc / Start · Controls**
+left stick walks; arrow keys, right-drag or the right stick look. **Esc / Start · Controls**
 opens paused controls. The start screen also offers control Settings and
 [Flight basics](NATIVE_TITLE.md).
 

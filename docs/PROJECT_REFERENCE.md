@@ -38,7 +38,7 @@ tools/run_godot_native.sh --continue=/absolute/path/to/freedom-save.json
 
 Select exactly one mode. New Game accepts the full unsigned 64-bit seed range,
 including zero, and starts a first-person actor on Origin Station's hub floor.
-Walk with WASD or the left stick; right-drag or the right stick controls look.
+Walk with WASD or the left stick; arrow keys, right-drag or the right stick control look.
 Escape or the on-screen button pauses. The bounded route reaches the workshop
 and D1 access, where the real open well stops unsupported walking. Wayfarer
 remains attached at the actual D1 port while the C++ shared clock advances.

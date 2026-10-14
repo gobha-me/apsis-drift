@@ -248,7 +248,7 @@ func build_ui() -> void:
 	column.add_child(telemetry)
 	var hint := hud_text()
 	hud_hint = hint
-	hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk toward D1 · E / A board Wayfarer"
+	hint.text = "WASD / left stick walk · Look keys / right-drag / right stick look\nEsc / Start pause · Arrows / D-pad navigate · Enter / A select\nWalk toward D1 · E / A board Wayfarer"
 	column.add_child(hint)
 	board_button = Button.new()
 	board_button.text = "Board Wayfarer · E / A"
@@ -403,17 +403,21 @@ func resume_requested() -> void:
 	# A past neutral frame cannot authorize a later held press (even W+S / A+D).
 	observe_neutral_controls()
 	if not controls_armed:
-		save_status.text = "Release WASD, both sticks and right mouse before Resume."
+		save_status.text = "Release walking and look controls before Resume."
 		return
 	paused = false
 	board_button.disabled = not focused
 	pause_button.text = "Pause"
-	pause_button.release_focus()
-	save_button.release_focus()
+	# Resume may come from Escape while any paused HUD action owns focus.
+	# Active arrow look must not also navigate that action's GUI neighbors.
+	var current := get_viewport().gui_get_focus_owner()
+	if current != null: current.release_focus()
 	save_status.text = "Walking. Save As pauses the journey."
 
 
 func current_controls_neutral() -> bool:
+	if preferences_provider != null and not preferences_provider.foot_keyboard_look_neutral():
+		return false
 	for key in [KEY_W, KEY_A, KEY_S, KEY_D]:
 		if Input.is_physical_key_pressed(key):
 			return false
@@ -496,6 +500,9 @@ func input_controls(delta: float) -> PackedFloat64Array:
 		return PackedFloat64Array([0.0, 0.0, requested_heading])
 	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
+	var keyboard_look: Vector2 = preferences_provider.foot_keyboard_look()
+	requested_heading -= keyboard_look.x * delta
+	pitch = clampf(pitch - keyboard_look.y * delta, -1.3, 1.3)
 	if available_pads.get(selected_pad, false):
 		forward -= stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_Y))
 		right += stick(Input.get_joy_axis(selected_pad, JOY_AXIS_LEFT_X))

@@ -2,7 +2,7 @@
 
 After a supported, stable Wayfarer landing, **Leave Wayfarer · suit** selects
 first-person ground walking. Release controls and resume explicitly. WASD and
-the left stick walk; right-drag and the right stick look. **Return through hatch**
+the left stick walk; arrow keys, right-drag and the right stick look. **Return through hatch**
 works within 3.5 metres of the original ground access point. Reboarding pauses
 again, after which the ordinary flight controls and thruster liftoff resume.
 Leaving is unavailable while airborne, attached, in a maneuver, in transit,
@@ -55,7 +55,13 @@ The authored roof-hatch animation and a visible transfer route remain unfinished
 This is a useful ground walking prototype, not proof of a continuous climb
 through the hatch. Ground keys are currently fixed WASD; stick shaping consumes
 the existing device/deadzone/curve settings. Flight binding remapping does not
-yet remap those ground keys.
+yet remap those ground keys. On foot, the existing keyboard look bindings
+(default arrows) work without the flight look modifier and use the saved look
+speed and vertical inversion. These bindings also apply on the station. Fixed
+WASD/E keep their walking/boarding meaning if a flight look binding conflicts.
+Menus retain arrow navigation while paused; release look keys before Resume,
+including opposing keys held together. Mouse and stick look retain their
+existing rates.
 
 The suited convention has **no oxygen timer**. Pack attachment, exposure damage,
 instantaneous weather and a saved outside-operation hazard policy remain open
