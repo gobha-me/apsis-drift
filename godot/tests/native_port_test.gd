@@ -14,6 +14,47 @@ func _initialize() -> void:
 	call_deferred("run")
 
 
+func check_port_camera(view: Control, owner: Variant, source: Dictionary) -> void:
+	# Synthetic presentation observations exercise a sub-millimetre boundary;
+	# no provider pose, physical separation or simulation clock is rewritten.
+	var camera_mode: bool = view.cockpit
+	var look: Vector2 = view.look_offset
+	view.cockpit = false
+	view.look_offset = Vector2(0.23, -0.17)
+	var look_basis := Basis(Vector3.UP, -view.look_offset.x) * Basis(Vector3.RIGHT, -view.look_offset.y)
+	for rotation in [Basis.IDENTITY, Basis(Vector3(1, 2, 3).normalized(), 0.63)]:
+		view.state = source.duplicate(true)
+		view.state.body_basis = source.body_basis * rotation
+		var previous_height := -INF
+		var points := {}
+		for distance in [0.0, 99.999, 100.0, 100.001, 125.0, 150.0, 175.0, 199.999, 200.0, 200.001, 1000.0]:
+			view.state.docking.separation = distance
+			view.update_view(0.0)
+			var local_eye: Vector3 = look_basis.inverse() * view.state.body_basis.inverse() * view.camera.position
+			check(local_eye.is_finite() and absf(local_eye.x - 17.0) < 0.0001 and absf(local_eye.z - 28.0) < 0.0001, "Exterior camera lost its body/look reference")
+			check(local_eye.y >= -7.0001 and local_eye.y <= 9.0001 and local_eye.y >= previous_height - 0.0001, "Exterior camera height overshot or reversed during departure")
+			check(view.camera.transform == view.terrain_camera.transform, "Port transition split the registered cameras")
+			previous_height = local_eye.y
+			points[distance] = view.camera.transform
+		check(points[99.999].origin.distance_to(points[100.001].origin) < 0.001, "Exterior camera jumps at the old100m port cutoff")
+		check(points[199.999].origin.distance_to(points[200.001].origin) < 0.001, "Exterior camera jumps at the far endpoint")
+		check(absf((look_basis.inverse() * view.state.body_basis.inverse() * points[0.0].origin).y + 7.0) < 0.0001 and absf((look_basis.inverse() * view.state.body_basis.inverse() * points[1000.0].origin).y - 9.0) < 0.0001, "Existing close/far exterior viewpoints changed")
+		var distances: Array = points.keys()
+		distances.reverse()
+		for distance in distances:
+			view.state.docking.separation = distance
+			view.update_view(0.25)
+			check(view.camera.transform == points[distance], "Port camera depends on history, cadence or approach direction")
+		view.state.docking.clear()
+		view.update_view(0.0)
+		check(view.camera.transform == points[1000.0], "Unavailable port changed the normal exterior camera")
+	view.state = source.duplicate(true)
+	view.cockpit = camera_mode
+	view.look_offset = look
+	view.update_view(0.0)
+	check(owner.get_freedom_flight_state() == source, "Camera-only observation checks mutated authoritative flight")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 5:
@@ -32,6 +73,13 @@ func run() -> void:
 	check(owner.get_freedom_flight_state() == far, "Failed distant capture changed clock/pose/target")
 	check(owner.initialize_freedom_continue(args[0]), "Approach Continue refused")
 	var start: Dictionary = owner.get_freedom_flight_state()
+	for separation in [null, "100", 100, [], NAN, INF, -INF, -0.001]:
+		var invalid_observation := start.duplicate(true)
+		invalid_observation.docking.separation = separation
+		check(not FlightView.valid_state(invalid_observation), "Invalid port separation accepted before presentation")
+	var missing_separation := start.duplicate(true)
+	missing_separation.docking.erase("separation")
+	check(not FlightView.valid_state(missing_separation), "Missing port separation accepted before presentation")
 	for ordinal in [-1, 0, 3, 4294967297, 9223372036854775807]:
 		check(not owner.select_freedom_port(ordinal) and owner.get_freedom_flight_state() == start, "Malformed target changed selected owner")
 	var corrupt := JSON.parse_string(FileAccess.get_file_as_string(args[0])) as Dictionary
@@ -51,6 +99,7 @@ func run() -> void:
 	check(view.station != null and view.station.camera == null and view.station.port_markers.size() == 2, "Close view lost real station or introduced inspection camera")
 	check(view.station.transform == Transform3D(start.station_basis, start.station_position), "Rendered station differs from C++ same-tick projection")
 	check(not view.capture_button.disabled and view.release_button.disabled, "Ready approach UI disagrees with capture gate")
+	check_port_camera(view, owner, start)
 	view.port_command("capture_freedom_port")
 	var captured: Dictionary = owner.get_freedom_flight_state()
 	check(captured.attached and captured.tick == start.tick and captured.target_port == 1, "UI capture did not apply the actual port constraint")

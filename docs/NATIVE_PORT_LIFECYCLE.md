@@ -62,6 +62,13 @@ presentation, not a distant station LOD. The home range cue remains a projection
 without a line-of-sight claim. No inspection camera or alternate station world
 is introduced into flight.
 
+The exterior camera stays below the craft through 100 metres of collar
+separation, then smoothly returns to its normal height at 200 metres. The offset
+uses the current C++ separation and full craft/look basis; it has no independent
+clock or saved history. Approach, departure, pause and Continue therefore choose
+the same viewpoint at the same state. This replaces the former 16-metre camera
+jump at 100 metres; it does not provide arbitrary-angle camera collision avoidance.
+
 Target buttons, collar separation, full alignment, inward/lateral speeds and
 capture readiness read the actual C++ assessment. Capture/release buttons invoke
 C++ commands; UI availability grants no extra capture tolerance. Constrained

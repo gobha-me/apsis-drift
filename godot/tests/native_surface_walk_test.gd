@@ -120,6 +120,67 @@ func check_far_visibility(source: String, assets: String, output: String, render
 	shell.free()
 
 
+func check_ground_pause_heading(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
+	for trigger in ["pause", "focus", "menu", "save"]:
+		if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("exited.json"), "assets": assets}), "Heading source Continue refused"): return
+		var view: Control = shell.current_view
+		if not check(view.surface_walking() and resume(view), "Heading source did not resume on foot"): return
+		var button := InputEventMouseButton.new()
+		button.button_index = MOUSE_BUTTON_RIGHT
+		button.pressed = true
+		button.button_mask = MOUSE_BUTTON_MASK_RIGHT
+		Input.parse_input_event(button)
+		Input.flush_buffered_events()
+		var motion := InputEventMouseMotion.new()
+		motion.relative = Vector2(150, 0)
+		motion.button_mask = MOUSE_BUTTON_MASK_RIGHT
+		# The deterministic shell disables automatic event delivery/processing;
+		# feed the real mouse event to the public handler, then a normal frame.
+		view._input(motion)
+		view._process(1.0 / 120.0)
+		var release: InputEventMouseButton = button.duplicate()
+		release.pressed = false
+		release.button_mask = 0
+		Input.parse_input_event(release)
+		Input.flush_buffered_events()
+		var turned: Dictionary = owner.get_freedom_flight_state()
+		if not check(view.error.is_empty() and absf(turned.surface_walk.heading) > 0.1, "Actual mouse turn did not earn a nonzero heading"): return
+		var prefix := output.path_join("heading-" + trigger)
+		if not check(owner.save_freedom_as(prefix + "-turned.json"), "Earned heading Save refused"): return
+		var before_bytes := FileAccess.get_file_as_bytes(prefix + "-turned.json")
+		var reference: Variant = ClassDB.instantiate("FreedomBridge")
+		if not check(reference.stage_freedom_continue(prefix + "-turned.json"), "Neutral reference Continue refused: " + str(reference.get_last_error())): return
+		var pending: Dictionary = reference.get_pending_freedom_start()
+		if not check(not pending.is_empty() and reference.commit_pending_freedom_start(pending.candidate_id), "Neutral reference commit refused: " + str(reference.get_last_error())): return
+		if not check(reference.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([0, 0, turned.surface_walk.heading]), false) and reference.save_freedom_as(prefix + "-reference.json"), "Neutral same-heading reference refused: " + str(reference.get_last_error())): return
+		if trigger == "pause": view.toggle_pause()
+		elif trigger == "focus":
+			view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+			view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+		elif trigger == "menu": view.instruments_button.pressed.emit()
+		else:
+			view.controls_menu.export_save_button.pressed.emit()
+			check(view.save_dialog.visible, "Surface Save As did not open")
+			view.save_dialog.hide()
+			view.save_dialog.file_selected.emit(prefix + "-selected.json")
+			check(FileAccess.get_file_as_bytes(prefix + "-selected.json") == before_bytes, "Actual Save As changed paused heading/actor/craft")
+		view._process(0.125)
+		check(view.paused and view.error.is_empty() and owner.get_freedom_flight_state() == turned and owner.save_freedom_as(prefix + "-paused.json") and FileAccess.get_file_as_bytes(prefix + "-paused.json") == before_bytes, "Pause/focus/menu/save changed the committed voyage: " + trigger)
+		if not resume(view): return
+		view._process(1.0 / 120.0)
+		var after: Dictionary = owner.get_freedom_flight_state()
+		check(after.surface_walk.heading == turned.surface_walk.heading and after.tick.to_int() == turned.tick.to_int() + 1, "First neutral resumed tick reset the earned heading or clock: " + trigger)
+		if not check(owner.save_freedom_as(prefix + "-resumed.json"), "Resumed heading Save refused"): return
+		check(after == reference.get_freedom_flight_state() and FileAccess.get_file_as_bytes(prefix + "-resumed.json") == FileAccess.get_file_as_bytes(prefix + "-reference.json"), "Neutral resume changed actor/body/resources beyond its genuine reference tick: " + trigger)
+		var saved_before: Dictionary = JSON.parse_string(before_bytes.get_string_from_utf8())
+		var saved_after: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(prefix + "-resumed.json"))
+		check(saved_after.actor.foot_position_metres == saved_before.actor.foot_position_metres and saved_anchor(prefix + "-resumed.json") == saved_anchor(prefix + "-turned.json"), "Stationary resume moved foot or landed anchor: " + trigger)
+		check(view.camera.position.is_equal_approx(after.surface_walk.eye_position) and view.camera.transform == view.terrain_camera.transform, "Resumed ground eye/registered cameras disagreed: " + trigger)
+	# Reinstall the original genuine seated fixture before the old canonical
+	# input route; none of these four short transactions enters its goldens.
+	check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("source.json"), "assets": assets}), "Heading check did not reset the canonical route")
+
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -140,6 +201,8 @@ func run() -> void:
 	recording.close()
 	shell.configure_audio({"audio_hum": wave, "audio_propulsion": wave, "audio_persist": false})
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK and shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Landed source did not stage: " + shell.error): shell.free(); quit(1); return
+	check_ground_pause_heading(shell, owner, args[0], args[1], args[2])
+	if failed: shell.free(); quit(1); return
 	var view: Control = shell.current_view
 	var model_id: int = view.staged_model.get_instance_id()
 	var audio_id: int = shell.audio_session.get_instance_id()
