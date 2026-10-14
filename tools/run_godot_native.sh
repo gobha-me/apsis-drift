@@ -3,12 +3,13 @@
 set -euo pipefail
 
 usage() {
-    echo 'usage: tools/run_godot_native.sh [--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH] [--build-dir=DIR] [--headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
+    echo 'usage: tools/run_godot_native.sh [--new-game=SEED | --continue=ABSOLUTE_SAVE_PATH] [--build-dir=DIR] [--display-driver=wayland|x11 | --headless-validate] [--audio-hum=ABSOLUTE_WAV --audio-propulsion=ABSOLUTE_WAV [--audio-persist=false]]' >&2
 }
 
 selection=''
 requested_native_build=''
 headless_validate=false
+display_driver=''
 audio_arguments=()
 audio_hum=''
 audio_propulsion=''
@@ -35,6 +36,14 @@ for argument in "$@"; do
                 exit 2
             fi
             headless_validate=true
+            ;;
+        --display-driver=*)
+            value="${argument#*=}"
+            if [[ -n "$display_driver" || ( "$value" != wayland && "$value" != x11 ) ]]; then
+                usage
+                exit 2
+            fi
+            display_driver="$value"
             ;;
         --audio-hum=*|--audio-propulsion=*)
             value="${argument#*=}"
@@ -64,6 +73,10 @@ for argument in "$@"; do
             ;;
     esac
 done
+if [[ -n "$display_driver" && "$headless_validate" == true ]]; then
+    usage
+    exit 2
+fi
 if [[ -z "$selection" && "$headless_validate" == true ]]; then
     usage
     exit 2
@@ -145,6 +158,7 @@ trap - EXIT
 
 engine_args=(--path "${repo_dir}/godot" \
     --scene res://scenes/native_start_shell.tscn)
+if [[ -n "$display_driver" ]]; then engine_args+=(--display-driver "$display_driver"); fi
 script_args=("${audio_arguments[@]}")
 if [[ -n "$selection" ]]; then script_args+=("$selection"); fi
 if [[ "$headless_validate" == true ]]; then
