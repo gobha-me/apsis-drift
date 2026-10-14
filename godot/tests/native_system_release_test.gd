@@ -175,6 +175,37 @@ func run() -> void:
 		jump_view = oracle_shell.current_view
 		jump_view.set_process(false)
 		check(jump_view.paused and jump_view.activated and oracle.get_freedom_flight_state().jump.phase == phase and oracle.save_freedom_as(args[2].path_join("jump-" + phase + "-continued.json")) and FileAccess.get_file_as_bytes(args[2].path_join("jump-" + phase + "-continued.json")) == jump_bytes and FileAccess.get_file_as_bytes(jump_path) == jump_bytes, "Jump staged Continue changed complete phase/source bytes")
+	# Activate only on a fresh original system oracle, after the other copies.
+	if not check(oracle_shell.select_start(oracle, {"mode": "continue", "value": args[0].path_join("stepped.json"), "assets": args[1]}), "Impact oracle staged Continue refused: " + oracle_shell.error): oracle_shell.free(); shell.free(); quit(1); return
+	var impact_view: Control = oracle_shell.current_view
+	impact_view.set_process(false)
+	var impact_source: Dictionary = oracle.get_freedom_flight_state()
+	var impact_model: int = impact_view.staged_model.get_instance_id()
+	if not check(impact_source.coordinate_frame == "system_inertial" and not impact_source.impact.selected and impact_source.impact_opt_in.available and impact_view.impact_menu_button != null and not impact_view.impact_menu_button.disabled and oracle.get_freedom_flight_state() == impact_source, "System impact query/button unavailable or mutating"): oracle_shell.free(); shell.free(); quit(1); return
+	save_matches(oracle, args[0].path_join("stepped.json"), args[2].path_join("impact-query.json"))
+	impact_view.impact_menu_button.pressed.emit()
+	var activated_impact: Dictionary = oracle.get_freedom_flight_state()
+	check(impact_view.error.is_empty() and impact_view.paused and impact_view.staged_model.get_instance_id() == impact_model and impact_view.staged_model.valid_current_pose() and activated_impact.coordinate_frame == "planet_relative_inertial" and activated_impact.impact.selected and activated_impact.impact.tick == activated_impact.tick, "Actual impact action lost relative condition, same tick, model or pause")
+	check(activated_impact.impact.forebody == 0 and activated_impact.impact.landing_structure == 0 and activated_impact.impact.latest.is_empty() and not activated_impact.impact.cracked and not activated_impact.impact.visibility_degraded and activated_impact.impact.landing_available and not activated_impact.impact.pending_loss, "Activation invented damage, receipt or loss")
+	for key in ["tick", "orientation_wxyz", "angular_velocity_body", "universe_seed", "system_id", "planet_id", "craft_id", "frame_id", "frame_version", "terrain_policy", "frame_policy"]: check(activated_impact[key] == impact_source[key], "Impact activation changed physical identity or motion: " + key)
+	if not check(activated_impact.docking.ready and not activated_impact.attached and not impact_view.capture_button.disabled, "Real impact oracle is not naturally capture-ready"): oracle_shell.free(); shell.free(); quit(1); return
+	impact_view.port_command("capture_freedom_port")
+	var impact_captured: Dictionary = oracle.get_freedom_flight_state()
+	check(impact_view.error.is_empty() and impact_captured.attached and impact_captured.coordinate_frame == "planet_relative_inertial" and impact_captured.impact == activated_impact.impact, "Actual conditioned capture lost its constraint or condition")
+	impact_view.port_command("release_freedom_port")
+	var impact_released: Dictionary = oracle.get_freedom_flight_state()
+	check(impact_view.error.is_empty() and impact_view.paused and impact_view.staged_model.get_instance_id() == impact_model and not impact_released.attached and impact_released.coordinate_frame == "planet_relative_inertial" and impact_released.impact == impact_captured.impact, "Actual conditioned release stranded the craft or lost relative condition/model")
+	for key in ["tick", "canonical_position_metres", "canonical_velocity_metres_per_second", "orientation_wxyz", "angular_velocity_body", "system_id", "planet_id"]: check(impact_released[key] == impact_captured[key], "Conditioned detach changed its actual constrained body: " + key)
+	activated_impact = impact_released
+	var impact_path: String = args[2].path_join("impact-activated.json")
+	check(oracle.save_freedom_as(impact_path), "Complete activated condition Save refused")
+	var impact_bytes := FileAccess.get_file_as_bytes(impact_path)
+	if not check(oracle_shell.select_start(oracle, {"mode": "continue", "value": impact_path, "assets": args[1]}), "Impact staged Continue refused: " + oracle_shell.error): oracle_shell.free(); shell.free(); quit(1); return
+	impact_view = oracle_shell.current_view
+	impact_view.set_process(false)
+	var restored_impact: Dictionary = oracle.get_freedom_flight_state()
+	check(impact_view.paused and impact_view.activated and impact_view.staged_model.valid_current_pose() and restored_impact.coordinate_frame == "planet_relative_inertial" and restored_impact.impact == activated_impact.impact and not restored_impact.impact_opt_in.available and impact_view.impact_menu_button != null and impact_view.impact_menu_button.disabled, "Impact Continue lost complete condition or selected action state")
+	check(oracle.save_freedom_as(args[2].path_join("impact-continued.json")) and FileAccess.get_file_as_bytes(args[2].path_join("impact-continued.json")) == impact_bytes and FileAccess.get_file_as_bytes(impact_path) == impact_bytes, "Impact Continue changed complete save/source bytes")
 	var capture_tick: String = str(owner.get_freedom_flight_state().tick)
 	view.port_command("capture_freedom_port")
 	var captured: Dictionary = owner.get_freedom_flight_state()

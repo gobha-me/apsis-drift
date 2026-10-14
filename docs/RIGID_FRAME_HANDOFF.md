@@ -252,8 +252,8 @@ Frame policy **2** is an explicit saved selection, with formats **36** (flight),
 policy **1**, all previous formats and ordinary New Game keep their existing
 relative representation. This increment selects no new altitude/SOI threshold.
 
-For the selected policy, successful physical undocking transforms the complete
-body into system coordinates at the same tick. The saved active-world owner
+For the selected policy without an active impact condition, successful physical
+undocking transforms the complete body into system coordinates at the same tick. The saved active-world owner
 retains the actual selected force/terrain planet even though a system frame has
 no planet field. Ordinary ticks derive a transient relative state, run the
 unchanged central-gravity/atmosphere/hold/actuator/resource providers, then
@@ -291,7 +291,8 @@ to the saved planet's relative frame at the unchanged tick, invokes the existing
 aid and validates the complete saved candidate before commit. Cancel retains
 that valid relative frame; Continue retains the body and starts with the
 transient aid off. Existing port capture constrains the relative body, and actual
-port release selects system coordinates again. No automatic frame boundary,
+port release selects system coordinates again unless an existing condition
+retains its supported relative body. No automatic frame boundary,
 new approach threshold or force law is introduced.
 
 For policy2, selecting an existing known jump destination keeps the exact
@@ -302,8 +303,18 @@ charges, transit and arrival; cancel retains the relative source, and arrival
 installs its existing relative target body. No new route, risk, force law or
 frame-selection default is introduced.
 
-System-mode impact activation still refuses transactionally. Physical
-port release still refuses a selected relative voyage with impacts or active jump/contact. Ordinary gameplay keeps policy1
+For policy2, impact-policy availability inspects a strict read-only relative
+view. Explicit activation commits that same-tick relative body together with
+the existing condition and complete saved voyage after validation. Already
+selected conditions keep their idempotent activation behavior. The condition
+remains in its supported relative frame; activation does not add an impact,
+change damage/recovery physics or select a new ordinary default.
+
+With a selected condition, physical port release keeps the validated relative
+constrained body at the same tick, preserves the condition and complete voyage,
+and validates the detached candidate before commit. Existing condition damage
+permissions are unchanged. Contact and active-jump release refusals remain.
+Ordinary gameplay keeps policy1
 while the remaining reference-route consumers are integrated.
 The selected policy is not an extra game mode, player debug control, automatic
 migration or completion of #200's whole handoff matrix.

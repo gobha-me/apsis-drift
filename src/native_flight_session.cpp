@@ -400,25 +400,27 @@ auto NativeFreedomFlightSession::release_port()
   if (auto valid = validate_freedom_docking_document({document_, *docking_});
       !valid)
     return std::unexpected{"Release state refused: " + valid.error().detail};
-  // Historical selection retains its exact relative state. Explicit policy 2
-  // changes representation at this existing event, never physical motion.
+  // Historical selection and selected conditions retain the validated relative
+  // body. Otherwise policy 2 changes coordinates here, never physical motion.
   auto candidate = *this;
   candidate.docking_->attached = false;
   if (document_.model.frame_policy == kFreedomReleaseSystemFramePolicy) {
-    if (condition_ ||
-        (surface_ && (surface_->gear_deployed || surface_->landed)) ||
+    if ((surface_ && (surface_->gear_deployed || surface_->landed)) ||
         (travel_ && travel_->phase != FreedomJumpPhase::idle))
-      return std::unexpected{"System release is not qualified with impacts, "
-                             "contact or an active jump"};
-    const auto system_body =
-        reframe_rigid_body(RigidBodyWorldContext{system_}, document_.flight,
-                           {{RigidFrameKind::system_inertial,
-                             document_.flight.frame.system,
-                             {},
-                             {}},
-                            document_.flight.tick});
-    if (!system_body) return std::unexpected{"System release handoff refused"};
-    candidate.document_.flight = *system_body;
+      return std::unexpected{"Port release is not qualified with contact "
+                             "or an active jump"};
+    if (!condition_) {
+      const auto system_body =
+          reframe_rigid_body(RigidBodyWorldContext{system_}, document_.flight,
+                             {{RigidFrameKind::system_inertial,
+                               document_.flight.frame.system,
+                               {},
+                               {}},
+                              document_.flight.tick});
+      if (!system_body)
+        return std::unexpected{"System release handoff refused"};
+      candidate.document_.flight = *system_body;
+    }
     const auto saved = candidate.save_document();
     if (!saved) return std::unexpected{saved.error()};
     if (auto encoded = encode_native_save_document_json(*saved); !encoded)

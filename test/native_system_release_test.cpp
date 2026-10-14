@@ -572,6 +572,128 @@ auto jump_handoff(const NativeFreedomFlightSession& source) -> void {
         "Actual arrival retains existing relative semantics, "
         "pilot/assembly/recovery and exact frozen attitude/spin");
 }
+auto impact_handoff(const NativeFreedomFlightSession& source,
+                    const NativeFlightControls& held) -> void {
+  const auto original = bytes(source);
+  const auto& aid_before = source.port_approach();
+  const auto& maneuver_before = source.surface_maneuver();
+  need(source.impact_consequences_available());
+  check(bytes(source) == original && source.port_approach() == aid_before &&
+            source.surface_maneuver() == maneuver_before,
+        "System impact availability is read-only for canonical body and whole "
+        "voyage");
+  auto expected = source.document();
+  expected.flight = independent_relative(source);
+  const auto pristine = need(make_craft_condition(expected));
+  auto enabled = source;
+  need(enabled.enable_impact_consequences());
+  check(enabled.document() == expected && enabled.condition() == pristine &&
+            enabled.resources() == source.resources() &&
+            enabled.knowledge() == source.knowledge() &&
+            enabled.travel() == source.travel() &&
+            enabled.docking() == source.docking() &&
+            enabled.boarding() == source.boarding() &&
+            enabled.starting_assembly() == source.starting_assembly() &&
+            need(enabled.recovery_document()).recovery ==
+                need(source.recovery_document()).recovery &&
+            enabled.port_approach() == aid_before &&
+            enabled.surface_maneuver() == maneuver_before &&
+            same(enabled.document().flight.orientation,
+                 source.document().flight.orientation) &&
+            same(enabled.document().flight.angular_velocity_radians_per_second,
+                 source.document().flight.angular_velocity_radians_per_second),
+        "Explicit impact selection creates existing condition on same-tick "
+        "relative body with all owners");
+  need(validate_craft_condition(*enabled.condition(), enabled.document()));
+  (void)need(enabled.condition_document());
+  const auto activated = bytes(enabled);
+  need(enabled.enable_impact_consequences());
+  check(bytes(enabled) == activated && !enabled.impact_consequences_available(),
+        "Existing selected-condition activation remains idempotent");
+  (void)reopen(enabled);
+  const bool ready =
+      need(enabled.assess_port()).decision == OriginDockDecision::capture_ready;
+  check(ready, "Fresh selected-condition copy retains the actual capture-ready "
+               "envelope");
+  if (!ready) return;
+  need(enabled.capture_port());
+  const auto captured_owner = enabled;
+  auto resumed = reopen(enabled);
+  need(enabled.release_port());
+  need(resumed.release_port());
+  check(!enabled.docking()->attached &&
+            enabled.document() == captured_owner.document() &&
+            enabled.document().flight.frame.kind ==
+                RigidFrameKind::planet_relative_inertial &&
+            enabled.condition() == captured_owner.condition() &&
+            enabled.resources() == captured_owner.resources() &&
+            enabled.knowledge() == captured_owner.knowledge() &&
+            enabled.travel() == captured_owner.travel() &&
+            enabled.boarding() == captured_owner.boarding() &&
+            enabled.starting_assembly() == captured_owner.starting_assembly() &&
+            need(enabled.recovery_document()).recovery ==
+                need(captured_owner.recovery_document()).recovery &&
+            bytes(enabled) == bytes(resumed),
+        "Actual capture/Continue/release retains exact relative constraint, "
+        "tick, condition and all owners");
+  const auto released = bytes(enabled);
+  resumed = reopen(resumed);
+  NativeFlightControls invalid;
+  invalid.positive_translation.x = std::numeric_limits<double>::quiet_NaN();
+  check(!enabled.advance(invalid) && bytes(enabled) == released &&
+            enabled.port_approach() == aid_before &&
+            enabled.surface_maneuver() == maneuver_before,
+        "Invalid input preserves the complete newly selected condition voyage");
+  const auto fuel = enabled.resources()->flight_quanta;
+  const auto step = need(enabled.advance(held));
+  const auto repeated = need(resumed.advance(held));
+  check(
+      bytes(enabled) == bytes(resumed) &&
+          enabled.document().flight.frame.kind ==
+              RigidFrameKind::planet_relative_inertial &&
+          enabled.document().flight.tick == source.document().flight.tick + 1 &&
+          enabled.condition()->tick == enabled.document().flight.tick &&
+          enabled.condition()->forebody == 0 &&
+          enabled.condition()->landing_structure == 0 &&
+          !enabled.condition()->latest &&
+          enabled.condition()->next_event == pristine.next_event &&
+          !enabled.recovery_pending() && step.fuel_debit_quanta > 0 &&
+          step.actuation.central.propulsion.positive_force_newtons.x > 0 &&
+          step.actuation.central.propulsion.negative_force_newtons.y > 0 &&
+          enabled.resources()->flight_quanta == fuel - step.fuel_debit_quanta &&
+          step.fuel_debit_quanta == repeated.fuel_debit_quanta &&
+          step.actuation.central.propulsion.positive_force_newtons ==
+              repeated.actuation.central.propulsion.positive_force_newtons &&
+          step.actuation.central.propulsion.negative_force_newtons ==
+              repeated.actuation.central.propulsion.negative_force_newtons,
+      "Actual held station-space tick resumes exactly without inventing "
+      "terrain damage or loss");
+  (void)reopen(enabled);
+  auto spooling = source;
+  need(spooling.begin_jump());
+  const auto spool_bytes = bytes(spooling);
+  check(!spooling.impact_consequences_available() &&
+            !spooling.enable_impact_consequences() &&
+            bytes(spooling) == spool_bytes && !spooling.condition(),
+        "Existing active-jump guard refuses impact activation without owner "
+        "loss");
+  auto pending = source;
+  const auto recovery = need(pending.recovery_document());
+  need(pending.record_loss(
+      FreedomLossCause::irrecoverable_destruction,
+      pending.document().origin.state.craft, pending.document().flight.tick,
+      need(freedom_recovery_source_checksum(recovery.voyage))));
+  const auto pending_bytes = bytes(pending);
+  check(!pending.impact_consequences_available() &&
+            !pending.enable_impact_consequences() &&
+            bytes(pending) == pending_bytes && !pending.condition() &&
+            !pending.port_approach().active &&
+            pending.surface_maneuver().kind == NativeSurfaceManeuverKind::off,
+        "Existing recorded-recovery guard refuses impact activation without a "
+        "new condition");
+  check(bytes(source) == original, "Impact activation and guard copies never "
+                                   "alter the exported source trace");
+}
 auto checkpoint(const NativeFreedomFlightSession& session,
                 const std::filesystem::path& output, std::string_view name,
                 Json& manifest) -> void {
@@ -616,8 +738,6 @@ auto refused_commands(NativeFreedomFlightSession& session) -> void {
           "System contact command refuses transactionally");
   refuses([&] { return session.release_surface(); },
           "System surface release refuses transactionally");
-  refuses([&] { return session.enable_impact_consequences(); },
-          "System impact selection refuses transactionally");
   FreedomSurfaceWalkSaveDocument outside{
       need(session.recovery_document()), 1, {}};
   const auto inside = need(encode_freedom_surface_walk_document_json(outside));
@@ -679,12 +799,16 @@ auto run(const std::filesystem::path& output) -> void {
   const auto assembly = station.starting_assembly();
   const auto origin = station.document().origin;
   const auto binding = station.craft_binding();
-  auto blocked = station;
-  need(blocked.enable_impact_consequences());
-  const auto selected_impact = bytes(blocked);
-  check(!blocked.release_port() && bytes(blocked) == selected_impact &&
-            blocked.docking()->attached && blocked.condition(),
-        "Selected relative impacts prevent release without dropping condition");
+  auto conditioned = station;
+  need(conditioned.enable_impact_consequences());
+  const auto constrained = conditioned.document().flight;
+  const auto pristine_condition = *conditioned.condition();
+  need(conditioned.release_port());
+  check(!conditioned.docking()->attached &&
+            conditioned.document().flight == constrained &&
+            conditioned.condition() == pristine_condition,
+        "Existing attached condition can depart in its unchanged supported "
+        "relative frame");
 
   NativeFlightControls held;
   held.positive_translation.x = .005;
@@ -789,6 +913,7 @@ auto run(const std::filesystem::path& output) -> void {
   checkpoint(live, output, "stepped", manifest);
   gear_handoff(live, held);
   jump_handoff(live);
+  impact_handoff(live, held);
   check(
       live.boarding() == pilot && live.starting_assembly() == assembly &&
           live.craft_binding().selection() != nullptr &&
