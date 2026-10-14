@@ -107,8 +107,12 @@ auto select_document(FreedomFlightSaveDocument document,
     return std::unexpected{
         "Freedom flight save rejected: " + hydrated.error().path + ": " +
         hydrated.error().detail};
+  const auto relative =
+      relative_freedom_flight_state(document, hydrated->system);
+  if (!relative || !relative->frame.planet)
+    return std::unexpected{"Selected flight relative owner is unavailable"};
   const auto reference =
-      find_local_system_planet(hydrated->system, *document.flight.frame.planet);
+      find_local_system_planet(hydrated->system, *relative->frame.planet);
   if (!reference)
     return std::unexpected{"Selected flight planet is unavailable"};
   auto home = (*reference)->descriptor;

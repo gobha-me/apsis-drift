@@ -10,6 +10,14 @@ a complete authenticated system-state flight into this existing canonical
 planet frame at the saved tick. Ordinary Save As remains formats26/31; old
 formats and nested voyages do not acquire another frame interpretation.
 
+The separately selected [release frame policy2](RIGID_FRAME_HANDOFF.md#explicit-release-selected-system-flight)
+persists actual undocked system coordinates in formats36/37/38 and retains
+complete voyage wrappers. Its temporary relative observations feed existing
+physics/terrain; canonical vectors and checksum remain explicit. This frame
+policy differs from terrain policy2. Ordinary New Game keeps relative frame
+policy1 while the selected path's landing, FTL, impact and approach consumers
+remain unfinished. Format35 imports still normalize once and do not select it.
+
 2026-09-30, #340; port lifecycle added 2026-10-01 in #342. The ordinary launcher
 selects format-17 station state, format-18 physical flight or explicit
 [format-19 port state](NATIVE_PORT_LIFECYCLE.md). New Game still starts at Origin Station. Continuing

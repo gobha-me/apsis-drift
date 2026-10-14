@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/rigid_frame_handoff.hpp"
 
 #include <array>
 #include <chrono>
@@ -62,6 +63,65 @@ struct Fixture {
         {NativeStartup::Mode::freedom, std::move(d), planet, {}}));
   }
 };
+auto release_frame_roundtrips() -> void {
+  const Fixture fixture{Seed{42}, 2};
+  auto detached = fixture.document();
+  detached.flight.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+  detached.flight.world = FreedomActiveWorldSelection{
+      1, fixture.system.catalog.id, fixture.station.orbit.host_planet};
+  auto system = detached;
+  system.flight.flight = require(reframe_rigid_body(
+      RigidBodyWorldContext{fixture.system}, detached.flight.flight,
+      {{RigidFrameKind::system_inertial, fixture.system.catalog.id, {}, {}},
+       detached.flight.flight.tick}));
+  auto invalid = system;
+  invalid.docking.attached = true;
+  check(!validate_freedom_docking_document(invalid),
+        "attached constraint refuses canonical system state");
+  invalid = system;
+  invalid.flight.world->planet = PlanetId{0};
+  check(!validate_freedom_docking_document(invalid),
+        "docking force owner must be authenticated station host");
+  check(!validate_freedom_surface_document({system, {true, {}}}),
+        "system flight with deployed gear refuses before absent-anchor return");
+  auto attached = detached;
+  attached.docking.attached = true;
+  attached.flight.flight = require(release_origin_port(
+      fixture.system, fixture.station, fixture.geometry,
+      {1, detached.docking.target, detached.flight.flight.craft,
+       detached.flight.flight.tick}));
+  for (const auto policy :
+       {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy}) {
+    for (auto source : {detached, system, attached}) {
+      source.flight.model.terrain_policy = policy;
+      const auto text = require(encode_freedom_docking_document_json(source));
+      const auto root = Json::parse(text);
+      auto mutation = root;
+      mutation["flight_model"].erase("frame_policy");
+      check(
+          !decode_freedom_docking_document_json(mutation.dump()),
+          "format37 requires frame selection even with attached relative body");
+      for (const auto legacy : {19U, 32U}) {
+        mutation = root;
+        mutation["format_version"] = legacy;
+        check(!decode_native_save_document_json(mutation.dump()),
+              "selected docking policy cannot enter old docking schemas");
+      }
+      check(root["format_version"] == kFreedomReleaseDockingSaveFormatVersion &&
+                require(decode_freedom_docking_document_json(text)) == source &&
+                require(decode_native_save_document_json(text)) ==
+                    NativeSaveDocument{source},
+            "format37 preserves attached or detached sole body and selected "
+            "policy");
+      const FreedomSurfaceSaveDocument surface{source, {}};
+      const auto nested = require(encode_native_save_document_json(surface));
+      check(
+          require(decode_native_save_document_json(nested)) ==
+              NativeSaveDocument{surface},
+          "surface wrapper accepts selected docking without dropping metadata");
+    }
+  }
+}
 auto invalid() -> void {
   const Fixture f;
   const auto good = f.document();
@@ -349,6 +409,7 @@ auto main() -> int {
   std::filesystem::create_directory(dir);
   try {
     invalid();
+    release_frame_roundtrips();
     lifecycle(dir);
     approach_aid();
   } catch (const std::exception& e) {

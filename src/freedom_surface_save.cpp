@@ -72,19 +72,22 @@ auto decode_base(const Json& j)
   const auto& version = j["format_version"];
   if (version == kFreedomFlightSaveFormatVersion ||
       version == kFreedomActiveFlightSaveFormatVersion ||
-      version == kFreedomTerrainFlightSaveFormatVersion) {
+      version == kFreedomTerrainFlightSaveFormatVersion ||
+      version == kFreedomReleaseFlightSaveFormatVersion) {
     auto d = decode_freedom_flight_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
   }
   if (version == kFreedomDockingSaveFormatVersion ||
-      version == kFreedomTerrainDockingSaveFormatVersion) {
+      version == kFreedomTerrainDockingSaveFormatVersion ||
+      version == kFreedomReleaseDockingSaveFormatVersion) {
     auto d = decode_freedom_docking_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
   }
   if (version == kFreedomJourneySaveFormatVersion ||
-      version == kFreedomTerrainJourneySaveFormatVersion) {
+      version == kFreedomTerrainJourneySaveFormatVersion ||
+      version == kFreedomReleaseJourneySaveFormatVersion) {
     auto d = decode_freedom_journey_document_json(text);
     if (!d) return std::unexpected{d.error()};
     return FreedomSurfaceBaseSave{std::move(*d)};
@@ -150,6 +153,11 @@ auto validate_freedom_surface_document(const FreedomSurfaceSaveDocument& d)
     return std::unexpected{
         failure("$.surface.gear_deployed",
                 "stow gear before station capture or walking")};
+  if (flight.flight.frame.kind == RigidFrameKind::system_inertial &&
+      (d.surface.gear_deployed || d.surface.landed))
+    return std::unexpected{failure(
+        "$.surface",
+        "system-frame flight requires stowed gear and no landed anchor")};
   if (!d.surface.landed) return {};
   if (!d.surface.gear_deployed || attached_or_outside(d.base))
     return std::unexpected{

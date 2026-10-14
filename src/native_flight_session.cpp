@@ -1,4 +1,5 @@
 #include "apsis_drift/native_flight_session.hpp"
+#include "apsis_drift/rigid_frame_handoff.hpp"
 
 #include <cmath>
 #include <limits>
@@ -168,8 +169,17 @@ auto NativeFreedomFlightSession::open(NativeStartup selected)
   if (!hydrated)
     return std::unexpected{"Flight session rejected: " + hydrated.error().path +
                            ": " + hydrated.error().detail};
+  const auto relative =
+      relative_freedom_flight_state(document, hydrated->system);
+  if (!relative) return std::unexpected{relative.error().detail};
+  if (document.flight.frame.kind == RigidFrameKind::system_inertial &&
+      (condition || surface_actor || actor ||
+       (surface && (surface->gear_deployed || surface->landed)) ||
+       (travel && travel->phase != FreedomJumpPhase::idle)))
+    return std::unexpected{"System flight cannot select contact, outside "
+                           "actors, impacts or an active jump yet"};
   const auto reference =
-      find_local_system_planet(hydrated->system, *document.flight.frame.planet);
+      find_local_system_planet(hydrated->system, *relative->frame.planet);
   if (!reference || selected.home_planet != (*reference)->descriptor)
     return std::unexpected{
         "Selected home planet differs from the saved physical owner"};
@@ -313,8 +323,10 @@ auto NativeFreedomFlightSession::assess_port() const
       generate_origin_station(document_.origin.recipe.universe_seed);
   const auto geometry = origin_station_geometry(station);
   if (!geometry) return std::unexpected{"Origin geometry is unavailable"};
-  const auto result = assess_origin_dock(system_, station, *geometry,
-                                         docking_->target, document_.flight);
+  const auto body = relative_state();
+  if (!body) return std::unexpected{body.error()};
+  const auto result =
+      assess_origin_dock(system_, station, *geometry, docking_->target, *body);
   if (!result) return std::unexpected{"Origin port assessment refused"};
   return *result;
 }
@@ -342,8 +354,10 @@ auto NativeFreedomFlightSession::capture_port()
       generate_origin_station(document_.origin.recipe.universe_seed);
   const auto geometry = origin_station_geometry(station);
   if (!geometry) return std::unexpected{"Origin geometry is unavailable"};
-  const auto constraint = capture_origin_port(
-      system_, station, *geometry, docking_->target, document_.flight);
+  const auto body = relative_state();
+  if (!body) return std::unexpected{body.error()};
+  const auto constraint =
+      capture_origin_port(system_, station, *geometry, docking_->target, *body);
   if (!constraint) return std::unexpected{"Physical port capture refused"};
   const auto pose =
       release_origin_port(system_, station, *geometry, *constraint);
@@ -364,6 +378,12 @@ auto NativeFreedomFlightSession::capture_port()
           captured.refresh_knowledge(LocalObservationEvent::port_capture);
       !observed)
     return observed;
+  if (document_.model.frame_policy == kFreedomReleaseSystemFramePolicy) {
+    const auto saved = captured.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+  }
   *this = std::move(captured);
   return {};
 }
@@ -380,10 +400,43 @@ auto NativeFreedomFlightSession::release_port()
   if (auto valid = validate_freedom_docking_document({document_, *docking_});
       !valid)
     return std::unexpected{"Release state refused: " + valid.error().detail};
-  // The canonical body already is the same-tick release pose. Removing the
-  // constraint never advances it, changes momentum or withdraws the craft.
-  docking_->attached = false;
+  // Historical selection retains its exact relative state. Explicit policy 2
+  // changes representation at this existing event, never physical motion.
+  auto candidate = *this;
+  candidate.docking_->attached = false;
+  if (document_.model.frame_policy == kFreedomReleaseSystemFramePolicy) {
+    if (condition_ ||
+        (surface_ && (surface_->gear_deployed || surface_->landed)) ||
+        (travel_ && travel_->phase != FreedomJumpPhase::idle))
+      return std::unexpected{"System release is not qualified with impacts, "
+                             "contact or an active jump"};
+    const auto system_body =
+        reframe_rigid_body(RigidBodyWorldContext{system_}, document_.flight,
+                           {{RigidFrameKind::system_inertial,
+                             document_.flight.frame.system,
+                             {},
+                             {}},
+                            document_.flight.tick});
+    if (!system_body) return std::unexpected{"System release handoff refused"};
+    candidate.document_.flight = *system_body;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+  }
+  *this = std::move(candidate);
   return {};
+}
+
+auto NativeFreedomFlightSession::relative_state() const
+    -> std::expected<RigidBodyState, std::string> {
+  // Admission and committing mutations already validate this private state.
+  // Ordinary relative observations retain the existing direct-body path.
+  if (document_.flight.frame.kind == RigidFrameKind::planet_relative_inertial)
+    return document_.flight;
+  auto body = relative_freedom_flight_state(document_, system_);
+  if (!body) return std::unexpected{body.error().detail};
+  return *body;
 }
 
 auto NativeFreedomFlightSession::observe() const
@@ -391,13 +444,15 @@ auto NativeFreedomFlightSession::observe() const
   const RigidBodyWorldContext context{system_};
   VacuumIntent intent;
   intent.assistance = document_.model.assistance;
+  const auto body = relative_state();
+  if (!body) return std::unexpected{body.error()};
   const auto air = evaluate_atmospheric_flight(
-      context, document_.flight, intent, rotation_, document_.model.atmosphere,
+      context, *body, intent, rotation_, document_.model.atmosphere,
       document_.model.central);
   if (!air) return std::unexpected{"Saved atmospheric observation refused"};
   const OrbitalTelemetryRecipe policy{1, air->space_boundary_altitude_metres};
   const auto orbit = evaluate_orbital_telemetry(
-      context, document_.flight, rotation_, policy, document_.model.central);
+      context, *body, rotation_, policy, document_.model.central);
   if (!orbit) return std::unexpected{"Saved orbital observation refused"};
   return NativeFlightObservation{*air, *orbit};
 }
@@ -421,8 +476,10 @@ auto NativeFreedomFlightSession::set_hold(OrbitHoldRequest request)
         "Cancel surface maneuver before requesting orbit hold"};
   const auto observed = observe();
   if (!observed) return std::unexpected{observed.error()};
+  const auto body = relative_state();
+  if (!body) return std::unexpected{body.error()};
   if (!validate_orbit_hold_request(
-          RigidBodyWorldContext{system_}, document_.flight, rotation_,
+          RigidBodyWorldContext{system_}, *body, rotation_,
           {1, observed->atmosphere.space_boundary_altitude_metres}, request,
           document_.model.central))
     return std::unexpected{
@@ -451,8 +508,10 @@ auto NativeFreedomFlightSession::current_orbit_hold_target() const
   if (observed->orbit.classification != OrbitClassification::stable)
     return std::unexpected{"Reach a bound orbit above the air boundary first"};
   const RigidBodyWorldContext context{system_};
-  const auto gravity = evaluate_central_body_gravity(context, document_.flight,
-                                                     document_.model.central);
+  const auto body = relative_state();
+  if (!body) return std::unexpected{body.error()};
+  const auto gravity =
+      evaluate_central_body_gravity(context, *body, document_.model.central);
   if (!gravity) return std::unexpected{"Current hold radius unavailable"};
   const auto momentum =
       observed->orbit.specific_angular_momentum_metres_squared_per_second;
@@ -468,7 +527,7 @@ auto NativeFreedomFlightSession::current_orbit_hold_target() const
       gravity->distance_metres,
       {component(momentum.x), component(momentum.y), component(momentum.z)}};
   if (!validate_orbit_hold_request(
-          context, document_.flight, rotation_,
+          context, *body, rotation_,
           {1, observed->atmosphere.space_boundary_altitude_metres},
           {kOrbitHoldVersion, target}, document_.model.central))
     return std::unexpected{"Current radius and plane refused for orbit hold"};
@@ -552,6 +611,37 @@ auto NativeFreedomFlightSession::advance_craft_tick(
   if (document_.flight.tick >= std::numeric_limits<SimulationTick>::max() - 2)
     return std::unexpected{
         "Flight clock cannot retain an advanceable saved candidate"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (condition_ || actor_ || surface_walker_ ||
+        (docking_ && docking_->attached) || port_approach_.active ||
+        (surface_ && (surface_->gear_deployed || surface_->landed)) ||
+        surface_maneuver_.kind != NativeSurfaceManeuverKind::off ||
+        (travel_ && travel_->phase != FreedomJumpPhase::idle))
+      return std::unexpected{"Unsupported constrained system-flight step"};
+    const auto body = relative_state();
+    if (!body) return std::unexpected{body.error()};
+    auto candidate = *this;
+    candidate.document_.flight = *body;
+    // Dispatch the unchanged planet-owned integrator exactly once. The local
+    // value is transient, and every whole-voyage owner travels with it.
+    auto result = candidate.advance_craft_tick(controls, step);
+    if (!result) return std::unexpected{result.error()};
+    const auto system_body = reframe_rigid_body(
+        RigidBodyWorldContext{system_}, candidate.document_.flight,
+        {{RigidFrameKind::system_inertial,
+          document_.flight.frame.system,
+          {},
+          {}},
+         candidate.document_.flight.tick});
+    if (!system_body) return std::unexpected{"System tick handoff refused"};
+    candidate.document_.flight = *system_body;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+    *this = std::move(candidate);
+    return result;
+  }
   const RigidBodyWorldContext context{system_};
   VacuumIntent intent{controls.positive_translation,
                       controls.negative_translation, controls.positive_rotation,
@@ -900,6 +990,9 @@ auto NativeFreedomFlightSession::surface_document() const
 }
 auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
     -> std::expected<void, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{
+        "System-flight landing/contact is not qualified yet"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -919,6 +1012,9 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
 auto NativeFreedomFlightSession::commit_touchdown(
     std::uint64_t expected_source_checksum)
     -> std::expected<void, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{
+        "System-flight landing/contact is not qualified yet"};
   if (condition_ && !condition_allows_landing(*condition_))
     return std::unexpected{
         "Landing structure is damaged; safe touchdown unavailable"};

@@ -33,7 +33,7 @@ struct SavedFlightProjection {
 };
 inline auto project_saved_flight(const NativeFreedomFlightSession& session)
     -> SavedFlightProjection {
-  const auto& body = session.document().flight;
+  const auto body = require(session.relative_state());
   const auto& system = session.system();
   const auto planet =
       require(find_local_system_planet(system, *body.frame.planet))->descriptor;

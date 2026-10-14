@@ -1,7 +1,9 @@
 #include "apsis_drift/native_flight_session.hpp"
 #include "apsis_drift/native_startup.hpp"
+#include "apsis_drift/rigid_frame_handoff.hpp"
 #include "apsis_drift/universe_navigation.hpp"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <chrono>
@@ -78,6 +80,161 @@ auto document(Seed seed, double altitude = 1000) -> FreedomFlightSaveDocument {
   state.position_metres = {planet.radius.value * 1000.0 + altitude, 0, 0};
   state.linear_velocity_metres_per_second = {0, 0, -100};
   return {origin, state, {}};
+}
+auto release_frame_selection() -> void {
+  const auto system = required(generate_physical_origin_system(Seed{42}, 2));
+  auto relative = document(Seed{42}, 500000);
+  relative.model.physical_catalog = system.generator_version;
+  relative.model.physical_ephemeris = system.ephemeris_version;
+  relative.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+  relative.flight.craft = wayfarer_frame().recipe;
+  relative.world = FreedomActiveWorldSelection{
+      1, system.catalog.id, relative.origin.recipe.home_planet};
+  relative.flight.orientation = {.8, .4, -.2, .4};
+  relative.flight.angular_velocity_radians_per_second = {.02, -.03, .04};
+  auto selected = relative;
+  selected.flight = required(reframe_rigid_body(
+      RigidBodyWorldContext{system}, relative.flight,
+      {{RigidFrameKind::system_inertial, system.catalog.id, {}, {}},
+       relative.flight.tick}));
+  auto reject = [&](FreedomFlightSaveDocument bad) {
+    check(!relative_freedom_flight_state(bad, system) &&
+              !encode_freedom_flight_document_json(bad),
+          "invalid selected frame refuses provider and persistence");
+  };
+  auto bad = selected;
+  bad.world.reset();
+  reject(bad);
+  bad = selected;
+  bad.world->planet = PlanetId{0};
+  reject(bad);
+  bad = selected;
+  bad.flight.frame.system = SystemId{0};
+  reject(bad);
+  bad = selected;
+  bad.flight.frame.planet = relative.world->planet;
+  reject(bad);
+  bad = selected;
+  bad.model.frame_policy = 3;
+  reject(bad);
+  bad = selected;
+  bad.model.frame_policy = kFreedomRelativeFramePolicy;
+  reject(bad);
+  bad = selected;
+  ++bad.origin.state.tick;
+  reject(bad);
+  bad = selected;
+  ++bad.model.central.version;
+  reject(bad);
+  bad = selected;
+  bad.model.hold.target = OrbitHoldTarget{PlanetId{0}, 1, {0, 0, 1}};
+  reject(bad);
+  for (const double value : {std::numeric_limits<double>::quiet_NaN(),
+                             std::numeric_limits<double>::infinity()}) {
+    bad = selected;
+    bad.flight.position_metres.x = value;
+    reject(bad);
+    bad = selected;
+    bad.flight.orientation.w = value;
+    reject(bad);
+    bad = selected;
+    bad.flight.angular_velocity_radians_per_second.y = value;
+    reject(bad);
+  }
+  const auto foreign = required(generate_physical_origin_system(Seed{43}, 2));
+  check(!relative_freedom_flight_state(selected, foreign),
+        "provider refuses a different valid physical owner");
+  auto forged = system;
+  forged.catalog.planets.front().orbit.epoch_phase_turns += 1;
+  check(!relative_freedom_flight_state(selected, forged),
+        "provider authenticates complete supplied physical owner");
+  for (const auto policy :
+       {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy}) {
+    selected.model.terrain_policy = policy;
+    relative.model.terrain_policy = policy;
+    for (const auto& source : {relative, selected}) {
+      const auto text = required(encode_freedom_flight_document_json(source));
+      const auto json = Json::parse(text);
+      for (const auto key : {"frame_policy", "terrain_policy"}) {
+        auto mutation = json;
+        mutation["flight_model"].erase(key);
+        check(!decode_freedom_flight_document_json(mutation.dump()),
+              "selected format requires both explicit policies");
+      }
+      for (const auto& invalid_policy :
+           {Json(true), Json(2.0), Json(1), Json(3), Json(4294967298ULL)}) {
+        auto mutation = json;
+        mutation["flight_model"]["frame_policy"] = invalid_policy;
+        check(!decode_freedom_flight_document_json(mutation.dump()),
+              "selected frame policy refuses invalid type/version");
+      }
+      for (const auto historical : {18U, 26U, 31U, 35U}) {
+        auto mutation = json;
+        mutation["format_version"] = historical;
+        check(!decode_freedom_flight_document_json(mutation.dump()) &&
+                  !decode_freedom_system_flight_import_json(mutation.dump()),
+              "selected policy cannot reinterpret historical codecs or "
+              "format35 import");
+      }
+      auto mutation = json;
+      mutation["flight"]["frame"] = nullptr;
+      check(!decode_freedom_flight_document_json(mutation.dump()),
+            "malformed selected frame refuses without JSON exception");
+      const auto restored = required(decode_freedom_flight_document_json(text));
+      check(
+          json["format_version"] == kFreedomReleaseFlightSaveFormatVersion &&
+              restored == source && bits(restored.flight, source.flight) &&
+              required(encode_freedom_flight_document_json(restored)) == text &&
+              required(decode_native_save_document_json(text)) ==
+                  NativeSaveDocument{source},
+          "format36 retains sole canonical state and both selections exactly");
+      const auto view = required(relative_freedom_flight_state(source, system));
+      check(view.frame == relative.flight.frame &&
+                view.tick == source.flight.tick &&
+                view.orientation == source.flight.orientation &&
+                view.angular_velocity_radians_per_second ==
+                    source.flight.angular_velocity_radians_per_second,
+            "relative adapter preserves orientation spin tick and named force "
+            "body");
+      if (source.flight.frame.kind == RigidFrameKind::planet_relative_inertial)
+        check(bits(view, source.flight),
+              "relative provider identity preserves every bit");
+      else {
+        const auto ephemeris = required(resolve_planet_ephemeris(
+            system, source.world->planet, {source.flight.tick, 0}));
+        const std::array<double, 6> actual{
+            view.position_metres.x,
+            view.position_metres.y,
+            view.position_metres.z,
+            view.linear_velocity_metres_per_second.x,
+            view.linear_velocity_metres_per_second.y,
+            view.linear_velocity_metres_per_second.z};
+        const std::array<double, 6> canonical{
+            source.flight.position_metres.x,
+            source.flight.position_metres.y,
+            source.flight.position_metres.z,
+            source.flight.linear_velocity_metres_per_second.x,
+            source.flight.linear_velocity_metres_per_second.y,
+            source.flight.linear_velocity_metres_per_second.z};
+        const std::array<double, 6> origin{
+            ephemeris.position.x, ephemeris.position.y, ephemeris.position.z,
+            ephemeris.velocity.x, ephemeris.velocity.y, ephemeris.velocity.z};
+        for (std::size_t axis = 0; axis < actual.size(); ++axis) {
+          const auto oracle =
+              static_cast<long double>(canonical[axis]) - origin[axis];
+          const auto tolerance = 4 * std::numeric_limits<double>::epsilon() *
+                                 std::max(1.0L, std::abs(oracle));
+          check(std::abs(static_cast<long double>(actual[axis]) - oracle) <=
+                    tolerance,
+                "relative view matches independent same-tick long-double "
+                "ephemeris subtraction");
+        }
+      }
+      check(
+          hydrate_freedom_flight_document(source).has_value(),
+          "selected canonical system state hydrates through its relative view");
+    }
+  }
 }
 auto invalid() -> void {
   const auto valid = document(Seed{42});
@@ -557,6 +714,7 @@ auto terrain_selection(const std::filesystem::path& directory) -> void {
 int main() {
   try {
     invalid();
+    release_frame_selection();
     const auto directory =
         std::filesystem::temp_directory_path() /
         ("apsis-flight-save-" +

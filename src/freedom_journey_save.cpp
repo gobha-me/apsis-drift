@@ -109,7 +109,10 @@ auto encode_freedom_journey_document_json(
   const auto encoded = encode_freedom_docking_document_json(document.voyage);
   if (!encoded) return std::unexpected{encoded.error()};
   auto root = Json::parse(*encoded);
-  root["format_version"] = document.voyage.flight.model.terrain_policy ==
+  root["format_version"] = document.voyage.flight.model.frame_policy ==
+                                   kFreedomReleaseSystemFramePolicy
+                               ? kFreedomReleaseJourneySaveFormatVersion
+                           : document.voyage.flight.model.terrain_policy ==
                                    kFreedomLocalDetailTerrainPolicy
                                ? kFreedomTerrainJourneySaveFormatVersion
                                : kFreedomJourneySaveFormatVersion;
@@ -171,9 +174,12 @@ auto decode_freedom_journey_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  const bool release =
+      root["format_version"] == kFreedomReleaseJourneySaveFormatVersion;
   const bool selected =
       root["format_version"] == kFreedomTerrainJourneySaveFormatVersion;
-  if (root["format_version"] != kFreedomJourneySaveFormatVersion && !selected)
+  if (root["format_version"] != kFreedomJourneySaveFormatVersion && !selected &&
+      !release)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom journey save version"}};
@@ -216,8 +222,9 @@ auto decode_freedom_journey_document_json(std::string_view text)
   const OriginWalkerState actor{1, *actor_id, *foot, *velocity,
                                 a["heading_radians"].get<double>()};
   root.erase("actor");
-  root["format_version"] = selected ? kFreedomTerrainDockingSaveFormatVersion
-                                    : kFreedomDockingSaveFormatVersion;
+  root["format_version"] = release    ? kFreedomReleaseDockingSaveFormatVersion
+                           : selected ? kFreedomTerrainDockingSaveFormatVersion
+                                      : kFreedomDockingSaveFormatVersion;
   root["state"]["location"] = "docked_at_origin_port";
   auto voyage = decode_freedom_docking_document_json(root.dump());
   if (!voyage) return std::unexpected{voyage.error()};

@@ -747,6 +747,12 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
   add_test(NAME native-flight-session-contract COMMAND apsis-drift-native-flight-session-tests)
   set_tests_properties(native-flight-session-contract PROPERTIES TIMEOUT 180)
+  add_executable(apsis-drift-native-system-release-tests test/native_system_release_test.cpp)
+  target_link_libraries(apsis-drift-native-system-release-tests PRIVATE apsis-drift::core nlohmann_json::nlohmann_json)
+  target_compile_options(apsis-drift-native-system-release-tests PRIVATE
+    -Wall -Wextra -Wpedantic -Werror -Wconversion -Wsign-conversion -ffp-contract=off)
+  add_test(NAME native-system-release-contract COMMAND apsis-drift-native-system-release-tests)
+  set_tests_properties(native-system-release-contract PROPERTIES TIMEOUT 180)
   add_executable(apsis-drift-system-flight-validation-tests test/system_flight_validation_test.cpp)
   target_link_libraries(apsis-drift-system-flight-validation-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-system-flight-validation-tests PRIVATE
