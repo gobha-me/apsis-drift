@@ -1,5 +1,6 @@
 extends "res://studies/captures/native_voyage_capture.gd"
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
+const Navigation = preload("res://scripts/native/home_navigation.gd")
 ## Actual native root, input, C++ terrain and complete Save comparisons.
 ## The source is explicitly a near-ground test setup, not a flight acceptance.
 
@@ -52,6 +53,12 @@ func saved_anchor(path: String) -> Dictionary:
 	return {}
 
 
+func check_ship_bearing(view: Control) -> void:
+	check(view.ship_marker.visible and view.ship_marker.label_text == "SHIP" and not view.home_marker.visible, "Ground view lost the separate ship bearing")
+	var expected := Navigation.project(view.camera, Vector3.ZERO, view.ship_marker.size, Navigation.INSET * view.ship_marker.render_scale)
+	check(not expected.is_empty() and view.ship_marker.cue == expected, "Ship bearing diverged from the actual camera and retained craft centre")
+
+
 func check_visibility_refresh(view: Control, owner: Variant, output: String, label: String, anchor: Dictionary) -> void:
 	var path := output.path_join(label + ".json")
 	var after := output.path_join(label + "-refresh.json")
@@ -63,6 +70,7 @@ func check_visibility_refresh(view: Control, owner: Variant, output: String, lab
 	check(view.error.is_empty() and view.paused and owner.get_freedom_flight_state() == state and view.staged_model.get_instance_id() == model and view.staged_model.valid_current_pose(), "Camera refresh changed the paused actor/craft/model")
 	check(owner.save_freedom_as(after) and FileAccess.get_file_as_bytes(after) == bytes and saved_anchor(path) == anchor, "Visibility refresh changed complete save or landed anchor")
 	check(view.camera.position.is_equal_approx(state.surface_walk.eye_position) and view.camera.transform == view.terrain_camera.transform and view.camera.fov == view.terrain_camera.fov, "Surface cameras lost authoritative eye/basis/FOV")
+	check_ship_bearing(view)
 	check(view.camera.far >= view.camera.position.length() + 16.0 and view.camera.far <= view.terrain_camera.far and view.camera.far / view.camera.near <= 500001.0, "Landed craft remains beyond the close-pass far plane")
 	check(view.camera.cull_mask == 3 and view.terrain_camera.cull_mask == 1 and view.camera.get_world_3d() == view.terrain_camera.get_world_3d() and view.light.light_cull_mask == 1 and view.local_light.light_cull_mask == 2, "Visibility repair lost shared terrain occlusion or light/layer ownership")
 	check(-view.camera.basis.z.dot((-view.camera.position).normalized()) > 0.9, "Actual backward walking no longer looks toward the retained craft")
@@ -227,9 +235,11 @@ func run() -> void:
 	var captures: Array = []
 	var rendered := DisplayServer.get_name() != "headless"
 	check(view.paused and not view.surface_walking() and view.state.surface.landed, "Continue lost landed seated readiness")
+	check(not view.ship_marker.visible and view.home_marker.label_text == "HOME", "Seated landing showed a ground ship bearing or changed HOME")
 	check(not view.hud_scroll.visible and "Landed" in view.primary_status.text and view.context_action.disabled, "Landed compact HUD lost actual mode or allowed a paused maneuver")
 	view.surface_walk_button.pressed.emit()
 	check(view.paused and view.surface_walking() and view.liftoff_button.disabled and view.assist_button.disabled, "Actual exit button did not transfer input and pause")
+	check_ship_bearing(view)
 	check(view.light.light_cull_mask == 1 and view.local_light.light_cull_mask == 2 and view.light.light_energy == 1.0 and is_equal_approx(view.local_light.light_energy, NativeEnvironment.sun_visibility(view.state)), "Suited view lost separate terrain/local sunlight")
 	check(view.surface_walk_menu_button.focus_mode == Control.FOCUS_ALL and not view.surface_walk_menu_button.disabled and view.controls_menu.saved_assist_button.disabled, "Surface menu lost controller focus or assistance guard")
 	var hold_before: Dictionary = owner.get_freedom_flight_state()
@@ -299,9 +309,11 @@ func run() -> void:
 	check(shell.load_origin == null and shell.current_view != view and shell.error.is_empty(), "Outside in-game Load did not stage")
 	view = shell.current_view
 	check(view.paused and view.surface_walking() and shell.audio_session.get_instance_id() == audio_id, "Outside Continue lost paused actor or duplicated audio owner")
+	check_ship_bearing(view)
 	walk(view, KEY_S, 600)
 	checkpoint(owner, args[0], args[2], "far")
 	check(view.camera.position.is_equal_approx(view.state.surface_walk.eye_position) and view.camera.position.length() > 20.0, "Walking did not move the rendered eye away from the craft")
+	check_ship_bearing(view)
 	if rendered: await capture_phase(view, owner, args[2], {"label": "far"}, captures)
 	var bad_path := args[2].path_join("corrupt.json")
 	var bad: Variant = JSON.parse_string(FileAccess.get_file_as_string(args[2].path_join("far.json")))
@@ -317,6 +329,7 @@ func run() -> void:
 	var retained_model: int = view.staged_model.get_instance_id()
 	view.context_action.pressed.emit()
 	check(view.paused and not view.surface_walking() and view.staged_model.get_instance_id() == retained_model and retained_model != model_id, "Nearby return failed or replaced the continued ship")
+	check(not view.ship_marker.visible, "Ground ship bearing remained visible after reboarding")
 	checkpoint(owner, args[0], args[2], "seated")
 	check(shell.select_start(owner, {"mode": "continue", "value": args[2].path_join("seated.json"), "assets": args[1]}), "Returned seated Continue did not stage")
 	view = shell.current_view
@@ -325,6 +338,7 @@ func run() -> void:
 		for batch in 8: view._process(0.125)
 	checkpoint(owner, args[0], args[2], "lifted")
 	check(not view.state.surface.landed and view.error.is_empty(), "Returned pilot cannot lift off with real thrust")
+	check(not view.ship_marker.visible, "Ground ship bearing remained visible in flight")
 	# Declared destruction is an explicit fixture, not an invented exposure event.
 	check(shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("pending-loss.json"), "assets": args[1]}), "Pending outside loss failed to stage")
 	check(shell.recovery_overlay != null and shell.current_view.surface_walking() and shell.current_view.paused, "Pending loss lost outside actor or explicit recovery choice")

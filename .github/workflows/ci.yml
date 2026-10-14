@@ -263,6 +263,7 @@ jobs:
           --test native_impact
           --test native_frame_import --test native_system_release
           --test native_surface_loop
+          --test native_first_flight_continuation
           --test wayfarer_operating
           --test recorded_audio_shutdown
 
@@ -289,5 +290,8 @@ jobs:
             build-native-contracts/native-contracts-*/frame-import-native/*.json
             build-native-contracts/native-contracts-*/surface-loop/*.json
             build-native-contracts/native-contracts-*/surface-loop-native/*.json
+            build-native-contracts/native-contracts-*/native_first_flight_continuation/*.json
+            build-native-contracts/native-contracts-*/native_first_flight_continuation/commands.jsonl
+            build-native-contracts/native-contracts-*/native_first_flight_continuation-native/*.json
           if-no-files-found: warn
           retention-days: 7

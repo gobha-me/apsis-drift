@@ -1,6 +1,7 @@
 extends "res://studies/captures/native_voyage_capture.gd"
 ## The composed neighboring trip uses production views, commands and C++ saves.
 const LABELS = ["station-start", "seated", "departed", "source-ready", "outbound-selection", "outbound-spool", "outbound-commit", "outbound-transit", "outbound-arrival", "neighbor-observed", "return-selection", "return-spool", "return-commit", "return-transit", "return-arrival", "near-port", "captured", "replenished", "station-return"]
+var continuation_frame_policy := 2
 
 func checkpoint_labels() -> Array:
 	return LABELS
@@ -10,6 +11,7 @@ func labels_for_trace(value: Variant) -> Array:
 
 func start_options(trace: Dictionary, args: PackedStringArray) -> Dictionary:
 	if trace.get("schema_version") == 7:
+		continuation_frame_policy = int(trace.frame_policy)
 		return {"mode": "continue", "value": args[0].path_join(trace.source_file), "assets": args[1]}
 	return super.start_options(trace, args)
 
@@ -41,7 +43,7 @@ static func bounded_decimal(value: Variant) -> bool:
 	return Checkpoints.decimal(value) and (value.length() == 1 or not value.begins_with("0")) and (value.length() < 20 or value <= "18446744073709551615")
 
 func valid_continuation(value: Dictionary) -> bool:
-	if value.get("route") != "native-neighbor-from-ascent" or value.get("start_mode") != "continue" or value.get("source_file") != "surface-ascent.json" or value.get("frame_policy") != 2 or value.get("terrain_policy") != 2 or value.get("uninterrupted_scope") != "suffix_from_declared_continue_only": return false
+	if value.get("route") != "native-neighbor-from-ascent" or value.get("start_mode") != "continue" or value.get("source_file") != "surface-ascent.json" or not Checkpoints.finite_number(value.get("frame_policy")) or (value.frame_policy != 1 and value.frame_policy != 2) or value.get("terrain_policy") != 2 or value.get("uninterrupted_scope") != "suffix_from_declared_continue_only": return false
 	if stream_start_tick(value) < 0 or not targeting_grade().is_empty(): return false
 	if value.get("flight_profile") != ("advanced" if value.get("profile") == "pilot" else "assisted"): return false
 	for field in ["initial_flight_quanta", "inherited_spent_quanta"]:
@@ -92,7 +94,8 @@ func valid_manifest(value: Variant) -> bool:
 		for component in position:
 			if not Checkpoints.finite_number(component): return false
 		if continuation:
-			if row.get("coordinate_frame") != ("system_inertial" if i < 3 else "planet_relative_inertial") or not row.get("surface_walking") is bool or not row.get("landed") is bool or row.surface_walking or row.landed or row.seated != (i < 16) or row.walking != (i == 16) or row.attached != (i >= 14): return false
+			var expected_frame := "system_inertial" if value.frame_policy == 2 and i < 3 else "planet_relative_inertial"
+			if row.get("coordinate_frame") != expected_frame or not row.get("surface_walking") is bool or not row.get("landed") is bool or row.surface_walking or row.landed or row.seated != (i < 16) or row.walking != (i == 16) or row.attached != (i >= 14): return false
 			if row.jump_phase != jump_phases[i] or row.jump_charges != (3 if i < 4 or i >= 15 else 2 if i < 10 else 1): return false
 			if i < jump_offsets.size() and tick != initial_tick + jump_offsets[i]: return false
 			if i == 15 and row.tick != rows[14].tick: return false
@@ -118,7 +121,7 @@ func manifest_refusals(trace: Dictionary) -> bool:
 		else: bad.profile = "invented"
 		if not check(not valid_manifest(bad), "Invalid round-trip manifest accepted: " + damage): return false
 	if trace.get("schema_version") == 7:
-		for damage in ["source", "mode", "scope", "initial", "clock", "frame", "actor", "fuel", "baseline", "charge", "phase"]:
+		for damage in ["source", "mode", "scope", "initial", "clock", "frame", "policy", "pair", "actor", "fuel", "baseline", "charge", "phase"]:
 			var bad: Dictionary = trace.duplicate(true)
 			if damage == "source": bad.source_file = "../source.json"
 			elif damage == "mode": bad.start_mode = "new_game"
@@ -127,7 +130,9 @@ func manifest_refusals(trace: Dictionary) -> bool:
 			elif damage == "clock":
 				bad.checkpoints[1].tick = str(int(bad.initial_tick) + 1)
 				bad.checkpoints[1].next_tick = str(int(bad.initial_tick) + 2)
-			elif damage == "frame": bad.checkpoints[0].coordinate_frame = "planet_relative_inertial"
+			elif damage == "frame": bad.checkpoints[0].coordinate_frame = "system_inertial" if trace.frame_policy == 1 else "planet_relative_inertial"
+			elif damage == "policy": bad.frame_policy = 3
+			elif damage == "pair": bad.frame_policy = 2 if trace.frame_policy == 1 else 1
 			elif damage == "actor": bad.checkpoints[0].surface_walking = true
 			elif damage == "fuel": bad.checkpoints[14].flight_quanta = "3032640000000000"
 			elif damage == "baseline": bad.inherited_spent_quanta = str(int(bad.inherited_spent_quanta) + 1)
@@ -156,7 +161,10 @@ func manifest_refusals(trace: Dictionary) -> bool:
 func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	var state: Dictionary = owner.get_freedom_flight_state()
 	if row.has("coordinate_frame"):
-		if not check(state.get("frame_policy") == 2 and state.get("coordinate_frame") == row.coordinate_frame and state.get("observation_frame") == "planet_relative_inertial" and state.get("surface_walk", {}).is_empty(), "Continuation lost its saved frame or retained a ground actor: " + row.label): return false
+		# The legacy policy-1 projection omits frame tags and its existing motion
+		# vectors are already canonical planet-relative values. Whole saves below
+		# independently verify the actual saved policy and frame at every boundary.
+		if not check(state.get("frame_policy", 1) == continuation_frame_policy and state.get("coordinate_frame", "planet_relative_inertial") == row.coordinate_frame and state.get("observation_frame", "planet_relative_inertial") == "planet_relative_inertial" and state.get("surface_walk", {}).is_empty(), "Continuation lost its saved frame or retained a ground actor: " + row.label): return false
 	if view is FlightView or view is WalkView:
 		if not check(view.sky_material != null and view.sky_material.get_shader_parameter("sun_direction") == state.star_direction and view.sky_material.get_shader_parameter("sun_color") == state.lighting.star_color and view.sky_material.get_shader_parameter("radius") == state.planet_radius and view.sky_material.get_shader_parameter("altitude") == state.altitude, "Current C++ sky diverged at real journey boundary: " + row.label): return false
 		if view is WalkView and not check(view.sky_owner.tick == state.tick and is_equal_approx(view.station_environment.ambient_light_energy, 0.7), "Station sky tick/fill changed across boarding boundary: " + row.label): return false
@@ -190,7 +198,8 @@ func checkpoint_review(view: Control, owner: Variant, row: Dictionary) -> bool:
 	if row.has("coordinate_frame"):
 		# Compare C++-decoded values, avoiding JSON decimal rounding in GDScript.
 		var canonical: Dictionary = restored.get_freedom_flight_state()
-		for field in ["canonical_position_metres", "canonical_velocity_metres_per_second", "orientation_wxyz", "angular_velocity_body"]:
+		var motion_fields := ["canonical_position_metres", "canonical_velocity_metres_per_second"] if continuation_frame_policy == 2 else ["position_metres", "velocity_metres_per_second"]
+		for field in motion_fields + ["orientation_wxyz", "angular_velocity_body"]:
 			if not check(state[field] == canonical[field], "Continued canonical motion differs: " + row.label): return false
 	if not check(restored.get_freedom_boarding_state() == boarding, "Continue changed pilot or seat presentation"): return false
 	var neutral := PackedFloat64Array()

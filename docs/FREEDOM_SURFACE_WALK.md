@@ -8,6 +8,11 @@ again, after which the ordinary flight controls and thruster liftoff resume.
 Leaving is unavailable while airborne, attached, in a maneuver, in transit,
 with a recorded pending loss, or without the supported native starter state.
 
+A cyan **SHIP** marker points toward the retained Wayfarer while outside, with
+an edge arrow when it is off screen or behind the camera. It marks the craft
+centre; reach the aft ground access to reboard. The marker does not identify
+terrain obstructions or a safe walking route, and hides after reboarding.
+
 C++ owns one planet-fixed ground actor, the existing landed ship and the sole
 voyage clock. Ground contact uses the same finest top triangles, terrain recipe,
 scale and planet identity as [touchdown](TERRAIN_TOUCHDOWN.md). The camera consumes

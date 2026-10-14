@@ -48,6 +48,7 @@ var orbital_forecast: RichTextLabel
 var telemetry: RichTextLabel
 var home_cue: RichTextLabel
 var home_marker: Control
+var ship_marker: Control
 var port_row: HBoxContainer
 var pause_button: Button
 var assist_button: CheckButton
@@ -425,6 +426,10 @@ func build_ui() -> void:
 	add_child(navigation_layer)
 	home_marker = HomeNavigation.new()
 	navigation_layer.add_child(home_marker)
+	ship_marker = HomeNavigation.new()
+	ship_marker.label_text = "SHIP"
+	ship_marker.visible = false
+	navigation_layer.add_child(ship_marker)
 	var column := VBoxContainer.new()
 	hud_column = column
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1329,6 +1334,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			button.disabled = state.attached or not state.get("station_available", true) or phase != "idle"
 	# Ground exploration keeps the return/suit controls clear of flight telemetry.
 	var outside := surface_walking()
+	ship_marker.visible = outside
+	if outside:
+		# The retained craft is the authoritative view origin. This is a
+		# centre bearing, not hatch reach, visibility or a safe terrain route.
+		ship_marker.update_cue(camera, Vector3.ZERO, false)
 	orbital_forecast.visible = not outside
 	resource_status.visible = not outside
 	assist_button.visible = not outside
@@ -1338,5 +1348,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
-			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSHIP points to the craft centre, not the hatch or a safe walking route.\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
 	update_compact_hud()

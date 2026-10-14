@@ -373,12 +373,17 @@ struct Trace {
          {"terrain_elevation_metres", terrain_elevation()},
          {"attached", session.docking() && session.docking()->attached},
          {"walking", session.walker().has_value()}});
-    if (selected) {
+    if (selected || continuation_route) {
       auto& row = checkpoints.back();
       if (continuation_route)
-        check(body.frame.kind == RigidFrameKind::system_inertial ||
-                  body.frame.kind == RigidFrameKind::planet_relative_inertial,
-              "Continuation checkpoint has an unsupported canonical frame");
+        check(
+            (session.document().model.frame_policy ==
+                 kFreedomRelativeFramePolicy &&
+             body.frame.kind == RigidFrameKind::planet_relative_inertial) ||
+                (selected &&
+                 (body.frame.kind == RigidFrameKind::system_inertial ||
+                  body.frame.kind == RigidFrameKind::planet_relative_inertial)),
+            "Continuation checkpoint has an unsupported canonical frame");
       row["coordinate_frame"] =
           (continuation_route
                ? body.frame.kind == RigidFrameKind::system_inertial
@@ -1188,16 +1193,25 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
   OriginWalkerState entry{};
   RigidOrientation station_q{};
   if (continue_from) {
+    const auto& initial_body = session.document().flight;
+    const bool relative_home_ascent =
+        initial_model.frame_policy == kFreedomRelativeFramePolicy &&
+        initial_body.frame.kind == RigidFrameKind::planet_relative_inertial &&
+        initial_body.frame.planet ==
+            session.system()
+                .catalog.planets.at(kOriginHomePlanetOrdinal)
+                .descriptor.id;
+    const bool system_ascent =
+        initial_model.frame_policy == kFreedomReleaseSystemFramePolicy &&
+        initial_body.frame.kind == RigidFrameKind::system_inertial;
     check(initial_tick <= 1'200'000 &&
               session.document().origin.recipe.universe_seed == Seed{42} &&
               session.system().catalog.id == ids.origin_system &&
-              initial_model.frame_policy == kFreedomReleaseSystemFramePolicy &&
+              (relative_home_ascent || system_ascent) &&
               initial_model.terrain_policy == 2 &&
               initial_model.physical_catalog == 2 &&
               initial_model.physical_ephemeris == 2 &&
               initial_model.assistance == !pilot &&
-              session.document().flight.frame.kind ==
-                  RigidFrameKind::system_inertial &&
               session.document().flight.craft ==
                   CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion} &&
               session.starting_assembly() ==

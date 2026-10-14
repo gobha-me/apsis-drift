@@ -72,14 +72,32 @@ on one backend; broader hardware and manual/controller qualification remain
 ## Continue after the surface voyage
 
 The same neighboring-trip consumer can explicitly Continue the actual
-post-walk, reboarding and thruster-ascent checkpoint from the selected surface
-loop. This checks that its retained terrain, actor, knowledge, travel and recovery
-wrappers survive two jumps, home capture, station service and disembarking.
+post-walk, reboarding and thruster-ascent checkpoint from the ordinary surface
+loop or the explicitly selected policy-2 loop. Its retained terrain, actor,
+knowledge, travel and recovery wrappers survive two jumps, home capture, station service and disembarking.
 The source's remaining flight fuel is the starting balance; the suffix meter
 accounts only for new propulsion. Neither the clock nor fuel resets at Continue.
 
-First produce the existing Advanced surface route. Its reported work directory
-retains the phase saves even after successful generated assets are compacted:
+For the ordinary New Game composition, run both cases together. The runner
+produces the ordinary station-to-surface-to-ascent route once; the second case
+Continues those exact ascent bytes through neighboring travel and home return:
+
+```sh
+python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
+  --build-dir build-native --timeout 600 --test native_surface_loop \
+  --test native_first_flight_continuation
+```
+
+Selecting only `native_first_flight_continuation` still produces its actual C++
+surface prefix, but checks native playback only for the neighboring-trip suffix.
+The combined invocation also checks the native prefix. Existing fresh neighboring
+trips remain separate tests. Neither route changes ordinary New Game's policy-1
+planet-relative frame or its saved assistance.
+
+To continue a previously generated ascent, first produce the ordinary surface
+route with `--test native_surface_loop`. The optional policy-2 Advanced variant
+uses the following explicit flags. Its reported work directory retains phase
+saves even after successful generated assets are compacted:
 
 ```sh
 python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
@@ -96,7 +114,8 @@ python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
 ```
 
 The opt-in variant requires one supported, free, seated home-system ascent save
-with three charges and matching assistance. An Assisted source uses
+with three charges and matching assistance: either the ordinary policy-1
+planet-relative frame or the selected policy-2 system frame. An Assisted source uses
 `native_roundtrip` instead. The runner holds a bounded copy, binds its hashes
 and checks both original and staged bytes remain unchanged. Schema 7 declares
 the real initial tick and seventeen suffix checkpoints; its first complete save

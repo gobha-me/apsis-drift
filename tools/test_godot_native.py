@@ -79,6 +79,7 @@ TESTS = {
     "native_surface_walk": "surface_walk_saves",
     "native_surface_walk_detail": "surface_walk_saves",
     "native_surface_loop": "surface_loop_saves",
+    "native_first_flight_continuation": "roundtrip_saves",
     "wayfarer_operating": "operating_assets",
     "operating_motion": "operating_motion",
     "physical_lighting_integration": "physical_snapshots",
@@ -565,7 +566,7 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
-    if "native_surface_loop" in selected:
+    if any(name in selected for name in ("native_surface_loop", "native_first_flight_continuation")):
         phases = work / "surface-loop"
         phases.mkdir()
         for index, invalid in enumerate((
@@ -609,6 +610,7 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
+    case_continuations = []
     for name in ROUNDTRIP_TESTS:
         if name not in selected:
             continue
@@ -630,27 +632,57 @@ def main(argv=None):
             if code == 0 or timed_out or any(phases.iterdir()):
                 print(f"FAIL round-trip argument refusal: {refusal_log}", flush=True)
                 return 1
+        case_source = (work / "surface-loop/space-exit.json"
+                       if name == "native_first_flight_continuation" else continuation_copy)
+        case_source_bytes = None
+        if case_source is not None:
+            try:
+                with case_source.open("rb") as stream:
+                    case_source_bytes = stream.read((1 << 20) + 1)
+                if not 0 < len(case_source_bytes) <= (1 << 20):
+                    raise ValueError("empty or oversized continuation")
+                case_source_digest = hashlib.sha256(case_source_bytes).hexdigest()
+            except (OSError, ValueError) as error:
+                print(f"FAIL round-trip continuation source: {error}", flush=True)
+                return 1
         log = work / f"{name}-fixture.log"
         code, timed_out, elapsed = run_logged(
             [str(planetary_fixture), str(phases), "--neighbor", "--commands",
              *(["--pilot"] if name != "native_roundtrip" else []),
              *(["--aligned"] if name.endswith("_aligned") else []),
              *(["--offset"] if name.endswith("_offset") else []),
-             *(["--continue-from=" + str(continuation_copy)] if continuation_copy else [])], log, env, args.timeout)
+             *(["--continue-from=" + str(case_source)] if case_source else [])], log, env, args.timeout)
         report["setup"].append({"family": name, "returncode": code,
             "timed_out": timed_out, "seconds": elapsed,
             "fixture_sha256": sha256(planetary_fixture)})
+        if case_source is not None:
+            source_report = {"file": case_source.relative_to(work).as_posix(),
+                             "sha256": case_source_digest,
+                             "bytes": len(case_source_bytes),
+                             "scope": "Explicit saved continuation; native suffix only"}
+            if name == "native_first_flight_continuation":
+                source_report["native_prefix_test"] = "native_surface_loop"
+                source_report["native_prefix_selected"] = "native_surface_loop" in selected
+            report["setup"][-1]["continuation_source"] = source_report
         save()
         if code != 0 or timed_out:
             print(f"FAIL actual round-trip fixture: {log}", flush=True)
             return 1
-        if continuation_copy is not None:
-            source_digest = report["continuation_source"]["sha256"]
-            if (sha256(continuation_copy) != source_digest or
-                    not (phases / "surface-ascent.json").is_file() or
-                    sha256(phases / "surface-ascent.json") != source_digest):
+        if case_source is not None:
+            emitted_source = phases / "surface-ascent.json"
+            try:
+                identical = (case_source.stat().st_size == len(case_source_bytes) and
+                             emitted_source.stat().st_size == len(case_source_bytes) and
+                             case_source.read_bytes() == case_source_bytes and
+                             emitted_source.read_bytes() == case_source_bytes)
+            except OSError:
+                identical = False
+            source_report["fixture_preserved_bytes"] = identical
+            save()
+            if not identical:
                 print("FAIL continuation changed its complete source save", flush=True)
                 return 1
+            case_continuations.append((case_source, emitted_source, source_report))
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
@@ -989,6 +1021,18 @@ def main(argv=None):
                                 "seconds": elapsed, "log": log.name})
         save()
         print(f"{status.upper()} {name} ({elapsed:.2f}s)", flush=True)
+    for case_source, emitted_source, source_report in case_continuations:
+        try:
+            unchanged = all(path.stat().st_size == source_report["bytes"] and
+                            sha256(path) == source_report["sha256"]
+                            for path in (case_source, emitted_source))
+        except OSError:
+            unchanged = False
+        source_report["unchanged_after_native"] = unchanged
+        if not unchanged:
+            print("FAIL native consumers changed a continuation source; retained work", flush=True)
+            save()
+            return 1
     if continuation is not None:
         try:
             unchanged = (continuation.stat().st_size == len(continuation_bytes) and
