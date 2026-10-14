@@ -71,6 +71,10 @@ auto validate_freedom_surface_walk_document(
     return std::unexpected{valid.error()};
   if (!d.actor) return {};
   const auto flight = recovery_flight(d.voyage.voyage);
+  if (flight.flight.frame.kind != RigidFrameKind::planet_relative_inertial ||
+      !flight.flight.frame.planet)
+    return std::unexpected{
+        failure("Ground actor requires canonical planet-relative flight")};
   const auto hydrated = hydrate_freedom_flight_document(flight);
   if (!hydrated) return std::unexpected{hydrated.error()};
   const auto planet =

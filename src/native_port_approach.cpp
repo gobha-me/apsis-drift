@@ -25,6 +25,8 @@ auto length(V v) -> double {
 
 auto NativeFreedomFlightSession::port_approach_available() const
     -> std::expected<void, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{"System-flight approach aid is not qualified yet"};
   if (actor_ || surface_walker_)
     return std::unexpected{"Board and sit before approaching a port"};
   if (surface_ && (surface_->landed || surface_->gear_deployed))

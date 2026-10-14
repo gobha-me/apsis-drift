@@ -40,6 +40,8 @@ auto NativeFreedomFlightSession::condition_document() const
 
 auto NativeFreedomFlightSession::impact_consequences_available() const
     -> std::expected<void, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{"System-flight impacts are not qualified yet"};
   if (condition_)
     return std::unexpected{"Terrain impacts are already selected"};
   if (recovery_pending() ||

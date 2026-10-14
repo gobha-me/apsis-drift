@@ -106,6 +106,10 @@ class NativeFreedomFlightSession {
   }
   [[nodiscard]] auto observe() const
       -> std::expected<NativeFlightObservation, std::string>;
+  // Qualified same-tick observation for the existing planet-owned providers.
+  // The canonical document remains the sole saved physical state.
+  [[nodiscard]] auto relative_state() const
+      -> std::expected<RigidBodyState, std::string>;
   auto set_assistance(bool enabled) -> std::expected<void, std::string> {
     if (recovery_pending())
       return std::unexpected{

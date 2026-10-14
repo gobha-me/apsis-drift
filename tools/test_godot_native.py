@@ -74,6 +74,7 @@ TESTS = {
     "native_selected_terrain": "freedom_saves",
     "native_impact": "impact_saves",
     "native_frame_import": "frame_import_saves",
+    "native_system_release": "system_release_saves",
     "native_surface_walk": "surface_walk_saves",
     "native_surface_walk_detail": "surface_walk_saves",
     "native_surface_loop": "surface_loop_saves",
@@ -219,6 +220,7 @@ def main(argv=None):
     surface_fixture = args.build_dir.resolve() / "apsis-drift-landed-craft-tests"
     impact_fixture = args.build_dir.resolve() / "apsis-drift-native-impact-tests"
     frame_import_fixture = args.build_dir.resolve() / "apsis-drift-freedom-flight-import-tests"
+    system_release_fixture = args.build_dir.resolve() / "apsis-drift-native-system-release-tests"
     for path in (engine, exporter):
         if not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable: {path}")
@@ -240,6 +242,9 @@ def main(argv=None):
     if "native_frame_import" in selected:
         if not frame_import_fixture.is_file() or not os.access(frame_import_fixture, os.X_OK):
             parser.error(f"missing C++ frame import fixture: {frame_import_fixture}")
+    if "native_system_release" in selected:
+        if not system_release_fixture.is_file() or not os.access(system_release_fixture, os.X_OK):
+            parser.error(f"missing C++ system release fixture: {system_release_fixture}")
     def prepare_physical_fixtures():
         for seed in (42, 43):
             path = work / f"physical-{seed}.json"
@@ -325,6 +330,10 @@ def main(argv=None):
         shutil.copy2(frame_import_fixture, work / frame_import_fixture.name)
         frame_import_fixture = work / frame_import_fixture.name
         staged_executables.append(frame_import_fixture)
+    if "native_system_release" in selected:
+        shutil.copy2(system_release_fixture, work / system_release_fixture.name)
+        system_release_fixture = work / system_release_fixture.name
+        staged_executables.append(system_release_fixture)
     env = os.environ.copy()
     env.update({"XDG_DATA_HOME": str(work / "userdata"),
                 "XDG_CONFIG_HOME": str(work / "config"),
@@ -346,7 +355,7 @@ def main(argv=None):
 
     print(f"Native contracts: {work}", flush=True)
     save()
-    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
+    if any(TESTS[name] in ("native_assets", "operating_assets", "operating_motion") or name in ("native_shell", "native_save", "saved_flight", "native_environment", "native_audio", "first_jump", "native_recovery", "native_port", "native_walk", "native_start_staging", "native_title", "native_profile", "native_planetary", "native_voyage", "native_surface_loop", "native_impact", "native_frame_import", "native_system_release", *ROUNDTRIP_TESTS, *SURFACE_TESTS) for name in selected):
         helpers = ("prepare_freedom_native_assets.py", "prepare_native_assets.py",
                          "prepare_operating_assets.py", "wayfarer_operating_spec.py",
                          "operating_asset_identity.py", "wayfarer_operating_glb_audit.py",
@@ -611,6 +620,21 @@ def main(argv=None):
         report["setup"][-1]["files_sha256"] = {
             path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
         save()
+    if "native_system_release" in selected:
+        phases = work / "system-release"
+        log = work / "system-release-fixture.log"
+        code, timed_out, elapsed = run_logged(
+            [str(system_release_fixture), "--fixtures", str(phases)], log, env, args.timeout)
+        report["setup"].append({"family": "system_release_saves", "returncode": code,
+            "timed_out": timed_out, "seconds": elapsed,
+            "fixture_sha256": sha256(system_release_fixture)})
+        save()
+        if code != 0 or timed_out:
+            print(f"FAIL authoritative system release fixture: {log}", flush=True)
+            return 1
+        report["setup"][-1]["files_sha256"] = {
+            path.name: sha256(path) for path in sorted(phases.iterdir()) if path.is_file()}
+        save()
     for name, (stem, fixture_flag, terrain_policy) in SURFACE_TESTS.items():
         if name not in selected:
             continue
@@ -842,6 +866,8 @@ def main(argv=None):
             arguments = [str(work / path) for path in ("impact", "native-assets", "impact-native")]
         elif TESTS[name] == "frame_import_saves":
             arguments = [str(work / path) for path in ("frame-import", "native-assets", "frame-import-native")]
+        elif TESTS[name] == "system_release_saves":
+            arguments = [str(work / path) for path in ("system-release", "native-assets", "system-release-native")]
         elif TESTS[name] == "surface_walk_saves":
             stem = SURFACE_TESTS[name][0]
             arguments = [str(work / path) for path in (stem, "native-assets", stem + "-native")]

@@ -19,6 +19,9 @@ auto NativeFreedomFlightSession::travel_document() const
 }
 auto NativeFreedomFlightSession::select_jump(SystemId destination)
     -> std::expected<void, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{
+        "System-flight FTL integration is not qualified yet"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -68,6 +71,9 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
 }
 auto NativeFreedomFlightSession::jump_preview() const
     -> std::expected<FreedomJumpPreview, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{
+        "System-flight FTL integration is not qualified yet"};
   if (travel_ && travel_->phase == FreedomJumpPhase::transit &&
       travel_->committed)
     return travel_->committed->preview;
@@ -94,6 +100,9 @@ auto NativeFreedomFlightSession::jump_preview() const
 }
 auto NativeFreedomFlightSession::jump_available() const
     -> std::expected<void, std::string> {
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
+    return std::unexpected{
+        "System-flight FTL integration is not qualified yet"};
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};

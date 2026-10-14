@@ -128,10 +128,10 @@ auto resolve_world(const FreedomSaveDocument& origin,
                 "physical catalog selection is unsupported")};
   return std::move(*system);
 }
-} // namespace
-
-auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
-    -> std::expected<FreedomFlightHydration, SaveSchemaError> {
+// Shared document checks precede any coordinate transformation. These do not
+// authenticate a caller-supplied world; the public view does that separately.
+auto validate_flight_origin(const FreedomFlightSaveDocument& document)
+    -> std::expected<void, SaveSchemaError> {
   if (auto valid = validate_freedom_save_document(document.origin); !valid)
     return std::unexpected{valid.error()};
   if (document.origin.lineage && !document.world)
@@ -143,31 +143,120 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.flight.tick",
                 "history/flight clocks differ or flight cannot advance")};
-  const auto& model = document.model;
-  if (model.terrain_policy != kFreedomLegacyTerrainPolicy &&
-      model.terrain_policy != kFreedomLocalDetailTerrainPolicy)
+  if (document.model.terrain_policy != kFreedomLegacyTerrainPolicy &&
+      document.model.terrain_policy != kFreedomLocalDetailTerrainPolicy)
     return std::unexpected{
         failure(SaveSchemaErrorCode::incompatible_generator_version,
                 "$.flight_model.terrain_policy",
                 "unsupported physical terrain policy")};
-  auto system = resolve_world(document.origin, model, document.world);
-  if (!system || system->ephemeris_version != model.physical_ephemeris ||
+  return {};
+}
+
+// Private callers have already resolved this exact world from the document or
+// compared the supplied complete owner with that resolved world. Keep the rigid
+// and model checks here; hydration evaluates atmosphere and hold once
+// afterward.
+auto relative_state_for_selected_world(
+    const FreedomFlightSaveDocument& document,
+    const PhysicalLocalSystem& system)
+    -> std::expected<RigidBodyState, SaveSchemaError> {
+  const auto& model = document.model;
+  if (system.ephemeris_version != model.physical_ephemeris ||
       model.rotation_owner != kPhysicalPlanetRotationOwnerVersion)
     return std::unexpected{failure(
         SaveSchemaErrorCode::incompatible_generator_version, "$.flight_model",
         "physical catalog, ephemeris or rotation owner is unsupported")};
   const auto planet = document.world ? document.world->planet
                                      : document.origin.recipe.home_planet;
-  if (document.flight.frame.kind != RigidFrameKind::planet_relative_inertial ||
-      document.flight.frame.system != system->catalog.id ||
-      document.flight.frame.planet != planet ||
+  if ((model.frame_policy != kFreedomRelativeFramePolicy &&
+       model.frame_policy != kFreedomReleaseSystemFramePolicy) ||
+      (model.frame_policy == kFreedomReleaseSystemFramePolicy &&
+       !document.world) ||
+      model.central.version != kCentralBodyDynamicsVersion ||
+      model.atmosphere.version != kAtmosphericFlightVersion ||
+      model.hold.version != kOrbitHoldVersion ||
+      !generate_planet_rotation_recipe(system, planet,
+                                       model.rotation_generator))
+    return std::unexpected{failure(
+        SaveSchemaErrorCode::incompatible_generator_version, "$.flight_model",
+        "unsupported frame/force/rotation selection")};
+  if (document.flight.frame.system != system.catalog.id ||
       (document.world &&
        document.flight.craft !=
-           CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion}))
+           CraftFrameRecipe{kWayfarerFrameId, kWayfarerFrameVersion}) ||
+      !find_local_system_planet(system, planet))
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.flight.frame",
+                                   "rigid body and force owner differ")};
+  const bool relative =
+      document.flight.frame.kind == RigidFrameKind::planet_relative_inertial;
+  const bool selected_system =
+      model.frame_policy == kFreedomReleaseSystemFramePolicy &&
+      document.flight.frame.kind == RigidFrameKind::system_inertial;
+  if ((!relative && !selected_system) ||
+      (relative && document.flight.frame.planet != planet))
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.flight.frame",
+                                   "unsupported canonical flight frame")};
+  const auto converted =
+      reframe_rigid_body(RigidBodyWorldContext{system}, document.flight,
+                         {{RigidFrameKind::planet_relative_inertial,
+                           system.catalog.id,
+                           planet,
+                           {}},
+                          document.flight.tick});
+  if (!converted)
     return std::unexpected{
-        failure(SaveSchemaErrorCode::invalid_state, "$.flight.frame",
-                "saved flight requires its explicitly selected "
-                "physical planet in the nonrotating frame")};
+        failure(SaveSchemaErrorCode::invalid_state, "$.flight",
+                "rigid state or same-tick conversion refused")};
+  return *converted;
+}
+} // namespace
+
+auto relative_freedom_flight_state(const FreedomFlightSaveDocument& document,
+                                   const PhysicalLocalSystem& system)
+    -> std::expected<RigidBodyState, SaveSchemaError> {
+  if (auto valid = validate_flight_origin(document); !valid)
+    return std::unexpected{valid.error()};
+  const auto& model = document.model;
+  const auto expected_system =
+      resolve_world(document.origin, model, document.world);
+  if (!expected_system) return std::unexpected{expected_system.error()};
+  if (*expected_system != system)
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::invalid_state, "$.world_owner",
+                "supplied physical owner differs from the saved world")};
+  const auto relative = relative_state_for_selected_world(document, system);
+  if (!relative) return std::unexpected{relative.error()};
+  const auto planet = document.world ? document.world->planet
+                                     : document.origin.recipe.home_planet;
+  const auto rotation =
+      generate_planet_rotation_recipe(system, planet, model.rotation_generator);
+  const auto physical_planet = find_local_system_planet(system, planet);
+  const auto profile = resolve_atmospheric_flight_profile(
+      (*physical_planet)->descriptor, model.atmosphere);
+  if (!rotation || !profile ||
+      !validate_orbit_hold_request(RigidBodyWorldContext{system}, *relative,
+                                   *rotation,
+                                   {1, profile->space_boundary_altitude_metres},
+                                   model.hold, model.central))
+    return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                   "$.flight_model.orbit_hold",
+                                   "invalid physical model or hold target")};
+  return *relative;
+}
+
+auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
+    -> std::expected<FreedomFlightHydration, SaveSchemaError> {
+  auto system = resolve_world(document.origin, document.model, document.world);
+  if (!system) return std::unexpected{system.error()};
+  if (auto valid = validate_flight_origin(document); !valid)
+    return std::unexpected{valid.error()};
+  const auto relative = relative_state_for_selected_world(document, *system);
+  if (!relative) return std::unexpected{relative.error()};
+  const auto& model = document.model;
+  const auto planet = document.world ? document.world->planet
+                                     : document.origin.recipe.home_planet;
   auto rotation = generate_planet_rotation_recipe(*system, planet,
                                                   model.rotation_generator);
   if (!rotation)
@@ -178,15 +267,14 @@ auto hydrate_freedom_flight_document(const FreedomFlightSaveDocument& document)
   const RigidBodyWorldContext context{*system};
   VacuumIntent intent;
   intent.assistance = model.assistance;
-  const auto atmosphere =
-      evaluate_atmospheric_flight(context, document.flight, intent, *rotation,
-                                  model.atmosphere, model.central);
+  const auto atmosphere = evaluate_atmospheric_flight(
+      context, *relative, intent, *rotation, model.atmosphere, model.central);
   if (!atmosphere)
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.flight",
                 "flight state or atmospheric/central selection is invalid")};
   if (!validate_orbit_hold_request(
-          context, document.flight, *rotation,
+          context, *relative, *rotation,
           {1, atmosphere->space_boundary_altitude_metres}, model.hold,
           model.central))
     return std::unexpected{
@@ -211,7 +299,9 @@ auto encode_freedom_flight_document_json(
                                    "rigid state cannot be encoded")};
   Json root = Json::parse(*origin);
   root["format_version"] =
-      document.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
+      document.model.frame_policy == kFreedomReleaseSystemFramePolicy
+          ? kFreedomReleaseFlightSaveFormatVersion
+      : document.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
           ? kFreedomTerrainFlightSaveFormatVersion
       : document.world ? kFreedomActiveFlightSaveFormatVersion
                        : kFreedomFlightSaveFormatVersion;
@@ -220,7 +310,10 @@ auto encode_freedom_flight_document_json(
         {"version", document.world->version},
         {"system_id", std::to_string(document.world->system.value)},
         {"planet_id", std::to_string(document.world->planet.value)}};
-  root["state"]["location"] = "planetary_flight";
+  root["state"]["location"] =
+      document.flight.frame.kind == RigidFrameKind::system_inertial
+          ? "system_flight"
+          : "planetary_flight";
   root["flight"] = Json::parse(*flight);
   const auto& model = document.model;
   Json target = nullptr;
@@ -240,8 +333,11 @@ auto encode_freedom_flight_document_json(
       {"atmosphere", model.atmosphere.version},
       {"orbit_hold", {{"version", model.hold.version}, {"target", target}}},
       {"assistance", model.assistance}};
-  if (model.terrain_policy == kFreedomLocalDetailTerrainPolicy)
+  if (model.terrain_policy == kFreedomLocalDetailTerrainPolicy ||
+      model.frame_policy == kFreedomReleaseSystemFramePolicy)
     root["flight_model"]["terrain_policy"] = model.terrain_policy;
+  if (model.frame_policy == kFreedomReleaseSystemFramePolicy)
+    root["flight_model"]["frame_policy"] = model.frame_policy;
   auto encoded = root.dump(2) + '\n';
   if (encoded.size() > kMaximumSaveDocumentBytes)
     return std::unexpected{failure(SaveSchemaErrorCode::document_too_large, "$",
@@ -294,10 +390,14 @@ auto decode_flight(std::string_view text, bool system_import)
     return std::unexpected{failure(
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported system-flight import version")};
-  const bool selected = importing || root["format_version"] ==
-                                         kFreedomTerrainFlightSaveFormatVersion;
+  const bool release =
+      !system_import &&
+      root["format_version"] == kFreedomReleaseFlightSaveFormatVersion;
+  const bool selected =
+      release || importing ||
+      root["format_version"] == kFreedomTerrainFlightSaveFormatVersion;
   const bool active =
-      importing ||
+      release || importing ||
       root["format_version"] == kFreedomActiveFlightSaveFormatVersion ||
       (selected && root.contains("world_owner"));
   if (root["format_version"] != kFreedomFlightSaveFormatVersion && !active &&
@@ -340,7 +440,13 @@ auto decode_flight(std::string_view text, bool system_import)
   }
   if (!root["state"].is_object() || !root["state"].contains("location") ||
       root["state"]["location"] !=
-          (importing ? "system_flight" : "planetary_flight"))
+          (importing || (release && root["flight"].is_object() &&
+                         root["flight"].contains("frame") &&
+                         root["flight"]["frame"].is_object() &&
+                         root["flight"]["frame"].contains("kind") &&
+                         root["flight"]["frame"]["kind"] == "system_inertial")
+               ? "system_flight"
+               : "planetary_flight"))
     return std::unexpected{
         failure(SaveSchemaErrorCode::invalid_state, "$.state.location",
                 importing ? "format35 requires explicit system_flight"
@@ -360,6 +466,14 @@ auto decode_flight(std::string_view text, bool system_import)
   const auto& m = root["flight_model"];
   auto model_shape = m;
   if (selected && model_shape.is_object()) model_shape.erase("terrain_policy");
+  if (release && model_shape.is_object()) model_shape.erase("frame_policy");
+  if (release &&
+      (!m.contains("frame_policy") || !m["frame_policy"].is_number_unsigned() ||
+       m["frame_policy"] != kFreedomReleaseSystemFramePolicy))
+    return std::unexpected{
+        failure(SaveSchemaErrorCode::incompatible_generator_version,
+                "$.flight_model.frame_policy",
+                "release save requires explicit policy2")};
   if (auto valid =
           fields(model_shape,
                  {"physical_catalog", "physical_ephemeris", "rotation_owner",
@@ -368,11 +482,11 @@ auto decode_flight(std::string_view text, bool system_import)
                  "$.flight_model");
       !valid)
     return std::unexpected{valid.error()};
-  if (selected &&
-      (!m.contains("terrain_policy") ||
-       !m["terrain_policy"].is_number_unsigned() ||
-       (m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy &&
-        (!importing || m["terrain_policy"] != kFreedomLegacyTerrainPolicy))))
+  if (selected && (!m.contains("terrain_policy") ||
+                   !m["terrain_policy"].is_number_unsigned() ||
+                   (m["terrain_policy"] != kFreedomLocalDetailTerrainPolicy &&
+                    ((!importing && !release) ||
+                     m["terrain_policy"] != kFreedomLegacyTerrainPolicy))))
     return std::unexpected{failure(
         SaveSchemaErrorCode::incompatible_generator_version,
         "$.flight_model.terrain_policy",
@@ -408,6 +522,8 @@ auto decode_flight(std::string_view text, bool system_import)
                            m["assistance"].get<bool>()};
   model.terrain_policy = selected ? m["terrain_policy"].get<std::uint32_t>()
                                   : kFreedomLegacyTerrainPolicy;
+  model.frame_policy =
+      release ? kFreedomReleaseSystemFramePolicy : kFreedomRelativeFramePolicy;
   const auto& target = hold["target"];
   if (!target.is_null()) {
     if (auto valid =

@@ -121,6 +121,80 @@ auto terrain_nested_roundtrips() -> void {
     }
   }
 }
+auto release_frame_nested_roundtrips() -> void {
+  auto selected = require(make_freedom_journey_new_game_document(Seed{42}));
+  auto& flight = selected.voyage.flight;
+  flight.model.frame_policy = kFreedomReleaseSystemFramePolicy;
+  flight.world = FreedomActiveWorldSelection{
+      1, flight.flight.frame.system, flight.flight.frame.planet.value()};
+  auto invalid = selected;
+  invalid.voyage.flight.world.reset();
+  check(!validate_freedom_journey_document(invalid),
+        "selected station journey requires explicit physical owner");
+  invalid = selected;
+  invalid.voyage.flight.flight.frame = {
+      RigidFrameKind::system_inertial, flight.flight.frame.system, {}, {}};
+  check(!validate_freedom_journey_document(invalid),
+        "station actor cannot claim a system-frame attached body");
+  const auto roundtrip = [](const NativeSaveDocument& document) {
+    const auto text = require(encode_native_save_document_json(document));
+    check(require(decode_native_save_document_json(text)) == document,
+          "complete nested voyage preserves frame selection, actor, assembly, "
+          "resources, knowledge and recovery");
+  };
+  for (const auto policy :
+       {kFreedomLegacyTerrainPolicy, kFreedomLocalDetailTerrainPolicy}) {
+    flight.model.terrain_policy = policy;
+    const auto text = require(encode_freedom_journey_document_json(selected));
+    const auto root = Json::parse(text);
+    auto mutation = root;
+    mutation["flight_model"].erase("terrain_policy");
+    check(!decode_freedom_journey_document_json(mutation.dump()),
+          "format38 explicitly retains legacy or selected terrain policy");
+    mutation = root;
+    mutation["flight_model"].erase("frame_policy");
+    check(!decode_freedom_journey_document_json(mutation.dump()),
+          "format38 requires release frame policy");
+    for (const auto legacy : {20U, 33U}) {
+      mutation = root;
+      mutation["format_version"] = legacy;
+      check(!decode_native_save_document_json(mutation.dump()),
+            "selected journey cannot be downgraded under historical schemas");
+    }
+    check(root["format_version"] == kFreedomReleaseJourneySaveFormatVersion &&
+              require(decode_freedom_journey_document_json(text)) == selected,
+          "format38 retains relative attached body while selecting release "
+          "policy");
+    roundtrip(selected);
+    const FreedomStartingAssemblySaveDocument assembly{selected, {}};
+    roundtrip(assembly);
+    for (const FreedomSurfaceBaseSave& base :
+         {FreedomSurfaceBaseSave{flight},
+          FreedomSurfaceBaseSave{selected.voyage},
+          FreedomSurfaceBaseSave{selected}, FreedomSurfaceBaseSave{assembly}}) {
+      const FreedomSurfaceSaveDocument surface{base, {}};
+      roundtrip(surface);
+      const FreedomResourceSaveDocument resources{surface,
+                                                  {1, flight.origin.state.craft,
+                                                   flight.flight.craft,
+                                                   flight.flight.tick}};
+      roundtrip(resources);
+      const FreedomKnowledgeSaveDocument knowledge{
+          resources, require(make_freedom_starting_knowledge(
+                         Seed{42}, kFreedomTravelKnowledgeVersion))};
+      roundtrip(knowledge);
+      if (std::holds_alternative<FreedomStartingAssemblySaveDocument>(base)) {
+        const FreedomTravelSaveDocument travel{
+            knowledge, {}, NativeStartingAssemblySelection{}, {}};
+        roundtrip(travel);
+        roundtrip(FreedomRecoverySaveDocument{travel, {}});
+        const FreedomRecoverySaveDocument recovery{knowledge, {}};
+        roundtrip(recovery);
+        roundtrip(FreedomSurfaceWalkSaveDocument{recovery, 1, {}});
+      }
+    }
+  }
+}
 auto invalid() -> void {
   const auto good = require(make_freedom_journey_new_game_document(Seed{42}));
   const auto text = require(encode_freedom_journey_document_json(good));
@@ -427,6 +501,7 @@ auto roundtrip() -> void {
 int main() {
   try {
     invalid();
+    release_frame_nested_roundtrips();
     terrain_nested_roundtrips();
     roundtrip();
     std::cout << "Freedom journey save contract passed\n";

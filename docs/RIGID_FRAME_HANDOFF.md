@@ -215,8 +215,9 @@ The [explicit system-frame import](SYSTEM_FLIGHT_IMPORT.md) now consumes a
 complete format35 source into ordinary saved native flight at the same tick.
 Saved docking/release, entry/ascent and tangent presentation use their existing
 application owners; they do not require a presentation-owned coordinate frame.
-Live reverse departure selection remains open under #200. This import does
-not broaden existing saved frames or change force laws.
+The separate explicit release-selected policy below adds live reverse departure;
+the wider insertion/ascent matrix remains open under #200. Format35 remains
+input-only and does not select that runtime policy or change force laws.
 
 The native lab is still planet-centred **nonrotating**, not `planet_fixed`.
 It is not switched by this provider. The retained lab is distinct from the
@@ -243,3 +244,42 @@ output magnitude failures and exact continuation with a caller-retained recipe.
 The finite-difference check excludes planet-centre displacement because the
 existing ephemeris rounds positions to metres: its sampled position is not an
 exact differentiable function of its separately quantized velocity.
+
+## Explicit release-selected system flight
+
+Frame policy **2** is an explicit saved selection, with formats **36** (flight),
+**37** (flattened docking) and **38** (flattened station journey). Historical
+policy **1**, all previous formats and ordinary New Game keep their existing
+relative representation. This increment selects no new altitude/SOI threshold.
+
+For the selected policy, successful physical undocking transforms the complete
+body into system coordinates at the same tick. The saved active-world owner
+retains the actual selected force/terrain planet even though a system frame has
+no planet field. Ordinary ticks derive a transient relative state, run the
+unchanged central-gravity/atmosphere/hold/actuator/resource providers, then
+transform their accepted result back at the final tick. This retains the same
+physical approximation; it does not switch to force-free space or add N-body
+physics. Quaternion and body-resolved spin survive the aligned translation.
+
+The entire candidate, including attachment, pilot/assembly, resources, knowledge,
+travel and recovery, must validate before commit. Save/Continue retains the
+canonical system state through the existing complete voyage wrappers; it never
+reconstructs a bare flight and drops the remaining owners. Real port assessment
+uses the qualified relative observation; capture commits the existing relative
+port constraint and attachment together. Presentation consumes relative local
+vectors and publishes separate canonical frame/vector metadata and checksum.
+
+System-mode landing/contact, approach aid, FTL and impact activation refuse
+transactionally in this increment. A selected relative voyage with impacts or
+active jump/contact cannot detach into the unsupported mode. Ordinary gameplay
+keeps policy1 until these remaining reference-route consumers are integrated.
+The selected policy is not an extra game mode, player debug control, automatic
+migration or completion of #200's whole handoff matrix.
+
+`native-system-release-contract` exercises real station walking/boarding,
+undock, held actuator steps, complete resume and actual capture. Its independent
+oracle adds/subtracts the final C++ ephemeris once, using the existing
+4×binary64-epsilon component/offset roundtrip budget; complete resumed saves,
+craft/tick, quaternion and body spin retain exact equality. The paired native
+`native_system_release` consumer checks the actual shell/model and canonical
+saves. These automated contracts do not qualify GPU pixels or controller feel.

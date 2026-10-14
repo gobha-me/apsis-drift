@@ -82,8 +82,11 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
   if (knowledge.recipe.version == kFreedomObservedKnowledgeVersion &&
       origin != home_system)
     return std::unexpected{Error::invalid_subject};
-  const auto home = resolve_planet_ephemeris(
-      system, *flight.flight.frame.planet, {flight.flight.tick, 0});
+  const auto relative = relative_freedom_flight_state(flight, system);
+  if (!relative || !relative->frame.planet)
+    return std::unexpected{Error::invalid_subject};
+  const auto home = resolve_planet_ephemeris(system, *relative->frame.planet,
+                                             {flight.flight.tick, 0});
   if (!home) return std::unexpected{Error::invalid_subject};
   auto next = knowledge;
   const auto record = [&](KnowledgeSubject subject, KnowledgeFact fact,
@@ -102,13 +105,13 @@ auto observe_freedom_local_ship(const FreedomKnowledge& knowledge,
     next = std::move(*candidate);
     return true;
   };
-  // Translation is kept relative to the home body so its close-range precision
-  // is never lost to adding/subtracting two large system-space coordinates.
+  // Close sensing uses the selected body's qualified relative view. Retained
+  // system states have already taken their same-tick translation above.
   for (const auto& body : system.catalog.planets) {
     const auto ephemeris = resolve_planet_ephemeris(system, body.descriptor.id,
                                                     {flight.flight.tick, 0});
     if (!ephemeris) return std::unexpected{Error::invalid_subject};
-    const auto& position = flight.flight.position_metres;
+    const auto& position = relative->position_metres;
     const double dx = (home->position.x - ephemeris->position.x) + position.x;
     const double dy = (home->position.y - ephemeris->position.y) + position.y;
     const double dz = (home->position.z - ephemeris->position.z) + position.z;

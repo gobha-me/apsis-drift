@@ -200,10 +200,11 @@ class FreedomBridge : public godot::RefCounted {
   }
   static auto saved_stream(const NativeFreedomFlightSession& session)
       -> std::unique_ptr<PlanetStream> {
-    if (!session.document().flight.frame.planet)
+    const auto relative = require(session.relative_state());
+    if (!relative.frame.planet)
       throw std::invalid_argument("Saved terrain requires a selected planet");
     return std::make_unique<PlanetStream>(
-        session.system(), body_id(*session.document().flight.frame.planet),
+        session.system(), body_id(*relative.frame.planet),
         session.document().model.terrain_policy);
   }
   struct PendingFreedomStart {
@@ -1022,7 +1023,9 @@ class FreedomBridge : public godot::RefCounted {
     try {
       if (!saved_flight)
         throw std::invalid_argument("Continue a physical flight save first");
-      const auto previous_frame = saved_flight->session.document().flight.frame;
+      // Terrain residency follows the authenticated planet owner.
+      const auto previous_frame =
+          require(saved_flight->session.relative_state()).frame;
       const auto previous_system = saved_flight->session.system().catalog.id;
       const auto previous_policy =
           saved_flight->session.document().model.terrain_policy;
@@ -1031,7 +1034,8 @@ class FreedomBridge : public godot::RefCounted {
           elapsed,
           {fractions.ptr(), static_cast<std::size_t>(fractions.size())},
           paused);
-      if (previous_frame != candidate->session.document().flight.frame ||
+      if (previous_frame !=
+              require(candidate->session.relative_state()).frame ||
           previous_system != candidate->session.system().catalog.id ||
           previous_policy !=
               candidate->session.document().model.terrain_policy) {
@@ -1250,7 +1254,7 @@ class FreedomBridge : public godot::RefCounted {
           s * v.z + k * q.z + 2 * q.w * (q.x * v.y - q.y * v.x) / n};
     };
     const auto& actor = *session.surface_walker();
-    const auto& body = session.document().flight;
+    const auto body = require(session.relative_state());
     const auto foot = actor.foot_position_metres;
     const auto radius = std::hypot(foot.x, foot.y, foot.z);
     const RigidVector3 up{foot.x / radius, foot.y / radius, foot.z / radius};
@@ -1465,7 +1469,7 @@ class FreedomBridge : public godot::RefCounted {
       result["universe_seed"] =
           decimal(document.origin.recipe.universe_seed.value);
       result["system_id"] = decimal(session.system().catalog.id.value);
-      result["planet_id"] = decimal(document.flight.frame.planet->value);
+      result["planet_id"] = decimal(view.planet.id.value);
       result["station_id"] = decimal(view.station.id.value);
       result["craft_id"] = decimal(document.origin.state.craft.value);
       result["actor_id"] = decimal(actor.actor_id);
@@ -1513,6 +1517,7 @@ class FreedomBridge : public godot::RefCounted {
       const auto& session = selected.session;
       const auto& document = session.document();
       const auto& body = document.flight;
+      const auto relative = require(session.relative_state());
       const auto view = project_saved_flight(session);
       const auto observed = require(session.observe());
       const auto coordinates = [](const auto& value) {
@@ -1541,7 +1546,7 @@ class FreedomBridge : public godot::RefCounted {
       result["universe_seed"] =
           decimal(document.origin.recipe.universe_seed.value);
       result["system_id"] = decimal(session.system().catalog.id.value);
-      result["planet_id"] = decimal(body.frame.planet->value);
+      result["planet_id"] = decimal(view.planet.id.value);
       result["terrain_policy"] =
           static_cast<std::int64_t>(document.model.terrain_policy);
       result["surface_walk"] = project_surface_walk_actor(selected);
@@ -1556,9 +1561,22 @@ class FreedomBridge : public godot::RefCounted {
       result["checksum"] = decimal(require(rigid_body_state_checksum(
           RigidBodyWorldContext{session.system()}, body)));
       result["continued"] = session.source_save().has_value();
-      result["position_metres"] = coordinates(body.position_metres);
+      // Existing view vectors remain selected-planet relative observations.
+      result["position_metres"] = coordinates(relative.position_metres);
       result["velocity_metres_per_second"] =
-          coordinates(body.linear_velocity_metres_per_second);
+          coordinates(relative.linear_velocity_metres_per_second);
+      if (document.model.frame_policy == kFreedomReleaseSystemFramePolicy) {
+        result["frame_policy"] =
+            static_cast<std::int64_t>(document.model.frame_policy);
+        result["coordinate_frame"] =
+            body.frame.kind == RigidFrameKind::system_inertial
+                ? "system_inertial"
+                : "planet_relative_inertial";
+        result["observation_frame"] = "planet_relative_inertial";
+        result["canonical_position_metres"] = coordinates(body.position_metres);
+        result["canonical_velocity_metres_per_second"] =
+            coordinates(body.linear_velocity_metres_per_second);
+      }
       godot::PackedFloat64Array orientation;
       for (double v : {body.orientation.w, body.orientation.x,
                        body.orientation.y, body.orientation.z})
@@ -1918,7 +1936,12 @@ class FreedomBridge : public godot::RefCounted {
       result["error"] = "This save has no selected environmental survey";
       return result;
     }
-    const auto& flight = session.document().flight;
+    const auto relative = session.relative_state();
+    if (!relative || !relative->frame.planet) {
+      result["error"] = "The current body's relative owner is unavailable";
+      return result;
+    }
+    const auto& flight = *relative;
     const auto recipe =
         generate_planet_ambient_recipe(session.system(), *flight.frame.planet,
                                        session.knowledge()->recipe.ambient);

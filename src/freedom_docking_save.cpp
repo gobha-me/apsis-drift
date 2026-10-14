@@ -36,6 +36,9 @@ auto validate_freedom_docking_document(
     -> std::expected<void, SaveSchemaError> {
   auto hydrated = hydrate_freedom_flight_document(document.flight);
   if (!hydrated) return std::unexpected{hydrated.error()};
+  const auto relative =
+      relative_freedom_flight_state(document.flight, hydrated->system);
+  if (!relative) return std::unexpected{relative.error()};
   const auto& state = document.docking;
   const auto& body = document.flight.flight;
   const auto station =
@@ -43,7 +46,7 @@ auto validate_freedom_docking_document(
   if (body.frame.system != generate_first_intersystem_identities(
                                document.flight.origin.recipe.universe_seed)
                                .origin_system ||
-      body.frame.planet != station.orbit.host_planet)
+      relative->frame.planet != station.orbit.host_planet)
     return std::unexpected{
         failure("$.docking", "Origin Station is not in the current frame")};
   const auto geometry = origin_station_geometry(station);
@@ -77,11 +80,16 @@ auto encode_freedom_docking_document_json(
   if (!encoded) return std::unexpected{encoded.error()};
   Json root = Json::parse(*encoded);
   root["format_version"] =
-      document.flight.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
+      document.flight.model.frame_policy == kFreedomReleaseSystemFramePolicy
+          ? kFreedomReleaseDockingSaveFormatVersion
+      : document.flight.model.terrain_policy == kFreedomLocalDetailTerrainPolicy
           ? kFreedomTerrainDockingSaveFormatVersion
           : kFreedomDockingSaveFormatVersion;
   root["state"]["location"] =
-      document.docking.attached ? "docked_at_origin_port" : "planetary_flight";
+      document.docking.attached ? "docked_at_origin_port"
+      : document.flight.flight.frame.kind == RigidFrameKind::system_inertial
+          ? "system_flight"
+          : "planetary_flight";
   root["docking"] = {
       {"geometry_version", document.docking.geometry_version},
       {"target",
@@ -128,9 +136,12 @@ auto decode_freedom_docking_document_json(std::string_view text)
       !root["format_version"].is_number_unsigned())
     return std::unexpected{
         failure("$.format_version", "unsigned version required")};
+  const bool release =
+      root["format_version"] == kFreedomReleaseDockingSaveFormatVersion;
   const bool selected =
       root["format_version"] == kFreedomTerrainDockingSaveFormatVersion;
-  if (root["format_version"] != kFreedomDockingSaveFormatVersion && !selected)
+  if (root["format_version"] != kFreedomDockingSaveFormatVersion && !selected &&
+      !release)
     return std::unexpected{SaveSchemaError{
         SaveSchemaErrorCode::unsupported_format_version, "$.format_version",
         "unsupported Freedom docking save version"}};
@@ -159,17 +170,24 @@ auto decode_freedom_docking_document_json(std::string_view text)
                                   {OriginStationId{*station_id},
                                    d["target"]["ordinal"].get<std::uint32_t>()},
                                   d["attached"].get<bool>()};
+  const bool system = release && root["flight"].is_object() &&
+                      root["flight"].contains("frame") &&
+                      root["flight"]["frame"].is_object() &&
+                      root["flight"]["frame"].contains("kind") &&
+                      root["flight"]["frame"]["kind"] == "system_inertial";
   if (!root["state"].is_object() || !root["state"].contains("location") ||
-      root["state"]["location"] !=
-          (state.attached ? "docked_at_origin_port" : "planetary_flight"))
+      root["state"]["location"] != (state.attached ? "docked_at_origin_port"
+                                    : system       ? "system_flight"
+                                                   : "planetary_flight"))
     return std::unexpected{
         failure("$.state.location", "attachment/location mismatch")};
   root.erase("docking");
-  root["format_version"] = selected ? kFreedomTerrainFlightSaveFormatVersion
+  root["format_version"] = release    ? kFreedomReleaseFlightSaveFormatVersion
+                           : selected ? kFreedomTerrainFlightSaveFormatVersion
                            : root.contains("world_owner")
                                ? kFreedomActiveFlightSaveFormatVersion
                                : kFreedomFlightSaveFormatVersion;
-  root["state"]["location"] = "planetary_flight";
+  root["state"]["location"] = system ? "system_flight" : "planetary_flight";
   auto flight = decode_freedom_flight_document_json(root.dump());
   if (!flight) return std::unexpected{flight.error()};
   FreedomDockingSaveDocument document{std::move(*flight), state};

@@ -10,8 +10,11 @@ namespace apsis_drift {
 inline constexpr std::uint32_t kFreedomFlightSaveFormatVersion{18};
 inline constexpr std::uint32_t kFreedomActiveFlightSaveFormatVersion{26};
 inline constexpr std::uint32_t kFreedomTerrainFlightSaveFormatVersion{31};
-// Top-level input only; ordinary and nested saves keep their existing formats.
+// Top-level input only; never emitted as a canonical or nested save.
 inline constexpr std::uint32_t kFreedomSystemFlightImportFormatVersion{35};
+inline constexpr std::uint32_t kFreedomReleaseFlightSaveFormatVersion{36};
+inline constexpr std::uint32_t kFreedomRelativeFramePolicy{1};
+inline constexpr std::uint32_t kFreedomReleaseSystemFramePolicy{2};
 inline constexpr std::uint32_t kFreedomLegacyTerrainPolicy{1};
 inline constexpr std::uint32_t kFreedomLocalDetailTerrainPolicy{2};
 inline constexpr std::uint32_t kFreedomActiveWorldVersion{1};
@@ -36,6 +39,9 @@ struct FreedomFlightModel {
   // Policy1 retains all historical source/contact arithmetic. Policy2 binds
   // physical local-detail recipe2 to its matching versioned top triangles.
   std::uint32_t terrain_policy{kFreedomLegacyTerrainPolicy};
+  // Policy2 retains a system-inertial body after the explicit release event;
+  // its named world owner still selects the existing force/view body.
+  std::uint32_t frame_policy{kFreedomRelativeFramePolicy};
   friend auto operator==(const FreedomFlightModel&, const FreedomFlightModel&)
       -> bool = default;
 };
@@ -54,9 +60,16 @@ struct FreedomFlightHydration {
   PhysicalPlanetRotationRecipe rotation;
   AtmosphericFlightSample atmosphere;
 };
+// Strict same-tick view of the sole canonical body; never changes the source,
+// selects a force body, or recursively hydrates a complete flight.
+[[nodiscard]] auto relative_freedom_flight_state(
+    const FreedomFlightSaveDocument&, const PhysicalLocalSystem&)
+    -> std::expected<RigidBodyState, SaveSchemaError>;
+
 // Format 18 retains the physical origin home frame. Explicit format 26
 // selects a real planet frame in the bounded origin/neighbor pair; no study
-// fallback or implicit migration.
+// fallback or implicit migration. Format36 explicitly retains frame policy2
+// with a relative attached or system-inertial released canonical body.
 [[nodiscard]] auto hydrate_freedom_flight_document(
     const FreedomFlightSaveDocument&)
     -> std::expected<FreedomFlightHydration, SaveSchemaError>;
