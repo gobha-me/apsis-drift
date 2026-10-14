@@ -402,6 +402,176 @@ auto port_handoff(const NativeFreedomFlightSession& source) -> void {
   check(bytes(source) == original, "Rendezvous/cancel/guard/capture copies "
                                    "never change exported source route");
 }
+auto jump_handoff(const NativeFreedomFlightSession& source) -> void {
+  const auto original = bytes(source);
+  const auto source_body = source.document().flight;
+  const auto& original_aid = source.port_approach();
+  const auto& original_maneuver = source.surface_maneuver();
+  const auto route = generate_first_intersystem_identities(
+      source.document().origin.recipe.universe_seed);
+  auto selected = source;
+  check(!selected.select_jump({0}) && bytes(selected) == original &&
+            selected.port_approach() == original_aid &&
+            selected.surface_maneuver() == original_maneuver,
+        "Unknown system jump selection preserves canonical body and whole "
+        "source");
+  need(selected.select_jump(route.target_system));
+  check(
+      selected.document().flight == source_body &&
+          selected.travel()->selected == route.target_system &&
+          selected.document().world == source.document().world &&
+          selected.document().origin == source.document().origin &&
+          selected.resources() == source.resources() &&
+          selected.knowledge() == source.knowledge() &&
+          selected.boarding() == source.boarding() &&
+          selected.starting_assembly() == source.starting_assembly() &&
+          need(selected.recovery_document()).recovery ==
+              need(source.recovery_document()).recovery,
+      "Known selection keeps exact canonical system body, tick and all owners");
+  selected = reopen(selected);
+  const auto before_queries = bytes(selected);
+  const auto preview = need(selected.jump_preview());
+  auto request = preview.request;
+  request.source = independent_relative(selected);
+  check(preview == need(preview_freedom_jump(request)) &&
+            preview.request.source == independent_relative(selected) &&
+            same(preview.request.source.orientation, source_body.orientation) &&
+            same(preview.request.source.angular_velocity_radians_per_second,
+                 source_body.angular_velocity_radians_per_second),
+        "System preview consumes independent same-tick relative source with "
+        "exact attitude/spin");
+  need(selected.jump_available());
+  check(
+      bytes(selected) == before_queries &&
+          selected.document().flight == source_body &&
+          selected.port_approach() == original_aid &&
+          selected.surface_maneuver() == original_maneuver,
+      "Preview and availability never convert the live body or mutate owners");
+  auto pending = selected;
+  const auto recovery = need(pending.recovery_document());
+  need(pending.record_loss(
+      FreedomLossCause::irrecoverable_destruction,
+      pending.document().origin.state.craft, pending.document().flight.tick,
+      need(freedom_recovery_source_checksum(recovery.voyage))));
+  const auto pending_bytes = bytes(pending);
+  check(!pending.select_jump(route.target_system) &&
+            !pending.jump_available() && !pending.begin_jump() &&
+            bytes(pending) == pending_bytes,
+        "Pending recovery guards still refuse selected system jump actions "
+        "transactionally");
+  auto begun = selected;
+  auto relative_document = selected.document();
+  relative_document.flight = independent_relative(selected);
+  need(begun.begin_jump());
+  check(begun.document() == relative_document &&
+            begun.travel()->phase == FreedomJumpPhase::spool &&
+            begun.travel()->spool_tick == source_body.tick &&
+            begun.resources() == selected.resources() &&
+            begun.knowledge() == selected.knowledge() &&
+            begun.boarding() == selected.boarding() &&
+            begun.starting_assembly() == selected.starting_assembly() &&
+            need(begun.recovery_document()).recovery ==
+                need(selected.recovery_document()).recovery,
+        "Explicit begin commits same-tick relative source and unchanged "
+        "whole-voyage owners");
+  auto canceled = reopen(begun);
+  need(canceled.advance({}));
+  const auto canceled_charges = canceled.resources()->jump_charges;
+  const auto canceled_attempt = canceled.travel()->next_attempt;
+  need(canceled.cancel_jump());
+  check(canceled.document().flight.frame.kind ==
+                RigidFrameKind::planet_relative_inertial &&
+            canceled.document().flight.tick == source_body.tick + 1 &&
+            canceled.resources()->jump_charges == canceled_charges &&
+            canceled.travel()->next_attempt == canceled_attempt &&
+            canceled.travel()->phase == FreedomJumpPhase::idle,
+        "Actual uncommitted cancel retains relative body without jump refund "
+        "or system return");
+  (void)reopen(canceled);
+  auto live = begun;
+  auto resumed = reopen(live);
+  const auto charges = live.resources()->jump_charges;
+  const auto attempt = live.travel()->next_attempt;
+  NativeFlightControls invalid;
+  invalid.positive_translation.x = std::numeric_limits<double>::quiet_NaN();
+  const auto spooling_bytes = bytes(live);
+  check(!live.advance(invalid) && !live.advance({}, SimulationSeconds{.1}) &&
+            !live.select_jump(route.target_system) &&
+            bytes(live) == spooling_bytes,
+        "Invalid controls/step or active-spool reselection preserve complete "
+        "jump source");
+  std::optional<FrozenFreedomJumpArrival> frozen;
+  for (SimulationTick tick = 1; tick <= kJumpSpoolTicks + kJumpTransitTicks;
+       ++tick) {
+    const auto step = need(live.advance({}));
+    const auto repeated = need(resumed.advance({}));
+    check(step.fuel_debit_quanta == repeated.fuel_debit_quanta &&
+              step.jump_committed == repeated.jump_committed &&
+              step.jump_arrived == repeated.jump_arrived,
+          "Each actual jump tick retains resumed commitment/arrival/debit "
+          "behavior");
+    if (tick < kJumpSpoolTicks)
+      check(live.resources()->jump_charges == charges && !step.jump_committed,
+            "Existing actual spool does not bill a charge early");
+    if (tick == kJumpSpoolTicks) {
+      check(step.jump_committed &&
+                live.travel()->phase == FreedomJumpPhase::transit &&
+                live.resources()->jump_charges == charges - 1 &&
+                live.travel()->next_attempt == attempt + 1 &&
+                live.travel()->committed.has_value(),
+            "Qualified actual source commits one existing charge and frozen "
+            "arrival");
+      if (!step.jump_committed || !live.travel()->committed) return;
+      frozen = live.travel()->committed;
+      const auto committed = bytes(live);
+      check(!live.cancel_jump() && !live.select_jump(route.target_system) &&
+                bytes(live) == committed &&
+                need(live.jump_preview()) == frozen->preview,
+            "Committed transit refuses cancel/reselection and preserves frozen "
+            "preview");
+    }
+    if (tick > kJumpSpoolTicks)
+      check(step.fuel_debit_quanta == 0 &&
+                live.resources()->flight_quanta ==
+                    live.travel()->commitment_resources->flight_quanta &&
+                live.resources()->jump_charges == charges - 1,
+            "Existing transit clocks do not refund charges or add flight-fuel "
+            "debit");
+    if (tick == 1 || tick == kJumpSpoolTicks - 1 || tick == kJumpSpoolTicks ||
+        tick == kJumpSpoolTicks + 1 ||
+        tick == kJumpSpoolTicks + kJumpTransitTicks - 1 ||
+        tick == kJumpSpoolTicks + kJumpTransitTicks) {
+      check(bytes(live) == bytes(resumed),
+            "Full outer-owner saves match at every real jump phase boundary");
+      resumed = reopen(resumed);
+    }
+    if (tick == kJumpSpoolTicks + kJumpTransitTicks)
+      check(step.jump_arrived,
+            "Existing scheduled arrival occurs without a fabricated leg");
+  }
+  check(frozen &&
+            live.document().flight.frame.kind ==
+                RigidFrameKind::planet_relative_inertial &&
+            live.document().model.frame_policy ==
+                kFreedomReleaseSystemFramePolicy &&
+            live.system().catalog.id == route.target_system &&
+            live.document().world->system == route.target_system &&
+            live.document().flight.tick ==
+                source_body.tick + kJumpSpoolTicks + kJumpTransitTicks &&
+            live.travel()->phase == FreedomJumpPhase::idle && !live.docking() &&
+            live.boarding() == source.boarding() &&
+            live.starting_assembly() == source.starting_assembly() &&
+            need(live.recovery_document()).recovery ==
+                need(source.recovery_document()).recovery &&
+            same(live.document().flight.orientation,
+                 frozen->preview.request.source.orientation) &&
+            same(live.document().flight.angular_velocity_radians_per_second,
+                 frozen->preview.request.source
+                     .angular_velocity_radians_per_second) &&
+            bytes(live) == bytes(resumed) && bytes(source) == original,
+        "Actual arrival retains existing relative semantics, "
+        "pilot/assembly/recovery and exact frozen attitude/spin");
+}
 auto checkpoint(const NativeFreedomFlightSession& session,
                 const std::filesystem::path& output, std::string_view name,
                 Json& manifest) -> void {
@@ -448,8 +618,6 @@ auto refused_commands(NativeFreedomFlightSession& session) -> void {
           "System surface release refuses transactionally");
   refuses([&] { return session.enable_impact_consequences(); },
           "System impact selection refuses transactionally");
-  refuses([&] { return session.begin_jump(); },
-          "System active FTL commitment refuses transactionally");
   FreedomSurfaceWalkSaveDocument outside{
       need(session.recovery_document()), 1, {}};
   const auto inside = need(encode_freedom_surface_walk_document_json(outside));
@@ -620,6 +788,7 @@ auto run(const std::filesystem::path& output) -> void {
         "Held real rotation exercises nonidentity quaternion and nonzero spin");
   checkpoint(live, output, "stepped", manifest);
   gear_handoff(live, held);
+  jump_handoff(live);
   check(
       live.boarding() == pilot && live.starting_assembly() == assembly &&
           live.craft_binding().selection() != nullptr &&

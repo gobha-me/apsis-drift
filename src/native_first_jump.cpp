@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace apsis_drift {
 auto NativeFreedomFlightSession::travel_document() const
@@ -19,9 +20,27 @@ auto NativeFreedomFlightSession::travel_document() const
 }
 auto NativeFreedomFlightSession::select_jump(SystemId destination)
     -> std::expected<void, std::string> {
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
-    return std::unexpected{
-        "System-flight FTL integration is not qualified yet"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight jump selection"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Jump selection frame assessment refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    if (auto selected = candidate.select_jump(destination); !selected)
+      return selected;
+    // Destination choice changes travel selection, not the physical body.
+    candidate.document_.flight = document_.flight;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+    *this = std::move(candidate);
+    return {};
+  }
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -71,9 +90,18 @@ auto NativeFreedomFlightSession::select_jump(SystemId destination)
 }
 auto NativeFreedomFlightSession::jump_preview() const
     -> std::expected<FreedomJumpPreview, std::string> {
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
-    return std::unexpected{
-        "System-flight FTL integration is not qualified yet"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight jump preview"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Jump preview frame assessment refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    return candidate.jump_preview();
+  }
   if (travel_ && travel_->phase == FreedomJumpPhase::transit &&
       travel_->committed)
     return travel_->committed->preview;
@@ -100,9 +128,18 @@ auto NativeFreedomFlightSession::jump_preview() const
 }
 auto NativeFreedomFlightSession::jump_available() const
     -> std::expected<void, std::string> {
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
-    return std::unexpected{
-        "System-flight FTL integration is not qualified yet"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight jump availability"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Jump availability frame assessment refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    return candidate.jump_available();
+  }
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
@@ -137,6 +174,24 @@ auto NativeFreedomFlightSession::begin_jump()
   if (recovery_pending())
     return std::unexpected{
         "Continue the recorded loss before controlling the replacement"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy ||
+        condition_)
+      return std::unexpected{"Unsupported system-flight jump commitment"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Jump begin frame handoff refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    if (auto begun = candidate.begin_jump(); !begun) return begun;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+    *this = std::move(candidate);
+    return {};
+  }
   if (auto available = jump_available(); !available) return available;
   auto candidate = *this;
   candidate.travel_->phase = FreedomJumpPhase::spool;

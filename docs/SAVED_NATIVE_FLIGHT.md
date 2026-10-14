@@ -21,7 +21,11 @@ the relative frame. These events preserve the complete voyage and use existing
 physics, without an automatic altitude boundary. Selecting the existing port
 approach aid uses the same saved relative frame; its availability check is
 read-only and cancellation retains that valid frame. Ordinary New Game keeps
-frame policy1; system-mode FTL and impact activation remain unsupported.
+frame policy1. Known jump selection keeps the canonical system body while
+preview and availability use read-only relative observations. Begin commits
+the relative frame before the unchanged starter spool/transit; cancel and
+arrival retain their existing relative semantics. System-mode impact
+activation remains unsupported.
 Format35 imports still normalize once and do not select frame policy2.
 
 2026-09-30, #340; port lifecycle added 2026-10-01 in #342. The ordinary launcher

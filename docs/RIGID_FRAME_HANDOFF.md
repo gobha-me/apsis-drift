@@ -294,7 +294,15 @@ transient aid off. Existing port capture constrains the relative body, and actua
 port release selects system coordinates again. No automatic frame boundary,
 new approach threshold or force law is introduced.
 
-System-mode FTL and impact activation still refuse transactionally. Physical
+For policy2, selecting an existing known jump destination keeps the exact
+canonical system body. Preview and availability query only the same-tick
+relative view. Beginning the jump commits that relative frame with the existing
+spool action after complete voyage validation. The unchanged starter rules own
+charges, transit and arrival; cancel retains the relative source, and arrival
+installs its existing relative target body. No new route, risk, force law or
+frame-selection default is introduced.
+
+System-mode impact activation still refuses transactionally. Physical
 port release still refuses a selected relative voyage with impacts or active jump/contact. Ordinary gameplay keeps policy1
 while the remaining reference-route consumers are integrated.
 The selected policy is not an extra game mode, player debug control, automatic
