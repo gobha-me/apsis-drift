@@ -29,6 +29,7 @@ namespace {
 using namespace apsis_drift;
 using V = RigidVector3;
 using Json = nlohmann::ordered_json;
+enum class PhysicalFlightProfile : std::uint8_t { assisted, advanced };
 auto add(V a, V b) -> V {
   return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
@@ -129,6 +130,7 @@ struct Trace {
   Json endurance_checkpoints = Json::array();
   std::optional<NativeFreedomFlightSession> uninterrupted{};
   bool ground_route{};
+  std::optional<PhysicalFlightProfile> profile{};
   auto flight(const NativeFlightControls& c)
       -> std::expected<NativeFlightStep, std::string> {
     auto result = session.advance(c);
@@ -184,6 +186,10 @@ struct Trace {
         need(live.set_assistance(false));
       else if (op == "assistance_on")
         need(live.set_assistance(true));
+      else if (op == "hold_on")
+        need(live.hold_current_orbit());
+      else if (op == "hold_off")
+        need(live.set_hold({}));
       else if (op == "land")
         need(live.request_landing());
       else if (op == "surface_exit")
@@ -316,7 +322,9 @@ struct Trace {
         label == "cruise-start" || label == "cruise-end" ||
         label == "landing-ready" || label == "surface-airborne" ||
         label == "space-exit" || label == "home-intercept" ||
-        label == "near-port";
+        label == "near-port" || label == "orbit-before-hold" ||
+        label == "orbit-hold-selected" || label == "orbit-hold-running" ||
+        label == "orbit-hold-disabled";
     if (selected)
       check(body.frame.kind == (system_phase
                                     ? RigidFrameKind::system_inertial
@@ -368,6 +376,23 @@ struct Trace {
         row["landed"] = session.surface() && session.surface()->landed;
       }
     }
+    if (profile) {
+      auto& row = checkpoints.back();
+      const bool assisted = *profile == PhysicalFlightProfile::assisted;
+      check(session.document().model.assistance ==
+                (label == "station-start" || label == "seated" || assisted),
+            "Physical profile silently changed assistance");
+      row["assistance"] = session.document().model.assistance;
+      row["hold_enabled"] = session.document().model.hold.target.has_value();
+      constexpr std::array classes{"stable", "decaying", "impact", "escape"};
+      row["orbit_classification"] =
+          classes[static_cast<unsigned>(observed.orbit.classification)];
+      if (label == "manual-gear" || label == "landed")
+        check(!session.document().model.hold.target &&
+                  session.surface_maneuver().kind ==
+                      NativeSurfaceManeuverKind::off,
+              "Physical contact retained orbit hold or an unexpected aid");
+    }
     if (endurance)
       endurance_checkpoints.push_back(
           {{"label", label},
@@ -387,7 +412,8 @@ struct Trace {
 // to the native controller. Saturation is physical; no correction writes state.
 auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
               const AtmosphericFlightSample& air, V acceleration,
-              const std::array<V, 3>& desired_axes) -> NativeFlightControls {
+              const std::array<V, 3>& desired_axes, bool assistance = false)
+    -> NativeFlightControls {
   const auto inverse = godot_spike::inverse_saved(body.orientation);
   V error{};
   constexpr std::array<V, 3> axes{{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
@@ -403,6 +429,8 @@ auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
   NativeFlightControls result;
   const std::array translation{body_accel.x, body_accel.y, body_accel.z};
   const std::array rotation{angular.x, angular.y, angular.z};
+  const auto rate = rotate(inverse, error);
+  const std::array desired_rate{rate.x, rate.y, rate.z};
   std::array<double*, 3> positive{&result.positive_translation.x,
                                   &result.positive_translation.y,
                                   &result.positive_translation.z};
@@ -422,9 +450,15 @@ auto controls(const RigidBodyState& body, const CraftFrameProperties& frame,
     *negative[i] = std::clamp(-translation[i] * frame.dry_mass_kg /
                                   frame.negative_force_newtons[i],
                               0.0, 1.0);
-    const auto demand = rotation[i] *
-                        static_cast<double>(frame.principal_inertia_kg_m2[i]) /
-                        frame.torque_newton_metres[i];
+    // Assisted fractions request angular rates; Advanced fractions request
+    // torque. Reuse the same attitude error and authoritative frame ratings.
+    const auto demand =
+        assistance
+            ? desired_rate[i] /
+                  (frame.max_angular_rate_milliradians_per_second[i] * .001)
+            : rotation[i] *
+                  static_cast<double>(frame.principal_inertia_kg_m2[i]) /
+                  frame.torque_newton_metres[i];
     *positive_rotation[i] = std::clamp(demand, 0.0, 1.0);
     *negative_rotation[i] = std::clamp(-demand, 0.0, 1.0);
   }
@@ -531,7 +565,8 @@ auto surface_start(bool system_frame) -> NativeStartup {
 
 auto run(const std::filesystem::path& output, bool record_commands,
          bool measure_endurance, bool surface_loop = false,
-         bool system_frame = false) -> void {
+         bool system_frame = false,
+         std::optional<PhysicalFlightProfile> profile = std::nullopt) -> void {
   Trace trace{
       need(NativeFreedomFlightSession::open(surface_start(system_frame)),
            "New session refused"),
@@ -539,6 +574,9 @@ auto run(const std::filesystem::path& output, bool record_commands,
   if (measure_endurance || surface_loop) trace.endurance.emplace();
   if (surface_loop) trace.uninterrupted.emplace(trace.session);
   trace.ground_route = surface_loop;
+  trace.profile = profile;
+  const bool assisted_profile = profile == PhysicalFlightProfile::assisted;
+  const bool manual_profile = profile == PhysicalFlightProfile::advanced;
   std::optional<Commands> commands;
   if (record_commands) {
     commands.emplace(output);
@@ -556,8 +594,8 @@ auto run(const std::filesystem::path& output, bool record_commands,
     (void)need(trace.walk({}), "Boarding refused");
   const auto original_q = session.document().flight.orientation;
   trace.checkpoint("seated");
-  need(session.set_assistance(false));
-  trace.action("assistance_off");
+  need(session.set_assistance(assisted_profile));
+  trace.action(assisted_profile ? "assistance_on" : "assistance_off");
   need(session.release_port());
   trace.action("release");
   NativeFlightControls withdrawal;
@@ -565,6 +603,57 @@ auto run(const std::filesystem::path& output, bool record_commands,
   for (int i = 0; i < 720; ++i)
     (void)need(trace.flight(withdrawal), "Withdrawal refused");
   trace.checkpoint("departed");
+  unsigned hold_active_ticks{}, hold_force_ticks{};
+  if (profile) {
+    const auto orbit = need(session.observe(), "Flown orbit query refused");
+    check(orbit.orbit.classification == OrbitClassification::stable &&
+              orbit.orbit.bound &&
+              orbit.atmosphere.altitude_metres >
+                  orbit.atmosphere.space_boundary_altitude_metres,
+          "Actual departed orbit is not stable above air; no initialized orbit "
+          "or automatic insertion");
+    const auto target = session.current_orbit_hold_target();
+    if (!target)
+      throw std::runtime_error("Actual departed hold selection refused: " +
+                               target.error());
+    trace.checkpoint("orbit-before-hold");
+    const auto before_hold = session.document();
+    const auto resources = session.resources();
+    auto expected = before_hold;
+    expected.model.hold = {kOrbitHoldVersion, *target};
+    need(session.hold_current_orbit());
+    trace.action("hold_on");
+    check(session.document() == expected && session.resources() == resources,
+          "Public hold selection changed more than the saved request");
+    trace.checkpoint("orbit-hold-selected");
+    for (unsigned step = 0; step < 120; ++step) {
+      const auto result =
+          need(trace.flight({}), "Actual requested hold refused");
+      if (assisted_profile) {
+        check(result.hold.status == OrbitHoldStatus::active ||
+                  result.hold.status == OrbitHoldStatus::saturated,
+              "Assisted flown hold did not allocate bounded correction");
+        ++hold_active_ticks;
+        if (result.applied_hold_force_body_newtons != V{}) ++hold_force_ticks;
+      } else
+        check(result.hold.status == OrbitHoldStatus::paused_advanced &&
+                  result.applied_hold_force_body_newtons == V{} &&
+                  result.fuel_debit_quanta == 0,
+              "Advanced neutral hold request did not retain passive flight");
+    }
+    if (assisted_profile)
+      check(hold_force_ticks > 0 &&
+                session.resources()->flight_quanta < resources->flight_quanta,
+            "Assisted flown hold lost actual correction or fuel debit");
+    trace.checkpoint("orbit-hold-running");
+    const auto held_body = session.document().flight;
+    need(session.set_hold({}));
+    trace.action("hold_off");
+    check(session.document().flight == held_body &&
+              !session.document().model.hold.target,
+          "Hold disable changed the physical body");
+    trace.checkpoint("orbit-hold-disabled");
+  }
   const auto station = generate_origin_station(Seed{42});
   const auto geometry =
       need(origin_station_geometry(station), "Geometry refused");
@@ -579,13 +668,14 @@ auto run(const std::filesystem::path& output, bool record_commands,
       need(session.observe(), "Observation refused").atmosphere.altitude_metres;
   int phase{}, cruise_ticks{};
   bool entered{}, exited{}, captured{};
+  bool manual_descent{}, controls_dirty{}, manual_contact_propulsion{};
   V cruise_start{}, cruise_end{};
   double minimum_terrain_clearance = start_altitude;
   SimulationTick approach_tick{};
   NativeFlightControls held;
   std::optional<LandedCraftAnchor> ground_goal;
   const int pilot_seconds = surface_loop ? 9000 : 6000;
-  for (int tick = 0; tick < 120 * pilot_seconds; ++tick) {
+  for (int tick = 0; tick < 120 * pilot_seconds - (profile ? 120 : 0); ++tick) {
     // Value copy stays valid when a checkpoint reloads the identical session.
     const auto body =
         need(session.relative_state(), "Pilot relative state refused");
@@ -701,10 +791,11 @@ auto run(const std::filesystem::path& output, bool record_commands,
       const auto normal =
           rotate(rotation.fixed_to_system,
                  rotate(ground_goal->fixed.orientation, {0, 1, 0}));
-      const auto target = rotate(
-          rotation.fixed_to_system,
-          add(ground_goal->fixed.position_metres,
-              scale(rotate(ground_goal->fixed.orientation, {0, 1, 0}), 12)));
+      const auto target =
+          rotate(rotation.fixed_to_system,
+                 add(ground_goal->fixed.position_metres,
+                     scale(rotate(ground_goal->fixed.orientation, {0, 1, 0}),
+                           manual_descent ? 0 : 12)));
       const auto target_velocity = cross(spin, target);
       const auto error = sub(target, p);
       const auto desired_velocity = add(
@@ -718,21 +809,48 @@ auto run(const std::filesystem::path& output, bool record_commands,
                      rotate(ground_goal->fixed.orientation, {1, 0, 0}));
       back = rotate(rotation.fixed_to_system,
                     rotate(ground_goal->fixed.orientation, {0, 0, 1}));
-      if (length(error) < .5 && length(sub(v, cross(spin, p))) < .3 &&
+      const bool ready =
+          length(error) < .5 && length(sub(v, cross(spin, p))) < .3 &&
           dot(rotate(body.orientation, {0, 1, 0}), up) > .999 &&
           length(sub(body.angular_velocity_radians_per_second,
                      rotate(godot_spike::inverse_saved(body.orientation),
-                            spin))) < .002) {
+                            spin))) < .002;
+      if (manual_profile && !manual_descent && ready) {
         trace.checkpoint("landing-ready");
-        need(session.set_assistance(true));
-        trace.action("assistance_on");
         need(session.request_landing());
         trace.action("land");
-        for (unsigned step = 0; step < 7200 && !session.surface()->landed;
-             ++step)
-          (void)need(trace.flight({}), "Actual landing aid refused");
-        check(session.surface()->landed.has_value(),
-              "Actual landing did not finish");
+        check(!session.document().model.assistance &&
+                  session.surface()->gear_deployed &&
+                  !session.surface()->landed &&
+                  session.surface_maneuver().kind ==
+                      NativeSurfaceManeuverKind::off,
+              "Advanced manual gear selected an assisted landing");
+        trace.checkpoint("manual-gear");
+        manual_descent = true;
+        controls_dirty = true;
+        continue;
+      }
+      if ((manual_profile && manual_descent && session.surface()->landed) ||
+          (!manual_profile && ready)) {
+        if (manual_profile)
+          check(
+              manual_contact_propulsion &&
+                  !session.document().model.assistance &&
+                  session.surface_maneuver().kind ==
+                      NativeSurfaceManeuverKind::off,
+              "Advanced actual contact lost manual thrust or selected an aid");
+        else {
+          trace.checkpoint("landing-ready");
+          need(session.set_assistance(true));
+          trace.action("assistance_on");
+          need(session.request_landing());
+          trace.action("land");
+          for (unsigned step = 0; step < 7200 && !session.surface()->landed;
+               ++step)
+            (void)need(trace.flight({}), "Actual landing aid refused");
+          check(session.surface()->landed.has_value(),
+                "Actual landing did not finish");
+        }
         trace.checkpoint("landed");
         const auto landed_anchor = session.surface()->landed;
         const auto fuel = session.resources()->flight_quanta;
@@ -761,18 +879,42 @@ auto run(const std::filesystem::path& output, bool record_commands,
         trace.checkpoint("surface-seated");
         need(session.release_surface());
         trace.action("liftoff");
+        bool lift_propulsion{};
         for (unsigned step = 0;
              step < 1200 &&
              session.surface_maneuver().kind != NativeSurfaceManeuverKind::off;
-             ++step)
-          (void)need(trace.flight({}), "Actual thruster liftoff refused");
+             ++step) {
+          const auto result =
+              need(trace.flight({}), "Actual thruster liftoff refused");
+          lift_propulsion =
+              lift_propulsion ||
+              result.actuation.central.propulsion.positive_force_newtons.y > 0;
+        }
         check(!session.surface()->landed && session.surface_maneuver().kind ==
                                                 NativeSurfaceManeuverKind::off,
               "Actual liftoff did not finish");
+        if (profile) {
+          auto snapshot = need(TerrainTouchdownSnapshot::create(session, true),
+                               "Actual airborne pad snapshot refused");
+          const auto query = snapshot.query();
+          bool clear =
+              query.assessment &&
+              query.assessment->classification == TouchdownClass::pads_clear &&
+              query.assessment->support_count > 0;
+          for (unsigned i = 0; clear && i < query.assessment->support_count;
+               ++i)
+            clear = query.supports[i] && *query.supports[i] &&
+                    (**query.supports[i]).minimum_gap_metres >= 3;
+          check(lift_propulsion && clear &&
+                    session.surface_maneuver().note ==
+                        "Airborne; manual flight resumes with gear deployed",
+                "Profile liftoff needs actual thrust, certified clear pads and "
+                "successful aid completion");
+        }
         need(session.set_landing_gear(false));
         trace.action("gear_stow");
-        need(session.set_assistance(false));
-        trace.action("assistance_off");
+        need(session.set_assistance(assisted_profile));
+        trace.action(assisted_profile ? "assistance_on" : "assistance_off");
         trace.checkpoint("surface-airborne");
         phase = 2;
         continue;
@@ -841,10 +983,16 @@ auto run(const std::filesystem::path& output, bool record_commands,
       check(captured, "Thruster approach did not reach capture");
       break;
     }
-    if (!record_commands || tick % kMaxCatchUpSteps == 0)
+    if (!record_commands || tick % kMaxCatchUpSteps == 0 || controls_dirty) {
       held = controls(body, frame, observed.atmosphere, acceleration,
-                      {right, up, back});
-    (void)need(trace.flight(held), "Flight step refused");
+                      {right, up, back},
+                      profile && session.document().model.assistance);
+      controls_dirty = false;
+    }
+    const auto result = need(trace.flight(held), "Flight step refused");
+    if (manual_profile && manual_descent && phase == 4)
+      manual_contact_propulsion =
+          manual_contact_propulsion || result.fuel_debit_quanta > 0;
   }
   if (!captured) {
     const auto available = session.port_approach_available();
@@ -912,6 +1060,21 @@ auto run(const std::filesystem::path& output, bool record_commands,
         "physical landing/walking/liftoff/return with exact Save/Continue; "
         "no ground initialization or ordinary New Game default change; "
         "test pilot only, no manual/controller qualification";
+  }
+  if (profile) {
+    report["schema_version"] = 6;
+    report["route"] = "physical-profile";
+    report["flight_profile"] = assisted_profile ? "assisted" : "advanced";
+    report["hold_ticks"] = 120;
+    report["hold_active_ticks"] = hold_active_ticks;
+    report["hold_force_ticks"] = hold_force_ticks;
+    report["scope"] =
+        "Actual selected station voyage with explicit runtime assistance "
+        "profile, "
+        "flown stable-orbit hold selection and complete Save/Continue; "
+        "Advanced final touchdown uses recorded manual channels; "
+        "explicit existing liftoff/port aids remain labelled aids, not fully "
+        "unaided flight";
   }
   if (commands)
     report["command_stream"] = {{"file", "commands.jsonl"},
@@ -1489,10 +1652,12 @@ int main(int argc, char** argv) {
           "Expected one absolute empty output "
           "directory and optional --commands/--endurance/--neighbor/--pilot/"
           "--aligned/--offset/--surface-loop [--system-frame] or distinct "
-          "--terrain-feature");
+          "--terrain-feature; --flight-profile=assisted|advanced requires "
+          "--surface-loop --system-frame");
     bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
         feature{}, system_frame{};
     std::optional<IntersystemArrivalQuality> grade;
+    std::optional<PhysicalFlightProfile> profile;
     for (int i = 2; i < argc; ++i) {
       const std::string_view option{argv[i]};
       if (option == "--commands" && !commands)
@@ -1503,6 +1668,10 @@ int main(int argc, char** argv) {
         surface_loop = true;
       else if (option == "--system-frame" && !system_frame)
         system_frame = true;
+      else if (option == "--flight-profile=assisted" && !profile)
+        profile = PhysicalFlightProfile::assisted;
+      else if (option == "--flight-profile=advanced" && !profile)
+        profile = PhysicalFlightProfile::advanced;
       else if (option == "--terrain-feature" && !feature)
         feature = true;
       else if (option == "--neighbor" && !neighbor)
@@ -1525,10 +1694,13 @@ int main(int argc, char** argv) {
     if (surface_loop && (neighbor || pilot || grade))
       throw std::invalid_argument(
           "--surface-loop is a distinct planetary fixture mode");
+    if (profile && (!surface_loop || !system_frame))
+      throw std::invalid_argument(
+          "A flight profile requires --surface-loop --system-frame");
     if (system_frame && !surface_loop)
       throw std::invalid_argument("--system-frame requires --surface-loop");
     if (feature && (commands || endurance || neighbor || pilot || grade ||
-                    surface_loop || system_frame))
+                    surface_loop || system_frame || profile))
       throw std::invalid_argument(
           "--terrain-feature is a distinct initialized measurement mode");
     if (pilot && !neighbor)
@@ -1541,7 +1713,7 @@ int main(int argc, char** argv) {
     else if (neighbor)
       run_neighbor(output, commands, pilot, grade);
     else
-      run(output, commands, endurance, surface_loop, system_frame);
+      run(output, commands, endurance, surface_loop, system_frame, profile);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

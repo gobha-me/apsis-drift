@@ -206,9 +206,13 @@ def main(argv=None):
                         help="repeat to select contracts; default is all")
     parser.add_argument("--selected-surface-loop", action="store_true",
                         help="explicit policy-2 station starter; requires --test native_surface_loop only")
+    parser.add_argument("--flight-profile", choices=("assisted", "advanced"),
+                        help="explicit physical profile; requires --selected-surface-loop")
     parser.add_argument("--keep-work", action="store_true",
                         help="retain successful asset/import/binary copies for replay; failures always retain them")
     args = parser.parse_args(argv)
+    if args.flight_profile and not args.selected_surface_loop:
+        parser.error("--flight-profile requires --selected-surface-loop")
     if args.selected_surface_loop and args.test != ["native_surface_loop"]:
         parser.error("--selected-surface-loop requires --test native_surface_loop only")
     if not sys.platform.startswith("linux"):
@@ -537,6 +541,10 @@ def main(argv=None):
         phases = work / "surface-loop"
         phases.mkdir()
         for index, invalid in enumerate((
+                [str(phases), "--flight-profile=advanced"],
+                [str(phases), "--surface-loop", "--flight-profile=assisted"],
+                [str(phases), "--surface-loop", "--system-frame", "--flight-profile=unknown"],
+                [str(phases), "--surface-loop", "--system-frame", "--flight-profile=advanced", "--flight-profile=assisted"],
                 [str(phases), "--system-frame"],
                 [str(phases), "--surface-loop", "--system-frame", "--system-frame"],
                 [str(phases), "--terrain-feature", "--system-frame"],
@@ -554,6 +562,8 @@ def main(argv=None):
         fixture_args = [str(planetary_fixture), str(phases), "--surface-loop", "--commands"]
         if args.selected_surface_loop:
             fixture_args.append("--system-frame")
+        if args.flight_profile:
+            fixture_args.append("--flight-profile=" + args.flight_profile)
         code, timed_out, elapsed = run_logged(
             fixture_args,
             log, env, args.timeout)
@@ -562,6 +572,8 @@ def main(argv=None):
             "fixture_sha256": sha256(planetary_fixture)})
         if args.selected_surface_loop:
             report["setup"][-1]["frame_policy"] = 2
+        if args.flight_profile:
+            report["setup"][-1]["flight_profile"] = args.flight_profile
         save()
         if code != 0 or timed_out:
             print(f"FAIL physical surface-loop fixture: {log}", flush=True)
