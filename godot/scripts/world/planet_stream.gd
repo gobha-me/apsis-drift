@@ -15,6 +15,7 @@ var swaps := 0
 var generated_total := 0
 var retired_total := 0
 var last_report: Dictionary = {}
+var pending_report: Dictionary = {}
 var error := ""
 var render_layer := 1
 var identity: Dictionary = {}
@@ -59,8 +60,23 @@ func reset_world() -> void:
 	timer = 0.0
 	is_ready = false
 	last_report.clear()
+	pending_report.clear()
 	identity.clear()
 	error = ""
+
+
+func _create_mesh(arrays: Array) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+func _refuse_cover(reason: String) -> void:
+	# The accepted cover keeps its last complete placement. Incoming nodes
+	# remain owned until explicit reset, but cannot replace or obscure it.
+	for id in nodes:
+		if not resident_ids.has(id): nodes[id].visible = false
+	error = reason
 
 
 func tick(delta: float, observer: Vector3) -> void:
@@ -94,9 +110,8 @@ func tick(delta: float, observer: Vector3) -> void:
 			for entry in pending:
 				wanted[entry.id] = true
 			upload_index = 0
-			last_report = batch.duplicate(false)
-			last_report.erase("tiles")
-			generated_total += int(batch.generated)
+			pending_report = batch.duplicate(false)
+			pending_report.erase("tiles")
 		elif timer >= 0.35:
 			timer = 0
 			if not bridge.request_stream(observer):
@@ -111,7 +126,7 @@ func tick(delta: float, observer: Vector3) -> void:
 			if nodes.has(entry.id):
 				continue
 			if not entry.has("vertices"):
-				error = "C++ stream omitted an uncached tile payload"
+				_refuse_cover("C++ stream omitted an uncached tile payload")
 				return
 			var arrays: Array = []
 			arrays.resize(Mesh.ARRAY_MAX)
@@ -120,8 +135,10 @@ func tick(delta: float, observer: Vector3) -> void:
 			arrays[Mesh.ARRAY_COLOR] = entry.colors
 			arrays[Mesh.ARRAY_TEX_UV] = entry.uv
 			arrays[Mesh.ARRAY_INDEX] = entry.indices
-			var mesh := ArrayMesh.new()
-			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			var mesh := _create_mesh(arrays)
+			if mesh == null or mesh.get_surface_count() != 1:
+				_refuse_cover("Terrain mesh upload did not produce one surface")
+				return
 			var instance := MeshInstance3D.new()
 			instance.layers = render_layer
 			instance.mesh = mesh
@@ -138,22 +155,6 @@ func tick(delta: float, observer: Vector3) -> void:
 			# A count limit plus a soft CPU budget. One GPU upload may still stall.
 			if uploaded >= 4 or Time.get_ticks_usec() - begin >= 2000:
 				break
-		if upload_index == pending.size():
-			for id in nodes.keys():
-				if not wanted.has(id):
-					var retired: MeshInstance3D = nodes[id]
-					retired.visible = false
-					retired.queue_free()
-					nodes.erase(id)
-					anchors.erase(id)
-					retired_total += 1
-				else:
-					nodes[id].visible = true
-			resident_ids = nodes.keys()
-			pending.clear()
-			wanted.clear()
-			is_ready = true
-			swaps += 1
 	# Transform both covers while staging. Subtraction happens in C++ doubles,
 	# before Godot ever receives a float; mesh coordinates are tile-local.
 	var ids := nodes.keys()
@@ -162,10 +163,34 @@ func tick(delta: float, observer: Vector3) -> void:
 		positions.append_array(anchors[id])
 	var transforms: Array = bridge.stream_transforms(positions)
 	if transforms.size() != ids.size():
-		error = "Invalid stream transforms: " + str(bridge.get_last_error())
+		_refuse_cover("Invalid stream transforms: " + str(bridge.get_last_error()))
 		return
+	# Validate the whole batch before moving even the first accepted tile.
+	for transform in transforms:
+		if not transform is Transform3D or not transform.is_finite():
+			_refuse_cover("Invalid terrain placement transform")
+			return
 	for i in range(ids.size()):
 		nodes[ids[i]].transform = transforms[i]
+	if not pending.is_empty() and upload_index == pending.size():
+		for id in nodes.keys():
+			if not wanted.has(id):
+				var retired: MeshInstance3D = nodes[id]
+				retired.visible = false
+				retired.queue_free()
+				nodes.erase(id)
+				anchors.erase(id)
+				retired_total += 1
+			else:
+				nodes[id].visible = true
+		resident_ids = nodes.keys()
+		last_report = pending_report
+		generated_total += int(pending_report.generated)
+		pending_report = {}
+		pending.clear()
+		wanted.clear()
+		is_ready = true
+		swaps += 1
 
 
 func report() -> Dictionary:
