@@ -33,7 +33,7 @@ static func decoded_values(args: Array) -> PackedFloat64Array:
 		result.append(value.hex_decode().decode_double(0))
 	return result
 
-static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false) -> bool:
+static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false, profile: bool = false) -> bool:
 	if not value is Array or value.size() != 3 or not value[0] is String or not Checkpoints.finite_number(value[1]) or value[1] != int(value[1]) or not value[2] is Array: return false
 	var op: String = value[0]
 	var count: int = int(value[1])
@@ -49,6 +49,7 @@ static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, tra
 		return true
 	if count != 0: return false
 	if op == "checkpoint": return args.size() == 1 and args[0] is String and args[0] in labels
+	if profile and op in ["hold_on", "hold_off"]: return args.is_empty()
 	if surface and op in ["assistance_on", "land", "surface_exit", "surface_return", "liftoff", "gear_stow"]: return args.is_empty()
 	if travel:
 		if op == "jump_select":
@@ -60,7 +61,7 @@ static func valid_record(value: Variant, labels: Array = Checkpoints.LABELS, tra
 		if op in ["jump_begin", "replenish"]: return args.is_empty()
 	return op in ["board", "unboard", "assistance_off", "release", "approach", "capture"] and args.is_empty()
 
-static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false) -> bool:
+static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkpoints.LABELS, travel: bool = false, surface: bool = false, profile: bool = false) -> bool:
 	var metadata: Variant = trace.get("command_stream")
 	if not metadata is Dictionary or metadata.get("file") != "commands.jsonl" or metadata.get("cadence_ticks") != 15 or metadata.get("float_encoding") != "ieee754-le-hex": return false
 	for pair in [["bytes", MAX_BYTES], ["rows", MAX_ROWS]]:
@@ -75,7 +76,7 @@ static func valid_stream(path: String, trace: Dictionary, labels: Array = Checkp
 		var line := stream.get_line()
 		if line.to_utf8_buffer().size() > 4096 or rows >= MAX_ROWS: return false
 		var record: Variant = JSON.parse_string(line)
-		if not valid_record(record, labels, travel, surface): return false
+		if not valid_record(record, labels, travel, surface, profile): return false
 		if travel and record[0] == "jump_select" and record[2][0] not in [trace.origin_system, trace.neighbor_system]: return false
 		rows += 1
 		if record[0] in ["walk", "flight", "surface_walk"]:
@@ -114,6 +115,9 @@ func start_options(_trace: Dictionary, args: PackedStringArray) -> Dictionary:
 
 func checkpoint_labels() -> Array:
 	return Checkpoints.LABELS
+
+func labels_for_trace(_trace: Variant) -> Array:
+	return checkpoint_labels()
 
 func valid_manifest(value: Variant) -> bool:
 	return Checkpoints.valid_trace(value)
@@ -161,10 +165,11 @@ func run() -> void:
 	if source == null or source.get_length() > 32768: quit(1); return
 	var trace: Variant = JSON.parse_string(source.get_as_text())
 	source.close()
-	var labels := checkpoint_labels()
+	var labels := labels_for_trace(trace)
 	var travel := travel_commands()
 	var surface := surface_commands()
-	if not check(valid_manifest(trace), "Malformed voyage manifest") or not check(valid_stream(args[0].path_join("commands.jsonl"), trace, labels, travel, surface), "Malformed bounded voyage stream"): quit(1); return
+	var profile: bool = trace is Dictionary and trace.get("schema_version") == 6
+	if not check(valid_manifest(trace), "Malformed voyage manifest") or not check(valid_stream(args[0].path_join("commands.jsonl"), trace, labels, travel, surface, profile), "Malformed bounded voyage stream"): quit(1); return
 	var zero := "0000000000000000"
 	check(valid_record(["walk", 15, [zero, zero, zero]]) and decoded_values(["000000000000f03f"])[0] == 1.0, "Valid exact control buffer refused")
 	for bad in [["flight", 0, []], ["walk", 16, [zero, zero, zero]], ["walk", 1.5, [zero, zero, zero]], ["flight", 1, [zero, zero, zero]], ["walk", 1, ["000000000000f87f", zero, zero]], ["walk", 1, ["000000000000f07f", zero, zero]], ["walk", 1, ["0000000000000040", zero, zero]], ["walk", 1, ["z000000000000000", zero, zero]], ["walk", 1, [zero + "00", zero, zero]], ["checkpoint", 0, ["../other"]], ["release", 0, [1]], ["teleport", 0, []]]:
@@ -228,6 +233,12 @@ func run() -> void:
 				await process_frame
 				await process_frame
 				check(owner.get_freedom_flight_state() == after, "Handoff frame wait advanced authoritative time")
+		elif op in ["hold_on", "hold_off"]:
+			if not check(view is FlightView, "Hold action reached station view"): break
+			view.player_input.axes.fill(0.0)
+			view.pause_controls("Explicit recorded orbit-hold selection")
+			view.request_hold(op == "hold_on")
+			if not check(view.error.is_empty() and owner.get_freedom_flight_state().hold_enabled == (op == "hold_on"), "Actual hold command refused: " + op): break
 		elif op in ["jump_select", "jump_begin", "port_select", "replenish"]:
 			if not travel_action(view, owner, op, record[2]): break
 		elif op in ["assistance_on", "land", "surface_exit", "surface_return", "liftoff", "gear_stow"]:
@@ -266,6 +277,7 @@ func run() -> void:
 		var scope := "One accelerated native session from New Game, semantic input replay; not manual/controller or performance acceptance"
 		if surface: scope = "One accelerated native session from New Game, semantic flight replay and physical ground keys; not manual/controller or performance acceptance"
 		if trace.get("frame_policy", 1) == 2: scope = "One accelerated native session from explicitly selected policy-2 station Save, semantic flight replay and physical ground keys; not ordinary New Game or manual/controller/performance acceptance"
+		if profile: scope = "Explicit selected physical profile; flown orbit hold and physical final contact, existing liftoff/port aids; not fully unaided or manual hardware acceptance"
 		report.store_string(JSON.stringify({"scope": scope, "route": "native-neighbor" if travel else trace.get("route", "surface-loop") if surface else "planetary", "pass": not failed, "rows": rows, "final_tick": str(tick), "model_retained": not failed, "trace_sha256": FileAccess.get_sha256(args[0].path_join("trace.json")), "commands_sha256": FileAccess.get_sha256(args[0].path_join("commands.jsonl")), "sources_sha256": hashes, "engine": Engine.get_version_info(), "renderer": RenderingServer.get_video_adapter_name() if rendered else "headless", "license_records": "native-assets/stowed/licenses", "captures": captures}, "\t") + "\n")
 		report.close()
 	else: check(false, "Could not write continuous voyage report")

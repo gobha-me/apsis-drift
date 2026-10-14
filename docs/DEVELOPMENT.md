@@ -120,6 +120,18 @@ ordinary New Game's frame policy1 nor the default runtime suite. See the
 [frame contract](RIGID_FRAME_HANDOFF.md#selected-surface-loop-composition-contract)
 for canonical ownership, replay checks and qualification limits.
 
+Add `--flight-profile assisted` or `--flight-profile advanced` to that command
+to exercise an explicit physical-flight profile. Both use the same actual
+station departure, surface walk and home capture. Each selects the public
+orbit-hold request from the reached stable orbit, flies 120 ticks, then disables
+it before descent. Assisted allocates bounded correction and fuel; Advanced
+retains the request while the controller reports paused Advanced flight.
+Advanced deploys gear and lands through recorded manual thrust. These profiles
+retain the explicitly requested liftoff and port-approach aids; they do not
+claim an entirely unaided journey. The ordinary and selected nineteen-phase
+routes remain available without a profile option. Run each profile separately
+with both compiler builds; the per-process deadline remains 600 seconds.
+
 These headless contracts exercise real C++/GDScript integration and fixtures.
 They do not qualify GPU appearance, physical controllers, audio devices or
 frame-rate performance. A launch with `--headless-validate` checks start selection
