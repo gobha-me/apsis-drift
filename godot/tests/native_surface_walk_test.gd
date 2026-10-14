@@ -125,6 +125,24 @@ func check_ground_pause_heading(shell: Control, owner: Variant, source: String, 
 		if not check(shell.select_start(owner, {"mode": "continue", "value": source.path_join("exited.json"), "assets": assets}), "Heading source Continue refused"): return
 		var view: Control = shell.current_view
 		if not check(view.surface_walking() and resume(view), "Heading source did not resume on foot"): return
+		if trigger == "pause":
+			var original := source.path_join("exited.json")
+			var original_bytes := FileAccess.get_file_as_bytes(original)
+			var keyboard_reference: Variant = ClassDB.instantiate("FreedomBridge")
+			if not check(keyboard_reference.stage_freedom_continue(original), "Keyboard ground reference Continue refused"): return
+			var keyboard_pending: Dictionary = keyboard_reference.get_pending_freedom_start()
+			if not check(keyboard_reference.commit_pending_freedom_start(keyboard_pending.candidate_id), "Keyboard ground reference commit refused"): return
+			# The ground view retains look in Godot's single-precision Vector2;
+			# construct the expected rightward command with that same public type.
+			var expected_look := Vector2(-float(owner.get_freedom_flight_state().surface_walk.heading), 0)
+			expected_look += Vector2(float(view.player_input.settings.look_speed), 0) * (1.0 / 120.0)
+			var keyboard_heading := wrapf(-float(expected_look.x), -PI, PI)
+			if not check(keyboard_reference.advance_freedom_surface_walk(1.0 / 120.0, PackedFloat64Array([0, 0, keyboard_heading]), false) and keyboard_reference.save_freedom_as(output.path_join("keyboard-ground-reference.json")), "Keyboard ground reference tick refused"): return
+			key(KEY_RIGHT, true)
+			view._process(1.0 / 120.0)
+			key(KEY_RIGHT, false)
+			if not check(view.error.is_empty() and owner.save_freedom_as(output.path_join("keyboard-ground-actual.json")) and FileAccess.get_file_as_bytes(output.path_join("keyboard-ground-actual.json")) == FileAccess.get_file_as_bytes(output.path_join("keyboard-ground-reference.json")), "Actual ground keyboard look diverged from the independent C++ walking tick"): return
+			if not check(FileAccess.get_file_as_bytes(original) == original_bytes, "Keyboard ground look changed its source Save"): return
 		var button := InputEventMouseButton.new()
 		button.button_index = MOUSE_BUTTON_RIGHT
 		button.pressed = true

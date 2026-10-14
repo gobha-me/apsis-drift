@@ -784,7 +784,7 @@ func refresh_control_hint() -> void:
 	if player_input == null:
 		return
 	if surface_walking():
-		hint.text = "WASD / left stick walk · Right-drag / right stick look\nEsc / Start controls · Return near the aft ground access to reboard"
+		hint.text = "WASD / left stick walk · Look keys / right-drag / right stick look\nEsc / Start controls · Return near the aft ground access to reboard"
 		return
 	var family := "pad" if player_input.last_device == "pad" else "key"
 	hint.text = "%s main · %s retro · %s view · Esc / Start controls\nF3: legacy camera alias. Flight controls request physical thrust/torque." % [player_input.binding_label("forward", family), player_input.binding_label("backward", family), player_input.binding_label("camera", family)]
@@ -1024,6 +1024,7 @@ func surface_controls(delta: float) -> PackedFloat64Array:
 		return PackedFloat64Array([0.0, 0.0, float(state.surface_walk.heading)])
 	var forward := float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S))
 	var right := float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A))
+	look_offset += player_input.foot_keyboard_look() * delta
 	if player_input.device >= 0:
 		var deadzone: float = player_input.settings.deadzone
 		var curve: float = player_input.settings.curve
@@ -1336,5 +1337,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
-			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nRight-drag / right stick: look\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
 	update_compact_hud()

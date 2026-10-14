@@ -27,6 +27,7 @@ func check_initial_controller() -> void:
 
 func run() -> void:
 	check_initial_controller()
+	check_foot_keyboard_look()
 	var controls := Controls.new()
 	controls.persist = false
 	controls.thrust_mode = true
@@ -287,3 +288,62 @@ func check_replacement_controller(controls: Node) -> void:
 	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 0)
 	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 7)
 	Input.joy_connection_changed.emit(7, false)
+
+
+func check_foot_keyboard_look() -> void:
+	var controls := Controls.new()
+	controls.persist = false
+	controls.initial_device = 0
+	root.add_child(controls)
+	controls.set_enabled(false)
+	controls.set_process_input(false)
+	var settings: Dictionary = controls.settings.duplicate(true)
+	var bindings: Dictionary = controls.bindings.duplicate(true)
+	check(controls.foot_keyboard_look() == Vector2.ZERO and controls.foot_keyboard_look_neutral(), "Released on-foot keys requested look")
+	for item in [[KEY_LEFT, Vector2.LEFT], [KEY_RIGHT, Vector2.RIGHT], [KEY_UP, Vector2.UP], [KEY_DOWN, Vector2.DOWN]]:
+		physical_key(item[0], true)
+		check(controls.foot_keyboard_look().is_equal_approx(item[1] * settings.look_speed) and not controls.foot_keyboard_look_neutral(), "On-foot keyboard sign/rate/individual neutral is wrong: " + str(item[0]))
+		physical_key(item[0], false)
+	physical_key(KEY_RIGHT, true)
+	physical_key(KEY_UP, true)
+	check(controls.foot_keyboard_look().is_equal_approx(Vector2(1, -1).normalized() * settings.look_speed), "Diagonal on-foot look changed total angular speed")
+	physical_key(KEY_LEFT, true)
+	physical_key(KEY_DOWN, true)
+	check(controls.foot_keyboard_look() == Vector2.ZERO and not controls.foot_keyboard_look_neutral(), "Opposed keyboard look bypassed physical neutral")
+	for key in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]: physical_key(key, false)
+	check(controls.foot_keyboard_look_neutral() and controls.needs_neutral and not controls.enabled and controls.settings == settings and controls.bindings == bindings, "Read-only foot look armed provider or changed preferences/bindings")
+	# The helper is keyboard-only even with both pad look axes and modifier held.
+	joy_axis(JOY_AXIS_RIGHT_X, 0.7)
+	joy_axis(JOY_AXIS_RIGHT_Y, -0.6)
+	joy_button(JOY_BUTTON_LEFT_STICK, true)
+	check(controls.foot_keyboard_look() == Vector2.ZERO and controls.foot_keyboard_look_neutral(), "Pad channels entered keyboard-only foot look")
+	joy_axis(JOY_AXIS_RIGHT_X, 0)
+	joy_axis(JOY_AXIS_RIGHT_Y, 0)
+	joy_button(JOY_BUTTON_LEFT_STICK, false)
+	check(controls.apply_preferences({"deadzone": 0.35, "curve": 2.0, "look_speed": 2.4, "invert_look": true, "prompts": 0}), "Valid foot look preferences refused")
+	physical_key(KEY_UP, true)
+	check(controls.foot_keyboard_look().is_equal_approx(Vector2(0, 2.4)), "Foot look ignored speed/inversion preferences")
+	physical_key(KEY_UP, false)
+	physical_key(KEY_DOWN, true)
+	check(controls.foot_keyboard_look().is_equal_approx(Vector2(0, -2.4)), "Inverted foot down sign is wrong")
+	physical_key(KEY_DOWN, false)
+	physical_key(KEY_LEFT, true)
+	check(controls.foot_keyboard_look().is_equal_approx(Vector2(-2.4, 0)), "Vertical inversion changed horizontal look")
+	physical_key(KEY_LEFT, false)
+	check(controls.rebind("look_right", "key", {"kind": "key", "code": KEY_J}), "Valid on-foot look remap refused")
+	physical_key(KEY_RIGHT, true)
+	check(controls.foot_keyboard_look() == Vector2.ZERO and controls.foot_keyboard_look_neutral(), "Old physical look key survived remap")
+	physical_key(KEY_RIGHT, false)
+	physical_key(KEY_J, true)
+	check(controls.foot_keyboard_look().is_equal_approx(Vector2(2.4, 0)) and not controls.foot_keyboard_look_neutral(), "Current mapped look key missed rate or neutral")
+	physical_key(KEY_J, false)
+	# All are valid flight remaps; fixed on-foot actions must win in both helpers.
+	for item in [[KEY_W, "forward"], [KEY_A, "turn_left"], [KEY_S, "backward"], [KEY_D, "turn_right"], [KEY_E, "strafe_right"]]:
+		controls.defaults()
+		controls.install()
+		check(controls.rebind(item[1], "key", {"kind": "key", "code": KEY_T}) and controls.rebind("look_right", "key", {"kind": "key", "code": item[0]}), "Fixed-key collision did not use a valid flight remap")
+		check(Controls.valid_document({"version": 4, "settings": controls.settings, "bindings": controls.bindings}), "Fixed-key collision fixture violates the existing profile schema")
+		physical_key(item[0], true)
+		check(controls.foot_keyboard_look() == Vector2.ZERO and controls.foot_keyboard_look_neutral(), "Fixed walking/boarding key also looked or blocked look-neutral: " + str(item[0]))
+		physical_key(item[0], false)
+	controls.free()

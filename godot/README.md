@@ -27,8 +27,8 @@ saved-start validation without opening a window. The Godot project’s default
 scene is `scenes/native_start_shell.tscn`; the launcher prepares the
 source-verified asset packages.
 
-New Game starts on Origin Station. WASD or the left stick walks; right-drag or
-the right stick looks. Escape opens pause controls. Save As persists through
+New Game starts on Origin Station. WASD or the left stick walks; arrow keys,
+right-drag or the right stick look. Escape opens pause controls. Save As persists through
 C++; Quit does not autosave. Continue starts paused. Boarding, sitting and
 leaving the station are playable prototypes with refinements still deferred. See [current scope](../docs/ROADMAP.md)
 and [saved station walking](../docs/SAVED_STATION_WALK.md).

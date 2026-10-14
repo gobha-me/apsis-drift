@@ -342,6 +342,28 @@ static func shape(value: float, deadzone: float, curve: float) -> float:
 func strength(action: String) -> float:
 	return Input.get_action_raw_strength("pilot_" + action)
 
+# Callers own pause/focus/boarding gates. The station's read-only provider is
+# intentionally disabled, so these helpers read physical keys without arming it.
+func foot_keyboard_look() -> Vector2:
+	var held := Vector4.ZERO
+	var actions := ["look_left", "look_right", "look_up", "look_down"]
+	for i in 4:
+		var key: int = int(bindings[actions[i]].key.code)
+		# Fixed walking and boarding retain their on-foot meaning after remaps.
+		if key not in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_E] and Input.is_physical_key_pressed(key): held[i] = 1.0
+	var look := Vector2(held.y - held.x, held.w - held.z)
+	look = look.normalized() * shape(look.length(), settings.deadzone, settings.curve) * settings.look_speed
+	if settings.invert_look: look.y *= -1
+	return look
+
+
+func foot_keyboard_look_neutral() -> bool:
+	for action in ["look_left", "look_right", "look_up", "look_down"]:
+		var key: int = int(bindings[action].key.code)
+		if key not in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_E] and Input.is_physical_key_pressed(key): return false
+	return true
+
+
 func observe_neutral() -> bool:
 	var neutral := true
 	# Overflow never drops a held barrier into permission. Complete physical
