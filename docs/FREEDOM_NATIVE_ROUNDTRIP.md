@@ -69,6 +69,48 @@ on one backend; broader hardware and manual/controller qualification remain
 [#244](https://github.com/gobha-me/apsis-drift/issues/244) and
 [#245](https://github.com/gobha-me/apsis-drift/issues/245).
 
+## Continue after the surface voyage
+
+The same neighboring-trip consumer can explicitly Continue the actual
+post-walk, reboarding and thruster-ascent checkpoint from the selected surface
+loop. This checks that its retained terrain, actor, knowledge, travel and recovery
+wrappers survive two jumps, home capture, station service and disembarking.
+The source's remaining flight fuel is the starting balance; the suffix meter
+accounts only for new propulsion. Neither the clock nor fuel resets at Continue.
+
+First produce the existing Advanced surface route. Its reported work directory
+retains the phase saves even after successful generated assets are compacted:
+
+```sh
+python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
+  --build-dir build-native --timeout 600 --test native_surface_loop \
+  --selected-surface-loop --flight-profile advanced
+```
+
+Set `SURFACE_STAGE` to that printed work directory, then run:
+
+```sh
+python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
+  --build-dir build-native --timeout 600 --test native_roundtrip_pilot \
+  --roundtrip-from-save "$SURFACE_STAGE/surface-loop/space-exit.json"
+```
+
+The opt-in variant requires one supported, free, seated home-system ascent save
+with three charges and matching assistance. An Assisted source uses
+`native_roundtrip` instead. The runner holds a bounded copy, binds its hashes
+and checks both original and staged bytes remain unchanged. Schema 7 declares
+the real initial tick and seventeen suffix checkpoints; its first complete save
+must equal the source. Physical selection, commitment, arrival, capture and
+replenishment still use the existing public commands. Malformed source, profile,
+clock, frame, fuel and phase metadata refuse; no source pose or resource grant
+manufactures the journey.
+
+This is a declared save/resume composition between the independently checked
+station-to-ascent prefix and one ongoing native neighboring-trip suffix. It is
+not uninterrupted native playback across that file handoff. Existing fresh-start
+round trips keep their original mode and checkpoints. All results remain
+separate from manual/controller, raster and hardware acceptance.
+
 The dense scrolling HUD and plain planetary materials remain refinements under
 the existing cockpit/terrain owners. The approved
 [standard recovery provider](FREEDOM_RECOVERY.md) separately checks declared losses
