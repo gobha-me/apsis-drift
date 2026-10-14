@@ -36,6 +36,9 @@ var terrain: Node3D
 var exhaust: Node3D
 var light: DirectionalLight3D
 var local_light: DirectionalLight3D
+var suit_lamp: SpotLight3D
+var suit_lamp_enabled := true
+var suit_lamp_button: Button
 var planet_environment: Environment
 var near_environment: Environment
 var sky_material: ShaderMaterial
@@ -328,6 +331,20 @@ func stage(owner: Variant, assets: String, pending: Dictionary, model: Node3D, h
 	near_container.add_child(near_viewport)
 	near_viewport.add_child(camera)
 	camera.cull_mask = 3
+	# One local presentation light follows the actual eye in the shared world.
+	# It illuminates both depth passes without changing either sunlight owner.
+	suit_lamp = SpotLight3D.new()
+	suit_lamp.name = "SuitNavigationLamp"
+	suit_lamp.position = Vector3(0, -0.08, -0.1)
+	suit_lamp.rotation.x = deg_to_rad(-10.0)
+	suit_lamp.light_color = Color.WHITE
+	suit_lamp.light_energy = 3.0
+	suit_lamp.light_cull_mask = 3
+	suit_lamp.spot_range = 22.0
+	suit_lamp.spot_angle = 40.0
+	suit_lamp.shadow_enabled = true
+	suit_lamp.visible = false
+	camera.add_child(suit_lamp)
 	terrain_camera = Camera3D.new()
 	terrain_camera.cull_mask = 1
 	terrain_camera.fov = camera.fov
@@ -742,6 +759,7 @@ func setup_controls() -> void:
 		unboard_menu_button = controls_menu.add_button(menu_column, "Unboard to station", unboard_requested)
 		menu_column.move_child(unboard_menu_button, controls_menu.title_button.get_index() + 1)
 		surface_walk_menu_button = controls_menu.add_button(menu_column, "Leave Wayfarer · suit", func(): port_command("return_from_freedom_surface_walk" if surface_walking() else "begin_freedom_surface_walk"))
+		suit_lamp_button = controls_menu.add_button(menu_column, "Suit lamp: On", toggle_suit_lamp)
 	player_input.pause_requested.connect(toggle_pause)
 	player_input.safety_pause.connect(pause_controls)
 	player_input.bindings_changed.connect(func():
@@ -784,6 +802,20 @@ func show_surface_conditions() -> void:
 	# This action is only in the paused controls menu; querying cannot advance
 	# the C++ clock, cancel an aid, or implicitly resume the flight.
 	controls_menu.show_menu(surface_conditions_text())
+
+
+func toggle_suit_lamp() -> void:
+	if not paused or not focused or not surface_walking() or journey_dialog_open or save_dialog.visible or recovery_notified or not error.is_empty(): return
+	suit_lamp_enabled = not suit_lamp_enabled
+	refresh_suit_lamp()
+
+
+func refresh_suit_lamp() -> void:
+	var outside := surface_walking()
+	suit_lamp.visible = outside and suit_lamp_enabled
+	if suit_lamp_button != null:
+		suit_lamp_button.visible = outside
+		suit_lamp_button.text = "Suit lamp: " + ("On" if suit_lamp_enabled else "Off")
 
 
 func refresh_control_hint() -> void:
@@ -1334,6 +1366,7 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 			button.disabled = state.attached or not state.get("station_available", true) or phase != "idle"
 	# Ground exploration keeps the return/suit controls clear of flight telemetry.
 	var outside := surface_walking()
+	refresh_suit_lamp()
 	ship_marker.visible = outside
 	if outside:
 		# The retained craft is the authoritative view origin. This is a
@@ -1348,5 +1381,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
-			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSHIP points to the craft centre, not the hatch or a safe walking route.\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nSHIP points to the craft centre, not the hatch or a safe walking route.\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
 	update_compact_hud()

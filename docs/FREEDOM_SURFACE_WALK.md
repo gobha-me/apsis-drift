@@ -13,6 +13,16 @@ an edge arrow when it is off screen or behind the camera. It marks the craft
 centre; reach the aft ground access to reboard. The marker does not identify
 terrain obstructions or a safe walking route, and hides after reboarding.
 
+The forward-facing **Suit lamp** lights nearby terrain and the craft while on
+foot, including at night. Esc/Start opens paused controls; select **Suit lamp:
+On/Off** with keyboard or controller, then Resume explicitly. The white beam
+follows the actual eye and reaches at most 22 metres. It requests ordinary mesh
+shadows; shadow bias, mesh coverage and renderer limits can affect occlusion.
+It does not brighten the sky or change sunlight, terrain, hazards or observations.
+The lamp defaults on in every fresh view, including Continue/Load, and hides
+when seated or flying. Its toggle is presentation state, with no saved equipment
+choice, oxygen timer or resource cost.
+
 C++ owns one planet-fixed ground actor, the existing landed ship and the sole
 voyage clock. Ground contact uses the same finest top triangles, terrain recipe,
 scale and planet identity as [touchdown](TERRAIN_TOUCHDOWN.md). The camera consumes

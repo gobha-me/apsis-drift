@@ -59,6 +59,47 @@ func check_ship_bearing(view: Control) -> void:
 	check(not expected.is_empty() and view.ship_marker.cue == expected, "Ship bearing diverged from the actual camera and retained craft centre")
 
 
+func check_suit_lamp(view: Control, owner: Variant, output: String) -> void:
+	var state: Dictionary = owner.get_freedom_flight_state()
+	var path := output.path_join("lamp-before.json")
+	check(owner.save_freedom_as(path), "Suit lamp save oracle refused")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var sun := [view.light.light_energy, view.local_light.light_energy, view.planet_environment.ambient_light_energy]
+	check(view.paused and view.suit_lamp.visible and view.suit_lamp_enabled and view.suit_lamp_button.visible and view.suit_lamp_button.focus_mode == Control.FOCUS_ALL, "Outside lamp lost default light or accessible paused control")
+	check(view.suit_lamp.get_parent() == view.camera and view.suit_lamp.get_world_3d() == view.terrain_camera.get_world_3d() and view.suit_lamp.light_cull_mask == 3 and view.suit_lamp.spot_range <= 25.0 and view.suit_lamp.spot_range >= 18.0 and view.suit_lamp.shadow_enabled, "Suit lamp lost bounded shared-world illumination/occlusion")
+	# Real GUI activation changes only the presentation; it cannot Resume.
+	# Playback disables the shell's processing. Enable only this GUI control,
+	# keeping the view and authoritative simulation disabled during frame waits.
+	var button_mode: int = view.suit_lamp_button.process_mode
+	view.suit_lamp_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	await process_frame
+	view.suit_lamp_button.grab_focus()
+	view.controls_menu.left_scroll.ensure_control_visible(view.suit_lamp_button)
+	check(view.suit_lamp_button.has_focus() and view.suit_lamp_button.can_process(), "Lamp GUI activation lacks focus or processing")
+	key(KEY_ENTER, true)
+	await process_frame
+	key(KEY_ENTER, false)
+	view.suit_lamp_button.process_mode = button_mode
+	check(not view.suit_lamp.visible and not view.suit_lamp_enabled and view.suit_lamp_button.text == "Suit lamp: Off" and view.paused, "Actual paused lamp activation failed or resumed walking")
+	view.focused = false
+	view.suit_lamp_button.pressed.emit()
+	view.focused = true
+	check(not view.suit_lamp_enabled, "Unfocused lamp callback changed its choice")
+	view.suit_lamp_button.pressed.emit()
+	check(view.suit_lamp.visible and view.suit_lamp_button.text == "Suit lamp: On" and view.paused, "Lamp could not turn on while retaining pause")
+	var offset: Transform3D = view.suit_lamp.transform
+	var look: Vector2 = view.look_offset
+	view.look_offset += Vector2(0.2, -0.1)
+	view.update_view(0.0)
+	check(view.suit_lamp.global_transform.is_equal_approx(view.camera.global_transform * offset) and view.suit_lamp.transform == offset, "Lamp did not follow the real ground eye/look")
+	view.look_offset = look
+	view.update_view(0.0)
+	view.suit_lamp_button.pressed.emit() # Leave off to check fresh-view reset below.
+	check(view.paused and owner.get_freedom_flight_state() == state and owner.save_freedom_as(output.path_join("lamp-after.json")) and FileAccess.get_file_as_bytes(output.path_join("lamp-after.json")) == bytes, "Lamp inspection/toggle changed complete voyage or simulation clock")
+	check(sun == [view.light.light_energy, view.local_light.light_energy, view.planet_environment.ambient_light_energy], "Lamp altered actual sunlight or ambient policy")
+	view.suit_lamp_button.release_focus()
+
+
 func check_visibility_refresh(view: Control, owner: Variant, output: String, label: String, anchor: Dictionary) -> void:
 	var path := output.path_join(label + ".json")
 	var after := output.path_join(label + "-refresh.json")
@@ -236,12 +277,14 @@ func run() -> void:
 	var rendered := DisplayServer.get_name() != "headless"
 	check(view.paused and not view.surface_walking() and view.state.surface.landed, "Continue lost landed seated readiness")
 	check(not view.ship_marker.visible and view.home_marker.label_text == "HOME", "Seated landing showed a ground ship bearing or changed HOME")
+	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Seated view exposed the on-foot lamp")
 	check(not view.hud_scroll.visible and "Landed" in view.primary_status.text and view.context_action.disabled, "Landed compact HUD lost actual mode or allowed a paused maneuver")
 	view.surface_walk_button.pressed.emit()
 	check(view.paused and view.surface_walking() and view.liftoff_button.disabled and view.assist_button.disabled, "Actual exit button did not transfer input and pause")
 	check_ship_bearing(view)
 	check(view.light.light_cull_mask == 1 and view.local_light.light_cull_mask == 2 and view.light.light_energy == 1.0 and is_equal_approx(view.local_light.light_energy, NativeEnvironment.sun_visibility(view.state)), "Suited view lost separate terrain/local sunlight")
 	check(view.surface_walk_menu_button.focus_mode == Control.FOCUS_ALL and not view.surface_walk_menu_button.disabled and view.controls_menu.saved_assist_button.disabled, "Surface menu lost controller focus or assistance guard")
+	await check_suit_lamp(view, owner, args[2])
 	var hold_before: Dictionary = owner.get_freedom_flight_state()
 	check(view.controls_menu.saved_hold_button.disabled and not hold_before.orbit_hold.available and not owner.set_freedom_hold(true) and owner.get_freedom_flight_state() == hold_before, "Outside pilot gained ship orbit hold")
 	check(not view.orbital_forecast.visible and not view.jump_button.visible and not view.assist_button.visible, "Outside HUD retained unrelated flight actions")
@@ -309,6 +352,7 @@ func run() -> void:
 	check(shell.load_origin == null and shell.current_view != view and shell.error.is_empty(), "Outside in-game Load did not stage")
 	view = shell.current_view
 	check(view.paused and view.surface_walking() and shell.audio_session.get_instance_id() == audio_id, "Outside Continue lost paused actor or duplicated audio owner")
+	check(view.suit_lamp_enabled and view.suit_lamp.visible and view.suit_lamp_button.text == "Suit lamp: On", "Outside Continue persisted the presentation-only lamp choice or lost default illumination")
 	check_ship_bearing(view)
 	walk(view, KEY_S, 600)
 	checkpoint(owner, args[0], args[2], "far")
@@ -330,6 +374,7 @@ func run() -> void:
 	view.context_action.pressed.emit()
 	check(view.paused and not view.surface_walking() and view.staged_model.get_instance_id() == retained_model and retained_model != model_id, "Nearby return failed or replaced the continued ship")
 	check(not view.ship_marker.visible, "Ground ship bearing remained visible after reboarding")
+	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Suit lamp remained active after reboarding")
 	checkpoint(owner, args[0], args[2], "seated")
 	check(shell.select_start(owner, {"mode": "continue", "value": args[2].path_join("seated.json"), "assets": args[1]}), "Returned seated Continue did not stage")
 	view = shell.current_view
@@ -339,6 +384,7 @@ func run() -> void:
 	checkpoint(owner, args[0], args[2], "lifted")
 	check(not view.state.surface.landed and view.error.is_empty(), "Returned pilot cannot lift off with real thrust")
 	check(not view.ship_marker.visible, "Ground ship bearing remained visible in flight")
+	check(not view.suit_lamp.visible and not view.suit_lamp_button.visible, "Suit lamp remained active during flight")
 	# Declared destruction is an explicit fixture, not an invented exposure event.
 	check(shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("pending-loss.json"), "assets": args[1]}), "Pending outside loss failed to stage")
 	check(shell.recovery_overlay != null and shell.current_view.surface_walking() and shell.current_view.paused, "Pending loss lost outside actor or explicit recovery choice")
