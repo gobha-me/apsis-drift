@@ -22,6 +22,7 @@ var current_view: Control
 var presentation_only := false
 var error := ""
 var recovery_overlay: Control
+var recovery_layer: CanvasLayer
 var recovery_status: Label
 var audio_session: Node
 var closing := false
@@ -348,19 +349,28 @@ func select_start(owner: Variant, options: Dictionary) -> bool:
 
 func refresh_recovery() -> void:
 	if recovery_overlay != null:
-		remove_child(recovery_overlay)
-		recovery_overlay.free()
+		recovery_layer.free()
 		recovery_overlay = null
+		recovery_layer = null
+		recovery_status = null
 	var recovery: Dictionary = bridge.get_freedom_recovery_state()
 	if not recovery.get("pending", false): return
 	current_view.pause_controls("Recorded craft loss. Continue with a replacement when ready.")
+	if current_view is FlightView:
+		current_view.recovery_notified = true
+		current_view.controls_menu.hide_menu()
 	current_view.set_process(false)
 	current_view.set_process_input(false)
+	# The flight controls and navigation use their own canvas layers.
+	# Recovery must remain above them, including after loading a pending loss.
+	recovery_layer = CanvasLayer.new()
+	recovery_layer.layer = 30
+	add_child(recovery_layer)
 	recovery_overlay = ColorRect.new()
 	recovery_overlay.color = Color(0.02, 0.025, 0.04, 0.94)
 	recovery_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	recovery_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(recovery_overlay)
+	recovery_layer.add_child(recovery_overlay)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	recovery_overlay.add_child(center)
@@ -377,7 +387,8 @@ func refresh_recovery() -> void:
 	column.add_child(explanation)
 	var resume := Button.new()
 	resume.text = "Continue at Origin Station"
-	resume.pressed.connect(continue_recovery)
+	# Replacement retires this overlay and its emitting button.
+	resume.pressed.connect(continue_recovery, CONNECT_DEFERRED)
 	column.add_child(resume)
 	var save := Button.new()
 	save.text = "Save As…"
@@ -390,6 +401,8 @@ func refresh_recovery() -> void:
 
 
 func continue_recovery() -> void:
+	# A second queued press can outlive the overlay retired by the first.
+	if recovery_overlay == null or bridge == null or not bridge.get_freedom_recovery_state().get("pending", false): return
 	if not select_start(bridge, {"mode": "recovery", "assets": assets_root}):
 		recovery_status.text = error
 		recovery_status.modulate = Color(1.0, 0.75, 0.65)
@@ -404,6 +417,14 @@ func connect_journey_view(view: Control) -> void:
 		view.title_requested.connect(request_title)
 	if view.has_signal("journey_mode_changed"):
 		view.journey_mode_changed.connect(switch_journey_view, CONNECT_DEFERRED)
+	if view.has_signal("recovery_requested"):
+		view.recovery_requested.connect(show_live_recovery.bind(view))
+
+
+func show_live_recovery(view: Control) -> void:
+	if view != current_view or recovery_overlay != null or bridge == null: return
+	if bridge.get_freedom_recovery_state().get("pending", false):
+		refresh_recovery()
 
 
 # Root owns replacement dialogs; the current view cannot resume beneath them.
