@@ -19,7 +19,19 @@ It does not claim a physically accurate observation simulator.
 
 The cockpit chart shows the number of locally recorded findings, excluding
 granted chart facts. Its rows mark an actually visited system independently.
-This is a ledger summary, not a complete survey archive or body renderer.
+From the paused flight or ground-walking controls, **Recorded observations**
+opens the already-owned facts for each known subject. Previous/Next selects a
+record; Up/Down scrolls its text. Back returns to controls while remaining
+paused. Opening the reader refreshes its snapshot without operating sensors,
+changing a target or advancing time. It also works after Continue.
+
+The reader labels granted chart facts separately from local ship evidence and
+physical arrivals. Each fact retains confidence, source, observation tick and
+craft identity. CONTACT/PROBABLE values and unresolved names stay redacted;
+unknown subjects and absent facts are not filled from the generated catalog.
+Historical saves without selected knowledge show unavailable rather than being
+upgraded. This is a record reader, not the deferred station archive, a complete
+survey or a body renderer.
 
 The pilot must be aboard. Committed simulation ticks divisible by 120 sample
 at one-second intervals; tick zero does not sample. Time compression executes

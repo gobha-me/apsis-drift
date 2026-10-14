@@ -7,6 +7,7 @@
 
 #include "apsis_drift/body_ephemeris.hpp"
 #include "apsis_drift/craft_environment_assessment.hpp"
+#include "apsis_drift/freedom_knowledge.hpp"
 #include "apsis_drift/native_profile.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/operating_motion.hpp"
@@ -19,6 +20,7 @@
 #include <numbers>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -334,6 +336,8 @@ class FreedomBridge : public godot::RefCounted {
                                 &FreedomBridge::get_freedom_boarding_state);
     godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_flight_state"),
                                 &FreedomBridge::get_freedom_flight_state);
+    godot::ClassDB::bind_method(godot::D_METHOD("get_freedom_observations"),
+                                &FreedomBridge::get_freedom_observations);
     godot::ClassDB::bind_method(
         godot::D_METHOD("select_freedom_jump", "system_id"),
         &FreedomBridge::select_freedom_jump);
@@ -1922,6 +1926,136 @@ class FreedomBridge : public godot::RefCounted {
   auto get_freedom_flight_state() const -> godot::Dictionary {
     return saved_flight ? project_flight_state(*saved_flight)
                         : godot::Dictionary{};
+  }
+
+  // Lazy recorded-knowledge projection: presentation neither discovers facts
+  // nor bypasses confidence by reading the generated catalog directly.
+  auto get_freedom_observations() const -> godot::Dictionary {
+    godot::Dictionary result;
+    result["selected"] = false;
+    result["tick"] = "0";
+    result["subjects"] = godot::Array{};
+    const auto decimal = [](auto value) {
+      return godot::String{std::to_string(value).c_str()};
+    };
+    try {
+      if (!saved_flight || !saved_flight->session.knowledge())
+        throw std::runtime_error("No selected recorded observations");
+      const auto& session = saved_flight->session;
+      const auto now = session.document().flight.tick;
+      result["tick"] = decimal(now);
+      const auto& ledger = *session.knowledge();
+      const auto known = known_freedom_subjects(ledger, now);
+      if (!known)
+        throw std::runtime_error("Recorded observation subjects unavailable");
+      constexpr std::array facts{
+          KnowledgeFact::identity_type, KnowledgeFact::location,
+          KnowledgeFact::physical,      KnowledgeFact::atmosphere,
+          KnowledgeFact::hazards,       KnowledgeFact::landing,
+          KnowledgeFact::station_ports, KnowledgeFact::presence};
+      constexpr std::array fact_names{"identity_type", "location", "physical",
+                                      "atmosphere",    "hazards",  "landing",
+                                      "station_ports", "presence"};
+      constexpr std::array source_names{"starting_chart", "local_ship",
+                                        "physical_arrival"};
+      constexpr std::array kind_names{"system", "planet", "station"};
+      godot::Array subjects;
+      for (const auto& subject : *known) {
+        godot::Dictionary row;
+        const auto kind = static_cast<std::size_t>(subject.kind);
+        if (kind >= kind_names.size())
+          throw std::runtime_error("Unsupported recorded subject kind");
+        row["kind"] = kind_names[kind];
+        row["system_id"] =
+            godot::String{system_id_string(subject.system).c_str()};
+        row["subject_id"] = decimal(subject.identity);
+        row["name"] = godot::String{
+            (std::string{"Unresolved "} + kind_names[kind]).c_str()};
+        godot::Array readings;
+        for (std::size_t i = 0; i < facts.size(); ++i) {
+          const auto query =
+              query_freedom_knowledge(ledger, subject, facts[i], now);
+          if (!query)
+            throw std::runtime_error("Recorded observation fact unavailable");
+          if (!*query) continue;
+          const auto& reading = **query;
+          const auto& provenance = reading.provenance;
+          const auto source = static_cast<std::size_t>(provenance.source);
+          if (source >= source_names.size())
+            throw std::runtime_error("Unsupported recorded observation source");
+          godot::Dictionary value;
+          std::visit(
+              [&](const auto& v) {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, KnownIdentity>) {
+                  value["name"] = godot::String{v.name.c_str()};
+                  row["name"] = value["name"];
+                } else if constexpr (std::is_same_v<T,
+                                                    UniversePositionMetres>) {
+                  value["x_metres"] = decimal(v.x);
+                  value["y_metres"] = decimal(v.y);
+                  value["z_metres"] = decimal(v.z);
+                } else if constexpr (std::is_same_v<T, KnownOrbit>) {
+                  value["radius_kilometres"] = decimal(v.radius_kilometres);
+                  value["period_ticks"] = decimal(v.period_ticks);
+                  value["epoch_phase_turns"] = v.epoch_phase_turns;
+                  value["inclination_microdegrees"] =
+                      v.inclination_microdegrees;
+                  value["ascending_node_turns"] = v.ascending_node_turns;
+                  if (v.host_planet)
+                    value["host_planet"] = decimal(v.host_planet->value);
+                } else if constexpr (std::is_same_v<T, KnownPhysical>) {
+                  value["radius_kilometres"] = v.radius_kilometres;
+                  value["gravity_milli_g"] = v.gravity_milli_g;
+                } else if constexpr (std::is_same_v<T, KnownAtmosphere>) {
+                  value["class"] =
+                      godot::String{atmosphere_class_name(v.kind).data()};
+                  value["pressure_millibars"] = v.pressure_millibars;
+                } else if constexpr (std::is_same_v<T, KnownHazards>) {
+                  value["min_temperature_mk"] = v.min_temperature_mk;
+                  value["max_temperature_mk"] = v.max_temperature_mk;
+                  value["radiation_nsv_per_hour"] = v.radiation_nsv_per_hour;
+                  value["electric_field_v_per_m"] = v.electric_field_v_per_m;
+                  value["gust_mm_per_second"] = v.gust_mm_per_second;
+                  value["ground_acceleration_mm_per_second2"] =
+                      v.ground_acceleration_mm_per_second2;
+                  value["visibility"] = godot::String{
+                      atmospheric_visibility_name(v.visibility).data()};
+                  value["maximum_obscuration_basis_points"] =
+                      v.maximum_obscuration_basis_points;
+                } else if constexpr (std::is_same_v<T, KnownLanding>) {
+                  value["character"] =
+                      godot::String{terrain_character_name(v.character).data()};
+                  value["water_basis_points"] = v.water_basis_points;
+                } else if constexpr (std::is_same_v<T, KnownStationPorts>) {
+                  value["count"] = v.count;
+                } else if constexpr (std::is_same_v<T, KnownPresence>) {
+                  value["arrival_tick"] = decimal(v.arrival_tick);
+                }
+              },
+              reading.value);
+          godot::Dictionary fact;
+          fact["fact"] = fact_names[i];
+          fact["confidence"] = godot::String{
+              navigation_knowledge_level_name(provenance.level).data()};
+          fact["source"] = source_names[source];
+          fact["source_id"] = decimal(provenance.source_id);
+          fact["tick"] = decimal(provenance.tick);
+          fact["craft_id"] = decimal(provenance.flight.value);
+          fact["value"] = value;
+          readings.append(fact);
+        }
+        row["facts"] = readings;
+        subjects.append(row);
+      }
+      result["subjects"] = subjects;
+      result["selected"] = true;
+    } catch (const std::exception& error) {
+      result["selected"] = false;
+      result["subjects"] = godot::Array{};
+      result["error"] = godot::String{error.what()};
+    }
+    return result;
   }
 
   auto get_freedom_environment_assessment(std::int64_t operation) const

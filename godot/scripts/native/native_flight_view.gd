@@ -718,6 +718,7 @@ func setup_controls() -> void:
 	controls_menu = PauseMenu.new()
 	controls_menu.controls = player_input
 	controls_menu.saved_flight = true
+	controls_menu.observations_query = Callable(bridge, "get_freedom_observations")
 	controls_menu.saved_wayfarer = state.frame_id == "2"
 	controls_menu.ship_audio_available = ship_audio != null
 	controls_menu.audio_preferences = audio_preferences

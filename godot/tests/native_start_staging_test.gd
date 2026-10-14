@@ -31,6 +31,101 @@ func check_sunlight(view: Control) -> void:
 		check(is_equal_approx(view.light.light_energy, 1.5 * visibility) and view.light.light_color == projection.lighting.star_color, "Station sunlight disagrees with current C++ projection")
 func _initialize() -> void:
 	call_deferred("run")
+
+func saved_knowledge_entries(path: String) -> Array:
+	# Keep uint64 provenance exact: Godot's JSON number path uses doubles.
+	# Quote only these integer-valued schema fields in the test's decoded copy.
+	var text := FileAccess.get_file_as_string(path)
+	var numbers := RegEx.new()
+	for field in ["system", "identity", "source_id", "flight", "tick"]:
+		numbers.compile('(\"' + field + '\"\\s*:\\s*)([0-9]+)(?=\\s*[,}\\]])')
+		text = numbers.sub(text, '$1"$2"', true)
+	var value: Variant = JSON.parse_string(text)
+	for level in 16:
+		if not value is Dictionary: break
+		if value.get("knowledge") is Dictionary:
+			return value.knowledge.get("entries", [])
+		value = value.get("voyage", value.get("base"))
+	check(false, "Recorded-observation oracle could not find the actual saved ledger")
+	return []
+
+func check_recorded_observations(bridge: Variant, path: String, fresh: bool) -> void:
+	var before: Dictionary = bridge.get_freedom_flight_state()
+	var actor: Dictionary = bridge.get_freedom_walk_state()
+	if not bridge.save_freedom_as(path):
+		check(false, "Recorded-observation source Save refused")
+		return
+	var source := FileAccess.get_file_as_bytes(path)
+	var entries := saved_knowledge_entries(path)
+	check(not bridge.advance_freedom_flight(-1.0, PackedFloat64Array(), false), "Invalid observation-diagnostic fixture advanced")
+	var diagnostic: String = bridge.get_last_error()
+	var readings: Dictionary = bridge.get_freedom_observations()
+	check(not diagnostic.is_empty() and bridge.get_freedom_observations() == readings and bridge.get_last_error() == diagnostic, "Repeated lazy observation reads sampled or cleared the command diagnostic")
+	if not readings.get("selected", false) or not readings.get("subjects") is Array:
+		check(false, "Selected recorded observations unavailable")
+		return
+	check(readings.tick == before.tick, "Recorded observations used another authoritative clock")
+	var kinds := ["system", "planet", "station"]
+	var facts := ["identity_type", "location", "physical", "atmosphere", "hazards", "landing", "station_ports", "presence"]
+	var confidence := ["contact", "probable", "resolved", "visited"]
+	var sources := ["starting_chart", "local_ship", "physical_arrival"]
+	var systems := {}
+	for subject in readings.subjects:
+		if subject.kind != "system": continue
+		for row in before.chart.rows:
+			if subject.name == row.name:
+				check(subject.system_id == row.system_id, "Recorded system ownership differs from its granted chart")
+				systems[subject.subject_id] = row.system_id
+	var expected := {}
+	var expected_subjects := {}
+	for entry in entries:
+		var system: String = systems.get(entry.system, "")
+		check(not system.is_empty(), "Saved fact lost its known system owner")
+		var key: String = kinds[int(entry.kind)] + "|" + system + "|" + entry.identity
+		expected_subjects[key] = true
+		expected[key + "|" + facts[int(entry.fact)]] = entry.transitions[-1]
+	var seen := {}
+	var subject_keys := {}
+	var local_facts := 0
+	var arrival_facts := 0
+	var redacted := 0
+	var current_physical := false
+	var current_presence := false
+	for subject in readings.subjects:
+		var key: String = subject.kind + "|" + subject.system_id + "|" + subject.subject_id
+		check(expected_subjects.has(key) and not subject_keys.has(key), "Observation getter listed an unrecorded or duplicate subject")
+		subject_keys[key] = true
+		for fact in subject.facts:
+			var fact_key: String = key + "|" + fact.fact
+			if not expected.has(fact_key):
+				check(false, "Observation getter exposed a fact absent from the saved ledger")
+				continue
+			var transition: Dictionary = expected[fact_key]
+			check(not seen.has(fact_key) and fact.confidence == confidence[int(transition.level)] and fact.source == sources[int(transition.source)] and fact.source_id == transition.source_id and fact.tick == transition.tick and fact.craft_id == transition.flight, "Recorded fact lost exact confidence/provenance/owner")
+			seen[fact_key] = true
+			if fresh:
+				check(fact.source == "starting_chart" and fact.confidence == "resolved" and fact.tick == "0" and fact.source_id == "1" and fact.craft_id == "0" and fact.fact in ["identity_type", "location", "station_ports"], "Fresh grants manufactured a local finding or visit")
+			if fact.source == "local_ship": local_facts += 1
+			if fact.source == "physical_arrival": arrival_facts += 1
+			if fact.confidence in ["contact", "probable"]:
+				check(fact.value is Dictionary and fact.value.is_empty(), "Unresolved fact leaked generated values")
+				if fact.fact == "identity_type": check(subject.name == "Unresolved " + subject.kind, "Unresolved identity leaked a generated name")
+				redacted += 1
+			elif fact.fact == "identity_type":
+				check(fact.value == {"name": subject.name}, "Resolved identity differs from its typed reading")
+			elif fact.fact == "station_ports":
+				check(subject.subject_id == before.station_id and fact.value == {"count": bridge.get_freedom_station_geometry().ports.size()}, "Granted port count differs from the owned station")
+			elif fact.fact == "presence":
+				check(fact.source == "physical_arrival" and fact.source_id == before.craft_id and fact.craft_id == before.craft_id and fact.value == {"arrival_tick": fact.tick}, "Physical arrival lost its exact craft or event tick")
+				if subject.kind == "system" and subject.subject_id == before.system_id: current_presence = true
+			elif fact.fact == "physical" and subject.kind == "planet" and subject.subject_id == before.planet_id:
+				check(fact.source == "local_ship" and fact.source_id == before.craft_id and fact.craft_id == before.craft_id and fact.value.radius_kilometres * 1000.0 == before.planet_radius and fact.value.gravity_milli_g > 0, "Resolved current-planet physical reading differs from its owner")
+				current_physical = true
+	check(seen.size() == expected.size() and subject_keys.size() == expected_subjects.size(), "Recorded getter omitted saved subjects or facts")
+	if not fresh: check(local_facts > 0 and arrival_facts > 0 and redacted > 0 and current_physical and current_presence, "Actual departure did not exercise resolved, redacted and visited recorded facts")
+	check(bridge.get_freedom_flight_state() == before and bridge.get_freedom_walk_state() == actor, "Reading recorded observations changed the actual actor/world")
+	check(bridge.save_freedom_as(path + ".after.json") and FileAccess.get_file_as_bytes(path + ".after.json") == source and FileAccess.get_file_as_bytes(path) == source, "Lazy observations changed complete saved knowledge or its source")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -41,6 +136,8 @@ func run() -> void:
 		quit(1)
 		return
 	var bridge: Variant = ClassDB.instantiate("FreedomBridge")
+	var unselected: Dictionary = bridge.get_freedom_observations()
+	check(not unselected.get("selected", true) and unselected.get("subjects", [1]).is_empty(), "Uninitialized bridge invented recorded subjects")
 	var shell := LateDamagedShell.new()
 	shell.presentation_only = true
 	root.add_child(shell)
@@ -63,6 +160,7 @@ func run() -> void:
 	var initial_chart: Dictionary = bridge.get_freedom_flight_state().chart
 	check(initial_chart.local_sensors and initial_chart.observed_facts == 0, "New Game silently invented ship observations")
 	check(initial_chart.selected and initial_chart.rows.size() == 2 and initial_chart.rows[0].current and initial_chart.rows[0].confidence == "resolved" and initial_chart.rows[1].confidence == "resolved" and initial_chart.rows[1].affordable, "Starting chart leaked extra rows, invented visits or lost granted route")
+	check_recorded_observations(bridge, args[1].get_base_dir().path_join("recorded-starting-grants.json"), true)
 	var current: Dictionary = bridge.get_freedom_walk_state()
 	check(current.universe_seed == "42" and current.tick == "0" and bridge.get_pending_freedom_start().is_empty(), "Presentation changed new actor clock or left pending")
 	var view: Control = shell.current_view
@@ -166,6 +264,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 		check(continued_shell.current_view is FlightView and continued_shell.current_view.cockpit and continued_shell.current_view.paused and continued_shell.current_view.staged_model.valid_current_pose(), "Seated Continue lost pose, cockpit or neutral pause")
 	check(continued_owner.get_freedom_flight_state().resources == bridge.get_freedom_flight_state().resources, "Staged Continue changed exact resource readings")
 	check(continued_owner.get_freedom_flight_state().chart == bridge.get_freedom_flight_state().chart, "Continue changed granted chart knowledge or invented visits")
+	check(continued_owner.get_freedom_observations() == bridge.get_freedom_observations(), "Seated Continue changed recorded facts or provenance")
 	continued_shell.free()
 	flight.port_command("release_freedom_port")
 	check(not bridge.get_freedom_flight_state().attached and "12 m" in flight.save_status.text, "Release lost mapped withdrawal guidance")
@@ -181,6 +280,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 	check(flight.state.resources.quantity_quanta.to_int() < 3032640000000000 and flight.state.resources.jump_charges == 3 and not flight.service_button.visible, "Actual departure did not burn flight fuel or exposed free-flight service")
 	check(flight.state.chart.rows[0].confidence == "visited" and flight.state.chart.rows[1].confidence == "resolved", "Actual free flight failed to record only the physically visited system")
 	check(flight.state.chart.observed_facts > 0 and "Ship sensors" in flight.chart_status.text, "Committed local evidence remained invisible in chart summary")
+	check_recorded_observations(bridge, save_path.get_base_dir().path_join("recorded-departure.json"), false)
 	check(flight.exhaust.update_applied(flight.state, 1.0 / 60.0, false) and flight.exhaust.withdrawal_intensity > 0.0, "Composed departure exhaust stayed dark")
 	var approach_menu: Button = flight.controls_menu.saved_port_buttons["Approach port with thrusters"]
 	check(not flight.approach_button.disabled and not approach_menu.disabled and approach_menu.focus_mode == Control.FOCUS_ALL, "Aligned return lost controller-accessible approach")
@@ -204,6 +304,7 @@ func check_boarding(shell: Control, bridge: Variant) -> void:
 		return
 	cadence_shell.current_view.set_process(false)
 	check(not cadence.get_freedom_flight_state().port_approach.active, "Continue armed unsaved approach command")
+	check(cadence.get_freedom_observations() == bridge.get_freedom_observations(), "Departure Continue changed recorded values or exact provenance")
 	check(cadence.begin_freedom_port_approach(), "Resumed explicit approach refused")
 	commands.fill(0.0)
 	var invalid := commands.duplicate()

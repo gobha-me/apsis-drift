@@ -26,6 +26,7 @@ TESTS = {
     "validate": "snapshot",
     "input": "none",
     "control_settings": "none",
+    "recorded_observations": "none",
     "chase_camera": "none",
     "flight_status": "none",
     "planet_lighting": "none",
