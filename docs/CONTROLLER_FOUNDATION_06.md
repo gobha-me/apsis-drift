@@ -61,7 +61,10 @@ jump controls or functioning cockpit instruments are claimed by this change.
   licensed platform icon artwork.
 - One active controller owns flight and controller menu actions. A second
   connected pad cannot silently steer. Initial selection is the first enumerated
-  controller; explicit device selection is a later improvement.
+  controller. After the selected controller disconnects, Start on another
+  already-connected controller adopts it while remaining paused. Release its
+  controls and Resume explicitly. A present owner cannot be replaced this way;
+  a general device picker remains a later improvement.
 - Losing window focus or disconnecting the selected pad pauses flight. Neither
   focus regain nor reconnection resumes automatically. On explicit resume,
   release flight/head-look controls before input can arm. Opposing held triggers

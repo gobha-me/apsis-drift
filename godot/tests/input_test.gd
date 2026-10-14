@@ -171,21 +171,22 @@ func run() -> void:
 	check(controls.sample().axes[0] == 0, "Unfocused input leaked")
 	Input.action_release("pilot_forward")
 	check_request_and_history(controls)
+	check_replacement_controller(controls)
 	controls.queue_free()
 	print("Player input contracts: %d failures (synthetic events; not hardware qualification)" % failures)
 	quit(0 if failures == 0 else 1)
 
-func joy_axis(code: int, value: float) -> void:
+func joy_axis(code: int, value: float, device := 0) -> void:
 	var event := InputEventJoypadMotion.new()
-	event.device = 0
+	event.device = device
 	event.axis = code
 	event.axis_value = value
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
 
-func joy_button(code: int, pressed: bool) -> void:
+func joy_button(code: int, pressed: bool, device := 0) -> void:
 	var event := InputEventJoypadButton.new()
-	event.device = 0
+	event.device = device
 	event.button_index = code
 	event.pressed = pressed
 	Input.parse_input_event(event)
@@ -242,3 +243,47 @@ func check_request_and_history(controls: Node) -> void:
 	check(not controls.observe_neutral() and not controls.needs_neutral, "Current-neutral observation was replaced by historical latch")
 	physical_key(controls.bindings.forward.key.code, false)
 	check(controls.observe_neutral(), "Current neutral observation failed after release")
+
+
+func check_replacement_controller(controls: Node) -> void:
+	# Connection signals provide availability; real events still own action state.
+	var settings: Dictionary = controls.settings.duplicate(true)
+	var bindings: Dictionary = controls.bindings.duplicate(true)
+	var pauses := []
+	controls.pause_requested.connect(func(): pauses.append(true))
+	controls.device = -1
+	controls.install()
+	Input.joy_connection_changed.emit(0, true)
+	Input.joy_connection_changed.emit(7, true)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.6, 7)
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	check(controls.device == 0 and controls.sample().thrust_axes[0] == 0 and pauses.is_empty(), "Already-connected foreign pad stole present owner")
+	Input.joy_connection_changed.emit(0, false)
+	check(controls.device == -1 and controls.needs_neutral, "Selected disconnect lost the neutral barrier")
+	controls.focused = false
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	check(controls.device == -1, "Unfocused replacement Start adopted a pad")
+	controls.focused = true
+	var before_safety: int = safety_count
+	joy_button(JOY_BUTTON_START, true, 7)
+	joy_button(JOY_BUTTON_START, false, 7)
+	var adopted: bool = controls.device == 7
+	check(adopted, "Already-connected replacement Start did not adopt after selected disconnect")
+	if adopted:
+		check(safety_count == before_safety + 1 and pauses.is_empty() and controls.needs_neutral, "Selecting Start resumed instead of safety-pausing")
+		check(controls.sample().thrust_axes[0] == 0 and controls.needs_neutral, "Held replacement trigger bypassed neutral")
+		joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 7)
+		check(controls.observe_neutral() and not controls.needs_neutral, "Released replacement retained a stale gate")
+		joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0.6, 7)
+		check(controls.sample().thrust_axes[0] > 0, "Adopted replacement axis missed installed mapping")
+		joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 7)
+		joy_axis(JOY_AXIS_TRIGGER_RIGHT, 1, 0)
+		joy_button(JOY_BUTTON_START, true, 0)
+		joy_button(JOY_BUTTON_START, false, 0)
+		check(controls.device == 7 and controls.sample().thrust_axes[0] == 0 and pauses.is_empty(), "Stale disconnected owner regained input authority")
+	check(controls.settings == settings and controls.bindings == bindings, "Replacement selection rewrote preferences or remaps")
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 0)
+	joy_axis(JOY_AXIS_TRIGGER_RIGHT, 0, 7)
+	Input.joy_connection_changed.emit(7, false)
