@@ -1,6 +1,7 @@
 #include "apsis_drift/native_flight_session.hpp"
 
 #include <type_traits>
+#include <utility>
 
 namespace apsis_drift {
 auto NativeFreedomFlightSession::condition_document() const
@@ -40,8 +41,17 @@ auto NativeFreedomFlightSession::condition_document() const
 
 auto NativeFreedomFlightSession::impact_consequences_available() const
     -> std::expected<void, std::string> {
-  if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
-    return std::unexpected{"System-flight impacts are not qualified yet"};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy)
+      return std::unexpected{"Unsupported system-flight impact selection"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Impact frame assessment refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    return candidate.impact_consequences_available();
+  }
   if (condition_)
     return std::unexpected{"Terrain impacts are already selected"};
   if (recovery_pending() ||
@@ -61,6 +71,24 @@ auto NativeFreedomFlightSession::impact_consequences_available() const
 auto NativeFreedomFlightSession::enable_impact_consequences()
     -> std::expected<void, std::string> {
   if (condition_) return {};
+  if (document_.flight.frame.kind == RigidFrameKind::system_inertial) {
+    if (document_.model.frame_policy != kFreedomReleaseSystemFramePolicy)
+      return std::unexpected{"Unsupported system-flight impact selection"};
+    auto candidate = *this;
+    const auto relative = relative_freedom_flight_state(document_, system_);
+    if (!relative)
+      return std::unexpected{"Impact frame handoff refused: " +
+                             relative.error().detail};
+    candidate.document_.flight = *relative;
+    if (auto enabled = candidate.enable_impact_consequences(); !enabled)
+      return enabled;
+    const auto saved = candidate.save_document();
+    if (!saved) return std::unexpected{saved.error()};
+    if (auto encoded = encode_native_save_document_json(*saved); !encoded)
+      return std::unexpected{encoded.error().detail};
+    *this = std::move(candidate);
+    return {};
+  }
   if (auto available = impact_consequences_available(); !available)
     return available;
   auto condition = make_craft_condition(document_);
