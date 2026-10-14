@@ -17,6 +17,7 @@ func refused(owner: Variant, elapsed: float, fractions: PackedFloat64Array, paus
 	check(not str(owner.get_last_error()).is_empty(), "Refusal lost diagnostic")
 	var diagnostic: String = owner.get_last_error()
 	check(owner.get_freedom_flight_state() == before, "Rejected batch changed flight or time")
+	owner.get_freedom_observations()
 	check(owner.get_last_error() == diagnostic, "Pure view discarded command diagnostic")
 
 
@@ -486,6 +487,36 @@ func check_saved_reference(view: Node, owner: Variant, directory: String) -> voi
 	check(not menu.basics.visible and menu.menu_margin.visible and root.gui_get_focus_owner() == menu.basics_button and view.paused, "Saved reference Back lost pause/focus")
 	check(owner.save_freedom_as(after_path) and FileAccess.get_file_as_bytes(after_path) == before_bytes, "Reference changed committed C++ save bytes")
 	check(view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, "Reference displayed firing exhaust")
+	menu.show_menu()
+
+
+func check_saved_observations(view: Node, owner: Variant, directory: String) -> void:
+	view.pause_controls("Recorded observations contract")
+	var menu: CanvasLayer = view.controls_menu
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var records: Dictionary = owner.get_freedom_observations()
+	var path := directory.path_join("observations-before.json")
+	check(owner.save_freedom_as(path), "Observation Save As oracle refused")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	menu.observations_button.grab_focus()
+	physical_key(KEY_ENTER, true)
+	await process_frame
+	physical_key(KEY_ENTER, false)
+	check(menu.observations_view.visible and menu.observations_view.readings == records and view.paused and not view.player_input.enabled, "Actual saved observation entry lost records or pause")
+	view._process(1.0 / 60.0)
+	physical_key(KEY_ESCAPE, true)
+	await process_frame
+	physical_key(KEY_ESCAPE, false)
+	check(view.paused and not menu.observations_view.visible and root.gui_get_focus_owner() == menu.observations_button, "First observation Back resumed or lost control focus")
+	joy_button(JOY_BUTTON_A, true)
+	await process_frame
+	joy_button(JOY_BUTTON_A, false)
+	check(menu.observations_view.visible, "Controller could not reopen actual observations")
+	joy_button(JOY_BUTTON_B, true)
+	await process_frame
+	joy_button(JOY_BUTTON_B, false)
+	check(view.paused and not menu.observations_view.visible and owner.get_freedom_observations() == records and owner.get_freedom_flight_state() == before, "Observation controller Back changed authoritative state")
+	check(owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Reading records changed complete saved bytes")
 	menu.show_menu()
 
 
@@ -1037,6 +1068,7 @@ func run() -> void:
 	await check_compact_hud(view, owner, args[0].get_base_dir())
 	await check_hud_layout(view, owner, args[0].get_base_dir())
 	await check_saved_reference(view, owner, args[0].get_base_dir())
+	await check_saved_observations(view, owner, args[0].get_base_dir())
 	await check_saved_settings(view, owner, args[0].get_base_dir())
 	await check_saved_controller(view, owner, args[0])
 	check(owner.initialize_freedom_continue(args[0]), "Controller regression damaged original Continue")

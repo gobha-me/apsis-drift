@@ -4,6 +4,7 @@ const INSET := 28.0
 const COLOR := Color(0.4, 0.9, 1.0)
 var cue: Dictionary = {}
 var render_scale := 1.0
+var label_text := "HOME"
 
 static func project(camera: Camera3D, target: Vector3, bounds: Vector2, inset: float = INSET) -> Dictionary:
 	if camera == null or not camera.is_inside_tree() or not target.is_finite() or not bounds.is_finite() or not is_finite(inset) or inset <= 0 or bounds.x <= inset * 2 or bounds.y <= inset * 2:
@@ -63,4 +64,4 @@ func _draw() -> void:
 		draw_polyline(PackedVector2Array([p - d * 12 * render_scale + side * 6 * render_scale, p, p - d * 12 * render_scale - side * 6 * render_scale]), COLOR, 2.0, true)
 	var label := p + Vector2(-58 if p.x > size.x - 80 * render_scale else 12, 6) * render_scale
 	draw_rect(Rect2(label + Vector2(-3, -18) * render_scale, Vector2(53, 24) * render_scale), Color(0.0, 0.0, 0.0, 0.85))
-	draw_string(ThemeDB.fallback_font, label, "HOME", HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(18 * render_scale), COLOR)
+	draw_string(ThemeDB.fallback_font, label, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(18 * render_scale), COLOR)

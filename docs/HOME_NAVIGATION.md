@@ -6,6 +6,10 @@ also identifies a target behind the current view. Range stays visible without a
 long numeric identifier. The marker follows the cockpit or exterior camera,
 including free look, and hides while the craft is attached.
 
+On foot, a separate **SHIP** marker uses the same projection to point toward the
+landed craft centre. HOME stays hidden during surface walking. The bearing helps
+reacquire the ship; the existing aft-access reach check still controls reboarding.
+
 A reference-globe sightline test identifies home beyond the planetary horizon.
 This is directional information for manual flight, not an orbital transfer
 planner. The existing orbit forecast, atmosphere and physical controls still

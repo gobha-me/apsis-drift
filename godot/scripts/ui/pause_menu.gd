@@ -49,6 +49,9 @@ var basics: Control
 var basics_button: Button
 var settings_view: Control
 var settings_button: Button
+var observations_query: Callable
+var observations_view: Control
+var observations_button: Button
 var entry_focus_frames := 0
 var menu_theme: Theme
 var menu_heading: Label
@@ -278,6 +281,13 @@ func _ready() -> void:
 		settings_view.controls = controls
 		panel.add_child(settings_view)
 		settings_view.back_requested.connect(close_settings)
+		if observations_query.is_valid():
+			observations_view = preload("res://scripts/native/recorded_observations.gd").new()
+			observations_view.controls = controls
+			observations_view.query = observations_query
+			panel.add_child(observations_view)
+			observations_view.back_requested.connect(close_observations)
+			observations_button = add_button(left, "Recorded observations", show_observations)
 	refresh_bindings()
 	if saved_flight:
 		get_window().size_changed.connect(layout_saved_menu)
@@ -435,10 +445,28 @@ func back_from_nested() -> bool:
 	if is_instance_valid(settings_view) and settings_view.visible:
 		settings_view.cancel()
 		return true
+	if is_instance_valid(observations_view) and observations_view.visible:
+		close_observations()
+		return true
 	if is_instance_valid(basics) and basics.visible:
 		close_basics()
 		return true
 	return false
+
+func show_observations() -> void:
+	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(observations_view): return
+	entry_focus_frames = 0
+	menu_margin.hide()
+	observations_view.open()
+
+func close_observations() -> void:
+	if not is_instance_valid(observations_view): return
+	observations_view.hide()
+	menu_margin.show()
+	if panel.visible:
+		observations_button.grab_focus()
+		left_scroll.ensure_control_visible(observations_button)
+		ensure_entry_focus_visible()
 
 func show_basics() -> void:
 	if not panel.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(basics):
@@ -481,6 +509,9 @@ func show_menu(reason := "") -> void:
 		if not reason.is_empty(): controls.status = reason
 		settings_view.refresh_status()
 		return
+	if is_instance_valid(observations_view) and observations_view.visible:
+		if not reason.is_empty(): controls.status = reason
+		return
 	if is_instance_valid(basics):
 		basics.hide()
 	menu_margin.show()
@@ -499,6 +530,7 @@ func ensure_entry_focus_visible() -> void:
 
 func hide_menu() -> void:
 	entry_focus_frames = 0
+	if is_instance_valid(observations_view): observations_view.hide()
 	if is_instance_valid(settings_view):
 		settings_view.pending.clear()
 		settings_view.hide()

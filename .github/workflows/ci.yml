@@ -251,7 +251,7 @@ jobs:
           --build-dir build-native
           --output-parent build-native-contracts
           --timeout 600
-          --test input --test control_settings --test freedom_start --test native_shell --test native_save
+          --test input --test control_settings --test recorded_observations --test freedom_start --test native_shell --test native_save
           --test native_asset_import --test native_station_view --test wayfarer_frame
           --test saved_flight --test native_environment --test native_audio --test first_jump --test native_recovery
           --test native_port --test native_walk
@@ -263,6 +263,7 @@ jobs:
           --test native_impact
           --test native_frame_import --test native_system_release
           --test native_surface_loop
+          --test native_first_flight_continuation
           --test wayfarer_operating
           --test recorded_audio_shutdown
 
@@ -289,5 +290,8 @@ jobs:
             build-native-contracts/native-contracts-*/frame-import-native/*.json
             build-native-contracts/native-contracts-*/surface-loop/*.json
             build-native-contracts/native-contracts-*/surface-loop-native/*.json
+            build-native-contracts/native-contracts-*/native_first_flight_continuation/*.json
+            build-native-contracts/native-contracts-*/native_first_flight_continuation/commands.jsonl
+            build-native-contracts/native-contracts-*/native_first_flight_continuation-native/*.json
           if-no-files-found: warn
           retention-days: 7
