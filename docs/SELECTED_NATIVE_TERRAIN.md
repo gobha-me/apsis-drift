@@ -107,6 +107,54 @@ route. The command is a reproducible check selection, not a claim that this
 revision has passed it. Headless integration checks cannot establish visible
 feature size, four-pixel projection, GPU performance or controller feel.
 
+## One measured low-flight feature
+
+The opt-in `--terrain-feature` fixture initializes one viewpoint above a measured
+ridge in universe 42's existing first target, body `7198692597331823481`. It samples
+the actual catalog 2, terrain 2 owner and chooses one daylight tick from its real
+rotation. This is an initialized measurement view, not a flown arrival or the
+ordinary voyage. The saved craft sits 50 m above the left trough; the cockpit eye
+keeps its authored offset and looks toward the crest.
+
+With a matching native build, retain one staged project for the capture:
+
+```sh
+python3 tools/test_godot_native.py --godot "$GODOT_BIN" \
+  --build-dir build-native --test native_asset_import \
+  --test native_selected_terrain --keep-work
+```
+
+Set `FEATURE_STAGE` to the work directory printed by that command. Use an empty
+fixture directory and a new capture output directory. The fixture refuses mixed
+voyage options and existing output content.
+
+```sh
+mkdir "$FEATURE_STAGE/feature"
+build-native/src/godot/apsis-drift-freedom-planetary-fixture \
+  "$FEATURE_STAGE/feature" --terrain-feature
+"$GODOT_BIN" --path "$FEATURE_STAGE/project" \
+  --rendering-method gl_compatibility --resolution 1280x720 \
+  --script res://studies/captures/native_terrain_feature_capture.gd -- \
+  "$FEATURE_STAGE/feature" "$FEATURE_STAGE/native-assets" \
+  "$FEATURE_STAGE/feature-output"
+```
+
+The capture retains an untouched image, actual camera projection of the three
+physical points, nearest streamed top-grid vertices and their incident surface edge lengths,
+stream identity and source/save hashes. Pixel coordinates use the reported
+camera viewport dimensions. Save/Continue must retain the complete initialized
+state. Physical sampling spacing, streamed edge lengths and visible feature size
+are separate measurements; a nearest vertex is not a contact or visibility
+certificate. Inspect the image before drawing a conclusion about readability.
+
+The initial measured ridge has 28.18 m prominence over 3.04 km. At the crest, the
+retained top grid has approximately 54 m edges; the nearest vertex is 21.5 m away
+horizontally and differs by about 0.07 m in local height. The actual 1280×720
+Compatibility cockpit image still looks subdued. This establishes a concrete
+sampling/projection baseline, not recognizable-relief acceptance or evidence
+that the renderer erased the feature. Wider composition, transition and weather
+work remains open under #212.
+
 ## Remaining limits
 
 Selection and shared ownership do not establish visual or hardware acceptance.
