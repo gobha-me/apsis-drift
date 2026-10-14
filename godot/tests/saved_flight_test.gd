@@ -264,6 +264,8 @@ func check_hold_controls(view: Control, owner: Variant, directory: String) -> vo
 	view.controls_menu.saved_hold_button.pressed.emit()
 	var selected: Dictionary = owner.get_freedom_flight_state()
 	check(view.paused and selected.hold_enabled and selected.tick == before.tick and selected.checksum == before.checksum, "Actual hold button advanced or replaced the physical orbit")
+	for frame in 3: view.controls_menu._process(0.0)
+	check("Orbit-hold request selected" in view.controls_menu.message.text and view.controls_menu.controls.status == view.save_status.text, "Selected hold feedback disappeared on the next controls frame")
 	check(absf(selected.orbit_hold.radius_metres - before.planet_radius - before.altitude) < 1.0e-8 and selected.orbit_hold.plane_normal == PackedFloat64Array([0, 0, 1]), "Actual hold button selected the wrong physical radius or plane")
 	check(not view.controls_menu.saved_hold_off_button.disabled and "Uses fuel" in view.controls_menu.saved_hold_note.text and "circular orbit" in view.controls_menu.saved_hold_note.text, "Requested hold lost its fuel and target limits")
 	check(owner.save_freedom_as(selected_path), "Selected hold save failed")
@@ -278,6 +280,8 @@ func check_hold_controls(view: Control, owner: Variant, directory: String) -> vo
 	view.request_assistance(true)
 	view.controls_menu.saved_hold_off_button.pressed.emit()
 	check(owner.get_freedom_flight_state() == before and view.paused and view.controls_menu.saved_hold_off_button.disabled, "Disable failed to restore original no-hold selection")
+	for frame in 3: view.controls_menu._process(0.0)
+	check("Orbit-hold request disabled" in view.controls_menu.message.text and view.controls_menu.controls.status == view.save_status.text, "Disabled hold feedback disappeared on the next controls frame")
 	check(owner.save_freedom_as(baseline) and FileAccess.get_file_as_bytes(baseline) == original, "Hold selection/disable changed full original save")
 	continued = null
 

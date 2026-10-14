@@ -847,15 +847,25 @@ func request_assistance(enabled: bool) -> void:
 	controls_menu.sync_saved_state(state, false)
 
 
+func report_action_status(message: String) -> void:
+	save_status.text = message
+	if paused and controls_menu.panel.visible:
+		# The opaque controls panel covers the HUD, and its next frame reads
+		# controls.status. Preserve the same notice in both visible contexts.
+		player_input.status = message
+		controls_menu.message.text = message
+	update_compact_hud()
+
+
 func request_hold(enabled: bool) -> void:
 	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible or mode_change_pending:
 		return
 	if not bridge.set_freedom_hold(enabled):
-		controls_menu.message.text = str(bridge.get_last_error())
+		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
 	controls_menu.sync_saved_state(state, false)
-	controls_menu.message.text = "Orbit-hold request selected. Resume explicitly to apply correction." if enabled else "Orbit-hold request disabled. Resume explicitly to coast."
+	report_action_status("Orbit-hold request selected. Resume explicitly to apply correction." if enabled else "Orbit-hold request disabled. Resume explicitly to coast.")
 
 
 func open_save_dialog() -> void:
@@ -912,10 +922,10 @@ func unboard_requested() -> void:
 	if not error.is_empty() or not focused or save_dialog.visible or player_input == null: return
 	observe_neutral_controls()
 	if not controls_armed:
-		save_status.text = "Release flight controls before leaving the seat."
+		report_action_status("Release flight controls before leaving the seat.")
 		return
 	if not bridge.begin_freedom_disembarking():
-		save_status.text = str(bridge.get_last_error())
+		report_action_status(str(bridge.get_last_error()))
 		return
 	pause_controls("Returning to the station.")
 	if not mode_change_pending:
@@ -928,7 +938,7 @@ func select_jump_destination(ordinal: int) -> void:
 	var rows: Array = state.get("chart", {}).get("rows", [])
 	if ordinal >= rows.size(): return
 	if not bridge.select_freedom_jump(rows[ordinal].system_id):
-		save_status.text = str(bridge.get_last_error())
+		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
 	update_view(0.0)
@@ -938,14 +948,14 @@ func jump_requested() -> void:
 	if not error.is_empty() or not focused or save_dialog.visible: return
 	observe_neutral_controls()
 	if not controls_armed:
-		save_status.text = "Release flight controls before changing the jump drive."
+		report_action_status("Release flight controls before changing the jump drive.")
 		return
 	var cancel: bool = state.get("jump", {}).get("phase", "idle") == "spool"
 	if not bridge.call("cancel_freedom_jump" if cancel else "begin_freedom_jump"):
-		save_status.text = str(bridge.get_last_error())
+		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
-	save_status.text = "Spool canceled · no jump charge spent" if cancel else "Spooling · Resume flight explicitly." if paused else "Spooling · one charge commits after 3 seconds"
+	report_action_status("Spool canceled · no jump charge spent" if cancel else "Spooling · Resume flight explicitly." if paused else "Spooling · one charge commits after 3 seconds")
 	update_view(0.0)
 
 
@@ -956,11 +966,11 @@ func port_command(command: String, ordinal: int = 0) -> void:
 	if command in ["begin_freedom_port_approach", "request_freedom_landing", "liftoff_freedom_surface", "begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
 		observe_neutral_controls()
 		if not controls_armed:
-			save_status.text = "Release movement controls before changing modes or starting a maneuver."
+			report_action_status("Release movement controls before changing modes or starting a maneuver.")
 			return
 	var accepted: bool = bridge.call(command, ordinal) if ordinal != 0 else bridge.call(command)
 	if not accepted:
-		save_status.text = str(bridge.get_last_error())
+		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
 	if command in ["begin_freedom_surface_walk", "return_from_freedom_surface_walk"]:
@@ -970,26 +980,25 @@ func port_command(command: String, ordinal: int = 0) -> void:
 		return
 	update_view(0.0)
 	if command == "replenish_freedom_resources":
-		save_status.text = "Flight reserve and three jump charges replenished · free station service"
+		report_action_status("Flight reserve and three jump charges replenished · free station service")
 	elif state.attached:
-		save_status.text = "Attached to D%d. Release before firing propulsion." % state.target_port
+		report_action_status("Attached to D%d. Release before firing propulsion." % state.target_port)
 	elif command == "release_freedom_port":
 		var family := "pad" if player_input.last_device == "pad" else "key"
-		save_status.text = "Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)]
+		report_action_status("Released D%d. %s withdraws below the port; %s brakes. Clear the 12 m column before forward thrust." % [state.target_port, player_input.binding_label("fall", family), player_input.binding_label("rise", family)])
 	elif command.ends_with("port_approach"):
-		save_status.text = state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else "")
+		report_action_status(state.port_approach.note + (" · Resume flight explicitly." if paused and state.port_approach.active else ""))
 	elif command in ["request_freedom_landing", "stow_freedom_landing_gear", "liftoff_freedom_surface", "cancel_freedom_surface_maneuver"]:
-		save_status.text = state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else "")
+		report_action_status(state.surface.note + (" · Resume flight explicitly." if paused and state.surface.maneuver != "off" else ""))
 	else:
-		save_status.text = "Port selected. Capture requires physical alignment and low closure."
+		report_action_status("Port selected. Capture requires physical alignment and low closure.")
 
 
 func enable_impacts() -> void:
 	if not paused or not focused or not error.is_empty() or journey_dialog_open or save_dialog.visible:
 		return
 	if not bridge.enable_freedom_impact_consequences():
-		save_status.text = str(bridge.get_last_error())
-		update_compact_hud()
+		report_action_status(str(bridge.get_last_error()))
 		return
 	state = bridge.get_freedom_flight_state()
 	pause_controls("Experimental terrain impacts selected · Save to retain this choice. Release controls before resuming.")

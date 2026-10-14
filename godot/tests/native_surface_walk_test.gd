@@ -100,6 +100,36 @@ func check_suit_lamp(view: Control, owner: Variant, output: String) -> void:
 	view.suit_lamp_button.release_focus()
 
 
+func check_paused_return_feedback(view: Control, owner: Variant, output: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var path := output.path_join("paused-return-before.json")
+	check(owner.save_freedom_as(path), "Paused return feedback Save oracle refused")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var menu: CanvasLayer = view.controls_menu
+	var button: Button = view.surface_walk_menu_button
+	check(view.paused and view.focused and view.surface_walking() and menu.panel.visible and button.visible and not button.disabled, "Distant paused return action is unavailable")
+	# Enable only the actual button; the replay shell/world remain disabled.
+	var button_mode: int = button.process_mode
+	button.process_mode = Node.PROCESS_MODE_ALWAYS
+	await process_frame
+	button.grab_focus()
+	menu.left_scroll.ensure_control_visible(button)
+	check(button.has_focus() and button.can_process(), "Paused return GUI lacks focus or processing")
+	key(KEY_ENTER, true)
+	await process_frame
+	key(KEY_ENTER, false)
+	var refusal := str(owner.get_last_error())
+	check(not refusal.is_empty(), "Actual distant return did not produce a provider refusal")
+	for frame in 3:
+		menu._process(0.0)
+		await process_frame
+	check(menu.panel.visible and menu.message.is_visible_in_tree() and refusal in menu.message.text and menu.controls.status == refusal and view.save_status.text == refusal, "Paused return refusal disappeared behind the menu or on its next frame")
+	check(root.get_visible_rect().encloses(menu.message.get_global_rect()), "Paused return refusal is outside the visible viewport")
+	check(view.paused and view.focused and button.has_focus() and owner.get_freedom_flight_state() == before and owner.save_freedom_as(output.path_join("paused-return-after.json")) and FileAccess.get_file_as_bytes(output.path_join("paused-return-after.json")) == bytes, "Paused refusal changed focus, clock, actor, craft or complete save")
+	button.process_mode = button_mode
+	button.release_focus()
+
+
 func check_visibility_refresh(view: Control, owner: Variant, output: String, label: String, anchor: Dictionary) -> void:
 	var path := output.path_join(label + ".json")
 	var after := output.path_join(label + "-refresh.json")
@@ -345,6 +375,8 @@ func run() -> void:
 	view._process(0.125)
 	view._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
 	check(view.paused and view.state.tick == paused_tick, "Focus loss advanced ground time or resumed silently")
+	await check_paused_return_feedback(view, owner, args[2])
+	if failed: shell.free(); quit(1); return
 	# Continue re-stages the actual actor, craft and terrain in the same root.
 	view.controls_menu.load_button.pressed.emit()
 	shell.load_dialog.file_selected.emit(args[2].path_join("halfway.json"))
