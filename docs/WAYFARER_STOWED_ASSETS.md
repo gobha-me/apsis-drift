@@ -36,8 +36,8 @@ normal profile; this does not claim unchanged normals for modified ribbons.
 Preparation adds `frame.json`, `preservation.json`, `replacement-contact.json`
 and a receipt. Replacement contact includes only the eight superseded original
 objects and five added connectors: **13 objects and 1,508 faces**. It preserves
-source-face identities and exact points without quantization. The eventual
-collision consumer must retain every other original obstacle and the existing
+source-face identities and exact points without quantization. The matched
+collision consumer retains every other original obstacle and the existing
 lower-cockpit halo once, using the
 [eight-range C++ partition](ORIGIN_STOWED_CONTACT_PARTITION.md).
 
@@ -50,25 +50,28 @@ An existing prepared output is reused only when its entire roster and bytes
 match. Changed outputs refuse replacement. Validation failure or a concurrently
 created destination leaves that destination intact.
 
-## Runtime integration remains separate
+## Runtime integration and limits
 
-This delivery prepares static assets. Ordinary game startup still uses its
-existing ship/contact selection. Supported boarding, sitting, occupied hardware
-motion, equipment persistence and departure remain under
-[First Flight #245](https://github.com/gobha-me/apsis-drift/issues/245).
+The [saved native starting assembly](NATIVE_STARTING_ASSEMBLY.md) now selects
+this package for New Game, with matched C++ contact and Godot rendering.
+The loader removes the operating base's seat-lift mesh once and installs the
+fourteen replacement roots with the authoritative seat transform applied once.
+The selected surface14 atlas drives presentation, exhaust and LOD; historical
+saves retain their original assembly and surface18 binding. Equipment selection
+persists through the C++ save owner, rather than being inferred from asset files.
 
-The live starter batches the old seat inside `HopperStructure`. Appending this
-assembly would duplicate it. The operating base provides a separate seat-lift
-mesh and matches the calibrated eye, screens and gear data. Its exterior atlas
-is bit-exact, but Godot imports it at surface14 rather than surface18; shared
-presentation, exhaust and LOD must use the verified selected surface before that
-base replaces the live model. The matched renderer/contact installer is still
-required.
+The [playable boarding prototype](PLAYABLE_BOARDING_PROTOTYPE.md) uses this
+retained assembly for its authored approach, seat and departure route. Static
+delivery and runtime integration do not certify anatomical fit, occupied
+restraint operation or support/load. Those refinements remain deferred under
+the [owner's #372 amendment](https://github.com/gobha-me/apsis-drift/issues/372#issuecomment-6079401442);
+broader [First Flight #245](https://github.com/gobha-me/apsis-drift/issues/245)
+acceptance remains separate.
 
 The [matched static contact factory](STOWED_COCKPIT_CONTACT.md) supplies the
 effective C++ replacement view through the existing lower-cockpit handle. It
-preserves the fixed coverage policy; live presentation and actor selection
-remain separate.
+preserves the fixed coverage policy; the selected runtime assembly binds the
+matching presentation without granting an anatomical actor certificate.
 
 Qualification provenance records the accepted finite results and correspondence
 identities, with their actual limits and public links. It preserves the older
