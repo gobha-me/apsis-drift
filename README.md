@@ -11,7 +11,7 @@ simulation, stable identities and versioned saves. The active direction is
 ## Play the native prototype
 
 The current native bridge and runtime checks support **Linux x86_64**. Install
-Godot 4.7.2, CMake 3.28+, Python 3.10+, Git and a C++23 compiler. Set `GODOT_BIN`
+Godot 4.7.2, CMake 3.28+, Python 3.11+, Git and a C++23 compiler. Set `GODOT_BIN`
 if Godot is not on PATH. The launcher builds the bridge and prepares the
 source-verified assets; the first build fetches pinned dependencies.
 
