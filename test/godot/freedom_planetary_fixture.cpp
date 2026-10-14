@@ -20,6 +20,8 @@
 // An opt-in integration fixture, not a gameplay autopilot. Every movement uses
 // the public session commands. Checkpoints are actual Save As/Continue results,
 // never practice starts, pose assignments or velocity injection.
+// The separate --terrain-feature mode explicitly initializes a measurement
+// viewpoint; it is neither a flown arrival nor the default voyage evidence.
 namespace {
 using namespace apsis_drift;
 using V = RigidVector3;
@@ -1259,6 +1261,171 @@ auto run_neighbor(const std::filesystem::path& output, bool record_commands,
   std::cout << "Native neighboring round trip: " << trace.checkpoints.size()
             << " phases, effort " << trace.endurance->effort_quanta << "Q\n";
 }
+auto terrain_feature(const std::filesystem::path& output) -> void {
+  const Seed universe{42};
+  const auto ids = generate_first_intersystem_identities(universe);
+  const auto system =
+      need(generate_physical_local_system(ids.target_system_seed, 2),
+           "Feature catalog refused");
+  const PlanetId id{7198692597331823481ULL};
+  const auto& planet =
+      need(find_local_system_planet(system, id), "Feature body refused")
+          ->descriptor;
+  const auto rotation = need(generate_planet_rotation_recipe(system, id),
+                             "Feature rotation refused");
+  auto cache = need(TerrainTileCache::create(12), "Feature cache refused");
+  const auto sampler =
+      need(TerrainLocalDetailSampler::create(system, body_id(id), {2}, cache),
+           "Feature sampler refused");
+  constexpr std::array<V, 3> directions{
+      {{.9999999258258838, .0003851600018052678, 0},
+       {.9999998211197538, .0005981308054568976, 0},
+       {.9999996673714516, .0008156328747314038, 0}}};
+  constexpr std::array labels{"left_trough", "crest", "right_trough"};
+  std::array<TerrainLocalDetailSample, 3> heights;
+  std::array<V, 3> points;
+  const double radius = planet.radius.value * 1000.0;
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    const auto d = directions[i];
+    heights[i] = need(sampler.sample_height({d.x, d.y, d.z}, 13),
+                      "Feature height refused");
+    points[i] = scale(unit(d), radius + heights[i].elevation_metres);
+  }
+  constexpr double clearance = 50;
+  const V position = scale(unit(directions[0]),
+                           radius + heights[0].elevation_metres + clearance);
+  std::optional<PhysicalPlanetRotationGeometry> daylight;
+  double angular_radius{}, sun_elevation{};
+  // Choose one declared initialized time from the actual rotating world. This
+  // never advances a session or substitutes a light for the native environment.
+  for (SimulationTick index = 0; index < 32 && !daylight; ++index) {
+    auto value =
+        need(resolve_planet_rotation(
+                 system, rotation, rotation.rotation.period_ticks * index / 32,
+                 {position.x, position.y, position.z}),
+             "Feature daylight query refused");
+    const auto star = value.geometry.observer_to_star_fixed;
+    sun_elevation = std::asin(
+        std::clamp(dot(unit(position), {star.x, star.y, star.z}), -1.0, 1.0));
+    angular_radius = std::asin(
+        std::min(1.0, system.catalog.star.radius_kilometres * 1000.0 /
+                          value.geometry.observer_star_distance_metres));
+    if (sun_elevation > std::max(.2, angular_radius)) daylight = value;
+  }
+  check(daylight.has_value(),
+        "No daylight feature viewpoint within32 declared times");
+  RigidBodyState fixed;
+  fixed.craft = {kWayfarerFrameId, kWayfarerFrameVersion};
+  fixed.frame = {RigidFrameKind::planet_fixed, system.catalog.id, id, {}};
+  fixed.tick = daylight->geometry.tick;
+  fixed.position_metres = position;
+  // These measured equatorial points lie in XY. Start with +Y yaw pi/2
+  // (right=-Z), then rotate about fixed +Z so body -Z faces the real crest.
+  const auto forward = unit(sub(points[1], position));
+  const double half_roll =
+      (std::atan2(forward.y, forward.x) - std::numbers::pi) / 2;
+  const double c = std::sqrt(.5), w = c * std::cos(half_roll),
+               z = c * std::sin(half_roll);
+  fixed.orientation = need(normalize_rigid_orientation({w, -z, w, z}),
+                           "Feature attitude refused");
+  check(dot(rotate(fixed.orientation, {0, 0, -1}), forward) > 1 - 1e-12,
+        "Initialized feature attitude does not face actual crest");
+  fixed = need(canonicalize_rigid_body_state({system}, fixed),
+               "Feature fixed state refused");
+  FreedomFlightSaveDocument flight{
+      make_freedom_new_game_document(universe),
+      need(reframe_rigid_body({system}, fixed,
+                              {{RigidFrameKind::planet_relative_inertial,
+                                system.catalog.id,
+                                id,
+                                {}},
+                               fixed.tick},
+                              rotation),
+           "Feature same-tick handoff refused"),
+      {}};
+  flight.origin.state.tick = fixed.tick;
+  flight.model.physical_catalog = 2;
+  flight.model.physical_ephemeris = 2;
+  flight.model.terrain_policy = 2;
+  flight.model.assistance = false;
+  flight.world = FreedomActiveWorldSelection{1, system.catalog.id, id};
+  auto session = need(
+      NativeFreedomFlightSession::open(need(native_select_save_document(flight),
+                                            "Feature native owner refused")),
+      "Feature session refused");
+  const auto path = output / "terrain-feature.json";
+  need(session.save_as(path));
+  const auto encoded =
+      need(encode_native_save_document_json(need(
+               session.save_document(), "Feature save projection refused")),
+           "Feature save encode refused");
+  std::ifstream saved{path};
+  const std::string original{std::istreambuf_iterator<char>{saved}, {}};
+  auto continued = need(NativeFreedomFlightSession::open(need(
+                            native_continue(path), "Feature Continue refused")),
+                        "Feature continued session refused");
+  check(original == encoded && continued.document() == flight &&
+            need(encode_native_save_document_json(
+                     need(continued.save_document(),
+                          "Feature continued projection refused")),
+                 "Feature continued encoding refused") == encoded,
+        "Initialized feature full Save/Continue changed owner/state/bytes");
+  const auto view = godot_spike::project_saved_flight(session);
+  const V presented_origin{view.tangent.origin.x, view.tangent.origin.y,
+                           view.tangent.origin.z};
+  const auto local = [&](V value) {
+    return coordinates(
+        {dot(value,
+             {view.tangent.east.x, view.tangent.east.y, view.tangent.east.z}),
+         dot(value, {view.tangent.up.x, view.tangent.up.y, view.tangent.up.z}),
+         -dot(value, {view.tangent.north.x, view.tangent.north.y,
+                      view.tangent.north.z})});
+  };
+  Json physical = Json::array();
+  for (std::size_t i = 0; i < points.size(); ++i)
+    physical.push_back(
+        {{"label", labels[i]},
+         {"fixed_direction", coordinates(directions[i])},
+         {"elevation_metres", heights[i].elevation_metres},
+         {"macro_elevation_metres", heights[i].macro_elevation_metres},
+         {"local_offset_metres", heights[i].local_offset_metres},
+         {"fixed_position_metres", coordinates(points[i])},
+         {"local_metres", local(sub(points[i], presented_origin))}});
+  const auto star = view.rotation.geometry.observer_to_star_fixed;
+  const Json manifest{
+      {"schema", "apsis.native-terrain-feature/1"},
+      {"scope", "Initialized measurement viewpoint, not flown arrival or "
+                "default voyage; no session steps"},
+      {"save_file", "terrain-feature.json"},
+      {"universe_seed", "42"},
+      {"system_id", std::to_string(system.catalog.id.value)},
+      {"planet_id", std::to_string(id.value)},
+      {"system_seed", std::to_string(system.catalog.seed.value)},
+      {"tick", std::to_string(fixed.tick)},
+      {"checksum",
+       std::to_string(need(rigid_body_state_checksum({system}, flight.flight),
+                           "Feature checksum refused"))},
+      {"physical_catalog", 2},
+      {"physical_ephemeris", 2},
+      {"terrain_policy", 2},
+      {"radius_metres", radius},
+      {"altitude_metres", view.pose.altitude_metres},
+      {"clearance_metres", clearance},
+      {"star_direction_fixed", coordinates({star.x, star.y, star.z})},
+      {"star_direction_local", local({star.x, star.y, star.z})},
+      {"star_angular_radius", angular_radius},
+      {"sun_elevation_radians", sun_elevation},
+      {"expected_native_sun_visibility", 1.0},
+      {"daylight_search_bound", 32},
+      {"camera_mode", "cockpit"},
+      {"look_offset", {0., 0.}},
+      {"framing", "Body -Z faces crest from craft centre; preserve authored "
+                  "pilot eye and measure actual camera projection"},
+      {"points", physical}};
+  std::ofstream report{output / "terrain-feature-manifest.json"};
+  report << manifest.dump(2) << '\n';
+  check(static_cast<bool>(report), "Feature manifest write failed");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1267,8 +1434,9 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "Expected one absolute empty output "
           "directory and optional --commands/--endurance/--neighbor/--pilot/"
-          "--aligned/--offset/--surface-loop");
-    bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{};
+          "--aligned/--offset/--surface-loop or distinct --terrain-feature");
+    bool commands{}, endurance{}, neighbor{}, pilot{}, surface_loop{},
+        feature{};
     std::optional<IntersystemArrivalQuality> grade;
     for (int i = 2; i < argc; ++i) {
       const std::string_view option{argv[i]};
@@ -1278,6 +1446,8 @@ int main(int argc, char** argv) {
         endurance = true;
       else if (option == "--surface-loop" && !surface_loop)
         surface_loop = true;
+      else if (option == "--terrain-feature" && !feature)
+        feature = true;
       else if (option == "--neighbor" && !neighbor)
         neighbor = true;
       else if (option == "--pilot" && !pilot)
@@ -1298,12 +1468,18 @@ int main(int argc, char** argv) {
     if (surface_loop && (neighbor || pilot || grade))
       throw std::invalid_argument(
           "--surface-loop is a distinct planetary fixture mode");
+    if (feature &&
+        (commands || endurance || neighbor || pilot || grade || surface_loop))
+      throw std::invalid_argument(
+          "--terrain-feature is a distinct initialized measurement mode");
     if (pilot && !neighbor)
       throw std::invalid_argument("--pilot requires --neighbor");
     if (grade && (!neighbor || !pilot))
       throw std::invalid_argument(
           "A selected grade requires --neighbor --pilot");
-    if (neighbor)
+    if (feature)
+      terrain_feature(output);
+    else if (neighbor)
       run_neighbor(output, commands, pilot, grade);
     else
       run(output, commands, endurance, surface_loop);
