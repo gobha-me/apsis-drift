@@ -51,7 +51,9 @@ func refresh() -> void:
 	var subjects: Array = readings.get("subjects", [])
 	page = clampi(page, 0, maxi(subjects.size() - 1, 0))
 	heading.text = "RECORDED OBSERVATIONS  %d / %d" % [page + 1, maxi(subjects.size(), 1)]
-	_paused.text = "FLIGHT PAUSED / RETAINED KNOWLEDGE · ship time " + time_text(str(readings.get("tick", "0")))
+	_paused.text = "FLIGHT PAUSED / RETAINED KNOWLEDGE"
+	if readings.get("selected", false):
+		_paused.text += " · ship time " + time_text(readings.tick)
 	_hint.text = "Left / right or Tab: select · Up / down: scroll\nB / Circle / Esc / Start: back to controls"
 	if readings.has("error"):
 		body.text = str(readings.error)
