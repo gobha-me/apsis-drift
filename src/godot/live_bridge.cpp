@@ -1301,6 +1301,41 @@ class FreedomBridge : public godot::RefCounted {
     basis.set_column(1, local(rotate(rotation, up)));
     basis.set_column(2, local(rotate(rotation, back)));
     result["basis"] = basis;
+    godot::Dictionary access;
+    const auto returned = session.surface_return_access();
+    access["available"] = returned.has_value();
+    if (returned) {
+      const auto point = rotate(rotation, returned->foot_position_metres);
+      access["position"] = local({point.x - body.position_metres.x,
+                                  point.y - body.position_metres.y,
+                                  point.z - body.position_metres.z});
+      access["distance_metres"] = returned->distance_metres;
+      access["within_reach"] = returned->within_reach;
+    }
+    result["return_access"] = access;
+    result["movement_blockage"] = godot::Variant{};
+    if (const auto blocked = session.surface_walk_blockage()) {
+      switch (*blocked) {
+        case PlanetSurfaceWalkStatus::terrain_unresolved:
+          result["movement_blockage"] = "terrain_unresolved";
+          break;
+        case PlanetSurfaceWalkStatus::water:
+          result["movement_blockage"] = "water";
+          break;
+        case PlanetSurfaceWalkStatus::slope:
+          result["movement_blockage"] = "slope";
+          break;
+        case PlanetSurfaceWalkStatus::step:
+          result["movement_blockage"] = "step";
+          break;
+        case PlanetSurfaceWalkStatus::craft_obstruction:
+          result["movement_blockage"] = "craft_obstruction";
+          break;
+        case PlanetSurfaceWalkStatus::supported:
+          throw std::invalid_argument("Supported step cannot be a blockage");
+        default: throw std::invalid_argument("Unknown surface movement result");
+      }
+    }
     result["heading"] = actor.heading_radians;
     result["version"] = static_cast<std::int64_t>(actor.version);
     return result;
@@ -1694,6 +1729,28 @@ class FreedomBridge : public godot::RefCounted {
                                                                 : "off";
       surface["remaining_seconds"] = maneuver.remaining_ticks / 120.0;
       surface["note"] = godot::String{maneuver.note.c_str()};
+      godot::Dictionary clearance;
+      clearance["available"] = false;
+      if (const auto sample = session.last_gear_clearance()) {
+        clearance["available"] = true;
+        clearance["reference"] = "deployed_pad_planes";
+        clearance["coordinate_frame"] = "planet_relative_inertial";
+        clearance["system_id"] = decimal(sample->frame.system.value);
+        clearance["planet_id"] = decimal(sample->frame.planet->value);
+        clearance["craft_id"] = decimal(document.origin.state.craft.value);
+        clearance["frame_id"] = decimal(sample->craft.id.value);
+        clearance["frame_version"] =
+            static_cast<std::int64_t>(sample->craft.version);
+        clearance["terrain_policy"] =
+            static_cast<std::int64_t>(sample->terrain_policy);
+        clearance["tick"] = decimal(sample->tick);
+        clearance["source_checksum"] = decimal(sample->source_checksum);
+        clearance["age_seconds"] =
+            static_cast<double>(body.tick - sample->tick) / 120.0;
+        clearance["minimum_gap_metres"] = sample->minimum_gap_metres;
+        clearance["maximum_gap_metres"] = sample->maximum_gap_metres;
+      }
+      surface["gear_clearance"] = clearance;
       result["surface"] = surface;
       godot::Dictionary impact;
       impact["selected"] = session.condition().has_value();

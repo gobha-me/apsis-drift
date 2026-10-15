@@ -93,6 +93,12 @@ func check_cover_replacements(accepted: Node3D, owner: Variant) -> void:
 			check(terrain.nodes.retained.visible and terrain.nodes.incoming.visible and terrain.nodes.retained.transform == fake.transforms[0] and terrain.nodes.incoming.transform == fake.transforms[2], "Committed replacement lost its complete placement")
 			check(not terrain.nodes.has("outgoing") and not outgoing.visible and outgoing.is_queued_for_deletion() and outgoing.transform == fake.transforms[1], "Outgoing cover retired before complete placement")
 			check(terrain.swaps == 4 and terrain.generated_total == 8 and terrain.retired_total == 3 and terrain.last_report == {"identity": owner.get_stream_identity(), "generated": 1}, "Successful replacement did not commit counters/report exactly once")
+			var depth: Vector2 = terrain.depth_range(Transform3D.IDENTITY, 100000.0)
+			check(depth != Vector2.ZERO, "Swapped actual mesh cover has no clip depth")
+			for placed: MeshInstance3D in terrain.nodes.values():
+				var actual_arrays: Array = placed.mesh.surface_get_arrays(0)
+				for vertex: Vector3 in actual_arrays[Mesh.ARRAY_VERTEX]:
+					check(-(placed.transform * vertex).z <= depth.y, "Same-tick replacement vertex escapes clip depth")
 			terrain.free()
 			continue
 		check(not terrain.error.is_empty() and terrain.is_ready and terrain.resident_ids == ["retained", "outgoing"], "Refused cover changed accepted residency: " + failure)
@@ -106,6 +112,73 @@ func check_cover_replacements(accepted: Node3D, owner: Variant) -> void:
 		terrain.tick(1.0, Vector3.ZERO)
 		check(terrain.error == fault and terrain.swaps == 3 and terrain.nodes.retained.transform == before[0], "Placement fault resumed without explicit reset: " + failure)
 		terrain.free()
+
+
+func check_camera_depth(terrain: Node3D, state: Dictionary) -> void:
+	var relation := Camera3D.new()
+	root.add_child(relation)
+	var radius := float(state.planet_radius)
+	# Only the camera is moved for a 10km inspection; selected C++ state/mesh
+	# placement stays untouched. Construct the reference-sphere tangent point
+	# independently, then ask Camera3D itself whether its far plane clips it.
+	var centre := Vector3(0, -radius - float(state.altitude), 0)
+	relation.position = Vector3(0, 10000.0 - float(state.altitude), 0)
+	var radial := radius + 10000.0
+	var tangent_y := radius * radius / radial
+	var limb := centre + Vector3(sqrt(radius * radius - tangent_y * tangent_y), tangent_y, 0)
+	relation.look_at(limb, Vector3.UP)
+	relation.near = 0.2
+	relation.far = 100000.0
+	check(not relation.is_position_in_frustum(limb), "Declared old 100km camera did not reproduce limb clipping")
+	var depth: Vector2 = terrain.depth_range(relation.transform, 100000.0)
+	check(depth != Vector2.ZERO and depth.y > 100000.0 and depth.y <= 1000000000.0 and depth.y / depth.x <= 500001.0, "Actual cover depth escaped its retained ratio/cap")
+	relation.near = depth.x
+	relation.far = depth.y
+	check(relation.is_position_in_frustum(limb), "Actual-camera far plane still clips the reference limb")
+	# Check actual submitted vertices independently of the AABB-bound algorithm,
+	# including C++ relief/skirts, a translated eye and a rolled camera.
+	var target := Vector3.ZERO
+	var maximum := 0.0
+	for node: MeshInstance3D in terrain.nodes.values():
+		var arrays: Array = node.mesh.surface_get_arrays(0)
+		for vertex: Vector3 in arrays[Mesh.ARRAY_VERTEX]:
+			var point: Vector3 = node.transform * vertex
+			if point.distance_squared_to(relation.position) > maximum:
+				maximum = point.distance_squared_to(relation.position)
+				target = point
+	relation.look_at(target, Vector3.UP)
+	relation.rotate_object_local(Vector3.BACK, 0.73)
+	depth = terrain.depth_range(relation.transform, 100000.0)
+	relation.near = depth.x
+	relation.far = depth.y
+	check(relation.is_position_in_frustum(target), "Actual submitted distant vertex was clipped after camera attitude change")
+	var inverse := relation.transform.affine_inverse()
+	for node: MeshInstance3D in terrain.nodes.values():
+		var arrays: Array = node.mesh.surface_get_arrays(0)
+		for vertex: Vector3 in arrays[Mesh.ARRAY_VERTEX]:
+			var actual: Vector3 = inverse * (node.transform * vertex)
+			check(-actual.z <= relation.far, "A submitted relief/skirt vertex escapes actual camera far depth")
+	# Every guard is pure: accepted placement/residency must survive refusal.
+	var before := [terrain.resident_ids.duplicate(), terrain.swaps, terrain.last_report.duplicate(true)]
+	for limit in [NAN, INF, -INF, -1.0, 99999.0, 1000000001.0]:
+		check(terrain.depth_range(relation.transform, limit) == Vector2.ZERO, "Invalid camera clip envelope accepted")
+	for invalid in [Transform3D(Basis.IDENTITY, Vector3(NAN, 0, 0)), Transform3D(Basis.IDENTITY, Vector3(0, INF, 0)), Transform3D(Basis(Vector3.ZERO, Vector3.UP, Vector3.BACK), Vector3.ZERO)]:
+		check(terrain.depth_range(invalid, 100000.0) == Vector2.ZERO, "Invalid/nonfinite camera relation accepted")
+	var source: MeshInstance3D = terrain.nodes.values()[0]
+	terrain.nodes["invalid-depth-node"] = null
+	check(terrain.depth_range(relation.transform, 100000.0) == Vector2.ZERO, "Malformed geometry owner accepted")
+	terrain.nodes.erase("invalid-depth-node")
+	var original := source.transform
+	source.transform = Transform3D(Basis.IDENTITY, Vector3(0, 0, INF))
+	check(terrain.depth_range(relation.transform, 100000.0) == Vector2.ZERO, "Nonfinite geometry placement accepted")
+	source.transform = original
+	var saved_nodes: Dictionary = terrain.nodes
+	terrain.nodes = {}
+	for index in 769: terrain.nodes[index] = source
+	check(terrain.depth_range(relation.transform, 100000.0) == Vector2.ZERO, "Oversized double-cover buffer accepted")
+	terrain.nodes = saved_nodes
+	check([terrain.resident_ids, terrain.swaps, terrain.last_report] == before and source.transform == original, "Depth refusal mutated accepted cover")
+	relation.free()
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -172,6 +245,7 @@ func run() -> void:
 		quit(1)
 		return
 	check_cover_replacements(terrain, owner)
+	check_camera_depth(terrain, first_state)
 	check(owner.get_freedom_flight_state() == first_state and FileAccess.get_sha256(source) == source_hash, "Presentation refusals changed the admitted world or source bytes")
 	var old_nodes: Array = terrain.nodes.values().duplicate()
 	# Place an old-generation batch in the pending queue, then replace the

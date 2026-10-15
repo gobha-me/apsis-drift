@@ -193,6 +193,33 @@ func tick(delta: float, observer: Vector3) -> void:
 		swaps += 1
 
 
+# Clip only presentation geometry already supplied by C++. Include both covers:
+# a staged tile can become visible during the same main-thread placement tick.
+# AABBs include actual relief, coarse chords and skirts; no terrain recipe is
+# duplicated here. The cap/ratio remain the existing distant-depth policy.
+func depth_range(relation: Transform3D, minimum_far: float) -> Vector2:
+	if not relation.is_finite() or absf(relation.basis.determinant()) < 0.000001 or not is_finite(minimum_far) or minimum_far < 100000.0 or minimum_far > 1000000000.0 or nodes.size() > 768:
+		return Vector2.ZERO
+	var inverse := relation.affine_inverse()
+	if not inverse.is_finite(): return Vector2.ZERO
+	var far_clip := minimum_far
+	for node in nodes.values():
+		if not is_instance_valid(node) or not node is MeshInstance3D or node.mesh == null or not node.transform.is_finite():
+			return Vector2.ZERO
+		var bounds: AABB = node.mesh.get_aabb()
+		if not bounds.position.is_finite() or not bounds.size.is_finite() or not bounds.end.is_finite() or bounds.size.x < 0.0 or bounds.size.y < 0.0 or bounds.size.z < 0.0:
+			return Vector2.ZERO
+		# Transform the whole box into camera space; its minimum Z bounds
+		# forward depth even when the camera is translated or rolled.
+		var camera_bounds: AABB = (inverse * node.transform) * bounds
+		if not camera_bounds.position.is_finite() or not camera_bounds.size.is_finite() or not camera_bounds.end.is_finite(): return Vector2.ZERO
+		# One-metre/one-ppm clip slack covers float AABB/placement rounding.
+		var depth := -float(camera_bounds.position.z)
+		far_clip = maxf(far_clip, depth + maxf(1.0, absf(depth) * 0.000001))
+	far_clip = minf(1000000000.0, far_clip)
+	return Vector2(maxf(0.2, far_clip / 500000.0), far_clip)
+
+
 func report() -> Dictionary:
 	var result := last_report.duplicate()
 	result["resident_tiles"] = resident_ids.size()

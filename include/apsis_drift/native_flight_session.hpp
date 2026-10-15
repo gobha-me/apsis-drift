@@ -186,9 +186,18 @@ class NativeFreedomFlightSession {
       -> const std::optional<PlanetSurfaceWalkerState>& {
     return surface_walker_;
   }
+  // Transient feedback from the last committed ground step, never save data.
+  // Supported movement/neutral steps clear it; getters perform no terrain work.
+  [[nodiscard]] auto surface_walk_blockage() const
+      -> std::optional<PlanetSurfaceWalkStatus> {
+    return surface_walker_ && !recovery_pending() ? surface_walk_blockage_
+                                                  : std::nullopt;
+  }
   [[nodiscard]] auto surface_walk_selected() const -> bool {
     return surface_walk_selected_;
   }
+  [[nodiscard]] auto surface_return_access() const
+      -> std::expected<PlanetSurfaceReturnAccess, std::string>;
   [[nodiscard]] auto begin_surface_walk() -> std::expected<void, std::string>;
   [[nodiscard]] auto return_from_surface_walk()
       -> std::expected<void, std::string>;
@@ -198,6 +207,8 @@ class NativeFreedomFlightSession {
   [[nodiscard]] auto surface_walk_document() const
       -> std::expected<FreedomSurfaceWalkSaveDocument, std::string>;
   [[nodiscard]] auto surface_document() const -> FreedomSurfaceSaveDocument;
+  [[nodiscard]] auto last_gear_clearance() const
+      -> std::optional<TerrainPadGapSample>;
   [[nodiscard]] auto set_landing_gear(bool deployed)
       -> std::expected<void, std::string>;
   [[nodiscard]] auto commit_touchdown(std::uint64_t expected_source_checksum)
@@ -232,6 +243,9 @@ class NativeFreedomFlightSession {
                                      SimulationSeconds)
       -> std::expected<NativeFlightStep, std::string>;
   auto try_surface_contact() -> void;
+  auto commit_touchdown_observed(std::uint64_t,
+                                 std::optional<TerrainPadGapSample>*)
+      -> std::expected<void, std::string>;
   NativeFreedomFlightSession(FreedomFlightSaveDocument document,
                              FreedomFlightHydration hydrated,
                              std::optional<std::filesystem::path> source);
@@ -252,9 +266,12 @@ class NativeFreedomFlightSession {
   std::optional<FreedomBoardingState> boarding_;
   NativePortApproach port_approach_;
   std::optional<FreedomSurfaceState> surface_;
+  std::optional<TerrainPadGapSample> gear_clearance_;
+  StarterCraftId gear_clearance_craft_{};
   NativeSurfaceManeuver surface_maneuver_;
   bool surface_walk_selected_{};
   std::optional<PlanetSurfaceWalkerState> surface_walker_;
+  std::optional<PlanetSurfaceWalkStatus> surface_walk_blockage_;
   std::shared_ptr<PlanetSurfaceWalkTerrain> surface_walk_terrain_;
 };
 } // namespace apsis_drift

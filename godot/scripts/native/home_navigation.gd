@@ -53,6 +53,16 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
+func label_bounds(at: Vector2) -> Rect2:
+	if not at.is_finite() or not size.is_finite() or not is_finite(render_scale) or render_scale <= 0 or size.x <= 0 or size.y <= 0:
+		return Rect2()
+	var font_size := maxi(1, roundi(18 * render_scale))
+	var measured := ThemeDB.fallback_font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var extent := Vector2(minf(size.x, measured + 6 * render_scale), minf(size.y, 24 * render_scale))
+	var left := at.x + 9 * render_scale
+	if left + extent.x > size.x: left = at.x - extent.x - 9 * render_scale
+	return Rect2(Vector2(clampf(left, 0, size.x - extent.x), clampf(at.y - 18 * render_scale, 0, size.y - extent.y)), extent)
+
 func _draw() -> void:
 	if cue.is_empty(): return
 	var p: Vector2 = cue.position
@@ -62,6 +72,7 @@ func _draw() -> void:
 		var d: Vector2 = cue.direction
 		var side := Vector2(-d.y, d.x)
 		draw_polyline(PackedVector2Array([p - d * 12 * render_scale + side * 6 * render_scale, p, p - d * 12 * render_scale - side * 6 * render_scale]), COLOR, 2.0, true)
-	var label := p + Vector2(-58 if p.x > size.x - 80 * render_scale else 12, 6) * render_scale
-	draw_rect(Rect2(label + Vector2(-3, -18) * render_scale, Vector2(53, 24) * render_scale), Color(0.0, 0.0, 0.0, 0.85))
-	draw_string(ThemeDB.fallback_font, label, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, roundi(18 * render_scale), COLOR)
+	var backing := label_bounds(p)
+	if not backing.has_area(): return
+	draw_rect(backing, Color(0.0, 0.0, 0.0, 0.85))
+	draw_string(ThemeDB.fallback_font, backing.position + Vector2(3, 18) * render_scale, label_text, HORIZONTAL_ALIGNMENT_LEFT, maxf(0, backing.size.x - 6 * render_scale), maxi(1, roundi(18 * render_scale)), COLOR)

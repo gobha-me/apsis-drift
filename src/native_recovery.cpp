@@ -34,6 +34,7 @@ auto NativeFreedomFlightSession::record_loss(FreedomLossCause cause,
   auto candidate = *this;
   candidate.recovery_ = std::move(result->recovery);
   if (candidate.recovery_pending()) {
+    candidate.gear_clearance_.reset();
     if (candidate.condition_) {
       candidate.condition_->tick = candidate.document_.flight.tick;
       candidate.retired_condition_ = candidate.condition_;

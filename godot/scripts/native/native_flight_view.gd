@@ -170,6 +170,12 @@ static func valid_state(value: Dictionary) -> bool:
 	if not walking is Dictionary: return false
 	if not walking.is_empty():
 		if walking.get("version") != 1 or not walking.get("eye_position") is Vector3 or not walking.eye_position.is_finite(): return false
+		var access: Variant = walking.get("return_access")
+		if not access is Dictionary or not access.get("available") is bool: return false
+		if access.available:
+			if not access.get("position") is Vector3 or not access.position.is_finite(): return false
+			if not access.get("distance_metres") is float or not is_finite(access.distance_metres) or access.distance_metres < 0: return false
+			if not access.get("within_reach") is bool: return false
 		if not walking.get("basis") is Basis or not walking.basis.is_finite() or absf(walking.basis.determinant() - 1.0) > 0.00001: return false
 		if not walking.get("heading") is float or not is_finite(walking.heading) or absf(walking.heading) > PI: return false
 	var impact: Variant = value.get("impact", {"selected": false})
@@ -1212,8 +1218,34 @@ func _process(delta: float) -> void:
 	if not terrain.error.is_empty():
 		pause_on_error(str(terrain.error))
 		return
+	# Placement and a complete cover swap happened above. Refresh before this
+	# frame renders, including the first frame of newly admitted geometry.
+	if not apply_camera_depth(camera.transform, minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))): return
 	if exhaust != null:
 		exhaust.update_applied(state, delta, paused)
+
+
+func apply_camera_depth(relation: Transform3D, minimum_far: float) -> bool:
+	var distant: Vector2 = terrain.depth_range(relation, minimum_far)
+	if distant == Vector2.ZERO:
+		pause_on_error("Terrain camera depth is unavailable")
+		return false
+	var close_depth := Vector2(0.05, 200.0)
+	if surface_walking():
+		close_depth = surface_depth_range(state.surface_walk.eye_position, distant.y)
+		if close_depth == Vector2.ZERO:
+			pause_on_error("Surface camera depth is unavailable")
+			return false
+	# Far/500k can reach 2000m at the existing 1e9m cap. Extend only the close
+	# far plane, with overlap for float projection rounding. Merely equal
+	# configured planes can leave a gap in the actual Camera3D frustum.
+	camera.near = close_depth.x
+	camera.far = maxf(close_depth.y, distant.x * 1.01)
+	terrain_camera.near = distant.x
+	terrain_camera.far = distant.y
+	camera.transform = relation
+	terrain_camera.transform = relation
+	return true
 
 
 func update_view(delta: float, defer_exhaust: bool = false) -> void:
@@ -1222,13 +1254,6 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
-	var distant_far := minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
-	var close_depth := Vector2(0.05, 200.0)
-	if surface_walking():
-		close_depth = surface_depth_range(state.surface_walk.eye_position, distant_far)
-		if close_depth == Vector2.ZERO:
-			pause_on_error("Surface camera depth is unavailable")
-			return
 	var condition: Dictionary = state.get("impact", {"selected": false})
 	if not impact_overlay.apply(condition, state.craft_id, state.frame_id, state.frame_version, cockpit, surface_walking()):
 		pause_on_error("Saved craft condition is unavailable")
@@ -1289,16 +1314,13 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if station != null:
 		station.transform = Transform3D(state.station_basis, state.station_position)
 		station.visible = state.get("station_available", true) and state.station_position.length() < 1000.0
-	terrain_camera.far = distant_far
-	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
-	camera.near = close_depth.x
-	camera.far = close_depth.y
+	var camera_relation := Transform3D.IDENTITY
 	var look_basis := Basis(Vector3.UP, -look_offset.x) * Basis(Vector3.RIGHT, -look_offset.y)
 	if surface_walking():
 		var walking: Dictionary = state.surface_walk
-		camera.transform = Transform3D(walking.basis * Basis(Vector3.UP, walking.heading) * Basis(Vector3.RIGHT, -look_offset.y), walking.eye_position)
+		camera_relation = Transform3D(walking.basis * Basis(Vector3.UP, walking.heading) * Basis(Vector3.RIGHT, -look_offset.y), walking.eye_position)
 	elif cockpit:
-		camera.transform = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
+		camera_relation = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
 	else:
 		# The overhead dock occupies the usual elevated chase viewpoint. Keep
 		# the close-port camera below the craft, then ease back to its normal
@@ -1307,9 +1329,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		var height := 9.0
 		if not state.docking.is_empty():
 			height = lerpf(-7.0, 9.0, smoothstep(100.0, 200.0, state.docking.separation))
-		camera.position = state.body_basis * (look_basis * Vector3(17.0, height, 28.0))
-		camera.look_at(Vector3.ZERO, state.body_basis.y)
-	terrain_camera.transform = camera.transform
+		camera_relation = Transform3D(Basis.IDENTITY, state.body_basis * (look_basis * Vector3(17.0, height, 28.0))).looking_at(Vector3.ZERO, state.body_basis.y)
+	if not apply_camera_depth(camera_relation, minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))): return
 	if player_input != null:
 		player_input.assist = state.assistance
 		assist_button.set_pressed_no_signal(state.assistance)
@@ -1414,9 +1435,11 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	refresh_suit_lamp()
 	ship_marker.visible = outside
 	if outside:
-		# The retained craft is the authoritative view origin. This is a
-		# centre bearing, not hatch reach, visibility or a safe terrain route.
-		ship_marker.update_cue(camera, Vector3.ZERO, false)
+		var access: Dictionary = state.surface_walk.return_access
+		# One marker avoids overlapping labels. SHIP is only a centre fallback;
+		# RETURN identifies the existing ground transfer, not an art hatch.
+		ship_marker.label_text = "RETURN" if access.available else "SHIP"
+		ship_marker.update_cue(camera, access.position if access.available else Vector3.ZERO, false)
 	orbital_forecast.visible = not outside
 	resource_status.visible = not outside
 	assist_button.visible = not outside
@@ -1426,5 +1449,5 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		for item in [chart_button, chart_status, jump_status, jump_button, home_cue, home_marker]: item.visible = false
 		for button in jump_destinations: button.visible = false
 		if controls_menu.saved_note != null:
-			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nSHIP points to the craft centre, not the hatch or a safe walking route.\nReturn near the Wayfarer's aft ground access, then select Return through hatch.\nSave As retains your ground position and the landed ship."
+			controls_menu.saved_note.text = "ON FOOT · SUIT EQUIPPED\nWASD / left stick: walk\nLook keys / right-drag / right stick: look\nSuit lamp: toggle in paused controls; release controls and Resume explicitly.\nRETURN marks the actual ground return access. If unavailable, SHIP points only to the craft centre.\nApproach RETURN until within reach, then select Return through hatch. The cue does not plan a safe terrain route.\nSave As retains your ground position and the landed ship."
 	update_compact_hud()

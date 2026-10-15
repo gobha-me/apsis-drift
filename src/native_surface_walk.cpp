@@ -30,13 +30,23 @@ auto NativeFreedomFlightSession::begin_surface_walk()
   if (!actor) return std::unexpected{actor.error()};
   auto candidate = *this;
   candidate.surface_walk_selected_ = true;
+  candidate.gear_clearance_.reset();
   candidate.surface_walker_ = *actor;
+  candidate.surface_walk_blockage_.reset();
   candidate.surface_walk_terrain_ =
       std::make_shared<PlanetSurfaceWalkTerrain>(std::move(*terrain));
   if (auto saved = candidate.surface_walk_document(); !saved)
     return std::unexpected{saved.error()};
   *this = std::move(candidate);
   return {};
+}
+auto NativeFreedomFlightSession::surface_return_access() const
+    -> std::expected<PlanetSurfaceReturnAccess, std::string> {
+  if (recovery_pending() || !surface_walker_ || !surface_walk_terrain_ ||
+      !surface_ || !surface_->landed ||
+      surface_walk_terrain_->anchor() != *surface_->landed)
+    return std::unexpected{"Return access requires its active landed walker"};
+  return surface_walk_terrain_->return_access(*surface_walker_);
 }
 auto NativeFreedomFlightSession::return_from_surface_walk()
     -> std::expected<void, std::string> {
@@ -48,6 +58,7 @@ auto NativeFreedomFlightSession::return_from_surface_walk()
     return std::unexpected{
         "Move within reach of the Wayfarer hatch ground access"};
   surface_walker_.reset();
+  surface_walk_blockage_.reset();
   surface_walk_terrain_.reset();
   return {};
 }
@@ -66,6 +77,9 @@ auto NativeFreedomFlightSession::advance_surface_walk(
   const auto flight = candidate.advance_craft_tick({}, step);
   if (!flight) return std::unexpected{flight.error()};
   candidate.surface_walker_ = movement->actor;
+  candidate.surface_walk_blockage_ = movement->status;
+  if (movement->status == PlanetSurfaceWalkStatus::supported)
+    candidate.surface_walk_blockage_.reset();
   *this = std::move(candidate);
   return *flight;
 }

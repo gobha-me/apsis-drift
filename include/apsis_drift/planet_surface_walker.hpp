@@ -26,6 +26,12 @@ enum class PlanetSurfaceWalkStatus : std::uint8_t {
   step,
   craft_obstruction
 };
+// Same terrain-projected ground access used by reboarding, not an art hatch.
+struct PlanetSurfaceReturnAccess {
+  RigidVector3 foot_position_metres;
+  double distance_metres{};
+  bool within_reach{};
+};
 struct PlanetSurfaceWalkStep {
   PlanetSurfaceWalkerState actor;
   PlanetSurfaceWalkStatus status{};
@@ -48,6 +54,8 @@ class PlanetSurfaceWalkTerrain {
                              const OriginWalkControls&,
                              SimulationSeconds = kSimulationStep)
       -> std::expected<PlanetSurfaceWalkStep, std::string>;
+  [[nodiscard]] auto return_access(const PlanetSurfaceWalkerState&)
+      -> std::expected<PlanetSurfaceReturnAccess, std::string>;
   [[nodiscard]] auto near_entry(const PlanetSurfaceWalkerState&)
       -> std::expected<bool, std::string>;
   [[nodiscard]] auto cache_size() const -> std::size_t { return cache_.size(); }

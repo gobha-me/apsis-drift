@@ -8,10 +8,15 @@ again, after which the ordinary flight controls and thruster liftoff resume.
 Leaving is unavailable while airborne, attached, in a maneuver, in transit,
 with a recorded pending loss, or without the supported native starter state.
 
-A cyan **SHIP** marker points toward the retained Wayfarer while outside, with
-an edge arrow when it is off screen or behind the camera. It marks the craft
-centre; reach the aft ground access to reboard. The marker does not identify
-terrain obstructions or a safe walking route, and hides after reboarding.
+A cyan **RETURN** marker points toward the actual terrain-supported aft ground
+access while outside, with an edge arrow when it is off screen or behind the
+camera. The compact HUD shows foot-to-access distance and **Within reach** at
+the same 3.5-metre threshold used by Return through hatch. This is the existing
+instant ground-transfer point, not the visible roof hatch itself. If the return
+access is unavailable, the same marker instead reads **SHIP** and points only
+to the retained craft centre; the HUD says Return access unavailable. One marker
+avoids overlapping labels. It does not identify terrain obstructions or a safe
+walking route, and hides after reboarding.
 
 The forward-facing **Suit lamp** lights nearby terrain and the craft while on
 foot, including at night. Esc/Start opens paused controls; select **Suit lamp:
@@ -41,6 +46,26 @@ steps retain the current foot position. Terrain queries use a four-tile cache;
 there is no circular mission boundary around the ship. This is point ground
 support and conservative box obstruction, not articulated human collision,
 jumping, swimming or arbitrary terrain obstacle simulation.
+
+The compact HUD explains the last committed blocked step: missing ground
+support, water, slope, an excessive step or drop, or the craft hull. A supported
+or neutral step clears the warning. Pause retains it; Continue and reboarding
+clear this transient feedback without adding it to saved world state.
+
+## Gear clearance while flying
+
+With landing gear deployed, the compact HUD shows the **last gear gap** and its
+sample age when the existing contact check finds supported dry terrain. It is
+the minimum signed gap from the deployed pads to their terrain planes, measured
+along those planes' normals. Reference altitude remains height above the
+planet's reference sphere. Neither reading certifies hull clearance or a safe
+landing.
+
+The readout adds no terrain queries. An unsupported contact query shows
+**Unavailable**, rather than a zero gap. Pause freezes the sample age. Stowing
+gear retires the sample; Continue starts without one until flight samples again.
+Landed, outside, liftoff and travel states do not display a retained flight gap.
+The transient sample is excluded from saved world state.
 
 ## Save and recovery
 

@@ -19,6 +19,40 @@ func check_deployed_gear(model: Node3D) -> void:
 		var center: Vector3 = expected[name]
 		check(absf(minimum.y - center.y) < 0.001 and absf((minimum.x + maximum.x) / 2.0 - center.x) < 0.001 and absf((minimum.z + maximum.z) / 2.0 - center.z) < 0.001 and absf(maximum.x - minimum.x - 0.64) < 0.001 and absf(maximum.z - minimum.z - 0.52) < 0.001, "Displayed deployed sole differs from physical rectangle " + name)
 
+func check_last_gear_gap(shell: Control, owner: Variant, source: String, assets: String, output: String) -> void:
+	var view: Control = shell.current_view
+	install_recorded_input(view)
+	check(not view.state.surface.gear_clearance.available, "Continue invented a historical gear gap")
+	view.request_assistance(false)
+	view.port_command("request_freedom_landing")
+	check(not view.state.surface.gear_clearance.available, "A gear command invented a contact sample")
+	if not resume(view): return
+	view._process(1.0 / 120.0)
+	var sampled: Dictionary = owner.get_freedom_flight_state()
+	var gap: Dictionary = sampled.surface.gear_clearance
+	check(view.error.is_empty() and not sampled.surface.landed and gap.available and gap.tick == sampled.tick and gap.source_checksum == sampled.checksum and gap.minimum_gap_metres > 0.0 and gap.minimum_gap_metres <= gap.maximum_gap_metres and gap.age_seconds == 0.0, "Actual airborne post-step query lost its last pad gap/provenance")
+	check("Last gear gap" in view.primary_status.text and "Reference altitude" in view.primary_status.text, "Compact HUD omitted last gear gap or confused its datum")
+	view.pause_controls("Inspecting last gear sample")
+	var paused: Dictionary = owner.get_freedom_flight_state()
+	check(paused.tick == sampled.tick and paused.surface.gear_clearance == gap, "Pausing changed the last contact observation")
+	sampled = paused
+	var saved := output.path_join("last-gear-gap.json")
+	check(owner.save_freedom_as(saved), "Sampled airborne Save As refused")
+	var bytes := FileAccess.get_file_as_bytes(saved)
+	for repeat in 3:
+		view._process(0.125)
+		check(owner.get_freedom_flight_state() == sampled, "Paused reads sampled terrain or advanced the voyage")
+	var short := PackedFloat64Array([0, 0])
+	check(not owner.advance_freedom_flight(0.125, short, false) and owner.get_freedom_flight_state() == sampled and owner.save_freedom_as(saved) and FileAccess.get_file_as_bytes(saved) == bytes, "Refused advance or sample inspection changed diagnostics/full save")
+	var continued: Variant = ClassDB.instantiate("FreedomBridge")
+	if not check(continued.stage_freedom_continue(saved), "Sampled assembled Continue staging refused"): return
+	var pending: Dictionary = continued.get_pending_freedom_start()
+	check(not pending.is_empty() and continued.commit_pending_freedom_start(pending.candidate_id) and not continued.get_freedom_flight_state().surface.gear_clearance.available and continued.save_freedom_as(output.path_join("last-gear-gap-continued.json")) and FileAccess.get_file_as_bytes(output.path_join("last-gear-gap-continued.json")) == bytes, "Continue fabricated a last sample or changed canonical saved bytes")
+	view.port_command("stow_freedom_landing_gear")
+	view.port_command("request_freedom_landing")
+	check(not view.state.surface.gear_clearance.available, "Same-tick stow/redeploy revived an old gear sample")
+	check(shell.select_start(owner, {"mode": "continue", "value": source, "assets": assets}), "Gear-gap probe did not restore canonical surface source")
+
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 3: quit(1); return
@@ -41,6 +75,8 @@ func run() -> void:
 	root.size = Vector2i(1280, 720)
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if not check(DirAccess.make_dir_recursive_absolute(args[2]) == OK and shell.select_start(owner, {"mode": "continue", "value": args[0].path_join("source.json"), "assets": args[1]}), "Near-ground source did not stage: " + shell.error): shell.free(); quit(1); return
+	check_last_gear_gap(shell, owner, args[0].path_join("source.json"), args[1], args[2])
+	if failed: shell.free(); quit(1); return
 	var view: Control = shell.current_view
 	install_recorded_input(view)
 	var model_id: int = view.staged_model.get_instance_id()

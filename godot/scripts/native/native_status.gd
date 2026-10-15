@@ -1,5 +1,6 @@
 extends RefCounted
 ## Presentation of C++ observations; never advances or edits the voyage.
+const NativeIds = preload("res://scripts/native/native_environment.gd")
 
 static func finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
@@ -9,6 +10,43 @@ static func layout_bounds(logical: Vector2, pixels: Vector2) -> Rect2:
 	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))
 	var margin := minf(16.0 * scale, minf(logical.x, logical.y) * 0.1)
 	return Rect2(Vector2.ONE * margin, Vector2(minf(380.0 * scale, logical.x - 2.0 * margin), minf(220.0 * scale, logical.y - 2.0 * margin)))
+
+# Last committed ground movement only; not a prediction or hazard assessment.
+static func movement_feedback(blockage: Variant) -> String:
+	if blockage == null: return ""
+	if not blockage is String: return "Ground movement feedback unavailable"
+	match blockage:
+		"terrain_unresolved": return "Last step blocked · Ground support unavailable"
+		"water": return "Last step blocked · Water or shoreline"
+		"slope": return "Last step blocked · Ground too steep"
+		"step": return "Last step blocked · Step or drop too large"
+		"craft_obstruction": return "Last step blocked · Wayfarer hull"
+	return "Ground movement feedback unavailable"
+
+static func gear_clearance_text(value: Dictionary) -> String:
+	const UNAVAILABLE := "Gear clearance · Unavailable"
+	var surface: Variant = value.get("surface")
+	var outside: Variant = value.get("surface_walk", {})
+	if not surface is Dictionary or not outside is Dictionary: return UNAVAILABLE
+	for field in ["gear_deployed", "landed"]:
+		if not surface.get(field) is bool: return UNAVAILABLE
+	if not value.get("attached") is bool or not surface.gear_deployed or surface.landed or value.attached or not outside.is_empty(): return UNAVAILABLE
+	var sample: Variant = surface.get("gear_clearance")
+	if not sample is Dictionary or not sample.get("available") is bool or not sample.available: return UNAVAILABLE
+	var current_frame: Variant = value.get("coordinate_frame", "planet_relative_inertial")
+	if not sample.get("reference") is String or not sample.get("coordinate_frame") is String or not current_frame is String: return UNAVAILABLE
+	if sample.reference != "deployed_pad_planes" or sample.coordinate_frame != "planet_relative_inertial" or current_frame != "planet_relative_inertial": return UNAVAILABLE
+	for field in ["system_id", "planet_id", "craft_id", "frame_id"]:
+		if not NativeIds.decimal(sample.get(field)) or not NativeIds.decimal(value.get(field)) or sample[field] != value[field]: return UNAVAILABLE
+	for field in ["frame_version", "terrain_policy"]:
+		if typeof(sample.get(field)) != TYPE_INT or typeof(value.get(field)) != TYPE_INT or sample[field] <= 0 or sample[field] != value[field]: return UNAVAILABLE
+	for field in ["tick", "source_checksum"]:
+		if not NativeIds.decimal(sample.get(field)): return UNAVAILABLE
+	if not NativeIds.decimal(value.get("tick")) or sample.tick.length() > value.tick.length() or (sample.tick.length() == value.tick.length() and sample.tick > value.tick): return UNAVAILABLE
+	for field in ["minimum_gap_metres", "maximum_gap_metres", "age_seconds"]:
+		if not finite_number(sample.get(field)): return UNAVAILABLE
+	if sample.minimum_gap_metres > sample.maximum_gap_metres or sample.age_seconds < 0.0: return UNAVAILABLE
+	return "Last gear gap %.2f m · %.1f s ago" % [sample.minimum_gap_metres, sample.age_seconds]
 
 static func summary(value: Dictionary) -> String:
 	for field in ["altitude", "surface_speed", "radial_rate", "air_density"]:
@@ -37,10 +75,19 @@ static func summary(value: Dictionary) -> String:
 	var lines := PackedStringArray([mode + " · " + location])
 	if not outside.is_empty():
 		if not outside.get("eye_position") is Vector3 or not outside.eye_position.is_finite(): return "Ground observations unavailable"
+		var blocked := movement_feedback(outside.get("movement_blockage"))
+		if not blocked.is_empty(): lines.append(blocked)
 		lines.append("Wayfarer · %.1f m to craft" % outside.eye_position.length())
+		var access: Variant = outside.get("return_access", {})
+		if access is Dictionary and access.get("available") is bool and access.available and finite_number(access.get("distance_metres")) and access.distance_metres >= 0.0 and access.get("within_reach") is bool:
+			lines.append("RETURN · %.1f m · %s" % [access.distance_metres, "Within reach · Return through hatch" if access.within_reach else "Approach ground access"])
+		else:
+			lines.append("RETURN · Return access unavailable")
 		lines.append("WASD / left stick walk · Right-drag / right stick look")
 	else:
 		lines.append("Reference altitude %.2f km" % (value.altitude / 1000.0))
+		if surface.get("gear_deployed", false) and not surface.get("landed", false) and not value.attached:
+			lines.append(gear_clearance_text(value))
 		lines.append("Surface speed %.1f m/s · Radial %+.1f m/s" % [value.surface_speed, value.radial_rate])
 		if value.get("assistance", false): lines.append("Flight assistance on")
 		if resources.get("selected", false):

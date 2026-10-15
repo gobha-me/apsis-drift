@@ -527,6 +527,81 @@ auto assisted_commands(const Fixture& f,
             pilot.surface_maneuver().kind == NativeSurfaceManeuverKind::off &&
             pilot.document().flight == flight.flight,
         "manual landing action deploys gear and retains piloted flight");
+  check(!pilot.last_gear_clearance(),
+        "Opening a save and deploying gear cannot invent a contact sample");
+  required(pilot.advance({}));
+  const auto sampled = pilot.last_gear_clearance();
+  check(sampled && !pilot.surface()->landed,
+        "Actual post-step query retains gaps while contact is not ready");
+  if (sampled) {
+    const auto source = pilot.document().flight;
+    check(sampled->frame == source.frame && sampled->craft == source.craft &&
+              sampled->rotation == pilot.rotation() &&
+              sampled->terrain_policy ==
+                  pilot.document().model.terrain_policy &&
+              sampled->tick == source.tick &&
+              sampled->source_checksum ==
+                  required(rigid_body_state_checksum({pilot.system()}, source)),
+          "Sample binds actual source owner, recipe, craft and committed tick");
+    auto oracle = required(TerrainTouchdownSnapshot::create(pilot, true));
+    const auto query = oracle.query();
+    double minimum = std::numeric_limits<double>::infinity(),
+           maximum = -minimum;
+    for (unsigned i = 0; i < query.geometry.support_count; ++i) {
+      check(query.supports[i] && *query.supports[i],
+            "Test-only same-state pad oracle is resolved");
+      if (!query.supports[i] || !*query.supports[i]) continue;
+      minimum = std::min(minimum, (**query.supports[i]).minimum_gap_metres);
+      maximum = std::max(maximum, (**query.supports[i]).maximum_gap_metres);
+    }
+    check(sampled->minimum_gap_metres == minimum &&
+              sampled->maximum_gap_metres == maximum && minimum > 0 &&
+              std::isfinite(minimum) && std::isfinite(maximum),
+          "Last gap equals certified whole-pad planes, not reference altitude");
+    const auto bytes = required(
+        encode_freedom_surface_document_json(pilot.surface_document()));
+    check(!pilot.commit_touchdown(sampled->source_checksum ^ 1) &&
+              !pilot.advance(invalid) &&
+              pilot.last_gear_clearance() == sampled &&
+              required(encode_freedom_surface_document_json(
+                  pilot.surface_document())) == bytes,
+          "Rejected command/advance and repeated reads retain sample and save");
+    auto continued = required(NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom,
+         required(decode_freedom_surface_document_json(bytes)),
+         f.planet,
+         {}}));
+    check(!continued.last_gear_clearance() &&
+              required(encode_freedom_surface_document_json(
+                  continued.surface_document())) == bytes,
+          "Continue has no invented sample and preserves complete saved state");
+    required(pilot.set_landing_gear(false));
+    required(pilot.set_landing_gear(true));
+    check(!pilot.last_gear_clearance(),
+          "Same-tick stow/redeploy retires rather than revives a sample");
+    std::optional<TerrainPadGapSample> refused_sample = sampled;
+    check(!prepare_landed_craft(f.owner, f.rotation, source, true,
+                                sampled->source_checksum ^ 1, f.terrain_policy,
+                                &refused_sample) &&
+              !refused_sample,
+          "Stale source refuses before publishing a diagnostic");
+    refused_sample = sampled;
+    auto nonfinite = source;
+    nonfinite.position_metres.x = std::numeric_limits<double>::quiet_NaN();
+    check(!prepare_landed_craft(f.owner, f.rotation, nonfinite, true,
+                                sampled->source_checksum, f.terrain_policy,
+                                &refused_sample) &&
+              !refused_sample,
+          "Nonfinite source cannot publish a diagnostic");
+    refused_sample = sampled;
+    auto wrong_owner = source;
+    wrong_owner.frame.system = SystemId{0};
+    check(!prepare_landed_craft(f.owner, f.rotation, wrong_owner, true,
+                                sampled->source_checksum, f.terrain_policy,
+                                &refused_sample) &&
+              !refused_sample,
+          "Wrong owner cannot publish a diagnostic");
+  }
   auto far = flight;
   far.flight.position_metres = add(far.flight.position_metres,
                                    rotate(far.flight.orientation, {0, 100, 0}));
@@ -933,6 +1008,8 @@ auto surface_walk_session(const Fixture& f,
       required(session.save_as(directory / (std::string{name} + ".json")));
   };
   checkpoint("source");
+  check(!session.surface_return_access(),
+        "Seated session has no outside return cue");
   required(session.begin_surface_walk());
   checkpoint("exited");
   check(session.surface_walker() && !session.walker() &&
@@ -944,6 +1021,65 @@ auto surface_walk_session(const Fixture& f,
         required(session.surface_walk_document())));
   };
   const auto before = snapshot();
+  check(!session.surface_walk_blockage(),
+        "Fresh ground ownership has no invented movement result");
+  // Separate actual-session probe leaves the canonical voyage/export untouched.
+  // Reuse the ordinary craft obstruction already exercised by the terrain test.
+  auto feedback = session;
+  for (unsigned tick = 0; tick < 120; ++tick)
+    required(feedback.advance_surface_walk({1, 0, 0}));
+  check(feedback.surface_walk_blockage() ==
+            PlanetSurfaceWalkStatus::craft_obstruction,
+        "Committed blocked steps expose the existing craft obstruction reason");
+  const auto feedback_save = required(encode_freedom_surface_walk_document_json(
+      required(feedback.surface_walk_document())));
+  const auto feedback_actor = feedback.surface_walker();
+  check(
+      !feedback.advance_surface_walk(
+          {std::numeric_limits<double>::quiet_NaN(), 0, 0}) &&
+          feedback.surface_walk_blockage() ==
+              PlanetSurfaceWalkStatus::craft_obstruction &&
+          feedback.surface_walker() == feedback_actor &&
+          required(encode_freedom_surface_walk_document_json(
+              required(feedback.surface_walk_document()))) == feedback_save,
+      "Rejected advance preserves committed feedback, actor and complete save");
+  auto feedback_resume = required(NativeFreedomFlightSession::open(
+      {NativeStartup::Mode::freedom,
+       required(decode_freedom_surface_walk_document_json(feedback_save)),
+       f.planet,
+       {}}));
+  check(!feedback_resume.surface_walk_blockage() &&
+            required(encode_freedom_surface_walk_document_json(required(
+                feedback_resume.surface_walk_document()))) == feedback_save,
+        "Continue clears transient blockage without changing saved bytes");
+  auto feedback_loss = feedback;
+  required(feedback_loss.record_loss(
+      FreedomLossCause::recoverable_destruction,
+      feedback_loss.document().origin.state.craft,
+      feedback_loss.document().flight.tick,
+      required(rigid_body_state_checksum(f.context,
+                                         feedback_loss.document().flight))));
+  check(!feedback_loss.surface_walk_blockage(),
+        "Pending loss cannot expose a prior ground obstruction");
+  required(feedback_loss.complete_recovery());
+  check(!feedback_loss.surface_walk_blockage(),
+        "Replacement station actor cannot inherit ground obstruction");
+  required(feedback.advance_surface_walk({-1, 0, 0}));
+  required(feedback_resume.advance_surface_walk({-1, 0, 0}));
+  check(!feedback.surface_walk_blockage() &&
+            feedback.surface_walker() != feedback_actor &&
+            required(encode_freedom_surface_walk_document_json(
+                required(feedback.surface_walk_document()))) ==
+                required(encode_freedom_surface_walk_document_json(
+                    required(feedback_resume.surface_walk_document()))),
+        "Supported movement clears blockage and matches independent Continue");
+  required(feedback.return_from_surface_walk());
+  check(!feedback.surface_walk_blockage(),
+        "Reboarding retires the ground movement result");
+  const auto return_access = required(session.surface_return_access());
+  check(return_access.within_reach && return_access.distance_metres == 0 &&
+            snapshot() == before,
+        "Return cue reads actual outside owner without changing complete save");
   const auto temporary =
       std::filesystem::temp_directory_path() /
       ("apsis-surface-walk-" +
@@ -968,6 +1104,7 @@ auto surface_walk_session(const Fixture& f,
       required(loss.surface_walk_document())));
   if (!directory.empty())
     required(loss.save_as(directory / "pending-loss.json"));
+  check(!loss.surface_return_access(), "Pending loss hides return access");
   check(!loss.advance_surface_walk({}) && !loss.return_from_surface_walk() &&
             pending == required(encode_freedom_surface_walk_document_json(
                            required(loss.surface_walk_document()))),
@@ -1070,6 +1207,20 @@ auto surface_walking(const Fixture& f) -> void {
   auto terrain = required(PlanetSurfaceWalkTerrain::create(
       f.owner, f.rotation, anchor, source.tick));
   const auto start = required(terrain.entry());
+  const auto access = required(terrain.return_access(start));
+  check(
+      access.foot_position_metres == start.foot_position_metres &&
+          access.distance_metres == 0 && access.within_reach,
+      "Return cue identifies actual terrain-supported entry, not craft centre");
+  auto invalid_access = start;
+  invalid_access.foot_position_metres.x =
+      std::numeric_limits<double>::quiet_NaN();
+  check(!terrain.return_access(invalid_access),
+        "Nonfinite return actor refuses");
+  invalid_access = start;
+  invalid_access.frame.planet = PlanetId{0};
+  check(!terrain.return_access(invalid_access),
+        "Wrong-owner return actor refuses");
   check(terrain.validate(start).has_value() &&
             required(terrain.near_entry(start)),
         "Actual landed Wayfarer has supported nearby hatch ground access");
@@ -1090,16 +1241,43 @@ auto surface_walking(const Fixture& f) -> void {
         "Independent long-double ray agrees with the actual rendered top "
         "triangle at the foot");
   auto actor = start;
+  auto previous_access = access;
+  bool crossed_reach_edge{};
   for (int i = 0; i < 1200; ++i) {
     const auto step = required(terrain.advance(actor, {-1, 0, 0}));
     check(step.status == PlanetSurfaceWalkStatus::supported,
           "Walking away remains supported without an invented area wall");
     actor = step.actor;
+    if (!crossed_reach_edge) {
+      const auto current_access = required(terrain.return_access(actor));
+      check(current_access.within_reach == required(terrain.near_entry(actor)),
+            "Return projection and interaction agree at the reach edge");
+      if (!current_access.within_reach) {
+        check(previous_access.within_reach &&
+                  previous_access.distance_metres <= 3.5 &&
+                  current_access.distance_metres > 3.5 &&
+                  current_access.distance_metres -
+                          previous_access.distance_metres <=
+                      2.45 * kSimulationStep.count() + 1e-8,
+              "Real supported steps bracket the exact 3.5-m reach predicate");
+        crossed_reach_edge = true;
+      }
+      previous_access = current_access;
+    }
   }
+  check(crossed_reach_edge,
+        "Supported outward walk crosses return reach boundary");
   check(norm(sub(actor.foot_position_metres, start.foot_position_metres)) >
                 19 &&
             !required(terrain.near_entry(actor)) && terrain.cache_size() <= 4,
         "Ground travel leaves interaction range with bounded terrain cache");
+  const auto distant_access = required(terrain.return_access(actor));
+  check(distant_access.foot_position_metres == start.foot_position_metres &&
+            std::abs(distant_access.distance_metres -
+                     norm(sub(actor.foot_position_metres,
+                              start.foot_position_metres))) < 1e-9 &&
+            !distant_access.within_reach,
+        "Distant cue retains exact entry and actual foot distance");
   for (int i = 0; i < 1200; ++i)
     actor = required(terrain.advance(actor, {1, 0, 0})).actor;
   check(norm(sub(actor.foot_position_metres, start.foot_position_metres)) <
