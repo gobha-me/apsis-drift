@@ -11,6 +11,7 @@
 #include "apsis_drift/native_profile.hpp"
 #include "apsis_drift/native_startup.hpp"
 #include "apsis_drift/operating_motion.hpp"
+#include "apsis_drift/planet_surface_appearance.hpp"
 #include "apsis_drift/station_geometry.hpp"
 
 #include <charconv>
@@ -1981,6 +1982,25 @@ class FreedomBridge : public godot::RefCounted {
       lighting["sea_density"] = profile.sea_level_density_kg_per_cubic_metre;
       lighting["atmosphere_edge"] = profile.space_boundary_altitude_metres;
       result["lighting"] = lighting;
+      // Visible material response only: no palette identity, climate envelope,
+      // seed or physical ice/water classification is disclosed by this packet.
+      const auto appearance =
+          require(resolve_planet_surface_appearance(view.planet));
+      godot::Dictionary surface_appearance;
+      surface_appearance["version"] =
+          static_cast<std::int64_t>(appearance.version);
+      surface_appearance["disclosure"] = std::int64_t{1};
+      surface_appearance["system_id"] = result["system_id"];
+      surface_appearance["planet_id"] = result["planet_id"];
+      surface_appearance["albedo_scale_basis_points"] =
+          static_cast<std::int64_t>(appearance.albedo_scale_basis_points);
+      surface_appearance["detail_contrast_basis_points"] =
+          static_cast<std::int64_t>(appearance.detail_contrast_basis_points);
+      surface_appearance["roughness_basis_points"] =
+          static_cast<std::int64_t>(appearance.roughness_basis_points);
+      surface_appearance["specular_basis_points"] =
+          static_cast<std::int64_t>(appearance.specular_basis_points);
+      result["surface_appearance"] = surface_appearance;
       if (document.model.optics) {
         const auto recipe = require(generate_planet_optics_recipe(
             session.system(), view.planet.id, document.model.optics));

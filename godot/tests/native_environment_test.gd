@@ -1,6 +1,7 @@
 extends SceneTree
 const NativeEnvironment = preload("res://scripts/native/native_environment.gd")
 const PlanetOptics = preload("res://scripts/native/native_planet_optics.gd")
+const SurfaceAppearance = preload("res://scripts/native/native_surface_appearance.gd")
 const FlightView = preload("res://scripts/native/native_flight_view.gd")
 const WalkView = preload("res://scripts/native/native_walk_view.gd")
 const Shell = preload("res://scripts/native/native_start_shell.gd")
@@ -33,6 +34,7 @@ func run() -> void:
 	check(owner.save_freedom_as(args[1]), "Before world bytes unavailable")
 	if failures > 0: owner = null; quit(1); return
 	var before := FileAccess.get_sha256(args[1])
+	check_surface_appearance(state)
 	check_planet_optics(state, args[1] + ".optics.json")
 	for key in ["scale_height", "sea_density", "atmosphere_edge", "star_angular_radius"]:
 		for value in [NAN, INF, -INF, -1.0, "7", true, null, Vector3.ONE]:
@@ -153,6 +155,55 @@ func run() -> void:
 	await process_frame
 	print("Native environment consumer: %d failures; synthetic angular fixtures and actual saved C++ port phases, actual catalog2 anchored phases when supplied, no raster/hardware claim" % failures)
 	quit(0 if failures == 0 else 1)
+
+func check_surface_appearance(state: Dictionary) -> void:
+	if not state.has("surface_appearance") or not SurfaceAppearance.valid(state):
+		check(false, "Actual C++ surface appearance packet is unavailable")
+		return
+	var presenter := SurfaceAppearance.new()
+	var first := ShaderMaterial.new()
+	first.shader = preload("res://shaders/terrain.gdshader")
+	var replacement := ShaderMaterial.new()
+	replacement.shader = first.shader
+	if not presenter.select(state) or not presenter.apply([first]):
+		check(false, "Actual surface profile could not bind terrain")
+		return
+	check(presenter.changed and first.get_shader_parameter("surface_profile_enabled"), "First material did not select its actual appearance")
+	var bindings := [["surface_albedo_scale", "albedo_scale_basis_points"],
+		["surface_detail_contrast", "detail_contrast_basis_points"],
+		["surface_roughness", "roughness_basis_points"],
+		["surface_specular", "specular_basis_points"]]
+	for pair in bindings:
+		check(is_equal_approx(float(first.get_shader_parameter(pair[0])), float(state.surface_appearance[pair[1]]) / 10000.0), "Surface material differs from C++ coefficient: " + pair[0])
+	# Static packets do not request another full terrain-material update. A tile
+	# created later still receives the accepted profile before becoming visible.
+	check(presenter.select(state) and not presenter.changed and presenter.apply([replacement]), "Repeated profile changed or replacement material lost appearance")
+	for pair in bindings:
+		check(first.get_shader_parameter(pair[0]) == replacement.get_shader_parameter(pair[0]), "Replacement terrain appearance differs")
+	var accepted: Dictionary = presenter.selected.duplicate(true)
+	var changes: Array = [{"version": 2}, {"version": true}, {"disclosure": 0},
+		{"system_id": "0" if state.system_id != "0" else "1"},
+		{"planet_id": "0" if state.planet_id != "0" else "1"}, {"seed": "42"}]
+	for field in SurfaceAppearance.LIMITS:
+		for value in [-1, SurfaceAppearance.LIMITS[field] + 1, 65535, NAN, INF, 1.0, true, null, "1"]:
+			changes.append({field: value})
+	for change: Dictionary in changes:
+		var malformed: Dictionary = state.duplicate(true)
+		malformed.surface_appearance.merge(change, true)
+		check(not SurfaceAppearance.valid(malformed) and not FlightView.valid_state(malformed) and not presenter.select(malformed) and presenter.selected == accepted, "Malformed appearance changed accepted profile: " + str(change.keys()))
+	for field in state.surface_appearance:
+		var missing: Dictionary = state.duplicate(true)
+		missing.surface_appearance.erase(field)
+		check(not presenter.select(missing) and presenter.selected == accepted, "Incomplete appearance changed accepted profile")
+	# A later invalid destination must not partly update earlier destinations.
+	first.set_shader_parameter("surface_roughness", 0.123)
+	check(not presenter.apply([first, null]) and is_equal_approx(float(first.get_shader_parameter("surface_roughness")), 0.123), "Rejected destination set partially mutated terrain")
+	check(presenter.apply([first]), "Accepted material could not restore its profile")
+	var legacy: Dictionary = state.duplicate(true)
+	legacy.erase("surface_appearance")
+	check(SurfaceAppearance.valid(legacy) and presenter.select(legacy) and presenter.changed and presenter.apply([first, replacement]) and presenter.selected.is_empty(), "Missing historical packet did not select neutral fallback")
+	check(not first.get_shader_parameter("surface_profile_enabled") and not replacement.get_shader_parameter("surface_profile_enabled"), "Neutral fallback retained selected appearance")
+	check(presenter.select(state) and presenter.changed and presenter.apply([replacement]) and replacement.get_shader_parameter("surface_profile_enabled"), "Actual appearance could not replace fallback")
 
 func check_planet_optics(historical: Dictionary, output: String) -> void:
 	check(not historical.has("optics") and PlanetOptics.valid(historical), "Historical save gained an optical selection")
@@ -304,5 +355,12 @@ func daynight_phases(directory: String, assets: String, output: String, environm
 func daynight_view(view: Control, state: Dictionary, visibility: float) -> void:
 	view.update_view(0.0)
 	check(view.error.is_empty() and view.state == state and view.paused and view.staged_model.valid_current_pose(), "Day/night native view refresh changed state or lost actual model pose")
+	check(view.surface_appearance.initialized and not view.surface_appearance.changed and view.surface_appearance.selected == state.surface_appearance, "Live view lost its static C++ material profile")
+	# Exercise the actual view's new-tile hook without inventing geometry or
+	# waiting for a different terrain cover at these fixed sunlight fixtures.
+	var replacement := ShaderMaterial.new()
+	replacement.shader = preload("res://shaders/terrain.gdshader")
+	view.terrain.terrain_material_created.emit(replacement)
+	check(view.error.is_empty() and replacement.get_shader_parameter("surface_profile_enabled") and is_equal_approx(float(replacement.get_shader_parameter("surface_albedo_scale")), float(state.surface_appearance.albedo_scale_basis_points) / 10000.0), "Live replacement material missed canonical appearance")
 	check(view.sky_material.get_shader_parameter("sun_direction") == state.star_direction and absf(view.sky_material.get_shader_parameter("sun_visibility") - visibility) < 0.0002 and absf(view.local_light.light_energy - visibility) < 0.0002, "Actual native sky/close lighting differs from canonical phase")
 	check(view.light.basis.z.distance_to(state.star_direction) < 0.000002 and view.local_light.basis == view.light.basis and view.light.light_energy == 1.0 and view.light.light_color == state.lighting.star_color and view.near_environment.ambient_light_energy == view.planet_environment.ambient_light_energy, "Actual terrain/close-pass lighting or ambient direction split at phase")

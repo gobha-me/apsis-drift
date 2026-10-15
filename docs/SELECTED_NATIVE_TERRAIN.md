@@ -64,15 +64,54 @@ session; rejected writes preserve existing destination bytes. See the
 
 The planetary material uses the C++ mesh's height-blended vertex colors as its
 albedo base. Neutral mineral/strata detail modulates brightness without replacing
-the palette with a common brown surface. Its scalar factor stays between 0.2925
-and 0.495 and fades to 0.45 at orbital distance using the existing footprint and
-distance filters. The same coarse/fine color endpoints participate in LOD morphs.
+the palette with a common brown surface. Without a material-profile packet its
+scalar factor stays between 0.2925 and 0.495 and fades to 0.45 at orbital distance.
+The same coarse/fine color endpoints participate in LOD morphs.
 Normals, terrain shape, star lighting and optical cover retain their existing
 owners. Nonplanet study materials retain their previous shading.
 
 These are visual palettes. Pale terrain does not certify ice, green does not
 identify vegetation, and blue does not introduce a liquid surface or new contact
 rules. Palette presentation grants no survey or hazard knowledge.
+
+### Surface finishes
+
+C++ material profile1 derives four bounded artist coefficients from the existing
+descriptor's palette family. It changes albedo scale, detail contrast, roughness
+and specular response on the actual terrain, with existing footprint/distance
+filters. Glacial styling is brighter, smoother and less granular; arid styling
+is dusty, while volcanic rock retains stronger mineral contrast. These are
+cosmetic finishes, independent of the generated temperature/pressure envelopes.
+
+| Palette art | Albedo scale | Detail contrast | Roughness | Specular |
+| --- | ---: | ---: | ---: | ---: |
+| Verdant | 0.45 | 0.85 | 0.88 | 0.35 |
+| Arid | 0.55 | 0.65 | 0.98 | 0.18 |
+| Glacial | 0.72 | 0.30 | 0.38 | 0.65 |
+| Volcanic | 0.43 | 1.25 | 0.85 | 0.40 |
+| Alien | 0.50 | 0.90 | 0.82 | 0.45 |
+
+The current-body packet supplies only version/disclosure1, authenticated body
+IDs and integer coefficients. It grants no knowledge, material composition or
+phase measurement. Unknown versions, wrong owners, missing fields and values
+outside the declared coefficient bounds refuse before material mutation.
+Unchanged profiles do not request a full material update. New tiles receive the
+accepted parameters before display, including during LOD replacement. Missing
+historical packets use the neutral shader fallback. Current presentation applies
+the cosmetic profile without changing saved recipes or full save bytes.
+
+Terrain heights, physical normals and contact remain unchanged. This does not
+certify load-bearing ice or add slippery surfaces. Existing sub-datum terrain
+refuses landing/walking, but remains the actual basin geometry: an ocean surface
+above it needs an explicit C++ sea-datum/clearance/contact policy before rendering.
+Blue basin shading alone is not an ocean implementation.
+
+The bounded software comparison uses authored, fixed material planes and one
+retained actual ground view. It shows brighter glacial art and warmer arid art;
+the cockpit ground pair has limited visible terrain. Flat planes mainly check
+albedo differences and do not establish convincing ice, grazing-angle specular
+response, new relief, oceans or hardware quality. Those limits do not change the
+physical surface or block continued work.
 
 Ordinary bridge streams retain the session's complete physical owner, current
 planet BodyId and saved policy. The descriptor-only constructor remains for

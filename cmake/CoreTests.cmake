@@ -839,6 +839,15 @@ if (APSIS_DRIFT_TESTS AND BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
   add_test(NAME planet-optics-contract COMMAND apsis-drift-planet-optics-tests)
   set_tests_properties(planet-optics-contract PROPERTIES TIMEOUT 90)
+  add_executable(apsis-drift-planet-surface-appearance-tests
+    test/planet_surface_appearance_test.cpp)
+  target_link_libraries(apsis-drift-planet-surface-appearance-tests
+    PRIVATE apsis-drift::core)
+  target_compile_options(apsis-drift-planet-surface-appearance-tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic;-Werror>)
+  add_test(NAME planet-surface-appearance-contract
+    COMMAND apsis-drift-planet-surface-appearance-tests)
+  set_tests_properties(planet-surface-appearance-contract PROPERTIES TIMEOUT 30)
   add_executable(apsis-drift-craft-environment-tests test/craft_environment_assessment_test.cpp)
   target_link_libraries(apsis-drift-craft-environment-tests PRIVATE apsis-drift::core)
   target_compile_options(apsis-drift-craft-environment-tests PRIVATE
