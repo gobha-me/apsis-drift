@@ -19,7 +19,8 @@ It does not claim a physically accurate observation simulator.
 
 The cockpit chart shows the number of locally recorded findings, excluding
 granted chart facts. Its rows mark an actually visited system independently.
-From the paused flight or ground-walking controls, **Recorded observations**
+From the paused flight, planetary walking or station-walking controls,
+**Recorded observations**
 opens the already-owned facts for each known subject. Previous/Next selects a
 record; Up/Down scrolls its text. Back returns to controls while remaining
 paused. Opening the reader refreshes its snapshot without operating sensors,
@@ -30,10 +31,14 @@ physical arrivals. Each fact retains confidence, source, observation tick and
 craft identity. CONTACT/PROBABLE values and unresolved names stay redacted;
 unknown subjects and absent facts are not filled from the generated catalog.
 Historical saves without selected knowledge show unavailable rather than being
-upgraded. This is a record reader, not the deferred station archive, a complete
-survey or a body renderer.
+upgraded. The same reader provides the bounded native station discovery archive
+(#179): pause while walking on Origin Station and choose Recorded observations.
+It remains available after returning and disembarking. Back returns to the
+invoking station action and stays paused; focus loss, resize and another
+controller cannot resume the journey or grant observations. Reading records
+needs no seated pilot. This is not a complete survey or a body renderer.
 
-The pilot must be aboard. Committed simulation ticks divisible by 120 sample
+For new ship observations the pilot must be aboard. Committed simulation ticks divisible by 120 sample
 at one-second intervals; tick zero does not sample. Time compression executes
 the same integer ticks and cannot skip or duplicate these samples. Walking or
 boarding on the station does not operate an unmanned ship scanner. Queries,
@@ -105,3 +110,10 @@ save/resume, invalid state/owners/versions/clocks and native flight transactions
 `freedom-observed-surface-lifecycle` uses real generated contact geometry for
 touchdown, landed idle, thrust liftoff and Save As/Continue. Retained recipe-1
 knowledge goldens and historical physics/resource traces remain independent.
+
+The native `native_walk` contract exercises the station archive from New Game
+and Continue with real retained records, selected-controller paging, focus loss,
+resize, nested Back and held-control Resume refusal, comparing complete saves.
+The composed `native_roundtrip` contract also checks the archive after physical
+return and disembarking. Existing reader tests cover redaction, malformed input,
+empty/unavailable records and long text without creating knowledge.

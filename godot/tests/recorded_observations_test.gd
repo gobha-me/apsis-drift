@@ -94,6 +94,14 @@ func run() -> void:
 	check(view.visible and not controls.enabled, "Safety pause resumed or discarded nested reader")
 	menu.hide_menu()
 	check(not view.visible and not menu.panel.visible, "Hidden controls left observations interactive")
+	view.query = func(): return {"selected": true, "tick": "120", "subjects": []}
+	menu.show_menu()
+	menu.show_observations()
+	check("No observations have been recorded." in view.body.text and root.gui_get_focus_owner() == view.back_button and view.next_button.disabled and view.previous_button.disabled, "Selected empty archive lost truthful text or Back focus")
+	view.query = func(): return {"selected": false, "tick": "0", "subjects": []}
+	view.open()
+	check("no selected observation records" in view.body.text and root.gui_get_focus_owner() == view.back_button, "Unselected archive was presented as an empty survey")
+	menu.back_from_nested()
 	menu.observations_query = func(): return null
 	view.query = menu.observations_query
 	menu.show_menu()

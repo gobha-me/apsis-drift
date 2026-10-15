@@ -147,7 +147,7 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 		check(view.hud_column.size.x <= view.hud_scroll.size.x and view.hud_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Station HUD has horizontal overflow")
 		var font_pixels: float = view.telemetry.get_theme_font_size("font_size") * pixels.x / view.size.x
 		check(font_pixels >= 17.5 and font_pixels <= 20.5, "Station HUD font shrank in small window")
-		for button in [view.pause_button, view.save_button, view.load_button, view.settings_button, view.title_button]:
+		for button in [view.pause_button, view.save_button, view.load_button, view.settings_button, view.title_button, view.observations_button]:
 			check(button.size.y * pixels.y / view.size.y >= 39.5, "Station action height shrank")
 		for label in [view.telemetry, view.hud_hint, view.save_status]:
 			check(label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and label.size.y >= label.get_minimum_size().y, "Station text clipped or lost wrapping")
@@ -225,6 +225,84 @@ func check_hud_layout(view: Control, owner: Variant, path: String, bytes: Packed
 	for frame in 3:
 		await process_frame
 	view.hud_scroll.scroll_vertical = 0
+
+
+func check_station_archive(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
+	var walk: Dictionary = owner.get_freedom_walk_state()
+	var flight: Dictionary = owner.get_freedom_flight_state()
+	var records: Dictionary = owner.get_freedom_observations()
+	var pose: Transform3D = view.camera.transform
+	var heading: float = view.requested_heading
+	var pitch: float = view.pitch
+	var old_device: int = view.selected_pad
+	var old_pads: Dictionary = view.available_pads.duplicate()
+	view.selected_pad = 41
+	view.available_pads = {41: true, 42: true}
+	view.set_paused(true)
+	view.observations_button.grab_focus()
+	physical_key(KEY_ENTER, true)
+	physical_key(KEY_ENTER, false)
+	for frame in 3: await process_frame
+	check(view.observations_open() and not view.hud_scroll.visible and view.observations_view.readings == records, "Station archive did not open the actual retained ledger")
+	check(view.paused and view.observations_view._paused.text.begins_with("PAUSED"), "Station archive lost pause or claims active flight")
+	var reader: Control = view.observations_view
+	if records.subjects.size() > 1:
+		var page: int = reader.page
+		reader.next_button.grab_focus()
+		joy_button(JOY_BUTTON_A, true, 42)
+		joy_button(JOY_BUTTON_A, false, 42)
+		await process_frame
+		check(reader.page == page, "Foreign controller changed station archive page")
+		joy_button(JOY_BUTTON_A, true, 41)
+		joy_button(JOY_BUTTON_A, false, 41)
+		await process_frame
+		check(reader.page != page and reader.readings == records, "Selected controller could not browse retained station records")
+		joy_button(JOY_BUTTON_DPAD_LEFT, true, 41)
+		joy_button(JOY_BUTTON_DPAD_LEFT, false, 41)
+		check(root.gui_get_focus_owner() == reader.previous_button, "Selected controller could not navigate station archive buttons")
+		joy_button(JOY_BUTTON_A, true, 41)
+		joy_button(JOY_BUTTON_A, false, 41)
+		check(reader.page == page, "Selected controller could not return to the earlier retained record")
+	var pixels := root.size
+	root.size = Vector2i(640, 450)
+	for frame in 3: await process_frame
+	check(reader.visible and reader.scroll.size.y > 0 and reader.body.get_theme_font_size("font_size") * root.size.x / view.size.x >= 25.0, "Station archive shrank or lost readable scrolling")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	joy_button(JOY_BUTTON_B, true, 41)
+	joy_button(JOY_BUTTON_B, false, 41)
+	check(view.observations_open() and view.paused, "Focus loss dismissed or resumed station archive")
+	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	view.resume_requested()
+	view.set_paused(false)
+	view.board_requested()
+	view.open_settings()
+	view.open_save_dialog()
+	check(view.observations_open() and view.paused and not view.settings_open() and not view.save_dialog.visible, "Archive allowed another journey action or resumed")
+	physical_key(KEY_W, true)
+	joy_axis(JOY_AXIS_LEFT_Y, -1.0, 41)
+	paused_checkpoint(view, owner, path, walk, flight, bytes, pose, heading, pitch, "Station archive input/focus/resize")
+	joy_button(JOY_BUTTON_B, true, 42)
+	joy_button(JOY_BUTTON_B, false, 42)
+	check(view.observations_open(), "Foreign controller dismissed station archive")
+	joy_button(JOY_BUTTON_START, true, 41)
+	joy_button(JOY_BUTTON_START, false, 41)
+	for frame in 3: await process_frame
+	check(not view.observations_open() and view.paused and view.hud_scroll.visible and root.gui_get_focus_owner() == view.observations_button, "Station archive Back resumed or lost invoking focus")
+	view.resume_requested()
+	check(view.paused, "Held walking control resumed after archive")
+	physical_key(KEY_W, false)
+	joy_axis(JOY_AXIS_LEFT_Y, 0.0, 41)
+	view.observe_neutral_controls()
+	view.open_observations()
+	physical_key(KEY_ESCAPE, true)
+	physical_key(KEY_ESCAPE, false)
+	check(not view.observations_open() and view.paused and owner.get_freedom_observations() == records, "Station archive keyboard Back changed retained knowledge or resumed")
+	view.selected_pad = old_device
+	view.available_pads = old_pads
+	view.preferences_provider.device = old_device
+	root.size = pixels
+	for frame in 3: await process_frame
+	paused_checkpoint(view, owner, path, walk, flight, bytes, pose, heading, pitch, "Station archive final")
 
 
 func check_held_resize(view: Control, owner: Variant, path: String, bytes: PackedByteArray) -> void:
@@ -687,6 +765,7 @@ func run() -> void:
 	await check_hud_layout(view, owner, path, originals[0])
 	check_stick_preferences(view, owner, path, originals[0])
 	await check_station_settings(view, owner, path, originals[0])
+	await check_station_archive(view, owner, path, originals[0])
 	check(view.advance_requested(60.0, neutral) and owner.get_freedom_walk_state() == start, "Paused view advanced shared time")
 	view.set_paused(false)
 	view._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
@@ -716,6 +795,7 @@ func run() -> void:
 	check(view.initialize(owner, args[2]) and view.paused, "Continued walking view resumed without player action")
 	check(view.light.basis.z.is_equal_approx(owner.get_freedom_flight_state().star_direction), "Continued station light lost its saved direction")
 	check_sky(view, owner.get_freedom_flight_state(), "Continue")
+	await check_station_archive(view, owner, path, originals[1])
 	check(view.advance_requested(1.0, neutral) and owner.get_freedom_walk_state() == continued, "Continued view advanced while initially paused")
 	var other: Variant = ClassDB.instantiate("FreedomBridge")
 	check(commit_fixture_new_game(other, "42"), "Cadence walking New Game refused")
