@@ -76,7 +76,7 @@ old saves must not acquire new operation restrictions through a load.
 This is the shared query and native warning foundation. #102 remains open for
 explicit saved policy selection, composed Assisted commitment refusal,
 instantaneous flight/terrain assessment and the actual safe reference flight.
-Pilot overrides need a complete deterministic consequence before admission.
+Advanced overrides need a complete deterministic consequence before admission.
 Declared-loss recovery alone does not authorize inventing damage or fatality
 rules. Suit capability/endurance and surface locomotion remain #199.
 
