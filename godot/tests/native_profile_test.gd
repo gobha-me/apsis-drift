@@ -135,6 +135,54 @@ func run() -> void:
 	await settle()
 	check(shell.title_view != null and shell.current_view == null and shell.title_view.catalog_continue_button.disabled == false, "Clean Title did not expose latest catalog Continue")
 	var title: Control = shell.title_view
+	# The real title catalog must keep the input provider's controller owner
+	# when a replacement connects while the browser is already open.
+	var catalog_bytes := FileAccess.get_file_as_bytes(second)
+	title.controls.available_pads = {0: true, 1: true}
+	title.controls.device = 0
+	title.controls.install()
+	title.open_catalog()
+	await settle()
+	var title_browser: Control = title.catalog_browser
+	check(title_browser.visible and title_browser.buttons.size() == 2 and title_browser.buttons[0].has_focus(), "Title did not open the actual saved-journey catalog")
+	await pad(JOY_BUTTON_DPAD_DOWN, 1)
+	await pad(JOY_BUTTON_START, 1)
+	check(title_browser.visible and title_browser.buttons[0].has_focus() and title.controls.device == 0, "Unselected controller took over the title catalog")
+	title.controls.connection_changed(0, false)
+	title.controls.connection_changed(2, true)
+	await pad(JOY_BUTTON_DPAD_DOWN, 0)
+	check(title_browser.visible and title_browser.buttons[0].has_focus(), "Disconnected controller navigated the title catalog")
+	title_browser.buttons[0].grab_focus()
+	await pad(JOY_BUTTON_DPAD_DOWN, 2)
+	check(title_browser.buttons[1].has_focus() and title.controls.device == 2, "Newly connected controller could not navigate the open title catalog")
+	var inactive_focus := root.gui_get_focus_owner()
+	title._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	title_browser._notification(Control.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await pad(JOY_BUTTON_B, 2)
+	await pad(JOY_BUTTON_START, 2)
+	check(title_browser.visible and root.gui_get_focus_owner() == inactive_focus, "Unfocused controller closed or navigated the catalog")
+	title._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	title_browser._notification(Control.NOTIFICATION_APPLICATION_FOCUS_IN)
+	await pad(JOY_BUTTON_B, 2)
+	check(not title_browser.visible and title.catalog_load_button.has_focus(), "Replacement controller could not leave the title catalog")
+	if title_browser.visible: title.back_from_catalog()
+	title.open_catalog()
+	title.controls.connection_changed(2, false)
+	# Device1 was already present: no new connection edge will select it.
+	await pad(JOY_BUTTON_START, 1)
+	check(title_browser.visible and title.controls.device == 1, "First backup Start did not select without leaving the catalog")
+	await pad(JOY_BUTTON_DPAD_DOWN, 1)
+	check(title_browser.buttons[1].has_focus(), "Already-connected backup could not navigate the catalog")
+	await pad(JOY_BUTTON_START, 1)
+	check(not title_browser.visible and title.catalog_load_button.has_focus(), "Selected backup Start could not return to title")
+	check(shell.current_view == null and shell.bridge.get_freedom_start().is_empty() and shell.bridge.get_pending_freedom_start().is_empty(), "Controller-only catalog actions generated or selected a journey")
+	check(FileAccess.get_sha256(first) == first_hash and FileAccess.get_file_as_bytes(second) == catalog_bytes and snapshot(owner, raw) == baseline, "Controller-only catalog actions changed a source save or retained authority")
+	# Keep a failed ownership assertion from cascading into a null journey.
+	if failures:
+		shell.free()
+		await settle()
+		quit(1)
+		return
 	title.continue_catalog()
 	await settle()
 	var continued: Variant = shell.bridge
