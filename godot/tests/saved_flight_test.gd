@@ -432,6 +432,28 @@ func check_hud_layout(view: Control, owner: Variant, directory: String) -> void:
 	view.pause_controls("HUD review complete")
 
 
+func check_rated_rise_readonly(view: Control, owner: Variant, directory: String) -> void:
+	var before: Dictionary = owner.get_freedom_flight_state()
+	var margin: Variant = before.get("rated_rise_margin")
+	if not check_rated_rise_value(margin): return
+	var path := directory.path_join("rated-rise-readonly.json")
+	check(owner.save_freedom_as(path), "Rated RISE inspection could not save its baseline")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	view.show_instruments()
+	for repeat in 3:
+		check(owner.get_freedom_flight_state() == before, "Rated RISE read changed authoritative flight or clock")
+		view.update_view(0.0)
+	check(view.paused and view.hud_scroll.visible and "Full RISE" in view.telemetry.text and "%+.1f m/s²" % margin in view.telemetry.text and "assumes fuel" in view.telemetry.text, "Expanded instrument lost the actual rated RISE value or estimate disclosure")
+	check(not "Full RISE" in view.primary_status.text, "Rated estimate expanded the compact flight HUD")
+	check(owner.get_freedom_flight_state() == before and owner.save_freedom_as(path) and FileAccess.get_file_as_bytes(path) == bytes, "Rated RISE inspection changed complete saved flight bytes")
+	view.pause_controls("Rated RISE inspection complete")
+
+func check_rated_rise_value(value: Variant) -> bool:
+	var valid: bool = value is float and is_finite(value)
+	check(valid, "Actual seated planetary flight omitted a finite rated RISE margin")
+	return valid
+
+
 func check_hud_profiles(directory: String, assets: String) -> void:
 	root.size = Vector2i(800, 450)
 	for fixture in ["flight-18.json", "port-far.json", "port-approach.json", "port-docked.json"]:
@@ -460,6 +482,7 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 			check(view.port_buttons.is_empty() and view.capture_button == null and view.dock_status == null, "Legacy HUD invented docking controls")
 		check(owner.get_freedom_flight_state() == before and view.paused, "HUD profile changed owner")
 		if before.attached:
+			check(not before.has("rated_rise_margin") and not "Full RISE" in view.telemetry.text, "Attached craft displayed a free-flight RISE estimate")
 			check(not before.orbit_hold.available and view.controls_menu.saved_hold_button.disabled and not owner.set_freedom_hold(true) and owner.get_freedom_flight_state() == before, "Attached craft accepted orbit hold")
 		view.free()
 		owner = null
@@ -1063,6 +1086,7 @@ func run() -> void:
 	view.update_view(0.0)
 	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far == 200.0 and view.camera.transform == saved_relation and owner.get_freedom_flight_state() == start, "Depth inspection changed ordinary close framing, camera or authoritative state")
 	check(view.exhaust.plumes.size() == 2 and view.exhaust.withdrawal_plumes.size() == 2 and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, "Neutral Continue displayed thrust or lost source outlets")
+	check_rated_rise_readonly(view, owner, args[0].get_base_dir())
 	var structural_skin: MeshInstance3D = view.ship.find_child("HopperStructure", true, false)
 	check(structural_skin != null and structural_skin.transform == Transform3D.IDENTITY, "Qualified skin lost its body-local identity")
 	var skin_arrays: Array = structural_skin.mesh.surface_get_arrays(MainExhaust.SKIN_SURFACE)

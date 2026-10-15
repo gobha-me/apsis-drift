@@ -78,3 +78,12 @@ recovery through the original C++ bridge. These tests preserve the existing
 neutral-input, focus-loss and transactional Continue checks. Native artwork,
 manual controller usability and final cockpit instrument placement remain
 separate qualification work.
+
+The expanded flight instruments include **Full RISE − gravity**, a rated radial
+acceleration at the current attitude. It uses the authoritative craft's full
+positive-Y force, simulation mass and actual local central gravity. The estimate
+assumes fuel and excludes drag, contact and all other thrust channels. While
+landed it describes prospective free flight; it is not a hover, safe liftoff or
+escape guarantee. Turning the craft changes the result. It is absent on foot,
+while attached, during an active jump, in system-only flight or pending recovery.
+The compact HUD is unchanged.

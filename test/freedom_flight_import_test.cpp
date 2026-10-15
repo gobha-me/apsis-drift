@@ -11,6 +11,7 @@
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <source_location>
 #include <stdexcept>
 #include <string_view>
@@ -282,6 +283,74 @@ auto invalid(const Fixture& f) -> void {
   check(f.bytes() == before,
         "all malformed import queries leave complete source untouched");
 }
+auto rated_rise(const Fixture& f) -> void {
+  const auto properties =
+      required(resolve_craft_frame(f.canonical.flight.craft)).properties;
+  const double radius = f.planet.radius.value * 1000.0;
+  const double surface_g = f.planet.surface_gravity.value * 9.80665 / 1000.0;
+  std::array<double, 2> upright{};
+  std::size_t altitude_index{};
+  for (const double altitude : {500000.0, 1000000.0}) {
+    for (const double angle :
+         {-std::numbers::pi / 2, -std::numbers::pi / 6, std::numbers::pi / 2}) {
+      auto document = f.canonical;
+      document.flight.position_metres = {radius + altitude, 0, 0};
+      document.flight.orientation = {std::cos(angle / 2), 0, 0,
+                                     std::sin(angle / 2)};
+      auto session = required(NativeFreedomFlightSession::open(
+          required(native_select_save_document(NativeSaveDocument{document}))));
+      const auto before = required(
+          encode_native_save_document_json(required(session.save_document())));
+      const auto view = godot_spike::project_saved_flight(session);
+      const auto margin = godot_spike::rated_rise_margin(session, view);
+      const auto& body = session.document().flight;
+      const auto& q = body.orientation;
+      // Independent Hamilton q * (0,+Y) * conjugate(q), projected onto the
+      // actual saved radial position. Do not reuse the tangent-axis helper.
+      const double n = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+      const V up{2 * (q.x * q.y - q.w * q.z) / n,
+                 (q.w * q.w - q.x * q.x + q.y * q.y - q.z * q.z) / n,
+                 2 * (q.y * q.z + q.w * q.x) / n};
+      const auto p = body.position_metres;
+      const double distance = std::hypot(p.x, p.y, p.z);
+      const double radial_up =
+          (up.x * p.x + up.y * p.y + up.z * p.z) / distance;
+      const double thrust =
+          static_cast<double>(properties.positive_force_newtons[1]) /
+          properties.dry_mass_kg;
+      const double gravity =
+          surface_g * (radius / distance) * (radius / distance);
+      const double expected = thrust * radial_up - gravity;
+      check(margin && std::abs(*margin - expected) < 1e-11,
+            "rated RISE follows actual saved attitude and local gravity");
+      check(
+          std::abs(radial_up + std::sin(angle)) < 1e-12,
+          "upright tilted and inverted fixtures have independent radial signs");
+      if (angle == -std::numbers::pi / 2 && margin)
+        upright[altitude_index] = *margin;
+      for (const double bad :
+           {std::numeric_limits<double>::quiet_NaN(),
+            std::numeric_limits<double>::infinity(),
+            -std::numeric_limits<double>::infinity(), -1.01, 1.01}) {
+        auto malformed = view;
+        malformed.body_axes[1].up = bad;
+        check(!godot_spike::rated_rise_margin(session, malformed),
+              "malformed optional RISE projection refuses without changing "
+              "flight");
+      }
+      for (int repeat = 0; repeat < 3; ++repeat)
+        check(godot_spike::rated_rise_margin(session, view) == margin,
+              "repeated rated RISE reads are stable");
+      check(required(encode_native_save_document_json(
+                required(session.save_document()))) == before,
+            "valid and refused RISE reads preserve complete saved state and "
+            "tick");
+    }
+    ++altitude_index;
+  }
+  check(upright[1] > upright[0],
+        "same upright craft gains RISE margin as inverse-square gravity falls");
+}
 auto accepted(const Fixture& f, const std::filesystem::path& directory,
               bool export_fixture = false) -> void {
   const auto bytes = f.bytes();
@@ -389,6 +458,7 @@ int main(int argc, char** argv) {
   try {
     const Fixture primary;
     invalid(primary);
+    rated_rise(primary);
     for (const auto seed :
          {Seed{0}, Seed{42}, Seed{std::numeric_limits<std::uint64_t>::max()}})
       for (bool neighbor : {false, true})

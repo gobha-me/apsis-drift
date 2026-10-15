@@ -93,6 +93,7 @@ func run() -> void:
 	view.port_command("release_freedom_port")
 	var released: Dictionary = owner.get_freedom_flight_state()
 	check(view.error.is_empty() and view.paused and not released.attached and released.tick == attached.tick and released.coordinate_frame == "system_inertial" and released.observation_frame == "planet_relative_inertial" and view.staged_model.get_instance_id() == model, "Real undock lost canonical frame, time, pause or retained model")
+	check(not released.has("rated_rise_margin"), "System-only flight displayed a local central-gravity estimate")
 	check(released.orientation_wxyz == attached.orientation_wxyz and released.angular_velocity_body == attached.angular_velocity_body and released.canonical_position_metres != released.position_metres, "System release reset attitude/spin or disguised absolute vector as local")
 	save_matches(owner, args[0].path_join("released.json"), args[2].path_join("released.json"))
 	var before: Dictionary = owner.get_freedom_flight_state()

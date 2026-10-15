@@ -100,12 +100,10 @@ The document is bounded to 1,024 bytes and two container levels before parsing;
 duplicate/extra/missing keys, wrong types, narrowing/overflow, non-finite JSON
 and invalid ownership refuse. IDs/seeds are exact unsigned 64-bit integers.
 
-Existing flight/save formats retain their original bytes and semantics: none
-has selected this provider yet. A future capability or walking consumer must
-explicitly carry this recipe/version in its saved schema. Loading an old save
-does not silently grant new hazard truth or reroll an environmental selection.
-The recipe codec qualifies that persistence boundary without an unrelated
-flight-save migration.
+Current knowledge saves select ambient provider version 1 and retain observation
+provenance. Resolved queries project its envelopes as `KnownHazards` through the
+actual physical owner; unresolved facts stay redacted. Historical flight formats without this knowledge selection retain
+their original semantics. Loading them does not silently grant hazard readings.
 
 Outdoor and landing exposure projections mark geologic motion applicable;
 atmospheric transit does not. All retain the same immutable surface envelopes.
@@ -114,9 +112,9 @@ impact, automatic damage or a force added to the flight integrator. Actual
 gravity/atmospheric dynamics retain their existing providers. Completed #93
 retains speed/descent-driven heating and thermal integration.
 
-Raw facts are available to C++ simulation consumers only. #175 must redact
-undiscovered facts and retain observation provenance before any new cockpit,
-chart or renderer presentation. #102 owns equipment-specific margins; #199
+Raw generated facts stay within C++ simulation consumers. Knowledge projections
+redact undiscovered facts and retain observation provenance for cockpit, chart
+and renderer presentation. #102 owns equipment-specific margins; #199
 owns suit/surface walking integration; #248 owns jump interference design.
 Time-varying storms, day/night thermal evolution, shield attenuation, hazard
 damage and detailed minor-body/stellar physics remain separate work. No mutable

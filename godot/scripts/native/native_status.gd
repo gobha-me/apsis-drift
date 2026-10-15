@@ -12,6 +12,13 @@ static func surface_position_text(walking: Dictionary) -> String:
 		return "Surface position unavailable"
 	return "Lat %+.5f° · Lon %+.5f°" % [rad_to_deg(walking.latitude), rad_to_deg(walking.longitude)]
 
+# A rated free-flight estimate, including while landed; never a clearance.
+static func rated_rise_text(state: Dictionary) -> String:
+	if not state.has("rated_rise_margin"): return ""
+	if not finite_number(state.rated_rise_margin): return "Rated RISE unavailable"
+	var mode := "Prospective free flight" if state.get("surface") is Dictionary and state.surface.get("landed", false) == true else "Rated free flight"
+	return "Full RISE − gravity: %+.1f m/s²\n%s · current attitude\nassumes fuel · excludes drag/contact" % [state.rated_rise_margin, mode]
+
 static func layout_bounds(logical: Vector2, pixels: Vector2) -> Rect2:
 	if not logical.is_finite() or not pixels.is_finite() or logical.x <= 0.0 or logical.y <= 0.0 or pixels.x <= 0.0 or pixels.y <= 0.0: return Rect2()
 	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))

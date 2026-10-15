@@ -1346,6 +1346,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if exhaust != null and not defer_exhaust:
 		exhaust.update_applied(state, delta, paused)
 	telemetry.text = "APSIS DRIFT · %s\nReference altitude %.1f km · Surface speed %.1f m/s\nRadial rate %.1f m/s · Air %.5f kg/m³\nTick %s%s" % ["Wayfarer" if state.frame_id == "2" else "Legacy starter frame", state.altitude / 1000.0, state.surface_speed, state.radial_rate, state.air_density, state.tick, " · PAUSED" if paused else ""]
+	var rated_rise := Status.rated_rise_text(state)
+	if not rated_rise.is_empty(): telemetry.text += "\n" + rated_rise
 	if surface_walking(): telemetry.text = "On foot · suit equipped\n%s\nWayfarer remains landed · %.1f m to craft centre\nTick %s%s" % [Status.surface_position_text(state.surface_walk), state.surface_walk.eye_position.length(), state.tick, " · PAUSED" if paused else ""]
 	var resources: Dictionary = state.get("resources", {})
 	if resources.get("selected", false):

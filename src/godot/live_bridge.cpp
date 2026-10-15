@@ -1939,6 +1939,8 @@ class FreedomBridge : public godot::RefCounted {
         positive_ratings.append(v);
       for (const auto v : frame.properties.negative_force_newtons)
         negative_ratings.append(v);
+      if (const auto margin = rated_rise_margin(session, view))
+        result["rated_rise_margin"] = *margin;
       result["positive_force_ratings"] = positive_ratings;
       result["negative_force_ratings"] = negative_ratings;
       const auto& star = view.rotation.geometry.observer_to_star_fixed;
