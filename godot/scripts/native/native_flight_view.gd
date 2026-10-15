@@ -1214,7 +1214,7 @@ func _process(delta: float) -> void:
 	update_view(delta, true)
 	if not error.is_empty():
 		return
-	terrain.tick(delta, camera.position)
+	terrain.tick(delta, camera.position, not paused and not save_dialog.visible)
 	if not terrain.error.is_empty():
 		pause_on_error(str(terrain.error))
 		return

@@ -15,6 +15,26 @@ class PlacementBridge extends RefCounted:
 	func stream_transforms(_anchors: PackedFloat64Array) -> Array: return transforms
 	func get_last_error() -> String: return "Declared placement refusal"
 
+class MorphBridge extends RefCounted:
+	var owner: Variant
+	var batch: Dictionary
+	var polls := 0
+	var requests := 0
+	func get_stream_identity() -> Dictionary: return owner.get_stream_identity()
+	func poll_stream() -> Dictionary:
+		polls += 1
+		var result := batch
+		batch = {}
+		return result
+	func request_stream(_observer: Vector3) -> bool:
+		requests += 1
+		return true
+	func stream_transforms(positions: PackedFloat64Array) -> Array:
+		var result: Array = []
+		for _index in range(0, positions.size(), 3): result.append(Transform3D.IDENTITY)
+		return result
+	func get_last_error() -> String: return "Declared morph fixture refusal"
+
 class EmptySurfaceStream extends StreamView:
 	func _create_mesh(_arrays: Array) -> ArrayMesh: return ArrayMesh.new()
 
@@ -111,6 +131,168 @@ func check_cover_replacements(accepted: Node3D, owner: Variant) -> void:
 		fake.transforms = [Transform3D.IDENTITY, Transform3D.IDENTITY, Transform3D.IDENTITY]
 		terrain.tick(1.0, Vector3.ZERO)
 		check(terrain.error == fault and terrain.swaps == 3 and terrain.nodes.retained.transform == before[0], "Placement fault resumed without explicit reset: " + failure)
+		terrain.free()
+
+
+# Lifecycle mock: admitted arrays are deliberately reused under declared tile
+# keys, not claimed to be the real parent/child world's matching geometry.
+# The C++ streaming contract separately checks the actual retained tile pair.
+const MORPH_PARENT := "0:10:513:511"
+const MORPH_CHILDREN := ["0:11:1026:1022", "0:11:1027:1022", "0:11:1026:1023", "0:11:1027:1023"]
+const MORPH_COMMON := "1:1:0:0"
+
+func morph_fixture(accepted: Node3D, owner: Variant, refining: bool) -> Dictionary:
+	var source: MeshInstance3D = accepted.nodes.values()[0]
+	var arrays: Array = source.mesh.surface_get_arrays(0)
+	var positions := PackedFloat32Array()
+	var normals := PackedFloat32Array()
+	var colors := PackedFloat32Array()
+	for index in arrays[Mesh.ARRAY_VERTEX].size():
+		var vertex: Vector3 = arrays[Mesh.ARRAY_VERTEX][index]
+		var normal: Vector3 = arrays[Mesh.ARRAY_NORMAL][index]
+		var color: Color = arrays[Mesh.ARRAY_COLOR][index]
+		positions.append_array(PackedFloat32Array([vertex.x, vertex.y, vertex.z - 100000.0, 0.0]))
+		normals.append_array(PackedFloat32Array([normal.x, normal.y, normal.z, 0.0]))
+		colors.append_array(PackedFloat32Array([color.r, color.g, color.b, 1.0]))
+	var terrain: Node3D = StreamView.new()
+	root.add_child(terrain)
+	var fake := MorphBridge.new()
+	fake.owner = owner
+	terrain.bridge = fake
+	terrain.identity = owner.get_stream_identity()
+	var old_ids: Array = [MORPH_COMMON, MORPH_PARENT] if refining else [MORPH_COMMON] + MORPH_CHILDREN
+	var final_ids: Array = [MORPH_COMMON] + MORPH_CHILDREN if refining else [MORPH_COMMON, MORPH_PARENT]
+	for id in old_ids:
+		var node := MeshInstance3D.new()
+		node.mesh = source.mesh
+		var material := ShaderMaterial.new()
+		material.shader = load("res://shaders/terrain.gdshader")
+		material.set_shader_parameter("morph_active", false)
+		material.set_shader_parameter("morph_fine_weight", 1.0)
+		node.material_override = material
+		terrain.add_child(node)
+		terrain.nodes[id] = node
+		terrain.anchors[id] = PackedFloat64Array([0, 0, 0])
+	terrain.resident_ids = old_ids.duplicate()
+	terrain.is_ready = true
+	terrain.swaps = 3
+	terrain.last_report = {"accepted": true}
+	var tiles: Array = []
+	for id in final_ids:
+		var tile := {"id": id}
+		if not old_ids.has(id):
+			tile.merge({"anchor": PackedFloat64Array([0, 0, 0]),
+				"vertices": arrays[Mesh.ARRAY_VERTEX], "normals": arrays[Mesh.ARRAY_NORMAL],
+				"colors": arrays[Mesh.ARRAY_COLOR], "uv": arrays[Mesh.ARRAY_TEX_UV],
+				"indices": arrays[Mesh.ARRAY_INDEX]})
+		tiles.append(tile)
+	var entries: Array = []
+	for id in MORPH_CHILDREN:
+		entries.append({"id": id, "coarse_id": MORPH_PARENT, "refining": refining,
+			"position_elevation": positions, "normals": normals, "colors": colors})
+	fake.batch = {"identity": owner.get_stream_identity(), "generated": 4 if refining else 1,
+		"tiles": tiles, "morph": {"version": 1, "draw_ids": [MORPH_COMMON] + MORPH_CHILDREN, "entries": entries}}
+	return {"terrain": terrain, "bridge": fake, "old_ids": old_ids, "final_ids": final_ids,
+		"base_arrays": var_to_bytes(arrays), "base_vertices": var_to_bytes(arrays[Mesh.ARRAY_VERTEX]),
+		"coarse_position": Vector3(positions[0], positions[1], positions[2])}
+
+func stage_mock_morph(fixture: Dictionary) -> bool:
+	var terrain: Node3D = fixture.terrain
+	# At most five new base nodes and four endpoint uploads. The count bound
+	# permits completion even when the existing soft upload budget stops early.
+	for iteration in 16:
+		terrain.tick(0.0, Vector3.ZERO, false)
+		if not check(terrain.error.is_empty(), "Declared morph staging refused: " + terrain.error): return false
+		if terrain.morph_active: return true
+	return check(false, "Declared bounded morph did not finish staging")
+
+func check_morph_lifecycle(accepted: Node3D, owner: Variant) -> void:
+	for refining in [true, false]:
+		var fixture := morph_fixture(accepted, owner, refining)
+		var terrain: Node3D = fixture.terrain
+		var fake: MorphBridge = fixture.bridge
+		var retired: Array = []
+		for id in fixture.old_ids:
+			if id != MORPH_COMMON: retired.append(terrain.nodes[id])
+		if not stage_mock_morph(fixture): terrain.free(); continue
+		check(terrain.morph_active and terrain.morph_progress == 0.0 and terrain.swaps == 3 and terrain.resident_ids == fixture.old_ids, "Morph start silently committed final residency")
+		check(terrain.report().morph_active and terrain.report().morph_progress == 0.0, "Morph report disagrees with presenter phase")
+		for id in MORPH_CHILDREN:
+			var node: MeshInstance3D = terrain.nodes[id]
+			check(node.visible and not terrain.nodes[MORPH_PARENT].visible and var_to_bytes(node.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]) == fixture.base_vertices, "Common fine draw cover changed base vertices or exposed coarse duplicate")
+			var bounds: AABB = node.mesh.custom_aabb
+			var coarse: Vector3 = fixture.coarse_position
+			check(coarse.x >= bounds.position.x and coarse.x <= bounds.end.x and coarse.y >= bounds.position.y and coarse.y <= bounds.end.y and coarse.z >= bounds.position.z and coarse.z <= bounds.end.z, "Swept custom AABB omits declared coarse endpoint")
+		var depth: Vector2 = terrain.depth_range(Transform3D.IDENTITY, 100000.0)
+		check(depth != Vector2.ZERO and depth.y >= -fixture.coarse_position.z, "Depth clipping ignored morph's swept bounds")
+		var calls := [fake.polls, fake.requests]
+		terrain.tick(0.125, Vector3.ZERO, false)
+		check(terrain.morph_active and terrain.morph_progress == 0.0 and [fake.polls, fake.requests] == calls, "Paused morph advanced or polled another cover")
+		terrain.tick(0.125, Vector3.ZERO, true)
+		check(terrain.morph_active and is_equal_approx(terrain.morph_progress, 0.5) and [fake.polls, fake.requests] == calls, "Half morph changed stream demand or phase")
+		terrain.tick(0.125, Vector3.ZERO, true)
+		var final_ids: Array = terrain.resident_ids.duplicate()
+		final_ids.sort()
+		var expected: Array = fixture.final_ids.duplicate()
+		expected.sort()
+		check(not terrain.morph_active and terrain.pending.is_empty() and final_ids == expected and terrain.swaps == 4, "Completed refine/coarsen did not commit final cover exactly once")
+		for node: MeshInstance3D in retired:
+			check(not node.visible and node.is_queued_for_deletion(), "Completed morph retained outgoing visible geometry")
+		var completed_calls := [fake.polls, fake.requests]
+		var completed_children := terrain.get_child_count()
+		terrain.tick(1.0, Vector3.ZERO)
+		check([fake.polls, fake.requests] == completed_calls and terrain.get_child_count() == completed_children and terrain.swaps == 4, "Same-frame retirement admitted a third cover before queued nodes left")
+		check(var_to_bytes(accepted.nodes.values()[0].mesh.surface_get_arrays(0)) == fixture.base_arrays, "Morph mutated shared admitted source mesh arrays")
+		terrain.free()
+	# Reset before all uploads and while actively paused: neither can leak
+	# endpoint resources or resume stale progress into the next world.
+	for active in [false, true]:
+		var fixture := morph_fixture(accepted, owner, true)
+		var terrain: Node3D = fixture.terrain
+		if active:
+			if not stage_mock_morph(fixture): terrain.free(); continue
+		else:
+			terrain.tick(0.0, Vector3.ZERO, false)
+			check(not terrain.pending.is_empty() and not terrain.morph_active, "Four-child fixture skipped its bounded staging phase")
+		var nodes: Array = terrain.nodes.values().duplicate()
+		terrain.reset_world()
+		check(not terrain.morph_active and terrain.morph_progress == 0.0 and terrain.nodes.is_empty() and terrain.pending.is_empty() and terrain.anchors.is_empty() and terrain.resident_ids.is_empty(), "Reset retained morph state or geometry")
+		for node: MeshInstance3D in nodes: check(not node.visible and node.is_queued_for_deletion(), "Reset left staged/active geometry visible")
+		var reset_calls := [fixture.bridge.polls, fixture.bridge.requests]
+		terrain.tick(1.0, Vector3.ZERO)
+		check([fixture.bridge.polls, fixture.bridge.requests] == reset_calls and terrain.nodes.is_empty() and terrain.get_child_count() == nodes.size(), "Same-frame world reset uploaded behind queued old covers")
+		terrain.free()
+
+func check_morph_refusals(accepted: Node3D, owner: Variant) -> void:
+	for damage in ["length", "nonfinite", "ancestry", "owner", "draw-roster"]:
+		var fixture := morph_fixture(accepted, owner, true)
+		var terrain: Node3D = fixture.terrain
+		var fake: MorphBridge = fixture.bridge
+		match damage:
+			"length":
+				var broken: PackedFloat32Array = fake.batch.morph.entries[0].normals.duplicate()
+				broken.resize(1)
+				fake.batch.morph.entries[0].normals = broken
+			"nonfinite":
+				var broken: PackedFloat32Array = fake.batch.morph.entries[0].position_elevation.duplicate()
+				broken[0] = NAN
+				fake.batch.morph.entries[0].position_elevation = broken
+			"ancestry": fake.batch.morph.entries[0].coarse_id = "1:10:513:511"
+			"owner": fake.batch.identity.generation = "999999"
+			"draw-roster": fake.batch.morph.draw_ids.pop_back()
+		var accepted_nodes: Array = []
+		for id in fixture.old_ids:
+			var node: MeshInstance3D = terrain.nodes[id]
+			accepted_nodes.append([node, node.mesh, node.material_override, node.transform])
+		for iteration in 16:
+			terrain.tick(0.0, Vector3.ZERO, false)
+			if not terrain.error.is_empty(): break
+		check(not terrain.error.is_empty() and not terrain.morph_active and terrain.resident_ids == fixture.old_ids and terrain.swaps == 3 and terrain.last_report == {"accepted": true}, "Malformed morph changed accepted cover: " + damage)
+		for entry in accepted_nodes:
+			var node: MeshInstance3D = entry[0]
+			check(node.visible and not node.is_queued_for_deletion() and node.mesh == entry[1] and node.material_override == entry[2] and node.transform == entry[3] and not node.material_override.get_shader_parameter("morph_active") and node.material_override.get_shader_parameter("morph_fine_weight") == 1.0, "Malformed morph mutated accepted base/material/placement: " + damage)
+		for id in terrain.nodes:
+			if not fixture.old_ids.has(id): check(not terrain.nodes[id].visible, "Refused incoming morph geometry was exposed: " + damage)
 		terrain.free()
 
 
@@ -245,6 +427,8 @@ func run() -> void:
 		quit(1)
 		return
 	check_cover_replacements(terrain, owner)
+	check_morph_lifecycle(terrain, owner)
+	check_morph_refusals(terrain, owner)
 	check_camera_depth(terrain, first_state)
 	check(owner.get_freedom_flight_state() == first_state and FileAccess.get_sha256(source) == source_hash, "Presentation refusals changed the admitted world or source bytes")
 	var old_nodes: Array = terrain.nodes.values().duplicate()

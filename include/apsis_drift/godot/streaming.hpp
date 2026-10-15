@@ -4,6 +4,8 @@
 #include "apsis_drift/godot/snapshot.hpp"
 #include "apsis_drift/terrain_local_detail.hpp"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <future>
 #include <map>
@@ -349,10 +351,243 @@ inline auto build_stream_tile(const PhysicalLocalSystem& owner, BodyId body,
 }
 
 using TileMap = std::map<StreamKey, std::shared_ptr<const StreamTile>>;
+
+struct StreamMorphTile {
+  StreamKey coarse_key;
+  // Fine weight increases from zero when refining, decreases when coarsening.
+  bool refining{};
+  // Actual coarse triangle endpoints, relative to the finer tile's anchor.
+  std::vector<StreamPoint> coarse_vertices, coarse_normals;
+  std::vector<std::array<double, 3>> coarse_colors; // Normalized RGB.
+  std::vector<double> coarse_elevations;
+  auto bytes() const -> std::size_t {
+    return coarse_vertices.size() * sizeof(StreamPoint) +
+           coarse_normals.size() * sizeof(StreamPoint) +
+           coarse_colors.size() * sizeof(std::array<double, 3>) +
+           coarse_elevations.size() * sizeof(double);
+  }
+};
+struct StreamTransition {
+  // Common refinement: only keys already present in one of the two covers.
+  TileMap draw_tiles;
+  std::map<StreamKey, StreamMorphTile> morphs;
+  // Endpoint payload only; draw_tiles share immutable existing base geometry.
+  auto bytes() const -> std::size_t {
+    std::size_t sum{};
+    for (const auto& [_, morph] : morphs)
+      sum += morph.bytes();
+    return sum;
+  }
+};
+
+namespace stream_morph_detail {
+inline auto valid_key(StreamKey key) -> bool {
+  return key.face < 6 && key.lod <= kStreamMaxLod && key.x < (1U << key.lod) &&
+         key.y < (1U << key.lod);
+}
+inline auto finite(StreamPoint p) -> bool {
+  return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+}
+inline auto validate_cover(const TileMap& tiles) -> void {
+  if (tiles.size() < 6 || tiles.size() > kStreamMaxTiles)
+    throw std::invalid_argument("invalid morph cover size");
+  constexpr unsigned n = kStreamIntervals + 1;
+  constexpr unsigned vertices = n * n + 4 * n;
+  constexpr unsigned top_indices = 6 * kStreamIntervals * kStreamIntervals;
+  constexpr unsigned indices = top_indices + 4 * kStreamIntervals * 12;
+  std::array<std::uint64_t, 6> area{};
+  for (const auto& [key, tile] : tiles) {
+    if (!valid_key(key) || !tile || tile->key != key || !finite(tile->anchor) ||
+        tile->vertices.size() != vertices || tile->normals.size() != vertices ||
+        tile->colors.size() != vertices ||
+        tile->elevations.size() != vertices || tile->indices.size() != indices)
+      throw std::invalid_argument("invalid morph tile shape or key");
+    auto ancestor = key;
+    while (ancestor.lod) {
+      --ancestor.lod;
+      ancestor.x /= 2;
+      ancestor.y /= 2;
+      if (tiles.contains(ancestor))
+        throw std::invalid_argument("overlapping morph cover");
+    }
+    area[key.face] += std::uint64_t{1} << (2 * (kStreamMaxLod - key.lod));
+    for (unsigned i = 0; i < vertices; ++i) {
+      const auto magnitude = length(tile->normals[i]);
+      if (!finite(tile->vertices[i]) || !finite(tile->normals[i]) ||
+          !std::isfinite(magnitude) || std::abs(magnitude - 1) > 1e-6 ||
+          !std::isfinite(tile->elevations[i]))
+        throw std::invalid_argument("invalid morph vertex attributes");
+    }
+    for (const auto index : tile->indices)
+      if (index < 0 || static_cast<unsigned>(index) >= vertices)
+        throw std::invalid_argument("invalid morph index buffer");
+    // Correspondence relies on this actual dyadic top topology, not arbitrary
+    // triangles or a second reconstruction of the terrain recipe.
+    for (unsigned row = 0; row < kStreamIntervals; ++row)
+      for (unsigned col = 0; col < kStreamIntervals; ++col) {
+        const auto a = row * n + col;
+        const auto offset = (row * kStreamIntervals + col) * 6;
+        const auto triangle_matches = [&](unsigned at, unsigned first,
+                                          unsigned second, unsigned third) {
+          return tile->indices[at] == static_cast<std::int32_t>(first) &&
+                 ((tile->indices[at + 1] == static_cast<std::int32_t>(second) &&
+                   tile->indices[at + 2] == static_cast<std::int32_t>(third)) ||
+                  (tile->indices[at + 1] == static_cast<std::int32_t>(third) &&
+                   tile->indices[at + 2] == static_cast<std::int32_t>(second)));
+        };
+        if (!triangle_matches(offset, a, a + 1, a + n) ||
+            !triangle_matches(offset + 3, a + 1, a + n + 1, a + n))
+          throw std::invalid_argument("unsupported morph top topology");
+      }
+  }
+  for (const auto face_area : area)
+    if (face_area != (std::uint64_t{1} << (2 * kStreamMaxLod)))
+      throw std::invalid_argument("incomplete morph cover");
+}
+inline auto ancestor_in(const TileMap& cover, StreamKey key)
+    -> TileMap::const_iterator {
+  for (;;) {
+    if (const auto found = cover.find(key); found != cover.end()) return found;
+    if (!key.lod) return cover.end();
+    --key.lod;
+    key.x /= 2;
+    key.y /= 2;
+  }
+}
+inline auto endpoints(const StreamTile& fine, const StreamTile& coarse,
+                      bool refining) -> StreamMorphTile {
+  if (!valid_key(fine.key) || !valid_key(coarse.key) ||
+      fine.key.face != coarse.key.face || fine.key.lod <= coarse.key.lod)
+    throw std::invalid_argument("invalid morph ancestry");
+  const unsigned difference = fine.key.lod - coarse.key.lod;
+  const unsigned scale = 1U << difference;
+  if (fine.key.x / scale != coarse.key.x || fine.key.y / scale != coarse.key.y)
+    throw std::invalid_argument("unrelated morph tiles");
+  StreamMorphTile result{coarse.key, refining, {}, {}, {}, {}};
+  const auto count = fine.vertices.size();
+  result.coarse_vertices.reserve(count);
+  result.coarse_normals.reserve(count);
+  result.coarse_colors.reserve(count);
+  result.coarse_elevations.reserve(count);
+  constexpr unsigned n = kStreamIntervals + 1;
+  const unsigned offset_x = (fine.key.x % scale) * kStreamIntervals;
+  const unsigned offset_y = (fine.key.y % scale) * kStreamIntervals;
+  const auto anchor_delta = sub(coarse.anchor, fine.anchor);
+  for (unsigned row = 0; row < n; ++row)
+    for (unsigned col = 0; col < n; ++col) {
+      const unsigned numerator_x = offset_x + col;
+      const unsigned numerator_y = offset_y + row;
+      const unsigned cell_x =
+          std::min(numerator_x / scale, kStreamIntervals - 1);
+      const unsigned cell_y =
+          std::min(numerator_y / scale, kStreamIntervals - 1);
+      const double x =
+          static_cast<double>(numerator_x - cell_x * scale) / scale;
+      const double y =
+          static_cast<double>(numerator_y - cell_y * scale) / scale;
+      const unsigned a = cell_y * n + cell_x;
+      const std::array<unsigned, 3> corners =
+          x + y <= 1 ? std::array{a, a + 1, a + n}
+                     : std::array{a + 1, a + n + 1, a + n};
+      const std::array<double, 3> weights =
+          x + y <= 1 ? std::array{1 - x - y, x, y}
+                     : std::array{1 - y, x + y - 1, 1 - x};
+      StreamPoint point{}, normal{};
+      std::array<double, 3> color{};
+      double elevation{};
+      for (unsigned i = 0; i < 3; ++i) {
+        const auto at = corners[i];
+        point = add(point, mul(coarse.vertices[at], weights[i]));
+        normal = add(normal, mul(coarse.normals[at], weights[i]));
+        color[0] += coarse.colors[at].red / 255.0 * weights[i];
+        color[1] += coarse.colors[at].green / 255.0 * weights[i];
+        color[2] += coarse.colors[at].blue / 255.0 * weights[i];
+        elevation += coarse.elevations[at] * weights[i];
+      }
+      point = add(point, anchor_delta);
+      if (!finite(point) || !finite(normal) || length(normal) <= 1e-12 ||
+          !std::isfinite(elevation))
+        throw std::invalid_argument("invalid morph endpoint");
+      result.coarse_vertices.push_back(point);
+      result.coarse_normals.push_back(normal);
+      result.coarse_colors.push_back(color);
+      result.coarse_elevations.push_back(elevation);
+    }
+  // Preserve each fine skirt's existing inward offset below its associated top.
+  // This morphs the top surface, not the old coarse skirt triangulation/depth.
+  for (unsigned edge = 0; edge < 4; ++edge)
+    for (unsigned i = 0; i < n; ++i) {
+      const unsigned top = edge == 0   ? i
+                           : edge == 1 ? i * n + n - 1
+                           : edge == 2 ? (n - 1) * n + n - 1 - i
+                                       : (n - 1 - i) * n;
+      const unsigned bottom = n * n + edge * n + i;
+      const auto point = add(result.coarse_vertices[top],
+                             sub(fine.vertices[bottom], fine.vertices[top]));
+      const auto elevation = result.coarse_elevations[top] +
+                             fine.elevations[bottom] - fine.elevations[top];
+      const auto inward = dot(sub(point, result.coarse_vertices[top]),
+                              add(result.coarse_vertices[top], fine.anchor));
+      if (!finite(point) || !std::isfinite(elevation) ||
+          !std::isfinite(inward) || inward >= 0)
+        throw std::invalid_argument("invalid morph skirt endpoint");
+      result.coarse_vertices.push_back(point);
+      result.coarse_normals.push_back(result.coarse_normals[top]);
+      result.coarse_colors.push_back(result.coarse_colors[top]);
+      result.coarse_elevations.push_back(elevation);
+    }
+  return result;
+}
+} // namespace stream_morph_detail
+
+// No terrain query: correspondence is derived only from the two immutable
+// accepted/generated covers. Initial loading remains atomic. Complete nested
+// quadtree partitions have a common refinement contained in their union.
+inline auto make_stream_transition(const TileMap& old, const TileMap& next)
+    -> StreamTransition {
+  stream_morph_detail::validate_cover(next);
+  if (old.empty()) return {next, {}};
+  stream_morph_detail::validate_cover(old);
+  StreamTransition result;
+  for (const auto& [key, tile] : old) {
+    if (const auto found = next.find(key); found != next.end()) {
+      const auto& other = *found->second;
+      if (tile != found->second &&
+          (tile->anchor != other.anchor || tile->vertices != other.vertices ||
+           tile->normals != other.normals || tile->colors != other.colors ||
+           tile->elevations != other.elevations ||
+           tile->indices != other.indices))
+        throw std::invalid_argument("shared morph tile changed geometry");
+      result.draw_tiles.emplace(key, tile);
+    } else if (const auto coarse = stream_morph_detail::ancestor_in(next, key);
+               coarse != next.end()) {
+      result.draw_tiles.emplace(key, tile);
+      result.morphs.emplace(
+          key, stream_morph_detail::endpoints(*tile, *coarse->second, false));
+    }
+  }
+  for (const auto& [key, tile] : next) {
+    if (old.contains(key)) continue;
+    if (const auto coarse = stream_morph_detail::ancestor_in(old, key);
+        coarse != old.end()) {
+      result.draw_tiles.emplace(key, tile);
+      result.morphs.emplace(
+          key, stream_morph_detail::endpoints(*tile, *coarse->second, true));
+    }
+  }
+  if (result.draw_tiles.empty() ||
+      result.draw_tiles.size() > old.size() + next.size() ||
+      result.draw_tiles.size() > kStreamMaxTiles * std::size_t{2})
+    throw std::invalid_argument("invalid morph draw cover");
+  return result;
+}
+
 struct StreamBatch {
   TileMap tiles;
+  StreamTransition transition;
   unsigned generated{}, reused{};
   double milliseconds{};
+  // New resident base geometry only, excluding shared transition payloads.
   auto bytes() const -> std::size_t {
     std::size_t sum = 0;
     for (const auto& [_, tile] : tiles)
@@ -456,6 +691,8 @@ class PlanetStream {
               ++batch.generated;
             }
           }
+          if (!token.stop_requested())
+            batch.transition = make_stream_transition(old, batch.tiles);
           batch.milliseconds = std::chrono::duration<double, std::milli>(
                                    std::chrono::steady_clock::now() - begin)
                                    .count();
