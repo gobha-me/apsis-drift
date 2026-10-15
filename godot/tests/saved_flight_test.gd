@@ -1054,6 +1054,14 @@ func run() -> void:
 	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far == 200.0 and view.terrain_camera.far / view.terrain_camera.near <= 500001.0, "Native camera depth ranges are unsafe")
 	check(view.camera.transform == view.terrain_camera.transform and view.camera.fov == view.terrain_camera.fov and view.camera.cull_mask == 3 and view.terrain_camera.cull_mask == 1, "Close terrain occlusion/camera registration was lost")
 	check(view.camera.get_world_3d() == view.terrain_camera.get_world_3d() and view.camera.get_viewport() != view.terrain_camera.get_viewport(), "Depth passes lost the shared world or viewport isolation")
+	# The existing distant cap must not open a gap between real Camera3D bands.
+	var saved_relation: Transform3D = view.camera.transform
+	check(view.apply_camera_depth(saved_relation, 1000000000.0), "Retained distant cap refused")
+	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far >= view.terrain_camera.near and view.camera.far / view.camera.near <= 500001.0 and view.terrain_camera.far / view.terrain_camera.near <= 500001.0 and view.terrain_camera.far == 1000000000.0, "High-altitude cap opened a depth gap or lost fine close precision")
+	var join := saved_relation * Vector3(0, 0, -view.terrain_camera.near * 0.999)
+	check(view.camera.is_position_in_frustum(join), "Actual close frustum clips just before the distant near plane")
+	view.update_view(0.0)
+	check(is_equal_approx(view.camera.near, 0.05) and view.camera.far == 200.0 and view.camera.transform == saved_relation and owner.get_freedom_flight_state() == start, "Depth inspection changed ordinary close framing, camera or authoritative state")
 	check(view.exhaust.plumes.size() == 2 and view.exhaust.withdrawal_plumes.size() == 2 and view.exhaust.intensity == 0.0 and view.exhaust.withdrawal_intensity == 0.0 and view.exhaust.lift_intensity == 0.0, "Neutral Continue displayed thrust or lost source outlets")
 	var structural_skin: MeshInstance3D = view.ship.find_child("HopperStructure", true, false)
 	check(structural_skin != null and structural_skin.transform == Transform3D.IDENTITY, "Qualified skin lost its body-local identity")

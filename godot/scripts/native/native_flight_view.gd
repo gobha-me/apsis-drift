@@ -1218,8 +1218,34 @@ func _process(delta: float) -> void:
 	if not terrain.error.is_empty():
 		pause_on_error(str(terrain.error))
 		return
+	# Placement and a complete cover swap happened above. Refresh before this
+	# frame renders, including the first frame of newly admitted geometry.
+	if not apply_camera_depth(camera.transform, minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))): return
 	if exhaust != null:
 		exhaust.update_applied(state, delta, paused)
+
+
+func apply_camera_depth(relation: Transform3D, minimum_far: float) -> bool:
+	var distant: Vector2 = terrain.depth_range(relation, minimum_far)
+	if distant == Vector2.ZERO:
+		pause_on_error("Terrain camera depth is unavailable")
+		return false
+	var close_depth := Vector2(0.05, 200.0)
+	if surface_walking():
+		close_depth = surface_depth_range(state.surface_walk.eye_position, distant.y)
+		if close_depth == Vector2.ZERO:
+			pause_on_error("Surface camera depth is unavailable")
+			return false
+	# Far/500k can reach 2000m at the existing 1e9m cap. Extend only the close
+	# far plane, with overlap for float projection rounding. Merely equal
+	# configured planes can leave a gap in the actual Camera3D frustum.
+	camera.near = close_depth.x
+	camera.far = maxf(close_depth.y, distant.x * 1.01)
+	terrain_camera.near = distant.x
+	terrain_camera.far = distant.y
+	camera.transform = relation
+	terrain_camera.transform = relation
+	return true
 
 
 func update_view(delta: float, defer_exhaust: bool = false) -> void:
@@ -1228,13 +1254,6 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if not error.is_empty():
 		hide_exhaust()
 		return
-	var distant_far := minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))
-	var close_depth := Vector2(0.05, 200.0)
-	if surface_walking():
-		close_depth = surface_depth_range(state.surface_walk.eye_position, distant_far)
-		if close_depth == Vector2.ZERO:
-			pause_on_error("Surface camera depth is unavailable")
-			return
 	var condition: Dictionary = state.get("impact", {"selected": false})
 	if not impact_overlay.apply(condition, state.craft_id, state.frame_id, state.frame_version, cockpit, surface_walking()):
 		pause_on_error("Saved craft condition is unavailable")
@@ -1295,16 +1314,13 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 	if station != null:
 		station.transform = Transform3D(state.station_basis, state.station_position)
 		station.visible = state.get("station_available", true) and state.station_position.length() < 1000.0
-	terrain_camera.far = distant_far
-	terrain_camera.near = maxf(0.2, terrain_camera.far / 500000.0)
-	camera.near = close_depth.x
-	camera.far = close_depth.y
+	var camera_relation := Transform3D.IDENTITY
 	var look_basis := Basis(Vector3.UP, -look_offset.x) * Basis(Vector3.RIGHT, -look_offset.y)
 	if surface_walking():
 		var walking: Dictionary = state.surface_walk
-		camera.transform = Transform3D(walking.basis * Basis(Vector3.UP, walking.heading) * Basis(Vector3.RIGHT, -look_offset.y), walking.eye_position)
+		camera_relation = Transform3D(walking.basis * Basis(Vector3.UP, walking.heading) * Basis(Vector3.RIGHT, -look_offset.y), walking.eye_position)
 	elif cockpit:
-		camera.transform = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
+		camera_relation = Transform3D(state.body_basis * look_basis, state.body_basis * pilot_eye)
 	else:
 		# The overhead dock occupies the usual elevated chase viewpoint. Keep
 		# the close-port camera below the craft, then ease back to its normal
@@ -1313,9 +1329,8 @@ func update_view(delta: float, defer_exhaust: bool = false) -> void:
 		var height := 9.0
 		if not state.docking.is_empty():
 			height = lerpf(-7.0, 9.0, smoothstep(100.0, 200.0, state.docking.separation))
-		camera.position = state.body_basis * (look_basis * Vector3(17.0, height, 28.0))
-		camera.look_at(Vector3.ZERO, state.body_basis.y)
-	terrain_camera.transform = camera.transform
+		camera_relation = Transform3D(Basis.IDENTITY, state.body_basis * (look_basis * Vector3(17.0, height, 28.0))).looking_at(Vector3.ZERO, state.body_basis.y)
+	if not apply_camera_depth(camera_relation, minf(1000000000.0, maxf(100000.0, state.altitude * 8.0))): return
 	if player_input != null:
 		player_input.assist = state.assistance
 		assist_button.set_pressed_no_signal(state.assistance)
