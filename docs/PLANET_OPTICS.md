@@ -51,6 +51,13 @@ wind forces, lightning, nearby craft/cabin fog or a new compositor. The close
 craft/station layer remains readable. Broader terrain and weather acceptance
 remains under #212.
 
+The initial software comparison on actual streamed terrain shows that Home42's
+generated cloud cap of3.69% produces a subtle change. A stronger authored dust
+reference demonstrates sky/terrain attenuation, but exposes a fine grid/facet
+pattern at orbital distance. That reference is not generated Home weather.
+Improving this appearance remains #212 work; the comparison establishes shared
+field integration and save preservation, not final art or hardware acceptance.
+
 ## Disclosure and persistence
 
 Visible-optics disclosure1 permits current optical scenery while recorded hazard
