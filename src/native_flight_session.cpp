@@ -1059,6 +1059,7 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
   if (!selected) {
     // Historical policy retains the existing action and exact relative body.
     if (!surface_) surface_ = FreedomSurfaceState{};
+    if (surface_->gear_deployed != deployed) gear_clearance_.reset();
     surface_->gear_deployed = deployed;
     if (deployed) cancel_port_approach();
     if (!deployed) cancel_surface_maneuver();
@@ -1074,6 +1075,8 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
   }
   const bool stowing = surface_ && surface_->gear_deployed && !deployed;
   if (!candidate.surface_) candidate.surface_ = FreedomSurfaceState{};
+  if (candidate.surface_->gear_deployed != deployed)
+    candidate.gear_clearance_.reset();
   candidate.surface_->gear_deployed = deployed;
   if (deployed) candidate.cancel_port_approach();
   if (!deployed) candidate.cancel_surface_maneuver();
@@ -1101,6 +1104,13 @@ auto NativeFreedomFlightSession::set_landing_gear(bool deployed)
 auto NativeFreedomFlightSession::commit_touchdown(
     std::uint64_t expected_source_checksum)
     -> std::expected<void, std::string> {
+  return commit_touchdown_observed(expected_source_checksum, nullptr);
+}
+auto NativeFreedomFlightSession::commit_touchdown_observed(
+    std::uint64_t expected_source_checksum,
+    std::optional<TerrainPadGapSample>* sampled_gap)
+    -> std::expected<void, std::string> {
+  if (sampled_gap) sampled_gap->reset();
   if (document_.flight.frame.kind == RigidFrameKind::system_inertial)
     return std::unexpected{
         "System-flight landing/contact is not qualified yet"};
@@ -1116,7 +1126,7 @@ auto NativeFreedomFlightSession::commit_touchdown(
         "Touchdown requires deployed gear and a free airborne craft"};
   const auto anchor = prepare_landed_craft(
       system_, rotation_, document_.flight, surface_->gear_deployed,
-      expected_source_checksum, document_.model.terrain_policy);
+      expected_source_checksum, document_.model.terrain_policy, sampled_gap);
   if (!anchor)
     return std::unexpected{
         "Touchdown refused by terrain, hull or motion checks"};
@@ -1126,6 +1136,7 @@ auto NativeFreedomFlightSession::commit_touchdown(
   auto candidate = *this;
   candidate.document_.flight = *pose;
   candidate.surface_->landed = *anchor;
+  candidate.gear_clearance_.reset();
   candidate.document_.model.hold = {};
   candidate.cancel_port_approach();
   candidate.cancel_surface_maneuver();
@@ -1156,6 +1167,7 @@ auto NativeFreedomFlightSession::release_surface()
   auto candidate = *this;
   candidate.document_.flight = *pose;
   candidate.surface_->landed.reset();
+  candidate.gear_clearance_.reset();
   candidate.surface_maneuver_ = {
       NativeSurfaceManeuverKind::liftoff, 1200,
       "Lifting with thrusters; manual input cancels"};

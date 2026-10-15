@@ -2,6 +2,8 @@
 
 #include "apsis_drift/planet_rotation.hpp"
 
+#include <optional>
+
 namespace apsis_drift {
 inline constexpr std::uint32_t kLandedCraftAnchorVersion{1};
 struct LandedCraftAnchor {
@@ -28,6 +30,20 @@ enum class LandedCraftError : std::uint8_t {
   insufficient_liftoff_authority
 };
 
+// Last actually queried deployed-pad plane gaps, not radar altitude or landing
+// permission. Transient diagnostics retain the original same-tick source owner.
+struct TerrainPadGapSample {
+  RigidCoordinateFrame frame;
+  CraftFrameRecipe craft;
+  PhysicalPlanetRotationRecipe rotation;
+  SimulationTick tick{};
+  std::uint64_t source_checksum{};
+  std::uint32_t terrain_policy{};
+  double minimum_gap_metres{}, maximum_gap_metres{};
+  friend auto operator==(const TerrainPadGapSample&, const TerrainPadGapSample&)
+      -> bool = default;
+};
+
 // Commit preparation, not flight clamping: from actual ready pads and a
 // certified hull, retain position/orientation and dissipate the bounded safe
 // contact velocities in the fixed surface frame. A stale source checksum
@@ -39,6 +55,15 @@ enum class LandedCraftError : std::uint8_t {
                                         bool gear_deployed,
                                         std::uint64_t expected_source_checksum,
                                         std::uint32_t terrain_policy = 1)
+    -> std::expected<LandedCraftAnchor, LandedCraftError>;
+
+// Optional diagnostic output from the very same existing contact query. A
+// certified gap can be present even when the subsequent landing is not ready.
+[[nodiscard]] auto prepare_landed_craft(
+    const PhysicalLocalSystem&, const PhysicalPlanetRotationRecipe&,
+    const RigidBodyState&, bool gear_deployed,
+    std::uint64_t expected_source_checksum, std::uint32_t terrain_policy,
+    std::optional<TerrainPadGapSample>* sampled_gap)
     -> std::expected<LandedCraftAnchor, LandedCraftError>;
 
 // Pure pose/velocity resolution at an authoritative tick. No integration of

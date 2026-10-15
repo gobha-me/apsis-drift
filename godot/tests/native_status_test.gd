@@ -63,5 +63,55 @@ func _initialize() -> void:
 		var bounds := Status.layout_bounds(dimensions, dimensions)
 		check(bounds.has_area() and Rect2(Vector2.ZERO, dimensions).encloses(bounds), "Compact HUD escaped valid dimensions")
 	check(snapshot == original, "Status presentation mutated authoritative facts")
+	var clearance := snapshot.duplicate(true)
+	clearance.merge({"system_id": "11", "planet_id": "12", "craft_id": "13", "frame_id": "2", "frame_version": 1, "terrain_policy": 2, "tick": "120"}, true)
+	clearance.surface = {"gear_deployed": true, "landed": false, "gear_clearance": {"available": true, "reference": "deployed_pad_planes", "coordinate_frame": "planet_relative_inertial", "system_id": "11", "planet_id": "12", "craft_id": "13", "frame_id": "2", "frame_version": 1, "terrain_policy": 2, "tick": "105", "source_checksum": "14", "minimum_gap_metres": 0.65, "maximum_gap_metres": 0.69, "age_seconds": 0.125}}
+	var clearance_before := clearance.duplicate(true)
+	check("Last gear gap 0.65 m" in Status.summary(clearance) and "0.1 s ago" in Status.summary(clearance) and "Reference altitude" in Status.summary(clearance), "Last pad gap lost age or substituted for reference altitude")
+	for field in ["minimum_gap_metres", "maximum_gap_metres", "age_seconds"]:
+		for bad in [NAN, INF, -INF, "unknown", null]:
+			var malformed := clearance.duplicate(true)
+			malformed.surface.gear_clearance[field] = bad
+			check("Unavailable" in Status.gear_clearance_text(malformed), "Malformed gap/age became a reading")
+	for field in ["system_id", "planet_id", "craft_id", "frame_id", "frame_version", "terrain_policy", "reference", "coordinate_frame", "tick", "source_checksum"]:
+		var malformed := clearance.duplicate(true)
+		malformed.surface.gear_clearance[field] = "invalid" if field == "source_checksum" else "999"
+		check("Unavailable" in Status.gear_clearance_text(malformed), "Mismatched clearance owner/clock/reference accepted: " + field)
+	for field in ["reference", "coordinate_frame"]:
+		for bad in [1, null, []]:
+			var damaged := clearance.duplicate(true)
+			damaged.surface.gear_clearance[field] = bad
+			check("Unavailable" in Status.gear_clearance_text(damaged), "Malformed clearance reference/frame became a reading")
+	for bad in [1, null, []]:
+		var damaged := clearance.duplicate(true)
+		damaged.coordinate_frame = bad
+		check("Unavailable" in Status.gear_clearance_text(damaged), "Malformed current coordinate frame became a reading")
+	for field in ["surface", "surface_walk", "attached"]:
+		for bad in [null, 1, "unknown", []]:
+			var malformed := clearance.duplicate(true)
+			malformed[field] = bad
+			check("Unavailable" in Status.gear_clearance_text(malformed), "Malformed nested clearance group caused a reading")
+	for field in ["gear_deployed", "landed", "gear_clearance"]:
+		for bad in [null, 1, "unknown", []]:
+			var malformed := clearance.duplicate(true)
+			malformed.surface[field] = bad
+			check("Unavailable" in Status.gear_clearance_text(malformed), "Malformed clearance availability accepted")
+	var malformed := clearance.duplicate(true)
+	malformed.surface.gear_clearance.minimum_gap_metres = 1.0
+	check("Unavailable" in Status.gear_clearance_text(malformed), "Reversed pad gap bounds accepted")
+	malformed = clearance.duplicate(true)
+	malformed.surface.gear_clearance.age_seconds = -1.0
+	check("Unavailable" in Status.gear_clearance_text(malformed), "Negative sample age accepted")
+	malformed = clearance.duplicate(true)
+	malformed.coordinate_frame = "system_inertial"
+	check("Unavailable" in Status.gear_clearance_text(malformed), "System-frame rendering invented a contact reading")
+	for state in ["stowed", "landed", "on_foot", "attached"]:
+		malformed = clearance.duplicate(true)
+		if state == "stowed": malformed.surface.gear_deployed = false
+		elif state == "landed": malformed.surface.landed = true
+		elif state == "on_foot": malformed.surface_walk = {"eye_position": Vector3.ZERO}
+		else: malformed.attached = true
+		check("Unavailable" in Status.gear_clearance_text(malformed) and not "Last gear gap" in Status.summary(malformed), "Ineligible lifecycle state revived a gear reading: " + state)
+	check(clearance == clearance_before, "Clearance formatter mutated observations")
 	print("Native status: %d failures" % failed)
 	quit(1 if failed else 0)

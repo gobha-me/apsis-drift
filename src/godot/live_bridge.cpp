@@ -1729,6 +1729,28 @@ class FreedomBridge : public godot::RefCounted {
                                                                 : "off";
       surface["remaining_seconds"] = maneuver.remaining_ticks / 120.0;
       surface["note"] = godot::String{maneuver.note.c_str()};
+      godot::Dictionary clearance;
+      clearance["available"] = false;
+      if (const auto sample = session.last_gear_clearance()) {
+        clearance["available"] = true;
+        clearance["reference"] = "deployed_pad_planes";
+        clearance["coordinate_frame"] = "planet_relative_inertial";
+        clearance["system_id"] = decimal(sample->frame.system.value);
+        clearance["planet_id"] = decimal(sample->frame.planet->value);
+        clearance["craft_id"] = decimal(document.origin.state.craft.value);
+        clearance["frame_id"] = decimal(sample->craft.id.value);
+        clearance["frame_version"] =
+            static_cast<std::int64_t>(sample->craft.version);
+        clearance["terrain_policy"] =
+            static_cast<std::int64_t>(sample->terrain_policy);
+        clearance["tick"] = decimal(sample->tick);
+        clearance["source_checksum"] = decimal(sample->source_checksum);
+        clearance["age_seconds"] =
+            static_cast<double>(body.tick - sample->tick) / 120.0;
+        clearance["minimum_gap_metres"] = sample->minimum_gap_metres;
+        clearance["maximum_gap_metres"] = sample->maximum_gap_metres;
+      }
+      surface["gear_clearance"] = clearance;
       result["surface"] = surface;
       godot::Dictionary impact;
       impact["selected"] = session.condition().has_value();

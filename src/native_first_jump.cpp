@@ -195,6 +195,7 @@ auto NativeFreedomFlightSession::begin_jump()
   if (auto available = jump_available(); !available) return available;
   auto candidate = *this;
   candidate.travel_->phase = FreedomJumpPhase::spool;
+  candidate.gear_clearance_.reset();
   candidate.travel_->spool_tick = document_.flight.tick;
   candidate.cancel_port_approach();
   candidate.cancel_surface_maneuver();
@@ -326,6 +327,7 @@ auto NativeFreedomFlightSession::advance_jump(
       auto hydrated = hydrate_freedom_flight_document(candidate.document_);
       if (!hydrated) return std::unexpected{hydrated.error().detail};
       candidate.system_ = std::move(hydrated->system);
+      candidate.gear_clearance_.reset();
       candidate.rotation_ = hydrated->rotation;
       candidate.travel_->phase = FreedomJumpPhase::idle;
       candidate.travel_->spool_tick = 0;

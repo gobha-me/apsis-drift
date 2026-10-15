@@ -4,6 +4,7 @@
 #include "apsis_drift/terrain_hull_clearance.hpp"
 #include "apsis_drift/terrain_touchdown.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -12,12 +13,44 @@ namespace {
 auto support_and_hull(const PhysicalLocalSystem& owner,
                       const PhysicalPlanetRotationRecipe& rotation,
                       const RigidBodyState& source, bool gear,
-                      std::uint32_t terrain_policy)
+                      std::uint32_t terrain_policy,
+                      std::optional<TerrainPadGapSample>* sampled_gap = nullptr)
     -> std::expected<RigidBodyState, LandedCraftError> {
   auto snapshot = TerrainTouchdownSnapshot::create(owner, rotation, source,
                                                    gear, terrain_policy);
   if (!snapshot) return std::unexpected{LandedCraftError::invalid_source};
   const auto query = snapshot->query();
+  if (sampled_gap && query.geometry.support_count > 0 &&
+      query.geometry.support_count <= query.supports.size()) {
+    double minimum = std::numeric_limits<double>::infinity();
+    double maximum = -minimum;
+    bool complete = true;
+    for (unsigned i = 0; i < query.geometry.support_count; ++i) {
+      const auto& pad = query.supports[i];
+      if (!pad || !*pad || (**pad).surface != TouchdownSurface::solid ||
+          !(**pad).footprint_supported ||
+          !std::isfinite((**pad).minimum_gap_metres) ||
+          !std::isfinite((**pad).maximum_gap_metres) ||
+          (**pad).minimum_gap_metres > (**pad).maximum_gap_metres) {
+        complete = false;
+        break;
+      }
+      minimum = std::min(minimum, (**pad).minimum_gap_metres);
+      maximum = std::max(maximum, (**pad).maximum_gap_metres);
+    }
+    if (complete && std::isfinite(minimum) && std::isfinite(maximum) &&
+        minimum <= maximum) {
+      const auto& provenance = query.geometry.provenance;
+      *sampled_gap = TerrainPadGapSample{source.frame,
+                                         source.craft,
+                                         provenance.rotation,
+                                         source.tick,
+                                         provenance.original_state_checksum,
+                                         terrain_policy,
+                                         minimum,
+                                         maximum};
+    }
+  }
   if (!query.assessment)
     return std::unexpected{LandedCraftError::contact_unknown};
   if (query.assessment->classification != TouchdownClass::pad_contact_ready)
@@ -37,6 +70,19 @@ auto prepare_landed_craft(const PhysicalLocalSystem& owner,
                           std::uint64_t expected_source_checksum,
                           std::uint32_t terrain_policy)
     -> std::expected<LandedCraftAnchor, LandedCraftError> {
+  return prepare_landed_craft(owner, rotation, source, gear_deployed,
+                              expected_source_checksum, terrain_policy,
+                              nullptr);
+}
+
+auto prepare_landed_craft(const PhysicalLocalSystem& owner,
+                          const PhysicalPlanetRotationRecipe& rotation,
+                          const RigidBodyState& source, bool gear_deployed,
+                          std::uint64_t expected_source_checksum,
+                          std::uint32_t terrain_policy,
+                          std::optional<TerrainPadGapSample>* sampled_gap)
+    -> std::expected<LandedCraftAnchor, LandedCraftError> {
+  if (sampled_gap) sampled_gap->reset();
   if (!godot_spike::saved_contact_recipe(terrain_policy))
     return std::unexpected{LandedCraftError::unsupported_version};
   const auto checksum = rigid_body_state_checksum({owner}, source);
@@ -45,7 +91,8 @@ auto prepare_landed_craft(const PhysicalLocalSystem& owner,
     return std::unexpected{LandedCraftError::stale_source};
   if (!gear_deployed)
     return std::unexpected{LandedCraftError::gear_not_deployed};
-  auto fixed = support_and_hull(owner, rotation, source, true, terrain_policy);
+  auto fixed = support_and_hull(owner, rotation, source, true, terrain_policy,
+                                sampled_gap);
   if (!fixed) return std::unexpected{fixed.error()};
   fixed->linear_velocity_metres_per_second = {};
   fixed->angular_velocity_radians_per_second = {};

@@ -184,12 +184,37 @@ auto NativeFreedomFlightSession::surface_maneuver_controls() const
 }
 
 auto NativeFreedomFlightSession::try_surface_contact() -> void {
+  gear_clearance_.reset();
   if (!surface_ || !surface_->gear_deployed || surface_->landed ||
       surface_maneuver_.kind == NativeSurfaceManeuverKind::liftoff ||
       (docking_ && docking_->attached) || actor_ || surface_walker_)
     return;
   const auto checksum = rigid_body_state_checksum({system_}, document_.flight);
-  if (checksum) (void)commit_touchdown(*checksum);
+  std::optional<TerrainPadGapSample> sampled_gap;
+  if (checksum) (void)commit_touchdown_observed(*checksum, &sampled_gap);
+  if (!surface_->landed) gear_clearance_ = std::move(sampled_gap);
+  gear_clearance_craft_ = document_.origin.state.craft;
+}
+auto NativeFreedomFlightSession::last_gear_clearance() const
+    -> std::optional<TerrainPadGapSample> {
+  if (!gear_clearance_ || !surface_ || !surface_->gear_deployed ||
+      surface_->landed || actor_ || surface_walker_ || recovery_pending() ||
+      (docking_ && docking_->attached) ||
+      (travel_ && travel_->phase != FreedomJumpPhase::idle) ||
+      surface_maneuver_.kind == NativeSurfaceManeuverKind::liftoff)
+    return {};
+  const auto& sample = *gear_clearance_;
+  const auto& current = document_.flight;
+  if (current.frame.kind != RigidFrameKind::planet_relative_inertial ||
+      sample.frame != current.frame || sample.craft != current.craft ||
+      sample.rotation != rotation_ ||
+      gear_clearance_craft_ != document_.origin.state.craft ||
+      sample.terrain_policy != document_.model.terrain_policy ||
+      sample.tick > current.tick || !std::isfinite(sample.minimum_gap_metres) ||
+      !std::isfinite(sample.maximum_gap_metres) ||
+      sample.minimum_gap_metres > sample.maximum_gap_metres)
+    return {};
+  return sample;
 }
 auto NativeFreedomFlightSession::advance_surface(
     const NativeFlightControls& controls, SimulationSeconds step)
@@ -207,6 +232,9 @@ auto NativeFreedomFlightSession::advance_surface(
     return std::unexpected{"Surface flight input refused"};
   auto candidate = *this;
   auto requested = controls;
+  // Only this successful batch's actual post-step contact query may publish a
+  // sample. A skipped/unknown contact path cannot revive an older landing gap.
+  candidate.gear_clearance_.reset();
   if (manual_input(controls) &&
       candidate.surface_maneuver_.kind != NativeSurfaceManeuverKind::off) {
     candidate.cancel_surface_maneuver();

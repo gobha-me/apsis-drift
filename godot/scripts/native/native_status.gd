@@ -1,5 +1,6 @@
 extends RefCounted
 ## Presentation of C++ observations; never advances or edits the voyage.
+const NativeIds = preload("res://scripts/native/native_environment.gd")
 
 static func finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
@@ -21,6 +22,31 @@ static func movement_feedback(blockage: Variant) -> String:
 		"step": return "Last step blocked · Step or drop too large"
 		"craft_obstruction": return "Last step blocked · Wayfarer hull"
 	return "Ground movement feedback unavailable"
+
+static func gear_clearance_text(value: Dictionary) -> String:
+	const UNAVAILABLE := "Gear clearance · Unavailable"
+	var surface: Variant = value.get("surface")
+	var outside: Variant = value.get("surface_walk", {})
+	if not surface is Dictionary or not outside is Dictionary: return UNAVAILABLE
+	for field in ["gear_deployed", "landed"]:
+		if not surface.get(field) is bool: return UNAVAILABLE
+	if not value.get("attached") is bool or not surface.gear_deployed or surface.landed or value.attached or not outside.is_empty(): return UNAVAILABLE
+	var sample: Variant = surface.get("gear_clearance")
+	if not sample is Dictionary or not sample.get("available") is bool or not sample.available: return UNAVAILABLE
+	var current_frame: Variant = value.get("coordinate_frame", "planet_relative_inertial")
+	if not sample.get("reference") is String or not sample.get("coordinate_frame") is String or not current_frame is String: return UNAVAILABLE
+	if sample.reference != "deployed_pad_planes" or sample.coordinate_frame != "planet_relative_inertial" or current_frame != "planet_relative_inertial": return UNAVAILABLE
+	for field in ["system_id", "planet_id", "craft_id", "frame_id"]:
+		if not NativeIds.decimal(sample.get(field)) or not NativeIds.decimal(value.get(field)) or sample[field] != value[field]: return UNAVAILABLE
+	for field in ["frame_version", "terrain_policy"]:
+		if typeof(sample.get(field)) != TYPE_INT or typeof(value.get(field)) != TYPE_INT or sample[field] <= 0 or sample[field] != value[field]: return UNAVAILABLE
+	for field in ["tick", "source_checksum"]:
+		if not NativeIds.decimal(sample.get(field)): return UNAVAILABLE
+	if not NativeIds.decimal(value.get("tick")) or sample.tick.length() > value.tick.length() or (sample.tick.length() == value.tick.length() and sample.tick > value.tick): return UNAVAILABLE
+	for field in ["minimum_gap_metres", "maximum_gap_metres", "age_seconds"]:
+		if not finite_number(sample.get(field)): return UNAVAILABLE
+	if sample.minimum_gap_metres > sample.maximum_gap_metres or sample.age_seconds < 0.0: return UNAVAILABLE
+	return "Last gear gap %.2f m · %.1f s ago" % [sample.minimum_gap_metres, sample.age_seconds]
 
 static func summary(value: Dictionary) -> String:
 	for field in ["altitude", "surface_speed", "radial_rate", "air_density"]:
@@ -60,6 +86,8 @@ static func summary(value: Dictionary) -> String:
 		lines.append("WASD / left stick walk · Right-drag / right stick look")
 	else:
 		lines.append("Reference altitude %.2f km" % (value.altitude / 1000.0))
+		if surface.get("gear_deployed", false) and not surface.get("landed", false) and not value.attached:
+			lines.append(gear_clearance_text(value))
 		lines.append("Surface speed %.1f m/s · Radial %+.1f m/s" % [value.surface_speed, value.radial_rate])
 		if value.get("assistance", false): lines.append("Flight assistance on")
 		if resources.get("selected", false):

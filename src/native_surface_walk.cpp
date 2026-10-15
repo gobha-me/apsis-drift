@@ -30,6 +30,7 @@ auto NativeFreedomFlightSession::begin_surface_walk()
   if (!actor) return std::unexpected{actor.error()};
   auto candidate = *this;
   candidate.surface_walk_selected_ = true;
+  candidate.gear_clearance_.reset();
   candidate.surface_walker_ = *actor;
   candidate.surface_walk_blockage_.reset();
   candidate.surface_walk_terrain_ =

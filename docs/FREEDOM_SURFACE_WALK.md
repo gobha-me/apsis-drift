@@ -52,6 +52,21 @@ support, water, slope, an excessive step or drop, or the craft hull. A supported
 or neutral step clears the warning. Pause retains it; Continue and reboarding
 clear this transient feedback without adding it to saved world state.
 
+## Gear clearance while flying
+
+With landing gear deployed, the compact HUD shows the **last gear gap** and its
+sample age when the existing contact check finds supported dry terrain. It is
+the minimum signed gap from the deployed pads to their terrain planes, measured
+along those planes' normals. Reference altitude remains height above the
+planet's reference sphere. Neither reading certifies hull clearance or a safe
+landing.
+
+The readout adds no terrain queries. An unsupported contact query shows
+**Unavailable**, rather than a zero gap. Pause freezes the sample age. Stowing
+gear retires the sample; Continue starts without one until flight samples again.
+Landed, outside, liftoff and travel states do not display a retained flight gap.
+The transient sample is excluded from saved world state.
+
 ## Save and recovery
 
 Explicit exit selects format **30**, surface actor version **1** and suited

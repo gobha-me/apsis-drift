@@ -527,6 +527,81 @@ auto assisted_commands(const Fixture& f,
             pilot.surface_maneuver().kind == NativeSurfaceManeuverKind::off &&
             pilot.document().flight == flight.flight,
         "manual landing action deploys gear and retains piloted flight");
+  check(!pilot.last_gear_clearance(),
+        "Opening a save and deploying gear cannot invent a contact sample");
+  required(pilot.advance({}));
+  const auto sampled = pilot.last_gear_clearance();
+  check(sampled && !pilot.surface()->landed,
+        "Actual post-step query retains gaps while contact is not ready");
+  if (sampled) {
+    const auto source = pilot.document().flight;
+    check(sampled->frame == source.frame && sampled->craft == source.craft &&
+              sampled->rotation == pilot.rotation() &&
+              sampled->terrain_policy ==
+                  pilot.document().model.terrain_policy &&
+              sampled->tick == source.tick &&
+              sampled->source_checksum ==
+                  required(rigid_body_state_checksum({pilot.system()}, source)),
+          "Sample binds actual source owner, recipe, craft and committed tick");
+    auto oracle = required(TerrainTouchdownSnapshot::create(pilot, true));
+    const auto query = oracle.query();
+    double minimum = std::numeric_limits<double>::infinity(),
+           maximum = -minimum;
+    for (unsigned i = 0; i < query.geometry.support_count; ++i) {
+      check(query.supports[i] && *query.supports[i],
+            "Test-only same-state pad oracle is resolved");
+      if (!query.supports[i] || !*query.supports[i]) continue;
+      minimum = std::min(minimum, (**query.supports[i]).minimum_gap_metres);
+      maximum = std::max(maximum, (**query.supports[i]).maximum_gap_metres);
+    }
+    check(sampled->minimum_gap_metres == minimum &&
+              sampled->maximum_gap_metres == maximum && minimum > 0 &&
+              std::isfinite(minimum) && std::isfinite(maximum),
+          "Last gap equals certified whole-pad planes, not reference altitude");
+    const auto bytes = required(
+        encode_freedom_surface_document_json(pilot.surface_document()));
+    check(!pilot.commit_touchdown(sampled->source_checksum ^ 1) &&
+              !pilot.advance(invalid) &&
+              pilot.last_gear_clearance() == sampled &&
+              required(encode_freedom_surface_document_json(
+                  pilot.surface_document())) == bytes,
+          "Rejected command/advance and repeated reads retain sample and save");
+    auto continued = required(NativeFreedomFlightSession::open(
+        {NativeStartup::Mode::freedom,
+         required(decode_freedom_surface_document_json(bytes)),
+         f.planet,
+         {}}));
+    check(!continued.last_gear_clearance() &&
+              required(encode_freedom_surface_document_json(
+                  continued.surface_document())) == bytes,
+          "Continue has no invented sample and preserves complete saved state");
+    required(pilot.set_landing_gear(false));
+    required(pilot.set_landing_gear(true));
+    check(!pilot.last_gear_clearance(),
+          "Same-tick stow/redeploy retires rather than revives a sample");
+    std::optional<TerrainPadGapSample> refused_sample = sampled;
+    check(!prepare_landed_craft(f.owner, f.rotation, source, true,
+                                sampled->source_checksum ^ 1, f.terrain_policy,
+                                &refused_sample) &&
+              !refused_sample,
+          "Stale source refuses before publishing a diagnostic");
+    refused_sample = sampled;
+    auto nonfinite = source;
+    nonfinite.position_metres.x = std::numeric_limits<double>::quiet_NaN();
+    check(!prepare_landed_craft(f.owner, f.rotation, nonfinite, true,
+                                sampled->source_checksum, f.terrain_policy,
+                                &refused_sample) &&
+              !refused_sample,
+          "Nonfinite source cannot publish a diagnostic");
+    refused_sample = sampled;
+    auto wrong_owner = source;
+    wrong_owner.frame.system = SystemId{0};
+    check(!prepare_landed_craft(f.owner, f.rotation, wrong_owner, true,
+                                sampled->source_checksum, f.terrain_policy,
+                                &refused_sample) &&
+              !refused_sample,
+          "Wrong owner cannot publish a diagnostic");
+  }
   auto far = flight;
   far.flight.position_metres = add(far.flight.position_metres,
                                    rotate(far.flight.orientation, {0, 100, 0}));
