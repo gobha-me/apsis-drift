@@ -22,6 +22,13 @@ Catalog browsing, save confirmation and Settings suspend gameplay; leaving them
 never automatically resumes movement. Resume still requires focus and neutral
 controls. Quitting does not autosave.
 
+The saved-journey browsers and journey confirmations follow the selected
+controller when it disconnects or is replaced. An already connected backup
+can be selected with Start after the previous controller is unavailable; that
+first Start only selects it. Use the next Start or B to go back. Selecting a
+controller never resumes the journey, and disconnected controllers cannot
+activate a catalog row or confirm a dialog. Keyboard navigation remains available.
+
 ## Storage and compatibility
 
 The native path shares the directory, canonical sixteen-digit filenames,

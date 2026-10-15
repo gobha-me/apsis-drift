@@ -940,7 +940,7 @@ func pause_controls(reason: String, show_menu := true) -> void:
 			controls_menu.sync_profile_state(profile)
 			if profile.get("explicit_path", false): reason += "\n" + str(profile.reason)
 		controls_menu.sync_saved_state(state, not error.is_empty())
-		if show_menu:
+		if show_menu and not journey_dialog_open:
 			controls_menu.show_menu(reason)
 	if save_status != null and error.is_empty():
 		save_status.text = reason

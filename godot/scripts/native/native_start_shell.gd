@@ -468,6 +468,8 @@ func request_load() -> void:
 			load_browser = ProfileBrowser.new()
 			load_browser.provider = bridge
 			add_child(load_browser)
+			# Shell delegates after the suspended origin's ownership-only action.
+			load_browser.set_process_input(false)
 			load_browser.selected.connect(choose_load_profile)
 			load_browser.canceled.connect(func(): finish_load("Load canceled. Current journey retained."))
 		load_browser.device = load_origin.selected_pad if load_origin is WalkView else load_origin.player_input.device
@@ -928,8 +930,25 @@ func layout_catalog_save() -> void:
 
 func _input(event: InputEvent) -> void:
 	if save_origin != null: nested_dialog_input(save_confirmation, save_origin, event)
-	elif load_origin != null: nested_dialog_input(load_confirmation, load_origin, event)
+	elif load_origin != null:
+		if load_browser != null and load_browser.visible:
+			if select_modal_controller(load_origin, event):
+				get_viewport().set_input_as_handled()
+				return
+			load_browser.device = modal_controller_device(load_origin)
+			load_browser._input(event)
+		else:
+			nested_dialog_input(load_confirmation, load_origin, event)
 	elif title_origin != null: nested_dialog_input(title_confirmation, title_origin, event)
+
+func select_modal_controller(origin: Control, event: InputEvent) -> bool:
+	if not origin.focused: return false
+	return origin.try_select_controller(event) if origin is WalkView else origin.player_input.try_select_controller(event)
+
+func modal_controller_device(origin: Control) -> int:
+	var device: int = origin.selected_pad if origin is WalkView else origin.player_input.device
+	var available: Dictionary = origin.available_pads if origin is WalkView else origin.player_input.available_pads
+	return device if available.get(device, false) else -1
 
 func nested_dialog_input(dialog: ConfirmationDialog, origin: Control, event: InputEvent) -> void:
 	if dialog == null or origin == null or not dialog.visible or not (event is InputEventJoypadButton or event is InputEventJoypadMotion): return
@@ -937,7 +956,9 @@ func nested_dialog_input(dialog: ConfirmationDialog, origin: Control, event: Inp
 	# actions use its selected controller directly, just like its paused root.
 	dialog.set_input_as_handled()
 	get_viewport().set_input_as_handled()
-	var device: int = origin.selected_pad if origin is WalkView else origin.player_input.device
+	if select_modal_controller(origin, event): return
+	var device := modal_controller_device(origin)
+	if device < 0: return
 	if not origin.focused or not (event is InputEventJoypadButton) or not event.pressed or event.device != device: return
 	if event.button_index in [JOY_BUTTON_B, JOY_BUTTON_START]:
 		dialog.get_cancel_button().pressed.emit()
