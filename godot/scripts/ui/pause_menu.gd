@@ -52,6 +52,8 @@ var settings_button: Button
 var observations_query: Callable
 var observations_view: Control
 var observations_button: Button
+var surface_reference_view: Control
+var surface_reference_invoker: WeakRef
 var entry_focus_frames := 0
 var menu_theme: Theme
 var menu_heading: Label
@@ -281,6 +283,10 @@ func _ready() -> void:
 		settings_view.controls = controls
 		panel.add_child(settings_view)
 		settings_view.back_requested.connect(close_settings)
+		surface_reference_view = preload("res://scripts/native/surface_reference.gd").new()
+		surface_reference_view.controls = controls
+		panel.add_child(surface_reference_view)
+		surface_reference_view.back_requested.connect(close_surface_reference)
 		if observations_query.is_valid():
 			observations_view = preload("res://scripts/native/recorded_observations.gd").new()
 			observations_view.controls = controls
@@ -448,6 +454,9 @@ func back_from_nested() -> bool:
 	if is_instance_valid(observations_view) and observations_view.visible:
 		close_observations()
 		return true
+	if is_instance_valid(surface_reference_view) and surface_reference_view.visible:
+		close_surface_reference()
+		return true
 	if is_instance_valid(basics) and basics.visible:
 		close_basics()
 		return true
@@ -466,6 +475,27 @@ func close_observations() -> void:
 	if panel.visible:
 		observations_button.grab_focus()
 		left_scroll.ensure_control_visible(observations_button)
+		ensure_entry_focus_visible()
+
+func show_surface_reference(text: String, invoking: Button) -> void:
+	if not panel.visible or not menu_margin.visible or not controls.focused or not controls.waiting_action.is_empty() or not is_instance_valid(surface_reference_view): return
+	entry_focus_frames = 0
+	surface_reference_invoker = weakref(invoking) if is_instance_valid(invoking) else null
+	surface_reference_view.reference_text = text
+	menu_margin.hide()
+	surface_reference_view.open()
+
+func close_surface_reference() -> void:
+	if not is_instance_valid(surface_reference_view): return
+	surface_reference_view.hide()
+	menu_margin.show()
+	var target: Variant = surface_reference_invoker.get_ref() if surface_reference_invoker != null else null
+	surface_reference_invoker = null
+	if not is_instance_valid(target) or not target is Button or target.disabled or not target.is_visible_in_tree() or not left_scroll.is_ancestor_of(target):
+		target = basics_button
+	if panel.visible and is_instance_valid(target):
+		target.grab_focus()
+		left_scroll.ensure_control_visible(target)
 		ensure_entry_focus_visible()
 
 func show_basics() -> void:
@@ -512,6 +542,9 @@ func show_menu(reason := "") -> void:
 	if is_instance_valid(observations_view) and observations_view.visible:
 		if not reason.is_empty(): controls.status = reason
 		return
+	if is_instance_valid(surface_reference_view) and surface_reference_view.visible:
+		if not reason.is_empty(): controls.status = reason
+		return
 	if is_instance_valid(basics):
 		basics.hide()
 	menu_margin.show()
@@ -531,6 +564,8 @@ func ensure_entry_focus_visible() -> void:
 func hide_menu() -> void:
 	entry_focus_frames = 0
 	if is_instance_valid(observations_view): observations_view.hide()
+	if is_instance_valid(surface_reference_view): surface_reference_view.hide()
+	surface_reference_invoker = null
 	if is_instance_valid(settings_view):
 		settings_view.pending.clear()
 		settings_view.hide()

@@ -226,6 +226,22 @@ func check_saved_menu_layout(view: Control, owner: Variant, directory: String) -
 			# Scroll offsets snap to logical pixels; allow less than one physical
 			# pixel at the clipped focus border, never a hidden action or label.
 			check(button.has_focus() and scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect()), "Saved menu action is unreachable at %s: %s · scroll %s · button %s" % [pixels, button.text, scroll.get_global_rect(), button.get_global_rect()])
+		var reference_text: String = (view.surface_conditions_text() + "\n").repeat(40)
+		menu.show_surface_reference(reference_text, view.surface_conditions_button)
+		for frame in 4: await process_frame
+		var reference: Control = menu.surface_reference_view
+		check(reference.visible and not menu.menu_margin.visible and reference.body.text == reference_text and root.gui_get_focus_owner() == reference.back_button and reference.scroll.size.y > 0, "Surface reference lost bounded scrolling, snapshot or Back focus")
+		check(reference.body.get_theme_font_size("font_size") * pixels.x / view.size.x >= 25.0, "Surface reference shrank its text in a short window")
+		physical_key(KEY_DOWN, true)
+		physical_key(KEY_DOWN, false)
+		await process_frame
+		check(reference.scroll.scroll_vertical > 0, "Keyboard could not scroll long surface-reference details")
+		menu.show_menu("Focus lost. Stay paused.")
+		check(reference.visible and reference.body.text == reference_text, "Safety pause discarded the surface-reference snapshot")
+		physical_key(KEY_ESCAPE, true)
+		physical_key(KEY_ESCAPE, false)
+		for frame in 3: await process_frame
+		check(not reference.visible and menu.menu_margin.visible and view.paused and root.gui_get_focus_owner() == view.surface_conditions_button, "Surface-reference Back resumed or lost invoking focus")
 		check(view.paused and owner.get_freedom_flight_state() == before and owner.save_freedom_as(output) and FileAccess.get_sha256(output) == frozen, "Menu resize/focus advanced or altered complete C++ save")
 	root.size = Vector2i(1280, 720)
 	menu.layout_saved_menu()
@@ -430,6 +446,8 @@ func check_hud_profiles(directory: String, assets: String) -> void:
 		view.show_instruments()
 		view.show_surface_conditions()
 		check("no selected environmental survey" in view.surface_conditions_text() and owner.get_freedom_flight_state() == before and view.paused, "Historical survey invented an owner, changed state or resumed")
+		check(view.controls_menu.surface_reference_view.visible and view.controls_menu.surface_reference_view.reference_text == view.surface_conditions_text(), "Unavailable historical survey was not readable in its paused reference")
+		view.controls_menu.close_surface_reference()
 		for frame in 3:
 			await process_frame
 		if before.frame_id == "2":

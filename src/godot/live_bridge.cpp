@@ -2095,11 +2095,41 @@ class FreedomBridge : public godot::RefCounted {
     const auto name = [](CraftEnvironmentRating rating) {
       return godot::String{craft_environment_rating_name(rating).data()};
     };
+    constexpr std::array margin_names{"minimum_temperature",
+                                      "maximum_temperature",
+                                      "radiation",
+                                      "electrical",
+                                      "pressure",
+                                      "gust",
+                                      "ground_motion",
+                                      "gravity",
+                                      "vertical_thrust",
+                                      "support_load"};
+    static_assert(margin_names.size() == kCraftEnvironmentMarginCount);
+    if (assessed->count > assessed->margins.size()) {
+      result["error"] = "The environmental margin count is invalid";
+      return result;
+    }
+    godot::Array margins;
+    for (std::size_t i = 0; i < assessed->count; ++i) {
+      const auto& margin = assessed->margins[i];
+      if (!margin) continue;
+      const auto kind = static_cast<std::size_t>(margin->kind);
+      if (kind >= margin_names.size()) {
+        result["error"] = "The environmental margin kind is invalid";
+        return result;
+      }
+      godot::Dictionary row;
+      row["kind"] = margin_names[kind];
+      row["rating"] = name(margin->rating);
+      margins.append(row);
+    }
     result["rating"] = name(assessed->rating);
     result["shielding_thermal"] = name(assessed->axes[0]);
     result["structural"] = name(assessed->axes[1]);
     result["propulsion"] = name(assessed->axes[2]);
     result["operation_supported"] = assessed->operation_supported;
+    result["margins"] = margins;
     return result;
   }
 

@@ -60,7 +60,15 @@ both physical and hazard observations. CONTACT and PROBABLE readings retain
 UNKNOWN; missing margins expose neither their values nor their signs.
 
 The native controls menu queries touchdown and return-ascent ratings on
-demand. It does not poll the hazard resolver every render frame. Opening the
+demand. The native bridge also projects at most ten already-known margin kinds
+and ratings, omitting every unresolved margin and all raw numerical values.
+The paused, scrollable Surface conditions reference names the known
+MARGINAL/INSUFFICIENT references, such as
+pressure or vertical thrust, so a broad axis rating has an explanation. An
+unsupported frame operation is identified separately. These remain recorded
+potential envelopes, not current weather or landing clearance.
+
+It does not poll the hazard resolver every render frame. Opening the
 survey preserves pause, controls, complete save state and the authoritative
 clock. Historical saves without a selected knowledge/ambient owner report
 that the survey is unavailable. Querying neither selects a new recipe nor

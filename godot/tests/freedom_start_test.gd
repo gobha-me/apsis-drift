@@ -1,4 +1,5 @@
 extends SceneTree
+const FlightView = preload("res://scripts/native/native_flight_view.gd")
 ## Real save-selection boundary; no scene, GPU, or synthetic flight start.
 
 var failures := 0
@@ -37,6 +38,15 @@ func reject_path(bridge: Variant, path: String, expected: Dictionary) -> void:
 
 
 func _initialize() -> void:
+	var limits := FlightView.reference_limits_text({"margins": [{"kind": "pressure", "rating": "MARGINAL"}, {"kind": "vertical_thrust", "rating": "INSUFFICIENT"}, {"kind": "gust", "rating": "SAFE"}], "operation_supported": true})
+	check("Pressure MARGINAL" in limits and "Vertical thrust INSUFFICIENT" in limits and "Wind loading" not in limits, "Reference limits lost independent known causes or called safe headroom a limitation")
+	check(FlightView.reference_limits_text({"margins": []}).is_empty(), "Unresolved reference margins invented a limit")
+	check("does not support" in FlightView.reference_limits_text({"margins": [], "operation_supported": false}), "Unsupported frame was presented as an environmental failure")
+	for malformed in [null, {}, [{"kind": "pressure", "rating": "UNKNOWN"}], [{"kind": "pressure", "rating": "MARGINAL"}, {"kind": "pressure", "rating": "MARGINAL"}], [{"kind": "secret", "rating": "INSUFFICIENT"}], [{"kind": "pressure", "rating": NAN}]]:
+		check(FlightView.reference_limits_text({"margins": malformed}) == "Reference margin details are unavailable.", "Malformed reference margins reached player-facing limits")
+	var oversized := []
+	oversized.resize(11)
+	check(FlightView.reference_limits_text({"margins": oversized}) == "Reference margin details are unavailable.", "Oversized reference detail was not bounded before display")
 	var args := OS.get_cmdline_user_args()
 	if args.size() != 6:
 		push_error("Expected station/career/corrupt saves, snapshot and flight save")
@@ -65,6 +75,7 @@ func _initialize() -> void:
 	var survey_source: Dictionary = bridge.get_freedom_flight_state()
 	for operation in [3, 4]:
 		var survey: Dictionary = bridge.get_freedom_environment_assessment(operation)
+		check(survey.get("margins") is Array and survey.margins.is_empty(), "Starting chart disclosed private margin names or signs")
 		check(survey.get("rating") == "UNKNOWN" and survey.get("shielding_thermal") == "UNKNOWN" and survey.get("structural") == "UNKNOWN" and survey.get("propulsion") == "UNKNOWN", "Starting chart disclosed private surface capability margins")
 	for operation in [-1, 5, 256, 9223372036854775807]:
 		check(bridge.get_freedom_environment_assessment(operation).has("error"), "Invalid operation narrowed into a supported query")
