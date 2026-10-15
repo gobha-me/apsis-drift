@@ -51,14 +51,15 @@ func refresh() -> void:
 	var subjects: Array = readings.get("subjects", [])
 	page = clampi(page, 0, maxi(subjects.size() - 1, 0))
 	heading.text = "RECORDED OBSERVATIONS  %d / %d" % [page + 1, maxi(subjects.size(), 1)]
-	_paused.text = "FLIGHT PAUSED / RETAINED KNOWLEDGE"
+	_paused.text = "PAUSED / RETAINED KNOWLEDGE"
 	if readings.get("selected", false):
 		_paused.text += " · ship time " + time_text(readings.tick)
 	_hint.text = "Left / right or Tab: select · Up / down: scroll\nB / Circle / Esc / Start: back to controls"
 	if readings.has("error"):
 		body.text = str(readings.error)
 	elif subjects.is_empty():
-		body.text = "This journey has no selected observation records. Reading this page does not start sensors or upgrade a save."
+		body.text = "No observations have been recorded." if readings.get("selected", false) else "This journey has no selected observation records."
+		body.text += " Reading this page does not start sensors or upgrade a save."
 	else:
 		body.text = subject_text(subjects[page])
 	previous_button.disabled = subjects.size() < 2

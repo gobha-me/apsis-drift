@@ -128,7 +128,7 @@ time. The existing jump owner then derives its solution at commitment.
 | Committed | Destination and immutable arrival are bound; selection and cancellation are disabled. |
 | Arrived | The destination is current and receives `current-system`; the known origin may be selected for return. |
 
-Assisted and Pilot use the same generated anchor, knowledge, authorization, and
+Assisted and Advanced use the same generated anchor, knowledge, authorization, and
 route status. Their existing alignment and arrival consequences operate only
 after selection and cannot reveal or change a destination.
 

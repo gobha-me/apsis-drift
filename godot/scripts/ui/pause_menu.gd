@@ -128,7 +128,7 @@ func _ready() -> void:
 		title_button = add_button(left, "Title…", func(): title_requested.emit())
 		export_save_button = add_button(left, "Export save file…", func(): save_requested.emit())
 		saved_assist_button = CheckButton.new()
-		saved_assist_button.text = "Assisted piloting"
+		saved_assist_button.text = "Flight assistance"
 		saved_assist_button.toggled.connect(func(value: bool): assistance_requested.emit(value))
 		left.add_child(saved_assist_button)
 		sized_controls.append(saved_assist_button)
@@ -367,7 +367,7 @@ func sync_saved_state(state: Dictionary, failed: bool) -> void:
 		basics.saved_context = state.duplicate(true)
 		if basics.visible: basics.refresh()
 	saved_assist_button.set_pressed_no_signal(state.get("assistance", false))
-	saved_assist_button.text = "Assisted piloting · ON" if state.get("assistance", false) else "Assisted piloting · OFF"
+	saved_assist_button.text = "Flight assistance · ON" if state.get("assistance", false) else "Flight assistance · OFF"
 	var jumping: bool = state.get("jump", {}).get("phase", "idle") != "idle"
 	var walking: bool = not state.get("surface_walk", {}).is_empty()
 	saved_assist_button.disabled = failed or jumping or walking

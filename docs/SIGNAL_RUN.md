@@ -65,16 +65,16 @@ Kitty or ANSI presentation.
 
 ## Planetfall and return rules
 
-Assisted and Pilot share the same physical route and immutable target.
+Assisted and Advanced share the same physical route and immutable target.
 Planetfall begins in a bounded orbital state derived from the station craft;
 the player can take an early or opposite-side entry and continue around the
 home planet. The acceptance guidance holds orbital altitude until the target
 corridor is near, then crosses orbital, atmospheric, and terrain regimes.
 
-Pilot retains the implemented thermal load and forced-abort rules. Its starter
+Advanced retains the implemented thermal load and forced-abort rules. Its starter
 guidance reacts to rising load by braking and climbing until the craft cools,
 then resumes entry. The contract remains completable without suppressing or
-rewriting Pilot consequences. Assisted reports the same thermal information
+rewriting Advanced consequences. Assisted reports the same thermal information
 without enforcing an abort.
 
 After collection, R ascends to the orbital regime. Enter creates a physical
@@ -93,7 +93,7 @@ Seed `42` binds:
 - home signal `signal-71d4c959dcd64423`.
 
 The schema-6 renderer-neutral report runs the complete Assisted route for
-seeds `42`, `12648430`, and `1`, then completes seed `42` under Pilot thermal
+seeds `42`, `12648430`, and `1`, then completes seed `42` under Advanced thermal
 rules. All generated tutorial homes are temperate by contract. The report
 records nonzero thermal, planetary, return-flight, and framebuffer evidence.
 

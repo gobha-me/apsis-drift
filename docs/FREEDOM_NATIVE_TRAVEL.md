@@ -82,7 +82,7 @@ automatic loss detection remains separate. No hard
 cooldown or invented damage/death law is added here. Full body-render redaction remains #215.
 The [bounded normal-trip trace](FREEDOM_NATIVE_ROUNDTRIP.md) composes real station
 departure, neighboring observation, physical return docking/service and
-disembarking, including real ALIGNED/OFFSET Pilot consequences. The separate
+disembarking, including real ALIGNED/OFFSET Advanced consequences. The separate
 planetary voyage retains surface-flight coverage; manual/controller/hardware
 acceptance remains #244/#245.
 

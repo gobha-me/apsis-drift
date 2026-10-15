@@ -2595,11 +2595,22 @@ auto intersystem_planetfall_contract() -> void {
       thermal_json ? decode_save_document_json(*thermal_json)
                    : std::expected<SaveDocument, SaveSchemaError>{
                          std::unexpected{SaveSchemaError{}}};
-  check(thermal_restored && thermal_restored->state.flight &&
-            thermal_restored->state.flight->thermal ==
-                PlanetaryThermalState{825'000U, true},
-        "save format 16 must preserve an active Pilot thermal abort exactly");
+  check(
+      thermal_restored && thermal_restored->state.flight &&
+          thermal_restored->state.flight->thermal ==
+              PlanetaryThermalState{825'000U, true},
+      "save format 16 must preserve an active Advanced thermal abort exactly");
   if (thermal_json) {
+    const auto assisted_latch = decode_save_document_json(
+        replace_once(*thermal_json, "\"rule_profile\": \"pilot\"",
+                     "\"rule_profile\": \"assisted\""));
+    check(!assisted_latch &&
+              assisted_latch.error() ==
+                  SaveSchemaError{SaveSchemaErrorCode::invalid_state,
+                                  "$.state.flight.thermal.abort_latched",
+                                  "Assisted flight cannot contain an Advanced "
+                                  "thermal-abort latch"},
+          "an Assisted save must reject an Advanced-only latch before commit");
     const auto corrupt_thermal = decode_save_document_json(replace_once(
         *thermal_json, "\"load_units\": 825000", "\"load_units\": 1000001"));
     check(!corrupt_thermal && corrupt_thermal.error().code ==
@@ -2762,7 +2773,8 @@ auto mission_board_contract() -> void {
             pilot_round_trip &&
             pilot_round_trip->state.intersystem_contract->rule_profile ==
                 IntersystemRuleProfile::pilot,
-        "format v15 must preserve the authoritative Pilot selection");
+        "the Advanced selection must round-trip using the historical pilot "
+        "token");
   if (pilot_json) {
     const auto invalid_profile = decode_save_document_json(
         replace_once(*pilot_json, "\"rule_profile\": \"pilot\"",
@@ -3963,6 +3975,18 @@ auto save_schema_contract() -> void {
         "save recipes must regenerate the canonical station and planet IDs");
   check(validate_save_document(expected).has_value(),
         "the representative legacy Signal Run save must validate");
+
+  auto invalid_legacy_latch = expected;
+  invalid_legacy_latch.state.flight->thermal.abort_latched = true;
+  const auto legacy_latch = validate_save_document(invalid_legacy_latch);
+  check(!legacy_latch &&
+            legacy_latch.error() ==
+                SaveSchemaError{
+                    SaveSchemaErrorCode::invalid_state,
+                    "$.state.flight.thermal.abort_latched",
+                    "legacy flight cannot contain an Advanced thermal-abort "
+                    "latch"},
+        "legacy saves must reject an Advanced-only latch before commit");
 
   const auto encoded = encode_save_document_json(expected);
   check(encoded &&

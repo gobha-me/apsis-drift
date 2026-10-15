@@ -43,7 +43,7 @@ and immutable arrival through the existing intersystem contract.
 
 Before outbound commitment the cockpit introduces opening the view, selecting
 Target, starting the spool, the cancel command, and either Assisted automatic
-alignment or Pilot correction and projected arrival quality. At the target it
+alignment or Advanced correction and projected arrival quality. At the target it
 retains the existing physical approach, objective, ascent, and departure
 guidance, then requires selecting Origin before the return spool. Arrival still
 requires physical station rendezvous, docking, and explicit turn-in.
@@ -55,7 +55,7 @@ terminal, PTY, proxy, decoder, network, compositor, or display throughput.
 ## Persistence boundary
 
 Save format 16 is unchanged. It already records authoritative onboarding,
-mission/travel phases, universe tick, Pilot alignment, committed destination,
+mission/travel phases, universe tick, Advanced alignment, committed destination,
 arrival solution, craft state, discoveries, and world deltas. Loading resets
 the transient universe-view focus and selection, while every authoritative
 phase resumes unchanged.

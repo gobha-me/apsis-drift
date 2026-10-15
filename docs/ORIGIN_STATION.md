@@ -86,7 +86,7 @@ assist, and cockpit guidance are active before the outbound jump. Enter may
 redock inside the bounded rendezvous envelope without advancing mission
 progress; J freezes the current craft and begins the cancelable jump spool.
 
-Pilot alignment adds the live station-local yaw and normalized relative speed
+Advanced alignment adds the live station-local yaw and normalized relative speed
 to its independently seeded base sample. During outbound spool the craft does
 not integrate; cancellation retimes the unchanged relative state to the current
 universe tick. This keeps moving-station ephemeris, craft physics, and jump

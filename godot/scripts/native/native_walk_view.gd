@@ -35,6 +35,10 @@ var load_button: Button
 var title_button: Button
 var settings_button: Button
 var settings_view: Control
+var observations_button: Button
+var observations_view: Control
+var observations_backing: ColorRect
+var observations_return_frames := 0
 var preferences_provider: Node
 var settings_return_frames := 0
 var save_dialog: FileDialog
@@ -271,7 +275,7 @@ func build_ui() -> void:
 	load_button = Button.new()
 	load_button.text = "Load…"
 	load_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open():
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open():
 			pause_controls("Load replaces the journey only after confirmation.")
 			load_requested.emit())
 	column.add_child(load_button)
@@ -282,7 +286,7 @@ func build_ui() -> void:
 	title_button = Button.new()
 	title_button.text = "Title…"
 	title_button.pressed.connect(func():
-		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open():
+		if focused and not journey_dialog_open and not save_dialog.visible and not settings_open() and not observations_open():
 			pause_controls("Return to title only after discarding unsaved progress.")
 			title_requested.emit())
 	column.add_child(title_button)
@@ -290,6 +294,10 @@ func build_ui() -> void:
 	export_save_button.text = "Export save file…"
 	export_save_button.pressed.connect(open_save_dialog)
 	column.add_child(export_save_button)
+	observations_button = Button.new()
+	observations_button.text = "Recorded observations"
+	observations_button.pressed.connect(open_observations)
+	column.add_child(observations_button)
 	save_status = hud_text()
 	save_status.text = "Approach the D1 ladder to board."
 	column.add_child(save_status)
@@ -314,6 +322,19 @@ func build_ui() -> void:
 	settings_view.controls = preferences_provider
 	settings_view.back_requested.connect(close_settings)
 	add_child(settings_view)
+	observations_backing = ColorRect.new()
+	observations_backing.color = Color(0.015, 0.025, 0.04)
+	observations_backing.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(observations_backing)
+	observations_backing.hide()
+	observations_view = preload("res://scripts/native/recorded_observations.gd").new()
+	observations_view.controls = preferences_provider
+	observations_view.query = Callable(bridge, "get_freedom_observations")
+	observations_view.back_requested.connect(close_observations)
+	add_child(observations_view)
+	# The station owns device/focus filtering before forwarding reader scrolling.
+	# Letting the child process first would admit stale disconnected-pad events.
+	observations_view.set_process_input(false)
 	save_dialog.canceled.connect(save_canceled)
 	resized.connect(layout_hud)
 
@@ -354,7 +375,7 @@ func layout_hud() -> void:
 	# Intrinsic scrollbar style width reserves a real gutter from wrapped text.
 	hud_scroll_style.content_margin_left = 8 * scale
 	hud_scroll_style.content_margin_right = 8 * scale
-	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button]:
+	for button in [board_button, pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button]:
 		button.custom_minimum_size.y = 40 * scale
 	hud_scroll.position = Vector2.ONE * margin
 	# ScrollContainer lays out integer-sized children; keep its viewport integral
@@ -377,7 +398,7 @@ func pause_controls(reason: String) -> void:
 	if pause_button != null:
 		pause_button.text = "Resume"
 		pause_button.disabled = not error.is_empty()
-		if focused and save_dialog != null and not save_dialog.visible and not settings_open():
+		if focused and save_dialog != null and not save_dialog.visible and not settings_open() and not observations_open():
 			(save_button if pause_button.disabled else pause_button).grab_focus()
 	if save_status != null:
 		save_status.text = "Walking paused: " + error if not error.is_empty() else reason
@@ -387,6 +408,9 @@ func pause_controls(reason: String) -> void:
 
 
 func toggle_pause() -> void:
+	if observations_open():
+		close_observations()
+		return
 	if settings_open():
 		settings_view.cancel()
 		return
@@ -397,7 +421,7 @@ func toggle_pause() -> void:
 
 
 func resume_requested() -> void:
-	if journey_dialog_open or settings_open(): return
+	if journey_dialog_open or settings_open() or observations_open(): return
 	if not error.is_empty() or not focused or save_dialog == null or save_dialog.visible:
 		return
 	# A past neutral frame cannot authorize a later held press (even W+S / A+D).
@@ -444,7 +468,7 @@ func controller_connection_changed(device: int, connected: bool) -> void:
 
 
 func open_save_dialog() -> void:
-	if not focused or save_dialog == null or settings_open():
+	if not focused or save_dialog == null or settings_open() or observations_open():
 		return
 	pause_controls("Save As preserves the last committed journey state.")
 	save_dialog.popup_centered_ratio(0.75)
@@ -463,8 +487,34 @@ func settings_open() -> bool:
 	return is_instance_valid(settings_view) and settings_view.visible
 
 
+func observations_open() -> bool:
+	return is_instance_valid(observations_view) and observations_view.visible
+
+
+func open_observations() -> void:
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open(): return
+	pause_controls("Reading retained observations does not operate sensors.")
+	preferences_provider.focused = focused
+	preferences_provider.device = selected_pad
+	settings_return_frames = 0
+	observations_return_frames = 0
+	hud_scroll.hide()
+	observations_backing.show()
+	observations_view.open()
+
+
+func close_observations() -> void:
+	if not observations_open(): return
+	observations_view.hide()
+	observations_backing.hide()
+	controls_armed = false
+	hud_scroll.show()
+	if focused: observations_button.grab_focus()
+	observations_return_frames = 2
+
+
 func open_settings() -> void:
-	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open(): return
+	if not focused or journey_dialog_open or save_dialog == null or save_dialog.visible or not error.is_empty() or settings_open() or observations_open(): return
 	pause_controls("Control choices stay pending until Apply.")
 	preferences_provider.focused = focused
 	preferences_provider.device = selected_pad
@@ -605,6 +655,9 @@ func _process(delta: float) -> void:
 	if settings_return_frames > 0:
 		settings_return_frames -= 1
 		if settings_return_frames == 0 and not settings_open(): hud_scroll.ensure_control_visible(settings_button)
+	if observations_return_frames > 0:
+		observations_return_frames -= 1
+		if observations_return_frames == 0 and not observations_open() and not settings_open(): hud_scroll.ensure_control_visible(observations_button)
 	if paused:
 		if not settings_open(): observe_neutral_controls()
 		return
@@ -642,6 +695,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if not focused or save_dialog == null or save_dialog.visible:
+		if observations_open(): get_viewport().set_input_as_handled()
 		return
 	var pressed := event.is_pressed() and not event.is_echo()
 	var key: int = event.physical_keycode if event is InputEventKey else KEY_NONE
@@ -649,12 +703,35 @@ func _input(event: InputEvent) -> void:
 	if pressed and (key == KEY_ESCAPE or button == JOY_BUTTON_START or (paused and button == JOY_BUTTON_B)):
 		toggle_pause()
 		get_viewport().set_input_as_handled()
+	elif observations_open():
+		# Station device selection does not reinstall the flight UI InputMap.
+		# Resolve this small reader's pad actions after the ownership guards above.
+		var buttons := [observations_view.previous_button, observations_view.next_button, observations_view.back_button]
+		if pressed and button == JOY_BUTTON_A:
+			var current := get_viewport().gui_get_focus_owner()
+			if current in buttons and not current.disabled: current.pressed.emit()
+			get_viewport().set_input_as_handled()
+		elif pressed and button in [JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT]:
+			var direction := -1 if button == JOY_BUTTON_DPAD_LEFT else 1
+			var index := buttons.find(get_viewport().gui_get_focus_owner())
+			for offset in range(1, buttons.size() + 1):
+				var next: Button = buttons[posmod(index + direction * offset, buttons.size())]
+				if not next.disabled:
+					next.grab_focus()
+					break
+			get_viewport().set_input_as_handled()
+		elif pressed and button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]:
+			var direction := -1 if button == JOY_BUTTON_DPAD_UP else 1
+			observations_view.scroll.scroll_vertical += direction * roundi(64 * observations_view._readable_scale)
+			get_viewport().set_input_as_handled()
+		else:
+			observations_view._input(event)
 	elif settings_open():
 		# Let the shared screen handle ordinary selected-controller UI actions.
 		return
 	elif paused and pressed and (key in [KEY_UP, KEY_DOWN, KEY_TAB] or button in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]):
 		var current := get_viewport().gui_get_focus_owner()
-		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button]
+		var buttons := [pause_button, replace_save_button, save_button, load_button, settings_button, title_button, export_save_button, observations_button]
 		var direction := -1 if key == KEY_UP or button == JOY_BUTTON_DPAD_UP else 1
 		var index := buttons.find(current)
 		for offset in range(1, buttons.size() + 1):
@@ -668,6 +745,8 @@ func _input(event: InputEvent) -> void:
 		var current := get_viewport().gui_get_focus_owner()
 		if current == settings_button:
 			open_settings()
+		elif current == observations_button:
+			open_observations()
 		elif current == title_button:
 			title_button.pressed.emit()
 		elif current == load_button:
@@ -695,6 +774,6 @@ func refresh_profile_actions() -> void:
 	save_button.tooltip_text = replace_save_button.tooltip_text
 
 func request_catalog_save(save_as: bool) -> void:
-	if not focused or journey_dialog_open or settings_open() or save_dialog.visible: return
+	if not focused or journey_dialog_open or settings_open() or observations_open() or save_dialog.visible: return
 	pause_controls("Save uses the last committed journey state.")
 	catalog_save_requested.emit(save_as)

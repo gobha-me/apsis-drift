@@ -2188,10 +2188,10 @@ auto validate_save_document(const SaveDocument& document)
         }
         if (contract.rule_profile == IntersystemRuleProfile::assisted &&
             document.state.flight->thermal.abort_latched) {
-          return std::unexpected{failure(
-              SaveSchemaErrorCode::invalid_state,
-              "$.state.flight.thermal.abort_latched",
-              "Assisted flight cannot contain a Pilot thermal-abort latch")};
+          return std::unexpected{failure(SaveSchemaErrorCode::invalid_state,
+                                         "$.state.flight.thermal.abort_latched",
+                                         "Assisted flight cannot contain an "
+                                         "Advanced thermal-abort latch")};
         }
       } else if (return_jump_spooling) {
         if (!document.state.system_flight || document.state.flight ||
@@ -2301,7 +2301,7 @@ auto validate_save_document(const SaveDocument& document)
         return std::unexpected{failure(
             SaveSchemaErrorCode::invalid_state,
             "$.state.flight.thermal.abort_latched",
-            "legacy flight cannot contain a Pilot thermal-abort latch")};
+            "legacy flight cannot contain an Advanced thermal-abort latch")};
       }
       if (auto flight =
               validate_flight(document.recipe, document.state.flight.value());
