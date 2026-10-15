@@ -157,8 +157,14 @@ func run() -> void:
 func check_planet_optics(historical: Dictionary, output: String) -> void:
 	check(not historical.has("optics") and PlanetOptics.valid(historical), "Historical save gained an optical selection")
 	var owner: Variant = ClassDB.instantiate("FreedomBridge")
-	if not owner.initialize_freedom_new_game("42"):
-		check(false, "Actual optical New Game refused: " + str(owner.get_last_error()))
+	# Pure bridge packet check: use the explicit pending transaction. The
+	# ordinary shell separately owns model staging before displaying a journey.
+	if not owner.stage_freedom_new_game("42"):
+		check(false, "Actual optical New Game could not stage: " + str(owner.get_last_error()))
+		return
+	var candidate: Dictionary = owner.get_pending_freedom_start()
+	if not owner.commit_pending_freedom_start(candidate.candidate_id):
+		check(false, "Actual optical New Game could not commit")
 		return
 	var state: Dictionary = owner.get_freedom_flight_state()
 	if not PlanetOptics.valid(state) or not state.has("optics"):
