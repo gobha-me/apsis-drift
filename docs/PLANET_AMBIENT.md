@@ -112,10 +112,15 @@ impact, automatic damage or a force added to the flight integrator. Actual
 gravity/atmospheric dynamics retain their existing providers. Completed #93
 retains speed/descent-driven heating and thermal integration.
 
-Raw generated facts stay within C++ simulation consumers. Knowledge projections
+Raw environmental envelopes stay within C++ simulation consumers. Knowledge projections
 redact undiscovered facts and retain observation provenance for cockpit, chart
 and renderer presentation. #102 owns equipment-specific margins; #199
 owns suit/surface walking integration; #248 owns jump interference design.
 Time-varying storms, day/night thermal evolution, shield attenuation, hazard
 damage and detailed minor-body/stellar physics remain separate work. No mutable
 weather state or competing rotation/light clock is introduced here.
+
+[Optics1](PLANET_OPTICS.md) separately selects actual static cloud/dust appearance
+within these potential bounds. Its narrow visible-optics disclosure sends no raw
+envelope or seed and grants no knowledge evidence. Historical unselected saves
+remain clear; the optical field does not apply hazards or movement restrictions.
