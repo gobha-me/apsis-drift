@@ -19,6 +19,15 @@ var pending_report: Dictionary = {}
 var error := ""
 var render_layer := 1
 var identity: Dictionary = {}
+const MORPH_SECONDS := 0.25
+const MAX_TILE_VERTICES := 33 * 33 + 4 * 33
+var morph_active := false
+var morph_progress := 0.0
+var morph_entries: Dictionary = {}
+var morph_draw_ids: Dictionary = {}
+var morph_upload_index := 0
+# Extra attributes may remain on accepted fine meshes, inactive, until retirement.
+var morph_attribute_bytes: Dictionary = {}
 
 
 static func valid_decimal(value: Variant) -> bool:
@@ -63,134 +72,301 @@ func reset_world() -> void:
 	pending_report.clear()
 	identity.clear()
 	error = ""
+	_clear_morph_state()
+	morph_attribute_bytes.clear()
 
 
 func _create_mesh(arrays: Array) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var flags := 0
+	if arrays[Mesh.ARRAY_CUSTOM0] is PackedFloat32Array:
+		flags = (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) | (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT) | (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 	return mesh
 
 
+func _clear_morph_state() -> void:
+	morph_active = false
+	morph_progress = 0.0
+	morph_entries.clear()
+	morph_draw_ids.clear()
+	morph_upload_index = 0
+
+
+func _base_material(node: MeshInstance3D) -> void:
+	if node.material_override is ShaderMaterial:
+		node.material_override.set_shader_parameter("morph_active", false)
+		node.material_override.set_shader_parameter("morph_fine_weight", 1.0)
+	if node.mesh is ArrayMesh:
+		node.mesh.custom_aabb = AABB()
+
+
 func _refuse_cover(reason: String) -> void:
-	# The accepted cover keeps its last complete placement. Incoming nodes
-	# remain owned until explicit reset, but cannot replace or obscure it.
+	# Roll back even an active common-refinement draw to the accepted base cover.
 	for id in nodes:
-		if not resident_ids.has(id): nodes[id].visible = false
+		_base_material(nodes[id])
+		nodes[id].visible = resident_ids.has(id)
+	_clear_morph_state()
 	error = reason
 
 
-func tick(delta: float, observer: Vector3) -> void:
+static func _morph_key(value: Variant) -> PackedInt32Array:
+	if not value is String: return PackedInt32Array()
+	var parts: PackedStringArray = value.split(":")
+	if parts.size() != 4: return PackedInt32Array()
+	var key := PackedInt32Array()
+	for part in parts:
+		if not valid_decimal(part) or part.length() > 4: return PackedInt32Array()
+		key.append(part.to_int())
+	if key[0] > 5 or key[1] > 13 or key[2] >= (1 << key[1]) or key[3] >= (1 << key[1]): return PackedInt32Array()
+	return key
+
+
+func _begin_batch(batch: Dictionary) -> bool:
+	var entries: Variant = batch.get("tiles")
+	if not entries is Array or entries.is_empty() or entries.size() > 384:
+		_refuse_cover("Invalid terrain cover buffer")
+		return false
+	var next_ids: Dictionary = {}
+	for entry in entries:
+		if not entry is Dictionary or not entry.get("id") is String or entry.id.is_empty() or entry.id.length() > 64 or next_ids.has(entry.id):
+			_refuse_cover("Invalid terrain tile roster")
+			return false
+		next_ids[entry.id] = true
+	var packet: Variant = batch.get("morph", {})
+	if not packet is Dictionary:
+		_refuse_cover("Invalid terrain transition packet")
+		return false
+	var endpoints: Dictionary = {}
+	var draw: Dictionary = {}
+	if not packet.is_empty():
+		if not packet.get("version") is int or packet.version != 1 or not packet.get("entries") is Array or packet.entries.is_empty() or packet.entries.size() > 768 or not packet.get("draw_ids") is Array or packet.draw_ids.is_empty() or packet.draw_ids.size() > 768 or resident_ids.is_empty():
+			_refuse_cover("Unsupported terrain transition header")
+			return false
+		var expected := next_ids.duplicate()
+		for entry in packet.entries:
+			if not entry is Dictionary or not entry.get("refining") is bool:
+				_refuse_cover("Invalid terrain transition direction")
+				return false
+			var fine := _morph_key(entry.get("id"))
+			var coarse := _morph_key(entry.get("coarse_id"))
+			if fine.is_empty() or coarse.is_empty() or fine[0] != coarse[0] or fine[1] <= coarse[1] or endpoints.has(entry.id):
+				_refuse_cover("Invalid terrain transition ancestry")
+				return false
+			var difference := fine[1] - coarse[1]
+			if (fine[2] >> difference) != coarse[2] or (fine[3] >> difference) != coarse[3]:
+				_refuse_cover("Unrelated terrain transition keys")
+				return false
+			if entry.refining:
+				if not next_ids.has(entry.id) or resident_ids.has(entry.id) or not resident_ids.has(entry.coarse_id):
+					_refuse_cover("Refining terrain differs from the accepted cover")
+					return false
+			elif not resident_ids.has(entry.id) or next_ids.has(entry.id) or not next_ids.has(entry.coarse_id):
+				_refuse_cover("Coarsening terrain differs from the accepted cover")
+				return false
+			else:
+				expected.erase(entry.coarse_id)
+				expected[entry.id] = true
+			endpoints[entry.id] = entry
+		for id in packet.draw_ids:
+			if not id is String or not expected.has(id) or draw.has(id):
+				_refuse_cover("Invalid terrain transition draw roster")
+				return false
+			draw[id] = true
+		if draw.size() != expected.size():
+			_refuse_cover("Incomplete terrain transition draw roster")
+			return false
+		for id in draw:
+			if not resident_ids.has(id) and not endpoints.has(id):
+				_refuse_cover("Missing terrain transition endpoint")
+				return false
+	pending = entries
+	wanted = next_ids
+	morph_entries = endpoints
+	morph_draw_ids = draw
+	upload_index = 0
+	morph_upload_index = 0
+	pending_report = batch.duplicate(false)
+	pending_report.erase("tiles")
+	pending_report.erase("morph")
+	return true
+
+
+static func _valid_bounds(bounds: AABB) -> bool:
+	return bounds.position.is_finite() and bounds.size.is_finite() and bounds.end.is_finite() and bounds.size.x >= 0.0 and bounds.size.y >= 0.0 and bounds.size.z >= 0.0
+
+
+func _upload_morph(entry: Dictionary) -> bool:
+	if not nodes.has(entry.id): return false
+	var node: MeshInstance3D = nodes[entry.id]
+	if not node.mesh is ArrayMesh or node.mesh.get_surface_count() != 1 or not node.material_override is ShaderMaterial: return false
+	var arrays: Array = node.mesh.surface_get_arrays(0)
+	if not arrays[Mesh.ARRAY_VERTEX] is PackedVector3Array: return false
+	var count: int = arrays[Mesh.ARRAY_VERTEX].size()
+	if count <= 0 or count > MAX_TILE_VERTICES: return false
+	for field in ["position_elevation", "normals", "colors"]:
+		var values: Variant = entry.get(field)
+		if not values is PackedFloat32Array or values.size() != 4 * count: return false
+		for value in values:
+			if not is_finite(value): return false
+	var bounds: AABB = node.mesh.get_aabb()
+	if not _valid_bounds(bounds): return false
+	for i in count:
+		var offset := 4 * i
+		var normal := Vector3(entry.normals[offset], entry.normals[offset + 1], entry.normals[offset + 2])
+		var magnitude := normal.length_squared()
+		if not is_finite(magnitude) or magnitude <= 0.000000000001 or magnitude > 1.00001: return false
+		for channel in 4:
+			if entry.colors[offset + channel] < 0.0 or entry.colors[offset + channel] > 1.0: return false
+		bounds = bounds.expand(Vector3(entry.position_elevation[offset], entry.position_elevation[offset + 1], entry.position_elevation[offset + 2]))
+	if not _valid_bounds(bounds): return false
+	arrays[Mesh.ARRAY_CUSTOM0] = entry.position_elevation
+	arrays[Mesh.ARRAY_CUSTOM1] = entry.normals
+	arrays[Mesh.ARRAY_CUSTOM2] = entry.colors
+	var mesh := _create_mesh(arrays)
+	if mesh == null or mesh.get_surface_count() != 1: return false
+	mesh.custom_aabb = bounds
+	node.mesh = mesh
+	morph_attribute_bytes[entry.id] = count * 4 * 4 * 3
+	return true
+
+
+func _set_morph_progress() -> void:
+	for id in morph_entries:
+		var material: ShaderMaterial = nodes[id].material_override
+		material.set_shader_parameter("morph_active", true)
+		material.set_shader_parameter("morph_fine_weight", morph_progress if morph_entries[id].refining else 1.0 - morph_progress)
+
+
+func _finish_cover() -> void:
+	for id in nodes.keys():
+		if not wanted.has(id):
+			var retired: MeshInstance3D = nodes[id]
+			retired.visible = false
+			retired.queue_free()
+			nodes.erase(id)
+			anchors.erase(id)
+			morph_attribute_bytes.erase(id)
+			retired_total += 1
+		else:
+			nodes[id].visible = true
+			_base_material(nodes[id])
+	resident_ids = nodes.keys()
+	last_report = pending_report
+	generated_total += int(pending_report.generated)
+	pending_report = {}
+	pending.clear()
+	wanted.clear()
+	_clear_morph_state()
+	is_ready = true
+	swaps += 1
+
+
+func tick(delta: float, observer: Vector3, animate := true) -> void:
+	if not is_finite(delta) or delta < 0.0 or not observer.is_finite():
+		_refuse_cover("Invalid terrain presentation clock or observer")
+		return
 	var current: Dictionary = bridge.get_stream_identity()
 	if not valid_identity(current):
-		error = "C++ terrain stream identity is unavailable or invalid"
+		_refuse_cover("C++ terrain stream identity is unavailable or invalid")
 		return
 	if current != identity:
-		# Retire both covers and any partially uploaded payload before keys
-		# from another owner, saved policy or stream generation can alias them.
-		# An implicit retirement must not acknowledge a latched fault. The
-		# owning view still needs to pause and silence stale presentation.
 		var latched_error := error
 		reset_world()
 		error = latched_error
 		identity = current.duplicate(true)
-	if not error.is_empty():
-		return
+		# Queued old-world children leave at frame end. Do not add a third
+		# cover's upload tail while the previous two covers still own nodes.
+		if get_child_count() > 0: return
+	if not error.is_empty(): return
+	if nodes.is_empty() and get_child_count() > 0: return
+	# Scene deletion happens at frame end. Repeated ticks within one frame
+	# must not accumulate another upload cover behind queued retired nodes.
+	var can_stage := get_child_count() == nodes.size()
 	timer += delta
-	if pending.is_empty():
+	if pending.is_empty() and not morph_active and can_stage:
 		var batch: Dictionary = bridge.poll_stream()
 		if batch.has("error"):
-			error = str(batch.error)
+			_refuse_cover(str(batch.error))
 			return
 		if batch.has("tiles"):
 			if typeof(batch.get("identity")) != TYPE_DICTIONARY or not valid_identity(batch.identity) or batch.identity != identity:
-				error = "C++ terrain batch differs from the selected stream"
+				_refuse_cover("C++ terrain batch differs from the selected stream")
 				return
-			pending = batch.tiles
-			wanted.clear()
-			for entry in pending:
-				wanted[entry.id] = true
-			upload_index = 0
-			pending_report = batch.duplicate(false)
-			pending_report.erase("tiles")
+			if not _begin_batch(batch): return
 		elif timer >= 0.35:
 			timer = 0
 			if not bridge.request_stream(observer):
-				error = str(bridge.get_last_error())
+				_refuse_cover(str(bridge.get_last_error()))
 				return
-	if not pending.is_empty():
+	if not pending.is_empty() and not morph_active and can_stage:
 		var uploaded := 0
 		var begin := Time.get_ticks_usec()
-		while upload_index < pending.size():
-			var entry: Dictionary = pending[upload_index]
-			upload_index += 1
-			if nodes.has(entry.id):
-				continue
-			if not entry.has("vertices"):
-				_refuse_cover("C++ stream omitted an uncached tile payload")
-				return
-			var arrays: Array = []
-			arrays.resize(Mesh.ARRAY_MAX)
-			arrays[Mesh.ARRAY_VERTEX] = entry.vertices
-			arrays[Mesh.ARRAY_NORMAL] = entry.normals
-			arrays[Mesh.ARRAY_COLOR] = entry.colors
-			arrays[Mesh.ARRAY_TEX_UV] = entry.uv
-			arrays[Mesh.ARRAY_INDEX] = entry.indices
-			var mesh := _create_mesh(arrays)
-			if mesh == null or mesh.get_surface_count() != 1:
-				_refuse_cover("Terrain mesh upload did not produce one surface")
-				return
-			var instance := MeshInstance3D.new()
-			instance.layers = render_layer
-			instance.mesh = mesh
-			var material := ShaderMaterial.new()
-			material.shader = load("res://shaders/terrain.gdshader")
-			material.set_shader_parameter("planet_tile", true)
-			material.set_shader_parameter("tile_origin", Vector3(entry.anchor[0], entry.anchor[1], entry.anchor[2]))
-			instance.material_override = material
-			instance.visible = false
-			add_child(instance)
-			nodes[entry.id] = instance
-			anchors[entry.id] = entry.anchor
+		var morph_ids := morph_entries.keys()
+		while upload_index < pending.size() or morph_upload_index < morph_ids.size():
+			if upload_index < pending.size():
+				var entry: Dictionary = pending[upload_index]
+				upload_index += 1
+				if nodes.has(entry.id): continue
+				if not entry.has("vertices"):
+					_refuse_cover("C++ stream omitted an uncached tile payload")
+					return
+				var arrays: Array = []
+				arrays.resize(Mesh.ARRAY_MAX)
+				arrays[Mesh.ARRAY_VERTEX] = entry.vertices
+				arrays[Mesh.ARRAY_NORMAL] = entry.normals
+				arrays[Mesh.ARRAY_COLOR] = entry.colors
+				arrays[Mesh.ARRAY_TEX_UV] = entry.uv
+				arrays[Mesh.ARRAY_INDEX] = entry.indices
+				var mesh := _create_mesh(arrays)
+				if mesh == null or mesh.get_surface_count() != 1:
+					_refuse_cover("Terrain mesh upload did not produce one surface")
+					return
+				var instance := MeshInstance3D.new()
+				instance.layers = render_layer
+				instance.mesh = mesh
+				var material := ShaderMaterial.new()
+				material.shader = load("res://shaders/terrain.gdshader")
+				material.set_shader_parameter("planet_tile", true)
+				material.set_shader_parameter("tile_origin", Vector3(entry.anchor[0], entry.anchor[1], entry.anchor[2]))
+				instance.material_override = material
+				instance.visible = false
+				add_child(instance)
+				nodes[entry.id] = instance
+				anchors[entry.id] = entry.anchor
+			else:
+				if not _upload_morph(morph_entries[morph_ids[morph_upload_index]]):
+					_refuse_cover("Invalid terrain morph attribute buffer or mesh")
+					return
+				morph_upload_index += 1
 			uploaded += 1
-			# A count limit plus a soft CPU budget. One GPU upload may still stall.
-			if uploaded >= 4 or Time.get_ticks_usec() - begin >= 2000:
-				break
-	# Transform both covers while staging. Subtraction happens in C++ doubles,
-	# before Godot ever receives a float; mesh coordinates are tile-local.
+			if uploaded >= 4 or Time.get_ticks_usec() - begin >= 2000: break
+	# Both covers move together; subtraction remains in C++ doubles.
 	var ids := nodes.keys()
 	var positions := PackedFloat64Array()
-	for id in ids:
-		positions.append_array(anchors[id])
+	for id in ids: positions.append_array(anchors[id])
 	var transforms: Array = bridge.stream_transforms(positions)
 	if transforms.size() != ids.size():
 		_refuse_cover("Invalid stream transforms: " + str(bridge.get_last_error()))
 		return
-	# Validate the whole batch before moving even the first accepted tile.
 	for transform in transforms:
 		if not transform is Transform3D or not transform.is_finite():
 			_refuse_cover("Invalid terrain placement transform")
 			return
-	for i in range(ids.size()):
-		nodes[ids[i]].transform = transforms[i]
-	if not pending.is_empty() and upload_index == pending.size():
-		for id in nodes.keys():
-			if not wanted.has(id):
-				var retired: MeshInstance3D = nodes[id]
-				retired.visible = false
-				retired.queue_free()
-				nodes.erase(id)
-				anchors.erase(id)
-				retired_total += 1
-			else:
-				nodes[id].visible = true
-		resident_ids = nodes.keys()
-		last_report = pending_report
-		generated_total += int(pending_report.generated)
-		pending_report = {}
-		pending.clear()
-		wanted.clear()
-		is_ready = true
-		swaps += 1
+	for i in range(ids.size()): nodes[ids[i]].transform = transforms[i]
+	if morph_active:
+		if animate:
+			morph_progress = minf(1.0, morph_progress + delta / MORPH_SECONDS)
+			_set_morph_progress()
+		if morph_progress >= 1.0: _finish_cover()
+	elif not pending.is_empty() and upload_index == pending.size() and morph_upload_index == morph_entries.size():
+		if morph_entries.is_empty():
+			_finish_cover()
+		else:
+			morph_active = true
+			morph_progress = 0.0
+			for id in nodes: nodes[id].visible = morph_draw_ids.has(id)
+			_set_morph_progress()
 
 
 # Clip only presentation geometry already supplied by C++. Include both covers:
@@ -207,6 +383,9 @@ func depth_range(relation: Transform3D, minimum_far: float) -> Vector2:
 		if not is_instance_valid(node) or not node is MeshInstance3D or node.mesh == null or not node.transform.is_finite():
 			return Vector2.ZERO
 		var bounds: AABB = node.mesh.get_aabb()
+		if node.mesh is ArrayMesh and node.mesh.custom_aabb != AABB():
+			if not _valid_bounds(node.mesh.custom_aabb): return Vector2.ZERO
+			bounds = bounds.merge(node.mesh.custom_aabb)
 		if not bounds.position.is_finite() or not bounds.size.is_finite() or not bounds.end.is_finite() or bounds.size.x < 0.0 or bounds.size.y < 0.0 or bounds.size.z < 0.0:
 			return Vector2.ZERO
 		# Transform the whole box into camera space; its minimum Z bounds
@@ -227,6 +406,11 @@ func report() -> Dictionary:
 	result["swaps"] = swaps
 	result["generated_total"] = generated_total
 	result["retired_total"] = retired_total
+	result["morph_active"] = morph_active
+	result["morph_progress"] = morph_progress
+	var attribute_bytes := 0
+	for bytes in morph_attribute_bytes.values(): attribute_bytes += int(bytes)
+	result["morph_attribute_payload_bytes"] = attribute_bytes
 	result["ready"] = is_ready
 	result["identity"] = identity.duplicate(true)
 	return result

@@ -5,6 +5,13 @@ const NativeIds = preload("res://scripts/native/native_environment.gd")
 static func finite_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
 
+static func surface_position_text(walking: Dictionary) -> String:
+	for field in ["latitude", "longitude"]:
+		if not finite_number(walking.get(field)): return "Surface position unavailable"
+	if absf(walking.latitude) > PI / 2.0 or absf(walking.longitude) > PI:
+		return "Surface position unavailable"
+	return "Lat %+.5f° · Lon %+.5f°" % [rad_to_deg(walking.latitude), rad_to_deg(walking.longitude)]
+
 static func layout_bounds(logical: Vector2, pixels: Vector2) -> Rect2:
 	if not logical.is_finite() or not pixels.is_finite() or logical.x <= 0.0 or logical.y <= 0.0 or pixels.x <= 0.0 or pixels.y <= 0.0: return Rect2()
 	var scale := maxf(1.0, maxf(logical.x / pixels.x, logical.y / pixels.y))

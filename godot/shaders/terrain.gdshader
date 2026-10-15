@@ -1,11 +1,13 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-// Presentation-only mineral/sediment shading. NO vertex displacement, collision
-// surface, random stream or saved-world data is introduced here. Metres.
+// Presentation-only shading and optional interpolation of C++ mesh endpoints.
+// No collision surface, random stream or saved-world data is introduced. Metres.
 uniform float altitude_origin = 0.0;
 uniform bool planet_tile = false;
 uniform vec3 tile_origin = vec3(0.0);
+uniform bool morph_active = false;
+uniform float morph_fine_weight = 1.0;
 varying vec3 surface_position;
 varying vec3 surface_normal;
 varying vec3 mineral_position;
@@ -29,6 +31,13 @@ float mineral_noise(vec3 p) {
 }
 
 void vertex() {
+	if (planet_tile && morph_active) {
+		float fine_weight = clamp(morph_fine_weight, 0.0, 1.0);
+		VERTEX = mix(CUSTOM0.xyz, VERTEX, fine_weight);
+		NORMAL = mix(CUSTOM1.xyz, NORMAL, fine_weight);
+		COLOR.rgb = mix(CUSTOM2.rgb, COLOR.rgb, fine_weight);
+		UV.x = mix(CUSTOM0.w, UV.x, fine_weight);
+	}
 	surface_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	surface_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
 	mineral_position = planet_tile ? VERTEX + tile_origin : surface_position + vec3(0.0, altitude_origin, 0.0);
@@ -40,7 +49,7 @@ void fragment() {
 	vec3 p = mineral_position;
 	// Fine surface slopes must fade spatially, not switch at a mesh LOD edge.
 	// VERTEX is view-space here, so this remains stable across floating-origin
-	// shifts and tile replacements. Geometry/physical heights are unchanged.
+	// shifts and tile replacements. This normal blend preserves physical heights.
 	float normal_detail = planet_tile ? 1.0 - smoothstep(120000.0, 500000.0, length(VERTEX)) : 1.0;
 	vec3 terrain_normal = normalize(mix(normalize(radial_normal), normalize(surface_normal), normal_detail));
 	float footprint = max(length(dFdx(p)), length(dFdy(p)));

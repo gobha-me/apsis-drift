@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -153,6 +154,17 @@ def run_logged(command, log, env, timeout):
 def sha256(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def stage_helper(source, destination):
+    """Reuse identical staged helpers without rewriting read-only snapshots."""
+    try:
+        metadata = destination.lstat()
+    except FileNotFoundError:
+        shutil.copy2(source, destination)
+        return
+    if not stat.S_ISREG(metadata.st_mode) or sha256(source) != sha256(destination):
+        raise ValueError(f"refusing changed or nonregular staged helper: {destination}")
 
 
 def finish_work(work, report, keep_work):
@@ -402,7 +414,7 @@ def main(argv=None):
                          "wayfarer_stowed_package_checks.py", "stowed_asset_identity.py",
                          "wayfarer_corrected_rest_geometry.py", "wayfarer_restraint_export_checks.py")
         for filename in helpers:
-            shutil.copy2(repo / "tools" / filename, work / filename)
+            stage_helper(repo / "tools" / filename, work / filename)
         preparer = work / "prepare_freedom_native_assets.py"
         log = work / "prepare-native-assets.log"
         code, timed_out, elapsed = run_logged(
@@ -426,7 +438,7 @@ def main(argv=None):
         for filename in ("prepare_operating_assets.py", "wayfarer_operating_spec.py", "operating_asset_identity.py",
                          "wayfarer_operating_glb_audit.py", "validate_operating_asset_glb.py",
                          "build_boarding_qualification.py"):
-            shutil.copy2(repo / "tools" / filename, work / filename)
+            stage_helper(repo / "tools" / filename, work / filename)
         preparer = work / "prepare_operating_assets.py"
         log = work / "prepare-operating-assets.log"
         code, timed_out, elapsed = run_logged(
@@ -446,7 +458,7 @@ def main(argv=None):
         for filename in ("prepare_operating_motion.py", "operating_motion_spec.py",
                          "operating_motion_identity.py", "package_operating_motion.py",
                          "prepare_native_assets.py"):
-            shutil.copy2(repo / "tools" / filename, work / filename)
+            stage_helper(repo / "tools" / filename, work / filename)
         preparer = work / "prepare_operating_motion.py"
         log = work / "prepare-operating-motion.log"
         code, timed_out, elapsed = run_logged(

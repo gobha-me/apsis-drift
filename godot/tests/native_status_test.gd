@@ -9,6 +9,19 @@ func _initialize() -> void:
 	# Invalid data/layout is checked before any world, model or rendering stage.
 	for dimensions in [Vector2.ZERO, Vector2(-1, 720), Vector2(INF, 720), Vector2(1280, NAN)]:
 		check(Status.layout_bounds(dimensions, Vector2(1280, 720)) == Rect2() and Status.layout_bounds(Vector2(1280, 720), dimensions) == Rect2(), "Invalid HUD dimensions accepted")
+	var position := {"latitude": PI / 6.0, "longitude": -PI / 4.0}
+	var position_before := position.duplicate(true)
+	check(Status.surface_position_text(position) == "Lat +30.00000° · Lon -45.00000°", "Surface position lost axis, sign or radian-to-degree units")
+	for field in ["latitude", "longitude"]:
+		for invalid in [null, true, false, NAN, INF, -INF, "unknown", [], {}]:
+			var bad_position := position.duplicate(true)
+			bad_position[field] = invalid
+			check(Status.surface_position_text(bad_position) == "Surface position unavailable", "Malformed surface coordinate became a position: " + field)
+	for bad_position in [{}, {"latitude": 0.0}, {"longitude": 0.0}, {"latitude": PI / 2.0 + 0.0000001, "longitude": 0.0}, {"latitude": -PI / 2.0 - 0.0000001, "longitude": 0.0}, {"latitude": 0.0, "longitude": PI + 0.0000001}, {"latitude": 0.0, "longitude": -PI - 0.0000001}]:
+		check(Status.surface_position_text(bad_position) == "Surface position unavailable", "Missing or out-of-range surface coordinates accepted")
+	check(Status.surface_position_text({"latitude": 0.0, "longitude": 0.0}) == "Lat +0.00000° · Lon +0.00000°", "Equator or prime meridian lost")
+	check("+90.00000°" in Status.surface_position_text({"latitude": PI / 2.0, "longitude": PI}) and "-90.00000°" in Status.surface_position_text({"latitude": -PI / 2.0, "longitude": -PI}), "Polar or date-line boundaries refused")
+	check(position == position_before, "Position formatting mutated the supplied observation")
 	var snapshot := {"altitude": 900.0, "surface_speed": 1.9, "radial_rate": 1.9, "air_density": 1.0685, "attached": false, "surface": {}, "surface_walk": {}, "jump": {"phase": "idle", "selected": "next"}, "resources": {"selected": true, "fraction": 0.9, "jump_charges": 3}, "chart": {"rows": [{"name": "Known home", "current": true, "system_id": "here"}, {"name": "Known neighbor", "current": false, "system_id": "next"}]}}
 	var original := snapshot.duplicate(true)
 	check("Atmosphere" in Status.summary(snapshot) and "Reference altitude 0.90 km" in Status.summary(snapshot) and "Known neighbor" in Status.summary(snapshot), "Reference height, modeled air or selected target lost")

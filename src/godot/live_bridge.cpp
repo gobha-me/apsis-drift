@@ -27,6 +27,7 @@
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
@@ -1279,6 +1280,10 @@ class FreedomBridge : public godot::RefCounted {
                                         body.tick))
             .geometry.fixed_to_system;
     const auto view = project_saved_flight(session);
+    const auto position = require(geodetic_from_planet_fixed(
+        view.planet, PlanetFixedPositionMetres{foot.x, foot.y, foot.z}));
+    result["latitude"] = position.latitude_radians;
+    result["longitude"] = position.longitude_radians;
     const auto local = [&](RigidVector3 v) {
       const auto& a = view.system_axes;
       return godot::Vector3{
@@ -2869,7 +2874,60 @@ class FreedomBridge : public godot::RefCounted {
         }
         entries.push_back(entry);
       }
+      godot::Dictionary morph;
+      if (!batch->transition.morphs.empty()) {
+        godot::Array draw_ids, endpoints;
+        for (const auto& [key, tile] : batch->transition.draw_tiles) {
+          (void)tile;
+          draw_ids.push_back(godot::String{stream_id(key).c_str()});
+        }
+        const auto as_float = [](double value) -> float {
+          if (!std::isfinite(value) ||
+              std::abs(value) > std::numeric_limits<float>::max())
+            throw std::invalid_argument("unrepresentable terrain morph value");
+          return static_cast<float>(value);
+        };
+        for (const auto& [key, endpoint] : batch->transition.morphs) {
+          const auto count =
+              batch->transition.draw_tiles.at(key)->vertices.size();
+          if (endpoint.coarse_vertices.size() != count ||
+              endpoint.coarse_normals.size() != count ||
+              endpoint.coarse_colors.size() != count ||
+              endpoint.coarse_elevations.size() != count)
+            throw std::invalid_argument("incomplete terrain morph attributes");
+          godot::PackedFloat32Array positions, normals, colors;
+          for (std::size_t i = 0; i < count; ++i) {
+            const auto position = endpoint.coarse_vertices[i];
+            const auto normal = endpoint.coarse_normals[i];
+            const auto color = endpoint.coarse_colors[i];
+            for (const auto value : {position.x, position.y, position.z,
+                                     endpoint.coarse_elevations[i]})
+              positions.push_back(as_float(value));
+            for (const auto value : {normal.x, normal.y, normal.z, 0.0})
+              normals.push_back(as_float(value));
+            for (const auto value : {color[0], color[1], color[2], 1.0})
+              colors.push_back(as_float(value));
+          }
+          godot::Dictionary entry;
+          entry["id"] = godot::String{stream_id(key).c_str()};
+          entry["coarse_id"] =
+              godot::String{stream_id(endpoint.coarse_key).c_str()};
+          entry["refining"] = endpoint.refining;
+          entry["position_elevation"] = positions;
+          entry["normals"] = normals;
+          entry["colors"] = colors;
+          endpoints.push_back(entry);
+        }
+        morph["version"] = 1;
+        morph["draw_ids"] = draw_ids;
+        morph["entries"] = endpoints;
+      }
       exported = std::move(next);
+      result["morph"] = morph;
+      result["morph_payload_bytes"] =
+          static_cast<std::int64_t>(batch->transition.bytes());
+      result["transition_draw_tiles"] =
+          static_cast<std::int64_t>(batch->transition.draw_tiles.size());
       result["identity"] = get_stream_identity();
       result["tiles"] = entries;
       result["generated"] = batch->generated;

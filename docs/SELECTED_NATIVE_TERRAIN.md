@@ -81,6 +81,27 @@ accepted cover's visibility, transforms and committed counters, and latches a
 presentation error until explicit reset. World-owner changes still retire the
 old world's geometry rather than retaining an unrelated cover.
 
+LOD replacements use a quarter-second geometric transition. C++ derives coarse
+endpoints from the actual triangles of the previous or incoming cover, without
+another terrain query. Refinement draws incoming fine topology; coarsening keeps
+outgoing fine topology until it has collapsed onto the incoming coarse surface.
+Positions, normals, colors and elevations share one presentation clock. Pausing
+freezes that clock while pending mesh uploads can finish; simulation time and
+save state do not change with presentation progress.
+
+The temporary draw cover contains only existing old/new keys and stays within
+their combined limit of 768 tiles. No third cover is requested during a morph.
+Uploads retain the four-mesh/two-millisecond soft budget; swept mesh bounds feed
+both visibility culling and camera depth. Malformed transition packets preserve
+the accepted base cover. Extra attributes on accepted fine meshes remain
+inactive until those meshes retire; the reported attribute payload is not a GPU
+allocation or performance measurement.
+
+This interpolates the top surface. Skirts keep each fine tile's existing inward
+offset; they do not reproduce the old coarse skirt triangulation or weld cube
+faces. A smooth top-surface handoff alone does not certify every seam, lighting
+transition or screen pixel.
+
 For policy2, tile planning subtracts the selected surface elevation from the
 radial observer distance before scoring the existing datum grid. A low camera
 over elevated ground therefore requests local detail using its radial surface
@@ -101,8 +122,11 @@ python3 tools/test_godot_native.py --godot "$GODOT_BIN" --build-dir build-native
 
 The selected-stream contract exercises real New Game, metadata refusals,
 legacy/selected Continue, pending-payload retirement, mesh residency and complete
-unchanged save bytes. The surface variants use the same landing, thruster
-liftoff, ground walking, reboarding and Save/Continue consumers with explicit
+unchanged save bytes. It also checks transition direction, paused progress,
+retirement, reset, swept bounds and malformed endpoint buffers. The C++ stream
+contract independently checks actual coarse triangles, shared-edge endpoints,
+both directions and bounded payloads. The surface variants use the same landing,
+thruster liftoff, ground walking, reboarding and Save/Continue consumers with explicit
 legacy or local-detail C++ fixtures. They share one prepared asset set in the
 runner. See [runtime checks](DEVELOPMENT.md#native-runtime-contracts) for staging,
 failure handling and retained evidence.
@@ -164,8 +188,8 @@ work remains open under #212.
 ## Remaining limits
 
 Selection and shared ownership do not establish visual or hardware acceptance.
-Current skirts, LOD transitions/popping and broader terrain presentation remain
-work; this integration does not add weather. Physical controller feel, GPU
+Skirt seams, broader LOD/lighting continuity and terrain composition remain
+work; geometric morphing does not add weather. Physical controller feel, GPU
 appearance and frame pacing require their own checks. Record actual feature
 width/height and sample spacing before claiming recognizable relief, and use
 the real camera/output projection for pixel targets. No provider timing,

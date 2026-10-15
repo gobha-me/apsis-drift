@@ -221,8 +221,303 @@ static auto selected_clearance_planning() -> void {
             << "; selected lod=13; cover=" << batch.tiles.size()
             << "; worker ms=" << batch.milliseconds << '\n';
 }
+static auto selected_morph_contract() -> void {
+  // Actual parent/four-child pair retained by the Oct14 coarse-to-eye fixture.
+  // No terrain search, height override or manufactured flight is involved.
+  const auto owner =
+      require(generate_physical_local_system(Seed{2910174744474113395ULL}, 2));
+  const auto body = body_id(PlanetId{7198692597331823481ULL});
+  const StreamKey parent{0, 10, 513, 511};
+  auto cache = require(TerrainTileCache::create(64));
+  const auto build = [&](StreamKey key) {
+    return build_stream_tile(owner, body, key, 2, cache);
+  };
+  TileMap old;
+  for (unsigned face = 0; face < 6; ++face) {
+    const StreamKey key{face, 0, 0, 0};
+    old.emplace(key, build(key));
+  }
+  // Complete cover containing the recorded parent; only its ancestor path is
+  // refined. All unchanged regions share the same actual immutable meshes.
+  for (unsigned depth = 0; depth < parent.lod; ++depth) {
+    const StreamKey key{parent.face, depth, parent.x >> (parent.lod - depth),
+                        parent.y >> (parent.lod - depth)};
+    check(old.erase(key) == 1, "retained morph parent path is incomplete");
+    for (unsigned y = 0; y < 2; ++y)
+      for (unsigned x = 0; x < 2; ++x) {
+        const StreamKey child{key.face, depth + 1, key.x * 2 + x,
+                              key.y * 2 + y};
+        old.emplace(child, build(child));
+      }
+  }
+  auto next = old;
+  next.erase(parent);
+  for (unsigned y = 0; y < 2; ++y)
+    for (unsigned x = 0; x < 2; ++x) {
+      const StreamKey child{parent.face, parent.lod + 1, parent.x * 2 + x,
+                            parent.y * 2 + y};
+      next.emplace(child, build(child));
+    }
+  const auto initial = make_stream_transition({}, old);
+  check(initial.draw_tiles == old && initial.morphs.empty() &&
+            initial.bytes() == 0 &&
+            make_stream_transition(old, old).morphs.empty(),
+        "initial/unchanged cover invented a morph");
+  const auto forward = make_stream_transition(old, next);
+  const auto backward = make_stream_transition(next, old);
+  const auto repeated = make_stream_transition(old, next);
+  constexpr unsigned n = kStreamIntervals + 1;
+  constexpr unsigned vertices = n * n + 4 * n;
+  check(forward.draw_tiles == next && backward.draw_tiles == next &&
+            forward.morphs.size() == 4 && backward.morphs.size() == 4 &&
+            forward.bytes() ==
+                4 * vertices *
+                    (2 * sizeof(StreamPoint) + sizeof(std::array<double, 3>) +
+                     sizeof(double)),
+        "bidirectional handoff lost fine topology or endpoint byte bound");
+  const auto& coarse = *old.at(parent);
+  // Independent oracle walks the actual index buffer and solves general 2D
+  // triangle barycentrics. It does not use the production cell/half selection.
+  const auto oracle = [&](double u, double v) {
+    struct Sample {
+      StreamPoint position{}, normal{};
+      std::array<double, 3> color{};
+      double elevation{};
+    };
+    for (unsigned at = 0; at < 6 * kStreamIntervals * kStreamIntervals;
+         at += 3) {
+      std::array<unsigned, 3> indices{};
+      std::array<double, 3> x{}, y{};
+      for (unsigned i = 0; i < 3; ++i) {
+        indices[i] = static_cast<unsigned>(coarse.indices[at + i]);
+        x[i] = static_cast<double>(indices[i] % n) / kStreamIntervals;
+        y[i] = static_cast<double>(indices[i] / n) / kStreamIntervals;
+      }
+      const auto determinant =
+          (y[1] - y[2]) * (x[0] - x[2]) + (x[2] - x[1]) * (y[0] - y[2]);
+      std::array<double, 3> w{
+          ((y[1] - y[2]) * (u - x[2]) + (x[2] - x[1]) * (v - y[2])) /
+              determinant,
+          ((y[2] - y[0]) * (u - x[2]) + (x[0] - x[2]) * (v - y[2])) /
+              determinant,
+          0};
+      w[2] = 1 - w[0] - w[1];
+      if (w[0] < -1e-12 || w[1] < -1e-12 || w[2] < -1e-12) continue;
+      Sample result;
+      for (unsigned i = 0; i < 3; ++i) {
+        const auto index = indices[i];
+        result.position =
+            add(result.position,
+                mul(add(coarse.vertices[index], coarse.anchor), w[i]));
+        result.normal = add(result.normal, mul(coarse.normals[index], w[i]));
+        result.color[0] += coarse.colors[index].red / 255.0 * w[i];
+        result.color[1] += coarse.colors[index].green / 255.0 * w[i];
+        result.color[2] += coarse.colors[index].blue / 255.0 * w[i];
+        result.elevation += coarse.elevations[index] * w[i];
+      }
+      return result;
+    }
+    throw std::runtime_error("actual coarse mesh omitted a tested UV point");
+  };
+  const auto check_endpoints = [&](const StreamTransition& transition) {
+    for (const auto& [key, morph] : transition.morphs) {
+      const auto& fine = *transition.draw_tiles.at(key);
+      check(morph.coarse_key == parent &&
+                morph.coarse_vertices.size() == vertices &&
+                morph.coarse_normals.size() == vertices &&
+                morph.coarse_colors.size() == vertices &&
+                morph.coarse_elevations.size() == vertices,
+            "morph endpoint dimensions or ancestry changed");
+      const double factor =
+          std::ldexp(1.0, static_cast<int>(key.lod - parent.lod));
+      for (const auto probe :
+           std::array<std::array<unsigned, 2>, 9>{{{0, 0},
+                                                   {32, 0},
+                                                   {0, 32},
+                                                   {32, 32},
+                                                   {1, 1},
+                                                   {7, 22},
+                                                   {21, 7},
+                                                   {31, 17},
+                                                   {16, 16}}}) {
+        const unsigned index = probe[1] * n + probe[0];
+        const double u =
+            (key.x + static_cast<double>(probe[0]) / kStreamIntervals) /
+                factor -
+            parent.x;
+        const double v =
+            (key.y + static_cast<double>(probe[1]) / kStreamIntervals) /
+                factor -
+            parent.y;
+        const auto expected = oracle(u, v);
+        check(length(sub(add(morph.coarse_vertices[index], fine.anchor),
+                         expected.position)) < 1e-6 &&
+                  length(sub(morph.coarse_normals[index], expected.normal)) <
+                      1e-12 &&
+                  std::abs(morph.coarse_elevations[index] -
+                           expected.elevation) < 1e-9,
+              "morph endpoint is not the actual indexed coarse triangle");
+        for (unsigned channel = 0; channel < 3; ++channel)
+          check(std::abs(morph.coarse_colors[index][channel] -
+                         expected.color[channel]) < 1e-12,
+                "coarse endpoint substituted a palette sample");
+      }
+      for (unsigned edge = 0; edge < 4; ++edge)
+        for (unsigned i = 0; i < n; ++i) {
+          const unsigned top = edge == 0   ? i
+                               : edge == 1 ? i * n + n - 1
+                               : edge == 2 ? (n - 1) * n + n - 1 - i
+                                           : (n - 1 - i) * n;
+          const unsigned bottom = n * n + edge * n + i;
+          const auto offset = sub(fine.vertices[bottom], fine.vertices[top]);
+          check(
+              length(sub(sub(morph.coarse_vertices[bottom],
+                             morph.coarse_vertices[top]),
+                         offset)) < 1e-8 &&
+                  dot(offset, add(morph.coarse_vertices[top], fine.anchor)) < 0,
+              "morph skirt changed its fine inward offset or crossed the top");
+        }
+    }
+  };
+  check_endpoints(forward);
+  for (const auto& [key, morph] : forward.morphs) {
+    const auto& reverse = backward.morphs.at(key);
+    const auto& repeat = repeated.morphs.at(key);
+    check(morph.refining && !reverse.refining &&
+              morph.coarse_vertices == reverse.coarse_vertices &&
+              morph.coarse_normals == reverse.coarse_normals &&
+              morph.coarse_colors == reverse.coarse_colors &&
+              morph.coarse_elevations == reverse.coarse_elevations &&
+              morph.coarse_vertices == repeat.coarse_vertices,
+          "reverse/repeated handoff changed endpoints or direction");
+  }
+  const StreamKey left{0, 11, 1026, 1022}, right{0, 11, 1027, 1022};
+  for (unsigned row = 0; row < n; ++row) {
+    const auto a = row * n + n - 1, b = row * n;
+    const auto& l = forward.morphs.at(left);
+    const auto& r = forward.morphs.at(right);
+    check(length(sub(add(l.coarse_vertices[a], next.at(left)->anchor),
+                     add(r.coarse_vertices[b], next.at(right)->anchor))) <
+                  1e-6 &&
+              length(sub(l.coarse_normals[a], r.coarse_normals[b])) < 1e-12 &&
+              l.coarse_colors[a] == r.coarse_colors[b] &&
+              l.coarse_elevations[a] == r.coarse_elevations[b],
+          "adjacent child endpoint positions or attributes expose a seam");
+  }
+  auto multilevel = next;
+  multilevel.erase(left);
+  for (unsigned y = 0; y < 2; ++y)
+    for (unsigned x = 0; x < 2; ++x) {
+      const StreamKey child{0, 12, left.x * 2 + x, left.y * 2 + y};
+      multilevel.emplace(child, build(child));
+    }
+  const auto multi = make_stream_transition(old, multilevel);
+  check(multi.morphs.size() == 7 && multi.draw_tiles == multilevel,
+        "multi-level common refinement lost a leaf");
+  check_endpoints(multi);
+  // One batch can refine the recorded face0 parent and coarsen face1. The
+  // common refinement must keep both sets of actual fine leaves without
+  // overlap.
+  auto mixed_old = old;
+  mixed_old.erase({1, 0, 0, 0});
+  for (unsigned y = 0; y < 2; ++y)
+    for (unsigned x = 0; x < 2; ++x) {
+      const StreamKey key{1, 1, x, y};
+      mixed_old.emplace(key, build(key));
+    }
+  const auto mixed = make_stream_transition(mixed_old, next);
+  check(mixed.morphs.size() == 8 &&
+            mixed.draw_tiles.size() == next.size() + 3 &&
+            mixed.draw_tiles.size() <= mixed_old.size() + next.size(),
+        "mixed common refinement dropped a direction or exceeded two covers");
+  std::vector<StreamKey> draw_keys;
+  for (const auto& [key, tile] : mixed.draw_tiles) {
+    check(mixed_old.contains(key) || next.contains(key),
+          "common refinement invented a third mesh cover");
+    (void)tile;
+    draw_keys.push_back(key);
+    if (const auto morph = mixed.morphs.find(key); morph != mixed.morphs.end())
+      check(morph->second.refining == (key.face == 0),
+            "mixed replacement reversed a fine weight");
+  }
+  complete_cover(draw_keys);
+
+  rejects([&] { (void)make_stream_transition({}, {}); });
+  auto malformed = next;
+  malformed.erase(left);
+  rejects([&] { (void)make_stream_transition(old, malformed); });
+  malformed = next;
+  malformed.emplace(parent, old.at(parent));
+  rejects([&] { (void)make_stream_transition(old, malformed); });
+  malformed = next;
+  malformed[left].reset();
+  rejects([&] { (void)make_stream_transition(old, malformed); });
+  malformed.clear();
+  for (unsigned i = 0; i <= kStreamMaxTiles; ++i)
+    malformed.emplace(StreamKey{0, 13, i, 0}, next.at(left));
+  rejects([&] { (void)make_stream_transition(old, malformed); });
+  for (const auto key :
+       std::array{StreamKey{6, 11, 1026, 1022}, StreamKey{0, 14, 1026, 1022},
+                  StreamKey{0, 11, 2048, 1022}}) {
+    malformed = next;
+    auto invalid = std::make_shared<StreamTile>(*malformed.at(left));
+    invalid->key = key;
+    malformed.erase(left);
+    malformed[key] = std::move(invalid);
+    rejects([&] { (void)make_stream_transition(old, malformed); });
+  }
+  // Mutate only a copied input mesh, never the immutable canonical fixture.
+  const auto reject_tile = [&](auto corrupt) {
+    auto bad = next;
+    auto tile = std::make_shared<StreamTile>(*bad.at(left));
+    corrupt(*tile);
+    bad[left] = std::move(tile);
+    rejects([&] { (void)make_stream_transition(old, bad); });
+  };
+  reject_tile([](StreamTile& tile) { tile.key.face = 6; });
+  reject_tile([](StreamTile& tile) { tile.vertices.pop_back(); });
+  reject_tile([](StreamTile& tile) { tile.normals.pop_back(); });
+  reject_tile([](StreamTile& tile) { tile.colors.pop_back(); });
+  reject_tile([](StreamTile& tile) { tile.elevations.pop_back(); });
+  reject_tile([](StreamTile& tile) { tile.indices.pop_back(); });
+  const auto nan = std::numeric_limits<double>::quiet_NaN();
+  reject_tile([&](StreamTile& tile) { tile.anchor.x = nan; });
+  reject_tile([&](StreamTile& tile) { tile.vertices[0].x = nan; });
+  reject_tile([&](StreamTile& tile) { tile.normals[0].x = nan; });
+  reject_tile([&](StreamTile& tile) { tile.elevations[0] = nan; });
+  reject_tile([](StreamTile& tile) { tile.normals[0] = {}; });
+  reject_tile([](StreamTile& tile) { tile.indices[0] = -1; });
+  reject_tile([](StreamTile& tile) { tile.indices[0] = vertices; });
+  reject_tile([](StreamTile& tile) { tile.indices[1] = tile.indices[2]; });
+  reject_tile([](StreamTile& tile) {
+    tile.vertices[n * n] = add(
+        tile.vertices[0], mul(unit(add(tile.vertices[0], tile.anchor)), 200));
+  });
+  auto changed = old;
+  auto altered = std::make_shared<StreamTile>(*old.at(parent));
+  altered->vertices[0].x += 1;
+  changed[parent] = altered;
+  rejects([&] { (void)make_stream_transition(old, changed); });
+  auto overflow_old = old;
+  auto overflow_next = next;
+  auto huge = std::make_shared<StreamTile>(*old.at(parent));
+  huge->anchor.x = 1e308;
+  overflow_old[parent] = huge;
+  huge = std::make_shared<StreamTile>(*next.at(left));
+  huge->anchor.x = -1e308;
+  overflow_next[left] = huge;
+  rejects([&] { (void)make_stream_transition(overflow_old, overflow_next); });
+  check(make_stream_transition(old, next).draw_tiles == next,
+        "refused correspondence mutated the accepted immutable covers");
+  std::cout << "Actual retained parent/children: bidirectional and multilevel "
+               "coarse-triangle endpoints, shared edge, skirts, byte bounds "
+               "and malformed data passed; endpoint bytes="
+            << forward.bytes() << '\n';
+}
+
 auto main() -> int {
   try {
+    selected_morph_contract();
     selected_clearance_planning();
     selected_stream_contract();
     const auto planet = generate_planet_descriptor(Seed{42});
@@ -334,6 +629,9 @@ auto main() -> int {
     check(initial.tiles.size() <= kStreamMaxTiles &&
               initial.bytes() < 48 * 1024 * 1024,
           "resident mesh budget");
+    check(initial.transition.draw_tiles == initial.tiles &&
+              initial.transition.morphs.empty(),
+          "first worker batch invented a transition");
     check(!stream.request(origin), "identical cover needlessly regenerated");
     const auto moved =
         require(planet_fixed_from_geodetic(planet, {.25, .402, 2500}));
@@ -342,6 +640,11 @@ auto main() -> int {
     auto next = await_batch(stream);
     check(next.reused > 0 && next.generated > 0,
           "cache failed to reuse/replenish tiles");
+    check(!next.transition.morphs.empty() &&
+              next.transition.draw_tiles.size() <=
+                  initial.tiles.size() + next.tiles.size() &&
+              next.transition.bytes() > 0,
+          "replacement worker omitted its bounded mesh correspondence");
     check(stream.request(origin), "return request not scheduled");
     auto back = await_batch(stream);
     check(back.tiles.size() == initial.tiles.size(), "return coverage changed");

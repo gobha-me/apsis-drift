@@ -19,6 +19,124 @@ spec.loader.exec_module(runner)
 
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_helper_staging_reuses_readonly_identical_bytes_and_mode(self):
+        with tempfile.TemporaryDirectory(prefix="native-helper-") as directory:
+            root = Path(directory)
+            source, destination = root / "source.py", root / "staged.py"
+            source.write_bytes(b"immutable helper\n")
+            source.chmod(0o444)
+            with mock.patch.object(runner.shutil, "copy2", wraps=runner.shutil.copy2) as copy:
+                runner.stage_helper(source, destination)
+                before = destination.stat()
+                runner.stage_helper(source, destination)
+                copy.assert_called_once_with(source, destination)
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
+            self.assertEqual(destination.stat().st_mode, before.st_mode)
+            self.assertEqual(destination.stat().st_mtime_ns, before.st_mtime_ns)
+            self.assertEqual(destination.stat().st_ino, before.st_ino)
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o444)
+
+    def test_helper_staging_refuses_changed_or_nonregular_destinations(self):
+        with tempfile.TemporaryDirectory(prefix="native-helper-") as directory:
+            root = Path(directory)
+            source = root / "source.py"
+            source.write_bytes(b"original helper\n")
+            changed = root / "changed.py"
+            changed.write_bytes(b"different helper\n")
+            changed.chmod(0o444)
+            link = root / "link.py"
+            link.symlink_to(source)
+            dangling = root / "dangling.py"
+            dangling.symlink_to(root / "absent")
+            folder = root / "folder.py"
+            folder.mkdir()
+            for destination in (changed, link, dangling, folder):
+                before = destination.lstat()
+                with self.subTest(destination=destination.name), \
+                        mock.patch.object(runner.shutil, "copy2") as copy:
+                    with self.assertRaisesRegex(ValueError, "staged helper"):
+                        runner.stage_helper(source, destination)
+                    copy.assert_not_called()
+                    after = destination.lstat()
+                    self.assertEqual((after.st_mode, after.st_ino, after.st_mtime_ns, after.st_size),
+                                     (before.st_mode, before.st_ino, before.st_mtime_ns, before.st_size))
+            self.assertEqual(changed.read_bytes(), b"different helper\n")
+            self.assertEqual(source.read_bytes(), b"original helper\n")
+            self.assertTrue(link.is_symlink())
+            self.assertTrue(dangling.is_symlink())
+            self.assertTrue(folder.is_dir())
+
+    def test_main_reuses_helpers_across_all_three_preparation_loops(self):
+        with tempfile.TemporaryDirectory(prefix="native-helper-cli-") as directory:
+            root = Path(directory)
+            checkout = root / "checkout"
+            source = checkout / "godot"
+            for name in ("project.godot", "tests/operating_motion_test.gd",
+                         "bin/freedom.gdextension"):
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("declared runner control fixture\n")
+            tools = checkout / "tools"
+            tools.mkdir()
+            runner_file = tools / "test_godot_native.py"
+            runner_file.write_bytes(Path(runner.__file__).read_bytes())
+            # Only helper staging is exercised; no preparer/assets/engine run.
+            for helper in Path(runner.__file__).parent.glob("*.py"):
+                (tools / helper.name).write_bytes(helper.name.encode())
+            build = root / "build"
+            bridge = build / "src/godot/bin/libapsis_freedom_bridge.so"
+            bridge.parent.mkdir(parents=True)
+            bridge.write_bytes(b"declared bridge")
+            exporter = build / "src/godot/apsis-drift-godot-snapshot"
+            engine = root / "engine"
+            for executable in (exporter, engine):
+                executable.write_bytes(b"not executed")
+                executable.chmod(0o755)
+            calls = []
+            staged_modes = {}
+
+            def prepare(command, log, _env, _timeout):
+                name = Path(command[1]).name
+                calls.append(name)
+                work = log.parent
+                log.write_text("mocked preparation boundary\n")
+                if name == "prepare_freedom_native_assets.py":
+                    for receipt in ("prepared.json", "operating/prepared.json",
+                                    "stowed/preparation.json"):
+                        path = work / "native-assets" / receipt
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_text("{}")
+                    for helper in work.glob("*.py"):
+                        helper.chmod(0o444)
+                        staged_modes[helper.name] = helper.stat().st_mode
+                if name == "prepare_operating_motion.py":
+                    return 1, False, 0.0 # Stop before snapshots/Godot, after loop3.
+                return 0, False, 0.0
+
+            output = root / "output"
+            with mock.patch.object(runner, "__file__", str(runner_file)), \
+                    mock.patch.object(runner, "run_logged", side_effect=prepare), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                result = runner.main(["--godot", str(engine), "--build-dir", str(build),
+                                      "--output-parent", str(output),
+                                      "--test", "operating_motion"])
+            self.assertEqual(result, 1)
+            self.assertEqual(calls, ["prepare_freedom_native_assets.py",
+                                     "prepare_operating_assets.py",
+                                     "prepare_operating_motion.py"])
+            work, = output.iterdir()
+            report = json.loads((work / "report.json").read_text())
+            self.assertEqual(len(report["setup"]), 3)
+            for name, mode in staged_modes.items():
+                self.assertEqual((work / name).stat().st_mode, mode)
+                self.assertEqual(runner.sha256(work / name), runner.sha256(tools / name))
+            for name, digest in report["setup"][0]["helper_sha256"].items():
+                self.assertEqual(digest, runner.sha256(tools / name))
+            self.assertEqual(report["setup"][1]["spec_sha256"],
+                             runner.sha256(tools / "wayfarer_operating_spec.py"))
+            self.assertEqual(report["setup"][2]["spec_sha256"],
+                             runner.sha256(tools / "operating_motion_spec.py"))
+
     def test_successful_work_compacts_generated_payloads_only(self):
         with tempfile.TemporaryDirectory(prefix="native-retention-") as directory:
             root = Path(directory)
